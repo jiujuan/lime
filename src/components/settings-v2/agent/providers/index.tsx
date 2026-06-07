@@ -1356,7 +1356,7 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
 
   const localProviderContent = (
     <ApiKeyProviderSection
-      className="h-[calc(100vh-220px)] min-h-[560px] max-h-[820px]"
+      className="h-[calc(100vh-280px)] min-h-[520px] max-h-[780px]"
       exposeOemLoginPrompt={isOemRuntime && !session}
       onOemLogin={() => {
         void handleOpenCloudUserCenter("/welcome");
@@ -1372,6 +1372,14 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
 
   return (
     <div className="space-y-4">
+      <div className="space-y-1.5">
+        <h1
+          className="text-2xl font-semibold tracking-normal text-slate-950"
+          data-testid="provider-settings-title"
+        >
+          {t("settings.tab.providers")}
+        </h1>
+      </div>
       {errorMessage ? <NoticeBar tone="error" message={errorMessage} /> : null}
       {infoMessage ? <NoticeBar tone="success" message={infoMessage} /> : null}
       {cloudOpenError ? (

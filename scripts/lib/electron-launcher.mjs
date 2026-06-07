@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -68,12 +69,14 @@ export function prepareBrandedElectronApp({
   fileExists = existsSync,
   makeDir = mkdirSync,
   readFile = readFileSync,
+  renameFile = renameSync,
   writeFile = writeFileSync,
   signApp = codesignAppBundle,
 } = {}) {
   const sourceAppPath = resolveMacElectronAppBundle(electronPath);
   makeDir(appDirectory, { recursive: true });
-  const executableName = path.basename(electronPath);
+  const sourceExecutableName = path.basename(electronPath);
+  const executableName = appName;
   const stableCandidates = [
     path.join(appDirectory, `${appName}.app`),
     path.join(appDirectory, `${appName}-dev.app`),
@@ -98,6 +101,7 @@ export function prepareBrandedElectronApp({
 
   const destinationAppPath =
     stableCandidates.find((candidate) => !fileExists(candidate)) ??
+    stableCandidates.at(-1) ??
     path.join(appDirectory, `${appName}-${process.pid}-${Date.now()}.app`);
   copyApp(sourceAppPath, destinationAppPath, {
     recursive: true,
@@ -112,11 +116,20 @@ export function prepareBrandedElectronApp({
     copyFile(iconSourcePath, path.join(resourcesPath, APP_ICON_NAME));
   }
 
+  renameMacExecutable({
+    appPath: destinationAppPath,
+    sourceExecutableName,
+    executableName,
+    fileExists,
+    renameFile,
+  });
+
   const infoPlistPath = path.join(destinationAppPath, "Contents", "Info.plist");
   const originalInfoPlist = readFile(infoPlistPath, "utf8");
   const brandedInfoPlist = brandInfoPlist(originalInfoPlist, {
     appName,
     bundleIdentifier,
+    executableName,
     iconFile: APP_ICON_NAME,
   });
   if (brandedInfoPlist !== originalInfoPlist) {
@@ -152,7 +165,10 @@ export function isBrandedElectronAppReady({
   if (!fileExists(executablePath) || !fileExists(infoPlistPath)) {
     return false;
   }
-  if (appPath && !hasUsableElectronFramework({ appPath, fileExists, readLink })) {
+  if (
+    appPath &&
+    !hasUsableElectronFramework({ appPath, fileExists, readLink })
+  ) {
     return false;
   }
   try {
@@ -160,6 +176,8 @@ export function isBrandedElectronAppReady({
     return (
       infoPlist.includes(`<key>CFBundleDisplayName</key>`) &&
       infoPlist.includes(`<key>CFBundleName</key>`) &&
+      infoPlist.includes(`<string>${appName}</string>`) &&
+      infoPlist.includes(`<key>CFBundleExecutable</key>`) &&
       infoPlist.includes(`<string>${appName}</string>`) &&
       infoPlist.includes(`<key>CFBundleIdentifier</key>`) &&
       infoPlist.includes(`<string>${bundleIdentifier}</string>`) &&
@@ -234,16 +252,39 @@ export function brandInfoPlist(
   {
     appName = APP_NAME,
     bundleIdentifier = DEV_BUNDLE_IDENTIFIER,
+    executableName = appName,
     iconFile = APP_ICON_NAME,
   } = {},
 ) {
   return setPlistStringValues(content, {
     CFBundleDisplayName: appName,
     CFBundleName: appName,
+    CFBundleExecutable: executableName,
     CFBundleIdentifier: bundleIdentifier,
     CFBundleIconFile: iconFile,
     LSApplicationCategoryType: "public.app-category.productivity",
   });
+}
+
+function renameMacExecutable({
+  appPath,
+  sourceExecutableName,
+  executableName,
+  fileExists = existsSync,
+  renameFile = renameSync,
+}) {
+  if (sourceExecutableName === executableName) {
+    return;
+  }
+
+  const macOsDir = path.join(appPath, "Contents", "MacOS");
+  const sourcePath = path.join(macOsDir, sourceExecutableName);
+  const destinationPath = path.join(macOsDir, executableName);
+  if (fileExists(destinationPath) || !fileExists(sourcePath)) {
+    return;
+  }
+
+  renameFile(sourcePath, destinationPath);
 }
 
 export function setPlistStringValues(content, values) {

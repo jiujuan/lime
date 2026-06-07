@@ -23,7 +23,6 @@ import {
   isUserProjectType,
 } from "./lib/api/project";
 import { useDeepLink } from "./hooks/useDeepLink";
-import { useRelayRegistry } from "./hooks/useRelayRegistry";
 import { useSkillCatalogBootstrap } from "./hooks/useSkillCatalogBootstrap";
 import { useServiceSkillCatalogBootstrap } from "./hooks/useServiceSkillCatalogBootstrap";
 import { useSiteAdapterCatalogBootstrap } from "./hooks/useSiteAdapterCatalogBootstrap";
@@ -54,6 +53,10 @@ import { installOfficialMarketplaceSkill } from "./lib/api/officialSkillMarketpl
 import { toast } from "sonner";
 import { SettingsTabs } from "./types/settings";
 import { hasDesktopHostInvokeCapability } from "./lib/desktop-runtime";
+import {
+  hasNativeStartupScreen,
+  hideNativeStartupOverlayWhenReady,
+} from "./lib/nativeStartupScreen";
 import { shouldReserveMacWindowControls } from "./lib/windowControls";
 import { startWindowDragFromMouseEvent } from "./lib/windowDrag";
 import {
@@ -138,9 +141,10 @@ function AppContent() {
 
   const { t } = useTranslation("common");
   const hasDesktopHostRuntime = hasDesktopHostInvokeCapability();
+  const nativeStartupScreenAvailable = hasNativeStartupScreen();
   const companionEntryEnabled = useCompanionEntryEnabled();
   const reserveMacWindowControls = shouldReserveMacWindowControls();
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(!nativeStartupScreenAvailable);
   const {
     currentPage,
     pageParams,
@@ -366,12 +370,8 @@ function AppContent() {
     onOpenWebsiteDeepLink: handleOpenWebsiteDeepLink,
   });
 
-  const { error: registryError, refresh: _refreshRegistry } = useRelayRegistry({
-    autoLoad: false,
-  });
   useAppStartupEffects({
     currentPage,
-    registryError,
   });
   const { shouldShowAppSidebar, shouldAddMainContentGap } = useAppShellLayout({
     currentPage,
@@ -401,6 +401,16 @@ function AppContent() {
     // Splash 完成后立即预加载默认项目
     preloadDefaultProject();
   }, []);
+
+  useEffect(() => {
+    if (showSplash || !nativeStartupScreenAvailable) {
+      return;
+    }
+
+    startupTracker.mark("Native startup screen: renderer ready");
+    preloadDefaultProject();
+    hideNativeStartupOverlayWhenReady();
+  }, [nativeStartupScreenAvailable, showSplash]);
 
   const handleWindowDragStart = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {

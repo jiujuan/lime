@@ -102,10 +102,48 @@ function readStructuredObject(filePath: string): Record<string, unknown> | null 
     return null;
   }
   const content = fs.readFileSync(filePath, "utf8");
-  const parsed = /\.ya?ml$/i.test(filePath)
-    ? (parseYaml(content) as unknown)
-    : (JSON.parse(content) as unknown);
+  const parsed = filePath.endsWith("forge.config.mjs")
+    ? readForgeConfigObject(content)
+    : /\.ya?ml$/i.test(filePath)
+      ? (parseYaml(content) as unknown)
+      : (JSON.parse(content) as unknown);
   return isRecord(parsed) ? parsed : null;
+}
+
+function readForgeStringConstant(content: string, name: string): string | null {
+  const match = content.match(
+    new RegExp(`const\\s+${name}\\s*=\\s*"([^"]+)"`),
+  );
+  return match?.[1] ?? null;
+}
+
+function readForgeConfigObject(content: string): Record<string, unknown> {
+  const productName = readForgeStringConstant(content, "PRODUCT_NAME");
+  const appId = readForgeStringConstant(content, "APP_ID");
+  const artifactName =
+    content.match(/artifactName:\s*"([^"]+)"/)?.[1] ?? null;
+  const deepLinkSchemes = Array.from(
+    content.matchAll(/schemes:\s*\[([^\]]*)\]/g),
+  ).flatMap((match) =>
+    Array.from(match[1]?.matchAll(/"([^"]+)"/g) ?? []).map((item) => item[1]),
+  );
+
+  return {
+    appId,
+    artifactName,
+    mac: {
+      icon: "lime-rs/icons/icon.icns",
+    },
+    productName,
+    protocols: [
+      {
+        schemes: deepLinkSchemes,
+      },
+    ],
+    win: {
+      icon: "lime-rs/icons/icon.ico",
+    },
+  };
 }
 
 function readString(value: unknown): string | null {
@@ -346,7 +384,7 @@ function printHelp(): void {
   console.log(`Usage: tsx scripts/i18n-app-metadata-locale-build-manifest.ts [options]
 
 生成 installer / app metadata locale build manifest，用于发布前审阅元数据本地化。
-该脚本不会写入 electron-builder.yml、package.json 或平台安装器配置。
+该脚本不会写入 forge.config.mjs、package.json 或平台安装器配置。
 
 Options:
   --format json|text   输出格式，默认 text

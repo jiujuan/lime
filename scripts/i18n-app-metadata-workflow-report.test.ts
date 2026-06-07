@@ -23,6 +23,30 @@ function writeFile(root: string, relativePath: string, content: string): void {
   fs.writeFileSync(filePath, content);
 }
 
+function forgeConfigFixture(): string {
+  return [
+    'const PRODUCT_NAME = "Lime";',
+    'const APP_ID = "com.limecloud.lime";',
+    'const RELEASE_OUTPUT_DIR = "release-electron";',
+    "",
+    "function nsisConfig() {",
+    "  return {",
+    '    artifactName: "${productName}_${version}_${arch}-setup.${ext}",',
+    "  };",
+    "}",
+    "",
+    "export default {",
+    "  packagerConfig: {",
+    "    protocols: [",
+    "      {",
+    '        schemes: ["lime"],',
+    "      },",
+    "    ],",
+    "  },",
+    "};",
+  ].join("\n");
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   for (const dir of tempDirs.splice(0)) {
@@ -64,27 +88,8 @@ describe("i18n app metadata workflow report", () => {
     );
     writeFile(
       root,
-      "electron-builder.yml",
-      [
-        "appId: com.limecloud.lime",
-        "productName: Lime",
-        "directories:",
-        "  output: release-electron",
-        "artifactName: ${productName}_${version}_${arch}.${ext}",
-        "protocols:",
-        "  - name: Lime URL",
-        "    schemes:",
-        "      - lime",
-        "mac:",
-        "  icon: lime-rs/icons/icon.icns",
-        "  target:",
-        "    - target: dmg",
-        "    - target: zip",
-        "win:",
-        "  icon: lime-rs/icons/icon.ico",
-        "  target:",
-        "    - target: nsis",
-      ].join("\n"),
+      "forge.config.mjs",
+      forgeConfigFixture(),
     );
     writeFile(
       root,
@@ -144,37 +149,37 @@ describe("i18n app metadata workflow report", () => {
               priority: "source-only",
             },
             {
-              path: "electron-builder.yml",
+              path: "forge.config.mjs",
               field: "productName",
               localization: "stable-brand",
               priority: "stable",
             },
             {
-              path: "electron-builder.yml",
+              path: "forge.config.mjs",
               field: "appId",
               localization: "stable-identifier",
               priority: "stable",
             },
             {
-              path: "electron-builder.yml",
+              path: "forge.config.mjs",
               field: "artifactName",
               localization: "source-only",
               priority: "source-only",
             },
             {
-              path: "electron-builder.yml",
+              path: "forge.config.mjs",
               field: "protocols[0].schemes",
               localization: "stable-identifier",
               priority: "stable",
             },
             {
-              path: "electron-builder.yml",
+              path: "forge.config.mjs",
               field: "mac.icon",
               localization: "source-only",
               priority: "source-only",
             },
             {
-              path: "electron-builder.yml",
+              path: "forge.config.mjs",
               field: "win.icon",
               localization: "source-only",
               priority: "source-only",
@@ -237,11 +242,11 @@ describe("i18n app metadata workflow report", () => {
         unscopedMetadataFields: [],
       }),
     );
-    expect(report.electronBuilderConfig.productName).toBe("Lime");
-    expect(report.electronBuilderConfig.appId).toBe("com.limecloud.lime");
-    expect(report.electronBuilderConfig.deepLinkSchemes).toEqual(["lime"]);
-    expect(report.electronBuilderConfig.macTargets).toEqual(["dmg", "zip"]);
-    expect(report.electronBuilderConfig.winTargets).toEqual(["nsis"]);
+    expect(report.electronForgeConfig.productName).toBe("Lime");
+    expect(report.electronForgeConfig.appId).toBe("com.limecloud.lime");
+    expect(report.electronForgeConfig.deepLinkSchemes).toEqual(["lime"]);
+    expect(report.electronForgeConfig.macTargets).toEqual(["dmg", "zip"]);
+    expect(report.electronForgeConfig.winTargets).toEqual(["nsis"]);
     expect(formatAppMetadataWorkflowReport(report, "text")).toContain(
       "[i18n:app-metadata] workflow inventory",
     );
@@ -271,12 +276,8 @@ describe("i18n app metadata workflow report", () => {
     writeFile(root, "lime-rs/Cargo.toml", '[package]\nname = "lime"\nversion = "1.47.0"\n');
     writeFile(
       root,
-      "electron-builder.yml",
-      [
-        "appId: com.limecloud.lime",
-        "productName: Lime",
-        "artifactName: ${productName}_${version}_${arch}.${ext}",
-      ].join("\n"),
+      "forge.config.mjs",
+      forgeConfigFixture(),
     );
     writeFile(
       root,
@@ -302,7 +303,7 @@ describe("i18n app metadata workflow report", () => {
               priority: "required-before-multilingual-release",
             },
             {
-              path: "electron-builder.yml",
+              path: "forge.config.mjs",
               field: "protocols[1].schemes",
               localization: "translatable",
               priority: "required-before-multilingual-release",
@@ -320,14 +321,17 @@ describe("i18n app metadata workflow report", () => {
     expect(report.summary.hasAppMetadataLocaleBuildManifest).toBe(false);
     expect(report.summary.appMetadataLocaleBuildManifestReady).toBe(false);
     expect(report.summary.metadataMissingScopedFieldCount).toBe(1);
-    expect(report.summary.metadataUnscopedFieldCount).toBe(3);
+    expect(report.summary.metadataUnscopedFieldCount).toBe(6);
     expect(report.metadataFieldCoverage.missingScopedFields).toEqual([
-      "electron-builder.yml#protocols[1].schemes",
+      "forge.config.mjs#protocols[1].schemes",
     ]);
     expect(report.metadataFieldCoverage.unscopedMetadataFields).toEqual([
-      "electron-builder.yml#appId",
-      "electron-builder.yml#artifactName",
-      "electron-builder.yml#productName",
+      "forge.config.mjs#appId",
+      "forge.config.mjs#artifactName",
+      "forge.config.mjs#mac.icon",
+      "forge.config.mjs#productName",
+      "forge.config.mjs#protocols[0].schemes",
+      "forge.config.mjs#win.icon",
     ]);
   });
 
@@ -335,7 +339,7 @@ describe("i18n app metadata workflow report", () => {
     const root = createTempDir();
     writeFile(root, "package.json", JSON.stringify({ name: "lime", version: "1.47.0" }, null, 2));
     writeFile(root, "lime-rs/Cargo.toml", '[package]\nname = "lime"\nversion = "1.47.0"\n');
-    writeFile(root, "electron-builder.yml", "productName: Lime\n");
+    writeFile(root, "forge.config.mjs", forgeConfigFixture());
     writeFile(root, "lime-rs/capabilities/agent-app-shell.json", JSON.stringify({ identifier: "agent-app-shell" }, null, 2));
 
     const outFile = path.join(root, "report.json");

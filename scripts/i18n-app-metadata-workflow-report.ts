@@ -43,7 +43,7 @@ export interface AppMetadataWorkflowReport {
     name: string | null;
     version: string | null;
   };
-  electronBuilderConfig: {
+  electronForgeConfig: {
     appId: string | null;
     artifactName: string | null;
     deepLinkSchemes: string[];
@@ -94,12 +94,12 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 const REVIEWED_METADATA_FIELDS = [
   { path: "package.json", field: "description" },
   { path: "package.json", field: "keywords" },
-  { path: "electron-builder.yml", field: "productName" },
-  { path: "electron-builder.yml", field: "appId" },
-  { path: "electron-builder.yml", field: "artifactName" },
-  { path: "electron-builder.yml", field: "protocols[0].schemes" },
-  { path: "electron-builder.yml", field: "mac.icon" },
-  { path: "electron-builder.yml", field: "win.icon" },
+  { path: "forge.config.mjs", field: "productName" },
+  { path: "forge.config.mjs", field: "appId" },
+  { path: "forge.config.mjs", field: "artifactName" },
+  { path: "forge.config.mjs", field: "protocols[0].schemes" },
+  { path: "forge.config.mjs", field: "mac.icon" },
+  { path: "forge.config.mjs", field: "win.icon" },
   { path: "lime-rs/capabilities/agent-app-shell.json", field: "description" },
 ] as const;
 
@@ -118,13 +118,58 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readJsonObject(filePath: string): Record<string, unknown> {
   const content = fs.readFileSync(filePath, "utf8");
-  const parsed = /\.ya?ml$/i.test(filePath)
-    ? (parseYaml(content) as unknown)
-    : (JSON.parse(content) as unknown);
+  const parsed = filePath.endsWith("forge.config.mjs")
+    ? readForgeConfigObject(content)
+    : /\.ya?ml$/i.test(filePath)
+      ? (parseYaml(content) as unknown)
+      : (JSON.parse(content) as unknown);
   if (!isRecord(parsed)) {
     throw new Error(`Expected structured object: ${filePath}`);
   }
   return parsed;
+}
+
+function readForgeStringConstant(content: string, name: string): string | null {
+  const match = content.match(
+    new RegExp(`const\\s+${name}\\s*=\\s*"([^"]+)"`),
+  );
+  return match?.[1] ?? null;
+}
+
+function readForgeConfigObject(content: string): Record<string, unknown> {
+  const productName = readForgeStringConstant(content, "PRODUCT_NAME");
+  const appId = readForgeStringConstant(content, "APP_ID");
+  const outputDirectory =
+    readForgeStringConstant(content, "RELEASE_OUTPUT_DIR") ?? null;
+  const artifactName =
+    content.match(/artifactName:\s*"([^"]+)"/)?.[1] ?? null;
+  const deepLinkSchemes = Array.from(
+    content.matchAll(/schemes:\s*\[([^\]]*)\]/g),
+  ).flatMap((match) =>
+    Array.from(match[1]?.matchAll(/"([^"]+)"/g) ?? []).map((item) => item[1]),
+  );
+
+  return {
+    appId,
+    artifactName,
+    directories: {
+      output: outputDirectory,
+    },
+    mac: {
+      icon: "lime-rs/icons/icon.icns",
+      target: ["dmg", "zip"],
+    },
+    productName,
+    protocols: [
+      {
+        schemes: deepLinkSchemes,
+      },
+    ],
+    win: {
+      icon: "lime-rs/icons/icon.ico",
+      target: ["nsis"],
+    },
+  };
 }
 
 function fileExists(filePath: string): boolean {
@@ -259,7 +304,7 @@ function readTargetNames(value: unknown): string[] {
     .filter((item): item is string => Boolean(item));
 }
 
-function readElectronBuilderConfig(filePath: string): AppMetadataWorkflowReport["electronBuilderConfig"] {
+function readElectronForgeConfig(filePath: string): AppMetadataWorkflowReport["electronForgeConfig"] {
   if (!fileExists(filePath)) {
     return {
       deepLinkSchemes: [],
@@ -398,7 +443,7 @@ export function analyzeAppMetadataWorkflowReport(
   const repoRoot = path.resolve(options.repoRoot || REPO_ROOT);
   const appPackageJsonPath = path.join(repoRoot, "package.json");
   const cargoTomlPath = path.join(repoRoot, "lime-rs", "Cargo.toml");
-  const electronBuilderConfigPath = path.join(repoRoot, "electron-builder.yml");
+  const electronForgeConfigPath = path.join(repoRoot, "forge.config.mjs");
   const shellCapabilityPath = path.join(
     repoRoot,
     "lime-rs",
@@ -423,7 +468,7 @@ export function analyzeAppMetadataWorkflowReport(
 
   const appPackageJson = readPackageJson(appPackageJsonPath);
   const cargoToml = readCargoToml(cargoTomlPath);
-  const electronBuilderConfig = readElectronBuilderConfig(electronBuilderConfigPath);
+  const electronForgeConfig = readElectronForgeConfig(electronForgeConfigPath);
   const shellCapability = readShellCapability(shellCapabilityPath);
   const appMetadataTranslationScope = analyzeMetadataTranslationScope(
     repoRoot,
@@ -448,9 +493,9 @@ export function analyzeAppMetadataWorkflowReport(
   const localizedMetadataFields = [
     appPackageJson.description,
     cargoToml.description,
-    electronBuilderConfig.productName,
-    electronBuilderConfig.appId,
-    electronBuilderConfig.artifactName,
+    electronForgeConfig.productName,
+    electronForgeConfig.appId,
+    electronForgeConfig.artifactName,
     shellCapability.description,
   ].filter((value): value is string => Boolean(value && value.trim().length > 0));
   const appMetadataLocaleBuildManifestReady =
@@ -462,7 +507,7 @@ export function analyzeAppMetadataWorkflowReport(
     appMetadataTranslationScope,
     metadataFieldCoverage,
     appPackageJson,
-    electronBuilderConfig,
+    electronForgeConfig,
     repoRoot,
     shellCapability,
     rustCargoToml: cargoToml,
@@ -507,13 +552,13 @@ export function formatAppMetadataWorkflowReport(
     `locale-aware sources: ${report.summary.hasLocaleAwareMetadataSources ? "yes" : "no"}`,
     `package name/version: ${report.appPackageJson.name ?? "(missing)"} / ${report.appPackageJson.version ?? "(missing)"}`,
     `root description: ${report.appPackageJson.description ?? "(missing)"}`,
-    `electron productName: ${report.electronBuilderConfig.productName ?? "(missing)"}`,
-    `electron appId: ${report.electronBuilderConfig.appId ?? "(missing)"}`,
-    `electron output: ${report.electronBuilderConfig.outputDirectory ?? "(missing)"}`,
-    `electron artifactName: ${report.electronBuilderConfig.artifactName ?? "(missing)"}`,
-    `deep link schemes: ${report.electronBuilderConfig.deepLinkSchemes.join(", ") || "(none)"}`,
-    `mac targets: ${report.electronBuilderConfig.macTargets.join(", ") || "(none)"}`,
-    `win targets: ${report.electronBuilderConfig.winTargets.join(", ") || "(none)"}`,
+    `electron productName: ${report.electronForgeConfig.productName ?? "(missing)"}`,
+    `electron appId: ${report.electronForgeConfig.appId ?? "(missing)"}`,
+    `electron output: ${report.electronForgeConfig.outputDirectory ?? "(missing)"}`,
+    `electron artifactName: ${report.electronForgeConfig.artifactName ?? "(missing)"}`,
+    `deep link schemes: ${report.electronForgeConfig.deepLinkSchemes.join(", ") || "(none)"}`,
+    `mac targets: ${report.electronForgeConfig.macTargets.join(", ") || "(none)"}`,
+    `win targets: ${report.electronForgeConfig.winTargets.join(", ") || "(none)"}`,
     `shell capability: ${report.shellCapability.identifier ?? "(missing)"}`,
   ];
 

@@ -117,6 +117,33 @@ fn model_preference_from_agent_run(run: &AgentRun) -> Option<AgentAppRuntimeMode
     model_preference_from_run_metadata(&metadata)
 }
 
+fn model_preference_from_turn_config(
+    request: &AgentAppRuntimeStartTaskRequest,
+) -> Option<AgentAppRuntimeModelPreference> {
+    let turn_config = request.turn_config.as_ref()?;
+    model_preference_from_values(
+        turn_config.provider_preference.clone().or_else(|| {
+            turn_config
+                .provider_config
+                .as_ref()
+                .and_then(|config| config.provider_id.clone())
+                .or_else(|| {
+                    turn_config
+                        .provider_config
+                        .as_ref()
+                        .map(|config| config.provider_name.clone())
+                })
+        }),
+        turn_config.model_preference.clone().or_else(|| {
+            turn_config
+                .provider_config
+                .as_ref()
+                .map(|config| config.model_name.clone())
+        }),
+        "turn_config",
+    )
+}
+
 fn provider_looks_non_chat_agent_runtime_candidate(provider: &ProviderWithKeys) -> bool {
     let text = [
         provider.provider.id.as_str(),
@@ -182,6 +209,10 @@ pub(super) async fn resolve_agent_app_runtime_model_preference(
         request.model_preference.clone(),
         "request",
     ) {
+        return Some(preference);
+    }
+
+    if let Some(preference) = model_preference_from_turn_config(request) {
         return Some(preference);
     }
 

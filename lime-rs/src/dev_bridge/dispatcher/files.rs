@@ -1,30 +1,8 @@
 use super::{args_or_default, get_string_arg, parse_nested_arg};
 use crate::dev_bridge::DevBridgeState;
 use serde_json::Value as JsonValue;
-use std::io;
 
 type DynError = Box<dyn std::error::Error>;
-
-fn to_dyn_error(message: String) -> DynError {
-    io::Error::other(message).into()
-}
-
-fn read_optional_usize_arg(
-    args: &JsonValue,
-    primary: &str,
-    secondary: &str,
-) -> Result<Option<usize>, DynError> {
-    let value = args.get(primary).or_else(|| args.get(secondary));
-    match value {
-        Some(raw) if raw.is_null() => Ok(None),
-        Some(raw) => {
-            let parsed = serde_json::from_value::<usize>(raw.clone())
-                .map_err(|error| format!("参数 {primary}/{secondary} 解析失败: {error}"))?;
-            Ok(Some(parsed))
-        }
-        None => Ok(None),
-    }
-}
 
 pub(super) async fn try_handle(
     _state: &DevBridgeState,
@@ -44,25 +22,6 @@ pub(super) async fn try_handle(
                 storage
                     .save_file_with_metadata(&session_id, &file_name, &content, metadata)
                     .map_err(|error| format!("保存会话文件失败: {error}"))?,
-            )?
-        }
-        "read_file_preview_cmd" => {
-            let args = args_or_default(args);
-            let path = get_string_arg(&args, "path", "path")?;
-            let max_size = read_optional_usize_arg(&args, "max_size", "maxSize")?;
-            serde_json::to_value(
-                crate::services::file_browser_service::read_file_preview_cmd(path, max_size)
-                    .await
-                    .map_err(|error| format!("读取文件预览失败: {error}"))?,
-            )?
-        }
-        "list_dir" => {
-            let args = args_or_default(args);
-            let path = get_string_arg(&args, "path", "path")?;
-            serde_json::to_value(
-                crate::services::file_browser_service::list_dir(path)
-                    .await
-                    .map_err(|error| format!("列出目录失败: {error}"))?,
             )?
         }
         "get_home_dir" => serde_json::to_value(

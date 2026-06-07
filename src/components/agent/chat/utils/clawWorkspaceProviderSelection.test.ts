@@ -114,6 +114,7 @@ function createModel(
 
 describe("resolveClawWorkspaceProviderSelection", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mockLoadConfiguredProviders.mockResolvedValue([]);
     mockGetModelRegistry.mockResolvedValue([]);
     mockGetProviderAliasConfig.mockResolvedValue(null);
@@ -233,5 +234,46 @@ describe("resolveClawWorkspaceProviderSelection", () => {
       model: "gpt-5.4-mini",
     });
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("openai");
+  });
+
+  it("关闭 provider fallback 时不应跨到其他已配置 Provider", async () => {
+    mockLoadConfiguredProviders.mockResolvedValueOnce([
+      createProvider({
+        key: "lime-hub",
+        label: "Lime Hub",
+        registryId: "lime-hub",
+        providerId: "lime-hub",
+        apiHost: "https://hub.example.com/v1",
+      }),
+      createProvider({
+        key: "deepseek",
+        label: "DeepSeek",
+        registryId: "deepseek",
+        providerId: "deepseek",
+        apiHost: "https://api.deepseek.com/v1",
+      }),
+    ]);
+    mockGetModelRegistry.mockResolvedValueOnce([
+      createModel("deepseek-v4-pro", {
+        provider_id: "deepseek",
+        provider_name: "DeepSeek",
+      }),
+    ]);
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      models: [],
+      source: "Error",
+      error: null,
+    });
+
+    const result = await resolveClawWorkspaceProviderSelection({
+      currentProviderType: "lime-hub",
+      currentModel: null,
+      theme: "general",
+      allowProviderFallback: false,
+    });
+
+    expect(result).toBeNull();
+    expect(mockFetchProviderModelsAuto).toHaveBeenCalledTimes(1);
+    expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("lime-hub");
   });
 });

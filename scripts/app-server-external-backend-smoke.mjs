@@ -10,7 +10,13 @@ import { localAppServerBinaryPath } from "./lib/electron-dev-sidecar.mjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
-const clientDistPath = path.join(rootDir, "packages", "app-server-client", "dist", "index.js");
+const clientDistPath = path.join(
+  rootDir,
+  "packages",
+  "app-server-client",
+  "dist",
+  "index.js",
+);
 
 const {
   METHOD_AGENT_SESSION_EVENT,
@@ -32,7 +38,9 @@ async function main() {
   }
   await assertBinaryExists(binaryPath);
 
-  const tempDir = await mkdtemp(path.join(tmpdir(), "app-server-external-backend-"));
+  const tempDir = await mkdtemp(
+    path.join(tmpdir(), "app-server-external-backend-"),
+  );
   let connected;
   try {
     const backendPath = path.join(tempDir, "query-loop-backend.mjs");
@@ -82,6 +90,7 @@ async function main() {
     const connection = connected.connection;
     const sessionId = "appserver_external_backend_smoke_session";
     const threadId = "appserver_external_backend_smoke_thread";
+    const turnId = "turn_external_backend_smoke";
 
     const capabilityResult = await connection.listCapabilities(
       {
@@ -90,9 +99,13 @@ async function main() {
       },
       { timeoutMs: 5_000 },
     );
-    const capabilityIds = capabilityResult.result.capabilities.map((capability) => capability.id);
+    const capabilityIds = capabilityResult.result.capabilities.map(
+      (capability) => capability.id,
+    );
     if (!capabilityIds.includes("content.draft.generate")) {
-      throw new Error(`content.draft.generate capability missing: ${capabilityIds.join(", ")}`);
+      throw new Error(
+        `content.draft.generate capability missing: ${capabilityIds.join(", ")}`,
+      );
     }
 
     const sessionResult = await connection.startSession(
@@ -104,13 +117,17 @@ async function main() {
       },
       { timeoutMs: 5_000 },
     );
-    assertEqual(sessionResult.result.session.sessionId, sessionId, "session id");
+    assertEqual(
+      sessionResult.result.session.sessionId,
+      sessionId,
+      "session id",
+    );
     assertEqual(sessionResult.result.session.threadId, threadId, "thread id");
 
     const turnResult = await connection.startTurn(
       {
         sessionId,
-        turnId: "turn_external_backend_smoke",
+        turnId,
         input: {
           text: "生成一段 content-studio 草稿",
         },
@@ -125,7 +142,11 @@ async function main() {
       { timeoutMs: 5_000 },
     );
     assertEqual(turnResult.result.turn.sessionId, sessionId, "turn session id");
-    assertEqual(turnResult.result.turn.status, "accepted", "turn status");
+    assertEqual(turnResult.result.turn.turnId, turnId, "turn id");
+    assertEqual(turnResult.result.turn.status, "completed", "turn status");
+    if (!turnResult.result.turn.completedAt) {
+      throw new Error(`turn ${turnId} is missing completedAt`);
+    }
 
     const notificationTypes = [];
     for (const notification of turnResult.notifications) {
@@ -135,18 +156,62 @@ async function main() {
     }
     while (
       !notificationTypes.includes("message.delta") ||
-      !notificationTypes.includes("artifact.snapshot")
+      !notificationTypes.includes("artifact.snapshot") ||
+      !notificationTypes.includes("turn.final_done")
     ) {
       const notification = await connection.nextNotification(5_000);
-      assertEqual(notification.method, METHOD_AGENT_SESSION_EVENT, "event method");
-      assertEqual(notification.params.event.sessionId, sessionId, "event session id");
+      assertEqual(
+        notification.method,
+        METHOD_AGENT_SESSION_EVENT,
+        "event method",
+      );
+      assertEqual(
+        notification.params.event.sessionId,
+        sessionId,
+        "event session id",
+      );
       notificationTypes.push(notification.params.event.type);
+    }
+
+    const readResult = await connection.readSession(
+      { sessionId },
+      { timeoutMs: 5_000 },
+    );
+    assertEqual(
+      readResult.result.session.sessionId,
+      sessionId,
+      "read session id",
+    );
+    assertEqual(readResult.result.session.threadId, threadId, "read thread id");
+    assertEqual(
+      readResult.result.session.appId,
+      "content-studio",
+      "read app id",
+    );
+    assertEqual(
+      readResult.result.session.workspaceId,
+      "content-workspace",
+      "read workspace id",
+    );
+    const readTurns = Array.isArray(readResult.result.turns)
+      ? readResult.result.turns
+      : [];
+    assertEqual(readTurns.length, 1, "read turn count");
+    const readTurn = readTurns.find((turn) => turn?.turnId === turnId);
+    if (!readTurn) {
+      throw new Error(`read session is missing turn ${turnId}`);
+    }
+    assertEqual(readTurn.sessionId, sessionId, "read turn session id");
+    assertEqual(readTurn.threadId, threadId, "read turn thread id");
+    assertEqual(readTurn.status, "completed", "read turn status");
+    if (!readTurn.completedAt) {
+      throw new Error(`read turn ${turnId} is missing completedAt`);
     }
 
     const artifactResult = await connection.readArtifacts(
       {
         sessionId,
-        turnId: "turn_external_backend_smoke",
+        turnId,
       },
       { timeoutMs: 5_000 },
     );
@@ -160,15 +225,34 @@ async function main() {
     const evidenceResult = await connection.exportEvidence(
       {
         sessionId,
-        turnId: "turn_external_backend_smoke",
+        turnId,
         includeEvents: true,
         includeArtifacts: true,
       },
       { timeoutMs: 5_000 },
     );
-    assertEqual(evidenceResult.result.session.sessionId, sessionId, "evidence session id");
-    if (!evidenceResult.result.events.some((event) => event.type === "message.delta")) {
-      throw new Error("evidence export is missing external message.delta event");
+    assertEqual(
+      evidenceResult.result.session.sessionId,
+      sessionId,
+      "evidence session id",
+    );
+    if (
+      !evidenceResult.result.events.some(
+        (event) => event.type === "message.delta",
+      )
+    ) {
+      throw new Error(
+        "evidence export is missing external message.delta event",
+      );
+    }
+    if (
+      !evidenceResult.result.events.some(
+        (event) => event.type === "turn.final_done",
+      )
+    ) {
+      throw new Error(
+        "evidence export is missing external turn.final_done event",
+      );
     }
     if (
       !evidenceResult.result.artifacts.some(
@@ -186,6 +270,10 @@ async function main() {
         `protocol=${connected.initializeResponse.serverInfo.protocolVersion}`,
         `capabilities=${capabilityIds.join(",")}`,
         `events=${notificationTypes.join(",")}`,
+        `readSession=${readResult.result.session.sessionId}`,
+        `readTurns=${readTurns.length}`,
+        `readTurnStatus=${readTurn.status}`,
+        `evidenceEvents=${evidenceResult.result.events.length}`,
         `artifacts=${artifactResult.result.artifacts.length}`,
       ].join(" "),
     );
@@ -202,7 +290,7 @@ async function assertBinaryExists(targetPath) {
     throw new Error(
       [
         `app-server binary not found: ${targetPath}`,
-        "先构建：cargo build --manifest-path \"lime-rs/Cargo.toml\" -p app-server",
+        '先构建：cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server',
         "或设置：APP_SERVER_BIN=/path/to/app-server",
       ].join("\n"),
     );
@@ -242,6 +330,12 @@ if (input.kind === "turnStart") {
             backend: "external",
             smoke: true,
           },
+        },
+      },
+      {
+        type: "turn.final_done",
+        payload: {
+          backend: "external",
         },
       },
     ],

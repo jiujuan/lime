@@ -1544,12 +1544,7 @@ pub struct ProvidersConfig {
 impl Default for ProvidersConfig {
     fn default() -> Self {
         Self {
-            kiro: ProviderConfig {
-                enabled: true,
-                credentials_path: Some("~/.aws/sso/cache/kiro-auth-token.json".to_string()),
-                region: Some("us-east-1".to_string()),
-                project_id: None,
-            },
+            kiro: ProviderConfig::default(),
             gemini: ProviderConfig {
                 enabled: false,
                 credentials_path: Some("~/.gemini/oauth_creds.json".to_string()),
@@ -1846,26 +1841,6 @@ impl Default for ModelsConfig {
                         name: None,
                         enabled: true,
                     },
-                    ModelInfo {
-                        id: "claude-sonnet-4-5-20250929".to_string(),
-                        name: None,
-                        enabled: true,
-                    },
-                    ModelInfo {
-                        id: "claude-sonnet-4-20250514".to_string(),
-                        name: None,
-                        enabled: true,
-                    },
-                ],
-            },
-        );
-
-        // Kiro
-        providers.insert(
-            "kiro".to_string(),
-            ProviderModelsConfig {
-                label: "Kiro".to_string(),
-                models: vec![
                     ModelInfo {
                         id: "claude-sonnet-4-5-20250929".to_string(),
                         name: None,
@@ -2868,7 +2843,8 @@ mod unit_tests {
             config.server.response_cache.cacheable_status_codes,
             vec![200]
         );
-        assert!(config.providers.kiro.enabled);
+        assert!(!config.providers.kiro.enabled);
+        assert!(config.providers.kiro.credentials_path.is_none());
         assert!(!config.providers.gemini.enabled);
         assert_eq!(config.default_provider, "openai");
         assert_eq!(config.routing.default_provider, "openai");

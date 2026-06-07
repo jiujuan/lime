@@ -6,8 +6,12 @@ export const METHOD_INITIALIZE = "initialize";
 export const METHOD_INITIALIZED = "initialized";
 export const METHOD_CAPABILITY_LIST = "capability/list";
 export const METHOD_ARTIFACT_READ = "artifact/read";
+export const METHOD_FILE_SYSTEM_LIST_DIRECTORY = "fileSystem/listDirectory";
+export const METHOD_FILE_SYSTEM_READ_FILE_PREVIEW =
+  "fileSystem/readFilePreview";
 export const METHOD_EVIDENCE_EXPORT = "evidence/export";
 export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
+export const METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
 export const METHOD_WORKSPACE_LIST = "workspace/list";
 export const METHOD_WORKSPACE_READ = "workspace/read";
 export const METHOD_WORKSPACE_BY_PATH_READ = "workspace/byPath/read";
@@ -22,7 +26,12 @@ export const METHOD_SKILL_LIST = "skill/list";
 export const METHOD_SKILL_READ = "skill/read";
 export const METHOD_WORKSPACE_SKILL_BINDINGS_LIST =
   "workspaceSkillBindings/list";
+export const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST =
+  "workspaceRegisteredSkills/list";
 export const METHOD_AGENT_APP_INSTALLED_LIST = "agentAppInstalled/list";
+export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start";
+export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status";
+export const METHOD_AGENT_APP_UI_RUNTIME_STOP = "agentAppUiRuntime/stop";
 export const METHOD_KNOWLEDGE_PACK_LIST = "knowledgePack/list";
 export const METHOD_AUTOMATION_JOB_LIST = "automationJob/list";
 export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
@@ -40,6 +49,11 @@ export const METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
 export const METHOD_MODEL_PROVIDER_CATALOG_LIST = "modelProvider/catalog/list";
 export const METHOD_MODEL_PROVIDER_ALIAS_READ = "modelProviderAlias/read";
 export const METHOD_MODEL_PROVIDER_ALIAS_LIST = "modelProviderAlias/list";
+export const METHOD_CONNECT_DEEP_LINK_RESOLVE = "connectDeepLink/resolve";
+export const METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE =
+  "connectOpenDeepLink/resolve";
+export const METHOD_CONNECT_RELAY_API_KEY_SAVE = "connectRelayApiKey/save";
+export const METHOD_CONNECT_CALLBACK_SEND = "connectCallback/send";
 
 export type AppServerMethodKind = "request" | "notification";
 
@@ -53,8 +67,11 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_INITIALIZED, kind: "notification" },
   { method: METHOD_CAPABILITY_LIST, kind: "request" },
   { method: METHOD_ARTIFACT_READ, kind: "request" },
+  { method: METHOD_FILE_SYSTEM_LIST_DIRECTORY, kind: "request" },
+  { method: METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, kind: "request" },
   { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
   { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
+  { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
   { method: METHOD_WORKSPACE_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_READ, kind: "request" },
   { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
@@ -66,7 +83,11 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_SKILL_LIST, kind: "request" },
   { method: METHOD_SKILL_READ, kind: "request" },
   { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
+  { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
   { method: METHOD_AGENT_APP_INSTALLED_LIST, kind: "request" },
+  { method: METHOD_AGENT_APP_UI_RUNTIME_START, kind: "request" },
+  { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
+  { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
   { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
   { method: METHOD_AUTOMATION_JOB_LIST, kind: "request" },
   { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
@@ -77,6 +98,10 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MODEL_PROVIDER_CATALOG_LIST, kind: "request" },
   { method: METHOD_MODEL_PROVIDER_ALIAS_READ, kind: "request" },
   { method: METHOD_MODEL_PROVIDER_ALIAS_LIST, kind: "request" },
+  { method: METHOD_CONNECT_DEEP_LINK_RESOLVE, kind: "request" },
+  { method: METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE, kind: "request" },
+  { method: METHOD_CONNECT_RELAY_API_KEY_SAVE, kind: "request" },
+  { method: METHOD_CONNECT_CALLBACK_SEND, kind: "request" },
   { method: METHOD_AGENT_SESSION_START, kind: "request" },
   { method: METHOD_AGENT_SESSION_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
@@ -235,6 +260,45 @@ export type ArtifactSummary = {
 export type ArtifactReadResponse = {
   artifacts: ArtifactSummary[];
   nextCursor?: string;
+};
+
+export type FileSystemListDirectoryParams = {
+  path: string;
+};
+
+export type FileSystemReadFilePreviewParams = {
+  path: string;
+  maxSize?: number;
+};
+
+export type FileSystemDirectoryListing = {
+  path: string;
+  parentPath: string | null;
+  entries: FileSystemFileEntry[];
+  error: string | null;
+};
+
+export type FileSystemFileEntry = {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+  modifiedAt: number;
+  fileType?: string;
+  isHidden: boolean;
+  modeStr?: string;
+  mode?: number;
+  mimeType?: string;
+  isSymlink: boolean;
+  iconDataUrl?: string;
+};
+
+export type FileSystemFilePreview = {
+  path: string;
+  content: string | null;
+  isBinary: boolean;
+  size: number;
+  error: string | null;
 };
 
 export type EvidenceExportParams = {
@@ -439,6 +503,23 @@ export type AgentSessionListResponse = {
   sessions: AgentSessionOverview[];
 };
 
+export type AgentSessionUpdateParams = {
+  sessionId: string;
+  title?: string;
+  archived?: boolean;
+  providerSelector?: string;
+  providerName?: string;
+  modelName?: string;
+  executionStrategy?: string;
+  recentAccessMode?: string;
+  recentPreferences?: unknown;
+  recentTeamSelection?: unknown;
+};
+
+export type AgentSessionUpdateResponse = {
+  session: AgentSessionOverview;
+};
+
 export type WorkspaceReadParams = {
   id: string;
 };
@@ -499,9 +580,42 @@ export type WorkspaceSkillBindingsListResponse = {
   bindings: unknown;
 };
 
+export type WorkspaceRegisteredSkillsListParams = {
+  workspaceRoot: string;
+};
+
+export type WorkspaceRegisteredSkillsListResponse = {
+  skills: unknown[];
+};
+
 export type AgentAppInstalledListResponse = {
   states: unknown[];
   issues: unknown[];
+};
+
+export type AgentAppUiRuntimeStartParams = {
+  appId: string;
+  entryKey?: string;
+};
+
+export type AgentAppUiRuntimeStatusParams = {
+  appId: string;
+};
+
+export type AgentAppUiRuntimeStopParams = {
+  appId: string;
+};
+
+export type AgentAppUiRuntimeStatusResponse = {
+  appId: string;
+  status: "starting" | "running" | "stopped" | "failed" | string;
+  baseUrl?: string;
+  entryUrl?: string;
+  port?: number;
+  pid?: number;
+  message?: string;
+  entryKey?: string;
+  route?: string;
 };
 
 export type KnowledgeListPacksParams = {
@@ -584,6 +698,67 @@ export type ModelProviderAliasReadResponse = {
 
 export type ModelProviderAliasListResponse = {
   configs: Record<string, unknown>;
+};
+
+export type ConnectDeepLinkResolveParams = {
+  url: string;
+};
+
+export type ConnectPayload = {
+  relay: string;
+  key: string;
+  name?: string;
+  refCode?: string;
+};
+
+export type ConnectDeepLinkResolveResponse = {
+  payload: ConnectPayload;
+  relayInfo?: unknown;
+  isVerified: boolean;
+};
+
+export type ConnectOpenDeepLinkResolveParams = {
+  url: string;
+};
+
+export type OpenDeepLinkPayload = {
+  kind: string;
+  slug: string;
+  source?: string;
+  version?: string;
+  action?: string;
+};
+
+export type ConnectOpenDeepLinkResolveResponse = {
+  payload: OpenDeepLinkPayload;
+};
+
+export type ConnectRelayApiKeySaveParams = {
+  relayId: string;
+  apiKey: string;
+  name?: string;
+};
+
+export type ConnectRelayApiKeySaveResponse = {
+  providerId: string;
+  keyId: string;
+  providerName: string;
+  isNewProvider: boolean;
+};
+
+export type ConnectCallbackStatus = "success" | "cancelled" | "error";
+
+export type ConnectCallbackSendParams = {
+  relayId: string;
+  apiKey: string;
+  status: ConnectCallbackStatus;
+  refCode?: string;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+export type ConnectCallbackSendResponse = {
+  delivered: boolean;
 };
 
 export type ProtocolSchemaGroup = "jsonrpc" | "v0";

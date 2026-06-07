@@ -58,14 +58,18 @@ function normalizeVersionTag(value) {
 }
 
 function contentTypeFor(filePath) {
-  if (/\.ya?ml$/i.test(filePath)) {
-    return "text/yaml";
+  const basename = path.basename(filePath);
+  if (basename === "RELEASES.json") {
+    return "application/json";
+  }
+  if (basename === "RELEASES") {
+    return "text/plain";
   }
   return "application/octet-stream";
 }
 
 function cacheControlFor(filePath) {
-  if (/^latest(?:-mac)?\.yml$/i.test(path.basename(filePath))) {
+  if (/^RELEASES(?:\.json)?$/i.test(path.basename(filePath))) {
     return "public, max-age=60, stale-while-revalidate=300";
   }
   return "public, max-age=31536000, immutable";
@@ -73,15 +77,17 @@ function cacheControlFor(filePath) {
 
 function isElectronUpdaterAsset(filePath) {
   const basename = path.basename(filePath);
-  if (/^latest(?:-mac)?\.yml$/i.test(basename)) {
+  if (/^RELEASES(?:\.json)?$/i.test(basename)) {
     return true;
   }
-  return /\.(blockmap|dmg|exe|zip)$/i.test(basename);
+  return /\.(dmg|exe|nupkg|zip)$/i.test(basename);
 }
 
 function assertNoRetiredUpdaterAssets(files) {
   const legacy = files.filter((file) =>
-    /(?:\.app\.tar\.gz|\.sig|latest\.json)$/i.test(path.basename(file)),
+    /(?:\.app\.tar\.gz|\.sig|latest(?:-mac)?\.yml|\.blockmap|latest\.json)$/i.test(
+      path.basename(file),
+    ),
   );
   if (legacy.length > 0) {
     throw new Error(

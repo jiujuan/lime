@@ -25,6 +25,8 @@
 
 生产路径不能 mock。`safeInvoke` / `invoke`、Electron Host、App Server sidecar、GUI smoke 和业务 E2E 必须进入真实 Electron Desktop Host IPC / App Server JSON-RPC；无真实通道时 fail-closed。`mockPriorityCommands`、`defaultMocks`、`invokeMockOnly`、`explicitMockFallback`、内存事件 / 窗口 / 快捷键夹具和 mock backend 只允许测试文件或显式测试夹具使用，不能作为产品降级、浏览器模式兜底或交付证据。
 
+macOS 真实 Electron E2E / GUI smoke 可以使用 Chromium `--use-mock-keychain` 隔离系统钥匙串。这只隔离测试进程的 Keychain backend，不等于业务 mock；目的是避免隔离 `HOME / ELECTRON_E2E_USER_DATA_DIR` 时触发“找不到用于储存 `Lime Key` 的钥匙串”系统弹窗或污染用户真实钥匙串。生产 App 和普通开发预览不得依赖该参数。
+
 新增命令和对应前端网关命名必须使用领域名，不要加 `Lime` / `lime_` / `lime-` 品牌前缀。例如 App Server 入口使用 `app_server_*`，不要写成带品牌前缀的命名。只有历史兼容、对外品牌标识或外部生态已固定的名字才允许例外，并在路线图或执行计划写明原因和退出条件。
 
 新增 AI Agent / runtime / host integration / 跨 App 复用能力默认走 App Server JSON-RPC current 主链。Electron main / preload 只作为 Desktop Host bridge，负责桌面壳能力、sidecar 生命周期与白名单 IPC；只有为旧 GUI 做兼容适配时，才继续触碰 `agent_runtime_*` / Aster legacy command facade；这类改动不能承接新业务逻辑，必须写清退出条件。
@@ -35,6 +37,18 @@
 - Electron Host bridge、App Server、legacy desktop facade 可以按 `current / compat / deprecated / dead-candidate` 演进
 - 新旧命令并存时，迁移边界清晰，不会继续扩散
 - 契约检查脚本能稳定扫描并阻止回流
+
+Connect deep link 已切到 Electron Desktop Host URL bridge 与 App Server JSON-RPC current 主链。当前唯一生产路径为：
+
+`Electron protocol/open-url -> src/lib/desktop-host/plugin-deep-link.ts -> src/hooks/useDeepLink.ts -> src/lib/api/connect.ts -> connectDeepLink/resolve | connectOpenDeepLink/resolve | connectRelayApiKey/save | connectCallback/send -> App Server RuntimeCore / LocalAppDataSource`
+
+固定约束：
+
+- Electron main / preload 只负责接收 `lime://` URL、缓存启动期 pending URL、派发 renderer-safe `onOpenUrl/getCurrent`，不得承接 Connect registry、API Key 保存或 webhook 业务事实
+- Connect registry 不再由 renderer 启动期预加载；`lime://connect` 实际发生时才由 App Server 按需读取缓存 / 远程 registry，保存 Relay API Key 时必须经 `connectRelayApiKey/save` 做 registry 校验
+- `lime://open` 官网入口同样走 `connectOpenDeepLink/resolve`，不要回退到旧 Desktop 命令
+- `deep-link://new-url`、`deep-link-connect`、`deep-link-error`、`handle_deep_link`、`handle_open_deep_link`、`save_relay_api_key`、`send_connect_callback`、`list_relay_providers`、`refresh_relay_registry` 都不得重新接回前端生产路径、Electron Desktop Host 白名单、DevBridge mock 或 renderer mock
+- 如未来需要展示中转商列表，必须先补 App Server current method 与前端 `src/lib/api/connect.ts` 网关；不能复活旧 Tauri registry list / refresh 命令
 
 浏览器连接器设置页同样遵循这条路径。当前主入口为 `src/lib/webview-api.ts` 中的浏览器连接器网关，统一承接：
 
@@ -168,7 +182,11 @@ Agent App current 安装 / package / runtime 主链不得在页面或 feature is
 
 `agent_app_start_ui_runtime` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Agent App scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
 
-`agent_app_runtime_*` 是 Agent App 进入 App Server / AgentRuntime 主链的 Desktop facade：`agent_app_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> backend host`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。cancel / read / host response 在 App Server protocol 覆盖前可继续作为 Desktop compat 适配到既有 `agent_runtime_*` 读写命令，但不得复制 Claw `*_skill_launch.rs`、不得新增垂直 `content_factory_*` Agent 命令，也不得把 `LIME_GATEWAY_*` 直接模型调用宣称为完整 Agent 能力。
+Claw / Aster 原完整执行链是 Agent 对话 runtime 的 current 参考实现，不应被前端 `agentRuntime` 模块或 Agent App UI runtime 替代。迁移方向是把 Claw 原链整体直迁到 App Server `RuntimeCore -> AsterBackend -> backend host`，让 Claw 与 Agent App 后续对话 turn 共用 `agentSession/start + agentSession/turn/start + agentSession/event + agentSession/read`。`src/lib/api/agentRuntime/*` 只允许作为前端 thin client gateway / compat projection，负责把旧 UI 形状投影到 App Server current method；它不是第二套业务 runtime，不得在其中补模型执行、事件合成、read model 拼装或 mock fallback。`agentAppUiRuntime/*` 只负责 Agent App UI 子进程 `start/status/stop/entryUrl` 生命周期，不承接对话 turn、tool runtime、evidence 或 Claw/Aster 私有请求合同。
+
+前端从本地存储恢复出的 Agent session id 在发送前必须先被 App Server `agentSession/read` 确认存在且归属当前 workspace。明确 `session not found` 或 workspace mismatch 时只能丢弃本地恢复快照并创建新的 App Server session；普通 bridge / network error 必须 fail closed，不得静默创建会话或继续轮询 stale session。Electron `safeInvoke` 返回的 App Server JSON-RPC result envelope 也必须在 `src/lib/api/appServer.ts` 网关层统一解包，业务页面不得各自猜测 `{ result: { lines } }` / `{ lines }` 形状。
+
+`agent_app_runtime_*` 是 Agent App 进入 App Server / AgentRuntime 主链的 Desktop facade：`agent_app_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> backend host`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。`startTask.turnConfig` 必须随 facade 透传，并写入 `RuntimeOptions.hostOptions.asterChatRequest`：扁平 `AsterChatRequest` 字段供 Desktop Aster host 恢复 Claw 原链，`turn_config` 镜像供外部 App Server backend 读取 provider_config / system_prompt / reasoning / sandbox 等配置。cancel / read / host response 在 App Server protocol 覆盖前可继续作为 Desktop compat 适配到既有 `agent_runtime_*` 读写命令，但不得复制 Claw `*_skill_launch.rs`、不得新增垂直 `content_factory_*` Agent 命令，也不得把 `LIME_GATEWAY_*` 直接模型调用宣称为完整 Agent 能力。
 
 P17.3 之前禁止真实删除 Agent App 本地数据：`agent_app_uninstall_rehearsal` 只生成 keep-data / delete-data 演练，`agent_app_uninstall` 只能返回同一演练摘要和未删除的 installed list，不得执行 `remove_file` / `remove_dir_all` 或移除 installed state。真实 delete-data 必须等后续路线图单独打开并补齐 evidence / residual audit / confirmation gate。
 

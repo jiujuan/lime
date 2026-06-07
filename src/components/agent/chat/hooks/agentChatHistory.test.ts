@@ -207,6 +207,156 @@ describe("agentChatHistory", () => {
     });
   });
 
+  it("App Server 历史 turn 缺少旧 prompt_text 字段时不应中断会话恢复", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-missing-legacy-text",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-missing-prompt",
+          thread_id: "session-missing-legacy-text",
+          status: "failed",
+          started_at: "2026-06-07T04:39:20.100Z",
+          completed_at: "2026-06-07T04:42:05.905Z",
+          created_at: "2026-06-07T04:39:20.100Z",
+          updated_at: "2026-06-07T04:42:05.905Z",
+        } as never,
+      ],
+      items: [
+        {
+          id: "item-user-missing-content",
+          thread_id: "session-missing-legacy-text",
+          turn_id: "turn-missing-prompt",
+          sequence: 1,
+          type: "user_message",
+          status: "completed",
+          started_at: "2026-06-07T04:39:20.100Z",
+          updated_at: "2026-06-07T04:39:20.100Z",
+        } as never,
+        {
+          id: "item-agent-missing-text",
+          thread_id: "session-missing-legacy-text",
+          turn_id: "turn-missing-prompt",
+          sequence: 2,
+          type: "agent_message",
+          status: "failed",
+          started_at: "2026-06-07T04:42:05.905Z",
+          updated_at: "2026-06-07T04:42:05.905Z",
+        } as never,
+      ],
+    };
+
+    expect(() =>
+      hydrateSessionDetailMessages(detail, "session-missing-legacy-text"),
+    ).not.toThrow();
+    expect(
+      hydrateSessionDetailMessages(detail, "session-missing-legacy-text"),
+    ).toEqual([]);
+  });
+
+  it("App Server 历史只有 artifact summary 时应恢复产物消息", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-artifact-only",
+      thread_id: "session-artifact-only-thread",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-artifact-only",
+          thread_id: "session-artifact-only-thread",
+          prompt_text: "",
+          status: "completed",
+          started_at: "2026-06-07T06:17:13.000Z",
+          completed_at: "2026-06-07T06:17:14.000Z",
+          created_at: "2026-06-07T06:17:13.000Z",
+          updated_at: "2026-06-07T06:17:14.000Z",
+        },
+      ],
+      items: [],
+      artifacts: [
+        {
+          artifactRef: "artifact-ref-1",
+          eventId: "event-artifact-1",
+          sequence: 1,
+          turnId: "turn-artifact-only",
+          artifactId: "code-artifact:greeting",
+          path: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+          title: "greeting.ts",
+          kind: "code",
+          status: "complete",
+          contentStatus: "available",
+          metadata: {
+            language: "typescript",
+            previewText: "export const greeting = 'hello';",
+          },
+        },
+      ],
+      thread_read: {
+        thread_id: "session-artifact-only-thread",
+        status: "completed",
+        profile_status: "completed",
+        turns: [
+          {
+            turn_id: "turn-artifact-only",
+            status: "completed",
+            native_status: "completed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        artifacts: [
+          {
+            artifactRef: "artifact-ref-1",
+            eventId: "event-artifact-1",
+            sequence: 1,
+            turnId: "turn-artifact-only",
+            artifactId: "code-artifact:greeting",
+            path: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+            title: "greeting.ts",
+            kind: "code",
+            status: "complete",
+            contentStatus: "available",
+            metadata: {
+              language: "typescript",
+              previewText: "export const greeting = 'hello';",
+            },
+          },
+        ],
+      } as never,
+    } as AsterSessionDetail & { artifacts: unknown[] };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-artifact-only",
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: "session-artifact-only-app-server-artifacts",
+      role: "assistant",
+      content: "已生成代码产物，可在工作台查看。",
+      runtimeTurnId: "turn-artifact-only",
+      artifacts: [
+        {
+          id: "code-artifact:greeting",
+          type: "code",
+          title: "greeting.ts",
+          status: "complete",
+          content: "export const greeting = 'hello';",
+          meta: {
+            filePath: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+            artifactPath: ".lime/qc/code-artifact-workbench/src/greeting.ts",
+            previewText: "export const greeting = 'hello';",
+          },
+        },
+      ],
+    });
+  });
+
   it("历史恢复不应把 commentary 阶段消息合并进最终正文", () => {
     const detail: AsterSessionDetail = {
       id: "session-commentary-final",
@@ -1170,7 +1320,8 @@ describe("agentChatHistory", () => {
     });
     expect(
       mergedMessages[1]?.contentParts?.find(
-        (part) => part.type === "tool_use" && part.toolCall.id === "tool-state-1",
+        (part) =>
+          part.type === "tool_use" && part.toolCall.id === "tool-state-1",
       ),
     ).toMatchObject({
       type: "tool_use",
@@ -1323,7 +1474,8 @@ describe("agentChatHistory", () => {
       path: ".lime/tasks/image_generate/task-history-json-image-1.json",
       absolute_path:
         "/workspace/.lime/tasks/image_generate/task-history-json-image-1.json",
-      artifact_path: ".lime/tasks/image_generate/task-history-json-image-1.json",
+      artifact_path:
+        ".lime/tasks/image_generate/task-history-json-image-1.json",
       progress: {
         phase: "pending_submit",
         message: "任务已创建，等待进入队列",
@@ -1400,9 +1552,7 @@ describe("agentChatHistory", () => {
       "session-history-json-image",
       { compactCompletedHistory: true },
     );
-    const assistant = messages.find(
-      (message) => message.role === "assistant",
-    );
+    const assistant = messages.find((message) => message.role === "assistant");
 
     expect(messages.map((message) => message.role)).toEqual([
       "user",

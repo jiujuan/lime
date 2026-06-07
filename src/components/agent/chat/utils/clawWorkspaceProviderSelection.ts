@@ -13,6 +13,7 @@ export interface ResolveClawWorkspaceProviderSelectionInput {
   currentProviderType?: string | null;
   currentModel?: string | null;
   theme?: string;
+  allowProviderFallback?: boolean;
 }
 
 export interface ClawWorkspaceProviderSelection {
@@ -88,7 +89,12 @@ function resolvePreferredModelId(
 export async function resolveClawWorkspaceProviderSelection(
   input: ResolveClawWorkspaceProviderSelectionInput,
 ): Promise<ClawWorkspaceProviderSelection | null> {
-  const { currentProviderType, currentModel, theme } = input;
+  const {
+    currentProviderType,
+    currentModel,
+    theme,
+    allowProviderFallback = true,
+  } = input;
   const configuredProviders = await loadConfiguredProviders();
 
   if (configuredProviders.length === 0) {
@@ -100,13 +106,17 @@ export async function resolveClawWorkspaceProviderSelection(
     currentProviderType,
   );
   const orderedProviders = currentProvider
-    ? [
-        currentProvider,
-        ...configuredProviders.filter(
-          (provider) => provider.key !== currentProvider.key,
-        ),
-      ]
-    : configuredProviders;
+    ? allowProviderFallback
+      ? [
+          currentProvider,
+          ...configuredProviders.filter(
+            (provider) => provider.key !== currentProvider.key,
+          ),
+        ]
+      : [currentProvider]
+    : allowProviderFallback || !currentProviderType?.trim()
+      ? configuredProviders
+      : [];
 
   for (const provider of orderedProviders) {
     const providerModels = await loadProviderModels(

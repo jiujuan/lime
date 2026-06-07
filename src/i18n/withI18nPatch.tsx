@@ -19,11 +19,15 @@ import { getConfig, type Config } from "@/lib/api/appConfig";
 import { I18nPatchProvider } from "./legacy-patch/I18nPatchProvider";
 import { StartupLoadingScreen } from "./StartupLoadingScreen";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
+import { hasNativeStartupScreen } from "@/lib/nativeStartupScreen";
 import { changeLimeLocale } from "./createI18n";
 import { toLegacyPatchLanguage } from "./locales";
 
 const CONFIG_LOAD_TIMEOUT_MS = 2500;
 const READY_COMMIT_TIMEOUT_MS = 48;
+const DEFAULT_STARTUP_CONFIG: LocaleConfig = { language: "auto" };
+
+type LocaleConfig = Pick<Config, "language">;
 
 /**
  * 检查是否在 Desktop Host 环境中运行
@@ -51,8 +55,11 @@ export function withI18nPatch<P extends object>(
   const { fadeInDuration = 150 } = options;
 
   return function PatchedComponent(props: P) {
-    const [config, setConfig] = useState<Config | null>(null);
-    const [isReady, setIsReady] = useState(false);
+    const nativeStartupScreenAvailable = hasNativeStartupScreen();
+    const [config, setConfig] = useState<LocaleConfig | null>(() =>
+      nativeStartupScreenAvailable ? DEFAULT_STARTUP_CONFIG : null,
+    );
+    const [isReady, setIsReady] = useState(nativeStartupScreenAvailable);
 
     useEffect(() => {
       let cancelled = false;
@@ -67,7 +74,7 @@ export function withI18nPatch<P extends object>(
         setIsReady(true);
       };
 
-      const applyConfig = async (nextConfig: Config) => {
+      const applyConfig = async (nextConfig: LocaleConfig) => {
         if (cancelled) {
           return;
         }
@@ -116,12 +123,12 @@ export function withI18nPatch<P extends object>(
         } else {
           console.warn(`[i18n] ${reason}`);
         }
-        void applyConfig({ language: "zh-CN" } as Config);
+        void applyConfig(DEFAULT_STARTUP_CONFIG);
       };
 
       // 如果不在 Desktop Host 环境，使用默认配置
       if (!isDesktopHostEnvironment()) {
-        void applyConfig({ language: "zh-CN" } as Config);
+        void applyConfig(DEFAULT_STARTUP_CONFIG);
         return () => {
           cancelled = true;
         };
@@ -162,11 +169,13 @@ export function withI18nPatch<P extends object>(
           window.cancelAnimationFrame(readyRafId);
         }
       };
-    }, []);
+    }, [nativeStartupScreenAvailable]);
 
     if (!config) {
       return <StartupLoadingScreen />;
     }
+
+    const legacyPatchLanguage = toLegacyPatchLanguage(config.language || "auto");
 
     return (
       <div
@@ -176,7 +185,8 @@ export function withI18nPatch<P extends object>(
         }}
       >
         <I18nPatchProvider
-          initialLanguage={toLegacyPatchLanguage(config.language || "zh-CN")}
+          key={legacyPatchLanguage}
+          initialLanguage={legacyPatchLanguage}
         >
           <Component {...props} />
         </I18nPatchProvider>

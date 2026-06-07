@@ -1,6 +1,10 @@
 pub use app_server_protocol::is_app_server_notification_method;
 pub use app_server_protocol::is_app_server_request_method;
 pub use app_server_protocol::AgentAppInstalledListResponse;
+pub use app_server_protocol::AgentAppUiRuntimeStartParams;
+pub use app_server_protocol::AgentAppUiRuntimeStatusParams;
+pub use app_server_protocol::AgentAppUiRuntimeStatusResponse;
+pub use app_server_protocol::AgentAppUiRuntimeStopParams;
 pub use app_server_protocol::AgentSessionActionRespondParams;
 pub use app_server_protocol::AgentSessionListParams;
 pub use app_server_protocol::AgentSessionReadParams;
@@ -13,6 +17,11 @@ pub use app_server_protocol::ArtifactReadParams;
 pub use app_server_protocol::AutomationJobListResponse;
 pub use app_server_protocol::CapabilityListParams;
 pub use app_server_protocol::EvidenceExportParams;
+pub use app_server_protocol::FileSystemDirectoryListing;
+pub use app_server_protocol::FileSystemFileEntry;
+pub use app_server_protocol::FileSystemFilePreview;
+pub use app_server_protocol::FileSystemListDirectoryParams;
+pub use app_server_protocol::FileSystemReadFilePreviewParams;
 pub use app_server_protocol::InitializeParams;
 use app_server_protocol::JsonRpcErrorResponse;
 use app_server_protocol::JsonRpcMessage;
@@ -42,6 +51,9 @@ pub use app_server_protocol::WorkspaceSkillBindingsListParams;
 pub use app_server_protocol::WorkspaceSkillBindingsListResponse;
 pub use app_server_protocol::APP_SERVER_METHODS;
 pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
+pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START;
+pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS;
+pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 pub use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_LIST;
@@ -53,6 +65,8 @@ pub use app_server_protocol::METHOD_ARTIFACT_READ;
 pub use app_server_protocol::METHOD_AUTOMATION_JOB_LIST;
 pub use app_server_protocol::METHOD_CAPABILITY_LIST;
 pub use app_server_protocol::METHOD_EVIDENCE_EXPORT;
+pub use app_server_protocol::METHOD_FILE_SYSTEM_LIST_DIRECTORY;
+pub use app_server_protocol::METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
 pub use app_server_protocol::METHOD_INITIALIZE;
 pub use app_server_protocol::METHOD_INITIALIZED;
 pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
@@ -255,6 +269,27 @@ impl AppServerClient {
         self.typed_request(typed::list_agent_app_installed())
     }
 
+    pub fn start_agent_app_ui_runtime(
+        &mut self,
+        params: AgentAppUiRuntimeStartParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::start_agent_app_ui_runtime(params))
+    }
+
+    pub fn agent_app_ui_runtime_status(
+        &mut self,
+        params: AgentAppUiRuntimeStatusParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::agent_app_ui_runtime_status(params))
+    }
+
+    pub fn stop_agent_app_ui_runtime(
+        &mut self,
+        params: AgentAppUiRuntimeStopParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::stop_agent_app_ui_runtime(params))
+    }
+
     pub fn list_knowledge_packs(
         &mut self,
         params: KnowledgeListPacksParams,
@@ -309,6 +344,20 @@ impl AppServerClient {
         params: ArtifactReadParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::read_artifacts(params))
+    }
+
+    pub fn list_directory(
+        &mut self,
+        params: FileSystemListDirectoryParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_directory(params))
+    }
+
+    pub fn read_file_preview(
+        &mut self,
+        params: FileSystemReadFilePreviewParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_file_preview(params))
     }
 
     pub fn export_evidence(
@@ -458,6 +507,24 @@ pub mod typed {
         TypedRequest::new(METHOD_AGENT_APP_INSTALLED_LIST, serde_json::json!({}))
     }
 
+    pub fn start_agent_app_ui_runtime(
+        params: AgentAppUiRuntimeStartParams,
+    ) -> TypedRequest<AgentAppUiRuntimeStartParams> {
+        TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_START, params)
+    }
+
+    pub fn agent_app_ui_runtime_status(
+        params: AgentAppUiRuntimeStatusParams,
+    ) -> TypedRequest<AgentAppUiRuntimeStatusParams> {
+        TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_STATUS, params)
+    }
+
+    pub fn stop_agent_app_ui_runtime(
+        params: AgentAppUiRuntimeStopParams,
+    ) -> TypedRequest<AgentAppUiRuntimeStopParams> {
+        TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_STOP, params)
+    }
+
     pub fn list_knowledge_packs(
         params: KnowledgeListPacksParams,
     ) -> TypedRequest<KnowledgeListPacksParams> {
@@ -506,6 +573,18 @@ pub mod typed {
 
     pub fn read_artifacts(params: ArtifactReadParams) -> TypedRequest<ArtifactReadParams> {
         TypedRequest::new(METHOD_ARTIFACT_READ, params)
+    }
+
+    pub fn list_directory(
+        params: FileSystemListDirectoryParams,
+    ) -> TypedRequest<FileSystemListDirectoryParams> {
+        TypedRequest::new(METHOD_FILE_SYSTEM_LIST_DIRECTORY, params)
+    }
+
+    pub fn read_file_preview(
+        params: FileSystemReadFilePreviewParams,
+    ) -> TypedRequest<FileSystemReadFilePreviewParams> {
+        TypedRequest::new(METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, params)
     }
 
     pub fn export_evidence(params: EvidenceExportParams) -> TypedRequest<EvidenceExportParams> {
@@ -862,6 +941,41 @@ mod tests {
     }
 
     #[test]
+    fn file_system_read_helpers_use_current_methods() {
+        let mut client = AppServerClient::new();
+
+        let listing = client
+            .list_directory(FileSystemListDirectoryParams {
+                path: "/workspace".to_string(),
+            })
+            .expect("listing");
+        let preview = client
+            .read_file_preview(FileSystemReadFilePreviewParams {
+                path: "/workspace/README.md".to_string(),
+                max_size: Some(1024),
+            })
+            .expect("preview");
+
+        assert_eq!(listing.id, RequestId::Integer(1));
+        assert_eq!(listing.method, METHOD_FILE_SYSTEM_LIST_DIRECTORY);
+        assert_eq!(
+            listing.params.expect("params"),
+            json!({
+                "path": "/workspace",
+            })
+        );
+        assert_eq!(preview.id, RequestId::Integer(2));
+        assert_eq!(preview.method, METHOD_FILE_SYSTEM_READ_FILE_PREVIEW);
+        assert_eq!(
+            preview.params.expect("params"),
+            json!({
+                "path": "/workspace/README.md",
+                "maxSize": 1024,
+            })
+        );
+    }
+
+    #[test]
     fn export_evidence_preserves_scope_and_stable_method() {
         let mut client = AppServerClient::new();
 
@@ -1012,6 +1126,8 @@ mod tests {
 
         assert!(methods.contains(&METHOD_INITIALIZE));
         assert!(methods.contains(&METHOD_ARTIFACT_READ));
+        assert!(methods.contains(&METHOD_FILE_SYSTEM_LIST_DIRECTORY));
+        assert!(methods.contains(&METHOD_FILE_SYSTEM_READ_FILE_PREVIEW));
         assert!(methods.contains(&METHOD_EVIDENCE_EXPORT));
         assert!(methods.contains(&METHOD_AGENT_SESSION_TURN_START));
         assert!(methods.contains(&METHOD_WORKSPACE_LIST));
@@ -1032,6 +1148,12 @@ mod tests {
         assert!(methods.contains(&METHOD_AGENT_SESSION_EVENT));
         assert!(is_app_server_request_method(METHOD_CAPABILITY_LIST));
         assert!(is_app_server_request_method(METHOD_ARTIFACT_READ));
+        assert!(is_app_server_request_method(
+            METHOD_FILE_SYSTEM_LIST_DIRECTORY
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_FILE_SYSTEM_READ_FILE_PREVIEW
+        ));
         assert!(is_app_server_request_method(METHOD_EVIDENCE_EXPORT));
         assert!(is_app_server_request_method(METHOD_WORKSPACE_LIST));
         assert!(is_app_server_request_method(METHOD_SKILL_LIST));

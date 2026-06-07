@@ -93,14 +93,44 @@ export class AdapterCapabilityHost implements CapabilityHost {
       runId,
     });
 
+    const storage = () => this.createStorageCapability(provenance);
+    const artifacts = () => this.createArtifactsCapability(provenance);
+    const evidence = () => this.createEvidenceCapability(provenance);
+    const knowledge = () => this.createKnowledgeCapability(provenance);
+    const agent = () => this.createAgentCapability(provenance);
+
     return {
       appId: this.preview.identity.appId,
       entry,
-      storage: this.createStorageCapability(provenance),
-      artifacts: this.createArtifactsCapability(provenance),
-      evidence: this.createEvidenceCapability(provenance),
-      knowledge: this.createKnowledgeCapability(provenance),
-      agent: this.createAgentCapability(provenance),
+      storage: {
+        get namespace() {
+          return storage().namespace;
+        },
+        get: async (key) => storage().get(key),
+        set: async (key, value) => storage().set(key, value),
+        list: async () => storage().list(),
+        delete: async (key) => storage().delete(key),
+      },
+      artifacts: {
+        create: async (input) => artifacts().create(input),
+        list: async () => artifacts().list(),
+      },
+      evidence: {
+        record: async (input) => evidence().record(input),
+        list: async () => evidence().list(),
+      },
+      knowledge: {
+        search: async (input) => knowledge().search(input),
+      },
+      agent: {
+        startTask: async (input) => agent().startTask(input),
+        streamTask: async (task) => agent().streamTask(task),
+        getTask: async (task) => agent().getTask(task),
+        cancelTask: async (task) => agent().cancelTask(task),
+        retryTask: async (task) => agent().retryTask(task),
+        submitHostResponse: async (input) => agent().submitHostResponse(input),
+        listTasks: async () => agent().listTasks(),
+      },
     };
   }
 

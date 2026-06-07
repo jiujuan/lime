@@ -49,7 +49,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
         return {
-          providerType: "kiro",
+          providerType: "openai",
           setProviderType: vi.fn(),
           model: "mock-model",
           setModel: vi.fn(),
@@ -216,7 +216,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
         return {
-          providerType: "kiro",
+          providerType: "openai",
           setProviderType: vi.fn(),
           model: "mock-model",
           setModel: vi.fn(),
@@ -422,7 +422,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       ({ workspaceId }: { workspaceId: string }) => {
         observedWorkspaceIds.push(workspaceId);
         return {
-          providerType: "kiro",
+          providerType: "openai",
           setProviderType: vi.fn(),
           model: "mock-model",
           setModel: vi.fn(),

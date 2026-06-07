@@ -11,6 +11,7 @@ import {
   getUpdateNotificationMetrics,
   isUpdateInstallSessionActive,
   listenUpdateInstallSession,
+  openUpdateWindow,
   recordUpdateNotificationAction,
   remindUpdateLater,
   setUpdateCheckSettings,
@@ -71,6 +72,7 @@ describe("appUpdate API", () => {
   it("应代理更新提醒动作", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(123)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(456)
@@ -79,6 +81,7 @@ describe("appUpdate API", () => {
       .mockResolvedValueOnce(undefined);
 
     await expect(closeUpdateWindow()).resolves.toBeUndefined();
+    await expect(openUpdateWindow()).resolves.toBeUndefined();
     await expect(dismissUpdateNotification("1.2.3")).resolves.toBe(123);
     await expect(
       recordUpdateNotificationAction("update_now"),
@@ -96,6 +99,7 @@ describe("appUpdate API", () => {
       }),
     ).resolves.toBeUndefined();
     await expect(testUpdateWindow()).resolves.toBeUndefined();
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "open_update_window");
   });
 
   it("应代理更新安装会话命令和事件", async () => {

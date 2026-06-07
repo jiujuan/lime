@@ -1,7 +1,9 @@
 use app_server_protocol::JsonRpcMessage;
+use app_server_protocol::JsonRpcResponse;
 use app_server_protocol::RequestId;
 use app_server_transport::decode_message;
 use app_server_transport::encode_message;
+use serde_json::Value;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Write;
@@ -21,7 +23,14 @@ pub enum HarnessCommand {
     SmokeLines {
         client_name: String,
     },
+    SessionFacadeLines {
+        client_name: String,
+    },
     LaunchStdio {
+        app_server_bin: PathBuf,
+        extra_args: Vec<String>,
+    },
+    LaunchSessionFacadeStdio {
         app_server_bin: PathBuf,
         extra_args: Vec<String>,
     },
@@ -84,6 +93,34 @@ impl StdioSmokeReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionFacadeStdioSmokeReport {
+    pub app_server_bin: PathBuf,
+    pub session_id: String,
+    pub initialize_response_id: RequestId,
+    pub start_session_response_id: RequestId,
+    pub list_sessions_response_id: RequestId,
+    pub read_session_response_id: RequestId,
+    pub update_session_response_id: RequestId,
+    pub listed_session_count: usize,
+}
+
+impl SessionFacadeStdioSmokeReport {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "[app-server-test-client] ok appServerBin={} sessionId={} initializeResponseId={} startSessionResponseId={} listSessionsResponseId={} readSessionResponseId={} updateSessionResponseId={} listedSessions={}",
+            self.app_server_bin.display(),
+            self.session_id,
+            self.initialize_response_id,
+            self.start_session_response_id,
+            self.list_sessions_response_id,
+            self.read_session_response_id,
+            self.update_session_response_id,
+            self.listed_session_count
+        )
+    }
+}
+
 pub fn parse_cli_args(args: impl IntoIterator<Item = String>) -> TestClientCli {
     let mut args = args.into_iter();
     let command = args.next();
@@ -103,6 +140,11 @@ pub fn parse_cli_args(args: impl IntoIterator<Item = String>) -> TestClientCli {
                 .next()
                 .unwrap_or_else(|| "app-server-test-client".to_string()),
         },
+        Some("session-facade-lines") => HarnessCommand::SessionFacadeLines {
+            client_name: args
+                .next()
+                .unwrap_or_else(|| "app-server-test-client".to_string()),
+        },
         Some("launch-stdio") => {
             let app_server_bin = args
                 .next()
@@ -110,6 +152,17 @@ pub fn parse_cli_args(args: impl IntoIterator<Item = String>) -> TestClientCli {
                 .unwrap_or_else(|| PathBuf::from("app-server"));
             let extra_args = args.collect::<Vec<_>>();
             HarnessCommand::LaunchStdio {
+                app_server_bin,
+                extra_args,
+            }
+        }
+        Some("launch-session-facade-stdio") => {
+            let app_server_bin = args
+                .next()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("app-server"));
+            let extra_args = args.collect::<Vec<_>>();
+            HarnessCommand::LaunchSessionFacadeStdio {
                 app_server_bin,
                 extra_args,
             }
@@ -148,25 +201,25 @@ pub fn run_stdio_smoke(
     result
 }
 
+pub fn run_session_facade_stdio_smoke(
+    config: StdioLaunchConfig,
+    input_lines: &[String],
+) -> Result<SessionFacadeStdioSmokeReport, String> {
+    let mut child = config
+        .command()
+        .spawn()
+        .map_err(|error| format!("failed to spawn app-server stdio process: {error}"))?;
+    let result = run_session_facade_stdio_smoke_with_child(&mut child, &config, input_lines);
+    cleanup_child(&mut child);
+    result
+}
+
 fn run_stdio_smoke_with_child(
     child: &mut Child,
     config: &StdioLaunchConfig,
     input_lines: &[String],
 ) -> Result<StdioSmokeReport, String> {
-    {
-        let stdin = child
-            .stdin
-            .as_mut()
-            .ok_or_else(|| "app-server stdio stdin is not available".to_string())?;
-        for line in input_lines {
-            stdin
-                .write_all(line.as_bytes())
-                .map_err(|error| format!("failed to write app-server stdio request: {error}"))?;
-        }
-        stdin
-            .flush()
-            .map_err(|error| format!("failed to flush app-server stdio request: {error}"))?;
-    }
+    write_input_lines(child, input_lines)?;
 
     let (initialize, capability_list) = {
         let stdout = child
@@ -196,6 +249,67 @@ fn run_stdio_smoke_with_child(
     })
 }
 
+fn run_session_facade_stdio_smoke_with_child(
+    child: &mut Child,
+    config: &StdioLaunchConfig,
+    input_lines: &[String],
+) -> Result<SessionFacadeStdioSmokeReport, String> {
+    write_input_lines(child, input_lines)?;
+
+    let (initialize, start, list, read, update) = {
+        let stdout = child
+            .stdout
+            .as_mut()
+            .ok_or_else(|| "app-server stdio stdout is not available".to_string())?;
+        let mut stdout = BufReader::new(stdout);
+        (
+            read_response(&mut stdout, RequestId::Integer(1))?,
+            read_response(&mut stdout, RequestId::Integer(2))?,
+            read_response(&mut stdout, RequestId::Integer(3))?,
+            read_response(&mut stdout, RequestId::Integer(4))?,
+            read_response(&mut stdout, RequestId::Integer(5))?,
+        )
+    };
+
+    let session_id = crate::SESSION_FACADE_SAMPLE_SESSION_ID;
+    expect_result_session_id(&start, &["session", "sessionId"], session_id)?;
+    expect_result_session_id(&read, &["session", "sessionId"], session_id)?;
+    expect_result_session_id(&update, &["session", "sessionId"], session_id)?;
+    let listed_session_count = expect_list_contains_session(&list, session_id)?;
+
+    drop(child.stdin.take());
+    wait_for_exit(child, Duration::from_secs(2))?;
+
+    Ok(SessionFacadeStdioSmokeReport {
+        app_server_bin: config.app_server_bin.clone(),
+        session_id: session_id.to_string(),
+        initialize_response_id: initialize.id,
+        start_session_response_id: start.id,
+        list_sessions_response_id: list.id,
+        read_session_response_id: read.id,
+        update_session_response_id: update.id,
+        listed_session_count,
+    })
+}
+
+fn write_input_lines(child: &mut Child, input_lines: &[String]) -> Result<(), String> {
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| "app-server stdio stdin is not available".to_string())?;
+        for line in input_lines {
+            stdin
+                .write_all(line.as_bytes())
+                .map_err(|error| format!("failed to write app-server stdio request: {error}"))?;
+        }
+        stdin
+            .flush()
+            .map_err(|error| format!("failed to flush app-server stdio request: {error}"))?;
+    }
+    Ok(())
+}
+
 fn read_response(
     stdout: &mut impl BufRead,
     expected_id: RequestId,
@@ -219,6 +333,64 @@ fn read_response(
         )),
         other => Err(format!("expected JSON-RPC response, got {other:?}")),
     }
+}
+
+fn expect_result_session_id(
+    response: &JsonRpcResponse,
+    path: &[&str],
+    expected: &str,
+) -> Result<(), String> {
+    let actual = value_at_path(&response.result, path)
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            format!(
+                "response {} did not include string result.{}",
+                response.id,
+                path.join(".")
+            )
+        })?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!(
+            "response {} sessionId mismatch: expected {expected}, got {actual}",
+            response.id
+        ))
+    }
+}
+
+fn expect_list_contains_session(
+    response: &JsonRpcResponse,
+    expected_session_id: &str,
+) -> Result<usize, String> {
+    let sessions = response
+        .result
+        .get("sessions")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            format!(
+                "response {} did not include result.sessions array",
+                response.id
+            )
+        })?;
+    if sessions.iter().any(|session| {
+        session
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .is_some_and(|session_id| session_id == expected_session_id)
+    }) {
+        Ok(sessions.len())
+    } else {
+        Err(format!(
+            "response {} sessions did not include sessionId {expected_session_id}",
+            response.id
+        ))
+    }
+}
+
+fn value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    path.iter()
+        .try_fold(value, |current, segment| current.get(segment))
 }
 
 fn wait_for_exit(child: &mut Child, timeout: Duration) -> Result<(), String> {
@@ -291,6 +463,31 @@ mod tests {
             }
         );
         assert_eq!(
+            parse_cli_args(vec![
+                "session-facade-lines".to_string(),
+                "fixture".to_string()
+            ]),
+            TestClientCli {
+                command: HarnessCommand::SessionFacadeLines {
+                    client_name: "fixture".to_string()
+                }
+            }
+        );
+        assert_eq!(
+            parse_cli_args(vec![
+                "launch-session-facade-stdio".to_string(),
+                "/bin/app-server".to_string(),
+                "--backend".to_string(),
+                "unavailable".to_string(),
+            ]),
+            TestClientCli {
+                command: HarnessCommand::LaunchSessionFacadeStdio {
+                    app_server_bin: PathBuf::from("/bin/app-server"),
+                    extra_args: vec!["--backend".to_string(), "unavailable".to_string()]
+                }
+            }
+        );
+        assert_eq!(
             parse_cli_args(vec!["legacy-client".to_string()]),
             TestClientCli {
                 command: HarnessCommand::InitializeLine {
@@ -346,6 +543,25 @@ mod tests {
         assert_eq!(
             report.summary_line(),
             "[app-server-test-client] ok appServerBin=/bin/app-server initializeResponseId=1 capabilityListResponseId=2 capabilities=4"
+        );
+    }
+
+    #[test]
+    fn session_facade_stdio_smoke_report_summary_is_stable() {
+        let report = SessionFacadeStdioSmokeReport {
+            app_server_bin: PathBuf::from("/bin/app-server"),
+            session_id: "sess_test_client_facade".to_string(),
+            initialize_response_id: RequestId::Integer(1),
+            start_session_response_id: RequestId::Integer(2),
+            list_sessions_response_id: RequestId::Integer(3),
+            read_session_response_id: RequestId::Integer(4),
+            update_session_response_id: RequestId::Integer(5),
+            listed_session_count: 1,
+        };
+
+        assert_eq!(
+            report.summary_line(),
+            "[app-server-test-client] ok appServerBin=/bin/app-server sessionId=sess_test_client_facade initializeResponseId=1 startSessionResponseId=2 listSessionsResponseId=3 readSessionResponseId=4 updateSessionResponseId=5 listedSessions=1"
         );
     }
 }

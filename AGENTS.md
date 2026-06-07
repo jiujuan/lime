@@ -31,14 +31,15 @@
 7. **未验证的平台假设要显式说明** - 涉及文件系统、进程、终端、快捷键、窗口、托盘、权限时尤其如此
 8. **新增命名禁止品牌前缀** - 新程序、目录、crate/package、Electron IPC channel、App Server 方法、API 网关、类型、模块和脚本默认不得添加 `Lime` / `lime_` / `lime-` 品牌前缀；直接使用领域名，如 `app_server_*`、`app-server`。只有对外发布品牌标识、历史兼容或第三方生态已固定命名时才允许保留，并在执行计划说明原因
 9. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力默认落到 `app-server` crates、JSON-RPC 协议、client 与 RuntimeCore；Electron 只作为 Desktop Host bridge，负责 IPC、窗口、托盘、Dock、updater 和 sidecar 生命周期，不是第二套后端或业务 adapter；`agent_runtime_*` / Aster 旧命令只作为 Desktop 兼容 facade，不再直接承接新业务逻辑，除非执行计划明确说明过渡原因和退出条件
-10. **不要继续扩展 compat / deprecated 路径** - 新 API、新命令、新前端入口默认落在当前 `current` 主路径
-11. **规划改了且明确无需兼容时，优先删旧实现** - 如果用户已明确“上一版无人使用 / 不用兼容 / 旧实现阻碍主线”，旧实现默认按 `dead` 或带退出条件的 `deprecated` 处理，不要继续修补、包裹或平移
-12. **`legacy current reference` 不是续命许可** - 旧路线图、旧实现锚点只用于理解现状与迁移，不等于允许继续往旧页面、旧命令、旧协议上加功能
+10. **Electron 打包事实源统一 Forge** - Electron packaging / installer / signing / notarization / updater metadata 的 current 配置只允许走 `forge.config.mjs`、`electron-forge package`、`electron-forge make` 与仓库内 Forge maker；`electron-builder.yml`、`electron-builder` CLI 和 builder yml 事实源按 `dead` 处理，不得新增引用或把它们写回文档、CI、守卫、i18n evidence。运行时更新仍以 `electron/updateHost.ts` + `electron-updater` 为 current；Windows NSIS updater 语义由 Forge maker 承接。
+11. **不要继续扩展 compat / deprecated 路径** - 新 API、新命令、新前端入口默认落在当前 `current` 主路径
+12. **规划改了且明确无需兼容时，优先删旧实现** - 如果用户已明确“上一版无人使用 / 不用兼容 / 旧实现阻碍主线”，旧实现默认按 `dead` 或带退出条件的 `deprecated` 处理，不要继续修补、包裹或平移
+13. **`legacy current reference` 不是续命许可** - 旧路线图、旧实现锚点只用于理解现状与迁移，不等于允许继续往旧页面、旧命令、旧协议上加功能
 
 ## 工程硬规则
 
 1. **默认统一校验入口** - 提交前默认执行 `npm run verify:local`
-2. **版本改动必须校验一致性** - 改 `package.json`、`package-lock.json`、Electron 配置、`lime-rs/Cargo.toml` 或 App Server release manifest 时执行 `npm run verify:app-version`
+2. **版本改动必须校验一致性** - 改 `package.json`、`package-lock.json`、`forge.config.mjs`、Electron 配置、`lime-rs/Cargo.toml` 或 App Server release manifest 时执行 `npm run verify:app-version`
 3. **协议改动必须同步四侧** - Electron Desktop Host bridge / preload 白名单、App Server JSON-RPC 协议、前端 `safeInvoke(...)` / API 网关、`agentCommandCatalog`、`mockPriorityCommands` / `defaultMocks` 必须保持一致，并执行 `npm run test:contracts`；只有触碰 legacy desktop facade 时才额外检查 legacy host 注册，新增 current 能力不得把旧注册表作为事实源。生产路径禁止 mock：`safeInvoke` / `invoke` / Electron Host / App Server / GUI smoke 不能回退 `mockPriorityCommands`、`defaultMocks`、`invokeMockOnly` 或 mock backend；这些只允许测试夹具显式使用
 4. **Lime 是 GUI 桌面产品** - 不能只以 `lint`、`typecheck`、单测通过作为“可交付”判断
 5. **高风险 GUI 改动必须做最小冒烟** - 涉及 GUI 壳、DevBridge、Workspace、主路径时执行 `npm run verify:gui-smoke`

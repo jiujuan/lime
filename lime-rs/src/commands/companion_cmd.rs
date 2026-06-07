@@ -2,7 +2,7 @@ use crate::services::companion_service::{
     self, CompanionLaunchPetRequest, CompanionLaunchPetResult, CompanionPetCommandRequest,
     CompanionPetSendResult, CompanionPetStatus, CompanionServiceState,
 };
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn companion_get_pet_status(
@@ -13,10 +13,16 @@ pub async fn companion_get_pet_status(
 
 #[tauri::command]
 pub async fn companion_launch_pet(
+    app_handle: AppHandle,
     companion_state: State<'_, CompanionServiceState>,
     request: Option<CompanionLaunchPetRequest>,
 ) -> Result<CompanionLaunchPetResult, String> {
-    companion_service::launch_pet_global(companion_state.inner(), request.unwrap_or_default()).await
+    companion_service::launch_pet_global(
+        companion_state.inner(),
+        app_handle,
+        request.unwrap_or_default(),
+    )
+    .await
 }
 
 #[tauri::command]

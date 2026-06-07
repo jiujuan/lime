@@ -86,9 +86,9 @@ mod tests {
         let mut mapper = ModelMapper::new();
         mapper.add_alias("gpt-4", "claude-sonnet-4-5");
         let step = RoutingStep::new(
-            Arc::new(RwLock::new(Router::new(ProviderType::Kiro))),
+            Arc::new(RwLock::new(Router::new(ProviderType::Gemini))),
             Arc::new(RwLock::new(mapper)),
-            Arc::new(RwLock::new("kiro".to_string())),
+            Arc::new(RwLock::new("gemini".to_string())),
         );
         assert_eq!(step.resolve_model("gpt-4").await, "claude-sonnet-4-5");
         assert_eq!(step.resolve_model("unknown-model").await, "unknown-model");
@@ -96,15 +96,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_routing_step_select_provider() {
-        let router = Router::new(ProviderType::Kiro);
+        let router = Router::new(ProviderType::Gemini);
         let step = RoutingStep::new(
             Arc::new(RwLock::new(router)),
             Arc::new(RwLock::new(ModelMapper::new())),
-            Arc::new(RwLock::new("kiro".to_string())),
+            Arc::new(RwLock::new("gemini".to_string())),
         );
         assert_eq!(
             step.select_provider("gemini-2.5-flash").await.unwrap(),
-            ProviderType::Kiro
+            ProviderType::Gemini
         );
     }
 
@@ -113,15 +113,15 @@ mod tests {
         let mut mapper = ModelMapper::new();
         mapper.add_alias("gpt-4", "claude-sonnet-4-5");
         let step = RoutingStep::new(
-            Arc::new(RwLock::new(Router::new(ProviderType::Kiro))),
+            Arc::new(RwLock::new(Router::new(ProviderType::Gemini))),
             Arc::new(RwLock::new(mapper)),
-            Arc::new(RwLock::new("kiro".to_string())),
+            Arc::new(RwLock::new("gemini".to_string())),
         );
         let mut ctx = RequestContext::new("gpt-4".to_string());
         let mut payload = serde_json::json!({"model": "gpt-4"});
         assert!(step.execute(&mut ctx, &mut payload).await.is_ok());
         assert_eq!(ctx.resolved_model, "claude-sonnet-4-5");
-        assert_eq!(ctx.provider, Some(ProviderType::Kiro));
+        assert_eq!(ctx.provider, Some(ProviderType::Gemini));
         assert_eq!(payload["model"], "claude-sonnet-4-5");
     }
 }

@@ -265,6 +265,84 @@ describe("openai-compatible-fixture-server", () => {
     expect(payload.error.message).toContain("provider request tools=<none>");
   });
 
+  it("scripted tool call 可延迟到下一次有工具面的请求，避免中间模型请求消耗脚本", async () => {
+    const fixture = await startFixture({
+      content: "INTERMEDIATE_OK",
+      deferScriptedToolCallsUntilAvailable: true,
+      scriptedResponses: [
+        {
+          type: "tool_call",
+          id: "call-read-fixture",
+          name: "Read",
+          arguments: { path: "README.md" },
+        },
+        {
+          type: "tool_call",
+          id: "call-write-fixture",
+          name: "Write",
+          arguments: { path: "out.txt", content: "ok" },
+        },
+      ],
+    });
+
+    const first = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [{ role: "user", content: "read" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "Read",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ],
+        stream: true,
+      }),
+    });
+    expect(first.ok).toBe(true);
+    expect(await first.text()).toContain('"Read"');
+
+    const intermediate = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [{ role: "user", content: "classify" }],
+        stream: false,
+      }),
+    });
+    expect(intermediate.ok).toBe(true);
+    expect((await intermediate.json()).choices[0].message.content).toBe(
+      "INTERMEDIATE_OK",
+    );
+
+    const second = await fetch(`${fixture.baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: DEFAULT_FIXTURE_MODEL,
+        messages: [{ role: "tool", content: "read ok" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "Write",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ],
+        stream: true,
+      }),
+    });
+    expect(second.ok).toBe(true);
+    expect(await second.text()).toContain('"Write"');
+    expect(fixture.requests).toHaveLength(3);
+  });
+
   it("scripted response 函数应能基于上一轮 tool result 动态生成下一次 tool call", async () => {
     const fixture = await startFixture({
       scriptedResponses: [

@@ -129,6 +129,10 @@ export async function testUpdateWindow(): Promise<void> {
   await safeInvoke("test_update_window");
 }
 
+export async function openUpdateWindow(): Promise<void> {
+  await safeInvoke("open_update_window");
+}
+
 export async function closeUpdateWindow(): Promise<void> {
   await safeInvoke("close_update_window");
 }

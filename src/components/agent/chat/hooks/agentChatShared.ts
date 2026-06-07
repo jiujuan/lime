@@ -237,6 +237,26 @@ function hasAssistantFinalText(message: Message | undefined): boolean {
   );
 }
 
+function hasActiveAssistantDraft(message: Message | undefined): boolean {
+  if (!message || message.role !== "assistant") {
+    return false;
+  }
+
+  const hasRunningTool = message.toolCalls?.some(
+    (item) => item.status === "running",
+  );
+  if (hasRunningTool) {
+    return true;
+  }
+
+  if (!message.isThinking) {
+    return false;
+  }
+
+  const runtimePhase = message.runtimeStatus?.phase;
+  return runtimePhase !== "failed" && runtimePhase !== "cancelled";
+}
+
 function extractActionRequestPreview(message: Message): string {
   const pendingAction = [...(message.actionRequests || [])]
     .reverse()
@@ -387,6 +407,13 @@ export function deriveTaskLiveState(params: {
   }
 
   if (latestMessage?.role === "user") {
+    return {
+      status: "running",
+      statusReason: "default",
+    };
+  }
+
+  if (hasActiveAssistantDraft(latestMessage)) {
     return {
       status: "running",
       statusReason: "default",

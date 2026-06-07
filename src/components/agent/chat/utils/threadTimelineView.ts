@@ -71,12 +71,14 @@ function readMetadataString(
 }
 
 function shouldHideConversationThreadTurn(turn: AgentThreadTurn): boolean {
-  const normalizedId = turn.id.trim().toLowerCase();
+  const normalizedId =
+    typeof turn.id === "string" ? turn.id.trim().toLowerCase() : "";
   if (normalizedId.startsWith(HIDDEN_CONVERSATION_AUXILIARY_TURN_ID_PREFIX)) {
     return true;
   }
 
-  const normalizedPrompt = turn.prompt_text.trim();
+  const normalizedPrompt =
+    typeof turn.prompt_text === "string" ? turn.prompt_text.trim() : "";
   return (
     normalizedPrompt.startsWith("辅助标题生成") ||
     normalizedPrompt.startsWith("辅助人设生成")

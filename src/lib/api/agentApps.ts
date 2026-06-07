@@ -42,7 +42,14 @@ import type {
 } from "@/features/agent-app/types";
 import {
   METHOD_AGENT_APP_INSTALLED_LIST,
+  METHOD_AGENT_APP_UI_RUNTIME_START,
+  METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+  METHOD_AGENT_APP_UI_RUNTIME_STOP,
   type AgentAppInstalledListResponse,
+  type AgentAppUiRuntimeStartParams,
+  type AgentAppUiRuntimeStatusParams,
+  type AgentAppUiRuntimeStatusResponse,
+  type AgentAppUiRuntimeStopParams,
 } from "../../../packages/app-server-client/src/protocol";
 
 export const AGENT_APPS_CHANGED_EVENT = "lime:agent-apps-changed";
@@ -286,6 +293,7 @@ function unwrapEnvelope<T>(payload: unknown): T {
 }
 
 type AgentAppInstalledListAppServerClient = Pick<AppServerClient, "request">;
+type AgentAppUiRuntimeAppServerClient = Pick<AppServerClient, "request">;
 
 function normalizeInstalledAgentAppListResponse(
   response: AgentAppInstalledListResponse | null | undefined,
@@ -314,6 +322,40 @@ async function requestAgentAppInstalledListAppServer(
     {},
   );
   return normalizeInstalledAgentAppListResponse(response.result);
+}
+
+function normalizeAgentAppUiRuntimeStatusResponse(
+  response: AgentAppUiRuntimeStatusResponse | null | undefined,
+): AgentAppUiRuntimeStatus {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server Agent App UI runtime did not return status");
+  }
+  if (typeof response.appId !== "string" || !response.appId.trim()) {
+    throw new Error("App Server Agent App UI runtime did not return appId");
+  }
+  if (typeof response.status !== "string" || !response.status.trim()) {
+    throw new Error("App Server Agent App UI runtime did not return status");
+  }
+  return response as AgentAppUiRuntimeStatus;
+}
+
+async function requestAgentAppUiRuntimeAppServer(
+  method:
+    | typeof METHOD_AGENT_APP_UI_RUNTIME_START
+    | typeof METHOD_AGENT_APP_UI_RUNTIME_STATUS
+    | typeof METHOD_AGENT_APP_UI_RUNTIME_STOP,
+  params:
+    | AgentAppUiRuntimeStartParams
+    | AgentAppUiRuntimeStatusParams
+    | AgentAppUiRuntimeStopParams,
+  appServerClient: AgentAppUiRuntimeAppServerClient = new AppServerClient(),
+): Promise<AgentAppUiRuntimeStatus> {
+  const response =
+    await appServerClient.request<AgentAppUiRuntimeStatusResponse>(
+      method,
+      params,
+    );
+  return normalizeAgentAppUiRuntimeStatusResponse(response.result);
 }
 
 function extractFrontmatter(markdown: string): Record<string, unknown> {
@@ -774,27 +816,25 @@ export async function uninstallAgentApp(
 export async function startAgentAppUiRuntime(
   request: AgentAppUiRuntimeStartRequest,
 ): Promise<AgentAppUiRuntimeStatus> {
-  return safeInvoke<AgentAppUiRuntimeStatus>("agent_app_start_ui_runtime", {
-    request,
+  return requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_START, {
+    appId: request.appId,
+    entryKey: request.entryKey,
   });
 }
 
 export async function getAgentAppUiRuntimeStatus(
   request: AgentAppUiRuntimeStatusRequest,
 ): Promise<AgentAppUiRuntimeStatus> {
-  return safeInvoke<AgentAppUiRuntimeStatus>(
-    "agent_app_get_ui_runtime_status",
-    {
-      request,
-    },
-  );
+  return requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_STATUS, {
+    appId: request.appId,
+  });
 }
 
 export async function stopAgentAppUiRuntime(
   request: AgentAppUiRuntimeStopRequest,
 ): Promise<AgentAppUiRuntimeStatus> {
-  return safeInvoke<AgentAppUiRuntimeStatus>("agent_app_stop_ui_runtime", {
-    request,
+  return requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_STOP, {
+    appId: request.appId,
   });
 }
 

@@ -55,6 +55,26 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
+    updateSession: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          title: "新标题",
+          model: "gpt-5.4",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:01.000Z",
+          messagesCount: 0,
+        },
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     request: vi.fn().mockImplementation((method: string) => {
       if (method === "workspaceSkillBindings/list") {
         return Promise.resolve({
@@ -162,24 +182,22 @@ describe("agentRuntime clientFactory", () => {
   it("传入 invoke 时应同时驱动 command 与 bridge client", async () => {
     const invoke = vi
       .fn()
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(true)
       .mockResolvedValueOnce([{ id: "adapter-1" }]);
     const client = createAgentRuntimeClient({ invoke });
 
     await expect(
-      client.updateAgentRuntimeSession({
+      client.resumeAgentRuntimeThread({
         session_id: "session-1",
-        name: "新标题",
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(true);
     await expect(client.siteListAdapters()).resolves.toEqual([
       { id: "adapter-1" },
     ]);
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "agent_runtime_update_session", {
+    expect(invoke).toHaveBeenNthCalledWith(1, "agent_runtime_resume_thread", {
       request: {
         session_id: "session-1",
-        name: "新标题",
       },
     });
     expect(invoke).toHaveBeenNthCalledWith(2, "site_list_adapters");
@@ -229,6 +247,13 @@ describe("agentRuntime clientFactory", () => {
         thread_id: "thread-1",
       }),
     );
+    await expect(
+      client.updateAgentRuntimeSession({
+        session_id: "session-1",
+        name: "新标题",
+        archived: true,
+      }),
+    ).resolves.toBeUndefined();
 
     expect(appServerClient.startSession).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -242,7 +267,103 @@ describe("agentRuntime clientFactory", () => {
     expect(appServerClient.readSession).toHaveBeenCalledWith({
       sessionId: "session-1",
     });
+    expect(appServerClient.updateSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      title: "新标题",
+      archived: true,
+    });
     expect(bridgeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("App Server detail 缺省旧数组字段时 get session 应补齐为可 hydrate 结构", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-failed",
+          threadId: "thread-failed",
+          appId: "agent-chat",
+          status: "failed",
+          createdAt: "2026-06-07T04:39:20.025Z",
+          updatedAt: "2026-06-07T04:42:05.905Z",
+        },
+        turns: [
+          {
+            turnId: "turn-failed",
+            sessionId: "session-failed",
+            threadId: "thread-failed",
+            status: "failed",
+            startedAt: "2026-06-07T04:39:20.100Z",
+            completedAt: "2026-06-07T04:42:05.905Z",
+          },
+        ],
+        detail: {
+          id: "session-failed",
+          thread_id: "thread-failed",
+          created_at: 1780807160025,
+          updated_at: 1780807325905,
+          thread_read: {
+            thread_id: "thread-failed",
+            status: "failed",
+          },
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          session: {
+            sessionId: "session-failed",
+            threadId: "thread-failed",
+            appId: "agent-chat",
+            status: "failed",
+            createdAt: "2026-06-07T04:39:20.025Z",
+            updatedAt: "2026-06-07T04:42:05.905Z",
+          },
+          turns: [
+            {
+              turnId: "turn-failed",
+              sessionId: "session-failed",
+              threadId: "thread-failed",
+              status: "failed",
+              startedAt: "2026-06-07T04:39:20.100Z",
+              completedAt: "2026-06-07T04:42:05.905Z",
+            },
+          ],
+          detail: {
+            id: "session-failed",
+            thread_id: "thread-failed",
+            created_at: 1780807160025,
+            updated_at: 1780807325905,
+            thread_read: {
+              thread_id: "thread-failed",
+              status: "failed",
+            },
+          },
+        },
+      },
+      messages: [],
+      notifications: [],
+    });
+    const client = createAgentRuntimeClient({
+      appServerClient,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.getAgentRuntimeSession("session-failed"),
+    ).resolves.toMatchObject({
+      id: "session-failed",
+      messages: [],
+      turns: [],
+      items: [],
+      queued_turns: [],
+      todo_items: [],
+      child_subagent_sessions: [],
+      thread_read: {
+        status: "failed",
+      },
+    });
   });
 
   it("turn lifecycle 应走 App Server client，不复用 legacy bridgeInvoke", async () => {

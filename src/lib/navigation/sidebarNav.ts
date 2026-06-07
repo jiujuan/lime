@@ -19,6 +19,8 @@ import { resolveAgentAppHostFlags } from "@/features/agent-app/featureFlag";
 import type { AgentAppHostFlags } from "@/features/agent-app/types";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 
+export { CURRENT_SIDEBAR_NAV_SCHEMA_VERSION };
+
 export interface SidebarNavItemDefinition {
   id: string;
   label: string;

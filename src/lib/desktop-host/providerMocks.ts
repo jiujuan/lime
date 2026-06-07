@@ -1,6 +1,4 @@
 export const providerMocks: Record<string, (args?: any) => any> = {
-  get_relay_providers: () => [],
-  list_relay_providers: () => [],
   get_system_provider_catalog: () => [],
   get_api_key_providers: () => [],
   get_api_key_provider: () => null,

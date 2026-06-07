@@ -1,12 +1,18 @@
-import { app } from "electron";
+import { app, shell } from "electron";
 import {
+  AppServerRequestError,
+  ERROR_CODES,
   METHOD_AGENT_APP_INSTALLED_LIST,
+  METHOD_AGENT_APP_UI_RUNTIME_START,
+  METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+  METHOD_AGENT_APP_UI_RUNTIME_STOP,
   METHOD_AGENT_SESSION_LIST,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_READ,
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
+  METHOD_AGENT_SESSION_UPDATE,
   METHOD_AUTOMATION_JOB_LIST,
   METHOD_CAPABILITY_LIST,
   METHOD_EVIDENCE_EXPORT,
@@ -31,13 +37,19 @@ import {
   METHOD_WORKSPACE_READ,
   METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
   type AgentAttachment,
+  type AgentSessionActionRespondResponse,
   type AgentSessionListResponse,
   type AgentSessionOverview,
   type AgentSessionReadResponse,
   type AgentSessionStartResponse,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartResponse,
+  type AgentSessionUpdateResponse,
   type AgentAppInstalledListResponse,
+  type AgentAppUiRuntimeStartParams,
+  type AgentAppUiRuntimeStatusParams,
+  type AgentAppUiRuntimeStatusResponse,
+  type AgentAppUiRuntimeStopParams,
   type ArtifactSummary,
   type AutomationJobListResponse,
   type CapabilityDescriptor,
@@ -62,24 +74,57 @@ import {
   type WorkspaceSkillBindingsListResponse,
 } from "app-server-client";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
 import path from "node:path";
 import type { ElectronAppServerHost } from "./appServerHost";
 
 type HostArgs = Record<string, unknown> | null | undefined;
 type AppServerParams = Record<string, unknown>;
+type HostEventEmitter = (event: string, payload?: unknown) => void;
 
 const CONFIG_FILE = "config.json";
+const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT = "oem-cloud-oauth-callback";
+const OEM_CLOUD_OAUTH_CALLBACK_PATH = "/oauth/callback";
+const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_TTL_MS = 10 * 60 * 1000;
+const OEM_CLOUD_OAUTH_CALLBACK_HTML = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lime 登录回调</title>
+    <script>
+      (function () {
+        if (window.location.hash && window.location.hash.length > 1) {
+          var params = new URLSearchParams(window.location.hash.slice(1));
+          var search = new URLSearchParams(window.location.search);
+          params.forEach(function (value, key) {
+            if (!search.has(key)) search.set(key, value);
+          });
+          window.location.replace(window.location.pathname + "?" + search.toString());
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Lime 登录结果已返回，可以关闭此页面。</p>
+  </body>
+</html>`;
 
 export class ElectronHostCommands {
   readonly #appServerHost: ElectronAppServerHost;
   readonly #userDataDir: string;
+  readonly #emit: HostEventEmitter;
+  #oauthCallbackBridgeServer: Server | null = null;
+  #oauthCallbackBridgeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     appServerHost: ElectronAppServerHost,
     userDataDir = app.getPath("userData"),
+    emit: HostEventEmitter = () => undefined,
   ) {
     this.#appServerHost = appServerHost;
     this.#userDataDir = userDataDir;
+    this.#emit = emit;
   }
 
   async invoke(command: string, args?: HostArgs): Promise<unknown> {
@@ -88,6 +133,14 @@ export class ElectronHostCommands {
         return await this.#readConfig();
       case "save_config":
         return await this.#saveConfig(args);
+      case "get_experimental_config":
+        return await this.#getExperimentalConfig();
+      case "save_experimental_config":
+        return await this.#saveExperimentalConfig(args);
+      case "open_external_url":
+        return await this.#openExternalUrl(args);
+      case "start_oem_cloud_oauth_callback_bridge":
+        return await this.#startOemCloudOAuthCallbackBridge();
       case "aster_agent_init":
         return await this.#initAgentRuntime();
       case "get_default_provider":
@@ -176,20 +229,84 @@ export class ElectronHostCommands {
         return await this.#getAutomationHealth();
       case "get_automation_jobs":
         return await this.#listAutomationJobs();
+      case "get_usage_stats":
+        return this.#getUsageStats();
+      case "get_model_usage_ranking":
+        return this.#emptyDiagnosticList("get_model_usage_ranking");
+      case "get_daily_usage_trends":
+        return this.#emptyDiagnosticList("get_daily_usage_trends");
+      case "get_voice_input_config":
+        return this.#getVoiceInputConfig();
+      case "get_voice_shortcut_runtime_status":
+        return this.#getVoiceShortcutRuntimeStatus();
+      case "get_asr_credentials":
+        return this.#getAsrCredentials();
+      case "list_audio_devices":
+        return this.#emptyDiagnosticList("list_audio_devices");
+      case "get_voice_instructions":
+        return this.#getVoiceInstructions();
+      case "voice_models_list_catalog":
+        return this.#emptyDiagnosticList("voice_models_list_catalog");
+      case "voice_models_get_install_state":
+        return this.#getVoiceModelInstallState(args);
+      case "get_environment_preview":
+        return await this.#getEnvironmentPreview();
+      case "unified_memory_stats":
+        return this.#getUnifiedMemoryStats();
+      case "get_mcp_servers":
+      case "mcp_list_servers_with_status":
+      case "mcp_list_tools":
+      case "mcp_list_prompts":
+      case "mcp_list_resources":
+        return this.#emptyDiagnosticList(command);
+      case "site_get_adapter_catalog_status":
+        return this.#getSiteAdapterCatalogStatus();
+      case "site_list_adapters":
+        return this.#emptyDiagnosticList("site_list_adapters");
+      case "get_skill_package_file_association_status":
+        return this.#getSkillPackageFileAssociationStatus();
+      case "set_skill_package_file_association_default":
+        return this.#setSkillPackageFileAssociationDefault();
+      case "get_browser_connector_settings_cmd":
+        return this.#getBrowserConnectorSettings();
+      case "get_browser_connector_install_status_cmd":
+        return this.#getBrowserConnectorInstallStatus();
+      case "get_chrome_profile_sessions":
+        return this.#emptyDiagnosticList("get_chrome_profile_sessions");
+      case "get_chrome_bridge_endpoint_info":
+        return this.#getChromeBridgeEndpointInfo();
+      case "get_chrome_bridge_status":
+        return this.#getChromeBridgeStatus();
+      case "get_browser_backend_policy":
+        return this.#getBrowserBackendPolicy();
+      case "get_browser_backends_status":
+        return this.#getBrowserBackendsStatus();
       case "project_memory_get":
         return await this.#readProjectMemory(args);
       case "agent_app_list_installed":
         return await this.#listAgentAppInstalled();
-      case "agent_app_get_ui_runtime_status":
-      case "agent_app_stop_ui_runtime":
-        return this.#throwMissingAppServerMethod(command);
       case "agent_app_start_ui_runtime":
-        return this.#throwMissingAppServerMethod(command);
+        return await this.#startAgentAppUiRuntime(args);
+      case "agent_app_get_ui_runtime_status":
+        return await this.#getAgentAppUiRuntimeStatus(args);
+      case "agent_app_stop_ui_runtime":
+        return await this.#stopAgentAppUiRuntime(args);
+      case "agent_app_runtime_start_task":
+        return await this.#startAgentAppRuntimeTask(args);
+      case "agent_app_runtime_get_task":
+        return await this.#getAgentAppRuntimeTask(args);
+      case "agent_app_runtime_cancel_task":
+        return await this.#cancelAgentAppRuntimeTask(args);
+      case "agent_app_runtime_submit_host_response":
+        return await this.#submitAgentAppRuntimeHostResponse(args);
       case "knowledge_list_packs":
         return await this.#listKnowledgePacks(args);
       case "report_frontend_debug_log":
         this.#reportFrontendDebugLog(args);
         return null;
+      case "report_frontend_crash":
+        this.#reportFrontendCrash(args);
+        return { success: true };
       default:
         throw new Error(`Electron host command is not implemented: ${command}`);
     }
@@ -202,6 +319,384 @@ export class ElectronHostCommands {
     return await this.#appServerHost.request<T>(method, params);
   }
 
+  async #openExternalUrl(args: HostArgs): Promise<Record<string, never>> {
+    const request = readRequest(args);
+    const url = readRequiredString(request, "url");
+    const normalizedUrl = normalizeExternalUrl(url);
+    await shell.openExternal(normalizedUrl);
+    return {};
+  }
+
+  async #startOemCloudOAuthCallbackBridge(): Promise<{
+    callbackUrl: string;
+  }> {
+    await this.#closeOemCloudOAuthCallbackBridge();
+
+    const server = createServer((request, response) => {
+      const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
+      if (requestUrl.pathname !== OEM_CLOUD_OAUTH_CALLBACK_PATH) {
+        response.writeHead(404, {
+          "Content-Type": "text/plain; charset=utf-8",
+        });
+        response.end("Not found");
+        return;
+      }
+
+      const payload = buildOemCloudOAuthCallbackPayload(requestUrl);
+      if (shouldEmitOemCloudOAuthCallback(payload)) {
+        this.#emit(OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT, payload);
+        void this.#closeOemCloudOAuthCallbackBridge();
+      }
+
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(OEM_CLOUD_OAUTH_CALLBACK_HTML);
+    });
+
+    server.on("error", (error) => {
+      console.warn(
+        `[OAuthCallbackBridge] OAuth 本地回调桥运行失败: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: Error) => {
+        server.off("listening", onListening);
+        reject(error);
+      };
+      const onListening = () => {
+        server.off("error", onError);
+        resolve();
+      };
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen(0, "127.0.0.1");
+    });
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      server.close();
+      throw new Error("无法读取 OAuth 本地回调地址");
+    }
+
+    this.#oauthCallbackBridgeServer = server;
+    this.#oauthCallbackBridgeTimer = setTimeout(() => {
+      void this.#closeOemCloudOAuthCallbackBridge();
+    }, OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_TTL_MS);
+
+    return {
+      callbackUrl: `http://127.0.0.1:${address.port}${OEM_CLOUD_OAUTH_CALLBACK_PATH}`,
+    };
+  }
+
+  async #closeOemCloudOAuthCallbackBridge(): Promise<void> {
+    if (this.#oauthCallbackBridgeTimer) {
+      clearTimeout(this.#oauthCallbackBridgeTimer);
+      this.#oauthCallbackBridgeTimer = null;
+    }
+    const server = this.#oauthCallbackBridgeServer;
+    this.#oauthCallbackBridgeServer = null;
+    if (!server || !server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+  }
+
+  #diagnosticMeta(command: string): Record<string, unknown> {
+    return {
+      source: "electron-host-diagnostic",
+      command,
+      status: "degraded",
+      appServerCurrent: false,
+    };
+  }
+
+  #emptyDiagnosticList(command: string): Array<Record<string, unknown>> {
+    const result: Array<Record<string, unknown>> = [];
+    Object.defineProperty(result, "__diagnostic", {
+      value: this.#diagnosticMeta(command),
+      enumerable: false,
+    });
+    return result;
+  }
+
+  async #startAgentAppUiRuntime(
+    args: HostArgs,
+  ): Promise<AgentAppUiRuntimeStatusResponse> {
+    const request = readRequest(args);
+    const params: AgentAppUiRuntimeStartParams = {
+      appId: readRequiredString(request, "appId"),
+    };
+    const entryKey = readString(request, "entryKey");
+    if (entryKey) {
+      params.entryKey = entryKey;
+    }
+    return await this.#appServerRequest<AgentAppUiRuntimeStatusResponse>(
+      METHOD_AGENT_APP_UI_RUNTIME_START,
+      params,
+    );
+  }
+
+  async #getAgentAppUiRuntimeStatus(
+    args: HostArgs,
+  ): Promise<AgentAppUiRuntimeStatusResponse> {
+    const request = readRequest(args);
+    const params: AgentAppUiRuntimeStatusParams = {
+      appId: readRequiredString(request, "appId"),
+    };
+    return await this.#appServerRequest<AgentAppUiRuntimeStatusResponse>(
+      METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+      params,
+    );
+  }
+
+  async #stopAgentAppUiRuntime(
+    args: HostArgs,
+  ): Promise<AgentAppUiRuntimeStatusResponse> {
+    const request = readRequest(args);
+    const params: AgentAppUiRuntimeStopParams = {
+      appId: readRequiredString(request, "appId"),
+    };
+    return await this.#appServerRequest<AgentAppUiRuntimeStatusResponse>(
+      METHOD_AGENT_APP_UI_RUNTIME_STOP,
+      params,
+    );
+  }
+
+  async #startAgentAppRuntimeTask(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
+    const request = readRequest(args);
+    const appId = readRequiredString(request, "appId");
+    const taskKind = readRequiredString(request, "taskKind");
+    const workspaceId = readRequiredString(request, "workspaceId");
+    const nowMs = Date.now();
+    const taskId = readString(request, "taskId") ?? `agent-app-task-${nowMs}`;
+    const traceId = `agent-app-trace-${nowMs}`;
+    const sessionId =
+      readString(request, "sessionId") ?? `agent-app-runtime-${nowMs}`;
+    const turnId = readString(request, "turnId") ?? `agent-app-turn-${nowMs}`;
+    const eventName =
+      readString(request, "eventName") ??
+      `agent_app_runtime:${appId}:${taskId}`;
+    const queueIfBusy = readBoolean(request, "queueIfBusy") ?? true;
+    const skipPreSubmitResume =
+      readBoolean(request, "skipPreSubmitResume") ?? false;
+    const turnConfig =
+      readRecord(request, "turnConfig") ??
+      readRecord(request, "turn_config") ??
+      {};
+    const metadata = {
+      ...(readRecord(request, "metadata") ?? {}),
+      ...(readRecord(turnConfig, "metadata") ?? {}),
+    };
+    const message = buildAgentAppRuntimeTaskMessage(request);
+    const providerPreference =
+      readString(request, "providerPreference") ??
+      readString(request, "provider_preference") ??
+      readString(turnConfig, "providerPreference") ??
+      readString(turnConfig, "provider_preference");
+    const modelPreference =
+      readString(request, "modelPreference") ??
+      readString(request, "model_preference") ??
+      readString(turnConfig, "modelPreference") ??
+      readString(turnConfig, "model_preference");
+    const queuedTurnId = `agent-app-queued-${taskId}`;
+    const hostOptions = {
+      asterChatRequest: {
+        message,
+        session_id: sessionId,
+        event_name: eventName,
+        images: null,
+        provider_config:
+          turnConfig.providerConfig ?? turnConfig.provider_config ?? null,
+        provider_preference: providerPreference,
+        model_preference: modelPreference,
+        reasoning_effort:
+          turnConfig.reasoningEffort ?? turnConfig.reasoning_effort ?? null,
+        thinking_enabled:
+          turnConfig.thinkingEnabled ?? turnConfig.thinking_enabled ?? null,
+        approval_policy:
+          turnConfig.approvalPolicy ?? turnConfig.approval_policy ?? null,
+        sandbox_policy:
+          turnConfig.sandboxPolicy ?? turnConfig.sandbox_policy ?? null,
+        project_id: null,
+        workspace_id: workspaceId,
+        web_search: turnConfig.webSearch ?? turnConfig.web_search ?? null,
+        search_mode: turnConfig.searchMode ?? turnConfig.search_mode ?? null,
+        execution_strategy:
+          turnConfig.executionStrategy ?? turnConfig.execution_strategy ?? null,
+        auto_continue:
+          turnConfig.autoContinue ?? turnConfig.auto_continue ?? null,
+        system_prompt:
+          turnConfig.systemPrompt ?? turnConfig.system_prompt ?? null,
+        metadata,
+        turn_id: turnId,
+        queue_if_busy: queueIfBusy,
+        queued_turn_id: queuedTurnId,
+        turn_config: turnConfig,
+      },
+    };
+
+    await this.#ensureAgentAppRuntimeSession({ sessionId, appId, workspaceId });
+    await this.#appServerRequest<AgentSessionTurnStartResponse>(
+      METHOD_AGENT_SESSION_TURN_START,
+      {
+        sessionId,
+        turnId,
+        input: {
+          text: message,
+          attachments: [],
+        },
+        runtimeOptions: {
+          stream: true,
+          eventName,
+          providerPreference: providerPreference ?? undefined,
+          modelPreference: modelPreference ?? undefined,
+          metadata,
+          queuedTurnId,
+          hostOptions,
+        },
+        queueIfBusy,
+        skipPreSubmitResume,
+      },
+    );
+
+    return {
+      appId,
+      entryKey: readString(request, "entryKey") ?? undefined,
+      taskId,
+      traceId,
+      taskKind,
+      sessionId,
+      turnId,
+      eventName,
+      status: "accepted",
+      submittedAt: new Date().toISOString(),
+    };
+  }
+
+  async #getAgentAppRuntimeTask(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
+    const request = readRequest(args);
+    const appId = readRequiredString(request, "appId");
+    const taskId = readRequiredString(request, "taskId");
+    const sessionId = readRequiredString(request, "sessionId");
+    const response = await this.#appServerRequest<AgentSessionReadResponse>(
+      METHOD_AGENT_SESSION_READ,
+      { sessionId },
+    );
+    return {
+      appId,
+      taskId,
+      sessionId,
+      status: "thread_read_available",
+      taskStatus: sessionStatusToAgentAppTaskStatus(response.session.status),
+      taskEvents: [],
+      threadRead: response.detail ?? sessionReadToLegacy(response),
+    };
+  }
+
+  async #cancelAgentAppRuntimeTask(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
+    const request = readRequest(args);
+    const appId = readRequiredString(request, "appId");
+    const taskId = readRequiredString(request, "taskId");
+    const sessionId = readRequiredString(request, "sessionId");
+    let turnId = readString(request, "turnId");
+    if (!turnId) {
+      const response = await this.#appServerRequest<AgentSessionReadResponse>(
+        METHOD_AGENT_SESSION_READ,
+        { sessionId },
+      );
+      turnId = activeAgentSessionTurnId(response);
+    }
+    if (!turnId) {
+      return {
+        appId,
+        taskId,
+        sessionId,
+        cancelled: false,
+        status: "not_running",
+      };
+    }
+    await this.#appServerRequest<AgentSessionTurnCancelResponse>(
+      METHOD_AGENT_SESSION_TURN_CANCEL,
+      { sessionId, turnId },
+    );
+    return {
+      appId,
+      taskId,
+      sessionId,
+      cancelled: true,
+      status: "cancelled",
+    };
+  }
+
+  async #submitAgentAppRuntimeHostResponse(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
+    const request = readRequest(args);
+    const appId = readRequiredString(request, "appId");
+    const taskId = readRequiredString(request, "taskId");
+    const runtimeRequest = readRecord(request, "runtimeRequest") ?? {};
+    const sessionId =
+      readString(runtimeRequest, "sessionId") ??
+      readRequiredString(runtimeRequest, "session_id");
+    const requestId =
+      readString(runtimeRequest, "requestId") ??
+      readRequiredString(runtimeRequest, "request_id");
+    const actionType =
+      readString(runtimeRequest, "actionType") ??
+      readString(runtimeRequest, "action_type") ??
+      "tool_confirmation";
+    await this.#appServerRequest<AgentSessionActionRespondResponse>(
+      METHOD_AGENT_SESSION_ACTION_RESPOND,
+      {
+        sessionId,
+        requestId,
+        actionType,
+        confirmed: readBoolean(runtimeRequest, "confirmed") ?? false,
+        ...readStringParam(runtimeRequest, "response", "response"),
+        userData: runtimeRequest.userData ?? runtimeRequest.user_data,
+        metadata: runtimeRequest.metadata,
+        ...readStringParam(runtimeRequest, "eventName", "eventName"),
+        ...readStringParam(runtimeRequest, "event_name", "eventName"),
+        actionScope: normalizeAgentSessionActionScope(
+          runtimeRequest.actionScope ?? runtimeRequest.action_scope,
+        ),
+      },
+    );
+    return {
+      appId,
+      taskId,
+      status: "submitted",
+    };
+  }
+
+  async #ensureAgentAppRuntimeSession(params: {
+    sessionId: string;
+    appId: string;
+    workspaceId: string;
+  }): Promise<void> {
+    try {
+      await this.#appServerRequest<AgentSessionStartResponse>(
+        METHOD_AGENT_SESSION_START,
+        params,
+      );
+    } catch (error) {
+      if (isAppServerSessionAlreadyExistsError(error)) {
+        return;
+      }
+      throw error;
+    }
+  }
+
   async #initAgentRuntime(): Promise<{
     initialized: true;
     provider_configured: boolean;
@@ -209,22 +704,35 @@ export class ElectronHostCommands {
     provider_selector?: string;
     model_name?: string;
   }> {
-    const [defaultProvider, providers, models] = await Promise.all([
-      this.#getDefaultProvider().catch(() => ""),
+    const [config, providers, models] = await Promise.all([
+      this.#readConfig().catch(() => buildDefaultConfig()),
       this.#listModelProviders().catch(() => []),
       this.#listModels().catch(() => []),
     ]);
+    const defaultProvider = resolveCurrentDefaultProvider(
+      config.default_provider,
+      providers,
+    );
+    const configuredDefaultProvider = findProvider(providers, defaultProvider);
     const selectedProvider =
-      findProvider(providers, defaultProvider) ??
-      providers.find(isConfiguredProvider);
+      (configuredDefaultProvider &&
+      isConfiguredProvider(configuredDefaultProvider)
+        ? configuredDefaultProvider
+        : null) ??
+      providers.find(isConfiguredProvider) ??
+      configuredDefaultProvider;
     const selectedProviderId =
-      readString(selectedProvider, "id") ?? defaultProvider;
-    const selectedModel =
-      models.find((model) => {
-        const providerId =
-          readString(model, "provider_id") ?? readString(model, "providerId");
-        return providerId === selectedProviderId;
-      }) ?? models[0];
+      readString(selectedProvider, "id")?.trim() ?? defaultProvider.trim();
+    const normalizedSelectedProviderId =
+      normalizeProviderIdentity(selectedProviderId);
+    const selectedModel = selectedProviderId
+      ? models.find((model) => {
+          const providerId = normalizeProviderIdentity(
+            readString(model, "provider_id") ?? readString(model, "providerId"),
+          );
+          return providerId === normalizedSelectedProviderId;
+        })
+      : undefined;
     const modelName =
       readString(selectedModel, "id") ??
       readString(selectedModel, "model_id") ??
@@ -242,11 +750,33 @@ export class ElectronHostCommands {
   }
 
   async #getDefaultProvider(): Promise<string> {
+    const [config, providers] = await Promise.all([
+      this.#readConfig(),
+      this.#listModelProviders(),
+    ]);
+    return resolveCurrentDefaultProvider(config.default_provider, providers);
+  }
+
+  async #getExperimentalConfig(): Promise<Record<string, unknown>> {
     const config = await this.#readConfig();
-    const defaultProvider = config.default_provider;
-    return typeof defaultProvider === "string" && defaultProvider.trim()
-      ? defaultProvider.trim()
-      : "";
+    return normalizeExperimentalConfig(config.experimental);
+  }
+
+  async #saveExperimentalConfig(args: HostArgs): Promise<{ success: true }> {
+    const request = readRequest(args);
+    const experimentalConfig =
+      readRecord(request, "experimentalConfig") ??
+      readRecord(request, "experimental_config");
+    if (!experimentalConfig) {
+      throw new Error("save_experimental_config requires experimentalConfig");
+    }
+    const config = await this.#readConfig();
+    return await this.#saveConfig({
+      config: {
+        ...config,
+        experimental: normalizeExperimentalConfig(experimentalConfig),
+      },
+    });
   }
 
   async #getProviderUiState(args: HostArgs): Promise<string | null> {
@@ -383,6 +913,14 @@ export class ElectronHostCommands {
       readString(turnConfig, "model_preference") ??
       readString(turnConfig, "modelPreference") ??
       undefined;
+    const asterChatRequest = buildAgentRuntimeAsterChatRequest({
+      request,
+      sessionId,
+      message,
+      turnConfig,
+      providerPreference,
+      modelPreference,
+    });
     await this.#appServerRequest<AgentSessionTurnStartResponse>(
       METHOD_AGENT_SESSION_TURN_START,
       {
@@ -407,6 +945,7 @@ export class ElectronHostCommands {
             readString(request, "queuedTurnId") ??
             undefined,
           hostOptions: {
+            asterChatRequest,
             agentRuntimeSubmitTurnRequest: request,
           },
         },
@@ -447,9 +986,37 @@ export class ElectronHostCommands {
     if (!sessionId) {
       throw new Error("agent_runtime_update_session requires session_id");
     }
-    await this.#appServerRequest<AgentSessionReadResponse>(
-      METHOD_AGENT_SESSION_READ,
-      { sessionId },
+    await this.#appServerRequest<AgentSessionUpdateResponse>(
+      METHOD_AGENT_SESSION_UPDATE,
+      {
+        sessionId,
+        ...readStringParam(request, "name", "title"),
+        ...readStringParam(request, "title", "title"),
+        ...readBooleanParam(request, "archived", "archived"),
+        ...readBooleanParam(request, "isArchived", "archived"),
+        ...readStringParam(request, "provider_selector", "providerSelector"),
+        ...readStringParam(request, "providerSelector", "providerSelector"),
+        ...readStringParam(request, "provider_name", "providerName"),
+        ...readStringParam(request, "providerName", "providerName"),
+        ...readStringParam(request, "model_name", "modelName"),
+        ...readStringParam(request, "modelName", "modelName"),
+        ...readStringParam(request, "execution_strategy", "executionStrategy"),
+        ...readStringParam(request, "executionStrategy", "executionStrategy"),
+        ...readStringParam(request, "recent_access_mode", "recentAccessMode"),
+        ...readStringParam(request, "recentAccessMode", "recentAccessMode"),
+        ...readValueParam(request, "recent_preferences", "recentPreferences"),
+        ...readValueParam(request, "recentPreferences", "recentPreferences"),
+        ...readValueParam(
+          request,
+          "recent_team_selection",
+          "recentTeamSelection",
+        ),
+        ...readValueParam(
+          request,
+          "recentTeamSelection",
+          "recentTeamSelection",
+        ),
+      },
     );
   }
 
@@ -495,6 +1062,10 @@ export class ElectronHostCommands {
       METHOD_AGENT_SESSION_READ,
       { sessionId },
     );
+    const threadRead = threadReadFromAgentSessionRead(response);
+    if (threadRead) {
+      return threadRead;
+    }
     return {
       session_id: response.session.sessionId,
       thread_id: response.session.threadId,
@@ -913,6 +1484,303 @@ export class ElectronHostCommands {
     };
   }
 
+  #getUsageStats(): Record<string, unknown> {
+    return {
+      total_conversations: 0,
+      total_messages: 0,
+      total_tokens: 0,
+      total_time_minutes: 0,
+      monthly_conversations: 0,
+      monthly_messages: 0,
+      monthly_tokens: 0,
+      today_conversations: 0,
+      today_messages: 0,
+      today_tokens: 0,
+      diagnostic: this.#diagnosticMeta("get_usage_stats"),
+    };
+  }
+
+  #getVoiceInputConfig(): Record<string, unknown> {
+    const instructions = this.#getVoiceInstructions();
+    return {
+      enabled: false,
+      shortcut: "CommandOrControl+Shift+V",
+      processor: {
+        polish_enabled: true,
+        polish_provider: "openai",
+        polish_model: "gpt-4.1-mini",
+        default_instruction_id: "default",
+      },
+      output: {
+        mode: "type",
+        type_delay_ms: 10,
+      },
+      instructions,
+      selected_device_id: undefined,
+      sound_enabled: true,
+      translate_instruction_id: "translate_en",
+      diagnostic: this.#diagnosticMeta("get_voice_input_config"),
+    };
+  }
+
+  #getVoiceShortcutRuntimeStatus(): Record<string, unknown> {
+    return {
+      shortcut_registered: false,
+      registered_shortcut: null,
+      fn_supported: process.platform === "darwin",
+      fn_registered: false,
+      fn_fallback_shortcut: "CommandOrControl+Shift+V",
+      fn_note:
+        "Electron current 语音快捷键运行时尚未接入；当前使用普通语音快捷键回退。",
+      diagnostic: this.#diagnosticMeta("get_voice_shortcut_runtime_status"),
+    };
+  }
+
+  #getAsrCredentials(): Array<Record<string, unknown>> {
+    return this.#emptyDiagnosticList("get_asr_credentials");
+  }
+
+  #getVoiceInstructions(): Array<Record<string, unknown>> {
+    return [
+      {
+        id: "default",
+        name: "默认润色",
+        prompt: "{{text}}",
+        is_preset: true,
+      },
+      {
+        id: "translate_en",
+        name: "翻译为英文",
+        prompt: "{{text}}",
+        is_preset: true,
+      },
+      {
+        id: "raw",
+        name: "原始输出",
+        prompt: "{{text}}",
+        is_preset: true,
+      },
+    ];
+  }
+
+  #getVoiceModelInstallState(args: HostArgs): Record<string, unknown> {
+    const request = readRequest(args);
+    const modelId =
+      readString(request, "modelId") ??
+      readString(request, "model_id") ??
+      "sensevoice-small-int8-2024-07-17";
+    const installDir = path.join(this.#userDataDir, "models", "voice", modelId);
+    return {
+      model_id: modelId,
+      installed: false,
+      installing: false,
+      install_dir: installDir,
+      model_file: null,
+      tokens_file: null,
+      vad_file: null,
+      installed_bytes: 0,
+      last_verified_at: Math.floor(Date.now() / 1000),
+      missing_files: ["model.int8.onnx", "tokens.txt", "silero_vad.onnx"],
+      default_credential_id: null,
+      diagnostic: this.#diagnosticMeta("voice_models_get_install_state"),
+    };
+  }
+
+  async #getEnvironmentPreview(): Promise<Record<string, unknown>> {
+    const config = await this.#readConfig();
+    const serverConfig = toRecord(config.server);
+    const apiKey = readString(serverConfig, "api_key") ?? "";
+    const apiBase =
+      `http://${readString(serverConfig, "host") ?? "127.0.0.1"}:` +
+      `${readNumber(serverConfig, "port") ?? 8787}`;
+    const entries = [
+      {
+        key: "LIME_API_BASE",
+        value: apiBase,
+        maskedValue: apiBase,
+        source: "config",
+        sourceLabel: "Electron Desktop Host",
+        sensitive: false,
+        overriddenSources: [],
+      },
+      {
+        key: "LIME_API_KEY",
+        value: apiKey,
+        maskedValue: apiKey ? "********" : "",
+        source: "config",
+        sourceLabel: "Electron Desktop Host",
+        sensitive: true,
+        overriddenSources: [],
+      },
+    ];
+    return {
+      shellImport: {
+        enabled: false,
+        status: "disabled",
+        message: "Electron current 暂未接入 shell 环境导入预览。",
+        importedCount: 0,
+        durationMs: null,
+        diagnostic: this.#diagnosticMeta("get_environment_preview"),
+      },
+      entries,
+      diagnostic: this.#diagnosticMeta("get_environment_preview"),
+    };
+  }
+
+  #getUnifiedMemoryStats(): Record<string, unknown> {
+    return {
+      total_entries: 0,
+      storage_used: 0,
+      memory_count: 0,
+      categories: [
+        { category: "identity", count: 0 },
+        { category: "context", count: 0 },
+        { category: "preference", count: 0 },
+        { category: "experience", count: 0 },
+        { category: "activity", count: 0 },
+      ],
+      diagnostic: this.#diagnosticMeta("unified_memory_stats"),
+    };
+  }
+
+  #getSiteAdapterCatalogStatus(): Record<string, unknown> {
+    return {
+      exists: false,
+      source_kind: "bundled",
+      registry_version: 1,
+      directory: path.join(this.#userDataDir, "site-adapters", "server-synced"),
+      adapter_count: 0,
+      diagnostic: this.#diagnosticMeta("site_get_adapter_catalog_status"),
+    };
+  }
+
+  #getSkillPackageFileAssociationStatus(): Record<string, unknown> {
+    return {
+      platform: process.platform,
+      extension: "skill",
+      extensions: ["skill", "skills"],
+      mimeType: "application/vnd.lime.skill+zip",
+      appIdentifier: app.getName(),
+      isDefault: false,
+      canSetDefault: true,
+      requiresUserConfirmation: true,
+      currentHandler: null,
+      settingsUrl: null,
+      detail:
+        "Electron Desktop Host 当前只能检查 .skill / .skills 文件关联状态；设置默认打开方式需要系统确认。",
+      diagnostic: this.#diagnosticMeta(
+        "get_skill_package_file_association_status",
+      ),
+    };
+  }
+
+  #setSkillPackageFileAssociationDefault(): Record<string, unknown> {
+    const status = this.#getSkillPackageFileAssociationStatus();
+    return {
+      changed: false,
+      message:
+        "Electron Desktop Host 当前不能静默修改系统文件关联，请在系统设置中确认 .skill / .skills 默认打开方式。",
+      status,
+      diagnostic: this.#diagnosticMeta(
+        "set_skill_package_file_association_default",
+      ),
+    };
+  }
+
+  #getBrowserConnectorSettings(): Record<string, unknown> {
+    const installRoot = path.join(this.#userDataDir, "browser-connectors");
+    return {
+      enabled: true,
+      install_root_dir: installRoot,
+      install_dir: path.join(installRoot, "Lime Browser Connector"),
+      browser_action_capabilities: [
+        { key: "read_page", label: "读取页面", enabled: true },
+        { key: "click", label: "点击", enabled: true },
+        { key: "type", label: "输入", enabled: true },
+        { key: "scroll_page", label: "滚动页面", enabled: true },
+      ],
+      system_connectors: [],
+      diagnostic: this.#diagnosticMeta("get_browser_connector_settings_cmd"),
+    };
+  }
+
+  #getBrowserConnectorInstallStatus(): Record<string, unknown> {
+    const installRoot = path.join(this.#userDataDir, "browser-connectors");
+    return {
+      status: "not_installed",
+      install_root_dir: installRoot,
+      install_dir: path.join(installRoot, "Lime Browser Connector"),
+      bundled_name: "Lime Browser Connector",
+      bundled_version: app.getVersion(),
+      installed_name: null,
+      installed_version: null,
+      message: "尚未导出浏览器连接器",
+      diagnostic: this.#diagnosticMeta(
+        "get_browser_connector_install_status_cmd",
+      ),
+    };
+  }
+
+  #getChromeBridgeEndpointInfo(): Record<string, unknown> {
+    return {
+      server_running: false,
+      host: "127.0.0.1",
+      port: 8999,
+      observer_ws_url: "ws://127.0.0.1:8999/lime-chrome-observer",
+      control_ws_url: "ws://127.0.0.1:8999/lime-chrome-control",
+      bridge_key: "proxy_cast",
+      diagnostic: this.#diagnosticMeta("get_chrome_bridge_endpoint_info"),
+    };
+  }
+
+  #getChromeBridgeStatus(): Record<string, unknown> {
+    return {
+      observer_count: 0,
+      control_count: 0,
+      pending_command_count: 0,
+      observers: [],
+      controls: [],
+      pending_commands: [],
+      diagnostic: this.#diagnosticMeta("get_chrome_bridge_status"),
+    };
+  }
+
+  #getBrowserBackendPolicy(): Record<string, unknown> {
+    return {
+      priority: ["lime_extension_bridge", "cdp_direct"],
+      auto_fallback: false,
+      diagnostic: this.#diagnosticMeta("get_browser_backend_policy"),
+    };
+  }
+
+  #getBrowserBackendsStatus(): Record<string, unknown> {
+    const policy = this.#getBrowserBackendPolicy();
+    return {
+      policy,
+      bridge_observer_count: 0,
+      bridge_control_count: 0,
+      running_profile_count: 0,
+      cdp_alive_profile_count: 0,
+      aster_native_host_supported: false,
+      aster_native_host_configured: false,
+      backends: [
+        {
+          backend: "lime_extension_bridge",
+          available: false,
+          reason: "浏览器连接器尚未连接",
+          capabilities: [],
+        },
+        {
+          backend: "cdp_direct",
+          available: false,
+          reason: "当前没有运行中的 Chrome Profile 会话",
+          capabilities: [],
+        },
+      ],
+      diagnostic: this.#diagnosticMeta("get_browser_backends_status"),
+    };
+  }
+
   async #readProjectMemory(args: HostArgs): Promise<unknown> {
     const request = readRequest(args);
     const projectId =
@@ -965,6 +1833,12 @@ export class ElectronHostCommands {
     console.log(`[electron-renderer:${level}] ${message}`);
   }
 
+  #reportFrontendCrash(args: HostArgs): void {
+    const report = readRecord(args, "report") ?? {};
+    const message = readString(report, "message") ?? "renderer crash report";
+    console.error("[electron-renderer:crash]", message, report);
+  }
+
   #configPath(): string {
     return path.join(this.#userDataDir, CONFIG_FILE);
   }
@@ -1000,6 +1874,14 @@ function readString(value: unknown, key: string): string | null {
   }
   const next = (value as Record<string, unknown>)[key];
   return typeof next === "string" && next.trim() ? next.trim() : null;
+}
+
+function readRequiredString(value: unknown, key: string): string {
+  const next = readString(value, key);
+  if (!next) {
+    throw new Error(`Missing required string field: ${key}`);
+  }
+  return next;
 }
 
 function readBoolean(value: unknown, key: string): boolean | null {
@@ -1053,6 +1935,183 @@ function readNumberParam(
   return { [outputKey]: Math.trunc(next) };
 }
 
+function readValueParam(
+  value: unknown,
+  inputKey: string,
+  outputKey: string,
+): AppServerParams {
+  const record = toRecord(value);
+  if (!record || record[inputKey] === undefined) {
+    return {};
+  }
+  return { [outputKey]: record[inputKey] };
+}
+
+function buildAgentRuntimeAsterChatRequest(params: {
+  request: Record<string, unknown>;
+  sessionId: string;
+  message: string;
+  turnConfig: Record<string, unknown> | null;
+  providerPreference?: string;
+  modelPreference?: string;
+}): Record<string, unknown> {
+  const { request, sessionId, message, turnConfig } = params;
+  const eventName =
+    readString(request, "event_name") ??
+    readString(request, "eventName") ??
+    `agentSession/event/${sessionId}`;
+  return {
+    message,
+    session_id: sessionId,
+    event_name: eventName,
+    images: readArray(request, "images") ?? null,
+    provider_config:
+      turnConfig?.provider_config ?? turnConfig?.providerConfig ?? null,
+    provider_preference: params.providerPreference,
+    model_preference: params.modelPreference,
+    reasoning_effort:
+      turnConfig?.reasoning_effort ?? turnConfig?.reasoningEffort ?? null,
+    thinking_enabled:
+      turnConfig?.thinking_enabled ?? turnConfig?.thinkingEnabled ?? null,
+    approval_policy:
+      turnConfig?.approval_policy ?? turnConfig?.approvalPolicy ?? null,
+    sandbox_policy:
+      turnConfig?.sandbox_policy ?? turnConfig?.sandboxPolicy ?? null,
+    workspace_id:
+      readString(request, "workspace_id") ??
+      readString(request, "workspaceId") ??
+      "",
+    web_search: turnConfig?.web_search ?? turnConfig?.webSearch ?? null,
+    search_mode: turnConfig?.search_mode ?? turnConfig?.searchMode ?? null,
+    execution_strategy:
+      turnConfig?.execution_strategy ??
+      turnConfig?.executionStrategy ??
+      null,
+    auto_continue:
+      turnConfig?.auto_continue ?? turnConfig?.autoContinue ?? null,
+    system_prompt:
+      turnConfig?.system_prompt ?? turnConfig?.systemPrompt ?? null,
+    metadata: turnConfig?.metadata ?? null,
+    turn_id: readString(request, "turn_id") ?? readString(request, "turnId"),
+    queue_if_busy:
+      readBoolean(request, "queue_if_busy") ??
+      readBoolean(request, "queueIfBusy") ??
+      false,
+    queued_turn_id:
+      readString(request, "queued_turn_id") ??
+      readString(request, "queuedTurnId") ??
+      null,
+    turn_config: turnConfig,
+  };
+}
+
+function buildAgentAppRuntimeTaskMessage(
+  request: Record<string, unknown>,
+): string {
+  const prompt =
+    readString(request, "prompt") ??
+    readString(request, "title") ??
+    readRequiredString(request, "taskKind");
+  return [
+    "【Agent App Runtime Task】",
+    `App: ${readRequiredString(request, "appId")}`,
+    `Entry: ${readString(request, "entryKey") ?? "default"}`,
+    `TaskKind: ${readRequiredString(request, "taskKind")}`,
+    "",
+    "Business Prompt:",
+    prompt,
+    "",
+    "Runtime Boundary:",
+    "- 请在 Lime AgentRuntime 主链中完成这个 App 业务任务。",
+    "- 不要要求用户跳回通用 Chat；如需补充上下文，请通过可审计的 action / request 机制表达。",
+    "",
+    "Input JSON:",
+    stringifyJsonField(request, "input"),
+    "",
+    "Expected Output JSON:",
+    stringifyJsonField(request, "expectedOutput"),
+  ].join("\n");
+}
+
+function stringifyJsonField(
+  record: Record<string, unknown>,
+  key: string,
+): string {
+  if (!Object.prototype.hasOwnProperty.call(record, key)) {
+    return "{}";
+  }
+  try {
+    return JSON.stringify(record[key], null, 2) ?? "{}";
+  } catch {
+    return String(record[key]);
+  }
+}
+
+function sessionStatusToAgentAppTaskStatus(status: string): string {
+  switch (status) {
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "canceled":
+    case "cancelled":
+      return "cancelled";
+    case "waitingAction":
+      return "blocked";
+    case "idle":
+      return "idle";
+    case "running":
+      return "running";
+    default:
+      return "thread_read_available";
+  }
+}
+
+function activeAgentSessionTurnId(
+  response: AgentSessionReadResponse,
+): string | null {
+  for (let index = response.turns.length - 1; index >= 0; index -= 1) {
+    const turn = response.turns[index];
+    if (
+      turn &&
+      (turn.status === "accepted" ||
+        turn.status === "queued" ||
+        turn.status === "running" ||
+        turn.status === "waitingAction")
+    ) {
+      return turn.turnId;
+    }
+  }
+  return null;
+}
+
+function normalizeAgentSessionActionScope(
+  value: unknown,
+): Record<string, string> | undefined {
+  const record = toRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  const scope = {
+    ...readStringParam(record, "sessionId", "sessionId"),
+    ...readStringParam(record, "session_id", "sessionId"),
+    ...readStringParam(record, "threadId", "threadId"),
+    ...readStringParam(record, "thread_id", "threadId"),
+    ...readStringParam(record, "turnId", "turnId"),
+    ...readStringParam(record, "turn_id", "turnId"),
+  };
+  return Object.keys(scope).length > 0
+    ? (scope as Record<string, string>)
+    : undefined;
+}
+
+function isAppServerSessionAlreadyExistsError(error: unknown): boolean {
+  return (
+    error instanceof AppServerRequestError &&
+    error.response.error.code === ERROR_CODES.sessionAlreadyExists
+  );
+}
+
 function sessionOverviewToLegacy(
   session: AgentSessionOverview,
 ): Record<string, unknown> {
@@ -1076,6 +2135,7 @@ function sessionOverviewToLegacy(
 function sessionReadToLegacy(
   response: AgentSessionReadResponse,
 ): Record<string, unknown> {
+  const threadRead = threadReadFromAgentSessionRead(response);
   return {
     id: response.session.sessionId,
     thread_id: response.session.threadId,
@@ -1088,10 +2148,19 @@ function sessionReadToLegacy(
     turns: response.turns,
     items: [],
     queued_turns: [],
-    thread_read: null,
+    thread_read: threadRead,
     todo_items: [],
     child_subagent_sessions: [],
   };
+}
+
+function threadReadFromAgentSessionRead(
+  response: AgentSessionReadResponse,
+): Record<string, unknown> | null {
+  const detail = toRecord(response.detail);
+  const threadRead =
+    toRecord(detail?.thread_read) ?? toRecord(detail?.threadRead);
+  return threadRead;
 }
 
 function timestampMillis(value: string | undefined): number {
@@ -1149,6 +2218,9 @@ function evidenceExportToLegacy(
     response.turns.length > 0
       ? response.turns[response.turns.length - 1]
       : undefined;
+  const observabilitySummary =
+    pack?.observabilitySummary ??
+    observabilitySummaryFromEvidenceEvents(response.events);
   const workspaceRoot =
     readString(
       toRecord(response.session.businessObjectRef?.metadata),
@@ -1178,12 +2250,219 @@ function evidenceExportToLegacy(
       response.turns.filter((turn) => turn.status === "queued").length,
     recentArtifactCount: pack?.recentArtifactCount ?? response.artifacts.length,
     knownGaps: pack?.knownGaps ?? [],
-    observabilitySummary: pack?.observabilitySummary,
+    observabilitySummary,
     completionAuditSummary: pack?.completionAuditSummary,
     artifacts:
       pack?.artifacts ??
       response.artifacts.map(artifactSummaryToEvidenceArtifact),
   };
+}
+
+function observabilitySummaryFromEvidenceEvents(
+  events: EvidenceExportResponse["events"],
+): Record<string, unknown> | undefined {
+  const toolCalls = toolCallsFromEvidenceEvents(events);
+  if (toolCalls.length === 0) {
+    return undefined;
+  }
+
+  return {
+    schemaVersion: "runtime-evidence-observability.v1",
+    toolCalls,
+  };
+}
+
+function toolCallsFromEvidenceEvents(
+  events: EvidenceExportResponse["events"],
+): Array<Record<string, unknown>> {
+  const calls: Array<Record<string, unknown>> = [];
+  for (const event of events) {
+    for (const next of toolCallProjectionsFromEvidenceEvent(event)) {
+      mergeToolCallProjection(calls, next);
+    }
+  }
+  return calls;
+}
+
+function toolCallProjectionsFromEvidenceEvent(
+  event: EvidenceExportResponse["events"][number],
+): Array<Record<string, unknown>> {
+  const type = String(event.type || "");
+  const payload = toRecord(event.payload) ?? {};
+  const runtimeEvent = toRecord(payload.runtimeEvent);
+  const item = toRecord(payload.item) ?? toRecord(runtimeEvent?.item);
+  const result = toRecord(payload.result) ?? toRecord(runtimeEvent?.result);
+  const projections: Array<Record<string, unknown>> = [];
+  const status = toolCallStatusFromEvidenceEvent(type, item);
+
+  if (status) {
+    const success =
+      readBoolean(payload, "success") ??
+      readBoolean(runtimeEvent, "success") ??
+      readBoolean(item, "success") ??
+      readBoolean(result, "success") ??
+      (status === "failed" ? false : undefined);
+    projections.push(
+      omitNullishRecord({
+        id:
+          readToolCallId(payload) ??
+          readToolCallId(runtimeEvent) ??
+          readToolCallId(item) ??
+          readToolCallId(result),
+        toolName:
+          readToolName(payload) ??
+          readToolName(runtimeEvent) ??
+          readToolName(item) ??
+          readToolName(result),
+        status,
+        success,
+        output:
+          readToolOutput(item) ??
+          readToolOutput(result) ??
+          readToolOutput(payload) ??
+          readToolOutput(runtimeEvent),
+        error: payload.error ?? runtimeEvent?.error ?? item?.error ?? result?.error,
+        eventId: event.eventId,
+        turnId: event.turnId,
+        timestamp: event.timestamp,
+      }),
+    );
+  }
+
+  for (const content of toolMessageContentRecords(payload, runtimeEvent)) {
+    const contentType = readString(content, "type");
+    if (contentType !== "tool_request" && contentType !== "tool_response") {
+      continue;
+    }
+    projections.push(
+      omitNullishRecord({
+        id: readToolCallId(content),
+        toolName: readToolName(content),
+        status: contentType === "tool_response" ? "completed" : "running",
+        success: readBoolean(content, "success"),
+        output: readToolOutput(content),
+        error: content.error,
+        eventId: event.eventId,
+        turnId: event.turnId,
+        timestamp: event.timestamp,
+      }),
+    );
+  }
+
+  return projections;
+}
+
+function toolCallStatusFromEvidenceEvent(
+  type: string,
+  item: Record<string, unknown> | null,
+): string | null {
+  if (type === "tool.started") {
+    return "running";
+  }
+  if (type === "tool.result") {
+    return "completed";
+  }
+  if (type === "tool.failed") {
+    return "failed";
+  }
+  if (item && readString(item, "type") === "tool_call") {
+    if (type === "item.started") {
+      return "running";
+    }
+    if (type === "item.completed") {
+      return readString(item, "status") ?? "completed";
+    }
+  }
+  return null;
+}
+
+function mergeToolCallProjection(
+  calls: Array<Record<string, unknown>>,
+  next: Record<string, unknown>,
+): void {
+  const id = readString(next, "id");
+  const toolName = readString(next, "toolName");
+  const existing = calls.find((call) => {
+    if (id && readString(call, "id") === id) {
+      return true;
+    }
+    return (
+      !id &&
+      Boolean(toolName) &&
+      readString(call, "toolName") === toolName &&
+      readString(call, "turnId") === readString(next, "turnId")
+    );
+  });
+  const normalizedNext = omitNullishRecord({
+    id: id ?? existing?.id ?? readString(next, "eventId"),
+    ...next,
+  });
+  if (existing) {
+    Object.assign(existing, normalizedNext);
+  } else {
+    calls.push(normalizedNext);
+  }
+}
+
+function readToolCallId(record: Record<string, unknown> | null): string | null {
+  return (
+    readString(record, "id") ??
+    readString(record, "tool_call_id") ??
+    readString(record, "toolCallId") ??
+    readString(record, "toolId") ??
+    readString(record, "tool_id")
+  );
+}
+
+function readToolName(record: Record<string, unknown> | null): string | null {
+  return (
+    readString(record, "tool_name") ??
+    readString(record, "toolName") ??
+    readString(record, "name")
+  );
+}
+
+function readToolOutput(record: Record<string, unknown> | null): unknown {
+  if (!record) {
+    return undefined;
+  }
+  return (
+    readString(record, "output") ??
+    readString(record, "output_preview") ??
+    readString(record, "outputPreview") ??
+    readString(record, "text") ??
+    readString(record, "content") ??
+    readString(record, "result") ??
+    record.output ??
+    record.output_preview ??
+    record.outputPreview ??
+    record.text ??
+    record.content ??
+    record.result
+  );
+}
+
+function toolMessageContentRecords(
+  payload: Record<string, unknown>,
+  runtimeEvent: Record<string, unknown> | null,
+): Array<Record<string, unknown>> {
+  const content =
+    readArray(readRecord(payload, "message"), "content") ??
+    readArray(readRecord(runtimeEvent, "message"), "content") ??
+    [];
+  return content
+    .map((entry) => toRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== null);
+}
+
+function omitNullishRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(record).filter(
+      ([, value]) => value !== undefined && value !== null,
+    ),
+  );
 }
 
 function artifactSummaryToEvidenceArtifact(
@@ -1206,19 +2485,39 @@ function findProvider(
   providers: unknown[],
   providerId: string,
 ): Record<string, unknown> | null {
-  if (!providerId) {
+  const normalizedProviderId = normalizeProviderIdentity(providerId);
+  if (!normalizedProviderId) {
     return null;
   }
   return (
     (providers.find((provider) => {
       const record = toRecord(provider);
+      const id = normalizeProviderIdentity(readString(record, "id"));
+      const name = normalizeProviderIdentity(readString(record, "name"));
       return (
-        record &&
-        (readString(record, "id") === providerId ||
-          readString(record, "name") === providerId)
+        record && (id === normalizedProviderId || name === normalizedProviderId)
       );
     }) as Record<string, unknown> | undefined) ?? null
   );
+}
+
+function normalizeProviderIdentity(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function resolveCurrentDefaultProvider(
+  value: unknown,
+  providers: unknown[],
+): string {
+  if (typeof value !== "string") {
+    return readString(providers.find(isConfiguredProvider), "id") ?? "";
+  }
+  const provider = value.trim();
+  const configuredProvider = findProvider(providers, provider);
+  if (configuredProvider && isConfiguredProvider(configuredProvider)) {
+    return readString(configuredProvider, "id") ?? provider;
+  }
+  return readString(providers.find(isConfiguredProvider), "id") ?? "";
 }
 
 function isConfiguredProvider(
@@ -1275,14 +2574,77 @@ function toRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function normalizeExperimentalConfig(value: unknown): Record<string, unknown> {
+  const record = toRecord(value) ?? {};
+  const webmcp = toRecord(record.webmcp);
+  return {
+    ...record,
+    webmcp: {
+      ...webmcp,
+      enabled: readBoolean(webmcp, "enabled") ?? false,
+    },
+  };
+}
+
+function normalizeExternalUrl(input: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(input.trim());
+  } catch (error) {
+    throw new Error(
+      `外部链接格式无效: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("外部链接只支持 http/https 地址");
+  }
+  return parsed.toString();
+}
+
+function normalizeCallbackBridgeValue(value: string | null): string | null {
+  const normalized = value?.trim() ?? "";
+  return normalized ? normalized : null;
+}
+
+function buildOemCloudOAuthCallbackPayload(
+  requestUrl: URL,
+): Record<string, string | null> {
+  const params = requestUrl.searchParams;
+  return {
+    sourcePath: requestUrl.pathname,
+    tenantId: normalizeCallbackBridgeValue(
+      params.get("tenantId") ?? params.get("tenant_id"),
+    ),
+    token: normalizeCallbackBridgeValue(params.get("token")),
+    next: normalizeCallbackBridgeValue(params.get("next")),
+    error: normalizeCallbackBridgeValue(params.get("error")),
+    deviceCode: normalizeCallbackBridgeValue(
+      params.get("deviceCode") ?? params.get("device_code"),
+    ),
+    status: normalizeCallbackBridgeValue(params.get("status")),
+  };
+}
+
+function shouldEmitOemCloudOAuthCallback(
+  payload: Record<string, string | null>,
+): boolean {
+  return Boolean(
+    payload.tenantId ||
+    payload.token ||
+    payload.error ||
+    payload.deviceCode ||
+    payload.status,
+  );
+}
+
 function capabilitiesToToolInventory(
   capabilities: CapabilityDescriptor[],
   caller: string,
   surface: { workbench: boolean; browser_assist: boolean },
 ): Record<string, unknown> {
   const runtimeTools = capabilities.flatMap((capability) =>
-    capability.methods.map((method) => ({
-      name: method,
+    capabilityRuntimeToolNames(capability).map((name) => ({
+      name,
       description: capability.description ?? capability.title,
       source_kind: "current_surface",
       source_label: capability.id,
@@ -1336,6 +2698,26 @@ function capabilitiesToToolInventory(
     extension_tools: [],
     mcp_tools: [],
   };
+}
+
+function capabilityRuntimeToolNames(capability: CapabilityDescriptor): string[] {
+  const toolName = capabilityToolName(capability);
+  if (toolName) {
+    return [toolName];
+  }
+  return capability.methods;
+}
+
+function capabilityToolName(capability: CapabilityDescriptor): string | null {
+  const id = capability.id.trim();
+  if (!id.startsWith("tool.")) {
+    return null;
+  }
+  const title = capability.title.trim();
+  if (title) {
+    return title;
+  }
+  return id.slice("tool.".length).trim() || null;
 }
 
 function buildDefaultConfig(): Record<string, unknown> {

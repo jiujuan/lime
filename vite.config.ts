@@ -24,7 +24,7 @@ function isTruthyEnv(value: string | undefined): boolean {
   return /^(1|true|yes|on)$/i.test(String(value || "").trim());
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const forceOptimizeDeps =
     process.env.LIME_VITE_FORCE_OPTIMIZE_DEPS?.trim() === "1";
   const isElectronRenderer =
@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
     : "node_modules/.vite-web";
 
   return {
+    base: command === "build" && isElectronRenderer ? "./" : undefined,
     cacheDir,
     define: {
       "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),

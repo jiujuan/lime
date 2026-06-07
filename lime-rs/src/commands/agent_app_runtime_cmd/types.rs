@@ -1,4 +1,6 @@
-use crate::commands::aster_agent_cmd::AgentRuntimeRespondActionRequest;
+use crate::commands::aster_agent_cmd::{
+    AgentRuntimeRespondActionRequest, AgentTurnConfigSnapshot,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -41,6 +43,8 @@ pub struct AgentAppRuntimeStartTaskRequest {
     pub provider_preference: Option<String>,
     #[serde(default)]
     pub model_preference: Option<String>,
+    #[serde(default)]
+    pub turn_config: Option<AgentTurnConfigSnapshot>,
     #[serde(default)]
     pub queue_if_busy: Option<bool>,
     #[serde(default)]

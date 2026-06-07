@@ -8,10 +8,7 @@ import {
   buildRustLayerReport,
   classifyRustTestFiles,
 } from "./rust-test-layer-classifier.mjs";
-import {
-  filterEntriesForCargoArgs,
-  parseArgs,
-} from "./run-rust-layer.mjs";
+import { filterEntriesForCargoArgs, parseArgs } from "./run-rust-layer.mjs";
 
 let tempRoot = null;
 
@@ -29,10 +26,6 @@ function createFixtureRepo() {
 [workspace]
 members = ["crates/*"]
 exclude = ["crates/aster-rust"]
-
-[package]
-name = "lime"
-version = "0.0.0"
 `,
   );
   writeFile(
@@ -139,36 +132,42 @@ describe("rust-test-layer-classifier", () => {
   it("按 Cargo 边界区分 unit、integration、e2e 和 excluded subcrate", () => {
     const repoRoot = createFixtureRepo();
     const entries = classifyRustTestFiles(repoRoot);
-    const byFile = Object.fromEntries(entries.map((entry) => [entry.file, entry]));
+    const byFile = Object.fromEntries(
+      entries.map((entry) => [entry.file, entry]),
+    );
 
     expect(byFile["lime-rs/src/lib.rs"]).toMatchObject({
       layer: "unit",
-      cargoScope: "workspace",
-      runnableByDefault: true,
+      cargoScope: "unmanaged-root",
+      packageName: "workspace-root",
+      runnableByDefault: false,
     });
     expect(
       byFile["lime-rs/src/commands/foo/tests/projection.rs"],
     ).toMatchObject({
       layer: "unit",
-      cargoScope: "workspace",
-      runnableByDefault: true,
+      cargoScope: "unmanaged-root",
+      runnableByDefault: false,
     });
     expect(byFile["lime-rs/tests/provider_contract.rs"]).toMatchObject({
       layer: "integration",
-      cargoScope: "workspace",
-      runnableByDefault: true,
+      cargoScope: "unmanaged-root",
+      runnableByDefault: false,
     });
     expect(byFile["lime-rs/tests/real_web_search.rs"]).toMatchObject({
       layer: "e2e",
       liveGated: true,
       runnableByDefault: false,
+      cargoScope: "unmanaged-root",
     });
     expect(byFile["lime-rs/crates/agent/tests/protocol.rs"]).toMatchObject({
       layer: "integration",
       packageName: "lime-agent",
       cargoScope: "workspace",
     });
-    expect(byFile["lime-rs/crates/services/src/skill_service.rs"]).toMatchObject({
+    expect(
+      byFile["lime-rs/crates/services/src/skill_service.rs"],
+    ).toMatchObject({
       layer: "unit",
       packageName: "lime-services",
       liveGated: true,
@@ -195,28 +194,28 @@ describe("rust-test-layer-classifier", () => {
     expect(report.layers.integration.ignored).toBe(1);
     expect(report.liveGated).toBe(2);
     expect(report.excludedSubcrateFiles).toBe(1);
-    expect(report.runnableByDefault).toBe(5);
+    expect(report.unmanagedRootFiles).toBe(4);
+    expect(report.runnableByDefault).toBe(2);
   });
 });
 
 describe("run-rust-layer 参数解析", () => {
   it("保留 Cargo package 参数和测试过滤器", () => {
-    expect(parseArgs(["unit", "-p", "lime-agent", "request_tool_policy"]))
-      .toMatchObject({
-        layer: "unit",
-        cargoArgs: ["-p", "lime-agent", "request_tool_policy"],
-        testArgs: [],
-      });
+    expect(
+      parseArgs(["unit", "-p", "lime-agent", "request_tool_policy"]),
+    ).toMatchObject({
+      layer: "unit",
+      cargoArgs: ["-p", "lime-agent", "request_tool_policy"],
+      testArgs: [],
+    });
   });
 
   it("把分隔符后的参数透传给 Rust test binary", () => {
-    expect(parseArgs(["e2e", "--", "--ignored", "--nocapture"])).toMatchObject(
-      {
-        layer: "e2e",
-        cargoArgs: [],
-        testArgs: ["--ignored", "--nocapture"],
-      },
-    );
+    expect(parseArgs(["e2e", "--", "--ignored", "--nocapture"])).toMatchObject({
+      layer: "e2e",
+      cargoArgs: [],
+      testArgs: ["--ignored", "--nocapture"],
+    });
   });
 
   it("列表按 Cargo package scope 过滤", () => {
@@ -226,17 +225,16 @@ describe("run-rust-layer 参数解析", () => {
     const defaultFiles = filterEntriesForCargoArgs(entries, []).map(
       (entry) => entry.file,
     );
-    expect(defaultFiles).toContain("lime-rs/src/lib.rs");
-    expect(defaultFiles).not.toContain(
-      "lime-rs/crates/agent/tests/protocol.rs",
+    expect(defaultFiles).not.toContain("lime-rs/src/lib.rs");
+    expect(defaultFiles).toContain("lime-rs/crates/agent/tests/protocol.rs");
+    expect(defaultFiles).toContain(
+      "lime-rs/crates/services/src/skill_service.rs",
     );
 
     const workspaceFiles = filterEntriesForCargoArgs(entries, [
       "--workspace",
     ]).map((entry) => entry.file);
-    expect(workspaceFiles).toContain(
-      "lime-rs/crates/agent/tests/protocol.rs",
-    );
+    expect(workspaceFiles).toContain("lime-rs/crates/agent/tests/protocol.rs");
 
     const agentFiles = filterEntriesForCargoArgs(entries, [
       "-p",

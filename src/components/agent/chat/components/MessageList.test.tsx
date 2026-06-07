@@ -2413,6 +2413,64 @@ describe("MessageList", () => {
     expect(container.textContent).not.toContain("直接回答优先");
   });
 
+  it("首字前等待态遇到提前完成的 turn 时，不应在消息尾部显示已完成", async () => {
+    const now = new Date("2026-06-07T10:00:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-first-token-completed-turn",
+        role: "user",
+        content: "请用一句话解释启动状态",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-first-token-completed-turn",
+        role: "assistant",
+        content: "",
+        timestamp: new Date(now.getTime() + 1000),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在生成回复",
+          detail: "运行时已开始处理，等待首个输出。",
+        },
+      },
+    ];
+
+    const container = await renderZh(messages, {
+      currentTurnId: "turn-first-token-completed",
+      isSending: true,
+      threadRead: {
+        thread_id: "thread-first-token-completed",
+        status: "completed",
+      },
+      turns: [
+        {
+          id: "turn-first-token-completed",
+          thread_id: "thread-first-token-completed",
+          prompt_text: "请用一句话解释启动状态",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:12.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:12.000Z",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-first-token-runtime-status"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("正在生成回复");
+    expect(container.textContent).toContain("等待首个输出");
+    expect(container.textContent).not.toContain("已完成");
+    expect(container.textContent).not.toContain("00:12");
+  });
+
   it("当前回合运行且只有执行轨迹时，应在消息结算区显示小型输出提示", () => {
     const now = new Date("2026-05-12T09:00:00.000Z");
     const messages: Message[] = [

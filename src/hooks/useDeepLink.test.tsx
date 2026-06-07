@@ -4,8 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDeepLink } from "./useDeepLink";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import { safeInvoke, safeListen } from "@/lib/dev-bridge";
-import { getCurrent } from "@/lib/desktop-host/plugin-deep-link";
+import { getCurrent, onOpenUrl } from "@/lib/desktop-host/plugin-deep-link";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import {
   completeOemCloudDesktopOAuthLogin,
@@ -20,23 +19,31 @@ import { setStoredOemCloudSessionState } from "@/lib/oemCloudSession";
 
 const {
   mockClaimClientReferral,
+  mockResolveConnectDeepLink,
+  mockResolveOpenDeepLink,
+  mockSaveConnectRelayApiKey,
   mockToastError,
   mockToastInfo,
   mockToastSuccess,
 } = vi.hoisted(() => ({
   mockClaimClientReferral: vi.fn(),
+  mockResolveConnectDeepLink: vi.fn(),
+  mockResolveOpenDeepLink: vi.fn(),
+  mockSaveConnectRelayApiKey: vi.fn(),
   mockToastError: vi.fn(),
   mockToastInfo: vi.fn(),
   mockToastSuccess: vi.fn(),
 }));
 
-vi.mock("@/lib/dev-bridge", () => ({
-  safeInvoke: vi.fn(),
-  safeListen: vi.fn(),
+vi.mock("@/lib/api/connect", () => ({
+  resolveConnectDeepLink: mockResolveConnectDeepLink,
+  resolveOpenDeepLink: mockResolveOpenDeepLink,
+  saveConnectRelayApiKey: mockSaveConnectRelayApiKey,
 }));
 
 vi.mock("@/lib/desktop-host/plugin-deep-link", () => ({
   getCurrent: vi.fn(),
+  onOpenUrl: vi.fn(),
 }));
 
 vi.mock("@/lib/desktop-runtime", () => ({
@@ -112,9 +119,31 @@ describe("useDeepLink", () => {
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
     vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
-    vi.mocked(safeListen).mockResolvedValue(vi.fn());
-    vi.mocked(safeInvoke).mockResolvedValue({});
     vi.mocked(getCurrent).mockResolvedValue([]);
+    vi.mocked(onOpenUrl).mockResolvedValue(vi.fn());
+    mockResolveConnectDeepLink.mockResolvedValue({
+      payload: {
+        relay: "relay-one",
+        key: "sk-relay-key",
+        name: "Relay Key",
+      },
+      relay_info: null,
+      is_verified: false,
+    });
+    mockResolveOpenDeepLink.mockResolvedValue({
+      payload: {
+        kind: "prompt",
+        slug: "gemini-longform-master",
+        source: "website",
+        version: "1",
+      },
+    });
+    mockSaveConnectRelayApiKey.mockResolvedValue({
+      provider_id: "provider-1",
+      key_id: "key-1",
+      provider_name: "Relay Key",
+      is_new_provider: true,
+    });
     mockClaimClientReferral.mockResolvedValue({});
     window.localStorage.clear();
     delete window.__LIME_BOOTSTRAP__;
@@ -144,8 +173,31 @@ describe("useDeepLink", () => {
 
     await renderHook();
 
-    expect(safeListen).not.toHaveBeenCalled();
+    expect(onOpenUrl).not.toHaveBeenCalled();
     expect(getCurrent).not.toHaveBeenCalled();
+  });
+
+  it("运行中的 Electron deep link 事件应经 Desktop Host bridge 进入 Connect 处理链", async () => {
+    let deepLinkHandler: ((urls: string[]) => void) | null = null;
+    vi.mocked(onOpenUrl).mockImplementation(async (handler) => {
+      deepLinkHandler = handler;
+      return vi.fn();
+    });
+
+    await renderHook();
+
+    await act(async () => {
+      deepLinkHandler?.([
+        "lime://connect?relay=relay-one&key=sk-relay-key&name=Relay%20Key",
+      ]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onOpenUrl).toHaveBeenCalledTimes(1);
+    expect(mockResolveConnectDeepLink).toHaveBeenCalledWith(
+      "lime://connect?relay=relay-one&key=sk-relay-key&name=Relay%20Key",
+    );
   });
 
   it("应解析官网 open deep link 并回调前端导航", async () => {
@@ -153,28 +205,14 @@ describe("useDeepLink", () => {
     vi.mocked(getCurrent).mockResolvedValue([
       "lime://open?kind=prompt&slug=gemini-longform-master&source=website&v=1",
     ]);
-    vi.mocked(safeInvoke).mockImplementation(async (command) => {
-      if (command === "handle_open_deep_link") {
-        return {
-          payload: {
-            kind: "prompt",
-            slug: "gemini-longform-master",
-            source: "website",
-            version: "1",
-          },
-        };
-      }
-
-      return {};
-    });
 
     await renderHook({
       onOpenWebsiteDeepLink,
     });
 
-    expect(safeInvoke).toHaveBeenCalledWith("handle_open_deep_link", {
-      url: "lime://open?kind=prompt&slug=gemini-longform-master&source=website&v=1",
-    });
+    expect(mockResolveOpenDeepLink).toHaveBeenCalledWith(
+      "lime://open?kind=prompt&slug=gemini-longform-master&source=website&v=1",
+    );
     expect(onOpenWebsiteDeepLink).toHaveBeenCalledWith({
       kind: "prompt",
       slug: "gemini-longform-master",
@@ -188,20 +226,14 @@ describe("useDeepLink", () => {
     vi.mocked(getCurrent).mockResolvedValue([
       "lime://open?kind=skill&slug=viral-content-breakdown&source=website&v=1&action=install",
     ]);
-    vi.mocked(safeInvoke).mockImplementation(async (command) => {
-      if (command === "handle_open_deep_link") {
-        return {
-          payload: {
-            kind: "skill",
-            slug: "viral-content-breakdown",
-            source: "website",
-            version: "1",
-            action: "install",
-          },
-        };
-      }
-
-      return {};
+    mockResolveOpenDeepLink.mockResolvedValueOnce({
+      payload: {
+        kind: "skill",
+        slug: "viral-content-breakdown",
+        source: "website",
+        version: "1",
+        action: "install",
+      },
     });
 
     await renderHook({
@@ -230,7 +262,8 @@ describe("useDeepLink", () => {
     await renderHook();
 
     window.removeEventListener(OEM_CLOUD_PAYMENT_RETURN_EVENT, listener);
-    expect(safeInvoke).not.toHaveBeenCalled();
+    expect(mockResolveConnectDeepLink).not.toHaveBeenCalled();
+    expect(mockResolveOpenDeepLink).not.toHaveBeenCalled();
     expect(received).toHaveLength(1);
     expect(received[0]).toMatchObject({
       tenantId: "tenant-0001",

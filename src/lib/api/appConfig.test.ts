@@ -209,14 +209,14 @@ describe("appConfig API", () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
 
     const nextConfig = {
-      default_provider: "kiro",
+      default_provider: "openai",
       navigation: { schema_version: 3, enabled_items: ["companion"] },
     } as never;
 
     await expect(saveConfig(nextConfig)).resolves.toBeUndefined();
     await expect(getConfig()).resolves.toEqual(
       expect.objectContaining({
-        default_provider: "kiro",
+        default_provider: "openai",
         navigation: { schema_version: 3, enabled_items: ["companion"] },
       }),
     );

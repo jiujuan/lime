@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { runNodeScriptJson } from "./node-script-test-runner.mjs";
 import { deriveHistoryRecordVerificationFacts } from "../harness-eval-history-record.mjs";
 
 const repoRoot = process.cwd();
@@ -18,24 +19,7 @@ function createTempRoot() {
 }
 
 function runNodeScriptAsync(scriptRelativePath: string, args: string[]) {
-  return new Promise<unknown>((resolve, reject) => {
-    execFile(
-      process.execPath,
-      [path.join(repoRoot, scriptRelativePath), ...args],
-      {
-        cwd: repoRoot,
-        encoding: "utf8",
-      },
-      (error, stdout) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve(JSON.parse(stdout));
-      },
-    );
-  });
+  return runNodeScriptJson(scriptRelativePath, args, { repoRoot });
 }
 
 afterEach(() => {
@@ -187,22 +171,34 @@ describe("harness-eval-history-record", () => {
     const historyDir = path.join(tempRoot, ".lime", "harness", "history");
     const workspaceRoot = path.join(tempRoot, "workspace");
 
-    const result = (await runNodeScriptAsync("scripts/harness-eval-history-record.mjs", [
-      "--format",
-      "json",
-      "--history-dir",
-      historyDir,
-      "--workspace-root",
-      workspaceRoot,
-    ])) as Record<string, any>;
+    const result = (await runNodeScriptAsync(
+      "scripts/harness-eval-history-record.mjs",
+      [
+        "--format",
+        "json",
+        "--history-dir",
+        historyDir,
+        "--workspace-root",
+        workspaceRoot,
+      ],
+    )) as Record<string, any>;
 
     const reportsRoot = path.join(tempRoot, ".lime", "harness", "reports");
     const summaryJsonPath = path.join(reportsRoot, "harness-eval-summary.json");
-    const summaryMarkdownPath = path.join(reportsRoot, "harness-eval-summary.md");
+    const summaryMarkdownPath = path.join(
+      reportsRoot,
+      "harness-eval-summary.md",
+    );
     const trendJsonPath = path.join(reportsRoot, "harness-eval-trend.json");
     const trendMarkdownPath = path.join(reportsRoot, "harness-eval-trend.md");
-    const cleanupJsonPath = path.join(reportsRoot, "harness-cleanup-report.json");
-    const cleanupMarkdownPath = path.join(reportsRoot, "harness-cleanup-report.md");
+    const cleanupJsonPath = path.join(
+      reportsRoot,
+      "harness-cleanup-report.json",
+    );
+    const cleanupMarkdownPath = path.join(
+      reportsRoot,
+      "harness-cleanup-report.md",
+    );
     const dashboardHtmlPath = path.join(reportsRoot, "harness-dashboard.html");
 
     expect(result.summary.outputJsonPath).toBe(summaryJsonPath);
@@ -220,9 +216,7 @@ describe("harness-eval-history-record", () => {
     expect(result.cleanup.outputJsonPath).toBe(cleanupJsonPath);
     expect(result.cleanup.outputMarkdownPath).toBe(cleanupMarkdownPath);
     expect(result.cleanup.verificationFailureOutcomeFocus).toEqual(
-      expect.arrayContaining([
-        "artifactValidator:issues_present",
-      ]),
+      expect.arrayContaining(["artifactValidator:issues_present"]),
     );
     expect(result.cleanup.verificationFailureCaseCount).toBe(1);
     expect(result.cleanup.verificationBlockingFailureCaseCount).toBe(0);
@@ -302,22 +296,25 @@ describe("harness-eval-history-record", () => {
       "harness-dashboard.html",
     );
 
-    const firstResult = (await runNodeScriptAsync("scripts/harness-eval-history-record.mjs", [
-      "--format",
-      "json",
-      "--history-dir",
-      historyDir,
-      "--workspace-root",
-      workspaceRoot,
-      "--summary-json",
-      summaryJsonPath,
-      "--summary-markdown",
-      summaryMarkdownPath,
-      "--dashboard-html",
-      dashboardHtmlPath,
-      "--output-json",
-      path.join(tempRoot, "first.json"),
-    ])) as Record<string, any>;
+    const firstResult = (await runNodeScriptAsync(
+      "scripts/harness-eval-history-record.mjs",
+      [
+        "--format",
+        "json",
+        "--history-dir",
+        historyDir,
+        "--workspace-root",
+        workspaceRoot,
+        "--summary-json",
+        summaryJsonPath,
+        "--summary-markdown",
+        summaryMarkdownPath,
+        "--dashboard-html",
+        dashboardHtmlPath,
+        "--output-json",
+        path.join(tempRoot, "first.json"),
+      ],
+    )) as Record<string, any>;
 
     const secondResult = (await runNodeScriptAsync(
       "scripts/harness-eval-history-record.mjs",
@@ -371,14 +368,14 @@ describe("harness-eval-history-record", () => {
     expect(secondResult.cleanup.currentObservabilityGapCaseCount).toBe(0);
     expect(secondResult.cleanup.degradedObservabilityGapCaseCount).toBe(1);
     expect(secondResult.cleanup.verificationFailureOutcomeFocus).toEqual(
-      expect.arrayContaining([
-        "artifactValidator:issues_present",
-      ]),
+      expect.arrayContaining(["artifactValidator:issues_present"]),
     );
     expect(secondResult.cleanup.verificationFailureCaseCount).toBe(1);
     expect(secondResult.cleanup.verificationBlockingFailureCaseCount).toBe(0);
     expect(secondResult.cleanup.verificationAdvisoryFailureCaseCount).toBe(1);
-    expect(secondResult.cleanup.verificationDegradedBlockingFailureCaseCount).toBe(0);
+    expect(
+      secondResult.cleanup.verificationDegradedBlockingFailureCaseCount,
+    ).toBe(0);
     expect(secondResult.cleanup.verificationRecoveredCaseCount).toBe(3);
     expect(secondResult.cleanup.currentVerificationRecoveredCaseCount).toBe(3);
     expect(secondResult.cleanup.currentRecoveredBaselineFocus).toEqual(
@@ -464,6 +461,8 @@ describe("harness-eval-history-record", () => {
       );
 
     expect(historyFiles).toHaveLength(2);
-    expect(firstResult.recordedSummaryPath).not.toBe(secondResult.recordedSummaryPath);
+    expect(firstResult.recordedSummaryPath).not.toBe(
+      secondResult.recordedSummaryPath,
+    );
   }, 240_000);
 });

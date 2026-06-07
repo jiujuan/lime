@@ -249,18 +249,24 @@ export function createSessionClient({
       const normalizedDetail = detail as AsterSessionDetail | null | undefined;
       const normalizedSessionDetail: AsterSessionDetail = {
         ...(detail as AsterSessionDetail),
+        messages: Array.isArray(normalizedDetail?.messages)
+          ? normalizedDetail.messages
+          : [],
+        turns: Array.isArray(normalizedDetail?.turns)
+          ? normalizedDetail.turns
+          : [],
         items: Array.isArray(normalizedDetail?.items)
           ? normalizedDetail.items.map((item) =>
               normalizeLegacyThreadItem(item as AgentThreadItem),
             )
-          : normalizedDetail?.items,
+          : [],
         child_subagent_sessions: Array.isArray(
           normalizedDetail?.child_subagent_sessions,
         )
           ? normalizedDetail.child_subagent_sessions.map(
               normalizeSubagentSessionInfo,
             )
-          : normalizedDetail?.child_subagent_sessions,
+          : [],
         subagent_parent_context: normalizeSubagentParentContext(
           normalizedDetail?.subagent_parent_context,
         ),
@@ -268,6 +274,9 @@ export function createSessionClient({
           normalizedDetail?.queued_turns,
         ),
         thread_read: normalizeThreadReadModel(normalizedDetail?.thread_read),
+        todo_items: Array.isArray(normalizedDetail?.todo_items)
+          ? normalizedDetail.todo_items
+          : [],
       };
       settled = true;
       recordAgentUiPerformanceMetric("agentRuntime.getSession.success", {
@@ -326,9 +335,7 @@ export function createSessionClient({
   async function updateAgentRuntimeSession(
     request: AgentRuntimeUpdateSessionRequest,
   ): Promise<void> {
-    return await invokeCommand<void>(AGENT_RUNTIME_COMMANDS.updateSession, {
-      request,
-    });
+    return await appServerSessionClient.updateAgentRuntimeSession(request);
   }
 
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {

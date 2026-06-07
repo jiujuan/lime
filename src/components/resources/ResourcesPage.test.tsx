@@ -10,6 +10,26 @@ import {
 import type { ResourceItem } from "./services/types";
 import { ResourcesPage } from "./ResourcesPage";
 
+vi.mock("react-i18next", async () => {
+  const workspaceZhCN = (await import("@/i18n/resources/zh-CN/workspace.json"))
+    .default as Record<string, string>;
+
+  return {
+    useTranslation: () => ({
+      i18n: {
+        language: "zh-CN",
+        resolvedLanguage: "zh-CN",
+      },
+      t: (key: string, options?: Record<string, unknown>) => {
+        const template = workspaceZhCN[key] ?? key;
+        return template.replace(/{{\s*([^}]+?)\s*}}/g, (_, name: string) =>
+          String(options?.[name.trim()] ?? ""),
+        );
+      },
+    }),
+  };
+});
+
 function createResourceItem(index: number) {
   return {
     id: `doc-${index}`,

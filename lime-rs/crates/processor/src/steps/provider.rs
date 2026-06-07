@@ -246,7 +246,9 @@ impl ProviderStep {
         Fut: Future<Output = Result<ProviderCallResult, ProviderCallError>>,
     {
         let mut failover_manager = FailoverManager::new(self.failover.config().clone());
-        let mut current_provider = ctx.provider.unwrap_or(ProviderType::Kiro);
+        let mut current_provider = ctx.provider.ok_or_else(|| {
+            StepError::Routing("未设置 Provider，无法执行 Provider 调用".to_string())
+        })?;
         let max_failover_attempts = available_providers.len();
         let mut failover_attempts = 0;
         let max_retries = self.retrier.config().max_retries;
@@ -505,28 +507,28 @@ mod tests {
     async fn test_handle_failover() {
         let step = ProviderStep::with_defaults();
         let mut ctx = RequestContext::new("test-model".to_string());
-        ctx.set_provider(ProviderType::Kiro);
+        ctx.set_provider(ProviderType::Gemini);
 
         let error = ProviderCallError::failover("Rate limit exceeded", Some(429));
         let available = vec![
-            ProviderType::Kiro,
             ProviderType::Gemini,
             ProviderType::OpenAI,
+            ProviderType::Claude,
         ];
 
         let new_provider = step.handle_failover(&ctx, &error, &available);
         assert!(new_provider.is_some());
-        assert_eq!(new_provider.unwrap(), ProviderType::Gemini);
+        assert_eq!(new_provider.unwrap(), ProviderType::OpenAI);
     }
 
     #[tokio::test]
     async fn test_handle_failover_no_alternative() {
         let step = ProviderStep::with_defaults();
         let mut ctx = RequestContext::new("test-model".to_string());
-        ctx.set_provider(ProviderType::Kiro);
+        ctx.set_provider(ProviderType::Gemini);
 
         let error = ProviderCallError::failover("Rate limit exceeded", Some(429));
-        let available = vec![ProviderType::Kiro];
+        let available = vec![ProviderType::Gemini];
 
         let new_provider = step.handle_failover(&ctx, &error, &available);
         assert!(new_provider.is_none());

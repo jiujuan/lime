@@ -4,8 +4,11 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_PACKAGE_ROOT = "release-electron";
+const MAC_PRODUCT_NAME = "Lime";
+const MAC_APP_ID = "com.limecloud.lime";
 
 function parseArgs(argv) {
   const args = {};
@@ -61,6 +64,16 @@ function findResourceRoots(packageRoot) {
     return existsSync(manifest) && existsSync(assets);
   });
   return roots.sort();
+}
+
+function findMacAppBundles(packageRoot) {
+  return walkDirectories(packageRoot)
+    .filter((dir) => dir.endsWith(".app"))
+    .map((appPath) => ({
+      appPath,
+      infoPlistPath: path.join(appPath, "Contents", "Info.plist"),
+    }))
+    .filter(({ infoPlistPath }) => existsSync(infoPlistPath));
 }
 
 function platformKey(platform = process.platform, arch = process.arch) {
@@ -134,7 +147,10 @@ function verifyResourceRoot(root, { platform, arch }) {
     "tray-warning.png",
     "tray-error.png",
   ]) {
-    assertFile(path.join(root, "desktop-assets", name), `desktop asset ${name}`);
+    assertFile(
+      path.join(root, "desktop-assets", name),
+      `desktop asset ${name}`,
+    );
   }
 
   return {
@@ -155,21 +171,134 @@ function verifyMainBundle(repoRoot) {
   assertFile(mainBundle, "Electron main bundle");
   const content = readFileSync(mainBundle, "utf8");
   if (/from\s+["']app-server-client["']/.test(content)) {
-    throw new Error("Electron main bundle still imports bare app-server-client");
+    throw new Error(
+      "Electron main bundle still imports bare app-server-client",
+    );
   }
+}
+
+export function verifyMacAppIdentity(packageRoot, { platform }) {
+  if (platform !== "darwin") {
+    return [];
+  }
+
+  const appBundles = findMacAppBundles(packageRoot);
+  if (appBundles.length === 0) {
+    return [];
+  }
+
+  return appBundles.map((bundle) => verifyMacAppBundleIdentity(bundle));
+}
+
+function verifyMacAppBundleIdentity({ appPath, infoPlistPath }) {
+  const content = readFileSync(infoPlistPath, "utf8");
+  if (/<key>\d+<\/key>\s*<string>/.test(content)) {
+    throw new Error(
+      `macOS Info.plist contains numeric extendInfo keys; Forge packager extendInfo must be an object: ${infoPlistPath}`,
+    );
+  }
+
+  const isMainApp = path.basename(appPath) === `${MAC_PRODUCT_NAME}.app`;
+  if (isMainApp) {
+    verifyMainMacAppInfoPlist(content, infoPlistPath);
+  } else {
+    verifyHelperMacAppInfoPlist(content, infoPlistPath);
+  }
+
+  return {
+    appPath,
+    infoPlistPath,
+    kind: isMainApp ? "main" : "helper",
+  };
+}
+
+function verifyMainMacAppInfoPlist(content, infoPlistPath) {
+  const requiredPairs = new Map([
+    ["CFBundleDisplayName", MAC_PRODUCT_NAME],
+    ["CFBundleName", MAC_PRODUCT_NAME],
+    ["CFBundleExecutable", MAC_PRODUCT_NAME],
+    ["CFBundleIdentifier", MAC_APP_ID],
+    ["CFBundleIconFile", "icon.icns"],
+  ]);
+  for (const [key, value] of requiredPairs) {
+    if (!plistContainsString(content, key, value)) {
+      throw new Error(
+        `macOS app identity mismatch for ${key}: ${infoPlistPath}`,
+      );
+    }
+  }
+
+  rejectElectronBrandValue(content, infoPlistPath);
+}
+
+function verifyHelperMacAppInfoPlist(content, infoPlistPath) {
+  for (const key of [
+    "CFBundleDisplayName",
+    "CFBundleName",
+    "CFBundleExecutable",
+  ]) {
+    if (plistStringValueStartsWith(content, key, "Electron")) {
+      throw new Error(
+        `macOS helper app identity still uses Electron for ${key}: ${infoPlistPath}`,
+      );
+    }
+  }
+}
+
+function rejectElectronBrandValue(content, infoPlistPath) {
+  if (plistContainsString(content, "CFBundleDisplayName", "Electron")) {
+    throw new Error(
+      `macOS app display name still uses Electron: ${infoPlistPath}`,
+    );
+  }
+  if (plistContainsString(content, "CFBundleName", "Electron")) {
+    throw new Error(
+      `macOS app bundle name still uses Electron: ${infoPlistPath}`,
+    );
+  }
+  if (plistContainsString(content, "CFBundleExecutable", "Electron")) {
+    throw new Error(
+      `macOS app executable still uses Electron: ${infoPlistPath}`,
+    );
+  }
+}
+
+function plistContainsString(content, key, value) {
+  const escapedKey = escapeRegExp(key);
+  const escapedValue = escapeRegExp(value);
+  return new RegExp(
+    `<key>${escapedKey}</key>\\s*<string>${escapedValue}</string>`,
+  ).test(content);
+}
+
+function plistStringValueStartsWith(content, key, valuePrefix) {
+  const escapedKey = escapeRegExp(key);
+  const escapedValuePrefix = escapeRegExp(valuePrefix);
+  return new RegExp(
+    `<key>${escapedKey}</key>\\s*<string>${escapedValuePrefix}`,
+  ).test(content);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = process.cwd();
-  const packageRoot = path.resolve(args["package-root"] || DEFAULT_PACKAGE_ROOT);
+  const packageRoot = path.resolve(
+    args["package-root"] || DEFAULT_PACKAGE_ROOT,
+  );
   const platform = args.platform || process.platform;
   const arch = args.arch || process.arch;
 
   verifyMainBundle(repoRoot);
+  const macAppInfoPlists = verifyMacAppIdentity(packageRoot, { platform });
   const resourceRoots = findResourceRoots(packageRoot);
   if (resourceRoots.length === 0) {
-    throw new Error(`no Electron packaged resource root found under ${packageRoot}`);
+    throw new Error(
+      `no Electron packaged resource root found under ${packageRoot}`,
+    );
   }
 
   const verified = resourceRoots.map((root) =>
@@ -179,6 +308,7 @@ function main() {
     JSON.stringify(
       {
         packageRoot,
+        macAppInfoPlists,
         verified,
       },
       null,
@@ -187,4 +317,9 @@ function main() {
   );
 }
 
-main();
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main();
+}

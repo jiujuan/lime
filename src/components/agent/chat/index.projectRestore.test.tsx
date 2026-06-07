@@ -150,6 +150,42 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     );
   });
 
+  it("本地记忆项目不存在时不应把 stale 项目 ID 传给 Agent runtime", async () => {
+    localStorage.setItem(
+      "agent_last_project_id",
+      JSON.stringify("workspace-1"),
+    );
+    mockGetProject.mockImplementation(async (projectId: string) => {
+      if (projectId === "workspace-1") {
+        return null;
+      }
+      return createProject(projectId);
+    });
+    mockGetOrCreateDefaultProject.mockResolvedValue(
+      createProject("project-default-real"),
+    );
+    mockEnsureWorkspaceReady.mockResolvedValue({
+      workspaceId: "project-default-real",
+      rootPath: "/tmp/project-default-real",
+      existed: true,
+      created: false,
+      repaired: false,
+      relocated: false,
+      previousRootPath: null,
+      warning: null,
+    });
+
+    renderPage({ agentEntry: "new-task", showChatPanel: false });
+    await flushEffects();
+
+    expect(mockGetProject).toHaveBeenCalledWith("workspace-1");
+    expect(mockGetOrCreateDefaultProject).toHaveBeenCalledTimes(1);
+    expect(observedWorkspaceIds).not.toContain("workspace-1");
+    expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
+      "project-default-real",
+    );
+  });
+
   it("存在 newChatAt 时手动选项目不应被重置", async () => {
     const container = renderPage({ newChatAt: 1234567890 });
     await flushEffects();

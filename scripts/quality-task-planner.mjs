@@ -168,7 +168,7 @@ const I18N_APP_METADATA_WORKFLOW_FILES = new Set([
   "scripts/i18n-app-metadata-workflow-report.ts",
   "lime-rs/Cargo.toml",
   "lime-rs/capabilities/agent-app-shell.json",
-  "electron-builder.yml",
+  "forge.config.mjs",
 ]);
 
 const I18N_RTL_READINESS_FILES = new Set([
@@ -274,7 +274,7 @@ const INTEGRITY_FILES = new Set([
   "package.json",
   "packages/lime-cli-npm/package.json",
   "lime-rs/Cargo.toml",
-  "electron-builder.yml",
+  "forge.config.mjs",
   "scripts/check-app-version-consistency.mjs",
   "scripts/quality-task-planner.mjs",
   "scripts/quality-task-selector.mjs",

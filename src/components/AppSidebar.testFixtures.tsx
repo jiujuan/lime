@@ -58,6 +58,7 @@ const {
   mockCheckForUpdates,
   mockGetUpdateInstallSession,
   mockListenUpdateInstallSession,
+  mockOpenUpdateWindow,
   mockRecordUpdateNotificationAction,
   mockRemindUpdateLater,
   mockStartUpdateInstallSession,
@@ -91,6 +92,7 @@ const {
   mockCheckForUpdates: vi.fn(),
   mockGetUpdateInstallSession: vi.fn(),
   mockListenUpdateInstallSession: vi.fn(),
+  mockOpenUpdateWindow: vi.fn(),
   mockRecordUpdateNotificationAction: vi.fn(),
   mockRemindUpdateLater: vi.fn(),
   mockStartUpdateInstallSession: vi.fn(),
@@ -111,6 +113,7 @@ export {
   mockListInstalledAgentApps,
   mockLogoutClient,
   mockOpenExternalUrl,
+  mockOpenUpdateWindow,
   mockRecordUpdateNotificationAction,
   mockRecordAgentUiPerformanceMetric,
   mockRemindUpdateLater,
@@ -154,6 +157,7 @@ vi.mock("@/lib/api/appUpdate", () => ({
   checkForUpdates: mockCheckForUpdates,
   getUpdateInstallSession: mockGetUpdateInstallSession,
   listenUpdateInstallSession: mockListenUpdateInstallSession,
+  openUpdateWindow: mockOpenUpdateWindow,
   recordUpdateNotificationAction: mockRecordUpdateNotificationAction,
   remindUpdateLater: mockRemindUpdateLater,
   startUpdateInstallSession: mockStartUpdateInstallSession,
@@ -436,6 +440,7 @@ export async function resetAppSidebarTest() {
     isActive: false,
   });
   mockListenUpdateInstallSession.mockResolvedValue(() => undefined);
+  mockOpenUpdateWindow.mockResolvedValue(undefined);
   mockRecordUpdateNotificationAction.mockResolvedValue(undefined);
   mockRemindUpdateLater.mockResolvedValue(0);
   mockStartUpdateInstallSession.mockResolvedValue({

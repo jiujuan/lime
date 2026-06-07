@@ -147,7 +147,7 @@ mod tests {
             routes: vec![
                 HintRouteEntry {
                     hint: "reasoning".to_string(),
-                    provider: ProviderType::Kiro,
+                    provider: ProviderType::Claude,
                     model: "claude-sonnet-4-5-20250514".to_string(),
                 },
                 HintRouteEntry {
@@ -157,7 +157,7 @@ mod tests {
                 },
                 HintRouteEntry {
                     hint: "code".to_string(),
-                    provider: ProviderType::Kiro,
+                    provider: ProviderType::Claude,
                     model: "claude-sonnet-4-5-20250514".to_string(),
                 },
             ],
@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(router.route_count(), 3);
 
         let route = router.route_by_hint("reasoning").unwrap();
-        assert_eq!(route.provider, ProviderType::Kiro);
+        assert_eq!(route.provider, ProviderType::Claude);
 
         let route = router.route_by_hint("fast").unwrap();
         assert_eq!(route.provider, ProviderType::Gemini);
@@ -203,7 +203,7 @@ mod tests {
 
         let m = router.match_message("[reasoning] 请分析这段代码").unwrap();
         assert_eq!(m.route.hint, "reasoning");
-        assert_eq!(m.route.provider, ProviderType::Kiro);
+        assert_eq!(m.route.provider, ProviderType::Claude);
         assert_eq!(m.stripped_message, "请分析这段代码");
     }
 

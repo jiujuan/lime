@@ -2,12 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { execFile } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
+
+import { runNodeScriptJson } from "./node-script-test-runner.mjs";
 
 const repoRoot = process.cwd();
 const tempRoots: string[] = [];
-const NODE_SCRIPT_TIMEOUT_MS = 45_000;
 
 function createTempRoot() {
   const tempRoot = fs.mkdtempSync(
@@ -141,39 +141,7 @@ function createReplayFixture(tempRoot: string) {
 }
 
 function runNodeScript(scriptRelativePath: string, args: string[]) {
-  return new Promise<any>((resolve, reject) => {
-    execFile(
-      process.execPath,
-      [path.join(repoRoot, scriptRelativePath), ...args],
-      {
-        cwd: repoRoot,
-        encoding: "utf8",
-        killSignal: "SIGKILL",
-        timeout: NODE_SCRIPT_TIMEOUT_MS,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        try {
-          resolve(JSON.parse(stdout));
-        } catch (parseError) {
-          reject(
-            new Error(
-              [
-                `无法解析 ${scriptRelativePath} 的 JSON 输出。`,
-                `stdout: ${stdout.slice(0, 500)}`,
-                `stderr: ${stderr.slice(0, 500)}`,
-                `error: ${String(parseError)}`,
-              ].join("\n"),
-            ),
-          );
-        }
-      },
-    );
-  });
+  return runNodeScriptJson(scriptRelativePath, args, { repoRoot });
 }
 
 afterEach(() => {
@@ -236,14 +204,17 @@ describe("Harness eval history window", () => {
       .sort();
     expect(historyFiles).toHaveLength(2);
 
-    const report = await runNodeScript("scripts/harness-eval-trend-report.mjs", [
-      "--format",
-      "json",
-      "--manifest",
-      manifestPath,
-      "--history-dir",
-      historyDir,
-    ]);
+    const report = await runNodeScript(
+      "scripts/harness-eval-trend-report.mjs",
+      [
+        "--format",
+        "json",
+        "--manifest",
+        manifestPath,
+        "--history-dir",
+        historyDir,
+      ],
+    );
 
     expect(report.sampleCount).toBe(2);
     expect(report.signals).not.toContain(

@@ -50,6 +50,24 @@ function appServerClientMock(): AppServerSessionRpcClient {
       notifications: [],
       messages: [],
     }),
+    updateSession: vi.fn().mockResolvedValue({
+      id: 4,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          title: "新标题",
+          model: "gpt-5.4",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:02.000Z",
+          archivedAt: null,
+          messagesCount: 3,
+        },
+      },
+      response: { id: 4, result: {} },
+      notifications: [],
+      messages: [],
+    }),
   };
 }
 
@@ -233,6 +251,11 @@ describe("appServerSessionClient", () => {
         threadId: "thread-2",
         appId: "desktop",
         workspaceId: "workspace-2",
+        businessObjectRef: {
+          kind: "agent.session",
+          id: "agent-session:workspace-2:1780704000000",
+          title: "协议会话标题",
+        },
         status: "running" as const,
         createdAt: "2026-06-06T00:00:00.000Z",
         updatedAt: "2026-06-06T00:00:03.000Z",
@@ -258,7 +281,7 @@ describe("appServerSessionClient", () => {
     await expect(client.getAgentRuntimeSession("session-2")).resolves.toEqual({
       id: "session-2",
       thread_id: "thread-2",
-      name: "session-2",
+      name: "协议会话标题",
       created_at: 1780704000000,
       updated_at: 1780704003000,
       workspace_id: "workspace-2",
@@ -277,7 +300,23 @@ describe("appServerSessionClient", () => {
       ],
       items: [],
       queued_turns: [],
-      thread_read: null,
+      thread_read: {
+        thread_id: "thread-2",
+        status: "running",
+        profile_status: "running",
+        active_turn_id: "turn-1",
+        turns: [
+          {
+            turn_id: "turn-1",
+            status: "running",
+            native_status: "running",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        updated_at: "2026-06-06T00:00:03.000Z",
+      },
       todo_items: [],
       child_subagent_sessions: [],
     });
@@ -292,5 +331,48 @@ describe("appServerSessionClient", () => {
     );
 
     expect(appServerClient.readSession).not.toHaveBeenCalled();
+  });
+
+  it("update 应通过 agentSession/update 写 current session 状态", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(
+      client.updateAgentRuntimeSession({
+        session_id: " session-1 ",
+        name: "  新标题  ",
+        archived: true,
+        provider_selector: " custom-provider ",
+        provider_name: " OpenAI Compatible ",
+        model_name: " gpt-5.4 ",
+        execution_strategy: "react",
+        recent_access_mode: "full-access",
+        recent_preferences: {
+          task: true,
+          subagent: false,
+        },
+        recent_team_selection: {
+          disabled: true,
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(appServerClient.updateSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      title: "新标题",
+      archived: true,
+      providerSelector: "custom-provider",
+      providerName: "OpenAI Compatible",
+      modelName: "gpt-5.4",
+      executionStrategy: "react",
+      recentAccessMode: "full-access",
+      recentPreferences: {
+        task: true,
+        subagent: false,
+      },
+      recentTeamSelection: {
+        disabled: true,
+      },
+    });
   });
 });

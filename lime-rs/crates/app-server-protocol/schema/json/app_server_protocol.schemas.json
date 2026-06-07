@@ -17,6 +17,115 @@
       "title": "AgentAppInstalledListResponse",
       "type": "object"
     },
+    "AgentAppUiRuntimeStartParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "entryKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId"
+      ],
+      "title": "AgentAppUiRuntimeStartParams",
+      "type": "object"
+    },
+    "AgentAppUiRuntimeStatusParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId"
+      ],
+      "title": "AgentAppUiRuntimeStatusParams",
+      "type": "object"
+    },
+    "AgentAppUiRuntimeStatusResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "entryKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "entryUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "message": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "route": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "status"
+      ],
+      "title": "AgentAppUiRuntimeStatusResponse",
+      "type": "object"
+    },
+    "AgentAppUiRuntimeStopParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId"
+      ],
+      "title": "AgentAppUiRuntimeStopParams",
+      "type": "object"
+    },
     "AgentAttachment": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -1160,6 +1269,143 @@
       "title": "AgentSessionTurnStartResponse",
       "type": "object"
     },
+    "AgentSessionUpdateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "archived": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "executionStrategy": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modelName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerSelector": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "recentAccessMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "recentPreferences": true,
+        "recentTeamSelection": true,
+        "sessionId": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionUpdateParams",
+      "type": "object"
+    },
+    "AgentSessionUpdateResponse": {
+      "$defs": {
+        "AgentSessionOverview": {
+          "properties": {
+            "archivedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "executionStrategy": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "messagesCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "model": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workingDir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "messagesCount",
+            "model",
+            "sessionId",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/AgentSessionOverview"
+        }
+      },
+      "required": [
+        "session"
+      ],
+      "title": "AgentSessionUpdateResponse",
+      "type": "object"
+    },
     "AgentTurn": {
       "$defs": {
         "AgentTurnStatus": {
@@ -1660,6 +1906,276 @@
         "name"
       ],
       "title": "ClientInfo",
+      "type": "object"
+    },
+    "ConnectCallbackSendParams": {
+      "$defs": {
+        "ConnectCallbackStatus": {
+          "enum": [
+            "cancelled",
+            "error",
+            "success"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "apiKey": {
+          "type": "string"
+        },
+        "errorCode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "errorMessage": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "refCode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "relayId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ConnectCallbackStatus"
+        }
+      },
+      "required": [
+        "apiKey",
+        "relayId",
+        "status"
+      ],
+      "title": "ConnectCallbackSendParams",
+      "type": "object"
+    },
+    "ConnectCallbackSendResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "delivered": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "delivered"
+      ],
+      "title": "ConnectCallbackSendResponse",
+      "type": "object"
+    },
+    "ConnectCallbackStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "cancelled",
+        "error",
+        "success"
+      ],
+      "title": "ConnectCallbackStatus",
+      "type": "string"
+    },
+    "ConnectDeepLinkResolveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "ConnectDeepLinkResolveParams",
+      "type": "object"
+    },
+    "ConnectDeepLinkResolveResponse": {
+      "$defs": {
+        "ConnectPayload": {
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "name": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "refCode": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "relay": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "relay"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "isVerified": {
+          "type": "boolean"
+        },
+        "payload": {
+          "$ref": "#/$defs/ConnectPayload"
+        },
+        "relayInfo": true
+      },
+      "required": [
+        "isVerified",
+        "payload"
+      ],
+      "title": "ConnectDeepLinkResolveResponse",
+      "type": "object"
+    },
+    "ConnectOpenDeepLinkResolveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "ConnectOpenDeepLinkResolveParams",
+      "type": "object"
+    },
+    "ConnectOpenDeepLinkResolveResponse": {
+      "$defs": {
+        "OpenDeepLinkPayload": {
+          "properties": {
+            "action": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "slug": {
+              "type": "string"
+            },
+            "source": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "version": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "slug"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/OpenDeepLinkPayload"
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "title": "ConnectOpenDeepLinkResolveResponse",
+      "type": "object"
+    },
+    "ConnectPayload": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "refCode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "relay": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "relay"
+      ],
+      "title": "ConnectPayload",
+      "type": "object"
+    },
+    "ConnectRelayApiKeySaveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "apiKey": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "relayId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "apiKey",
+        "relayId"
+      ],
+      "title": "ConnectRelayApiKeySaveParams",
+      "type": "object"
+    },
+    "ConnectRelayApiKeySaveResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "isNewProvider": {
+          "type": "boolean"
+        },
+        "keyId": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "providerName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "isNewProvider",
+        "keyId",
+        "providerId",
+        "providerName"
+      ],
+      "title": "ConnectRelayApiKeySaveResponse",
       "type": "object"
     },
     "EvidenceExportParams": {
@@ -2254,6 +2770,257 @@
       "title": "EvidencePackSummary",
       "type": "object"
     },
+    "FileSystemDirectoryListing": {
+      "$defs": {
+        "FileSystemFileEntry": {
+          "properties": {
+            "fileType": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "iconDataUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "isDir": {
+              "type": "boolean"
+            },
+            "isHidden": {
+              "default": false,
+              "type": "boolean"
+            },
+            "isSymlink": {
+              "default": false,
+              "type": "boolean"
+            },
+            "mimeType": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "mode": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "modeStr": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "modifiedAt": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "size": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "isDir",
+            "modifiedAt",
+            "name",
+            "path",
+            "size"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FileSystemFileEntry"
+          },
+          "type": "array"
+        },
+        "error": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "parentPath": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FileSystemDirectoryListing",
+      "type": "object"
+    },
+    "FileSystemFileEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "fileType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "iconDataUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "isDir": {
+          "type": "boolean"
+        },
+        "isHidden": {
+          "default": false,
+          "type": "boolean"
+        },
+        "isSymlink": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mimeType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "mode": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modeStr": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modifiedAt": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "isDir",
+        "modifiedAt",
+        "name",
+        "path",
+        "size"
+      ],
+      "title": "FileSystemFileEntry",
+      "type": "object"
+    },
+    "FileSystemFilePreview": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "error": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "isBinary": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "isBinary",
+        "path",
+        "size"
+      ],
+      "title": "FileSystemFilePreview",
+      "type": "object"
+    },
+    "FileSystemListDirectoryParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FileSystemListDirectoryParams",
+      "type": "object"
+    },
+    "FileSystemReadFilePreviewParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "maxSize": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FileSystemReadFilePreviewParams",
+      "type": "object"
+    },
     "InitializeParams": {
       "$defs": {
         "ClientCapabilities": {
@@ -2792,6 +3559,41 @@
       "title": "ModelSyncStateReadResponse",
       "type": "object"
     },
+    "OpenDeepLinkPayload": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "source": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "slug"
+      ],
+      "title": "OpenDeepLinkPayload",
+      "type": "object"
+    },
     "PlatformInfo": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3090,6 +3892,31 @@
       "title": "WorkspaceReadResponse",
       "type": "object"
     },
+    "WorkspaceRegisteredSkillsListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "workspaceRoot": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspaceRoot"
+      ],
+      "title": "WorkspaceRegisteredSkillsListParams",
+      "type": "object"
+    },
+    "WorkspaceRegisteredSkillsListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "skills": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "WorkspaceRegisteredSkillsListResponse",
+      "type": "object"
+    },
     "WorkspaceSkillBindingsListParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3218,16 +4045,26 @@
           "items": {
             "enum": [
               "agentAppInstalled/list",
+              "agentAppUiRuntime/start",
+              "agentAppUiRuntime/status",
+              "agentAppUiRuntime/stop",
               "agentSession/action/respond",
               "agentSession/list",
               "agentSession/read",
               "agentSession/start",
               "agentSession/turn/cancel",
               "agentSession/turn/start",
+              "agentSession/update",
               "artifact/read",
               "automationJob/list",
               "capability/list",
+              "connectCallback/send",
+              "connectDeepLink/resolve",
+              "connectOpenDeepLink/resolve",
+              "connectRelayApiKey/save",
               "evidence/export",
+              "fileSystem/listDirectory",
+              "fileSystem/readFilePreview",
               "initialize",
               "knowledgePack/list",
               "model/list",
@@ -3248,6 +4085,7 @@
               "workspace/projectPath/resolve",
               "workspace/projectsRoot/read",
               "workspace/read",
+              "workspaceRegisteredSkills/list",
               "workspaceSkillBindings/list"
             ]
           },

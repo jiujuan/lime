@@ -475,7 +475,7 @@ pub(crate) use dto::{
     AgentRuntimeSendSubagentInputRequest, AgentRuntimeSendSubagentInputResponse,
     AgentRuntimeSessionDetail, AgentRuntimeSpawnSubagentRequest, AgentRuntimeSpawnSubagentResponse,
     AgentRuntimeSubmitTurnRequest, AgentRuntimeThreadArtifactView, AgentRuntimeThreadDiagnostics,
-    AgentRuntimeThreadEvidenceSummary, AgentRuntimeThreadReadModel,
+    AgentRuntimeThreadEvidenceSummary, AgentRuntimeThreadReadModel, AgentTurnConfigSnapshot,
     AgentRuntimeThreadTelemetrySummary, AgentRuntimeThreadToolCallView,
     AgentRuntimeThreadTurnProfileView, AgentRuntimeToolInventoryRequest,
     AgentRuntimeUpdateSessionRequest, AgentRuntimeWaitSubagentsRequest,

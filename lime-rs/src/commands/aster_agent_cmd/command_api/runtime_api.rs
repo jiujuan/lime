@@ -8,7 +8,7 @@ use super::thread_read_projection::{
 };
 use super::*;
 use crate::commands::aster_agent_cmd::app_server_host::{
-    build_tauri_aster_app_server, submit_desktop_app_server_turn, DesktopAppServerSubmitTurnInput,
+    build_desktop_aster_app_server, submit_desktop_app_server_turn, DesktopAppServerSubmitTurnInput,
 };
 use crate::commands::aster_agent_cmd::dto::AgentRuntimeSessionHistoryCursor;
 use crate::database::lock_db;
@@ -184,7 +184,7 @@ pub async fn agent_runtime_submit_turn(
     let metadata = runtime_request.metadata.clone();
     let provider_preference = runtime_request.provider_preference.clone();
     let model_preference = runtime_request.model_preference.clone();
-    let app_server = build_tauri_aster_app_server(runtime.clone());
+    let app_server = build_desktop_aster_app_server(runtime.clone());
     tracing::info!(
         "[AsterAgent][TTFT] submit_turn app_server request built: session_id={}, event_name={}, elapsed_ms={}",
         session_id,

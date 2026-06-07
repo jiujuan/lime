@@ -4,13 +4,13 @@
 
 ## 概述
 
-Lime 当前是一个本地优先的 Electron Desktop Host + App Server JSON-RPC 桌面应用，而不是单一前端项目或单一 API 服务。legacy Tauri adapter 只用于兼容和退役守卫，不再作为 current 交付事实源。
+Lime 当前是一个本地优先的 Electron Desktop Host + App Server JSON-RPC 桌面应用，而不是单一前端项目或单一 API 服务。legacy desktop adapter 只用于兼容和退役守卫，不再作为 current 交付事实源。
 
 测试体系需要同时覆盖：
 
 - 前端界面与工作台交互
 - Electron Desktop Host / App Server JSON-RPC 命令边界
-- legacy Tauri adapter 守卫
+- legacy desktop adapter 守卫
 - Rust 服务层与业务逻辑
 - 数据库、文件系统与工作区状态
 - Provider、协议转换与本地 HTTP Server
@@ -43,10 +43,10 @@ Lime 当前是一个本地优先的 Electron Desktop Host + App Server JSON-RPC 
 
 - `current`：Electron Desktop Host、Electron preload / IPC、App Server JSON-RPC、`packages/app-server-client`、`src/lib/desktop-host/` mock、`smoke:electron` / `verify:gui-smoke`
 - `compat`：`safeInvoke`、DevBridge fallback、旧 `agent_runtime_*` facade；只能证明迁移期适配没有漂移
-- `deprecated`：legacy Tauri adapter、legacy `tauri-mock`、旧 `tauri::generate_handler!`；只能作为旧入口不回流的守卫
-- `dead`：旧 `src-tauri` 路径、旧 Tauri GUI smoke、Tauri-only E2E；不得作为新功能可交付证据
+- `deprecated`：legacy desktop adapter、legacy desktop mock、旧宿主命令注册表；只能作为旧入口不回流的守卫
+- `dead`：旧桌面宿主源码路径、旧宿主 GUI smoke、旧宿主专用 E2E；不得作为新功能可交付证据
 
-测试用例需要全面更新事实源：新增和重写测试默认覆盖 current 路径；已有 Tauri / tauri-mock 测试若仍保留，必须改名或注释为 legacy guard，不能继续冒充主路径回归。
+测试用例需要全面更新事实源：新增和重写测试默认覆盖 current 路径；已有 legacy desktop adapter / mock 测试若仍保留，必须改名或注释为 legacy guard，不能继续冒充主路径回归。
 
 ## 目录结构
 
@@ -76,25 +76,25 @@ internal/tests/
 
 ## 文档索引
 
-| 文档                                                             | 说明                         | 适用场景                              |
-| ---------------------------------------------------------------- | ---------------------------- | ------------------------------------- |
-| [testing-strategy-2026.md](testing-strategy-2026.md)             | 当前 Lime 测试体系建设建议   | 建立分层门禁、规划演进                |
-| [unit-tests.md](unit-tests.md)                                   | 单元测试指南                 | 独立模块测试                          |
-| [integration-tests.md](integration-tests.md)                     | 集成测试指南                 | 模块间协作测试                        |
-| [e2e-tests.md](e2e-tests.md)                                     | 当前浏览器续测与 E2E 入口    | Playwright MCP / DevBridge 主路径验证 |
-| [../aiprompts/playwright-e2e.md](../aiprompts/playwright-e2e.md) | 浏览器续测详细事实源         | 继续测试、复现、控制台与 Bridge 排障  |
-| [agent-evaluation.md](agent-evaluation.md)                       | Agent 评估指南               | AI Agent 行为评估                     |
-| [../tests/agent-ops-qc.md](../tests/agent-ops-qc.md)                               | Agent 运营级测试体系         | qcloop、证据包、发布门禁、运营回归    |
-| [../tests/agent-qc-p0-scenarios.md](../tests/agent-qc-p0-scenarios.md)             | Agent QC P0 场景执行手册     | 核心场景执行、证据要求、失败沉淀      |
-| [../tests/lime-agent-qc-rollout-plan.md](../tests/lime-agent-qc-rollout-plan.md)   | Lime 落地计划                | 分阶段构建 qcloop 证据链、GUI/Runtime 深测、release gate |
-| [../tests/lime-agent-qc-current-blockers.md](../tests/lime-agent-qc-current-blockers.md) | 当前 P0 阻断记录        | 真实 qcloop fail evidence、root cause、关闭条件 |
-| [agent-qc-scenarios.manifest.json](agent-qc-scenarios.manifest.json) | Agent QC 场景清单         | 机器可读场景、lane、命令、证据要求    |
-| [agent-qc-evidence.schema.json](agent-qc-evidence.schema.json)   | Evidence Pack schema         | 测试证据、场景结果、verdict 合同      |
-| [agent-qc-gui-flows.manifest.json](agent-qc-gui-flows.manifest.json) | GUI flow 清单             | Playwright MCP 步骤、断言、证据要求   |
-| [harness-evals.md](harness-evals.md)                             | Harness eval 任务集与 runner | Replay 样本、grader、nightly 摘要     |
-| [test-cases/converter-tests.md](test-cases/converter-tests.md)   | 转换器测试用例               | OpenAI ↔ Claude 转换                  |
-| [test-cases/provider-tests.md](test-cases/provider-tests.md)     | Provider 测试用例            | API Key Provider、协议转换和 API 调用 |
-| [test-cases/agent-tests.md](test-cases/agent-tests.md)           | Agent 测试用例               | Aster Agent 集成                      |
+| 文档                                                                                     | 说明                         | 适用场景                                                 |
+| ---------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------- |
+| [testing-strategy-2026.md](testing-strategy-2026.md)                                     | 当前 Lime 测试体系建设建议   | 建立分层门禁、规划演进                                   |
+| [unit-tests.md](unit-tests.md)                                                           | 单元测试指南                 | 独立模块测试                                             |
+| [integration-tests.md](integration-tests.md)                                             | 集成测试指南                 | 模块间协作测试                                           |
+| [e2e-tests.md](e2e-tests.md)                                                             | 当前浏览器续测与 E2E 入口    | Playwright MCP / DevBridge 主路径验证                    |
+| [../aiprompts/playwright-e2e.md](../aiprompts/playwright-e2e.md)                         | 浏览器续测详细事实源         | 继续测试、复现、控制台与 Bridge 排障                     |
+| [agent-evaluation.md](agent-evaluation.md)                                               | Agent 评估指南               | AI Agent 行为评估                                        |
+| [../tests/agent-ops-qc.md](../tests/agent-ops-qc.md)                                     | Agent 运营级测试体系         | qcloop、证据包、发布门禁、运营回归                       |
+| [../tests/agent-qc-p0-scenarios.md](../tests/agent-qc-p0-scenarios.md)                   | Agent QC P0 场景执行手册     | 核心场景执行、证据要求、失败沉淀                         |
+| [../tests/lime-agent-qc-rollout-plan.md](../tests/lime-agent-qc-rollout-plan.md)         | Lime 落地计划                | 分阶段构建 qcloop 证据链、GUI/Runtime 深测、release gate |
+| [../tests/lime-agent-qc-current-blockers.md](../tests/lime-agent-qc-current-blockers.md) | 当前 P0 阻断记录             | 真实 qcloop fail evidence、root cause、关闭条件          |
+| [agent-qc-scenarios.manifest.json](agent-qc-scenarios.manifest.json)                     | Agent QC 场景清单            | 机器可读场景、lane、命令、证据要求                       |
+| [agent-qc-evidence.schema.json](agent-qc-evidence.schema.json)                           | Evidence Pack schema         | 测试证据、场景结果、verdict 合同                         |
+| [agent-qc-gui-flows.manifest.json](agent-qc-gui-flows.manifest.json)                     | GUI flow 清单                | Playwright MCP 步骤、断言、证据要求                      |
+| [harness-evals.md](harness-evals.md)                                                     | Harness eval 任务集与 runner | Replay 样本、grader、nightly 摘要                        |
+| [test-cases/converter-tests.md](test-cases/converter-tests.md)                           | 转换器测试用例               | OpenAI ↔ Claude 转换                                     |
+| [test-cases/provider-tests.md](test-cases/provider-tests.md)                             | Provider 测试用例            | API Key Provider、协议转换和 API 调用                    |
+| [test-cases/agent-tests.md](test-cases/agent-tests.md)                                   | Agent 测试用例               | Aster Agent 集成                                         |
 
 ## 快速开始
 
@@ -220,12 +220,12 @@ npm run lint
 
 ## 核心测试模块
 
-| 模块          | 测试重点                   | 文档                                                |
-| ------------- | -------------------------- | --------------------------------------------------- |
-| 协议转换      | OpenAI ↔ Claude 转换正确性 | [converter-tests.md](test-cases/converter-tests.md) |
+| 模块          | 测试重点                             | 文档                                                |
+| ------------- | ------------------------------------ | --------------------------------------------------- |
+| 协议转换      | OpenAI ↔ Claude 转换正确性           | [converter-tests.md](test-cases/converter-tests.md) |
 | Provider 系统 | API Key Provider、协议转换、API 调用 | [provider-tests.md](test-cases/provider-tests.md)   |
-| 退役凭证入口  | 旧凭证 HTTP API 保持下线   | [integration-tests.md](integration-tests.md)        |
-| Aster Agent   | 流式响应、工具调用         | [agent-tests.md](test-cases/agent-tests.md)         |
+| 退役凭证入口  | 旧凭证 HTTP API 保持下线             | [integration-tests.md](integration-tests.md)        |
+| Aster Agent   | 流式响应、工具调用                   | [agent-tests.md](test-cases/agent-tests.md)         |
 
 ## 测试原则
 

@@ -15,6 +15,7 @@ describe("mockPriorityCommands", () => {
       "close_webview_panel",
       "check_for_updates",
       "download_update",
+      "open_update_window",
       "companion_get_pet_status",
       "workspace_list",
       "aster_agent_init",
@@ -25,7 +26,6 @@ describe("mockPriorityCommands", () => {
       "knowledge_list_packs",
       "get_automation_jobs",
       "project_memory_get",
-      "list_dir",
       "session_files_save_file",
     ];
 
@@ -51,8 +51,11 @@ describe("mockPriorityCommands", () => {
 
   it("模型与运行时真相命令在浏览器模式下禁止静默退回 mock", () => {
     expect(shouldDisallowMockFallbackInBrowser("aster_agent_init")).toBe(true);
-    expect(shouldDisallowMockFallbackInBrowser("agent_generate_title")).toBe(
+    expect(shouldDisallowMockFallbackInBrowser("open_update_window")).toBe(
       true,
+    );
+    expect(shouldDisallowMockFallbackInBrowser("agent_generate_title")).toBe(
+      false,
     );
     expect(
       shouldDisallowMockFallbackInBrowser("get_or_create_default_project"),
@@ -166,12 +169,12 @@ describe("mockPriorityCommands", () => {
       true,
     );
     expect(shouldDisallowMockFallbackInBrowser("read_file_preview_cmd")).toBe(
-      true,
+      false,
     );
     expect(
       shouldDisallowMockFallbackInBrowser("session_files_resolve_file_path"),
     ).toBe(true);
-    expect(shouldDisallowMockFallbackInBrowser("list_dir")).toBe(true);
+    expect(shouldDisallowMockFallbackInBrowser("list_dir")).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("get_file_manager_locations"),
     ).toBe(true);

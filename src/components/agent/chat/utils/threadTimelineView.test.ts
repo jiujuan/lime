@@ -574,4 +574,19 @@ describe("threadTimelineView", () => {
     expect(mergedTurns[0]?.status).toBe("completed");
     expect(mergedTurns[0]?.completed_at).toBe("2026-03-18T08:36:05.000Z");
   });
+
+  it("历史 turn 缺少 prompt_text 时不应中断会话水合", () => {
+    const persistedTurn = {
+      id: "turn-from-app-server-detail",
+      thread_id: "thread-1",
+      status: "completed",
+      started_at: "2026-06-07T06:17:13.000Z",
+      completed_at: "2026-06-07T06:17:14.000Z",
+      created_at: "2026-06-07T06:17:13.000Z",
+      updated_at: "2026-06-07T06:17:14.000Z",
+    } as AgentThreadTurn;
+
+    expect(() => mergeThreadTurns([persistedTurn])).not.toThrow();
+    expect(mergeThreadTurns([persistedTurn])).toEqual([persistedTurn]);
+  });
 });

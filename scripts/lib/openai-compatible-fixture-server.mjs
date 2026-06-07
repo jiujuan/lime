@@ -384,19 +384,42 @@ function normalizeScriptedResponses(value) {
     .filter(Boolean);
 }
 
-function scriptedResponseAt(scriptedResponses, requestIndex) {
+function scriptedResponseAt(scriptedResponses, scriptedIndex) {
   if (scriptedResponses.length === 0) {
     return null;
   }
-  return scriptedResponses[Math.min(requestIndex, scriptedResponses.length - 1)];
+  return scriptedResponses[
+    Math.min(scriptedIndex, scriptedResponses.length - 1)
+  ];
 }
 
-async function resolveScriptedResponse(scriptedResponses, requestIndex, context) {
-  const scripted = scriptedResponseAt(scriptedResponses, requestIndex);
+async function resolveScriptedResponse(
+  scriptedResponses,
+  scriptedIndex,
+  context,
+) {
+  const scripted = scriptedResponseAt(scriptedResponses, scriptedIndex);
   if (typeof scripted === "function") {
     return await scripted(context);
   }
   return scripted;
+}
+
+function shouldDeferScriptedResponse(scripted, body, options) {
+  if (options.deferScriptedToolCallsUntilAvailable !== true) {
+    return false;
+  }
+
+  const requestTools = requestToolNames(body);
+  if (typeof scripted === "function") {
+    return requestTools.length === 0;
+  }
+
+  if (scripted?.type !== "tool_call" || !scriptedToolRequired(scripted)) {
+    return false;
+  }
+
+  return requestTools.length === 0;
 }
 
 function sendScriptedChatCompletion(response, { model, scripted, stream, body }) {
@@ -442,6 +465,11 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
     DEFAULT_FIXTURE_API_KEY;
   const content = String(options.content || "MO_OK");
   const scriptedResponses = normalizeScriptedResponses(options.scriptedResponses);
+  const scriptedOptions = {
+    deferScriptedToolCallsUntilAvailable:
+      options.deferScriptedToolCallsUntilAvailable === true,
+  };
+  let scriptedIndex = 0;
   const requests = [];
 
   const server = http.createServer(async (request, response) => {
@@ -482,12 +510,24 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
       });
       const requestIndex = requests.length - 1;
       const responseModel = String(body?.model || model);
-      const scripted = await resolveScriptedResponse(scriptedResponses, requestIndex, {
+      const scriptedCandidate = scriptedResponseAt(
+        scriptedResponses,
+        scriptedIndex,
+      );
+      const shouldDefer = shouldDeferScriptedResponse(
+        scriptedCandidate,
         body,
-        request,
-        requests,
-        requestIndex,
-      });
+        scriptedOptions,
+      );
+      const scripted = shouldDefer
+        ? null
+        : await resolveScriptedResponse(scriptedResponses, scriptedIndex, {
+            body,
+            request,
+            requests,
+            requestIndex,
+            scriptedIndex,
+          });
       if (
         scripted &&
         sendScriptedChatCompletion(response, {
@@ -497,6 +537,7 @@ export async function startOpenAiCompatibleFixtureServer(options = {}) {
           body,
         })
       ) {
+        scriptedIndex += 1;
         return;
       }
       const shouldCallStructuredOutput = hasStructuredOutputTool(body);

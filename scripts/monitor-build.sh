@@ -12,7 +12,7 @@ while true; do
     echo "⏰ 当前时间: $(date '+%H:%M:%S')"
     echo ""
 
-    # 检查 Electron Builder 进度
+    # 检查 Electron Forge 进度
     if [ -f /tmp/electron-build.log ]; then
         echo "📝 最新日志 (最后 20 行):"
         echo "---"
@@ -32,7 +32,7 @@ while true; do
     fi
 
     # 检查进程是否还在运行
-    if ! pgrep -f "electron-builder|electron:package:dir|electron:dist" > /dev/null; then
+    if ! pgrep -f "electron-forge|electron:package:dir|electron:dist" > /dev/null; then
         echo "⚠️  打包进程已结束"
         break
     fi

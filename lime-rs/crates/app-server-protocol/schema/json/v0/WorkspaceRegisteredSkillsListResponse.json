@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "skills": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    }
+  },
+  "title": "WorkspaceRegisteredSkillsListResponse",
+  "type": "object"
+}

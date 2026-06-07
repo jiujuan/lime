@@ -44,6 +44,10 @@ internal/prd/skills/**
 !internal/prd/tools/
 internal/prd/tools/**
 !internal/prd/tools/*.md
+!internal/prd/next/
+internal/prd/next/**
+!internal/prd/next/*.md
+!internal/prd/next/*.html
 
 # Internal roadmap&gongzonghao (private)
 internal/exec-plans/

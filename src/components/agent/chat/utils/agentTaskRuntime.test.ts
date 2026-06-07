@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "../types";
 import { buildAgentTaskRuntimeCardModel } from "./agentTaskRuntime";
+import { buildInputbarRuntimeStatusLineModel } from "./inputbarRuntimeStatusLine";
 
 describe("agentTaskRuntime", () => {
   it("简单直接回答完成后不应继续显示主任务卡", () => {
@@ -179,6 +180,65 @@ describe("agentTaskRuntime", () => {
     expect(model?.status).toBe("waiting_input");
     expect(model?.phase).toBe("waiting_input");
     expect(model?.detail).toContain("等待你确认");
+  });
+
+  it("turn_completed 早于 final_done 时不应把等待首个输出的助手草稿标记为已完成", () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-streaming",
+        role: "user",
+        content: "帮我分析 Electron 迁移方案",
+        timestamp: new Date("2026-06-07T10:00:00.000Z"),
+      },
+      {
+        id: "msg-assistant-streaming",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-07T10:00:01.000Z"),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在生成回复",
+          detail: "运行时已开始处理，等待首个输出。",
+        },
+      },
+    ];
+    const turns = [
+      {
+        id: "turn-streaming",
+        thread_id: "thread-streaming",
+        prompt_text: "帮我分析 Electron 迁移方案",
+        status: "completed" as const,
+        started_at: "2026-06-07T10:00:00Z",
+        completed_at: "2026-06-07T10:00:12Z",
+        created_at: "2026-06-07T10:00:00Z",
+        updated_at: "2026-06-07T10:00:12Z",
+      },
+    ];
+
+    const taskModel = buildAgentTaskRuntimeCardModel({
+      messages,
+      turns,
+      currentTurnId: "turn-streaming",
+      threadRead: {
+        thread_id: "thread-streaming",
+        status: "completed",
+      },
+    });
+    const inputbarModel = buildInputbarRuntimeStatusLineModel({
+      messages,
+      turns,
+      currentTurnId: "turn-streaming",
+      threadRead: {
+        thread_id: "thread-streaming",
+        status: "completed",
+      },
+    });
+
+    expect(taskModel?.status).toBe("running");
+    expect(taskModel?.phase).toBe("reasoning");
+    expect(inputbarModel?.status).toBe("running");
+    expect(inputbarModel?.completedAt).toBeNull();
   });
 
   it("复杂任务完成后应自动折叠，回到消息级 usage 与结算展示", () => {

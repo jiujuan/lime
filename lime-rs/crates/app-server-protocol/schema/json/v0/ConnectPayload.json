@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "key": {
+      "type": "string"
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "refCode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "relay": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "relay"
+  ],
+  "title": "ConnectPayload",
+  "type": "object"
+}

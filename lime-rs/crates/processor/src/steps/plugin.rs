@@ -6,7 +6,6 @@ use super::traits::{PipelineStep, StepError};
 use async_trait::async_trait;
 use lime_core::plugin::PluginManager;
 use lime_core::processor::RequestContext;
-use lime_core::ProviderType;
 use std::sync::Arc;
 
 /// 插件前置钩子步骤
@@ -27,7 +26,9 @@ impl PipelineStep for PluginPreStep {
         ctx: &mut RequestContext,
         payload: &mut serde_json::Value,
     ) -> Result<(), StepError> {
-        let provider = ctx.provider.unwrap_or(ProviderType::Kiro);
+        let provider = ctx.provider.ok_or_else(|| {
+            StepError::Routing("未设置 Provider，无法执行插件前置钩子".to_string())
+        })?;
         ctx.init_plugin_context(provider);
 
         if let Some(plugin_ctx) = ctx.plugin_context_mut() {
@@ -112,13 +113,14 @@ impl PipelineStep for PluginPostStep {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lime_core::ProviderType;
 
     #[tokio::test]
     async fn test_plugin_pre_step_execute() {
         let plugins = Arc::new(PluginManager::with_defaults());
         let step = PluginPreStep::new(plugins);
         let mut ctx = RequestContext::new("model".to_string());
-        ctx.set_provider(ProviderType::Kiro);
+        ctx.set_provider(ProviderType::Gemini);
         let mut payload = serde_json::json!({"model": "model"});
         assert!(step.execute(&mut ctx, &mut payload).await.is_ok());
         assert!(ctx.plugin_ctx.is_some());
@@ -129,8 +131,8 @@ mod tests {
         let plugins = Arc::new(PluginManager::with_defaults());
         let step = PluginPostStep::new(plugins);
         let mut ctx = RequestContext::new("model".to_string());
-        ctx.set_provider(ProviderType::Kiro);
-        ctx.init_plugin_context(ProviderType::Kiro);
+        ctx.set_provider(ProviderType::Gemini);
+        ctx.init_plugin_context(ProviderType::Gemini);
         let mut payload = serde_json::json!({"response": "test"});
         assert!(step.execute(&mut ctx, &mut payload).await.is_ok());
     }

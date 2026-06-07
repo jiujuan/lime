@@ -7,7 +7,7 @@
  */
 
 import { useCallback } from "react";
-import { safeInvoke } from "@/lib/dev-bridge";
+import { sendConnectCallback } from "@/lib/api/connect";
 
 /**
  * 回调状态类型
@@ -98,13 +98,13 @@ export function useConnectCallback(): UseConnectCallbackReturn {
   const sendCallback = useCallback(
     async (params: SendCallbackParams): Promise<boolean> => {
       try {
-        const result = await safeInvoke<boolean>("send_connect_callback", {
+        const result = await sendConnectCallback({
           relayId: params.relayId,
           apiKey: params.apiKey,
           status: params.status,
-          refCode: params.refCode ?? null,
-          errorCode: params.errorCode ?? null,
-          errorMessage: params.errorMessage ?? null,
+          refCode: params.refCode,
+          errorCode: params.errorCode,
+          errorMessage: params.errorMessage,
         });
 
         console.log(

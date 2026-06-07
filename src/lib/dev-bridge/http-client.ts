@@ -226,6 +226,16 @@ async function isElectronHostBridgeHealthResponse(
   return payload.status === "ok" && payload.transport === "electron-host";
 }
 
+async function probeElectronHostBridgeHealth(): Promise<Response> {
+  return await fetchWithTimeout(
+    BRIDGE_HEALTH_URL,
+    {
+      method: "GET",
+    },
+    DEV_BRIDGE_HEALTH_TIMEOUT_MS,
+  );
+}
+
 async function fetchWithTimeout(
   input: FetchInput,
   init: FetchOptions,
@@ -276,20 +286,13 @@ async function ensureBridgeReachable(options?: {
     return;
   }
 
-  if (isBridgeCooldownActive(now) && options?.bypassCooldown !== true) {
-    throw createBridgeConnectionFailureError("bridge cooldown active");
-  }
+  const cooldownActive =
+    isBridgeCooldownActive(now) && options?.bypassCooldown !== true;
 
   if (!bridgeHealthProbePromise) {
     bridgeHealthProbePromise = (async () => {
       try {
-        const response = await fetchWithTimeout(
-          BRIDGE_HEALTH_URL,
-          {
-            method: "GET",
-          },
-          DEV_BRIDGE_HEALTH_TIMEOUT_MS,
-        );
+        const response = await probeElectronHostBridgeHealth();
         if (!response.ok) {
           markBridgeUnavailable();
           return false;
@@ -303,6 +306,21 @@ async function ensureBridgeReachable(options?: {
       } catch (error) {
         const message = toErrorMessage(error);
         if (isBridgeHardConnectionError(message)) {
+          try {
+            const response = await probeElectronHostBridgeHealth();
+            if (
+              response.ok &&
+              (await isElectronHostBridgeHealthResponse(response))
+            ) {
+              markBridgeHealthy();
+              return true;
+            }
+          } catch (retryError) {
+            const retryMessage = toErrorMessage(retryError);
+            if (!isBridgeConnectionError(retryMessage)) {
+              throw retryError;
+            }
+          }
           markBridgeUnavailable();
           return false;
         }
@@ -322,7 +340,11 @@ async function ensureBridgeReachable(options?: {
 
   const reachable = await bridgeHealthProbePromise;
   if (!reachable) {
-    throw createBridgeConnectionFailureError("bridge health check failed");
+    throw createBridgeConnectionFailureError(
+      cooldownActive
+        ? "bridge cooldown active; recovery probe failed"
+        : "bridge health check failed",
+    );
   }
 }
 

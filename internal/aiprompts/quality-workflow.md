@@ -178,6 +178,22 @@
 - 改依赖时，要同步提交对应锁文件，如 `package-lock.json`、`lime-rs/Cargo.lock`
 - 本仓库没有 Bazel，不适用 Bazel lockfile 规则
 
+Electron 打包 / 发布 / updater metadata 的 current 事实源固定为 `forge.config.mjs`、`electron-forge package`、`electron-forge make` 与仓库内 Forge maker。改这条链路时必须成组检查：
+
+- `forge.config.mjs`
+- `electron/forge/*`
+- `package.json` 与 `package-lock.json`
+- `.github/workflows/release.yml` 与相关发布 workflow
+- `scripts/run-electron-package-dir.mjs`
+- `scripts/stage-electron-release-assets.mjs`
+- `scripts/verify-electron-package-resources.mjs`
+- `scripts/electron-current-entrypoints.test.mjs`
+- `scripts/electron-current-docs-guard.test.mjs`
+- `scripts/check-app-server-client-contract.mjs`
+- `internal/roadmap/appserver/release-updater.md`
+
+`electron-builder.yml`、`electron-builder` CLI 与 builder yml 事实源属于 `dead`，不得继续作为 current 文档、CI、质量任务、i18n app metadata evidence 或守卫输入。运行时更新链路仍以 `electron/updateHost.ts` + `electron-updater` 为 current；Windows NSIS installer / generic feed 语义由 Forge maker 承接，不能为了迁移 Forge 改坏 updater 兼容。
+
 ### 5. Rust 校验先小后大
 
 - 默认先跑受影响 crate、模块或定向测试

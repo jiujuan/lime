@@ -227,39 +227,36 @@ function renderWorkspaceChatContent({
               {teamWorkspaceDockProps ? (
                 <TeamWorkspaceDock {...teamWorkspaceDockProps} />
               ) : null}
+              {showWorkspaceAlert ? (
+                <div className="mx-4 mb-2 flex items-center gap-2 rounded-[18px] border border-amber-200/90 bg-amber-50/86 px-3.5 py-2.5 text-sm text-amber-800 shadow-sm shadow-amber-950/5 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                  <span className="flex-1">{copy.workspaceMissing}</span>
+                  <button
+                    type="button"
+                    onClick={onSelectWorkspaceDirectory}
+                    className="shrink-0 rounded-xl border border-amber-200 bg-white/84 px-2.5 py-1 text-xs font-medium text-amber-900 transition hover:border-amber-300 hover:bg-white dark:bg-amber-800 dark:text-amber-100 dark:hover:bg-amber-700"
+                  >
+                    {copy.workspaceReselect}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDismissWorkspaceAlert}
+                    className="shrink-0 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
+                    aria-label={copy.workspaceDismissAria}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : null}
+              {showInlineInputbar ? (
+                <ChatInputSlot data-testid="workspace-inline-input-slot">
+                  {inputbarNode}
+                </ChatInputSlot>
+              ) : null}
             </>
           </ChatContent>
         ) : (
           <EmptyState {...emptyStateProps} />
         )}
-
-        {showChatLayout ? (
-          <>
-            {showWorkspaceAlert ? (
-              <div className="mx-4 mb-2 flex items-center gap-2 rounded-[18px] border border-amber-200/90 bg-amber-50/86 px-3.5 py-2.5 text-sm text-amber-800 shadow-sm shadow-amber-950/5 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                <span className="flex-1">{copy.workspaceMissing}</span>
-                <button
-                  type="button"
-                  onClick={onSelectWorkspaceDirectory}
-                  className="shrink-0 rounded-xl border border-amber-200 bg-white/84 px-2.5 py-1 text-xs font-medium text-amber-900 transition hover:border-amber-300 hover:bg-white dark:bg-amber-800 dark:text-amber-100 dark:hover:bg-amber-700"
-                >
-                  {copy.workspaceReselect}
-                </button>
-                <button
-                  type="button"
-                  onClick={onDismissWorkspaceAlert}
-                  className="shrink-0 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200"
-                  aria-label={copy.workspaceDismissAria}
-                >
-                  ✕
-                </button>
-              </div>
-            ) : null}
-            {showInlineInputbar ? (
-              <ChatInputSlot>{inputbarNode}</ChatInputSlot>
-            ) : null}
-          </>
-        ) : null}
       </ChatContainerInner>
     </ChatContainer>
   );
@@ -318,9 +315,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   model: ComponentProps<typeof EmptyState>["model"];
   setModel: ComponentProps<typeof EmptyState>["setModel"];
   reasoningEffort?: ComponentProps<typeof EmptyState>["reasoningEffort"];
-  setReasoningEffort?: ComponentProps<
-    typeof EmptyState
-  >["setReasoningEffort"];
+  setReasoningEffort?: ComponentProps<typeof EmptyState>["setReasoningEffort"];
   accessMode: ComponentProps<typeof EmptyState>["accessMode"];
   setAccessMode?: ComponentProps<typeof EmptyState>["setAccessMode"];
   onManageProviders?: ComponentProps<typeof EmptyState>["onManageProviders"];

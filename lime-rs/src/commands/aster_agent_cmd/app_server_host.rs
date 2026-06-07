@@ -447,7 +447,7 @@ impl TauriAsterBackendHost {
     }
 }
 
-pub(crate) fn build_tauri_aster_runtime_core(runtime: RuntimeCommandContext) -> RuntimeCore {
+pub(crate) fn build_desktop_aster_runtime_core(runtime: RuntimeCommandContext) -> RuntimeCore {
     let capability_source = desktop_app_server_capability_source_with_runtime(runtime.clone());
     let artifact_content_provider = desktop_artifact_content_provider_with_runtime(&runtime);
     let evidence_export_provider = desktop_evidence_export_provider_with_runtime(&runtime);
@@ -460,7 +460,7 @@ pub(crate) fn build_tauri_aster_runtime_core(runtime: RuntimeCommandContext) -> 
     )
 }
 
-pub(crate) fn build_tauri_aster_app_server(runtime: RuntimeCommandContext) -> AppServer {
+pub(crate) fn build_desktop_aster_app_server(runtime: RuntimeCommandContext) -> AppServer {
     let app_server_bridge = Arc::new(OnceLock::new());
     let capability_source = desktop_app_server_capability_source_with_runtime(runtime.clone());
     let artifact_content_provider = desktop_artifact_content_provider_with_runtime(&runtime);
@@ -1933,8 +1933,7 @@ fn runtime_event_from_lime_agent_event(
 fn should_close_app_server_event_bridge(event: &lime_agent::AgentEvent) -> bool {
     matches!(
         event,
-        lime_agent::AgentEvent::TurnCompleted { .. }
-            | lime_agent::AgentEvent::TurnFailed { .. }
+        lime_agent::AgentEvent::TurnFailed { .. }
             | lime_agent::AgentEvent::FinalDone { .. }
             | lime_agent::AgentEvent::Error { .. }
     )
@@ -4533,7 +4532,7 @@ mod tests {
         assert_eq!(append.session_id, "sess_append");
         assert_eq!(append.turn_id.as_deref(), Some("turn_payload"));
         assert_eq!(append.event.event_type, "turn.completed");
-        assert!(append.should_close);
+        assert!(!append.should_close);
     }
 
     #[test]

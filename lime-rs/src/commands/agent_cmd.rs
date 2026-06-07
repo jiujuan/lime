@@ -40,11 +40,10 @@ const TITLE_GENERATION_STREAM_IDLE_TIMEOUT_SECS: u64 = 20;
 const TITLE_GENERATION_QUEUE_TIMEOUT_SECS: u64 = 2;
 const TITLE_GENERATION_MAX_CONCURRENCY: usize = 2;
 
-const TITLE_FALLBACK_PROVIDER_CHAIN: [(&str, &str); 4] = [
+const TITLE_FALLBACK_PROVIDER_CHAIN: [(&str, &str); 3] = [
     ("deepseek", "deepseek-chat"),
     ("openai", "gpt-4o-mini"),
     ("anthropic", "claude-3-haiku-20240307"),
-    ("kiro", "anthropic.claude-3-haiku-20240307-v1:0"),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

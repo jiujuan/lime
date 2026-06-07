@@ -118,6 +118,7 @@ export const updateMocks: Record<string, (args?: any) => any> = {
   remind_update_later: () => nowSeconds() + 24 * 3600,
   dismiss_update_notification: () => nowSeconds() + 24 * 3600,
   close_update_window: () => ({}),
+  open_update_window: () => ({}),
   set_update_check_settings: () => ({ success: true }),
   test_update_window: () => ({}),
 };

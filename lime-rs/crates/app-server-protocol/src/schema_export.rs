@@ -1,4 +1,8 @@
 use crate::AgentAppInstalledListResponse;
+use crate::AgentAppUiRuntimeStartParams;
+use crate::AgentAppUiRuntimeStatusParams;
+use crate::AgentAppUiRuntimeStatusResponse;
+use crate::AgentAppUiRuntimeStopParams;
 use crate::AgentAttachment;
 use crate::AgentEvent;
 use crate::AgentInput;
@@ -20,6 +24,8 @@ use crate::AgentSessionTurnCancelParams;
 use crate::AgentSessionTurnCancelResponse;
 use crate::AgentSessionTurnStartParams;
 use crate::AgentSessionTurnStartResponse;
+use crate::AgentSessionUpdateParams;
+use crate::AgentSessionUpdateResponse;
 use crate::AgentTurn;
 use crate::AgentTurnStatus;
 use crate::AppServerMethodKind;
@@ -34,10 +40,25 @@ use crate::CapabilityListParams;
 use crate::CapabilityListResponse;
 use crate::ClientCapabilities;
 use crate::ClientInfo;
+use crate::ConnectCallbackSendParams;
+use crate::ConnectCallbackSendResponse;
+use crate::ConnectCallbackStatus;
+use crate::ConnectDeepLinkResolveParams;
+use crate::ConnectDeepLinkResolveResponse;
+use crate::ConnectOpenDeepLinkResolveParams;
+use crate::ConnectOpenDeepLinkResolveResponse;
+use crate::ConnectPayload;
+use crate::ConnectRelayApiKeySaveParams;
+use crate::ConnectRelayApiKeySaveResponse;
 use crate::EvidenceExportParams;
 use crate::EvidenceExportResponse;
 use crate::EvidencePackArtifact;
 use crate::EvidencePackSummary;
+use crate::FileSystemDirectoryListing;
+use crate::FileSystemFileEntry;
+use crate::FileSystemFilePreview;
+use crate::FileSystemListDirectoryParams;
+use crate::FileSystemReadFilePreviewParams;
 use crate::InitializeParams;
 use crate::InitializeResponse;
 use crate::JsonRpcError;
@@ -57,6 +78,7 @@ use crate::ModelProviderAliasReadResponse;
 use crate::ModelProviderCatalogListResponse;
 use crate::ModelProviderListResponse;
 use crate::ModelSyncStateReadResponse;
+use crate::OpenDeepLinkPayload;
 use crate::PlatformInfo;
 use crate::ProjectMemoryReadParams;
 use crate::ProjectMemoryReadResponse;
@@ -76,6 +98,8 @@ use crate::WorkspaceProjectPathResolveResponse;
 use crate::WorkspaceProjectsRootReadResponse;
 use crate::WorkspaceReadParams;
 use crate::WorkspaceReadResponse;
+use crate::WorkspaceRegisteredSkillsListParams;
+use crate::WorkspaceRegisteredSkillsListResponse;
 use crate::WorkspaceSkillBindingsListParams;
 use crate::WorkspaceSkillBindingsListResponse;
 use crate::APP_SERVER_METHODS;
@@ -221,6 +245,11 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ArtifactContentStatus>("ArtifactContentStatus"),
         typed_schema::<ArtifactSummary>("ArtifactSummary"),
         typed_schema::<ArtifactReadResponse>("ArtifactReadResponse"),
+        typed_schema::<FileSystemListDirectoryParams>("FileSystemListDirectoryParams"),
+        typed_schema::<FileSystemReadFilePreviewParams>("FileSystemReadFilePreviewParams"),
+        typed_schema::<FileSystemDirectoryListing>("FileSystemDirectoryListing"),
+        typed_schema::<FileSystemFileEntry>("FileSystemFileEntry"),
+        typed_schema::<FileSystemFilePreview>("FileSystemFilePreview"),
         typed_schema::<EvidenceExportParams>("EvidenceExportParams"),
         typed_schema::<EvidenceExportResponse>("EvidenceExportResponse"),
         typed_schema::<EvidencePackSummary>("EvidencePackSummary"),
@@ -228,6 +257,8 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentSessionListParams>("AgentSessionListParams"),
         typed_schema::<AgentSessionOverview>("AgentSessionOverview"),
         typed_schema::<AgentSessionListResponse>("AgentSessionListResponse"),
+        typed_schema::<AgentSessionUpdateParams>("AgentSessionUpdateParams"),
+        typed_schema::<AgentSessionUpdateResponse>("AgentSessionUpdateResponse"),
         typed_schema::<WorkspaceReadParams>("WorkspaceReadParams"),
         typed_schema::<WorkspacePathReadParams>("WorkspacePathReadParams"),
         typed_schema::<WorkspaceProjectPathResolveParams>("WorkspaceProjectPathResolveParams"),
@@ -242,7 +273,15 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<SkillReadResponse>("SkillReadResponse"),
         typed_schema::<WorkspaceSkillBindingsListParams>("WorkspaceSkillBindingsListParams"),
         typed_schema::<WorkspaceSkillBindingsListResponse>("WorkspaceSkillBindingsListResponse"),
+        typed_schema::<WorkspaceRegisteredSkillsListParams>("WorkspaceRegisteredSkillsListParams"),
+        typed_schema::<WorkspaceRegisteredSkillsListResponse>(
+            "WorkspaceRegisteredSkillsListResponse",
+        ),
         typed_schema::<AgentAppInstalledListResponse>("AgentAppInstalledListResponse"),
+        typed_schema::<AgentAppUiRuntimeStartParams>("AgentAppUiRuntimeStartParams"),
+        typed_schema::<AgentAppUiRuntimeStatusParams>("AgentAppUiRuntimeStatusParams"),
+        typed_schema::<AgentAppUiRuntimeStopParams>("AgentAppUiRuntimeStopParams"),
+        typed_schema::<AgentAppUiRuntimeStatusResponse>("AgentAppUiRuntimeStatusResponse"),
         typed_schema::<KnowledgeListPacksParams>("KnowledgeListPacksParams"),
         typed_schema::<KnowledgeListPacksResponse>("KnowledgeListPacksResponse"),
         typed_schema::<AutomationJobListResponse>("AutomationJobListResponse"),
@@ -257,6 +296,19 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ModelProviderAliasReadParams>("ModelProviderAliasReadParams"),
         typed_schema::<ModelProviderAliasReadResponse>("ModelProviderAliasReadResponse"),
         typed_schema::<ModelProviderAliasListResponse>("ModelProviderAliasListResponse"),
+        typed_schema::<ConnectDeepLinkResolveParams>("ConnectDeepLinkResolveParams"),
+        typed_schema::<ConnectPayload>("ConnectPayload"),
+        typed_schema::<ConnectDeepLinkResolveResponse>("ConnectDeepLinkResolveResponse"),
+        typed_schema::<ConnectOpenDeepLinkResolveParams>("ConnectOpenDeepLinkResolveParams"),
+        typed_schema::<OpenDeepLinkPayload>("OpenDeepLinkPayload"),
+        typed_schema::<ConnectOpenDeepLinkResolveResponse>(
+            "ConnectOpenDeepLinkResolveResponse",
+        ),
+        typed_schema::<ConnectRelayApiKeySaveParams>("ConnectRelayApiKeySaveParams"),
+        typed_schema::<ConnectRelayApiKeySaveResponse>("ConnectRelayApiKeySaveResponse"),
+        typed_schema::<ConnectCallbackStatus>("ConnectCallbackStatus"),
+        typed_schema::<ConnectCallbackSendParams>("ConnectCallbackSendParams"),
+        typed_schema::<ConnectCallbackSendResponse>("ConnectCallbackSendResponse"),
         typed_schema::<AgentSessionStartParams>("AgentSessionStartParams"),
         typed_schema::<AgentSessionStartResponse>("AgentSessionStartResponse"),
         typed_schema::<AgentSessionReadParams>("AgentSessionReadParams"),

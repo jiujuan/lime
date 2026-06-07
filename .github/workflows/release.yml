@@ -102,27 +102,26 @@ jobs:
             host_platform: darwin
             arch: arm64
             feed: darwin-arm64
-            electron_args: --mac dmg zip --arm64
+            forge_targets: dmg,zip
             name: macOS-arm64
           - platform: macos-15-intel
             target: x86_64-apple-darwin
             host_platform: darwin
             arch: x64
             feed: darwin-x64
-            electron_args: --mac dmg zip --x64
+            forge_targets: dmg,zip
             name: macOS-x64
           - platform: windows-2022
             target: x86_64-pc-windows-msvc
             host_platform: win32
             arch: x64
             feed: win32-x64
-            electron_args: --win nsis --x64
+            forge_targets: squirrel
             name: Windows-x64
 
     runs-on: ${{ matrix.platform }}
     env:
       NODE_OPTIONS: --max-old-space-size=8192
-      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
       ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
       LIME_ELECTRON_UPDATES_URL: ${{ (secrets.LIME_UPDATES_BASE_URL || vars.LIME_UPDATES_BASE_URL || 'https://updates.limecloud.com') }}/lime/stable/${{ matrix.feed }}/
 
@@ -168,7 +167,9 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
           missing=()
@@ -176,11 +177,41 @@ jobs:
           [ -n "${APPLE_CERTIFICATE_PASSWORD:-}" ] || missing+=("APPLE_CERTIFICATE_PASSWORD")
           [ -n "${APPLE_ID:-}" ] || missing+=("APPLE_ID")
           [ -n "${APPLE_PASSWORD:-}" ] || missing+=("APPLE_PASSWORD")
+          [ -n "${APPLE_SIGNING_IDENTITY:-}" ] || missing+=("APPLE_SIGNING_IDENTITY")
           [ -n "${APPLE_TEAM_ID:-}" ] || missing+=("APPLE_TEAM_ID")
+          [ -n "${KEYCHAIN_PASSWORD:-}" ] || missing+=("KEYCHAIN_PASSWORD")
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing Electron macOS signing/notarization secrets: %s\n' "${missing[*]}" >&2
             exit 1
           fi
+      
+      - name: Import Electron macOS signing certificate
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/lime-electron-signing.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/lime-electron-signing.p12"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          echo "LIME_MACOS_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Build Electron app
         shell: bash
@@ -191,8 +222,8 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/lime-rs/target
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
-          CSC_LINK: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE || '' }}
-          CSC_KEY_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          LIME_ELECTRON_SIGN: ${{ startsWith(matrix.platform, 'macos') && '1' || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_SIGNING_IDENTITY || '' }}
           APPLE_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_TEAM_ID || '' }}
@@ -200,7 +231,10 @@ jobs:
         run: |
           set -euxo pipefail
           npm run electron:build
-          npx electron-builder ${{ matrix.electron_args }} --publish never
+          npx electron-forge make \
+            --platform "${{ matrix.host_platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --targets "${{ matrix.forge_targets }}"
 
       - name: Verify Electron package resources
         shell: bash
@@ -218,7 +252,7 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/stage-electron-release-assets.mjs \
-            --builder-dir release-electron \
+            --forge-dir release-electron \
             --out-dir "release-assets/${{ matrix.target }}" \
             --target-triple "${{ matrix.target }}" \
             --version "$RELEASE_TAG"
@@ -276,9 +310,9 @@ jobs:
           fi
           printf 'Downloaded Electron release assets:\n'
           printf ' - %s\n' "${assets[@]}"
-          if find "release-assets" -type f \( -name "*.app.tar.gz" -o -name "*.sig" -o -name "latest.json" \) | grep -q .; then
+          if find "release-assets" -type f \( -name "*.app.tar.gz" -o -name "*.sig" -o -name "latest.json" -o -name "latest.yml" -o -name "latest-mac.yml" -o -name "*.blockmap" \) | grep -q .; then
             echo "::error::Legacy updater assets must not be published by the Electron release workflow"
-            find "release-assets" -type f \( -name "*.app.tar.gz" -o -name "*.sig" -o -name "latest.json" \) | sort
+            find "release-assets" -type f \( -name "*.app.tar.gz" -o -name "*.sig" -o -name "latest.json" -o -name "latest.yml" -o -name "latest-mac.yml" -o -name "*.blockmap" \) | sort
             exit 1
           fi
 

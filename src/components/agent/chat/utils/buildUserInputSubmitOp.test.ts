@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createSubmitTurnRequestFromAgentOp } from "@/lib/api/agentProtocol";
 import { buildUserInputSubmitOp } from "./buildUserInputSubmitOp";
 
 describe("buildUserInputSubmitOp", () => {
@@ -193,6 +194,36 @@ describe("buildUserInputSubmitOp", () => {
 
     expect(op.preferences?.providerPreference).toBe("deepseek");
     expect(op.preferences?.modelPreference).toBe("deepseek-v4-flash");
+  });
+
+  it("App Server current turn/start 投影应携带完整 provider/model 偏好", () => {
+    const op = buildUserInputSubmitOp({
+      content: "继续",
+      images: [],
+      sessionId: "session-app-server-current",
+      eventName: "aster_stream_app_server_current",
+      workspaceId: "workspace-current",
+      turnId: "turn-current-1",
+      executionRuntime: {
+        session_id: "session-app-server-current",
+        source: "runtime_snapshot",
+        provider_selector: "openai",
+        model_name: "gpt-4.1",
+        execution_strategy: "react",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: "react",
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "full-access",
+      effectiveProviderType: "custom-provider",
+      effectiveModel: "mimo-v2.5-pro",
+    });
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+
+    expect(request.turn_config?.provider_preference).toBe("custom-provider");
+    expect(request.turn_config?.model_preference).toBe("mimo-v2.5-pro");
   });
 
   it("provider 发生切换时应同时提交 provider/model 偏好", () => {

@@ -128,13 +128,21 @@ export function filterEntriesForCargoArgs(entries, cargoArgs) {
     }
   }
 
+  const workspaceEntries = entries.filter(
+    (entry) => entry.cargoScope === "workspace",
+  );
+
   if (allWorkspace) {
-    return entries;
+    return workspaceEntries;
   }
   if (packages.size > 0) {
-    return entries.filter((entry) => packages.has(entry.packageName));
+    return workspaceEntries.filter((entry) => packages.has(entry.packageName));
   }
-  return entries.filter((entry) => entry.packageName === "lime");
+
+  const rootPackageEntries = workspaceEntries.filter(
+    (entry) => entry.packageRoot === "lime-rs",
+  );
+  return rootPackageEntries.length > 0 ? rootPackageEntries : workspaceEntries;
 }
 
 export function findCargoTestFilters(cargoArgs) {

@@ -2,16 +2,13 @@
 
 import { spawn } from "node:child_process";
 
-const env = {
-  ...process.env,
-  CSC_IDENTITY_AUTO_DISCOVERY: "false",
-};
+const arch = process.env.npm_config_arch || process.arch;
+const platform = process.env.npm_config_platform || process.platform;
 
 const child = spawn(
   "npx",
-  ["electron-builder", "--dir", "--publish", "never"],
+  ["electron-forge", "package", "--platform", platform, "--arch", arch],
   {
-    env,
     stdio: "inherit",
     shell: process.platform === "win32",
   },

@@ -330,9 +330,7 @@ function resolveCapturedRuntimeEventName({
   return null;
 }
 
-function collectRuntimeEventNameCalls(
-  mock: typeof mockSubmitAgentRuntimeTurn,
-) {
+function collectRuntimeEventNameCalls(mock: typeof mockSubmitAgentRuntimeTurn) {
   return mock.mock.calls.map((args, index) => ({
     args,
     order: mock.mock.invocationCallOrder[index] ?? index,
@@ -623,6 +621,63 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
+  it("已有有效工作区模型偏好时不应被 legacy init 默认 provider 清空", async () => {
+    const workspaceId = "ws-init-retain-explicit-custom-model";
+    const selectedProvider = "custom-230cb5bf-3419-4742-8148-e8222423541c";
+    const selectedModel = "mimo-v2.5-pro";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify(selectedProvider),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify(selectedModel),
+    );
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: true,
+      provider_name: "openai",
+      provider_selector: "deepseek",
+      model_name: "deepseek-v4-pro",
+    });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: selectedProvider,
+      model: selectedModel,
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: selectedProvider,
+        currentModel: selectedModel,
+        theme: "general",
+        allowProviderFallback: false,
+      });
+      expect(harness.getValue().providerType).toBe(selectedProvider);
+      expect(harness.getValue().model).toBe(selectedModel);
+
+      await act(async () => {
+        await harness.getValue().triggerAIGuide("检查 Mimo provider 透传");
+      });
+
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.provider_preference,
+      ).toBe(selectedProvider);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.model_preference,
+      ).toBe(selectedModel);
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("deferred 话题加载模式下应延后 Agent 预热，避免抢占首屏会话恢复", async () => {
     const scheduledTasks: Array<() => void> = [];
     mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
@@ -698,6 +753,54 @@ describe("useAsterAgentChat 首页新会话", () => {
           localStorage.getItem(`agent_pref_provider_${workspaceId}`) || "null",
         ),
       ).toBe("custom-a32774c6-6fd0-433b-8b81-e95340e08793");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("Agent 初始化返回 current provider 但无模型时不应回流旧 Provider 缓存", async () => {
+    const workspaceId = "ws-init-current-provider-without-model";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify("deepseek"),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify("deepseek-v4-pro"),
+    );
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: true,
+      provider_name: "Lime Hub",
+      provider_selector: "lime-hub",
+    });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue(null);
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetDefaultProvider).not.toHaveBeenCalled();
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: "lime-hub",
+        currentModel: null,
+        theme: "general",
+        allowProviderFallback: false,
+      });
+      expect(harness.getValue().providerType).toBe("lime-hub");
+      expect(harness.getValue().model).toBe("");
+      expect(
+        JSON.parse(
+          localStorage.getItem(`agent_pref_provider_${workspaceId}`) || "null",
+        ),
+      ).toBe("lime-hub");
+      expect(
+        JSON.parse(
+          localStorage.getItem(`agent_pref_model_${workspaceId}`) || "null",
+        ),
+      ).toBe("");
     } finally {
       harness.unmount();
     }
@@ -4304,7 +4407,22 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         workspaceId,
         undefined,
         "react",
-        { runStartHooks: true },
+        {
+          runStartHooks: true,
+          metadata: {
+            providerSelector: selectedProvider,
+            modelName: selectedModel,
+            executionRuntime: {
+              providerSelector: selectedProvider,
+              modelName: selectedModel,
+            },
+            extensionData: {
+              "lime_provider_routing.v0": {
+                providerSelector: selectedProvider,
+              },
+            },
+          },
+        },
       );
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
@@ -6990,6 +7108,88 @@ describe("useAsterAgentChat 偏好持久化", () => {
         "react",
         { runStartHooks: true },
       );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("发送前应丢弃 App Server 已不存在的本地恢复会话并新建", async () => {
+    const workspaceId = "ws-stale-restore-submit";
+    const staleSessionId = "session-stale-restore-submit";
+    const freshSessionId = "session-fresh-after-stale-restore";
+    const staleHydration = createDeferred<{
+      id: string;
+      workspace_id: string;
+      messages: [];
+      turns: [];
+      items: [];
+      queued_turns: [];
+    }>();
+    seedSession(workspaceId, staleSessionId);
+    mockCreateAgentRuntimeSession.mockResolvedValue(freshSessionId);
+    mockGetAgentRuntimeSession.mockImplementation(async (sessionId: string) => {
+      if (sessionId === staleSessionId) {
+        if (mockGetAgentRuntimeSession.mock.calls.length === 1) {
+          return staleHydration.promise;
+        }
+        throw new Error(`session not found: ${staleSessionId}`);
+      }
+
+      return {
+        id: sessionId,
+        workspace_id: workspaceId,
+        messages: [],
+        turns: [],
+        items: [],
+        queued_turns: [],
+      };
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+
+      expect(harness.getValue().sessionId).toBe(staleSessionId);
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("继续处理这个任务", [], false, false, false, "react");
+      });
+
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(staleSessionId, {
+        historyLimit: 40,
+      });
+      expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
+        workspaceId,
+        undefined,
+        "react",
+        { runStartHooks: true },
+      );
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "继续处理这个任务",
+          session_id: freshSessionId,
+        }),
+      );
+      expect(harness.getValue().sessionId).toBe(freshSessionId);
+      expect(
+        sessionStorage.getItem(`aster_curr_sessionId_${workspaceId}`),
+      ).toBe(JSON.stringify(freshSessionId));
+
+      await act(async () => {
+        staleHydration.resolve({
+          id: staleSessionId,
+          workspace_id: workspaceId,
+          messages: [],
+          turns: [],
+          items: [],
+          queued_turns: [],
+        });
+        await flushEffects();
+      });
+      expect(harness.getValue().sessionId).toBe(freshSessionId);
     } finally {
       harness.unmount();
     }

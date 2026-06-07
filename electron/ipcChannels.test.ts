@@ -45,15 +45,60 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("project_memory_get")).toBe(true);
     expect(isElectronHostCommand("get_model_registry")).toBe(true);
     expect(isElectronHostCommand("get_api_key_providers")).toBe(true);
+    expect(isElectronHostCommand("list_dir")).toBe(false);
+    expect(isElectronHostCommand("read_file_preview_cmd")).toBe(false);
     expect(isElectronHostCommand("list_executable_skills")).toBe(true);
     expect(isElectronHostCommand("workspace_list")).toBe(true);
     expect(isElectronHostCommand("workspace_get_by_path")).toBe(true);
     expect(isElectronHostCommand("get_config")).toBe(true);
+    expect(isElectronHostCommand("get_experimental_config")).toBe(true);
+    expect(isElectronHostCommand("save_experimental_config")).toBe(true);
     expect(isElectronHostCommand("agent_app_list_installed")).toBe(true);
+    expect(isElectronHostCommand("agent_app_runtime_start_task")).toBe(true);
+    expect(isElectronHostCommand("agent_app_runtime_cancel_task")).toBe(true);
+    expect(isElectronHostCommand("agent_app_runtime_get_task")).toBe(true);
+    expect(
+      isElectronHostCommand("agent_app_runtime_submit_host_response"),
+    ).toBe(true);
+    expect(isElectronHostCommand("get_usage_stats")).toBe(true);
+    expect(isElectronHostCommand("get_model_usage_ranking")).toBe(true);
+    expect(isElectronHostCommand("get_daily_usage_trends")).toBe(true);
+    expect(isElectronHostCommand("get_browser_connector_settings_cmd")).toBe(
+      true,
+    );
+    expect(
+      isElectronHostCommand("get_browser_connector_install_status_cmd"),
+    ).toBe(true);
+    expect(isElectronHostCommand("get_chrome_profile_sessions")).toBe(true);
+    expect(isElectronHostCommand("get_chrome_bridge_endpoint_info")).toBe(true);
+    expect(isElectronHostCommand("get_chrome_bridge_status")).toBe(true);
+    expect(isElectronHostCommand("get_browser_backend_policy")).toBe(true);
+    expect(isElectronHostCommand("get_browser_backends_status")).toBe(true);
+    expect(isElectronHostCommand("get_voice_input_config")).toBe(true);
+    expect(isElectronHostCommand("get_asr_credentials")).toBe(true);
+    expect(isElectronHostCommand("get_voice_instructions")).toBe(true);
+    expect(isElectronHostCommand("voice_models_get_install_state")).toBe(true);
+    expect(isElectronHostCommand("get_environment_preview")).toBe(true);
+    expect(isElectronHostCommand("unified_memory_stats")).toBe(true);
+    expect(isElectronHostCommand("get_mcp_servers")).toBe(true);
+    expect(isElectronHostCommand("mcp_list_servers_with_status")).toBe(true);
+    expect(isElectronHostCommand("site_get_adapter_catalog_status")).toBe(true);
+    expect(isElectronHostCommand("open_external_url")).toBe(true);
+    expect(isElectronHostCommand("start_oem_cloud_oauth_callback_bridge")).toBe(
+      true,
+    );
+    expect(
+      isElectronHostCommand("get_skill_package_file_association_status"),
+    ).toBe(true);
+    expect(
+      isElectronHostCommand("set_skill_package_file_association_default"),
+    ).toBe(true);
+    expect(isElectronHostCommand("report_frontend_crash")).toBe(true);
     expect(isElectronHostCommand("sync_tray_model_shortcuts")).toBe(true);
     expect(
       isElectronHostCommand("take_pending_skill_package_open_requests"),
     ).toBe(true);
+    expect(isElectronHostCommand("open_update_window")).toBe(true);
   });
 
   it("App Server 原始桥接命令只包含 JSONL sidecar 通道", () => {
@@ -75,7 +120,14 @@ describe("electron/ipcChannels", () => {
 
   it("App Server truth bridge 命令由 Desktop Host 投影，不走原始 JSONL 通道", () => {
     expect([...ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS].sort()).toEqual([
+      "agent_app_get_ui_runtime_status",
       "agent_app_list_installed",
+      "agent_app_runtime_cancel_task",
+      "agent_app_runtime_get_task",
+      "agent_app_runtime_start_task",
+      "agent_app_runtime_submit_host_response",
+      "agent_app_start_ui_runtime",
+      "agent_app_stop_ui_runtime",
       "agent_runtime_create_session",
       "agent_runtime_export_evidence_pack",
       "agent_runtime_get_session",
@@ -126,6 +178,11 @@ describe("electron/ipcChannels", () => {
     expect(
       ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS.some((command) =>
         isElectronAppServerCommand(command),
+      ),
+    ).toBe(false);
+    expect(
+      ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS.includes(
+        "start_oem_cloud_oauth_callback_bridge" as never,
       ),
     ).toBe(false);
   });

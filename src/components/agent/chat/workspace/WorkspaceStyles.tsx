@@ -231,7 +231,6 @@ export const ChatContent = styled.div<{ $compact?: boolean }>`
   min-height: 0;
   padding: ${({ $compact }) => ($compact ? "0 6px 6px" : "0 10px 10px")};
   overflow: hidden;
-  height: 100%;
   position: relative;
 `;
 
@@ -243,6 +242,7 @@ export const MessageViewport = styled.div<{ $bottomPadding?: string }>`
 `;
 
 export const ChatInputSlot = styled.div`
+  flex: 0 0 auto;
   width: min(calc(100% - 20px), 900px);
   max-width: 100%;
   margin: 0 auto;

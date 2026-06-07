@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import {
   buildAgentTaskRuntimeCardModel,
+  isAssistantAwaitingFinalResponse,
   type AgentTaskRuntimeStatus,
   type AgentTaskRuntimeSubtaskStats,
 } from "./agentTaskRuntime";
@@ -113,6 +114,7 @@ function resolveLatestAssistantMessage(messages: Message[]): Message | null {
 }
 
 function resolveFallbackStatus(params: {
+  latestAssistant: Message | null;
   latestTurn: AgentThreadTurn | null;
   latestTurnItems: AgentThreadItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
@@ -122,6 +124,7 @@ function resolveFallbackStatus(params: {
   isSending: boolean;
 }): AgentTaskRuntimeStatus | null {
   const {
+    latestAssistant,
     latestTurn,
     latestTurnItems,
     threadRead,
@@ -182,6 +185,9 @@ function resolveFallbackStatus(params: {
 
   switch (latestTurn?.status) {
     case "completed":
+      if (isAssistantAwaitingFinalResponse(latestAssistant)) {
+        return "running";
+      }
       return "completed";
     case "failed":
       return "failed";
@@ -330,6 +336,15 @@ function resolveFallbackDetail(params: {
   return null;
 }
 
+function resolveVisibleCompletedAt(
+  status: AgentTaskRuntimeStatus,
+  completedAt: DateLike,
+): DateLike {
+  return status === "completed" || status === "failed" || status === "aborted"
+    ? completedAt
+    : null;
+}
+
 export function buildInputbarRuntimeStatusLineModel({
   messages,
   turns = [],
@@ -387,11 +402,12 @@ export function buildInputbarRuntimeStatusLineModel({
       subtaskStats: builtTask.subtaskStats,
       usage: resolveVisibleUsage(builtTask.status, latestAssistant),
       startedAt,
-      completedAt,
+      completedAt: resolveVisibleCompletedAt(builtTask.status, completedAt),
     };
   }
 
   const status = resolveFallbackStatus({
+    latestAssistant,
     latestTurn,
     latestTurnItems,
     threadRead,
@@ -432,6 +448,6 @@ export function buildInputbarRuntimeStatusLineModel({
     subtaskStats: resolveSubtaskStats(childSubagentSessions),
     usage,
     startedAt,
-    completedAt,
+    completedAt: resolveVisibleCompletedAt(status, completedAt),
   };
 }

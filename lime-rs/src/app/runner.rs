@@ -542,23 +542,6 @@ pub fn run() {
                 });
             }
 
-            {
-                let app_handle = app.handle().clone();
-                let companion_state = app
-                    .state::<crate::services::companion_service::CompanionServiceState>()
-                    .inner()
-                    .clone();
-
-                tauri::async_runtime::spawn(async move {
-                    match companion_state.start(app_handle).await {
-                        Ok(()) => tracing::info!("[启动] Companion Pet 服务已启动"),
-                        Err(error) => {
-                            tracing::warn!("[启动] Companion Pet 服务启动失败: {}", error)
-                        }
-                    }
-                });
-            }
-
             #[cfg(debug_assertions)]
             {
                 let app_handle = app.handle().clone();
@@ -1436,8 +1419,6 @@ pub fn run() {
             crate::services::sysinfo_service::subscribe_sysinfo,
             crate::services::sysinfo_service::unsubscribe_sysinfo,
             // File browser commands
-            crate::services::file_browser_service::list_dir,
-            crate::services::file_browser_service::read_file_preview_cmd,
             crate::services::file_browser_service::get_home_dir,
             crate::services::file_browser_service::get_file_manager_locations,
             crate::services::file_browser_service::get_file_icon_data_url,

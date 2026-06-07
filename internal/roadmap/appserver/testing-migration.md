@@ -22,23 +22,23 @@
 
 ## 2. 当前测试事实源
 
-| 分类 | 测试事实源 | 说明 |
-| --- | --- | --- |
-| `current` | `scripts/electron-current-entrypoints.test.mjs` | 固定 `dev / build / preview / verify:gui-smoke` 默认走 Electron。 |
-| `current` | `scripts/lib/electron-dev-sidecar.test.mjs` | 验证 Electron dev sidecar 的 app-server binary 解析与构建入口。 |
-| `current` | `scripts/lib/electron-app-server-assets.test.mjs` | 验证 Electron packaged app-server resources 和 release manifest。 |
-| `current` | `electron/ipcChannels.test.ts` | 验证 Electron IPC channel catalog。 |
-| `current` | `src/features/agent-app/architecture/importBoundaries.test.ts` | 阻止 Agent App current 代码直接 import legacy Tauri host API。 |
-| `current` | `packages/app-server-client/tests/client.test.mjs` | 验证外部 App 通过 App Server client 消费协议。 |
-| `current` | `scripts/lib/agent-qc-process-owner-current.test.mjs` | 验证 raw process owner sidecar 识别 Electron smoke / dev runtime，不再只围绕 Tauri dev 判断。 |
-| `current` | `scripts/electron-current-docs-guard.test.mjs` | 阻止 current 测试文档、GUI 续测 skill 和 qcloop 当前操作段继续推荐 Tauri GUI 启动、Tauri E2E 框架或把 Tauri 壳写成 GUI smoke 证据。 |
-| `current` | `scripts/electron-current-rules-guard.test.mjs` | 验证根规则、`internal/aiprompts` 与核心 skills 已锁定 Electron / App Server current、禁止新增品牌前缀命名，并要求新 Agent 逻辑走 App Server。 |
-| `current` | `scripts/lib/agent-qc-report-core.test.ts` | 验证 Agent QC package script fixture 中的 `verify:gui-smoke` 指向 `smoke:electron`，不再把旧 `scripts/verify-gui-smoke.mjs` 当 current 证据。 |
-| `current` | `scripts/lib/gui-smoke-run-lock.test.mjs` | 验证 GUI smoke run lock owner fixture 使用 `npm run smoke:electron`，不再把旧脚本路径写进 current owner metadata。 |
-| `current` | `scripts/verify-gui-smoke.mjs` | 保留旧文件名作为兼容入口，但直接委托 `npm run smoke:electron`，直接执行也只验证 Electron Desktop Host。 |
-| `deprecated guard` | `scripts/tauri-deprecated-entrypoints.test.mjs` | 验证旧 Tauri GUI entrypoint 只输出退役提示。 |
-| `deprecated guard` | `scripts/standalone-deprecated-artifact-adapter-guard.test.mjs` | 验证旧 standalone Tauri config / build adapter CLI 与 core helper 默认 blocked，且不回流 current release evidence / GUI 证据。 |
-| `deprecated artifact adapter` | `scripts/lib/agent-app-standalone-tauri-*.test.mjs` | 只允许证明旧 standalone artifact adapter 没回流 current。 |
+| 分类                          | 测试事实源                                                      | 说明                                                                                                                                          |
+| ----------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `current`                     | `scripts/electron-current-entrypoints.test.mjs`                 | 固定 `dev / build / preview / verify:gui-smoke` 默认走 Electron。                                                                             |
+| `current`                     | `scripts/lib/electron-dev-sidecar.test.mjs`                     | 验证 Electron dev sidecar 的 app-server binary 解析与构建入口。                                                                               |
+| `current`                     | `scripts/lib/electron-app-server-assets.test.mjs`               | 验证 Electron packaged app-server resources 和 release manifest。                                                                             |
+| `current`                     | `electron/ipcChannels.test.ts`                                  | 验证 Electron IPC channel catalog。                                                                                                           |
+| `current`                     | `src/features/agent-app/architecture/importBoundaries.test.ts`  | 阻止 Agent App current 代码直接 import legacy Tauri host API。                                                                                |
+| `current`                     | `packages/app-server-client/tests/client.test.mjs`              | 验证外部 App 通过 App Server client 消费协议。                                                                                                |
+| `current`                     | `scripts/lib/agent-qc-process-owner-current.test.mjs`           | 验证 raw process owner sidecar 识别 Electron smoke / dev runtime，不再只围绕 Tauri dev 判断。                                                 |
+| `current`                     | `scripts/electron-current-docs-guard.test.mjs`                  | 阻止 current 测试文档、GUI 续测 skill 和 qcloop 当前操作段继续推荐 Tauri GUI 启动、Tauri E2E 框架或把 Tauri 壳写成 GUI smoke 证据。           |
+| `current`                     | `scripts/electron-current-rules-guard.test.mjs`                 | 验证根规则、`internal/aiprompts` 与核心 skills 已锁定 Electron / App Server current、禁止新增品牌前缀命名，并要求新 Agent 逻辑走 App Server。 |
+| `current`                     | `scripts/lib/agent-qc-report-core.test.ts`                      | 验证 Agent QC package script fixture 中的 `verify:gui-smoke` 指向 `smoke:electron`，不再把旧 `scripts/verify-gui-smoke.mjs` 当 current 证据。 |
+| `current`                     | `scripts/lib/gui-smoke-run-lock.test.mjs`                       | 验证 GUI smoke run lock owner fixture 使用 `npm run smoke:electron`，不再把旧脚本路径写进 current owner metadata。                            |
+| `current`                     | `scripts/verify-gui-smoke.mjs`                                  | 保留旧文件名作为兼容入口，但直接委托 `npm run smoke:electron`，直接执行也只验证 Electron Desktop Host。                                       |
+| `deprecated guard`            | `scripts/standalone-deprecated-artifact-adapter-guard.test.mjs` | 验证旧 standalone Tauri config / build adapter CLI 与 core helper 默认 blocked，且不回流 current release evidence / GUI 证据。                |
+| `deprecated artifact adapter` | `scripts/lib/agent-app-standalone-tauri-*.test.mjs`             | 只允许证明旧 standalone artifact adapter 没回流 current。                                                                                     |
+| `dead guard`                  | `scripts/electron-current-entrypoints.test.mjs`                 | 验证 root Tauri GUI app entry files 已删除，不能重新作为 Desktop current 或 deprecated runner 入口回流。                                      |
 
 ## 3. 迁移规则
 
@@ -88,7 +88,7 @@ npm run test:contracts
 
 暂缓处理：
 
-1. `src/lib/governance/legacySurfaceCatalog.json` 当前也在并行进程 staged 写集，本轮不覆盖；后续需要补脚本级 surface，覆盖 legacy runner / smoke / artifact adapter，并限制 allowed paths 只允许 deprecated guard 与历史说明。
+1. `src/lib/governance/legacySurfaceCatalog.json` 当前也在并行进程 staged 写集，本轮不覆盖；后续需要补脚本级 surface，覆盖 legacy smoke / artifact adapter，并限制 allowed paths 只允许 dead guard、deprecated guard 与历史说明。
 2. 只剩变量名含 `tauriConfig` 的历史 artifact adapter，等 package/release 命名整体迁移时再集中处理。
 3. Rust crate 内依赖 host state 的 Aster backend 测试，等 RuntimeCore / ExecutionBackend 解耦后再迁。
 
@@ -362,3 +362,49 @@ git diff --check -- "lime-rs/crates/app-server-protocol/src/protocol/v0.rs" "scr
 3. `npm run test:contracts` 通过，覆盖 App Server client contract、command contracts、harness contracts、modality contracts 与 docs boundary。
 4. App Server Rust protocol / client / transport 定向测试通过，`app-server` lib 56 个测试通过。
 5. `npm run smoke:electron` 通过，完成 renderer production build、Electron host build、app-server sidecar 准备，并输出 renderer loaded 与 app-server initialized。
+
+2026-06-06 追加 Electron current build / release / CI runtime input guard：
+
+```bash
+node --check "scripts/electron-current-entrypoints.test.mjs"
+npx vitest run "scripts/electron-current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
+npx vitest run "scripts/electron-current-docs-guard.test.mjs" "scripts/electron-current-rules-guard.test.mjs" --silent=passed-only --disableConsoleIntercept
+npx prettier --check "scripts/electron-current-entrypoints.test.mjs"
+npm run test:contracts
+git diff --check -- "scripts/electron-current-entrypoints.test.mjs" "internal/roadmap/appserver/testing-migration.md"
+```
+
+这组证据证明：
+
+1. `scripts/electron-current-entrypoints.test.mjs` 已递归扫描 `.github/` 与 `electron/`，并覆盖 Electron build / package / release / updater / smoke / version current 入口。
+2. current Electron 构建、发布、CI 与 host 文件不得重新消费旧宿主 config、CLI、全局对象、runtime marker 或命令宏。
+3. `npm run test:contracts` 通过，`mock priority commands: 0`，确认这次守卫补强没有让生产 bridge 回退 mock 或旧宿主路径。
+
+2026-06-06 追加 root Tauri GUI app 删除与 Rust layer virtual workspace 口径：
+
+```bash
+node --check "scripts/rust-test-layer-classifier.mjs" "scripts/run-rust-layer.mjs" "scripts/electron-current-entrypoints.test.mjs"
+npx vitest run "scripts/rust-test-layer-classifier.test.mjs" "scripts/lib/legacy-surface-report-core.test.ts" "scripts/electron-current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
+node "scripts/run-rust-layer.mjs" unit --list --json
+```
+
+这组证据证明：
+
+1. `lime-rs/build.rs`、`lime-rs/src/main.rs`、`lime-rs/src/lib.rs`、`lime-rs/tauri.conf.json`、`lime-rs/tauri.conf.headless.json` 已按 `dead` root GUI app entry 删除。
+2. `scripts/electron-current-entrypoints.test.mjs` 已守住这些 root app entry files 不能重新出现；Desktop current 只允许 Electron / App Server 入口。
+3. Rust layer classifier 现在按 virtual workspace 事实源识别真实 `crates/*` package；无 root `[package]` 时，`lime-rs/src` 残留旧模块只计为 `unmanaged-root` 治理统计，不再进入默认 Rust test 执行口径。
+
+2026-06-07 追加 retired Windows host config current 回流守卫：
+
+```bash
+node --check "scripts/electron-current-entrypoints.test.mjs"
+npx vitest run "scripts/electron-current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
+rg -n "lime-rs/tauri.windows.conf|tauri.windows.conf" "package.json" "electron-builder.yml" ".github" "electron" "scripts/check-app-version-consistency.mjs"
+git diff --check -- "scripts/electron-current-entrypoints.test.mjs" "internal/roadmap/appserver/testing-migration.md"
+```
+
+这组证据证明：
+
+1. `lime-rs/tauri.windows.conf.json` 只允许作为 `dead cleanup candidate` 暂存，不能回流 package scripts、Electron Builder、CI、Electron host 或版本一致性检查。
+2. `scripts/electron-current-entrypoints.test.mjs` 已把该 Windows 旧宿主配置加入 retired build input 禁止词，并扫描 Electron current build / release / CI / host 文件。
+3. 物理删除该文件属于文件删除动作，需要按危险操作确认后再执行；删除后同一守卫应继续通过。

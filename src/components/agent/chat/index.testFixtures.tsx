@@ -849,8 +849,8 @@ export function buildMockProviderModel(
   return {
     id: "mock-model",
     display_name: "Mock Model",
-    provider_id: "kiro",
-    provider_name: "Kiro",
+    provider_id: "openai",
+    provider_name: "OpenAI",
     family: "mock-model",
     tier: "pro" as const,
     capabilities: {
@@ -1082,7 +1082,7 @@ export function createMockAgentChatUnifiedState(
   overrides: Record<string, unknown> = {},
 ) {
   return {
-    providerType: "kiro",
+    providerType: "openai",
     setProviderType: vi.fn(),
     model: "mock-model",
     setModel: vi.fn(),
@@ -1367,10 +1367,10 @@ beforeEach(() => {
     "loadConfiguredProviders",
   ).mockResolvedValue([
     {
-      key: "kiro",
-      label: "Kiro",
-      registryId: "kiro",
-      type: "kiro",
+      key: "openai",
+      label: "OpenAI",
+      registryId: "openai",
+      type: "openai",
     },
   ]);
   vi.spyOn(providerModelsModule, "loadProviderModels").mockResolvedValue([

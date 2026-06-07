@@ -1,5 +1,5 @@
 use super::app_server_host::{
-    build_tauri_aster_app_server, ensure_desktop_aster_chat_request_ids,
+    build_desktop_aster_app_server, ensure_desktop_aster_chat_request_ids,
     submit_desktop_aster_chat_request, DesktopAsterChatSubmitInput,
 };
 use super::*;
@@ -1176,7 +1176,7 @@ async fn submit_subagent_app_server_turn(
     queue_if_busy: bool,
     skip_pre_submit_resume: bool,
 ) -> Result<String, String> {
-    let app_server = build_tauri_aster_app_server(runtime_command_context.clone());
+    let app_server = build_desktop_aster_app_server(runtime_command_context.clone());
     submit_desktop_aster_chat_request(
         &app_server,
         DesktopAsterChatSubmitInput {

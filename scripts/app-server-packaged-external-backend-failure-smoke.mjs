@@ -1,6 +1,15 @@
 #!/usr/bin/env node
 
-import { access, chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -10,7 +19,13 @@ import { localAppServerBinaryPath } from "./lib/electron-dev-sidecar.mjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
-const clientDistPath = path.join(rootDir, "packages", "app-server-client", "dist", "index.js");
+const clientDistPath = path.join(
+  rootDir,
+  "packages",
+  "app-server-client",
+  "dist",
+  "index.js",
+);
 
 const {
   AppServerRequestError,
@@ -26,12 +41,14 @@ const {
 async function main() {
   if (typeof AppServerRequestError !== "function") {
     throw new Error(
-      "packages/app-server-client/dist is stale; run npm --prefix \"packages/app-server-client\" run build",
+      'packages/app-server-client/dist is stale; run npm --prefix "packages/app-server-client" run build',
     );
   }
 
   const sourceBinaryPath = await resolveSourceBinaryPath();
-  const tempDir = await mkdtemp(path.join(tmpdir(), "app-server-packaged-failure-smoke-"));
+  const tempDir = await mkdtemp(
+    path.join(tmpdir(), "app-server-packaged-failure-smoke-"),
+  );
   let lifecycle;
 
   try {
@@ -93,7 +110,11 @@ async function main() {
     );
     lifecycle = started.lifecycle;
 
-    assertEqual(started.resolved.config.binaryPath, packagedBinaryPath, "packaged binary path");
+    assertEqual(
+      started.resolved.config.binaryPath,
+      packagedBinaryPath,
+      "packaged binary path",
+    );
     const connection = started.connected.connection;
     const sessionId = "appserver_packaged_failure_smoke_session";
     const threadId = "appserver_packaged_failure_smoke_thread";
@@ -129,7 +150,9 @@ async function main() {
       );
 
     if (turnResult.ok) {
-      throw new Error("expected failed turn response from packaged external backend");
+      throw new Error(
+        "expected failed turn response from packaged external backend",
+      );
     }
     if (!(turnResult.error instanceof AppServerRequestError)) {
       throw new Error(
@@ -137,8 +160,38 @@ async function main() {
       );
     }
 
-    const clientEvents = agentEventsFromNotifications(turnResult.error.notifications);
-    const clientFailure = assertFailureEvents(clientEvents, "client streamed events");
+    const clientEvents = agentEventsFromNotifications(
+      turnResult.error.notifications,
+    );
+    const clientFailure = assertFailureEvents(
+      clientEvents,
+      "client streamed events",
+    );
+
+    const readResult = await connection.readSession(
+      { sessionId },
+      { timeoutMs: 5_000 },
+    );
+    assertEqual(
+      readResult.result.session.sessionId,
+      sessionId,
+      "read session id",
+    );
+    assertEqual(readResult.result.session.threadId, threadId, "read thread id");
+    const readTurns = Array.isArray(readResult.result.turns)
+      ? readResult.result.turns
+      : [];
+    assertEqual(readTurns.length, 1, "read failed turn count");
+    const readTurn = readTurns.find((turn) => turn?.turnId === turnId);
+    if (!readTurn) {
+      throw new Error(`read session is missing failed turn ${turnId}`);
+    }
+    assertEqual(readTurn.sessionId, sessionId, "read failed turn session id");
+    assertEqual(readTurn.threadId, threadId, "read failed turn thread id");
+    assertEqual(readTurn.status, "failed", "read failed turn status");
+    if (!readTurn.completedAt) {
+      throw new Error(`read failed turn ${turnId} is missing completedAt`);
+    }
 
     const evidenceResult = await connection.exportEvidence(
       {
@@ -150,8 +203,15 @@ async function main() {
       { timeoutMs: 5_000 },
     );
     const evidenceEvents = evidenceResult.result.events;
-    const evidenceFailure = assertFailureEvents(evidenceEvents, "evidence events");
-    assertEqual(evidenceResult.result.artifacts.length, 0, "failed turn artifact count");
+    const evidenceFailure = assertFailureEvents(
+      evidenceEvents,
+      "evidence events",
+    );
+    assertEqual(
+      evidenceResult.result.artifacts.length,
+      0,
+      "failed turn artifact count",
+    );
 
     await lifecycle.stop();
 
@@ -163,6 +223,8 @@ async function main() {
         `protocol=${started.connected.initializeResponse.serverInfo.protocolVersion}`,
         `clientEvents=${clientEvents.map((event) => event.type).join(",")}`,
         `evidenceEvents=${evidenceEvents.map((event) => event.type).join(",")}`,
+        `readTurns=${readTurns.length}`,
+        `readTurnStatus=${readTurn.status}`,
         `clientFailure=${JSON.stringify(clientFailure.payload.message)}`,
         `evidenceFailure=${JSON.stringify(evidenceFailure.payload.message)}`,
       ].join(" "),
@@ -184,7 +246,7 @@ async function resolveSourceBinaryPath() {
     throw new Error(
       [
         `app-server binary not found: ${binaryPath}`,
-        "先构建：cargo build --manifest-path \"lime-rs/Cargo.toml\" -p app-server",
+        '先构建：cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server',
         "或设置：APP_SERVER_BIN=/path/to/app-server",
       ].join("\n"),
     );
@@ -192,7 +254,9 @@ async function resolveSourceBinaryPath() {
 }
 
 async function readPackageVersion() {
-  const packageJson = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
+  const packageJson = JSON.parse(
+    await readFile(path.join(rootDir, "package.json"), "utf8"),
+  );
   return String(packageJson.version || "").trim();
 }
 
@@ -214,21 +278,29 @@ process.exit(7);
 
 function agentEventsFromNotifications(notifications) {
   return notifications
-    .filter((notification) => notification.method === METHOD_AGENT_SESSION_EVENT)
+    .filter(
+      (notification) => notification.method === METHOD_AGENT_SESSION_EVENT,
+    )
     .map((notification) => notification.params.event);
 }
 
 function assertFailureEvents(events, label) {
   if (!events.some((event) => event.type === "message.delta")) {
-    throw new Error(`${label} missing message.delta: ${JSON.stringify(events)}`);
+    throw new Error(
+      `${label} missing message.delta: ${JSON.stringify(events)}`,
+    );
   }
   const failed = events.find((event) => event.type === "turn.failed");
   if (!failed) {
     throw new Error(`${label} missing turn.failed: ${JSON.stringify(events)}`);
   }
   const message = String(failed.payload?.message ?? "");
-  if (!message.includes("packaged external backend crashed after partial output")) {
-    throw new Error(`${label} turn.failed missing stderr summary: ${JSON.stringify(failed)}`);
+  if (
+    !message.includes("packaged external backend crashed after partial output")
+  ) {
+    throw new Error(
+      `${label} turn.failed missing stderr summary: ${JSON.stringify(failed)}`,
+    );
   }
   return failed;
 }

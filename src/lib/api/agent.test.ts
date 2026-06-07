@@ -29,6 +29,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
   APP_SERVER_METHOD_AGENT_SESSION_READ,
   APP_SERVER_METHOD_AGENT_SESSION_START,
+  APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
@@ -331,26 +332,41 @@ describe("Agent API 治理护栏", () => {
   });
 
   it("updateAgentRuntimeSession 应支持 recent_access_mode", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-access",
+        threadId: "session-runtime-access",
+        title: "Session",
+        model: "gpt-5.4",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+        messagesCount: 0,
+      },
+    });
 
     await updateAgentRuntimeSession({
       session_id: "session-runtime-access",
       recent_access_mode: "full-access",
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_update_session",
-      {
-        request: {
-          session_id: "session-runtime-access",
-          recent_access_mode: "full-access",
-        },
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+      sessionId: "session-runtime-access",
+      recentAccessMode: "full-access",
+    });
   });
 
   it("updateAgentRuntimeSession 应透传 provider_selector", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-provider",
+        threadId: "session-runtime-provider",
+        title: "Session",
+        model: "mimo-v2-pro",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+        messagesCount: 0,
+      },
+    });
 
     await updateAgentRuntimeSession({
       session_id: "session-runtime-provider",
@@ -358,16 +374,11 @@ describe("Agent API 治理护栏", () => {
       model_name: "mimo-v2-pro",
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_update_session",
-      {
-        request: {
-          session_id: "session-runtime-provider",
-          provider_selector: "custom-cae6e762-fb45-4f71-878c-3106510ade78",
-          model_name: "mimo-v2-pro",
-        },
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+      sessionId: "session-runtime-provider",
+      providerSelector: "custom-cae6e762-fb45-4f71-878c-3106510ade78",
+      modelName: "mimo-v2-pro",
+    });
   });
 
   it("respondAgentRuntimeAction 应经 Electron IPC 调 App Server action/respond", async () => {
@@ -606,9 +617,19 @@ describe("Agent API 治理护栏", () => {
     );
   });
 
-  it("interruptAgentRuntimeTurn 应经 Electron IPC 调 App Server turn/cancel，session update 暂保 compat 命令", async () => {
+  it("interruptAgentRuntimeTurn 与 updateAgentRuntimeSession 应经 Electron IPC 调 App Server", async () => {
     mockAppServerResponse({});
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime",
+        threadId: "session-runtime",
+        title: "新标题",
+        model: "gpt-5.4",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+        messagesCount: 0,
+      },
+    });
 
     await interruptAgentRuntimeTurn({
       session_id: "session-runtime",
@@ -624,17 +645,11 @@ describe("Agent API 治理护栏", () => {
       sessionId: "session-runtime",
       turnId: "turn-1",
     });
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      2,
-      "agent_runtime_update_session",
-      {
-        request: {
-          session_id: "session-runtime",
-          name: "新标题",
-          execution_strategy: "react",
-        },
-      },
-    );
+    expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+      sessionId: "session-runtime",
+      title: "新标题",
+      executionStrategy: "react",
+    });
   });
 
   it("listAgentRuntimeSessions 应返回现役 runtime 会话列表", async () => {
@@ -1898,11 +1913,19 @@ describe("Agent API 治理护栏", () => {
     );
   });
 
-  it("deleteAgentRuntimeSession / updateAgentRuntimeSession / generateAgentRuntimeSessionTitle 应走现役命令", async () => {
-    mockSafeInvoke
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce("新的智能标题");
+  it("deleteAgentRuntimeSession / updateAgentRuntimeSession 应走 current 边界，标题生成只做本地投影", async () => {
+    mockSafeInvoke.mockResolvedValueOnce(undefined);
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-3",
+        threadId: "session-runtime-3",
+        title: "重命名后的标题",
+        model: "gpt-5.4",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+        messagesCount: 0,
+      },
+    });
 
     await deleteAgentRuntimeSession("session-runtime-3");
     await updateAgentRuntimeSession({
@@ -1910,7 +1933,10 @@ describe("Agent API 治理护栏", () => {
       name: "重命名后的标题",
     });
     await expect(
-      generateAgentRuntimeSessionTitle("session-runtime-3"),
+      generateAgentRuntimeSessionTitle(
+        "session-runtime-3",
+        "user：新的智能标题\nassistant：正在整理",
+      ),
     ).resolves.toBe("新的智能标题");
 
     expect(mockSafeInvoke).toHaveBeenNthCalledWith(
@@ -1920,145 +1946,56 @@ describe("Agent API 治理护栏", () => {
         sessionId: "session-runtime-3",
       },
     );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      2,
-      "agent_runtime_update_session",
-      {
-        request: {
-          session_id: "session-runtime-3",
-          name: "重命名后的标题",
-        },
-      },
-    );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(3, "agent_generate_title", {
+    expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
       sessionId: "session-runtime-3",
-      titleKind: "session",
+      title: "重命名后的标题",
     });
+    expect(mockSafeInvoke).toHaveBeenCalledTimes(2);
   });
 
-  it("generateAgentRuntimeTitle 应支持图片任务命名预览", async () => {
-    mockSafeInvoke.mockResolvedValueOnce("城市夜景主视觉");
-
+  it("generateAgentRuntimeTitle 应从图片任务预览文本生成本地标题", async () => {
     await expect(
       generateAgentRuntimeTitle({
         previewText: "赛博朋克风城市夜景主视觉",
         titleKind: "image_task",
       }),
-    ).resolves.toBe("城市夜景主视觉");
+    ).resolves.toBe("赛博朋克风城市夜景主视觉");
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_generate_title", {
-      previewText: "赛博朋克风城市夜景主视觉",
-      titleKind: "image_task",
-    });
+    expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 
-  it("generateAgentRuntimeTitleResult 应保留 generation_topic runtime task profile", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      title: "城市夜景主视觉",
-      sessionId: "title-gen-1",
-      executionRuntime: {
-        session_id: "title-gen-1",
-        source: "runtime_snapshot",
-        task_profile: {
-          kind: "generation_topic",
-          source: "auxiliary_generation_topic",
-          service_model_slot: "generation_topic",
-        },
-        routing_decision: {
-          routingMode: "single_candidate",
-          decisionSource: "service_model_setting",
-          decisionReason: "命中 service_models.generation_topic",
-          candidateCount: 1,
-        },
-      },
-      usedFallback: false,
-    });
-
+  it("generateAgentRuntimeTitleResult 应返回本地 fallback 诊断且不调用旧标题命令", async () => {
     const result = await generateAgentRuntimeTitleResult({
-      previewText: "赛博朋克风城市夜景主视觉",
-      titleKind: "image_task",
+      sessionId: "session-runtime-3",
+      previewText:
+        "user：整理今天的国际新闻，按地区归类并给出可执行摘要\nassistant：好的",
+      titleKind: "session",
     });
 
-    expect(result.executionRuntime?.task_profile).toMatchObject({
-      kind: "generation_topic",
-      source: "auxiliary_generation_topic",
-      service_model_slot: "generation_topic",
+    expect(result).toEqual({
+      title: "整理今天的国际新闻，按地区归类并给出可执行摘要",
+      sessionId: "session-runtime-3",
+      executionRuntime: null,
+      usedFallback: true,
+      fallbackReason: "local_preview_title",
     });
-    expect(result.executionRuntime?.routing_decision).toMatchObject({
-      decisionReason: "命中 service_models.generation_topic",
-    });
+    expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 
-  it("generateAgentRuntimeTitleResult 应解析 runtime 诊断结果", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      title: "城市夜景主视觉",
-      sessionId: "title-gen-1",
-      executionRuntime: {
-        session_id: "title-gen-1",
-        source: "runtime_snapshot",
-        task_profile: {
-          kind: "generation_topic",
-          source: "auxiliary_generation_topic",
-        },
-        routing_decision: {
-          routingMode: "single_candidate",
-          decisionSource: "service_model_setting",
-          decisionReason: "命中 service_models.generation_topic",
-          candidateCount: 1,
-        },
-        limit_state: {
-          status: "single_candidate_only",
-          singleCandidateOnly: true,
-          providerLocked: true,
-          settingsLocked: true,
-          oemLocked: false,
-          candidateCount: 1,
-        },
-        cost_state: {
-          status: "estimated",
-          estimatedCostClass: "low",
-        },
-      },
-      usedFallback: false,
-    });
-
+  it("generateAgentRuntimeTitleResult 应清理 Markdown 与角色前缀", async () => {
     await expect(
       generateAgentRuntimeTitleResult({
-        previewText: "赛博朋克风城市夜景主视觉",
+        previewText: "user：# `城市夜景主视觉`",
         titleKind: "image_task",
       }),
     ).resolves.toEqual({
       title: "城市夜景主视觉",
-      sessionId: "title-gen-1",
-      executionRuntime: {
-        session_id: "title-gen-1",
-        source: "runtime_snapshot",
-        task_profile: {
-          kind: "generation_topic",
-          source: "auxiliary_generation_topic",
-        },
-        routing_decision: {
-          routingMode: "single_candidate",
-          decisionSource: "service_model_setting",
-          decisionReason: "命中 service_models.generation_topic",
-          candidateCount: 1,
-        },
-        limit_state: {
-          status: "single_candidate_only",
-          singleCandidateOnly: true,
-          providerLocked: true,
-          settingsLocked: true,
-          oemLocked: false,
-          candidateCount: 1,
-        },
-        cost_state: {
-          status: "estimated",
-          estimatedCostClass: "low",
-        },
-      },
-      usedFallback: false,
-      fallbackReason: null,
+      sessionId: null,
+      executionRuntime: null,
+      usedFallback: true,
+      fallbackReason: "local_preview_title",
     });
+    expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 
   it("subagent 控制面 helper 应走统一 runtime 命令", async () => {

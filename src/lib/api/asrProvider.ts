@@ -5,6 +5,7 @@
  */
 
 import { safeInvoke } from "@/lib/dev-bridge";
+import { getConfig, saveConfig, type Config } from "./appConfig";
 
 // ============ ASR Provider 类型 ============
 
@@ -114,6 +115,105 @@ export interface VoiceInputConfig {
   translate_instruction_id: string;
 }
 
+type ConfigWithVoiceInput = Config & {
+  experimental?: Config["experimental"] & {
+    voice_input?: (Partial<VoiceInputConfig> & Record<string, unknown>) | null;
+  };
+};
+
+const DEFAULT_VOICE_INSTRUCTIONS: VoiceInstruction[] = [
+  {
+    id: "default",
+    name: "默认润色",
+    prompt: "{{text}}",
+    is_preset: true,
+  },
+  {
+    id: "translate_en",
+    name: "翻译为英文",
+    prompt: "{{text}}",
+    is_preset: true,
+  },
+  {
+    id: "raw",
+    name: "原始输出",
+    prompt: "{{text}}",
+    is_preset: true,
+  },
+];
+
+const DEFAULT_VOICE_INPUT_CONFIG: VoiceInputConfig = {
+  enabled: false,
+  shortcut: "CommandOrControl+Shift+V",
+  processor: {
+    polish_enabled: true,
+    polish_provider: "openai",
+    polish_model: "gpt-4.1-mini",
+    default_instruction_id: "default",
+  },
+  output: {
+    mode: "type",
+    type_delay_ms: 10,
+  },
+  instructions: DEFAULT_VOICE_INSTRUCTIONS,
+  selected_device_id: undefined,
+  sound_enabled: true,
+  translate_instruction_id: "translate_en",
+};
+
+function cloneVoiceInputConfig(config: VoiceInputConfig): VoiceInputConfig {
+  return {
+    ...config,
+    processor: { ...config.processor },
+    output: { ...config.output },
+    instructions: config.instructions.map((instruction) => ({
+      ...instruction,
+    })),
+  };
+}
+
+function normalizeVoiceInputConfig(
+  value: Partial<VoiceInputConfig> | null | undefined,
+): VoiceInputConfig {
+  return {
+    ...cloneVoiceInputConfig(DEFAULT_VOICE_INPUT_CONFIG),
+    ...(value ?? {}),
+    processor: {
+      ...DEFAULT_VOICE_INPUT_CONFIG.processor,
+      ...(value?.processor ?? {}),
+    },
+    output: {
+      ...DEFAULT_VOICE_INPUT_CONFIG.output,
+      ...(value?.output ?? {}),
+    },
+    instructions:
+      Array.isArray(value?.instructions) && value.instructions.length > 0
+        ? value.instructions.map((instruction) => ({ ...instruction }))
+        : DEFAULT_VOICE_INSTRUCTIONS.map((instruction) => ({ ...instruction })),
+    selected_device_id: value?.selected_device_id,
+  };
+}
+
+function mergeVoiceInputConfig(
+  appConfig: Config,
+  voiceInputConfig: VoiceInputConfig,
+): Config {
+  const currentVoiceInput = (appConfig as ConfigWithVoiceInput).experimental
+    ?.voice_input;
+
+  return {
+    ...appConfig,
+    experimental: {
+      ...appConfig.experimental,
+      webmcp: appConfig.experimental?.webmcp ?? { enabled: false },
+      voice_input: {
+        ...(currentVoiceInput ?? {}),
+        ...cloneVoiceInputConfig(voiceInputConfig),
+      },
+    },
+  } as Config;
+}
+
 // ============ 麦克风设备类型 ============
 
 /** 麦克风设备信息 */
@@ -176,14 +276,16 @@ export async function testAsrCredential(
 
 /** 获取语音输入配置 */
 export async function getVoiceInputConfig(): Promise<VoiceInputConfig> {
-  return safeInvoke<VoiceInputConfig>("get_voice_input_config");
+  const appConfig = (await getConfig()) as ConfigWithVoiceInput;
+  return normalizeVoiceInputConfig(appConfig.experimental?.voice_input);
 }
 
 /** 保存语音输入配置 */
 export async function saveVoiceInputConfig(
   config: VoiceInputConfig,
 ): Promise<void> {
-  return safeInvoke<void>("save_voice_input_config", { voiceConfig: config });
+  const appConfig = await getConfig({ forceRefresh: true });
+  await saveConfig(mergeVoiceInputConfig(appConfig, config));
 }
 
 /** 获取指令列表 */

@@ -8,21 +8,6 @@ pub use lime_services::file_browser_service::{
     DirectoryListing, FileEntry, FileManagerLocation, FilePreview,
 };
 
-/// Tauri 命令：列出目录
-#[tauri::command]
-pub async fn list_dir(path: String) -> Result<DirectoryListing, String> {
-    lime_services::file_browser_service::list_dir(path).await
-}
-
-/// Tauri 命令：读取文件预览
-#[tauri::command]
-pub async fn read_file_preview_cmd(
-    path: String,
-    max_size: Option<usize>,
-) -> Result<FilePreview, String> {
-    lime_services::file_browser_service::read_file_preview_cmd(path, max_size).await
-}
-
 /// Tauri 命令：获取用户主目录
 #[tauri::command]
 pub async fn get_home_dir() -> Result<String, String> {

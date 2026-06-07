@@ -119,6 +119,27 @@ describe("live-provider-smoke-gate", () => {
     expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
   });
 
+  it("Claw streaming GUI E2E 默认应在 DevBridge 健康检查前阻断 live Provider", () => {
+    const result = spawnSync(
+      "node",
+      ["scripts/claw-chat-ready-streaming-smoke.mjs", "--timeout-ms", "30000"],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          [LIVE_PROVIDER_SMOKE_ENV]: "",
+          [REAL_API_TEST_ENV]: "",
+        },
+      },
+    );
+    const output = `${result.stdout}${result.stderr}`;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain("默认禁止执行");
+    expect(output).not.toContain("stage=wait-health");
+  });
+
   it("知识库真实 Provider E2E 即使指定 provider/model 也必须显式授权", () => {
     const result = spawnSync(
       "node",
@@ -211,6 +232,7 @@ function listSmokeScripts() {
       (entry) =>
         entry.isFile() &&
         entry.name.endsWith(".mjs") &&
+        !entry.name.endsWith(".test.mjs") &&
         !entry.name.startsWith("check-"),
     )
     .map((entry) => {

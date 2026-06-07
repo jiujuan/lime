@@ -186,7 +186,7 @@ export interface ModelAlias {
 }
 /** Provider 的别名配置 */
 export interface ProviderAliasConfig {
-    /** Provider ID（如 "kiro"、"codex"） */
+    /** Provider ID（如 "openai"、"codex"） */
     provider: string;
     /** 描述 */
     description: string | null;

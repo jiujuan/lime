@@ -47,6 +47,7 @@ describe("withI18nPatch", () => {
 
   afterEach(() => {
     cleanupMountedRoots(mountedRoots);
+    window.history.replaceState(null, "", "/");
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
@@ -75,5 +76,22 @@ describe("withI18nPatch", () => {
     } finally {
       consoleWarnSpy.mockRestore();
     }
+  });
+
+  it("已有 Electron 原生启动页时不再显示 i18n 文字启动页", async () => {
+    mockGetConfig.mockImplementation(
+      () => new Promise(() => undefined) as Promise<unknown>,
+    );
+    mockHasDesktopHostInvokeCapability.mockReturnValue(true);
+    window.history.replaceState(null, "", "/?nativeStartup=1");
+
+    const PatchedComponent = withI18nPatch(DemoComponent);
+    const mounted = mountHarness(PatchedComponent, {}, mountedRoots);
+
+    await flushEffects(2);
+
+    expect(mounted.container.textContent).toContain("应用已就绪");
+    expect(mounted.container.textContent).not.toContain("正在启动 Lime");
+    expect(mounted.container.textContent).not.toContain("正在准备界面语言配置");
   });
 });

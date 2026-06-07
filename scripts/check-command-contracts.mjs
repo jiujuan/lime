@@ -27,6 +27,10 @@ const frontendCommandPatterns = [
 ];
 
 const knownDeferredRegistrationReasons = new Map();
+const retiredFileBrowserFacadeCommands = new Set([
+  "list_dir",
+  "read_file_preview_cmd",
+]);
 
 function addDeferredCommands(commands, reason) {
   for (const command of commands) {
@@ -57,6 +61,7 @@ const currentElectronHostRequiredCommands = new Set([
   "get_all_alias_configs",
   "get_automation_jobs",
   "get_default_provider",
+  "get_experimental_config",
   "get_model_preferences",
   "get_model_registry",
   "get_model_registry_provider_ids",
@@ -68,7 +73,10 @@ const currentElectronHostRequiredCommands = new Set([
   "get_skill_detail",
   "knowledge_list_packs",
   "list_executable_skills",
+  "open_external_url",
   "project_memory_get",
+  "save_experimental_config",
+  "start_oem_cloud_oauth_callback_bridge",
   "workspace_ensure_default_ready",
   "workspace_ensure_ready",
   "workspace_get",
@@ -81,9 +89,42 @@ const currentElectronHostRequiredCommands = new Set([
 
 const currentDevBridgeTruthRequiredCommands = new Set([
   "agent_app_list_installed",
+  "agent_app_get_ui_runtime_status",
+  "agent_app_start_ui_runtime",
+  "agent_app_stop_ui_runtime",
+  "open_external_url",
+  "start_oem_cloud_oauth_callback_bridge",
   "knowledge_list_packs",
   "get_automation_jobs",
   "project_memory_get",
+]);
+
+const electronDiagnosticFacadeCommands = new Set([
+  "get_asr_credentials",
+  "get_browser_backend_policy",
+  "get_browser_backends_status",
+  "get_browser_connector_install_status_cmd",
+  "get_browser_connector_settings_cmd",
+  "get_chrome_bridge_endpoint_info",
+  "get_chrome_bridge_status",
+  "get_chrome_profile_sessions",
+  "get_daily_usage_trends",
+  "get_environment_preview",
+  "get_mcp_servers",
+  "get_model_usage_ranking",
+  "get_usage_stats",
+  "get_voice_input_config",
+  "get_voice_shortcut_runtime_status",
+  "list_audio_devices",
+  "mcp_list_prompts",
+  "mcp_list_resources",
+  "mcp_list_servers_with_status",
+  "mcp_list_tools",
+  "site_get_adapter_catalog_status",
+  "site_list_adapters",
+  "unified_memory_stats",
+  "voice_models_get_install_state",
+  "voice_models_list_catalog",
 ]);
 
 addDeferredCommands(
@@ -91,7 +132,6 @@ addDeferredCommands(
     "agent_start_process",
     "agent_stop_process",
     "agent_get_process_status",
-    "agent_generate_title",
     "aster_agent_status",
     "aster_agent_configure_provider",
     "aster_agent_reset",
@@ -196,11 +236,10 @@ addDeferredCommands(
     "capability_draft_get",
     "capability_draft_verify",
     "capability_draft_register",
-    "capability_draft_list_registered_skills",
     "capability_draft_submit_approval_session_inputs",
     "capability_draft_execute_controlled_get",
   ],
-  "compat: Capability Draft remains a gated native feature surface; keep it out of the App Server truth bridge until runtime binding is current.",
+  "compat: Capability Draft generation / verification / registration remains a gated native feature surface; registered skills discovery has moved to App Server workspaceRegisteredSkills/list.",
 );
 
 function normalizePath(filePath) {
@@ -546,6 +585,17 @@ function addRequiredSubstringFailures(
   }
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasStandaloneIdentifier(sourceCode, identifier) {
+  const pattern = new RegExp(
+    `(^|[^A-Za-z0-9_])${escapeRegExp(identifier)}([^A-Za-z0-9_]|$)`,
+  );
+  return pattern.test(sourceCode);
+}
+
 function extractNamedFunctionBody(sourceCode, marker) {
   const markerIndex = sourceCode.indexOf(marker);
   if (markerIndex < 0) {
@@ -864,6 +914,55 @@ function collectProductionBridgeGuardFailures() {
     });
   }
 
+  const electronHostCommandsPath = "electron/hostCommands.ts";
+  const electronHostCommandsSource = readSource(electronHostCommandsPath);
+  if (electronHostCommandsSource.includes('"aster_compat"')) {
+    failures.push({
+      file: electronHostCommandsPath,
+      message: "Electron 设置页诊断 facade 不能恢复 legacy Aster 浏览器后端",
+      token: '"aster_compat"',
+    });
+  }
+  if (electronHostCommandsSource.includes("auto_fallback: true")) {
+    failures.push({
+      file: electronHostCommandsPath,
+      message: "Electron 设置页诊断 facade 不能默认启用浏览器后端自动回退",
+      token: "auto_fallback: true",
+    });
+  }
+  for (const command of electronDiagnosticFacadeCommands) {
+    if (!electronHostCommandsSource.includes(`"${command}"`)) {
+      failures.push({
+        file: electronHostCommandsPath,
+        message: "设置页 Electron 诊断命令缺少 host facade 承接",
+        token: command,
+      });
+    }
+    const usesSharedMcpDiagnostic =
+      (command === "get_mcp_servers" || command.startsWith("mcp_list_")) &&
+      electronHostCommandsSource.includes(
+        "return this.#emptyDiagnosticList(command);",
+      );
+    const diagnosticMetaPattern = new RegExp(
+      `#diagnosticMeta\\([\\s\\S]*?["'\`]${escapeRegExp(command)}["'\`][\\s\\S]*?\\)`,
+    );
+    const emptyDiagnosticListPattern = new RegExp(
+      `#emptyDiagnosticList\\([\\s\\S]*?["'\`]${escapeRegExp(command)}["'\`][\\s\\S]*?\\)`,
+    );
+    const hasDiagnosticProjection =
+      diagnosticMetaPattern.test(electronHostCommandsSource) ||
+      emptyDiagnosticListPattern.test(electronHostCommandsSource) ||
+      usesSharedMcpDiagnostic;
+    if (!hasDiagnosticProjection) {
+      failures.push({
+        file: electronHostCommandsPath,
+        message:
+          "设置页 Electron 诊断命令必须显式标注 electron-host-diagnostic degraded",
+        token: command,
+      });
+    }
+  }
+
   const runElectronDevPath = "scripts/run-electron-dev.mjs";
   const runElectronDevSource = readSource(runElectronDevPath);
   for (const snippet of [
@@ -1024,6 +1123,47 @@ function collectProductionBridgeGuardFailures() {
   return failures;
 }
 
+function collectRetiredFileBrowserFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/desktop-host/fileSystemMocks.ts",
+      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能继续保留 desktop-host mock fixture",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/files.rs",
+      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/services/file_browser_service.rs",
+      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 Tauri command wrapper",
+    },
+    {
+      path: "lime-rs/crates/services/src/file_browser_service.rs",
+      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 services compat wrapper",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readSource(source.path);
+    for (const command of retiredFileBrowserFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
 function printGuardFailures(title, failures) {
   console.error(`\n## ${title}`);
   for (const failure of failures) {
@@ -1046,6 +1186,8 @@ function main() {
   const bridgeTruthCommands = collectBridgeTruthCommands();
   const agentCommandCatalog = readAgentCommandCatalog();
   const productionBridgeGuardFailures = collectProductionBridgeGuardFailures();
+  const retiredFileBrowserFacadeSourceFailures =
+    collectRetiredFileBrowserFacadeSourceFailures();
 
   const deprecatedCommands = new Set(
     Object.keys(agentCommandCatalog.deprecatedCommandReplacements ?? {}),
@@ -1076,6 +1218,15 @@ function main() {
   );
   const deprecatedCommandsStillUsed = new Set(
     [...frontendCommands].filter((command) => deprecatedCommands.has(command)),
+  );
+  const retiredFileBrowserFacadeLeaks = new Set(
+    [...retiredFileBrowserFacadeCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
   );
   const runtimeGatewayMissingRegistrations = new Set(
     [...runtimeGatewayCommands].filter(
@@ -1163,6 +1314,22 @@ function main() {
       "前端仍在调用的废弃命令",
       deprecatedCommandsStillUsed,
       frontendUsage,
+    );
+  }
+
+  if (retiredFileBrowserFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server fileSystem/* 的旧文件浏览命令不能回到 Electron Host 或 DevBridge truth surface",
+      retiredFileBrowserFacadeLeaks,
+    );
+  }
+
+  if (retiredFileBrowserFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server fileSystem/* 的旧文件浏览命令不能回到旧客户端源码",
+      retiredFileBrowserFacadeSourceFailures,
     );
   }
 

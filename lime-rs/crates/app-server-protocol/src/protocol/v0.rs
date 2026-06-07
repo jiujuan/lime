@@ -18,6 +18,11 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "ArtifactContentStatus",
     "ArtifactSummary",
     "ArtifactReadResponse",
+    "FileSystemListDirectoryParams",
+    "FileSystemReadFilePreviewParams",
+    "FileSystemDirectoryListing",
+    "FileSystemFileEntry",
+    "FileSystemFilePreview",
     "EvidenceExportParams",
     "EvidenceExportResponse",
     "EvidencePackSummary",
@@ -25,6 +30,8 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "AgentSessionListParams",
     "AgentSessionOverview",
     "AgentSessionListResponse",
+    "AgentSessionUpdateParams",
+    "AgentSessionUpdateResponse",
     "WorkspaceReadParams",
     "WorkspacePathReadParams",
     "WorkspaceProjectPathResolveParams",
@@ -39,7 +46,13 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "SkillReadResponse",
     "WorkspaceSkillBindingsListParams",
     "WorkspaceSkillBindingsListResponse",
+    "WorkspaceRegisteredSkillsListParams",
+    "WorkspaceRegisteredSkillsListResponse",
     "AgentAppInstalledListResponse",
+    "AgentAppUiRuntimeStartParams",
+    "AgentAppUiRuntimeStatusParams",
+    "AgentAppUiRuntimeStopParams",
+    "AgentAppUiRuntimeStatusResponse",
     "KnowledgeListPacksParams",
     "KnowledgeListPacksResponse",
     "AutomationJobListResponse",
@@ -54,6 +67,17 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "ModelProviderAliasReadParams",
     "ModelProviderAliasReadResponse",
     "ModelProviderAliasListResponse",
+    "ConnectDeepLinkResolveParams",
+    "ConnectPayload",
+    "ConnectDeepLinkResolveResponse",
+    "ConnectOpenDeepLinkResolveParams",
+    "OpenDeepLinkPayload",
+    "ConnectOpenDeepLinkResolveResponse",
+    "ConnectRelayApiKeySaveParams",
+    "ConnectRelayApiKeySaveResponse",
+    "ConnectCallbackStatus",
+    "ConnectCallbackSendParams",
+    "ConnectCallbackSendResponse",
     "AgentSessionStartParams",
     "AgentSessionStartResponse",
     "AgentSessionReadParams",
@@ -82,8 +106,11 @@ pub const METHOD_INITIALIZE: &str = "initialize";
 pub const METHOD_INITIALIZED: &str = "initialized";
 pub const METHOD_CAPABILITY_LIST: &str = "capability/list";
 pub const METHOD_ARTIFACT_READ: &str = "artifact/read";
+pub const METHOD_FILE_SYSTEM_LIST_DIRECTORY: &str = "fileSystem/listDirectory";
+pub const METHOD_FILE_SYSTEM_READ_FILE_PREVIEW: &str = "fileSystem/readFilePreview";
 pub const METHOD_EVIDENCE_EXPORT: &str = "evidence/export";
 pub const METHOD_AGENT_SESSION_LIST: &str = "agentSession/list";
+pub const METHOD_AGENT_SESSION_UPDATE: &str = "agentSession/update";
 pub const METHOD_WORKSPACE_LIST: &str = "workspace/list";
 pub const METHOD_WORKSPACE_READ: &str = "workspace/read";
 pub const METHOD_WORKSPACE_BY_PATH_READ: &str = "workspace/byPath/read";
@@ -95,7 +122,11 @@ pub const METHOD_WORKSPACE_ENSURE_READY: &str = "workspace/ensureReady";
 pub const METHOD_SKILL_LIST: &str = "skill/list";
 pub const METHOD_SKILL_READ: &str = "skill/read";
 pub const METHOD_WORKSPACE_SKILL_BINDINGS_LIST: &str = "workspaceSkillBindings/list";
+pub const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST: &str = "workspaceRegisteredSkills/list";
 pub const METHOD_AGENT_APP_INSTALLED_LIST: &str = "agentAppInstalled/list";
+pub const METHOD_AGENT_APP_UI_RUNTIME_START: &str = "agentAppUiRuntime/start";
+pub const METHOD_AGENT_APP_UI_RUNTIME_STATUS: &str = "agentAppUiRuntime/status";
+pub const METHOD_AGENT_APP_UI_RUNTIME_STOP: &str = "agentAppUiRuntime/stop";
 pub const METHOD_KNOWLEDGE_PACK_LIST: &str = "knowledgePack/list";
 pub const METHOD_AUTOMATION_JOB_LIST: &str = "automationJob/list";
 pub const METHOD_PROJECT_MEMORY_READ: &str = "projectMemory/read";
@@ -106,6 +137,10 @@ pub const METHOD_MODEL_PROVIDER_LIST: &str = "modelProvider/list";
 pub const METHOD_MODEL_PROVIDER_CATALOG_LIST: &str = "modelProvider/catalog/list";
 pub const METHOD_MODEL_PROVIDER_ALIAS_READ: &str = "modelProviderAlias/read";
 pub const METHOD_MODEL_PROVIDER_ALIAS_LIST: &str = "modelProviderAlias/list";
+pub const METHOD_CONNECT_DEEP_LINK_RESOLVE: &str = "connectDeepLink/resolve";
+pub const METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE: &str = "connectOpenDeepLink/resolve";
+pub const METHOD_CONNECT_RELAY_API_KEY_SAVE: &str = "connectRelayApiKey/save";
+pub const METHOD_CONNECT_CALLBACK_SEND: &str = "connectCallback/send";
 pub const METHOD_AGENT_SESSION_START: &str = "agentSession/start";
 pub const METHOD_AGENT_SESSION_READ: &str = "agentSession/read";
 pub const METHOD_AGENT_SESSION_TURN_START: &str = "agentSession/turn/start";
@@ -145,11 +180,23 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_EVIDENCE_EXPORT,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_UPDATE,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -197,7 +244,23 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_AGENT_APP_INSTALLED_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_UI_RUNTIME_START,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_UI_RUNTIME_STOP,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -238,6 +301,22 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_MODEL_PROVIDER_ALIAS_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_CONNECT_DEEP_LINK_RESOLVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_CONNECT_RELAY_API_KEY_SAVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_CONNECT_CALLBACK_SEND,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -433,6 +512,68 @@ pub struct ArtifactReadResponse {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemListDirectoryParams {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemReadFilePreviewParams {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_size: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemDirectoryListing {
+    pub path: String,
+    #[serde(default)]
+    pub parent_path: Option<String>,
+    #[serde(default)]
+    pub entries: Vec<FileSystemFileEntry>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemFileEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub modified_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_type: Option<String>,
+    #[serde(default)]
+    pub is_hidden: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode_str: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    #[serde(default)]
+    pub is_symlink: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_data_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemFilePreview {
+    pub path: String,
+    #[serde(default)]
+    pub content: Option<String>,
+    pub is_binary: bool,
+    pub size: u64,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct EvidenceExportParams {
@@ -542,6 +683,36 @@ pub struct AgentSessionListResponse {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentSessionUpdateParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_strategy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recent_access_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recent_preferences: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recent_team_selection: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionUpdateResponse {
+    pub session: AgentSessionOverview,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceReadParams {
     pub id: String,
 }
@@ -635,6 +806,19 @@ pub struct WorkspaceSkillBindingsListResponse {
     pub bindings: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceRegisteredSkillsListParams {
+    pub workspace_root: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceRegisteredSkillsListResponse {
+    #[serde(default)]
+    pub skills: Vec<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAppInstalledListResponse {
@@ -642,6 +826,47 @@ pub struct AgentAppInstalledListResponse {
     pub states: Vec<serde_json::Value>,
     #[serde(default)]
     pub issues: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUiRuntimeStartParams {
+    pub app_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUiRuntimeStatusParams {
+    pub app_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUiRuntimeStopParams {
+    pub app_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUiRuntimeStatusResponse {
+    pub app_id: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -741,6 +966,103 @@ pub struct ModelProviderAliasReadResponse {
 pub struct ModelProviderAliasListResponse {
     #[serde(default)]
     pub configs: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectDeepLinkResolveParams {
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectPayload {
+    pub relay: String,
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ref_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectDeepLinkResolveResponse {
+    pub payload: ConnectPayload,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_info: Option<serde_json::Value>,
+    pub is_verified: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectOpenDeepLinkResolveParams {
+    pub url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenDeepLinkPayload {
+    pub kind: String,
+    pub slug: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectOpenDeepLinkResolveResponse {
+    pub payload: OpenDeepLinkPayload,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectRelayApiKeySaveParams {
+    pub relay_id: String,
+    pub api_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectRelayApiKeySaveResponse {
+    pub provider_id: String,
+    pub key_id: String,
+    pub provider_name: String,
+    pub is_new_provider: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ConnectCallbackStatus {
+    Success,
+    Cancelled,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectCallbackSendParams {
+    pub relay_id: String,
+    pub api_key: String,
+    pub status: ConnectCallbackStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ref_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectCallbackSendResponse {
+    pub delivered: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -1650,8 +1972,11 @@ mod tests {
                 METHOD_INITIALIZED,
                 METHOD_CAPABILITY_LIST,
                 METHOD_ARTIFACT_READ,
+                METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+                METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
                 METHOD_EVIDENCE_EXPORT,
                 METHOD_AGENT_SESSION_LIST,
+                METHOD_AGENT_SESSION_UPDATE,
                 METHOD_WORKSPACE_LIST,
                 METHOD_WORKSPACE_READ,
                 METHOD_WORKSPACE_BY_PATH_READ,
@@ -1663,7 +1988,11 @@ mod tests {
                 METHOD_SKILL_LIST,
                 METHOD_SKILL_READ,
                 METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+                METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
                 METHOD_AGENT_APP_INSTALLED_LIST,
+                METHOD_AGENT_APP_UI_RUNTIME_START,
+                METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+                METHOD_AGENT_APP_UI_RUNTIME_STOP,
                 METHOD_KNOWLEDGE_PACK_LIST,
                 METHOD_AUTOMATION_JOB_LIST,
                 METHOD_PROJECT_MEMORY_READ,
@@ -1674,6 +2003,10 @@ mod tests {
                 METHOD_MODEL_PROVIDER_CATALOG_LIST,
                 METHOD_MODEL_PROVIDER_ALIAS_READ,
                 METHOD_MODEL_PROVIDER_ALIAS_LIST,
+                METHOD_CONNECT_DEEP_LINK_RESOLVE,
+                METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
+                METHOD_CONNECT_RELAY_API_KEY_SAVE,
+                METHOD_CONNECT_CALLBACK_SEND,
                 METHOD_AGENT_SESSION_START,
                 METHOD_AGENT_SESSION_READ,
                 METHOD_AGENT_SESSION_TURN_START,

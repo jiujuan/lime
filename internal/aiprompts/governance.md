@@ -214,7 +214,17 @@ npm run test:contracts
 - 旁路系统已经迁完
 - 边界检查与定向验证通过
 
-## Lime 特别关注的三类边界
+## Lime 特别关注的边界
+
+### 0. Electron 打包事实源
+
+Electron packaging / installer / signing / notarization / updater metadata 只能继续向 `forge.config.mjs`、`electron-forge package`、`electron-forge make` 与仓库内 Forge maker 收敛。
+
+- `current`：`forge.config.mjs`、`electron/forge/*`、Forge CLI、release workflow、staging / verifier / docs / contract guards
+- `current`：`electron/updateHost.ts` + `electron-updater`，只负责运行时更新检查、下载和安装会话
+- `dead`：`electron-builder.yml`、`electron-builder` CLI、builder yml 事实源、把 Electron Builder 当 current 的文档或 i18n evidence
+
+Windows 仍保持 NSIS installer / generic feed 语义，但必须由 Forge maker 承接；不得为了“统一 Forge”把 updater 语义改成另一套不兼容机制。发现新引用 `electron-builder.yml` 或 `npx electron-builder` 时，默认先判为旧路回流，而不是新增 compat。
 
 ### 1. 命令边界
 

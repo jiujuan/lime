@@ -17,7 +17,7 @@
 当前口径：
 
 - Chrome extension 已完成是否迁移 `_locales/messages.json` 的评估，当前记录为 `standardChromeLocaleDecisionRecorded=true`、`standardChromeLocaleWorkflowRequired=false`；继续保留轻量 `InstallI18n` registry，并用 drift / terminology inventory 作为门禁。
-- Installer / app metadata 已完成 build-time locale manifest workflow，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 仍表示不改写真实 Electron Builder / installer 配置。
+- Installer / app metadata 已完成 build-time locale manifest workflow，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 仍表示不改写真实 Electron Forge / installer 配置。
 - 文档站、installer 与 Chrome extension 的现状仍不等于已经生成多语言发布产物；本阶段完成的是 PRD P4 要求的评估、scope、manifest、smoke 与发布前审阅 workflow。
 
 验证：
@@ -34,11 +34,11 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n-app-metadata-locale-build-manifest.ts` 与测试 `scripts/i18n-app-metadata-locale-build-manifest.test.ts`，把 `app-metadata-translation-scope.json` 转成 build-time locale manifest；它只读提取 app / installer metadata 字段，检查 required localized value，不写回 `package.json`、`electron-builder.yml` 或平台安装器配置。
-- `internal/roadmap/i18n/app-metadata-translation-scope.json` 已把 `workflowStatus` 更新为 `ready`，新增 `manifestGenerationAllowed=true`，并为 `package.json#description` 这个 `translatable` 字段补齐 `en-US` localized value；Electron Builder 的 `productName / appId / deep-link scheme` 保持 stable brand / identifier。
+- 新增 `scripts/i18n-app-metadata-locale-build-manifest.ts` 与测试 `scripts/i18n-app-metadata-locale-build-manifest.test.ts`，把 `app-metadata-translation-scope.json` 转成 build-time locale manifest；它只读提取 app / installer metadata 字段，检查 required localized value，不写回 `package.json`、`forge.config.mjs` 或平台安装器配置。
+- `internal/roadmap/i18n/app-metadata-translation-scope.json` 已把 `workflowStatus` 更新为 `ready`，新增 `manifestGenerationAllowed=true`，并为 `package.json#description` 这个 `translatable` 字段补齐 `en-US` localized value；Electron Forge 的 `productName / appId / deep-link scheme` 保持 stable brand / identifier。
 - `package.json` 新增 `i18n:app-metadata-locale-manifest` / `i18n:app-metadata-locale-manifest:json` / `i18n:app-metadata-locale-manifest:check`，用于发布前生成和检查 metadata locale manifest。
 - `scripts/i18n-app-metadata-workflow-report.ts` 已消费 `app-metadata-locale-build-manifest.json`，当前 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`；`generatedConfigEmissionAllowed=false` 保持不变，避免把 manifest 误报成真实平台安装包配置生成。
-- `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把 app metadata locale manifest 接入推荐命令；metadata scope、Electron Builder 配置、package metadata 或相关脚本变化后，会提示先刷新 `app-metadata-locale-build-manifest.json`，再刷新 inventory / P4 / roadmap readiness。
+- `scripts/quality-task-planner.mjs` / `scripts/quality-task-planner.test.ts` 已把 app metadata locale manifest 接入推荐命令；metadata scope、Electron Forge 配置、package metadata 或相关脚本变化后，会提示先刷新 `app-metadata-locale-build-manifest.json`，再刷新 inventory / P4 / roadmap readiness。
 - 已刷新 `internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json`；当前 `workflowStatus=ready`，9 个 metadata entry 中 1 个 localized entry、3 个 stable entry、5 个 source-only entry，missing field 与 required localized missing 均为 `0`。
 
 验证：

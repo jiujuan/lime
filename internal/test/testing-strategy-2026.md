@@ -42,13 +42,13 @@
 
 ### deprecated
 
-- legacy Tauri adapter、legacy `tauri-mock`、旧 `tauri::generate_handler!` 相关测试口径
-- `tauri-driver` 作为仓库推荐 E2E 方案的说法
+- legacy desktop adapter、legacy desktop mock、旧宿主命令注册表相关测试口径
+- 旧桌面 WebDriver 方案作为仓库推荐 E2E 方案的说法
 - `npm run test:e2e` 作为现行测试入口的说法
 
 ### dead
 
-- 旧 `src-tauri` 路径、旧 Tauri GUI smoke、旧 Tauri-only E2E 口径
+- 旧桌面宿主源码路径、旧宿主 GUI smoke、旧宿主专用 E2E 口径
 - `npm run test:e2e` 作为现行仓库命令已不存在，不应继续作为测试标准引用
 
 ## 2. 已从待办移除的事项
@@ -58,7 +58,7 @@
 - 前端 `Vitest` 覆盖已经足够广，`src/components`、`src/hooks`、`src/lib/api`、`src/features/browser-runtime` 等已有大量测试
 - Rust 单测 / 集成测试基础已经存在，`lime-rs/src` 与多个 workspace crate 都有可运行测试
 - 本地统一校验入口已经存在：`test:frontend`、`test:bridge`、`test:rust`、`verify:local`、`verify:local:full`
-- 桥接基础测试已经存在：`src/lib/dev-bridge/safeInvoke.test.ts`、`src/lib/desktop-host/core.test.ts`；legacy `src/lib/tauri-mock/core.test.ts` 如保留，只能作为退役守卫
+- 桥接基础测试已经存在：`src/lib/dev-bridge/safeInvoke.test.ts`、`src/lib/desktop-host/core.test.ts`；legacy desktop mock 测试如保留，只能作为退役守卫
 - legacy 治理护栏已经存在：`npm run governance:legacy-report`
 - 旧权限表面治理护栏已经补齐：`src/lib/governance/legacyToolPermissionGuard.test.ts` + `npm run governance:legacy-report`
 - 跨层命令契约检查基础版已经落地：`npm run test:contracts` 已进入 `scripts/local-ci.mjs`
@@ -68,11 +68,11 @@
 
 ## 3. 当前仍未解决的问题优先级
 
-| 优先级 | 事项                                        | 为什么重要                                          | 当前证据                                                                                                                                                                                                  | 完成定义                                                                                               |
-| ------ | ------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| P1     | Agent eval 仍未完全工程化                   | 价值高，且当前最缺的是把证据沉淀成长期回归资产      | 已补 `internal/test/harness-evals.md`、`harness-evals.manifest.json`、`scripts/harness-eval-runner.mjs`、`scripts/harness-eval-trend-report.mjs` 与 nightly 摘要 / trend 骨架，但真实执行与更多高价值样本仍缺 | 形成稳定任务集、可增长 replay 样本、grader、nightly 输出与趋势指标                                     |
-| P1     | qcloop 真实运行结果尚未导出为 Evidence Pack | 运营级测试需要从“场景清单”进入“每次运行可审计证据” | 已补 Agent QC manifest、evidence schema 与本地报告脚本；Agent QC 已从 GitHub Actions / `test:contracts` 验证链路移出 | qcloop 批次可导出 `agent-qc-evidence.schema.json` 形状，并可被本地 / 人工发布证据流程消费             |
-| P2     | terminal / App Server sidecar 自包含 smoke 仍可继续扩面 | 最小 GUI smoke 基线已具备，但更细分主链仍缺专项守卫 | 当前 `smoke:electron / workspace-ready / browser-runtime / site-adapters` 已覆盖 GUI 最小主链；`smoke:social-workbench` 仍依赖已有 session，terminal / App Server sidecar 还没有各自独立的自包含 smoke 入口                            | 如后续需要继续扩面，应补 terminal 或 App Server sidecar 的独立 smoke，而不是继续把现有 current smoke 算成缺口 |
+| 优先级 | 事项                                                    | 为什么重要                                          | 当前证据                                                                                                                                                                                                      | 完成定义                                                                                                      |
+| ------ | ------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| P1     | Agent eval 仍未完全工程化                               | 价值高，且当前最缺的是把证据沉淀成长期回归资产      | 已补 `internal/test/harness-evals.md`、`harness-evals.manifest.json`、`scripts/harness-eval-runner.mjs`、`scripts/harness-eval-trend-report.mjs` 与 nightly 摘要 / trend 骨架，但真实执行与更多高价值样本仍缺 | 形成稳定任务集、可增长 replay 样本、grader、nightly 输出与趋势指标                                            |
+| P1     | qcloop 真实运行结果尚未导出为 Evidence Pack             | 运营级测试需要从“场景清单”进入“每次运行可审计证据”  | 已补 Agent QC manifest、evidence schema 与本地报告脚本；Agent QC 已从 GitHub Actions / `test:contracts` 验证链路移出                                                                                          | qcloop 批次可导出 `agent-qc-evidence.schema.json` 形状，并可被本地 / 人工发布证据流程消费                     |
+| P2     | terminal / App Server sidecar 自包含 smoke 仍可继续扩面 | 最小 GUI smoke 基线已具备，但更细分主链仍缺专项守卫 | 当前 `smoke:electron / workspace-ready / browser-runtime / site-adapters` 已覆盖 GUI 最小主链；`smoke:social-workbench` 仍依赖已有 session，terminal / App Server sidecar 还没有各自独立的自包含 smoke 入口   | 如后续需要继续扩面，应补 terminal 或 App Server sidecar 的独立 smoke，而不是继续把现有 current smoke 算成缺口 |
 
 ## 4. 建议执行顺序
 

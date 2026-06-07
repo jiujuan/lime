@@ -29,8 +29,12 @@ pub(super) async fn try_handle(
             >(&args_or_default(args), "request")?
             .unwrap_or_default();
             serde_json::to_value(
-                crate::services::companion_service::launch_pet_global(&companion_state, request)
-                    .await?,
+                crate::services::companion_service::launch_pet_global(
+                    &companion_state,
+                    app_handle.clone(),
+                    request,
+                )
+                .await?,
             )?
         }
         "companion_send_pet_command" => {

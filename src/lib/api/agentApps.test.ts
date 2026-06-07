@@ -18,6 +18,7 @@ import {
   reviewLocalAgentAppPackage,
   selectAgentAppDirectory,
   selectLocalAgentAppDirectory,
+  getAgentAppUiRuntimeStatus,
   startAgentAppUiRuntime,
   stopAgentAppUiRuntime,
   submitAgentAppRegistrationCode,
@@ -712,26 +713,31 @@ describe("agentApps API", () => {
     expect(result.payload.apps[0]?.releaseId).toBe("release-bootstrap");
   });
 
-  it("Agent App UI runtime 网关应使用嵌套 request 调用 current 命令", async () => {
-    vi.mocked(safeInvoke).mockImplementation(async (command) => {
-      if (command === "agent_app_start_ui_runtime") {
-        return {
+  it("Agent App UI runtime 网关应直连 App Server current 命令", async () => {
+    appServerRequestMock
+      .mockResolvedValueOnce({
+        result: {
           appId: "content-factory-app",
           status: "running",
           baseUrl: "http://127.0.0.1:4199",
           entryUrl: "http://127.0.0.1:4199/dashboard",
           entryKey: "dashboard",
           route: "/dashboard",
-        };
-      }
-      if (command === "agent_app_stop_ui_runtime") {
-        return {
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          appId: "content-factory-app",
+          status: "running",
+          entryUrl: "http://127.0.0.1:4199/dashboard",
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
           appId: "content-factory-app",
           status: "stopped",
-        };
-      }
-      throw new Error(`unexpected command ${command}`);
-    });
+        },
+      });
 
     await expect(
       startAgentAppUiRuntime({
@@ -743,24 +749,39 @@ describe("agentApps API", () => {
       entryUrl: "http://127.0.0.1:4199/dashboard",
     });
     await expect(
+      getAgentAppUiRuntimeStatus({ appId: "content-factory-app" }),
+    ).resolves.toMatchObject({ status: "running" });
+    await expect(
       stopAgentAppUiRuntime({ appId: "content-factory-app" }),
     ).resolves.toMatchObject({ status: "stopped" });
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       1,
-      "agent_app_start_ui_runtime",
+      "agentAppUiRuntime/start",
       {
-        request: {
-          appId: "content-factory-app",
-          entryKey: "dashboard",
-        },
+        appId: "content-factory-app",
+        entryKey: "dashboard",
       },
     );
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "agent_app_stop_ui_runtime", {
-      request: {
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
+      2,
+      "agentAppUiRuntime/status",
+      {
         appId: "content-factory-app",
       },
-    });
+    );
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
+      3,
+      "agentAppUiRuntime/stop",
+      {
+        appId: "content-factory-app",
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_start_ui_runtime");
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_get_ui_runtime_status",
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_stop_ui_runtime");
   });
 
   it("Agent App 宿主目录选择网关应走 current Desktop Host 命令", async () => {

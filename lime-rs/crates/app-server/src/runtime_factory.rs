@@ -316,8 +316,15 @@ mod tests {
             .list_capabilities(CapabilityListParams::default())
             .expect("capability list");
 
-        assert_eq!(response.capabilities.len(), 1);
-        assert_eq!(response.capabilities[0].id, "agent.session");
+        let ids = response
+            .capabilities
+            .iter()
+            .map(|capability| capability.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(ids.contains(&"agent.session"));
+        assert!(ids.contains(&"tool.WebFetch"));
+        assert!(ids.contains(&"tool.WebSearch"));
     }
 
     #[test]

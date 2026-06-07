@@ -71,7 +71,7 @@ describe("modelRegistry API", () => {
   it("getProviderAliasConfig 应复用已加载的全量别名配置", async () => {
     resolveAppServerRequest({
       configs: {
-        kiro: {
+        "custom-provider": {
           models: ["kimi-k2"],
           aliases: {
             "kimi-k2": {
@@ -84,12 +84,12 @@ describe("modelRegistry API", () => {
 
     await expect(getAllAliasConfigs()).resolves.toEqual(
       expect.objectContaining({
-        kiro: expect.objectContaining({
+        "custom-provider": expect.objectContaining({
           models: ["kimi-k2"],
         }),
       }),
     );
-    await expect(getProviderAliasConfig("kiro")).resolves.toEqual(
+    await expect(getProviderAliasConfig("custom-provider")).resolves.toEqual(
       expect.objectContaining({ models: ["kimi-k2"] }),
     );
 
@@ -188,21 +188,23 @@ describe("modelRegistry API", () => {
   it("单个 provider alias 应通过 App Server 读取并缓存", async () => {
     resolveAppServerRequest({
       config: {
-        provider: "kiro",
+        provider: "custom-provider",
         models: ["kimi-k2"],
         aliases: {},
       },
     });
 
-    await expect(getProviderAliasConfig("kiro")).resolves.toEqual(
-      expect.objectContaining({ provider: "kiro" }),
+    await expect(getProviderAliasConfig("custom-provider")).resolves.toEqual(
+      expect.objectContaining({ provider: "custom-provider" }),
     );
-    await expect(getProviderAliasConfig("kiro")).resolves.toEqual(
-      expect.objectContaining({ provider: "kiro" }),
+    await expect(getProviderAliasConfig("custom-provider")).resolves.toEqual(
+      expect.objectContaining({ provider: "custom-provider" }),
     );
 
     expect(appServerRequestMock).toHaveBeenCalledTimes(1);
-    expectAppServerRequest(1, "modelProviderAlias/read", { provider: "kiro" });
+    expectAppServerRequest(1, "modelProviderAlias/read", {
+      provider: "custom-provider",
+    });
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 

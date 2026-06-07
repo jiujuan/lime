@@ -138,4 +138,15 @@ describe("Electron current repository rules guard", () => {
     expect(content).not.toContain(retiredHostMockDir());
     expect(content).not.toContain("SC_DISABLE_SPEEDY");
   });
+
+  it("keeps renderer HTML entrypoint covered by the native startup shell", () => {
+    const content = readFile("index.html");
+
+    expect(content).toContain('data-lime-native-startup');
+    expect(content).toContain('data-lime-startup-shell');
+    expect(content).toContain('data-lime-startup-logo');
+    expect(content).toContain('params.get("nativeStartup") === "1"');
+    expect(content).toContain("index-startup-progress-shift");
+    expect(content).toContain("animation: index-startup-progress-shift");
+  });
 });

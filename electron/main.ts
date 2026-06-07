@@ -16,7 +16,18 @@ import {
 import { ElectronAppServerHost } from "./appServerHost";
 import { ElectronDevHttpBridge } from "./devHttpBridge";
 import { ElectronHostCommands } from "./hostCommands";
+import {
+  buildMainWindowChromeOptions,
+  buildMainWindowStartupDataUrl,
+  buildMainWindowStartupHtml,
+  buildMainWindowStartupOptions,
+} from "./mainWindowOptions";
 import { ElectronUpdateHost } from "./updateHost";
+import {
+  buildUpdateNotificationWindowBounds,
+  type RectangleLike,
+} from "./updateNotificationWindowPosition";
+import { buildUpdateNotificationWindowUrl } from "./updateNotificationWindowUrl";
 import {
   AppServerClient,
   decodeMessage,
@@ -33,6 +44,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  screen,
   session,
   type MenuItemConstructorOptions,
   type OpenDialogOptions,
@@ -41,14 +53,24 @@ import {
   Tray,
   type IpcMainInvokeEvent,
 } from "electron";
-import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isWindowsSquirrelStartup = handleWindowsSquirrelStartup();
 const appServerHost = new ElectronAppServerHost();
-const hostCommands = new ElectronHostCommands(appServerHost);
-const updateHost = new ElectronUpdateHost(broadcast);
+configureElectronUserDataPath();
+const hostCommands = new ElectronHostCommands(
+  appServerHost,
+  app.getPath("userData"),
+  broadcast,
+);
+const updateHost = new ElectronUpdateHost(broadcast, {
+  open: openUpdateNotificationWindow,
+  close: closeUpdateNotificationWindow,
+});
 let devHttpBridge: ElectronDevHttpBridge | null = null;
 const pendingDeepLinks: string[] = [];
 const pendingSkillPackageOpenPaths: string[] = [];
@@ -58,8 +80,16 @@ const APP_ICON_SOURCE = "lime-rs/icons/icon.png";
 const APP_ICON_PACKAGED_NAME = "icon.png";
 const SKILL_PACKAGE_OPEN_EVENT = "skill-package://open";
 const TRAY_MODEL_SELECTED_EVENT = "tray-model-selected";
+const STARTUP_SCREEN_VISIBLE_TIMEOUT_MS = 900;
+const UPDATE_NOTIFICATION_ANCHOR_SELECTOR =
+  '[data-testid="app-sidebar-update-button"]';
+const UPDATE_NOTIFICATION_WINDOW_SIZE = {
+  width: 232,
+  height: 182,
+};
 
 let mainWindow: BrowserWindow | null = null;
+let updateNotificationWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 let trayModelShortcutsState: TrayModelShortcutsState | null = null;
@@ -92,8 +122,9 @@ function createMainWindow(): BrowserWindow {
     height: 920,
     minWidth: 980,
     minHeight: 680,
-    show: false,
     title: APP_NAME,
+    ...buildMainWindowStartupOptions(),
+    ...buildMainWindowChromeOptions(),
     icon: resolveDesktopAsset(APP_ICON_SOURCE, APP_ICON_PACKAGED_NAME),
     webPreferences: {
       contextIsolation: true,
@@ -103,30 +134,29 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
-  window.once("ready-to-show", () => {
-    window.show();
-  });
-
   const devServerUrl = process.env.VITE_DEV_SERVER_URL?.trim();
   installMainWindowNavigationGuard(window, devServerUrl);
   installDevRendererContextMenu(window, devServerUrl);
   installDevRendererShortcuts(window, devServerUrl);
-  if (devServerUrl) {
-    void clearDevRendererCache().then(() => {
-      if (!window.isDestroyed()) {
-        void window.loadURL(devServerUrl);
-      }
-    });
-    if (process.env.LIME_ELECTRON_OPEN_DEVTOOLS === "1") {
-      window.webContents.openDevTools({ mode: "detach" });
+  void showStartupScreenBeforeRenderer(window, devServerUrl).catch((error) => {
+    if (isNavigationAbortError(error)) {
+      return;
     }
-  } else {
-    void window.loadFile(path.resolve(app.getAppPath(), "dist/index.html"));
-  }
+    console.error(
+      `[electron-host] main window renderer load failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  });
 
   if (process.env.LIME_ELECTRON_SMOKE === "1") {
-    window.webContents.once("did-finish-load", () => {
-      void runElectronSmokeChecks()
+    const runSmokeAfterRendererLoad = () => {
+      const loadedUrl = window.webContents.getURL();
+      if (loadedUrl.startsWith("data:text/html")) {
+        return;
+      }
+      window.webContents.off("did-finish-load", runSmokeAfterRendererLoad);
+      void runElectronSmokeChecks(window)
         .then(() => {
           void exitElectronSmoke(0);
         })
@@ -138,7 +168,8 @@ function createMainWindow(): BrowserWindow {
           );
           void exitElectronSmoke(1);
         });
-    });
+    };
+    window.webContents.on("did-finish-load", runSmokeAfterRendererLoad);
     window.webContents.once("did-fail-load", (_event, code, description) => {
       console.error(`[electron-smoke] renderer failed: ${code} ${description}`);
       void exitElectronSmoke(1);
@@ -162,6 +193,146 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
+async function showStartupScreenBeforeRenderer(
+  window: BrowserWindow,
+  devServerUrl?: string,
+): Promise<void> {
+  await loadMainWindowStartupScreen(window);
+  await waitForMainWindowStartupScreenVisible(window);
+  if (!window.isDestroyed()) {
+    window.show();
+  }
+  await loadMainWindowRenderer(window, devServerUrl);
+}
+
+async function loadMainWindowStartupScreen(
+  window: BrowserWindow,
+): Promise<void> {
+  const iconDataUrl = resolveStartupIconDataUrl();
+  const startupHtml = buildMainWindowStartupHtml({
+    appName: APP_NAME,
+    iconDataUrl,
+    locale: app.getLocale(),
+  });
+
+  try {
+    await window.loadURL(buildMainWindowStartupDataUrl(startupHtml));
+  } catch (error) {
+    console.warn(
+      `[electron-host] startup screen failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
+async function waitForMainWindowStartupScreenVisible(
+  window: BrowserWindow,
+): Promise<void> {
+  if (window.isDestroyed()) {
+    return;
+  }
+
+  try {
+    await Promise.race([
+      window.webContents.executeJavaScript(
+        `new Promise((resolve) => {
+          const finish = () => resolve(true);
+          const waitForPaint = () => {
+            requestAnimationFrame(() => requestAnimationFrame(finish));
+          };
+          const logo = document.querySelector("[data-lime-startup-logo]");
+          if (!logo || logo.tagName !== "IMG") {
+            waitForPaint();
+            return;
+          }
+          if (logo.complete && logo.naturalWidth > 0) {
+            waitForPaint();
+            return;
+          }
+          if (typeof logo.decode === "function") {
+            logo.decode().catch(() => undefined).then(waitForPaint);
+            return;
+          }
+          logo.addEventListener("load", waitForPaint, { once: true });
+          logo.addEventListener("error", waitForPaint, { once: true });
+        })`,
+      ),
+      new Promise((resolve) => {
+        setTimeout(resolve, STARTUP_SCREEN_VISIBLE_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    if (!window.isDestroyed()) {
+      console.warn(
+        `[electron-host] startup screen visibility wait failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+}
+
+async function loadMainWindowRenderer(
+  window: BrowserWindow,
+  devServerUrl?: string,
+): Promise<void> {
+  if (window.isDestroyed()) {
+    return;
+  }
+
+  if (devServerUrl) {
+    await clearDevRendererCache();
+    if (!window.isDestroyed()) {
+      await loadMainWindowUrl(window, withNativeStartupFlag(devServerUrl));
+    }
+    if (
+      !window.isDestroyed() &&
+      process.env.LIME_ELECTRON_OPEN_DEVTOOLS === "1"
+    ) {
+      window.webContents.openDevTools({ mode: "detach" });
+    }
+    return;
+  }
+
+  await loadMainWindowUrl(
+    window,
+    withNativeStartupFlag(
+      pathToFileURL(
+        path.resolve(app.getAppPath(), "dist/index.html"),
+      ).toString(),
+    ),
+  );
+}
+
+async function loadMainWindowUrl(
+  window: BrowserWindow,
+  url: string,
+): Promise<void> {
+  try {
+    await window.loadURL(url);
+  } catch (error) {
+    if (isNavigationAbortError(error)) {
+      return;
+    }
+    throw error;
+  }
+}
+
+function isNavigationAbortError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes("ERR_ABORTED") ||
+      error.message.includes("ERR_FAILED (-3)"))
+  );
+}
+
+function withNativeStartupFlag(targetUrl: string): string {
+  const url = new URL(targetUrl);
+  url.searchParams.set("nativeStartup", "1");
+  return url.toString();
+}
+
 async function clearDevRendererCache(): Promise<void> {
   if (process.env.LIME_ELECTRON_CLEAR_RENDERER_CACHE === "0") {
     return;
@@ -178,7 +349,7 @@ async function clearDevRendererCache(): Promise<void> {
   }
 }
 
-async function runElectronSmokeChecks(): Promise<void> {
+async function runElectronSmokeChecks(window: BrowserWindow): Promise<void> {
   console.log("[electron-smoke] renderer loaded");
   const client = new AppServerClient({ initialRequestId: 1 });
   const request = client.initialize({
@@ -215,6 +386,150 @@ async function runElectronSmokeChecks(): Promise<void> {
   }
   console.log(
     `[electron-smoke] app-server initialized protocol=${result.serverInfo.protocolVersion} version=${result.serverInfo.version}`,
+  );
+  await waitForElectronSmokeWorkbenchReady(window);
+  console.log("[electron-smoke] claw workbench shell ready");
+}
+
+async function waitForElectronSmokeWorkbenchReady(
+  window: BrowserWindow,
+): Promise<void> {
+  if (window.isDestroyed()) {
+    throw new Error("main window was destroyed before workbench smoke");
+  }
+
+  const result = (await window.webContents.executeJavaScript(
+    `new Promise((resolve) => {
+      const timeoutMs = 60000;
+      const intervalMs = 250;
+      const startedAt = Date.now();
+      const problemPatterns = [
+        /无法连接后端桥接/,
+        /Desktop Host 尚未支持命令/,
+        /Electron host command is not supported/,
+        /Electron host command is not implemented/,
+        /Unsupported command/,
+        /未知命令/,
+        /bridge cooldown active/,
+        /加载.*失败/,
+        /加载失败/,
+        /调用失败/,
+      ];
+      const sanitize = (value) => String(value || "").replace(/\\s+/g, " ").trim();
+      const readJsonArray = (key) => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      };
+      const isCurrentRunEntry = (entry) => {
+        const timestamp = Date.parse(entry?.timestamp || "");
+        return Number.isFinite(timestamp) && timestamp >= startedAt;
+      };
+      const visible = (element) => {
+        if (!element) {
+          return false;
+        }
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+      };
+      const collect = () => {
+        const text = document.body?.innerText || "";
+        const problemTexts = problemPatterns.flatMap((pattern) => {
+          const match = text.match(pattern);
+          return match ? [match[0]] : [];
+        });
+        const textareas = Array.from(document.querySelectorAll('textarea[name="agent-chat-message"]'));
+        const composer = textareas.find((item) => visible(item) && !item.disabled && item.getAttribute("aria-disabled") !== "true");
+        const shellReady = Boolean(document.querySelector('[data-testid="workspace-shell-scene"]'));
+        const inputbarReady = Boolean(document.querySelector('[data-testid="inputbar-core-container"]'));
+        const invokeErrors = readJsonArray("lime_invoke_error_buffer_v1").filter(isCurrentRunEntry);
+        const traceErrors = readJsonArray("lime_invoke_trace_buffer_v1").filter((entry) => entry && entry.status === "error" && isCurrentRunEntry(entry));
+        return {
+          ok: shellReady && inputbarReady && Boolean(composer) && problemTexts.length === 0 && invokeErrors.length === 0 && traceErrors.length === 0,
+          shellReady,
+          inputbarReady,
+          composerReady: Boolean(composer),
+          problemTexts,
+          invokeErrors: invokeErrors.slice(-5).map((entry) => ({
+            command: entry?.command || null,
+            transport: entry?.transport || null,
+            error: sanitize(entry?.error),
+          })),
+          traceErrors: traceErrors.slice(-5).map((entry) => ({
+            command: entry?.command || null,
+            transport: entry?.transport || null,
+            status: entry?.status || null,
+            error: sanitize(entry?.error),
+          })),
+          visibleButtons: Array.from(document.querySelectorAll("button"))
+            .map((button, index) => {
+              const rect = button.getBoundingClientRect();
+              return {
+                index,
+                visible: rect.width > 0 && rect.height > 0,
+                text: sanitize(button.textContent),
+                aria: button.getAttribute("aria-label") || "",
+                testId: button.getAttribute("data-testid") || "",
+                disabled: button.disabled || button.getAttribute("aria-disabled") === "true",
+              };
+            })
+            .filter((button) => button.visible && !button.disabled)
+            .slice(0, 24),
+          url: window.location.href,
+          title: document.title,
+          bodyStart: sanitize(text).slice(0, 500),
+        };
+      };
+      const tick = () => {
+        const snapshot = collect();
+        if (snapshot.ok) {
+          resolve(snapshot);
+          return;
+        }
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve(snapshot);
+          return;
+        }
+        setTimeout(tick, intervalMs);
+      };
+      tick();
+    })`,
+    true,
+  )) as {
+    ok?: boolean;
+    shellReady?: boolean;
+    inputbarReady?: boolean;
+    composerReady?: boolean;
+    problemTexts?: unknown[];
+    invokeErrors?: unknown[];
+    traceErrors?: unknown[];
+    visibleButtons?: unknown[];
+    url?: string;
+    title?: string;
+    bodyStart?: string;
+  };
+
+  if (result?.ok) {
+    return;
+  }
+
+  throw new Error(
+    `claw workbench shell not ready: ${JSON.stringify({
+      shellReady: result?.shellReady ?? false,
+      inputbarReady: result?.inputbarReady ?? false,
+      composerReady: result?.composerReady ?? false,
+      problemTexts: result?.problemTexts ?? [],
+      invokeErrors: result?.invokeErrors ?? [],
+      traceErrors: result?.traceErrors ?? [],
+      visibleButtons: result?.visibleButtons ?? [],
+      url: result?.url ?? "",
+      title: result?.title ?? "",
+      bodyStart: result?.bodyStart ?? "",
+    })}`,
   );
 }
 
@@ -483,6 +798,150 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
+async function openUpdateNotificationWindow(
+  params?: {
+    current?: string | null;
+    latest?: string | null;
+    downloadUrl?: string | null;
+  } | null,
+): Promise<void> {
+  const url = buildUpdateNotificationWindowUrl({
+    appPath: app.getAppPath(),
+    devServerUrl: process.env.VITE_DEV_SERVER_URL?.trim(),
+    current: params?.current,
+    latest: params?.latest,
+    downloadUrl: params?.downloadUrl,
+  });
+
+  if (updateNotificationWindow && !updateNotificationWindow.isDestroyed()) {
+    await loadMainWindowUrl(updateNotificationWindow, url);
+    await positionUpdateNotificationWindow(updateNotificationWindow);
+    updateNotificationWindow.show();
+    updateNotificationWindow.focus();
+    return;
+  }
+
+  updateNotificationWindow = new BrowserWindow({
+    width: UPDATE_NOTIFICATION_WINDOW_SIZE.width,
+    height: UPDATE_NOTIFICATION_WINDOW_SIZE.height,
+    minWidth: 220,
+    minHeight: 160,
+    maxWidth: 320,
+    maxHeight: 260,
+    title: "Lime Update",
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    show: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: "#00000000",
+    icon: resolveDesktopAsset(APP_ICON_SOURCE, APP_ICON_PACKAGED_NAME),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      preload: path.resolve(__dirname, "../preload/preload.cjs"),
+    },
+  });
+
+  updateNotificationWindow.on("closed", () => {
+    updateNotificationWindow = null;
+  });
+  updateNotificationWindow.once("ready-to-show", () => {
+    updateNotificationWindow?.show();
+    updateNotificationWindow?.focus();
+  });
+  updateNotificationWindow.webContents.setWindowOpenHandler(
+    ({ url: target }) => {
+      if (/^https?:\/\//i.test(target)) {
+        void shell.openExternal(target);
+      }
+      return { action: "deny" };
+    },
+  );
+
+  await positionUpdateNotificationWindow(updateNotificationWindow);
+  await loadMainWindowUrl(updateNotificationWindow, url);
+}
+
+async function closeUpdateNotificationWindow(): Promise<void> {
+  if (!updateNotificationWindow || updateNotificationWindow.isDestroyed()) {
+    updateNotificationWindow = null;
+    return;
+  }
+  updateNotificationWindow.close();
+}
+
+async function positionUpdateNotificationWindow(
+  window: BrowserWindow,
+): Promise<void> {
+  if (window.isDestroyed()) {
+    return;
+  }
+
+  const contentBounds = getUpdateNotificationReferenceContentBounds();
+  const anchorRect = await readUpdateNotificationAnchorRect();
+  const display = screen.getDisplayMatching(contentBounds);
+  window.setBounds(
+    buildUpdateNotificationWindowBounds({
+      anchorRect,
+      contentBounds,
+      updateWindowSize: UPDATE_NOTIFICATION_WINDOW_SIZE,
+      workArea: display.workArea,
+    }),
+  );
+}
+
+function getUpdateNotificationReferenceContentBounds(): RectangleLike {
+  const referenceWindow =
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (referenceWindow) {
+    return referenceWindow.getContentBounds();
+  }
+  return screen.getPrimaryDisplay().workArea;
+}
+
+async function readUpdateNotificationAnchorRect(): Promise<RectangleLike | null> {
+  const referenceWindow =
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (!referenceWindow) {
+    return null;
+  }
+
+  try {
+    return (await referenceWindow.webContents.executeJavaScript(
+      `(() => {
+        const element = document.querySelector(${JSON.stringify(
+          UPDATE_NOTIFICATION_ANCHOR_SELECTOR,
+        )});
+        if (!element) {
+          return null;
+        }
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) {
+          return null;
+        }
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        };
+      })()`,
+      true,
+    )) as RectangleLike | null;
+  } catch (error) {
+    console.warn(
+      `[electron-host] update notification anchor unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return null;
+  }
+}
+
 function loadTrayImage(): Electron.NativeImage {
   const preferred =
     process.platform === "darwin"
@@ -495,6 +954,23 @@ function loadTrayImage(): Electron.NativeImage {
     image.setTemplateImage(true);
   }
   return image;
+}
+
+function configureElectronUserDataPath(): void {
+  const e2eUserDataDir = process.env.ELECTRON_E2E_USER_DATA_DIR?.trim();
+  if (!e2eUserDataDir) {
+    return;
+  }
+  if (process.env.LIME_ELECTRON_E2E !== "1") {
+    console.warn(
+      "[electron-host] ELECTRON_E2E_USER_DATA_DIR is ignored outside E2E mode",
+    );
+    return;
+  }
+
+  const resolvedUserDataDir = path.resolve(e2eUserDataDir);
+  mkdirSync(resolvedUserDataDir, { recursive: true });
+  app.setPath("userData", resolvedUserDataDir);
 }
 
 function broadcast(event: string, payload?: unknown): void {
@@ -830,6 +1306,36 @@ function handleDeepLink(url: string): void {
   broadcast("deep-link-open-url", [url]);
 }
 
+function normalizeDeepLinkUrl(value: string): string | null {
+  const trimmed = value.trim().replace(/^["']|["']$/g, "");
+  if (!trimmed.startsWith("lime://")) {
+    return null;
+  }
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "lime:" ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+function collectDeepLinkUrls(values: string[]): string[] {
+  const urls: string[] = [];
+  for (const value of values) {
+    const normalized = normalizeDeepLinkUrl(value);
+    if (normalized && !urls.includes(normalized)) {
+      urls.push(normalized);
+    }
+  }
+  return urls;
+}
+
+function recordDeepLinkUrls(urls: string[]): void {
+  for (const url of urls) {
+    handleDeepLink(url);
+  }
+}
+
 function collectSkillPackageOpenPaths(values: string[]): string[] {
   const paths: string[] = [];
   for (const value of values) {
@@ -900,21 +1406,22 @@ app.on("open-file", (event, filePath) => {
   event.preventDefault();
   recordSkillPackageOpenPaths(collectSkillPackageOpenPaths([filePath]));
 });
+recordDeepLinkUrls(collectDeepLinkUrls(process.argv));
 recordSkillPackageOpenPaths(collectSkillPackageOpenPaths(process.argv));
 
 const singleInstanceLock =
-  process.env.LIME_ELECTRON_E2E === "1" ||
-  process.env.LIME_ELECTRON_SMOKE === "1" ||
-  app.requestSingleInstanceLock();
-if (!singleInstanceLock) {
+  !isWindowsSquirrelStartup &&
+  (process.env.LIME_ELECTRON_E2E === "1" ||
+    process.env.LIME_ELECTRON_SMOKE === "1" ||
+    app.requestSingleInstanceLock());
+if (isWindowsSquirrelStartup) {
+  // Windows Squirrel installer events are handled before the normal app boot path.
+} else if (!singleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", (_event, argv) => {
     showMainWindow();
-    const url = argv.find((arg) => arg.startsWith("lime://"));
-    if (url) {
-      handleDeepLink(url);
-    }
+    recordDeepLinkUrls(collectDeepLinkUrls(argv));
     recordSkillPackageOpenPaths(collectSkillPackageOpenPaths(argv));
   });
 
@@ -949,6 +1456,40 @@ app.on("before-quit", () => {
   devHttpBridge = null;
   void appServerHost.stop();
 });
+
+function handleWindowsSquirrelStartup(): boolean {
+  if (process.platform !== "win32") {
+    return false;
+  }
+
+  const command = process.argv[1];
+  const executableName = path.basename(process.execPath);
+  const updateExecutable = path.resolve(
+    path.dirname(process.execPath),
+    "..",
+    "Update.exe",
+  );
+  const runUpdate = (args: string[]) => {
+    spawn(updateExecutable, args, { detached: true }).once("close", () => {
+      app.quit();
+    });
+  };
+
+  if (command === "--squirrel-install" || command === "--squirrel-updated") {
+    runUpdate([`--createShortcut=${executableName}`]);
+    return true;
+  }
+  if (command === "--squirrel-uninstall") {
+    runUpdate([`--removeShortcut=${executableName}`]);
+    return true;
+  }
+  if (command === "--squirrel-obsolete") {
+    app.quit();
+    return true;
+  }
+
+  return false;
+}
 
 async function warmupAppServer(): Promise<void> {
   try {
@@ -994,6 +1535,16 @@ function resolveDesktopAsset(
   }
 
   return path.resolve(process.cwd(), sourceRelativePath);
+}
+
+function resolveStartupIconDataUrl(): string | null {
+  const iconPath = resolveDesktopAsset(APP_ICON_SOURCE, APP_ICON_PACKAGED_NAME);
+  try {
+    const icon = readFileSync(iconPath);
+    return `data:image/png;base64,${icon.toString("base64")}`;
+  } catch {
+    return null;
+  }
 }
 
 function configureApplicationIdentity(): void {

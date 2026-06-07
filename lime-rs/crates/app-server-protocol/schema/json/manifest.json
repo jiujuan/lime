@@ -16,6 +16,18 @@
     },
     {
       "kind": "request",
+      "method": "agentAppUiRuntime/start"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppUiRuntime/status"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppUiRuntime/stop"
+    },
+    {
+      "kind": "request",
       "method": "agentSession/action/respond"
     },
     {
@@ -44,6 +56,10 @@
     },
     {
       "kind": "request",
+      "method": "agentSession/update"
+    },
+    {
+      "kind": "request",
       "method": "artifact/read"
     },
     {
@@ -56,7 +72,31 @@
     },
     {
       "kind": "request",
+      "method": "connectCallback/send"
+    },
+    {
+      "kind": "request",
+      "method": "connectDeepLink/resolve"
+    },
+    {
+      "kind": "request",
+      "method": "connectOpenDeepLink/resolve"
+    },
+    {
+      "kind": "request",
+      "method": "connectRelayApiKey/save"
+    },
+    {
+      "kind": "request",
       "method": "evidence/export"
+    },
+    {
+      "kind": "request",
+      "method": "fileSystem/listDirectory"
+    },
+    {
+      "kind": "request",
+      "method": "fileSystem/readFilePreview"
     },
     {
       "kind": "request",
@@ -144,6 +184,10 @@
     },
     {
       "kind": "request",
+      "method": "workspaceRegisteredSkills/list"
+    },
+    {
+      "kind": "request",
       "method": "workspaceSkillBindings/list"
     }
   ],
@@ -160,6 +204,10 @@
     ],
     "v0": [
       "AgentAppInstalledListResponse",
+      "AgentAppUiRuntimeStartParams",
+      "AgentAppUiRuntimeStatusParams",
+      "AgentAppUiRuntimeStatusResponse",
+      "AgentAppUiRuntimeStopParams",
       "AgentAttachment",
       "AgentEvent",
       "AgentInput",
@@ -181,6 +229,8 @@
       "AgentSessionTurnCancelResponse",
       "AgentSessionTurnStartParams",
       "AgentSessionTurnStartResponse",
+      "AgentSessionUpdateParams",
+      "AgentSessionUpdateResponse",
       "AgentTurn",
       "AgentTurnStatus",
       "ArtifactContentStatus",
@@ -194,10 +244,25 @@
       "CapabilityListResponse",
       "ClientCapabilities",
       "ClientInfo",
+      "ConnectCallbackSendParams",
+      "ConnectCallbackSendResponse",
+      "ConnectCallbackStatus",
+      "ConnectDeepLinkResolveParams",
+      "ConnectDeepLinkResolveResponse",
+      "ConnectOpenDeepLinkResolveParams",
+      "ConnectOpenDeepLinkResolveResponse",
+      "ConnectPayload",
+      "ConnectRelayApiKeySaveParams",
+      "ConnectRelayApiKeySaveResponse",
       "EvidenceExportParams",
       "EvidenceExportResponse",
       "EvidencePackArtifact",
       "EvidencePackSummary",
+      "FileSystemDirectoryListing",
+      "FileSystemFileEntry",
+      "FileSystemFilePreview",
+      "FileSystemListDirectoryParams",
+      "FileSystemReadFilePreviewParams",
       "InitializeParams",
       "InitializeResponse",
       "KnowledgeListPacksParams",
@@ -211,6 +276,7 @@
       "ModelProviderCatalogListResponse",
       "ModelProviderListResponse",
       "ModelSyncStateReadResponse",
+      "OpenDeepLinkPayload",
       "PlatformInfo",
       "ProjectMemoryReadParams",
       "ProjectMemoryReadResponse",
@@ -229,6 +295,8 @@
       "WorkspaceProjectsRootReadResponse",
       "WorkspaceReadParams",
       "WorkspaceReadResponse",
+      "WorkspaceRegisteredSkillsListParams",
+      "WorkspaceRegisteredSkillsListResponse",
       "WorkspaceSkillBindingsListParams",
       "WorkspaceSkillBindingsListResponse"
     ]

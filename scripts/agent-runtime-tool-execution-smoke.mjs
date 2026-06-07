@@ -1714,6 +1714,7 @@ async function runSmoke(options) {
 
   console.log(`${LOG_PREFIX} stage=fixture-provider`);
   const fixture = await startOpenAiCompatibleFixtureServer({
+    deferScriptedToolCallsUntilAvailable: options.batch === "web-tools",
     scriptedResponses,
   });
   console.log(
@@ -1728,6 +1729,7 @@ async function runSmoke(options) {
       {
         workspaceId,
         name: `Tool execution fixture ${scenario.id} ${new Date().toISOString()}`,
+        executionStrategy: "react",
         runStartHooks: false,
         metadata: {
           harness: {

@@ -225,11 +225,10 @@ const AUTO_RUNTIME_MEMORY_SESSION_MESSAGE_LIMIT: usize = 8;
 const AUTO_RUNTIME_MEMORY_SESSION_MIN_MESSAGE_LENGTH: usize = 18;
 const FAST_RESPONSE_SYSTEM_PROMPT_OVERRIDE_MAX_CHARS: usize = 800;
 const RUNTIME_TURN_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(45);
-const COMPACTION_FALLBACK_PROVIDER_CHAIN: [(&str, &str); 4] = [
+const COMPACTION_FALLBACK_PROVIDER_CHAIN: [(&str, &str); 3] = [
     ("deepseek", "deepseek-chat"),
     ("openai", "gpt-4o-mini"),
     ("anthropic", "claude-3-haiku-20240307"),
-    ("kiro", "anthropic.claude-3-haiku-20240307-v1:0"),
 ];
 
 #[derive(Clone, Copy)]

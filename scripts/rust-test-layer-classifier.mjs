@@ -41,7 +41,13 @@ function parseWorkspaceMemberRoots(repoRoot) {
   );
 
   const roots = new Map();
-  roots.set("lime-rs", { packageName: "lime", workspaceMember: true });
+  const rootPackageName = readPackageName(cargoTomlPath);
+  if (rootPackageName) {
+    roots.set("lime-rs", {
+      packageName: rootPackageName,
+      workspaceMember: true,
+    });
+  }
 
   const cratesDir = path.join(repoRoot, "lime-rs", "crates");
   if (!fs.existsSync(cratesDir)) {
@@ -89,8 +95,9 @@ function findPackageRoot(relFile, memberRoots) {
   }
   return {
     root: "lime-rs",
-    packageName: "lime",
-    workspaceMember: true,
+    packageName: "workspace-root",
+    workspaceMember: false,
+    unmanagedRoot: true,
   };
 }
 
@@ -141,9 +148,11 @@ export function classifyRustTestFiles(repoRoot = process.cwd(), files = null) {
     const ignoredCount = (content.match(IGNORE_ATTRIBUTE_RE) || []).length;
     const liveGated = ignoredCount > 0 && LIVE_GATE_RE.test(content);
     const layer = classifyLayer(toPosix(file), packageInfo.root, liveGated);
-    const cargoScope = packageInfo.workspaceMember
-      ? "workspace"
-      : "excluded-subcrate";
+    const cargoScope = packageInfo.unmanagedRoot
+      ? "unmanaged-root"
+      : packageInfo.workspaceMember
+        ? "workspace"
+        : "excluded-subcrate";
     const hasDefaultRunnableTests = testCount > ignoredCount && layer !== "e2e";
 
     return [
@@ -172,7 +181,9 @@ export function classifyRustTestFiles(repoRoot = process.cwd(), files = null) {
 
 function buildReasons({ relFile, layer, liveGated, cargoScope, packageRoot }) {
   const reasons = [];
-  if (cargoScope === "excluded-subcrate") {
+  if (cargoScope === "unmanaged-root") {
+    reasons.push("not a Cargo package in workspace manifest");
+  } else if (cargoScope === "excluded-subcrate") {
     reasons.push("excluded from lime-rs workspace manifest");
   }
   if (liveGated) {
@@ -216,10 +227,14 @@ export function buildRustLayerReport(options = {}) {
     generatedAt: new Date().toISOString(),
     totalFiles: entries.length,
     totalTests: entries.reduce((sum, entry) => sum + entry.testCount, 0),
-    runnableByDefault: entries.filter((entry) => entry.runnableByDefault).length,
+    runnableByDefault: entries.filter((entry) => entry.runnableByDefault)
+      .length,
     liveGated: entries.filter((entry) => entry.liveGated).length,
     excludedSubcrateFiles: entries.filter(
       (entry) => entry.cargoScope === "excluded-subcrate",
+    ).length,
+    unmanagedRootFiles: entries.filter(
+      (entry) => entry.cargoScope === "unmanaged-root",
     ).length,
     layers: byLayer,
     entries,
@@ -234,6 +249,7 @@ export function renderRustLayerReportText(report) {
     `Runnable by default: ${report.runnableByDefault}`,
     `Live-gated: ${report.liveGated}`,
     `Excluded subcrate files: ${report.excludedSubcrateFiles}`,
+    `Unmanaged root files: ${report.unmanagedRootFiles ?? 0}`,
     "",
     "Layers:",
   ];
@@ -260,7 +276,17 @@ export function renderRustLayerReportText(report) {
   }
 
   if (report.excludedSubcrateFiles > 0) {
-    lines.push("", "Excluded subcrate test files are counted for governance only.");
+    lines.push(
+      "",
+      "Excluded subcrate test files are counted for governance only.",
+    );
+  }
+
+  if ((report.unmanagedRootFiles ?? 0) > 0) {
+    lines.push(
+      "",
+      "Unmanaged root test files are counted for governance only.",
+    );
   }
 
   lines.push("");

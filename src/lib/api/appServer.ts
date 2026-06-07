@@ -7,9 +7,12 @@ import {
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
+  METHOD_AGENT_SESSION_UPDATE,
   METHOD_ARTIFACT_READ,
   METHOD_CAPABILITY_LIST,
   METHOD_EVIDENCE_EXPORT,
+  METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+  METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
   PROTOCOL_VERSION,
@@ -39,6 +42,8 @@ import {
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartParams,
   type AgentSessionTurnStartResponse,
+  type AgentSessionUpdateParams,
+  type AgentSessionUpdateResponse,
   type AgentTurn,
   type AgentTurnStatus,
   type ArtifactContentStatus,
@@ -55,6 +60,11 @@ import {
   type EvidenceExportResponse,
   type EvidencePackArtifact,
   type EvidencePackSummary,
+  type FileSystemDirectoryListing,
+  type FileSystemFileEntry,
+  type FileSystemFilePreview,
+  type FileSystemListDirectoryParams,
+  type FileSystemReadFilePreviewParams,
   type InitializeParams,
   type InitializeResponse,
   type JsonRpcError,
@@ -76,9 +86,15 @@ export const APP_SERVER_METHOD_INITIALIZE = METHOD_INITIALIZE;
 export const APP_SERVER_METHOD_INITIALIZED = METHOD_INITIALIZED;
 export const APP_SERVER_METHOD_CAPABILITY_LIST = METHOD_CAPABILITY_LIST;
 export const APP_SERVER_METHOD_ARTIFACT_READ = METHOD_ARTIFACT_READ;
+export const APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY =
+  METHOD_FILE_SYSTEM_LIST_DIRECTORY;
+export const APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW =
+  METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = METHOD_EVIDENCE_EXPORT;
 export const APP_SERVER_METHOD_AGENT_SESSION_START = METHOD_AGENT_SESSION_START;
 export const APP_SERVER_METHOD_AGENT_SESSION_READ = METHOD_AGENT_SESSION_READ;
+export const APP_SERVER_METHOD_AGENT_SESSION_UPDATE =
+  METHOD_AGENT_SESSION_UPDATE;
 export const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
   METHOD_AGENT_SESSION_TURN_START;
 export const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =
@@ -103,6 +119,8 @@ export type AppServerDrainEventsResult = {
   lines: string[];
 };
 
+type AppServerSafeInvokeEnvelope<T> = T | { result?: T };
+
 export type AppServerRequestId = RequestId;
 export type AppServerJsonValue = JsonValue;
 export type AppServerJsonRpcRequest = JsonRpcRequest;
@@ -123,6 +141,13 @@ export type AppServerArtifactReadParams = ArtifactReadParams;
 export type AppServerArtifactContentStatus = ArtifactContentStatus;
 export type AppServerArtifactSummary = ArtifactSummary;
 export type AppServerArtifactReadResponse = ArtifactReadResponse;
+export type AppServerFileSystemListDirectoryParams =
+  FileSystemListDirectoryParams;
+export type AppServerFileSystemReadFilePreviewParams =
+  FileSystemReadFilePreviewParams;
+export type AppServerFileSystemDirectoryListing = FileSystemDirectoryListing;
+export type AppServerFileSystemFileEntry = FileSystemFileEntry;
+export type AppServerFileSystemFilePreview = FileSystemFilePreview;
 export type AppServerEvidenceExportParams = EvidenceExportParams;
 export type AppServerEvidenceExportResponse = EvidenceExportResponse;
 export type AppServerEvidencePackSummary = EvidencePackSummary;
@@ -146,6 +171,8 @@ export type AppServerAgentTurn = AgentTurn;
 export type AppServerAgentEvent = AgentEvent;
 export type AppServerAgentSessionStartResponse = AgentSessionStartResponse;
 export type AppServerAgentSessionReadResponse = AgentSessionReadResponse;
+export type AppServerAgentSessionUpdateParams = AgentSessionUpdateParams;
+export type AppServerAgentSessionUpdateResponse = AgentSessionUpdateResponse;
 export type AppServerAgentSessionTurnStartResponse =
   AgentSessionTurnStartResponse;
 export type AppServerAgentSessionTurnCancelResponse =
@@ -186,19 +213,36 @@ export class AppServerRpcError extends Error {
 export async function handleAppServerJsonLines(
   request: AppServerHandleJsonLinesRequest,
 ): Promise<AppServerHandleJsonLinesResult> {
-  return await safeInvoke<AppServerHandleJsonLinesResult>(
-    "app_server_handle_json_lines",
-    { request },
+  return unwrapAppServerSafeInvokeResult(
+    await safeInvoke<
+      AppServerSafeInvokeEnvelope<AppServerHandleJsonLinesResult>
+    >("app_server_handle_json_lines", { request }),
   );
 }
 
 export async function drainAppServerEvents(
   request: AppServerDrainEventsRequest = {},
 ): Promise<AppServerDrainEventsResult> {
-  return await safeInvoke<AppServerDrainEventsResult>(
-    "app_server_drain_events",
-    { request },
+  return unwrapAppServerSafeInvokeResult(
+    await safeInvoke<AppServerSafeInvokeEnvelope<AppServerDrainEventsResult>>(
+      "app_server_drain_events",
+      { request },
+    ),
   );
+}
+
+function unwrapAppServerSafeInvokeResult<T>(
+  payload: AppServerSafeInvokeEnvelope<T>,
+): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    "result" in payload
+  ) {
+    return (payload as { result?: T }).result as T;
+  }
+  return payload as T;
 }
 
 export function createAppServerRequest(
@@ -284,6 +328,24 @@ export class AppServerClient {
     );
   }
 
+  async listDirectory(
+    params: AppServerFileSystemListDirectoryParams,
+  ): Promise<AppServerRequestResult<AppServerFileSystemDirectoryListing>> {
+    return await this.request<AppServerFileSystemDirectoryListing>(
+      APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+      params,
+    );
+  }
+
+  async readFilePreview(
+    params: AppServerFileSystemReadFilePreviewParams,
+  ): Promise<AppServerRequestResult<AppServerFileSystemFilePreview>> {
+    return await this.request<AppServerFileSystemFilePreview>(
+      APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+      params,
+    );
+  }
+
   async exportEvidence(
     params: AppServerEvidenceExportParams,
   ): Promise<AppServerRequestResult<AppServerEvidenceExportResponse>> {
@@ -298,6 +360,15 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerAgentSessionReadResponse>> {
     return await this.request<AppServerAgentSessionReadResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_READ,
+      params,
+    );
+  }
+
+  async updateSession(
+    params: AppServerAgentSessionUpdateParams,
+  ): Promise<AppServerRequestResult<AppServerAgentSessionUpdateResponse>> {
+    return await this.request<AppServerAgentSessionUpdateResponse>(
+      APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
       params,
     );
   }

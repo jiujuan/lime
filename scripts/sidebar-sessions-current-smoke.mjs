@@ -290,7 +290,7 @@ function collectInvokeEntry(requestPayload, responsePayload, requestUrl) {
   };
 }
 
-function summarizeInvokeEntries(entries) {
+function summarizeInvokeEntries(entries, options = {}) {
   const appServerRequests = entries.flatMap((entry) => entry.appServerRequests);
   const appServerMethodsSeen = Array.from(
     new Set(appServerRequests.map((request) => request.method)),
@@ -298,6 +298,13 @@ function summarizeInvokeEntries(entries) {
   const agentSessionListRequests = appServerRequests.filter(
     (request) => request.method === "agentSession/list",
   );
+  const seededWorkspaceId =
+    typeof options.workspaceId === "string" ? options.workspaceId.trim() : "";
+  const seededWorkspaceFilterRequests = seededWorkspaceId
+    ? agentSessionListRequests.filter(
+        (request) => request.params?.workspaceId === seededWorkspaceId,
+      )
+    : [];
   const legacySessionCommandsSeen = Array.from(
     new Set(
       entries
@@ -316,6 +323,29 @@ function summarizeInvokeEntries(entries) {
   const archivedOnlySeen = agentSessionListRequests.some(
     (request) => request.params?.archivedOnly === true,
   );
+  const agentSessionListResponses = entries.flatMap((entry) =>
+    entry.appServerRequests
+      .filter((request) => request.method === "agentSession/list")
+      .map((request) => {
+        const response = entry.responseMessages.find(
+          (message) => message?.id === request.id,
+        );
+        const sessions = response?.result?.sessions;
+        return {
+          id: request.id,
+          archivedOnly: request.params?.archivedOnly === true,
+          valid: Array.isArray(sessions),
+          sessionsCount: Array.isArray(sessions) ? sessions.length : null,
+          error: response?.error ? sanitizeJson(response.error) : null,
+        };
+      }),
+  );
+  const recentSessionListResponsesValid = agentSessionListResponses.some(
+    (response) => !response.archivedOnly && response.valid,
+  );
+  const archivedSessionListResponsesValid = agentSessionListResponses.some(
+    (response) => response.archivedOnly && response.valid,
+  );
 
   return {
     appServerHandleJsonLinesSeen,
@@ -323,6 +353,11 @@ function summarizeInvokeEntries(entries) {
     legacySessionCommandsSeen,
     agentSessionListRequestCount: agentSessionListRequests.length,
     agentSessionListRequests,
+    agentSessionListResponses,
+    seededWorkspaceFilterRequestCount: seededWorkspaceFilterRequests.length,
+    seededWorkspaceFilterRequests,
+    recentSessionListResponsesValid,
+    archivedSessionListResponsesValid,
     archivedOnlySeen,
     missingRequiredAppServerMethods: REQUIRED_APP_SERVER_METHODS.filter(
       (method) => !appServerMethodsSeen.includes(method),
@@ -333,19 +368,22 @@ function summarizeInvokeEntries(entries) {
 async function waitForInvokeEvidence(entries, options) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < Math.min(30_000, options.timeoutMs)) {
-    const observed = summarizeInvokeEntries(entries);
+    const observed = summarizeInvokeEntries(entries, options);
     if (
       observed.appServerHandleJsonLinesSeen &&
       observed.missingRequiredAppServerMethods.length === 0 &&
       observed.agentSessionListRequestCount >= 2 &&
       observed.archivedOnlySeen &&
+      observed.recentSessionListResponsesValid &&
+      observed.archivedSessionListResponsesValid &&
+      observed.seededWorkspaceFilterRequestCount === 0 &&
       observed.legacySessionCommandsSeen.length === 0
     ) {
       return observed;
     }
     await sleep(250);
   }
-  return summarizeInvokeEntries(entries);
+  return summarizeInvokeEntries(entries, options);
 }
 
 function resolveLocalChromeExecutablePath() {
@@ -482,6 +520,11 @@ async function run() {
     legacySessionCommandsSeen: [],
     agentSessionListRequestCount: 0,
     agentSessionListRequests: [],
+    agentSessionListResponses: [],
+    seededWorkspaceFilterRequestCount: 0,
+    seededWorkspaceFilterRequests: [],
+    recentSessionListResponsesValid: false,
+    archivedSessionListResponsesValid: false,
     archivedOnlySeen: false,
     missingRequiredAppServerMethods: [...REQUIRED_APP_SERVER_METHODS],
     consoleErrors: [],
@@ -601,6 +644,18 @@ async function run() {
     );
     assert(summary.archivedOnlySeen, "未观察到归档列表 archivedOnly=true 请求");
     assert(
+      summary.recentSessionListResponsesValid,
+      "未观察到最近对话 agentSession/list 的有效 sessions 数组响应",
+    );
+    assert(
+      summary.archivedSessionListResponsesValid,
+      "未观察到归档对话 agentSession/list 的有效 sessions 数组响应",
+    );
+    assert(
+      summary.seededWorkspaceFilterRequestCount === 0,
+      `观察到本地记忆项目污染 agentSession/list workspaceId: ${JSON.stringify(summary.seededWorkspaceFilterRequests)}`,
+    );
+    assert(
       summary.legacySessionCommandsSeen.length === 0,
       `观察到 legacy session 命令: ${summary.legacySessionCommandsSeen.join(", ")}`,
     );
@@ -615,7 +670,7 @@ async function run() {
     summary.error = error instanceof Error ? error.message : String(error);
     summary.consoleErrors = consoleErrors;
     summary.failedRequests = failedRequests.slice(0, 20);
-    const observed = summarizeInvokeEntries(invokeEntries);
+    const observed = summarizeInvokeEntries(invokeEntries, options);
     Object.assign(summary, observed);
     writeJsonFile(networkPath, {
       entries: invokeEntries,

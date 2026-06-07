@@ -24,13 +24,12 @@ env:
   RUSTUP_MAX_RETRIES: 10
   CARGO_TERM_COLOR: always
   NODE_OPTIONS: --max-old-space-size=8192
-  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
   ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
   LIME_ELECTRON_UPDATES_URL: https://updates.limecloud.com/lime/stable/win32-x64/
 
 jobs:
   build-windows-test:
-    name: Build Electron Windows x64 NSIS installer
+    name: Build Electron Windows x64 Squirrel installer
     runs-on: windows-2022
     timeout-minutes: 90
 
@@ -79,14 +78,14 @@ jobs:
         run: |
           set -euxo pipefail
           npm run electron:build
-          npx electron-builder --win nsis --x64 --publish never
+          npx electron-forge make --platform win32 --arch x64 --targets squirrel
           VERSION="$(node -p "require('./package.json').version")"
           node scripts/verify-electron-package-resources.mjs \
             --package-root release-electron \
             --platform win32 \
             --arch x64
           node scripts/stage-electron-release-assets.mjs \
-            --builder-dir release-electron \
+            --forge-dir release-electron \
             --out-dir windows-test-package \
             --target-triple x86_64-pc-windows-msvc \
             --version "$VERSION"

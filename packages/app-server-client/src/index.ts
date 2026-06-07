@@ -16,6 +16,9 @@ import {
   APP_SERVER_METHODS,
   JSONRPC_VERSION,
   METHOD_AGENT_APP_INSTALLED_LIST,
+  METHOD_AGENT_APP_UI_RUNTIME_START,
+  METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+  METHOD_AGENT_APP_UI_RUNTIME_STOP,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_EVENT,
   METHOD_AGENT_SESSION_LIST,
@@ -23,10 +26,17 @@ import {
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
+  METHOD_AGENT_SESSION_UPDATE,
   METHOD_ARTIFACT_READ,
   METHOD_AUTOMATION_JOB_LIST,
   METHOD_CAPABILITY_LIST,
+  METHOD_CONNECT_CALLBACK_SEND,
+  METHOD_CONNECT_DEEP_LINK_RESOLVE,
+  METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
+  METHOD_CONNECT_RELAY_API_KEY_SAVE,
   METHOD_EVIDENCE_EXPORT,
+  METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+  METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
   METHOD_KNOWLEDGE_PACK_LIST,
@@ -48,6 +58,7 @@ import {
   METHOD_WORKSPACE_PROJECTS_ROOT_READ,
   METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
   METHOD_WORKSPACE_READ,
+  METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
   METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
   PROTOCOL_VERSION,
   agentSessionEventNotification,
@@ -72,7 +83,13 @@ import {
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartParams,
   type AgentSessionTurnStartResponse,
+  type AgentSessionUpdateParams,
+  type AgentSessionUpdateResponse,
   type AgentAppInstalledListResponse,
+  type AgentAppUiRuntimeStartParams,
+  type AgentAppUiRuntimeStatusParams,
+  type AgentAppUiRuntimeStatusResponse,
+  type AgentAppUiRuntimeStopParams,
   type AppServerMethodSpec,
   type AppServerProtocolSchemaManifest,
   type ArtifactReadParams,
@@ -81,8 +98,20 @@ import {
   type AutomationJobListResponse,
   type CapabilityListParams,
   type CapabilityListResponse,
+  type ConnectCallbackSendParams,
+  type ConnectCallbackSendResponse,
+  type ConnectDeepLinkResolveParams,
+  type ConnectDeepLinkResolveResponse,
+  type ConnectOpenDeepLinkResolveParams,
+  type ConnectOpenDeepLinkResolveResponse,
+  type ConnectRelayApiKeySaveParams,
+  type ConnectRelayApiKeySaveResponse,
   type EvidenceExportParams,
   type EvidenceExportResponse,
+  type FileSystemDirectoryListing,
+  type FileSystemFilePreview,
+  type FileSystemListDirectoryParams,
+  type FileSystemReadFilePreviewParams,
   type InitializeParams,
   type InitializeResponse,
   type JsonRpcErrorResponse,
@@ -118,6 +147,8 @@ import {
   type WorkspaceProjectsRootReadResponse,
   type WorkspaceReadParams,
   type WorkspaceReadResponse,
+  type WorkspaceRegisteredSkillsListParams,
+  type WorkspaceRegisteredSkillsListResponse,
   type WorkspaceSkillBindingsListParams,
   type WorkspaceSkillBindingsListResponse,
 } from "./protocol.js";
@@ -332,6 +363,10 @@ export class AppServerClient {
     return this.request(METHOD_AGENT_SESSION_LIST, params);
   }
 
+  updateSession(params: AgentSessionUpdateParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_UPDATE, params);
+  }
+
   listWorkspaces(): JsonRpcRequest {
     return this.request(METHOD_WORKSPACE_LIST, {});
   }
@@ -380,8 +415,28 @@ export class AppServerClient {
     return this.request(METHOD_WORKSPACE_SKILL_BINDINGS_LIST, params);
   }
 
+  listWorkspaceRegisteredSkills(
+    params: WorkspaceRegisteredSkillsListParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, params);
+  }
+
   listAgentAppInstalled(): JsonRpcRequest {
     return this.request(METHOD_AGENT_APP_INSTALLED_LIST, {});
+  }
+
+  startAgentAppUiRuntime(params: AgentAppUiRuntimeStartParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_UI_RUNTIME_START, params);
+  }
+
+  getAgentAppUiRuntimeStatus(
+    params: AgentAppUiRuntimeStatusParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_UI_RUNTIME_STATUS, params);
+  }
+
+  stopAgentAppUiRuntime(params: AgentAppUiRuntimeStopParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_UI_RUNTIME_STOP, params);
   }
 
   listKnowledgePacks(params: KnowledgeListPacksParams): JsonRpcRequest {
@@ -398,6 +453,14 @@ export class AppServerClient {
 
   readArtifacts(params: ArtifactReadParams): JsonRpcRequest {
     return this.request(METHOD_ARTIFACT_READ, params);
+  }
+
+  listDirectory(params: FileSystemListDirectoryParams): JsonRpcRequest {
+    return this.request(METHOD_FILE_SYSTEM_LIST_DIRECTORY, params);
+  }
+
+  readFilePreview(params: FileSystemReadFilePreviewParams): JsonRpcRequest {
+    return this.request(METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, params);
   }
 
   exportEvidence(params: EvidenceExportParams): JsonRpcRequest {
@@ -440,6 +503,28 @@ export class AppServerClient {
     return this.request(METHOD_MODEL_PROVIDER_ALIAS_LIST, {});
   }
 
+  resolveConnectDeepLink(
+    params: ConnectDeepLinkResolveParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_CONNECT_DEEP_LINK_RESOLVE, params);
+  }
+
+  resolveConnectOpenDeepLink(
+    params: ConnectOpenDeepLinkResolveParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE, params);
+  }
+
+  saveConnectRelayApiKey(
+    params: ConnectRelayApiKeySaveParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_CONNECT_RELAY_API_KEY_SAVE, params);
+  }
+
+  sendConnectCallback(params: ConnectCallbackSendParams): JsonRpcRequest {
+    return this.request(METHOD_CONNECT_CALLBACK_SEND, params);
+  }
+
   startTurn(params: AgentSessionTurnStartParams): JsonRpcRequest {
     return this.request(METHOD_AGENT_SESSION_TURN_START, params);
   }
@@ -468,6 +553,7 @@ export class AppServerConnection {
   readonly transport: AppServerMessageTransport;
 
   #bufferedMessages: JsonRpcMessage[] = [];
+  #mirroredNotifications: JsonRpcNotification[] = [];
   #transportReadLock: Promise<void> = Promise.resolve();
 
   constructor(
@@ -507,6 +593,17 @@ export class AppServerConnection {
     return await this.request<AgentSessionListResponse>(
       this.client.listSessions(params),
       METHOD_AGENT_SESSION_LIST,
+      options,
+    );
+  }
+
+  async updateSession(
+    params: AgentSessionUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionUpdateResponse>> {
+    return await this.request<AgentSessionUpdateResponse>(
+      this.client.updateSession(params),
+      METHOD_AGENT_SESSION_UPDATE,
       options,
     );
   }
@@ -627,12 +724,56 @@ export class AppServerConnection {
     );
   }
 
+  async listWorkspaceRegisteredSkills(
+    params: WorkspaceRegisteredSkillsListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceRegisteredSkillsListResponse>> {
+    return await this.request<WorkspaceRegisteredSkillsListResponse>(
+      this.client.listWorkspaceRegisteredSkills(params),
+      METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
+      options,
+    );
+  }
+
   async listAgentAppInstalled(
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<AgentAppInstalledListResponse>> {
     return await this.request<AgentAppInstalledListResponse>(
       this.client.listAgentAppInstalled(),
       METHOD_AGENT_APP_INSTALLED_LIST,
+      options,
+    );
+  }
+
+  async startAgentAppUiRuntime(
+    params: AgentAppUiRuntimeStartParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppUiRuntimeStatusResponse>> {
+    return await this.request<AgentAppUiRuntimeStatusResponse>(
+      this.client.startAgentAppUiRuntime(params),
+      METHOD_AGENT_APP_UI_RUNTIME_START,
+      options,
+    );
+  }
+
+  async getAgentAppUiRuntimeStatus(
+    params: AgentAppUiRuntimeStatusParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppUiRuntimeStatusResponse>> {
+    return await this.request<AgentAppUiRuntimeStatusResponse>(
+      this.client.getAgentAppUiRuntimeStatus(params),
+      METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+      options,
+    );
+  }
+
+  async stopAgentAppUiRuntime(
+    params: AgentAppUiRuntimeStopParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppUiRuntimeStatusResponse>> {
+    return await this.request<AgentAppUiRuntimeStatusResponse>(
+      this.client.stopAgentAppUiRuntime(params),
+      METHOD_AGENT_APP_UI_RUNTIME_STOP,
       options,
     );
   }
@@ -676,6 +817,28 @@ export class AppServerConnection {
     return await this.request<ArtifactReadResponse>(
       this.client.readArtifacts(params),
       METHOD_ARTIFACT_READ,
+      options,
+    );
+  }
+
+  async listDirectory(
+    params: FileSystemListDirectoryParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<FileSystemDirectoryListing>> {
+    return await this.request<FileSystemDirectoryListing>(
+      this.client.listDirectory(params),
+      METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+      options,
+    );
+  }
+
+  async readFilePreview(
+    params: FileSystemReadFilePreviewParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<FileSystemFilePreview>> {
+    return await this.request<FileSystemFilePreview>(
+      this.client.readFilePreview(params),
+      METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
       options,
     );
   }
@@ -774,6 +937,50 @@ export class AppServerConnection {
     );
   }
 
+  async resolveConnectDeepLink(
+    params: ConnectDeepLinkResolveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ConnectDeepLinkResolveResponse>> {
+    return await this.request<ConnectDeepLinkResolveResponse>(
+      this.client.resolveConnectDeepLink(params),
+      METHOD_CONNECT_DEEP_LINK_RESOLVE,
+      options,
+    );
+  }
+
+  async resolveConnectOpenDeepLink(
+    params: ConnectOpenDeepLinkResolveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ConnectOpenDeepLinkResolveResponse>> {
+    return await this.request<ConnectOpenDeepLinkResolveResponse>(
+      this.client.resolveConnectOpenDeepLink(params),
+      METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
+      options,
+    );
+  }
+
+  async saveConnectRelayApiKey(
+    params: ConnectRelayApiKeySaveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ConnectRelayApiKeySaveResponse>> {
+    return await this.request<ConnectRelayApiKeySaveResponse>(
+      this.client.saveConnectRelayApiKey(params),
+      METHOD_CONNECT_RELAY_API_KEY_SAVE,
+      options,
+    );
+  }
+
+  async sendConnectCallback(
+    params: ConnectCallbackSendParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ConnectCallbackSendResponse>> {
+    return await this.request<ConnectCallbackSendResponse>(
+      this.client.sendConnectCallback(params),
+      METHOD_CONNECT_CALLBACK_SEND,
+      options,
+    );
+  }
+
   async startTurn(
     params: AgentSessionTurnStartParams,
     options: AppServerRequestOptions = {},
@@ -826,11 +1033,16 @@ export class AppServerConnection {
 
     try {
       for (;;) {
-        const message = await this.#nextMessageForRequest(id, options.timeoutMs);
+        const message = await this.#nextMessageForRequest(
+          id,
+          options.timeoutMs,
+        );
         messages.push(message);
 
         if (isJsonRpcNotification(message)) {
           notifications.push(message);
+          this.#mirroredNotifications.push(message);
+          await this.#yieldReadTurn();
           continue;
         }
 
@@ -860,6 +1072,10 @@ export class AppServerConnection {
 
   async nextNotification(timeoutMs?: number): Promise<JsonRpcNotification> {
     for (;;) {
+      const buffered = this.#shiftBufferedNotification();
+      if (buffered) {
+        return buffered;
+      }
       const notification = await this.#withTransportRead(
         timeoutMs,
         () => this.#shiftBufferedNotification(),
@@ -959,6 +1175,10 @@ export class AppServerConnection {
   }
 
   #shiftBufferedNotification(): JsonRpcNotification | undefined {
+    const mirrored = this.#mirroredNotifications.shift();
+    if (mirrored) {
+      return mirrored;
+    }
     const index = this.#bufferedMessages.findIndex(isJsonRpcNotification);
     if (index < 0) {
       return undefined;

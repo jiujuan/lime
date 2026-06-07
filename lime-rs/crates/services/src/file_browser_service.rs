@@ -1018,23 +1018,6 @@ pub fn read_file_preview(path: &str, max_size: Option<usize>) -> FilePreview {
     }
 }
 
-/// 服务接口：列出目录
-pub async fn list_dir(path: String) -> Result<DirectoryListing, String> {
-    tokio::task::spawn_blocking(move || list_directory(&path))
-        .await
-        .map_err(|e| format!("目录读取任务失败: {e}"))
-}
-
-/// 服务接口：读取文件预览
-pub async fn read_file_preview_cmd(
-    path: String,
-    max_size: Option<usize>,
-) -> Result<FilePreview, String> {
-    tokio::task::spawn_blocking(move || read_file_preview(&path, max_size))
-        .await
-        .map_err(|e| format!("文件预览任务失败: {e}"))
-}
-
 /// 服务接口：异步获取文件图标
 pub async fn get_file_icon_data_url(path: String) -> Result<Option<String>, String> {
     let path_buf = PathBuf::from(&path);

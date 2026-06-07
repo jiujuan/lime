@@ -29,6 +29,7 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(true);
     expect(isBridgeTruthCommand("get_automation_jobs")).toBe(true);
     expect(isBridgeTruthCommand("project_memory_get")).toBe(true);
+    expect(isBridgeTruthCommand("agent_generate_title")).toBe(false);
     expect(isBridgeTruthCommand("get_hint_routes")).toBe(false);
   });
 
@@ -61,8 +62,27 @@ describe("commandPolicy", () => {
     expect(
       resolveDevBridgeCommandTimeoutProfile("agent_app_start_ui_runtime"),
     ).toBe("agent-app-ui-runtime-start");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "ui-runtime-start",
+              method: "agentAppUiRuntime/start",
+              params: {
+                appId: "content-factory-sdk-fixture-app",
+                entryKey: "dashboard",
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe("agent-app-ui-runtime-start");
     expect(resolveDevBridgeCommandTimeoutProfile("execute_skill")).toBe(
       "skill-execution",
+    );
+    expect(resolveDevBridgeCommandTimeoutProfile("agent_generate_title")).toBe(
+      "default",
     );
     expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
@@ -90,6 +110,32 @@ describe("commandPolicy", () => {
         },
       }),
     ).toBe("app-server-turn-start");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: 6,
+              method: "workspace/default/ensure",
+              params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe("startup-truth");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: 7,
+              method: "workspace/ensureReady",
+              params: { workspaceId: "default" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("startup-truth");
     expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
         request: {

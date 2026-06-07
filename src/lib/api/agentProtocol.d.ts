@@ -570,6 +570,7 @@ export interface AgentUserPreferences {
     providerConfig?: AsterProviderConfig;
     providerPreference?: string;
     modelPreference?: string;
+    reasoningEffort?: string;
     thinking?: boolean;
     webSearch?: boolean;
     searchMode?: AgentRuntimeWebSearchMode;

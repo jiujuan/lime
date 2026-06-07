@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "isNewProvider": {
+      "type": "boolean"
+    },
+    "keyId": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": "string"
+    },
+    "providerName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "isNewProvider",
+    "keyId",
+    "providerId",
+    "providerName"
+  ],
+  "title": "ConnectRelayApiKeySaveResponse",
+  "type": "object"
+}

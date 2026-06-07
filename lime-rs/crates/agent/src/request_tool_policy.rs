@@ -11,6 +11,7 @@ use crate::protocol_projection::project_runtime_event;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
 use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
 use aster::conversation::message::{Message, MessageContent, SystemNotificationType};
+use aster::providers::errors::ProviderError;
 use aster::session::SessionManager;
 use aster::tools::ToolContext;
 use futures::{stream, StreamExt};
@@ -31,6 +32,7 @@ pub const WEB_SEARCH_SYNTHESIS_MARKER: &str = "【预检索后输出要求】";
 
 const EMPTY_REPLY_DIRECT_ANSWER_RETRY_PROMPT: &str = "请继续。你上一条回复没有输出任何内容。不要重复调用工具，直接基于当前上下文给出最终答复；如果当前确实无法继续，请明确说明原因。";
 const INCOMPLETE_TOOL_BATCH_CONTINUE_PROMPT: &str = "请继续。你上一条回复还是中间过程结论，不是最终答复。若仍缺关键证据，请立刻继续下一批必要工具调用；证据足够后直接给出完整结论。不要停在“还需要继续查看/读取/确认”的中间态，也不要重复上一批已经完成的工具。";
+const PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT: &str = "请继续。上一轮模型通道在尾段暂时中断，但当前对话中已有工具结果和部分输出。请基于已经完成的工具结果与上下文直接补齐最终答复；不要重复已经完成的工具调用，除非确实缺少关键证据。";
 const DEFAULT_REQUIRED_TOOLS: &[&str] = &["WebSearch"];
 const DEFAULT_ALLOWED_TOOLS: &[&str] = &["WebSearch", "WebFetch"];
 const WEB_SEARCH_REQUIRED_TOOLS_ENV_KEYS: &[&str] = &[
@@ -588,6 +590,30 @@ fn should_downgrade_provider_tail_failure(
             .to_ascii_lowercase()
             .starts_with("agent provider execution failed:")
         && build_output_preserved_reply_fallback(diagnostics).is_some()
+}
+
+fn should_retry_provider_tail_failure(
+    error_message: &str,
+    diagnostics: &StreamEventDiagnostics,
+    emitted_any: bool,
+) -> bool {
+    emitted_any
+        && (diagnostics.text_delta_count > 0 || diagnostics.tool_end_count > 0)
+        && retryable_provider_tail_failure_detail(error_message).is_some()
+}
+
+fn retryable_provider_tail_failure_detail(error_message: &str) -> Option<&str> {
+    let detail = error_message
+        .trim()
+        .strip_prefix("Agent provider execution failed:")?
+        .trim();
+    if detail.is_empty() {
+        return None;
+    }
+    if ProviderError::message_is_non_retryable_provider_rejection(detail) {
+        return None;
+    }
+    Some(detail)
 }
 
 fn build_output_preserved_reply_fallback(diagnostics: &StreamEventDiagnostics) -> Option<String> {
@@ -1195,6 +1221,21 @@ fn build_empty_reply_retry_runtime_status() -> AgentRuntimeStatus {
             "首轮流式回复未产出正文".to_string(),
             "当前轮次未检测到真实工具产物".to_string(),
             "正在直接补发最终答复".to_string(),
+        ],
+        metadata: Some(build_diagnostics_runtime_status_metadata()),
+    }
+}
+
+fn build_provider_tail_failure_retry_runtime_status(error_detail: &str) -> AgentRuntimeStatus {
+    AgentRuntimeStatus {
+        phase: "retrying".to_string(),
+        title: "正在恢复模型输出".to_string(),
+        detail: "模型通道在尾段暂时中断，正在基于已完成的工具结果和上下文补齐最终答复。"
+            .to_string(),
+        checkpoints: vec![
+            "已保留本轮已有工具结果和部分输出".to_string(),
+            format!("检测到可重试的模型通道错误：{error_detail}"),
+            "正在继续生成最终答复".to_string(),
         ],
         metadata: Some(build_diagnostics_runtime_status_metadata()),
     }
@@ -1960,7 +2001,70 @@ where
                 is_reply_cancelled(&cancel_probe),
             ));
         }
-        return Err(error);
+        if let Some(error_detail) =
+            retryable_provider_tail_failure_detail(&error.message).filter(|_| {
+                should_retry_provider_tail_failure(&error.message, &diagnostics, emitted_any)
+            })
+        {
+            tracing::warn!(
+                "[AsterAgent][ReplyPolicy] retrying after provider tail failure: tools={}, text_deltas={}, error={}",
+                diagnostics.tool_end_count,
+                diagnostics.text_delta_count,
+                error_detail
+            );
+            emit_runtime_status_with_projection(
+                agent,
+                &session_config,
+                build_provider_tail_failure_retry_runtime_status(error_detail),
+                &mut on_event,
+            )
+            .await;
+            let retry_attempt = stream_agent_reply_once(
+                agent,
+                Message::user()
+                    .with_text(PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT)
+                    .agent_only(),
+                duplicate_session_config(&session_config),
+                cancel_token.clone(),
+                request_tool_policy,
+                &mut web_search_tracker,
+                &mut write_artifact_emitter,
+                &mut emitted_any,
+                &mut text_chunks,
+                &mut event_errors,
+                &mut diagnostics,
+                &mut on_event,
+            )
+            .await;
+            if let Err(retry_error) = retry_attempt {
+                if should_downgrade_provider_tail_failure(
+                    &retry_error.message,
+                    &diagnostics,
+                    emitted_any,
+                ) {
+                    tracing::warn!(
+                        "[AsterAgent][ReplyPolicy] provider tail failure downgraded after tail-failure retry with persisted output: tools={}, artifacts={}, saved_site={}",
+                        diagnostics.tool_end_count,
+                        diagnostics.persisted_artifact_count,
+                        diagnostics.saved_site_content_count
+                    );
+                    let Some(fallback_text) = build_output_preserved_reply_fallback(&diagnostics)
+                    else {
+                        return Err(retry_error);
+                    };
+                    return Ok(build_stream_reply_execution(
+                        fallback_text,
+                        event_errors,
+                        emitted_any,
+                        web_search_tracker.format_attempts(),
+                        is_reply_cancelled(&cancel_probe),
+                    ));
+                }
+                return Err(retry_error);
+            }
+        } else {
+            return Err(error);
+        }
     }
 
     if is_reply_cancelled(&cancel_probe) {
@@ -2723,6 +2827,70 @@ mod tests {
                     Some(Message::assistant().with_text("第二段")),
                     Some(ProviderUsage::new("gpt-5.3-codex".to_string(), Usage::default())),
                 );
+            }))
+        }
+
+        fn supports_streaming(&self) -> bool {
+            true
+        }
+
+        fn get_model_config(&self) -> aster::model::ModelConfig {
+            aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+        }
+    }
+
+    struct TailFailureThenTextProvider {
+        attempts: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl Provider for TailFailureThenTextProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "tail-failure-then-text-provider"
+        }
+
+        async fn complete_with_model(
+            &self,
+            _model_config: &aster::model::ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[rmcp::model::Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            Ok((
+                Message::assistant().with_text("非流式兜底不应被调用"),
+                ProviderUsage::new("gpt-5.3-codex".to_string(), Usage::default()),
+            ))
+        }
+
+        async fn stream(
+            &self,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[rmcp::model::Tool],
+        ) -> Result<aster::providers::base::MessageStream, ProviderError> {
+            let attempt = self.attempts.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::pin(async_stream::try_stream! {
+                if attempt == 0 {
+                    yield (
+                        Some(Message::assistant().with_text("已完成搜索，")),
+                        None,
+                    );
+                    Err(ProviderError::RequestFailed(
+                        "error sending request for url (https://example.invalid/v1/messages) (failed to connect to example.invalid)".to_string(),
+                    ))?;
+                } else {
+                    yield (
+                        Some(Message::assistant().with_text("最终摘要已补齐。")),
+                        Some(ProviderUsage::new("gpt-5.3-codex".to_string(), Usage::default())),
+                    );
+                }
             }))
         }
 
@@ -3578,6 +3746,57 @@ mod tests {
             )),
             "应向前端投影空答复重试状态"
         );
+    }
+
+    #[tokio::test]
+    async fn stream_message_reply_with_policy_should_retry_retryable_provider_tail_failure() {
+        let (store, session) = create_test_session_store("lime-provider-tail-retry");
+        let agent = Agent::new().with_session_store(store.clone());
+        let attempts = Arc::new(AtomicUsize::new(0));
+        agent
+            .update_provider(
+                Arc::new(TailFailureThenTextProvider {
+                    attempts: attempts.clone(),
+                }),
+                &session.id,
+            )
+            .await
+            .expect("应配置测试 provider");
+
+        let session_config = aster::agents::SessionConfig {
+            id: session.id.clone(),
+            thread_id: None,
+            turn_id: Some("turn-provider-tail-retry".to_string()),
+            schedule_id: None,
+            max_turns: None,
+            retry_config: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: None,
+        };
+        let policy = resolve_request_tool_policy(Some(true), false);
+        let mut runtime_events = Vec::new();
+
+        let reply = stream_message_reply_with_policy(
+            &agent,
+            Message::user().with_text("整理今天的国际新闻"),
+            None,
+            session_config,
+            None,
+            &policy,
+            |event| runtime_events.push(event.clone()),
+        )
+        .await
+        .expect("尾段可重试 provider 失败后应续写成功");
+
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(reply.text_output, "已完成搜索，最终摘要已补齐。");
+        assert!(runtime_events.iter().any(|event| matches!(
+            event,
+            RuntimeAgentEvent::RuntimeStatus { status }
+                if status.title == "正在恢复模型输出"
+        )));
     }
 
     #[tokio::test]

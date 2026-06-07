@@ -228,7 +228,7 @@ describe("quality-task-planner", () => {
   });
 
   it("Electron installer / app metadata 改动应推荐刷新 app metadata evidence", () => {
-    const tasks = detectTasks(["electron-builder.yml"]);
+    const tasks = detectTasks(["forge.config.mjs"]);
 
     expect(tasks.integrity).toBe(true);
     expect(tasks.rust).toBe(false);

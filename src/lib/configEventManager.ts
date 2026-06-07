@@ -42,8 +42,8 @@ export interface EndpointProvidersChangeEvent {
   claude_code?: string;
   codex?: string;
   windsurf?: string;
-  kiro?: string;
   other?: string;
+  [provider: string]: string | undefined;
   source: ConfigChangeSource;
 }
 

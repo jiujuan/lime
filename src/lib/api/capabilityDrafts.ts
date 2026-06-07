@@ -1,4 +1,6 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { AppServerClient } from "@/lib/api/appServer";
+import { METHOD_WORKSPACE_REGISTERED_SKILLS_LIST } from "../../../packages/app-server-client/src/protocol";
 
 export type CapabilityDraftStatus =
   | "unverified"
@@ -432,6 +434,8 @@ export interface WorkspaceRegisteredSkillRecord {
   launchEnabled: boolean;
   runtimeGate: string;
 }
+
+type CapabilityDraftsAppServerClient = Pick<AppServerClient, "request">;
 
 type RawCapabilityDraftFileSummary = Partial<CapabilityDraftFileSummary> & {
   relative_path?: string;
@@ -1892,6 +1896,8 @@ function normalizeDraft(raw: RawCapabilityDraftRecord): CapabilityDraftRecord {
 }
 
 export const capabilityDraftsApi = {
+  appServerClient: new AppServerClient() as CapabilityDraftsAppServerClient,
+
   async create(
     request: CreateCapabilityDraftRequest,
   ): Promise<CapabilityDraftRecord> {
@@ -1964,14 +1970,23 @@ export const capabilityDraftsApi = {
   async listRegisteredSkills(
     request: ListWorkspaceRegisteredSkillsRequest,
   ): Promise<WorkspaceRegisteredSkillRecord[]> {
-    const skills = await safeInvoke<RawWorkspaceRegisteredSkillRecord[]>(
-      "capability_draft_list_registered_skills",
-      { request },
-    );
-    if (!Array.isArray(skills)) {
-      return [];
+    const workspaceRoot = request.workspaceRoot.trim();
+    if (!workspaceRoot) {
+      throw new Error(
+        "workspaceRoot is required to list App Server workspace registered skills",
+      );
     }
-    return skills.map(normalizeWorkspaceRegisteredSkill);
+    const response = await this.appServerClient.request<{
+      skills?: RawWorkspaceRegisteredSkillRecord[];
+    }>(METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, {
+      workspaceRoot,
+    });
+    if (!Array.isArray(response.result.skills)) {
+      throw new Error(
+        "App Server workspaceRegisteredSkills/list did not return skills",
+      );
+    }
+    return response.result.skills.map(normalizeWorkspaceRegisteredSkill);
   },
 
   async submitApprovalSessionInputs(

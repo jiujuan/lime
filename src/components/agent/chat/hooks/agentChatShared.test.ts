@@ -265,6 +265,59 @@ describe("agentChatShared", () => {
     });
   });
 
+  it("首字前等待中的 assistant 草稿不应因 isSending 清空而误判为已完成", () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-first-token-waiting",
+        role: "user",
+        content: "帮我解释启动状态",
+        timestamp: new Date("2026-06-07T10:00:00.000Z"),
+      },
+      {
+        id: "msg-assistant-first-token-waiting",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-07T10:00:01.000Z"),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在生成回复",
+          detail: "运行时已开始处理，等待首个输出。",
+        },
+      },
+    ];
+
+    expect(
+      deriveTaskLiveState({
+        messages,
+        isSending: false,
+        pendingActionCount: 0,
+        queuedTurnCount: 0,
+        threadStatus: "completed",
+        workspaceError: false,
+      }),
+    ).toEqual({
+      status: "running",
+      statusReason: "default",
+    });
+
+    expect(
+      buildLiveTaskSnapshot({
+        messages,
+        isSending: false,
+        pendingActionCount: 0,
+        queuedTurnCount: 0,
+        threadStatus: "completed",
+        workspaceError: false,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        status: "running",
+        lastPreview: "帮我解释启动状态",
+      }),
+    );
+  });
+
   it("应优先返回最近可继续的会话候选", () => {
     const topics = [
       {

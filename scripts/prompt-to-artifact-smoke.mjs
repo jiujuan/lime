@@ -135,7 +135,9 @@ async function waitForHealth(options) {
     try {
       const payload = await checkHealth(options.healthUrl);
       if (!options.json) {
-        console.log(`[prompt-to-artifact:p5-smoke] DevBridge 已就绪 (${Date.now() - startedAt}ms)`);
+        console.log(
+          `[prompt-to-artifact:p5-smoke] DevBridge 已就绪 (${Date.now() - startedAt}ms)`,
+        );
       }
       return payload;
     } catch (error) {
@@ -164,6 +166,37 @@ async function invoke(invokeUrl, cmd, args = {}) {
     throw new Error(`${cmd} failed: ${payload.error}`);
   }
   return payload?.result;
+}
+
+async function invokeAppServer(invokeUrl, method, params = {}) {
+  const response = await invoke(invokeUrl, "app_server_handle_json_lines", {
+    request: {
+      lines: [
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          params,
+        }),
+      ],
+    },
+  });
+  const lines = Array.isArray(response?.lines) ? response.lines : [];
+  for (const line of lines) {
+    const text = typeof line === "string" ? line.trim() : "";
+    if (!text) {
+      continue;
+    }
+    const message = JSON.parse(text);
+    if (message?.id !== 1) {
+      continue;
+    }
+    if (message.error) {
+      throw new Error(`${method} failed: ${JSON.stringify(message.error)}`);
+    }
+    return message.result;
+  }
+  throw new Error(`${method} did not return a JSON-RPC response`);
 }
 
 function buildGeneratedFiles() {
@@ -270,7 +303,9 @@ async function prepareWorkspace(options) {
     await fs.mkdir(options.workspaceRoot, { recursive: true });
     return { workspaceRoot: options.workspaceRoot, createdTemp: false };
   }
-  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lime-prompt-artifact-p5-"));
+  const workspaceRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lime-prompt-artifact-p5-"),
+  );
   return { workspaceRoot, createdTemp: true };
 }
 
@@ -287,7 +322,9 @@ async function runSmoke(options) {
       userGoal:
         "每天 9 点读取只读 CLI 或 fixture 输出，生成 Markdown 趋势摘要，失败时提示我检查配置。",
       sourceKind: "cli",
-      sourceRefs: ["internal/exec-plans/skill-forge-prompt-to-artifact-p5-plan.md"],
+      sourceRefs: [
+        "internal/exec-plans/skill-forge-prompt-to-artifact-p5-plan.md",
+      ],
       permissionSummary: ["Level 0 只读发现", "Level 1 draft-scoped write"],
       generatedFiles: buildGeneratedFiles(),
     };
@@ -298,9 +335,13 @@ async function runSmoke(options) {
     const draftId = pickString(draft, "draftId", "draft_id");
     assert(draftId, "capability_draft_create 未返回 draftId");
 
-    const verification = await invoke(options.invokeUrl, "capability_draft_verify", {
-      request: { workspaceRoot: workspace.workspaceRoot, draftId },
-    });
+    const verification = await invoke(
+      options.invokeUrl,
+      "capability_draft_verify",
+      {
+        request: { workspaceRoot: workspace.workspaceRoot, draftId },
+      },
+    );
     const verificationStatus = pickString(
       verification?.draft,
       "verificationStatus",
@@ -313,57 +354,84 @@ async function runSmoke(options) {
     const failedChecks = pickArray(verification?.report, "checks").filter(
       (check) => pickString(check, "status") === "failed",
     );
-    assert(failedChecks.length === 0, `verification 存在失败项: ${JSON.stringify(failedChecks)}`);
+    assert(
+      failedChecks.length === 0,
+      `verification 存在失败项: ${JSON.stringify(failedChecks)}`,
+    );
 
-    const registration = await invoke(options.invokeUrl, "capability_draft_register", {
-      request: { workspaceRoot: workspace.workspaceRoot, draftId },
-    });
+    const registration = await invoke(
+      options.invokeUrl,
+      "capability_draft_register",
+      {
+        request: { workspaceRoot: workspace.workspaceRoot, draftId },
+      },
+    );
     const registeredSkillDirectory = pickString(
       registration?.registration,
       "registeredSkillDirectory",
       "registered_skill_directory",
     );
-    assert(registeredSkillDirectory, "registration 未返回 registeredSkillDirectory");
-
-    const registeredSkills = await invoke(
-      options.invokeUrl,
-      "capability_draft_list_registered_skills",
-      { request: { workspaceRoot: workspace.workspaceRoot } },
+    assert(
+      registeredSkillDirectory,
+      "registration 未返回 registeredSkillDirectory",
     );
+
+    const registeredSkillsResult = await invokeAppServer(
+      options.invokeUrl,
+      "workspaceRegisteredSkills/list",
+      { workspaceRoot: workspace.workspaceRoot },
+    );
+    const registeredSkills = pickArray(registeredSkillsResult, "skills");
     assert(Array.isArray(registeredSkills), "registered skills 返回不是数组");
     const registeredSkill = registeredSkills.find(
       (skill) =>
-        pickString(skill, "registeredSkillDirectory", "registered_skill_directory") ===
-          registeredSkillDirectory || pickString(skill, "name") === "只读 CLI 每日报告",
+        pickString(
+          skill,
+          "registeredSkillDirectory",
+          "registered_skill_directory",
+        ) === registeredSkillDirectory ||
+        pickString(skill, "name") === "只读 CLI 每日报告",
     );
     assert(registeredSkill, "registered discovery 未找到刚注册的 skill");
     assert(
-      registeredSkill.launchEnabled === false || registeredSkill.launch_enabled === false,
+      registeredSkill.launchEnabled === false ||
+        registeredSkill.launch_enabled === false,
       "registered discovery 不应默认 launchEnabled=true",
     );
 
-    const bindingSnapshot = await invoke(
+    const bindingSnapshot = await invokeAppServer(
       options.invokeUrl,
-      "agent_runtime_list_workspace_skill_bindings",
+      "workspaceSkillBindings/list",
       {
-        request: {
-          workspaceRoot: workspace.workspaceRoot,
-          caller: "assistant",
-          workbench: true,
-        },
+        workspaceRoot: workspace.workspaceRoot,
+        caller: "assistant",
+        workbench: true,
       },
     );
     const bindings = pickArray(bindingSnapshot, "bindings");
     const binding = bindings.find(
-      (item) => pickString(item, "registered_skill_directory", "registeredSkillDirectory") === registeredSkillDirectory,
+      (item) =>
+        pickString(
+          item,
+          "registered_skill_directory",
+          "registeredSkillDirectory",
+        ) === registeredSkillDirectory,
     );
     assert(binding, "runtime binding readiness 未找到刚注册的 skill");
     assert(
-      pickString(binding, "binding_status", "bindingStatus") === "ready_for_manual_enable",
+      pickString(binding, "binding_status", "bindingStatus") ===
+        "ready_for_manual_enable",
       `binding 未 ready_for_manual_enable: ${pickString(binding, "binding_status", "bindingStatus")}`,
     );
-    assert(binding.launch_enabled === false || binding.launchEnabled === false, "binding 不应默认 launch enabled");
-    assert(binding.tool_runtime_visible === false || binding.toolRuntimeVisible === false, "binding 不应默认 tool runtime visible");
+    assert(
+      binding.launch_enabled === false || binding.launchEnabled === false,
+      "binding 不应默认 launch enabled",
+    );
+    assert(
+      binding.tool_runtime_visible === false ||
+        binding.toolRuntimeVisible === false,
+      "binding 不应默认 tool runtime visible",
+    );
 
     const summary = {
       status: "passed",
@@ -414,7 +482,9 @@ main().catch((error) => {
   const detail = error instanceof Error ? error.message : String(error);
   console.error(`[prompt-to-artifact:p5-smoke] 失败: ${detail}`);
   if (error?.workspaceRoot) {
-    console.error(`[prompt-to-artifact:p5-smoke] workspaceRoot: ${error.workspaceRoot}`);
+    console.error(
+      `[prompt-to-artifact:p5-smoke] workspaceRoot: ${error.workspaceRoot}`,
+    );
   }
   process.exit(1);
 });

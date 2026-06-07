@@ -6,7 +6,7 @@ use super::{AutomationJobRecord, AutomationPayload, BROWSER_AUTOMATION_RETIRED_M
 use crate::agent::AsterAgentWrapper;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::aster_agent_cmd::app_server_host::{
-    build_tauri_aster_app_server, submit_desktop_app_server_turn, DesktopAppServerSubmitTurnInput,
+    build_desktop_aster_app_server, submit_desktop_app_server_turn, DesktopAppServerSubmitTurnInput,
 };
 use crate::commands::aster_agent_cmd::RuntimeCommandContext;
 use crate::config::GlobalConfigManagerState;
@@ -178,7 +178,7 @@ async fn execute_agent_turn(
         mcp_manager.inner(),
         automation_state.inner(),
     );
-    let app_server = build_tauri_aster_app_server(runtime);
+    let app_server = build_desktop_aster_app_server(runtime);
     submit_desktop_app_server_turn(
         &app_server,
         DesktopAppServerSubmitTurnInput {

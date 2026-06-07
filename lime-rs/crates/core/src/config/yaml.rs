@@ -217,7 +217,7 @@ impl ConfigManager {
                 .model_aliases
                 .extend(other.routing.model_aliases);
         }
-        if other.routing.default_provider != "kiro" {
+        if other.routing.default_provider != RoutingConfig::default().default_provider {
             self.config.routing.default_provider = other.routing.default_provider;
         }
 
@@ -241,7 +241,7 @@ impl ConfigManager {
     }
 }
 
-use super::types::{LoggingConfig, RetrySettings, ServerConfig};
+use super::types::{LoggingConfig, RetrySettings, RoutingConfig, ServerConfig};
 
 fn normalize_legacy_workspace_preferences_yaml_value(value: &mut serde_yaml::Value) -> bool {
     let Some(mapping) = value.as_mapping_mut() else {
@@ -833,14 +833,15 @@ server:
   port: 9000
   api_key: "test-key"
 providers:
-  kiro:
+  openai:
     enabled: true
+    base_url: "https://api.openai.com/v1"
 "#;
         let config = ConfigManager::parse_yaml(yaml).unwrap();
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 9000);
         assert_eq!(config.server.api_key, "test-key");
-        assert!(config.providers.kiro.enabled);
+        assert!(config.providers.openai.enabled);
     }
 
     #[test]
@@ -851,21 +852,17 @@ server:
   port: 8999
   api_key: "proxy_cast"
 providers:
-  kiro:
-    enabled: true
-    credentials_path: "~/.aws/sso/cache/kiro-auth-token.json"
-    region: "us-east-1"
   gemini:
     enabled: false
   qwen:
     enabled: false
   openai:
-    enabled: false
+    enabled: true
     base_url: "https://api.openai.com/v1"
   claude:
     enabled: false
 routing:
-  default_provider: "kiro"
+  default_provider: "openai"
   model_aliases:
     gpt-4: "claude-sonnet-4-5-20250514"
 retry:

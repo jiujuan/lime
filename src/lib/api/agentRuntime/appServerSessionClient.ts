@@ -3,10 +3,12 @@ import {
   type AppServerAgentTurn,
   type AppServerAgentSessionReadParams,
   type AppServerAgentSessionReadResponse,
+  type AppServerAgentSessionUpdateParams,
   type AppServerBusinessObjectRef,
 } from "@/lib/api/appServer";
 import { METHOD_AGENT_SESSION_LIST } from "../../../../packages/app-server-client/src/protocol";
 import type { AgentThreadTurn, AgentThreadTurnStatus } from "../agentProtocol";
+import { projectAppServerSessionReadToThreadReadModel } from "./appServerReadModelProjection";
 import type {
   AsterExecutionStrategy,
   AsterSessionDetail,
@@ -14,13 +16,14 @@ import type {
   AgentRuntimeCreateSessionOptions,
   AgentRuntimeGetSessionOptions,
   AgentRuntimeListSessionsOptions,
+  AgentRuntimeUpdateSessionRequest,
 } from "./types";
 
 const DEFAULT_APP_ID = "desktop";
 
 export type AppServerSessionRpcClient = Pick<
   AppServerClient,
-  "startSession" | "readSession" | "request"
+  "startSession" | "readSession" | "updateSession" | "request"
 >;
 
 export type AppServerAgentSessionListParams = {
@@ -101,10 +104,19 @@ export function createAppServerSessionClient({
     );
   }
 
+  async function updateAgentRuntimeSession(
+    request: AgentRuntimeUpdateSessionRequest,
+  ): Promise<void> {
+    await appServerClient.updateSession(
+      appServerSessionUpdateParamsFromRequest(request),
+    );
+  }
+
   return {
     createAgentRuntimeSession,
     getAgentRuntimeSession,
     listAgentRuntimeSessions,
+    updateAgentRuntimeSession,
   };
 }
 
@@ -173,6 +185,29 @@ function appServerSessionReadParamsFromOptions(
   });
 }
 
+function appServerSessionUpdateParamsFromRequest(
+  request: AgentRuntimeUpdateSessionRequest,
+): AppServerAgentSessionUpdateParams {
+  const sessionId = request.session_id.trim();
+  if (!sessionId) {
+    throw new Error("sessionId is required to update App Server session");
+  }
+
+  return omitUndefined({
+    sessionId,
+    title: request.name?.trim() || undefined,
+    archived:
+      typeof request.archived === "boolean" ? request.archived : undefined,
+    providerSelector: request.provider_selector?.trim() || undefined,
+    providerName: request.provider_name?.trim() || undefined,
+    modelName: request.model_name?.trim() || undefined,
+    executionStrategy: request.execution_strategy,
+    recentAccessMode: request.recent_access_mode,
+    recentPreferences: request.recent_preferences,
+    recentTeamSelection: request.recent_team_selection,
+  });
+}
+
 function appServerSessionOverviewToRuntimeInfo(
   session: AppServerAgentSessionOverview,
 ): AsterSessionInfo {
@@ -201,10 +236,13 @@ function appServerSessionReadToRuntimeDetail(
   response: AppServerAgentSessionReadResponse,
 ): AsterSessionDetail {
   const fallbackTimestamp = response.session.updatedAt;
+  const title =
+    sessionTitleFromBusinessObjectRef(response.session.businessObjectRef) ??
+    response.session.sessionId;
   return {
     id: response.session.sessionId,
     thread_id: response.session.threadId,
-    name: response.session.sessionId,
+    name: title,
     created_at: timestampMillis(response.session.createdAt),
     updated_at: timestampMillis(response.session.updatedAt),
     workspace_id: response.session.workspaceId,
@@ -214,10 +252,29 @@ function appServerSessionReadToRuntimeDetail(
     ),
     items: [],
     queued_turns: [],
-    thread_read: null,
+    thread_read: projectAppServerSessionReadToThreadReadModel(response),
     todo_items: [],
     child_subagent_sessions: [],
   };
+}
+
+function sessionTitleFromBusinessObjectRef(
+  ref: AppServerBusinessObjectRef | undefined,
+): string | undefined {
+  const title = ref?.title?.trim();
+  if (title) {
+    return title;
+  }
+
+  const metadata =
+    ref?.metadata &&
+    typeof ref.metadata === "object" &&
+    !Array.isArray(ref.metadata)
+      ? (ref.metadata as Record<string, unknown>)
+      : null;
+  const metadataTitle =
+    typeof metadata?.title === "string" ? metadata.title.trim() : "";
+  return metadataTitle || undefined;
 }
 
 function appServerTurnToRuntimeTurn(

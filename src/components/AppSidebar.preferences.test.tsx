@@ -10,6 +10,7 @@ import {
   flushEffects,
   mockCheckForUpdates,
   mockGetConfig,
+  mockOpenUpdateWindow,
   mountSidebarContainer,
   resetAppSidebarTest,
 } from "./AppSidebar.testFixtures";
@@ -19,7 +20,7 @@ describe("AppSidebar preferences", () => {
   beforeEach(resetAppSidebarTest);
   afterEach(cleanupAppSidebarTest);
 
-  it("检测到新版本时应在账户区显示升级图标并点击展开窄弹窗", async () => {
+  it("检测到新版本时应在账户区显示升级图标并点击打开更新专用窗口", async () => {
     mockCheckForUpdates.mockResolvedValue({
       current: "1.57.0",
       latest: "1.58.0",
@@ -56,22 +57,7 @@ describe("AppSidebar preferences", () => {
       await Promise.resolve();
     });
 
-    const updatePanel = container.querySelector(
-      '[data-testid="app-sidebar-update-panel"]',
-    );
-    expect(updatePanel).not.toBeNull();
-    expect(updatePanel?.textContent).toContain("发现新版本 1.58.0");
-    expect(updatePanel?.textContent).toContain("当前 1.57.0");
-    expect(updatePanel?.textContent).toContain("稍后");
-    expect(updatePanel?.textContent).toContain("立即更新");
-
-    await act(async () => {
-      updatePanel
-        ?.querySelector<HTMLButtonElement>('button[aria-label="收起更新面板"]')
-        ?.click();
-      await Promise.resolve();
-    });
-
+    expect(mockOpenUpdateWindow).toHaveBeenCalledTimes(1);
     expect(
       container.querySelector('[data-testid="app-sidebar-update-panel"]'),
     ).toBeNull();

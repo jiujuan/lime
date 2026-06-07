@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 function readPackageScripts() {
@@ -17,10 +18,26 @@ function retiredHostConfigStem() {
   return ["ta", "uri.conf"].join("");
 }
 
+function retiredRootDesktopHostFiles() {
+  const configStem = retiredHostConfigStem();
+  return [
+    "lime-rs/build.rs",
+    "lime-rs/src/main.rs",
+    "lime-rs/src/lib.rs",
+    ["lime-rs/", configStem, ".json"].join(""),
+    ["lime-rs/", configStem, ".headless.json"].join(""),
+  ];
+}
+
+function retiredHostCleanupCandidateFiles() {
+  return [["lime-rs/", retiredHostTopic(), ".windows.conf.json"].join("")];
+}
+
 function retiredHostBuildInputTerms() {
   return [
     retiredHostConfigStem(),
     ["lime-rs/", retiredHostConfigStem()].join(""),
+    ["lime-rs/", retiredHostTopic(), ".windows.conf"].join(""),
     ["src-", "ta", "uri"].join(""),
     ["@", "ta", "uri-apps/cli"].join(""),
     ["npm run ", "ta", "uri"].join(""),
@@ -28,10 +45,73 @@ function retiredHostBuildInputTerms() {
   ];
 }
 
+function retiredHostRuntimeTerms() {
+  return [
+    ...retiredHostBuildInputTerms(),
+    ["__", "TA", "URI__"].join(""),
+    ["__", "TA", "URI_INTERNALS__"].join(""),
+    ["TA", "URI_"].join(""),
+    ["ta", "uri::"].join(""),
+    ["#[", "ta", "uri::command]"].join(""),
+  ];
+}
+
 function expectNoRetiredHostBuildInput(content, label) {
   for (const term of retiredHostBuildInputTerms()) {
     expect(content, label).not.toContain(term);
   }
+}
+
+function expectNoRetiredHostRuntimeInput(content, label) {
+  for (const term of retiredHostRuntimeTerms()) {
+    expect(content, label).not.toContain(term);
+  }
+}
+
+function listFiles(root, predicate = () => true) {
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const filePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listFiles(filePath, predicate));
+      continue;
+    }
+    if (entry.isFile() && predicate(filePath)) {
+      files.push(filePath);
+    }
+  }
+  return files.sort();
+}
+
+function currentElectronEntrypointFiles() {
+  const explicitFiles = [
+    "package.json",
+    "forge.config.mjs",
+    "scripts/brand-electron-mac-helper-apps.mjs",
+    "scripts/check-app-version-consistency.mjs",
+    "scripts/build-electron.mjs",
+    "scripts/build-electron-renderer.mjs",
+    "scripts/build-electron-renderer-smoke.mjs",
+    "scripts/copy-electron-desktop-assets.mjs",
+    "scripts/electron-smoke.mjs",
+    "scripts/plan-electron-updater-r2-upload.mjs",
+    "scripts/prepare-electron-app-server-assets.mjs",
+    "scripts/run-electron-dev.mjs",
+    "scripts/run-electron-package-dir.mjs",
+    "scripts/run-electron-preview.mjs",
+    "scripts/stage-electron-release-assets.mjs",
+    "scripts/verify-electron-package-resources.mjs",
+  ];
+  return [
+    ...explicitFiles,
+    ...listFiles(".github", (filePath) =>
+      /\.(ya?ml|json|md|sh|mjs|js|ts)$/i.test(filePath),
+    ),
+    ...listFiles("electron", (filePath) =>
+      /\.(ya?ml|json|md|mjs|js|ts|tsx)$/i.test(filePath),
+    ),
+  ];
 }
 
 describe("Electron current package entrypoints", () => {
@@ -55,28 +135,54 @@ describe("Electron current package entrypoints", () => {
     expect(retiredHostScripts).toEqual([]);
   });
 
-  it("package scripts, Electron Builder, and version checks do not consume retired host config", () => {
+  it("does not keep retired root desktop host app entry files", () => {
+    for (const filePath of retiredRootDesktopHostFiles()) {
+      expect(fs.existsSync(filePath), filePath).toBe(false);
+    }
+  });
+
+  it("keeps retired host cleanup candidates out of current entrypoints", () => {
+    const currentEntrypointContent = currentElectronEntrypointFiles()
+      .map((filePath) => readFile(filePath))
+      .join("\n");
+
+    for (const filePath of retiredHostCleanupCandidateFiles()) {
+      expect(currentEntrypointContent, filePath).not.toContain(filePath);
+    }
+  });
+
+  it("package scripts, Electron Forge, and version checks do not consume retired host config", () => {
     const scripts = readPackageScripts();
     const scriptEntrypoints = Object.entries(scripts)
       .map(([name, command]) => `${name} ${command}`)
       .join("\n");
-    const electronBuilder = readFile("electron-builder.yml");
+    const forgeConfig = readFile("forge.config.mjs");
     const appVersionCheck = readFile(
       "scripts/check-app-version-consistency.mjs",
     );
 
     expectNoRetiredHostBuildInput(scriptEntrypoints, "package.json scripts");
-    expectNoRetiredHostBuildInput(electronBuilder, "electron-builder.yml");
+    expectNoRetiredHostBuildInput(forgeConfig, "forge.config.mjs");
     expectNoRetiredHostBuildInput(
       appVersionCheck,
       "scripts/check-app-version-consistency.mjs",
     );
 
-    expect(electronBuilder).toContain("productName: Lime");
-    expect(electronBuilder).toContain("app-server.release.json");
+    expect(forgeConfig).toContain('const PRODUCT_NAME = "Lime"');
+    expect(forgeConfig).toContain('const APP_ID = "com.limecloud.lime"');
+    expect(forgeConfig).toContain("app-server.release.json");
+    expect(forgeConfig).toContain("new MakerDMG");
+    expect(forgeConfig).toContain("new MakerZIP");
+    expect(forgeConfig).toContain("new MakerNsis");
     expect(appVersionCheck).toContain("Cargo.toml");
     expect(appVersionCheck).toContain("packages");
     expect(appVersionCheck).toContain("lime-cli-npm");
+  });
+
+  it("Electron current build, release, CI, and host files stay free of retired host runtime inputs", () => {
+    for (const filePath of currentElectronEntrypointFiles()) {
+      expectNoRetiredHostRuntimeInput(readFile(filePath), filePath);
+    }
   });
 
   it("legacy verify-gui-smoke script delegates to Electron smoke", () => {
@@ -90,6 +196,36 @@ describe("Electron current package entrypoints", () => {
     expect(content).not.toContain("node_modules/.bin");
   });
 
+  it("Electron smoke gates Claw workbench shell and composer readiness", () => {
+    const mainContent = readFile("electron/main.ts");
+    const smokeScript = readFile("scripts/electron-smoke.mjs");
+
+    expect(mainContent).toContain("waitForElectronSmokeWorkbenchReady");
+    expect(mainContent).toContain('[data-testid="workspace-shell-scene"]');
+    expect(mainContent).toContain('[data-testid="inputbar-core-container"]');
+    expect(mainContent).toContain('textarea[name="agent-chat-message"]');
+    expect(mainContent).toContain("claw workbench shell ready");
+    expect(mainContent).not.toContain('"agentSession/turn/start"');
+    expect(mainContent).not.toContain('"test_api_key_provider_chat"');
+    expect(smokeScript).toContain("mkdtempSync");
+    expect(smokeScript).toContain("ELECTRON_E2E_USER_DATA_DIR");
+    expect(smokeScript).toContain('LIME_ELECTRON_E2E: "1"');
+    expect(smokeScript).toContain("timed out waiting for renderer/workbench");
+  });
+
+  it("Electron packaged renderer uses relative assets under file URLs", () => {
+    const viteConfig = readFile("vite.config.ts");
+    const buildRenderer = readFile("scripts/build-electron-renderer.mjs");
+    const smokeBuildRenderer = readFile(
+      "scripts/build-electron-renderer-smoke.mjs",
+    );
+
+    expect(buildRenderer).toContain("LIME_ELECTRON_RENDERER");
+    expect(smokeBuildRenderer).toContain("LIME_ELECTRON_RENDERER");
+    expect(viteConfig).toContain("base:");
+    expect(viteConfig).toContain('isElectronRenderer ? "./" : undefined');
+  });
+
   it("build monitor observes Electron package output instead of retired host bundles", () => {
     const content = readFile("scripts/monitor-build.sh");
 
@@ -97,7 +233,7 @@ describe("Electron current package entrypoints", () => {
     expect(content).toContain("/tmp/electron-build.log");
     expect(content).toContain("release-electron");
     expect(content).toContain(
-      "electron-builder|electron:package:dir|electron:dist",
+      "electron-forge|electron:package:dir|electron:dist",
     );
     expect(content).not.toMatch(/retired-host/i);
     expect(content).not.toContain("lime-rs/target/release/bundle");

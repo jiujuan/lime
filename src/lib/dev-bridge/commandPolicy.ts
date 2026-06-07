@@ -27,8 +27,9 @@ export type DevBridgeCommandTimeoutProfile =
 const bridgeTruthCommands = new Set<string>([
   "aster_agent_init",
   "aster_agent_status",
+  "open_external_url",
+  "open_update_window",
   "start_oem_cloud_oauth_callback_bridge",
-  "agent_generate_title",
   "get_or_create_default_project",
   "workspace_list",
   "workspace_get_default",
@@ -115,7 +116,6 @@ const bridgeTruthCommands = new Set<string>([
   "capability_draft_get",
   "capability_draft_verify",
   "capability_draft_register",
-  "capability_draft_list_registered_skills",
   "capability_draft_submit_approval_session_inputs",
   "capability_draft_execute_controlled_get",
   "agent_runtime_list_workspace_skill_bindings",
@@ -156,7 +156,6 @@ const bridgeTruthCommands = new Set<string>([
   "knowledge_validate_context_run",
   "get_automation_jobs",
   "project_memory_get",
-  "list_dir",
   "get_home_dir",
   "get_file_manager_locations",
   "get_file_icon_data_url",
@@ -168,7 +167,6 @@ const bridgeTruthCommands = new Set<string>([
   "reveal_in_finder",
   "open_with_default_app",
   "session_files_save_file",
-  "read_file_preview_cmd",
   "session_files_resolve_file_path",
   "upload_material",
   "voice_models_download",
@@ -188,8 +186,6 @@ const devBridgeProviderProbeCommands = new Set([
   "test_api_key_provider_connection",
   "test_api_key_provider_chat",
 ]);
-
-const devBridgeAgentLongRunningCommands = new Set(["agent_generate_title"]);
 
 const devBridgeAgentAppUiRuntimeStartCommands = new Set([
   "agent_app_start_ui_runtime",
@@ -237,6 +233,18 @@ const devBridgeStartupTruthCommands = new Set([
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
 const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
+const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD =
+  "agentAppUiRuntime/start";
+const APP_SERVER_STARTUP_TRUTH_METHODS = new Set([
+  "workspace/default/read",
+  "workspace/default/ensure",
+  "workspace/list",
+  "workspace/read",
+  "workspace/byPath/read",
+  "workspace/projectsRoot/read",
+  "workspace/projectPath/resolve",
+  "workspace/ensureReady",
+]);
 
 const bridgeTruthEventPrefixes = [
   "voice-model-download-progress",
@@ -306,13 +314,18 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerAgentTurnStartCommand(command, args)) {
     return "app-server-turn-start";
   }
+  if (isAppServerAgentAppUiRuntimeStartCommand(command, args)) {
+    return "agent-app-ui-runtime-start";
+  }
   if (isAppServerAgentSessionListCommand(command, args)) {
     return "agent-session-list";
   }
+  if (isAppServerStartupTruthCommand(command, args)) {
+    return "startup-truth";
+  }
   if (
     command.startsWith("agent_app_runtime_") ||
-    command.startsWith("agent_runtime_") ||
-    devBridgeAgentLongRunningCommands.has(command)
+    command.startsWith("agent_runtime_")
   ) {
     return "agent-runtime";
   }
@@ -367,6 +380,30 @@ function isAppServerAgentTurnStartCommand(
   );
 }
 
+function isAppServerAgentAppUiRuntimeStartCommand(
+  command: string,
+  args: unknown,
+): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasMethod(line, APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD),
+  );
+}
+
+function isAppServerStartupTruthCommand(
+  command: string,
+  args: unknown,
+): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasAnyMethod(line, APP_SERVER_STARTUP_TRUTH_METHODS),
+  );
+}
+
 function extractAppServerJsonLines(args: unknown): string[] {
   if (!args || typeof args !== "object" || Array.isArray(args)) {
     return [];
@@ -383,10 +420,20 @@ function extractAppServerJsonLines(args: unknown): string[] {
 }
 
 function jsonRpcLineHasMethod(line: string, method: string): boolean {
+  return jsonRpcLineHasAnyMethod(line, new Set([method]));
+}
+
+function jsonRpcLineHasAnyMethod(
+  line: string,
+  methods: ReadonlySet<string>,
+): boolean {
   try {
     const parsed = JSON.parse(line.trim()) as { method?: unknown } | null;
     return Boolean(
-      parsed && typeof parsed === "object" && parsed.method === method,
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.method === "string" &&
+      methods.has(parsed.method),
     );
   } catch {
     return false;

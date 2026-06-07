@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
-import { mkdirSync, readdirSync, rmSync, statSync, copyFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -8,24 +14,24 @@ import { fileURLToPath } from "node:url";
 const TARGETS = {
   "aarch64-apple-darwin": {
     archLabel: "aarch64",
+    forgeArchLabel: "arm64",
     installerExtensions: [".dmg"],
-    metadataNames: ["latest-mac.yml"],
-    metadataExtensions: [".blockmap"],
-    installerName: (version) => `Lime_${version}_aarch64.dmg`,
+    archiveExtensions: [".zip"],
+    metadataNames: ["RELEASES.json"],
   },
   "x86_64-apple-darwin": {
     archLabel: "x64",
+    forgeArchLabel: "x64",
     installerExtensions: [".dmg"],
-    metadataNames: ["latest-mac.yml"],
-    metadataExtensions: [".blockmap"],
-    installerName: (version) => `Lime_${version}_x64.dmg`,
+    archiveExtensions: [".zip"],
+    metadataNames: ["RELEASES.json"],
   },
   "x86_64-pc-windows-msvc": {
     archLabel: "x64",
+    forgeArchLabel: "x64",
     installerExtensions: [".exe"],
-    metadataNames: ["latest.yml"],
-    metadataExtensions: [".blockmap"],
-    installerName: (version) => `Lime_${version}_x64-setup.exe`,
+    archiveExtensions: [".nupkg"],
+    metadataNames: ["RELEASES"],
   },
 };
 
@@ -75,83 +81,117 @@ function walkFiles(root) {
   return result.sort();
 }
 
-function isAllowedAsset(filePath, spec) {
-  const basename = path.basename(filePath);
-  if (basename.includes("builder-debug")) {
-    return false;
-  }
-  if (spec.metadataNames.includes(basename)) {
-    return true;
-  }
-  return spec.metadataExtensions.some((extension) => basename.endsWith(extension));
+function isAllowedMetadataAsset(filePath, spec) {
+  return spec.metadataNames.includes(path.basename(filePath));
 }
 
-function scoreInstaller(filePath, targetTriple) {
+function scoreByNameAndPath(filePath, spec, extensions) {
   const basename = path.basename(filePath).toLowerCase();
-  if (targetTriple.endsWith("apple-darwin")) {
-    if (!basename.endsWith(".dmg")) {
-      return 0;
-    }
-    return basename.includes("universal") ? 1 : 2;
+  if (!extensions.some((extension) => basename.endsWith(extension))) {
+    return 0;
   }
-  if (targetTriple === "x86_64-pc-windows-msvc") {
-    if (!basename.endsWith(".exe")) {
-      return 0;
-    }
-    return basename.includes("setup") ? 3 : 2;
+  const normalizedPath = filePath.replace(/\\/g, "/").toLowerCase();
+  let score = 1;
+  if (basename.includes(spec.archLabel)) {
+    score += 3;
   }
-  return 0;
+  if (basename.includes(spec.forgeArchLabel)) {
+    score += 3;
+  }
+  if (normalizedPath.includes(`-${spec.forgeArchLabel}`)) {
+    score += 2;
+  }
+  if (basename.includes("setup")) {
+    score += 1;
+  }
+  if (basename.includes("universal")) {
+    score -= 1;
+  }
+  return score;
 }
 
-function isInstaller(filePath, spec) {
-  const basename = path.basename(filePath).toLowerCase();
-  return spec.installerExtensions.some((extension) => basename.endsWith(extension));
+function selectAsset(files, spec, extensions, label) {
+  const selected = files
+    .map((filePath) => ({
+      filePath,
+      score: scoreByNameAndPath(filePath, spec, extensions),
+    }))
+    .filter((item) => item.score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score || left.filePath.localeCompare(right.filePath),
+    )[0]?.filePath;
+  if (!selected) {
+    throw new Error(`no ${label} asset found under Forge output`);
+  }
+  return selected;
 }
 
-function stageElectronReleaseAssets({
-  builderDir,
-  outDir,
-  targetTriple,
-  version,
-}) {
+function assertNoRetiredUpdaterAssets(files) {
+  const retiredAssets = files.filter((filePath) =>
+    /(?:\.app\.tar\.gz|\.sig|latest(?:-mac)?\.yml|\.blockmap|latest\.json)$/i.test(
+      path.basename(filePath),
+    ),
+  );
+  if (retiredAssets.length > 0) {
+    throw new Error(
+      `legacy updater assets are not allowed in Electron release staging: ${retiredAssets.join(", ")}`,
+    );
+  }
+}
+
+function stageElectronReleaseAssets({ forgeDir, outDir, targetTriple, version }) {
   const spec = TARGETS[targetTriple];
   if (!spec) {
     throw new Error(`unsupported target triple: ${targetTriple}`);
   }
-  const sourceDir = path.resolve(builderDir || "release-electron");
-  const stagingDir = path.resolve(outDir || path.join("release-assets", targetTriple));
-  const normalizedVersion = normalizeVersion(version);
+  const sourceDir = path.resolve(forgeDir || "release-electron");
+  const stagingDir = path.resolve(
+    outDir || path.join("release-assets", targetTriple),
+  );
+  normalizeVersion(version);
 
   const sourceStat = statSync(sourceDir, { throwIfNoEntry: false });
   if (!sourceStat?.isDirectory()) {
-    throw new Error(`electron builder output is missing: ${sourceDir}`);
+    throw new Error(`Electron Forge output is missing: ${sourceDir}`);
   }
 
   const allFiles = walkFiles(sourceDir);
-  const installer = allFiles
-    .filter((filePath) => isInstaller(filePath, spec))
-    .map((filePath) => ({
-      filePath,
-      score: scoreInstaller(filePath, targetTriple),
-    }))
-    .filter((item) => item.score > 0)
-    .sort((left, right) => right.score - left.score || left.filePath.localeCompare(right.filePath))[0]
-    ?.filePath;
-  if (!installer) {
-    throw new Error(`no installer asset found for ${targetTriple} under ${sourceDir}`);
+  assertNoRetiredUpdaterAssets(allFiles);
+
+  const installer = selectAsset(
+    allFiles,
+    spec,
+    spec.installerExtensions,
+    `installer for ${targetTriple}`,
+  );
+  const archive =
+    spec.archiveExtensions.length > 0
+      ? selectAsset(
+          allFiles,
+          spec,
+          spec.archiveExtensions,
+          `updater archive for ${targetTriple}`,
+        )
+      : null;
+
+  const metadataAssets = allFiles.filter((filePath) =>
+    isAllowedMetadataAsset(filePath, spec),
+  );
+  if (metadataAssets.length === 0) {
+    throw new Error(
+      `no update metadata asset found under Forge output for ${targetTriple}: ${spec.metadataNames.join(", ")}`,
+    );
   }
 
-  const metadataAssets = allFiles.filter((filePath) => isAllowedAsset(filePath, spec));
-  const assets = [installer, ...metadataAssets].sort();
+  const assets = [installer, archive, ...metadataAssets].filter(Boolean).sort();
 
   rmSync(stagingDir, { recursive: true, force: true });
   mkdirSync(stagingDir, { recursive: true });
 
   const copied = [];
   for (const asset of assets) {
-    const destinationName =
-      asset === installer ? spec.installerName(normalizedVersion) : path.basename(asset);
-    const destination = path.join(stagingDir, destinationName);
+    const destination = path.join(stagingDir, path.basename(asset));
     copyFileSync(asset, destination);
     copied.push({ destination, source: asset });
   }
@@ -161,13 +201,14 @@ function stageElectronReleaseAssets({
   );
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const copied = stageElectronReleaseAssets({
-    builderDir: args["builder-dir"],
+    forgeDir: args["forge-dir"],
     outDir: args["out-dir"],
     targetTriple: args["target-triple"],
-    version: args.version || process.env.RELEASE_TAG || process.env.GITHUB_REF_NAME,
+    version:
+      args.version || process.env.RELEASE_TAG || process.env.GITHUB_REF_NAME,
   });
   console.log("Staged Electron release assets:");
   for (const item of copied) {
@@ -180,7 +221,10 @@ const isCli =
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isCli) {
-  main();
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
 }
 
 export { stageElectronReleaseAssets };

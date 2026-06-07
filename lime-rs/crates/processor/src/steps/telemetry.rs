@@ -5,7 +5,6 @@
 use super::traits::{PipelineStep, StepError};
 use async_trait::async_trait;
 use lime_core::processor::RequestContext;
-use lime_core::ProviderType;
 use lime_infra::{
     RequestLog, RequestStatus, StatsAggregator, TokenSource, TokenTracker, TokenUsageRecord,
 };
@@ -30,7 +29,14 @@ impl TelemetryStep {
         status: RequestStatus,
         error_message: Option<String>,
     ) {
-        let provider = ctx.provider.unwrap_or(ProviderType::Kiro);
+        let Some(provider) = ctx.provider else {
+            tracing::warn!(
+                "[TELEMETRY] request_id={} skip_request_log reason=missing_provider model={}",
+                ctx.request_id,
+                ctx.resolved_model
+            );
+            return;
+        };
         let mut log = RequestLog::new(
             ctx.request_id.clone(),
             provider,
@@ -64,7 +70,14 @@ impl TelemetryStep {
         output_tokens: Option<u32>,
         source: TokenSource,
     ) {
-        let provider = ctx.provider.unwrap_or(ProviderType::Kiro);
+        let Some(provider) = ctx.provider else {
+            tracing::warn!(
+                "[TELEMETRY] request_id={} skip_token_log reason=missing_provider model={}",
+                ctx.request_id,
+                ctx.resolved_model
+            );
+            return;
+        };
         if input_tokens.is_some() || output_tokens.is_some() {
             let record = TokenUsageRecord::new(
                 uuid::Uuid::new_v4().to_string(),
@@ -139,13 +152,15 @@ impl PipelineStep for TelemetryStep {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lime_core::ProviderType;
 
     #[test]
     fn test_telemetry_step_record_request() {
         let stats = Arc::new(RwLock::new(StatsAggregator::with_defaults()));
         let tokens = Arc::new(RwLock::new(TokenTracker::with_defaults()));
         let step = TelemetryStep::new(stats.clone(), tokens);
-        let ctx = RequestContext::new("claude-sonnet-4-5".to_string());
+        let mut ctx = RequestContext::new("claude-sonnet-4-5".to_string());
+        ctx.set_provider(ProviderType::Claude);
         step.record_request(&ctx, RequestStatus::Success, None);
         assert_eq!(stats.read().len(), 1);
     }
@@ -155,7 +170,8 @@ mod tests {
         let stats = Arc::new(RwLock::new(StatsAggregator::with_defaults()));
         let tokens = Arc::new(RwLock::new(TokenTracker::with_defaults()));
         let step = TelemetryStep::new(stats, tokens.clone());
-        let ctx = RequestContext::new("claude-sonnet-4-5".to_string());
+        let mut ctx = RequestContext::new("claude-sonnet-4-5".to_string());
+        ctx.set_provider(ProviderType::Claude);
         step.record_tokens(&ctx, Some(100), Some(50), TokenSource::Actual);
         assert_eq!(tokens.read().len(), 1);
     }
@@ -165,7 +181,8 @@ mod tests {
         let stats = Arc::new(RwLock::new(StatsAggregator::with_defaults()));
         let tokens = Arc::new(RwLock::new(TokenTracker::with_defaults()));
         let step = TelemetryStep::new(stats, tokens.clone());
-        let ctx = RequestContext::new("claude-sonnet-4-5".to_string());
+        let mut ctx = RequestContext::new("claude-sonnet-4-5".to_string());
+        ctx.set_provider(ProviderType::Claude);
         let response =
             serde_json::json!({"usage": {"prompt_tokens": 100, "completion_tokens": 50}});
         step.record_tokens_from_response(&ctx, &response);
@@ -178,6 +195,7 @@ mod tests {
         let tokens = Arc::new(RwLock::new(TokenTracker::with_defaults()));
         let step = TelemetryStep::new(stats.clone(), tokens.clone());
         let mut ctx = RequestContext::new("claude-sonnet-4-5".to_string());
+        ctx.set_provider(ProviderType::Claude);
         let mut payload =
             serde_json::json!({"usage": {"prompt_tokens": 100, "completion_tokens": 50}});
         assert!(step.execute(&mut ctx, &mut payload).await.is_ok());

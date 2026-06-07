@@ -14,6 +14,7 @@ import {
   type AgentRuntimeAppServerClient,
 } from "./threadClient";
 import type { AgentRuntimeCommandInvoke } from "./transport";
+import type { AgentRuntimeSubmitTurnRequest } from "./types";
 
 vi.mock("@/lib/dev-bridge", () => ({
   isDevBridgeAvailable: vi.fn(),
@@ -126,22 +127,19 @@ describe("agentRuntime threadClient", () => {
             message: "生成草稿",
             session_id: "session-1",
             event_name: "agentSession/event/session-1",
-            workspace_id: "workspace-1",
-            turn_id: "turn-1",
             images: [
               {
                 data: "data:image/png;base64,abc",
                 media_type: "image/png",
               },
             ],
-            turn_config: {
-              provider_preference: "deepseek",
-              model_preference: "deepseek-v4-flash",
-              metadata: { source: "chat" },
-            },
+            provider_preference: "deepseek",
+            model_preference: "deepseek-v4-flash",
+            workspace_id: "workspace-1",
+            metadata: { source: "chat" },
+            turn_id: "turn-1",
             queue_if_busy: true,
             queued_turn_id: "queued-1",
-            skip_pre_submit_resume: true,
           },
         },
       },
@@ -180,11 +178,140 @@ describe("agentRuntime threadClient", () => {
             message: "整理新闻",
             session_id: "session-1",
             event_name: "event-1",
+            workspace_id: "",
           },
         },
       },
     });
     expect(invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("App Server submit 应通过 hostOptions 无损携带 Claw/Aster 原始请求快照", () => {
+    const request: AgentRuntimeSubmitTurnRequest = {
+      message: "继续执行完整 Claw 链路",
+      session_id: "session-claw",
+      event_name: "aster_stream_claw",
+      workspace_id: "workspace-claw",
+      turn_id: "turn-claw",
+      images: [
+        {
+          data: "data:image/png;base64,claw",
+          media_type: "image/png",
+        },
+      ],
+      turn_config: {
+        provider_config: {
+          provider_id: "deepseek",
+          provider_name: "deepseek",
+          model_name: "deepseek-v4-pro",
+        },
+        provider_preference: "deepseek",
+        model_preference: "deepseek-v4-pro",
+        reasoning_effort: "high",
+        thinking_enabled: true,
+        approval_policy: "on-request",
+        sandbox_policy: "workspace-write",
+        execution_strategy: "react",
+        web_search: true,
+        search_mode: "required",
+        auto_continue: {
+          enabled: true,
+          fast_mode_enabled: false,
+          continuation_length: 2,
+          sensitivity: 0.5,
+        },
+        system_prompt: "保留 Claw 原始系统提示",
+        metadata: {
+          harness: {
+            source: "claw",
+            workspace_skill_runtime_enable: {
+              source: "manual_session_enable",
+            },
+          },
+        },
+      },
+      queue_if_busy: true,
+      queued_turn_id: "queued-claw",
+      skip_pre_submit_resume: true,
+    } satisfies AgentRuntimeSubmitTurnRequest;
+    const turnConfig = request.turn_config;
+    if (!turnConfig) {
+      throw new Error("turn_config should be defined for Claw requests");
+    }
+
+    expect(appServerTurnStartParamsFromRequest(request)).toEqual({
+      sessionId: "session-claw",
+      turnId: "turn-claw",
+      input: {
+        text: "继续执行完整 Claw 链路",
+        attachments: [
+          {
+            kind: "image",
+            uri: "data:image/png;base64,claw",
+            metadata: {
+              mediaType: "image/png",
+              index: 0,
+            },
+          },
+        ],
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName: "aster_stream_claw",
+        providerPreference: "deepseek",
+        modelPreference: "deepseek-v4-pro",
+        metadata: turnConfig.metadata,
+        queuedTurnId: "queued-claw",
+        hostOptions: {
+          asterChatRequest: {
+            message: "继续执行完整 Claw 链路",
+            session_id: "session-claw",
+            event_name: "aster_stream_claw",
+            images: [
+              {
+                data: "data:image/png;base64,claw",
+                media_type: "image/png",
+              },
+            ],
+            provider_config: {
+              provider_id: "deepseek",
+              provider_name: "deepseek",
+              model_name: "deepseek-v4-pro",
+            },
+            provider_preference: "deepseek",
+            model_preference: "deepseek-v4-pro",
+            reasoning_effort: "high",
+            thinking_enabled: true,
+            approval_policy: "on-request",
+            sandbox_policy: "workspace-write",
+            workspace_id: "workspace-claw",
+            web_search: true,
+            search_mode: "required",
+            execution_strategy: "react",
+            auto_continue: {
+              enabled: true,
+              fast_mode_enabled: false,
+              continuation_length: 2,
+              sensitivity: 0.5,
+            },
+            system_prompt: "保留 Claw 原始系统提示",
+            metadata: {
+              harness: {
+                source: "claw",
+                workspace_skill_runtime_enable: {
+                  source: "manual_session_enable",
+                },
+              },
+            },
+            turn_id: "turn-claw",
+            queue_if_busy: true,
+            queued_turn_id: "queued-claw",
+          },
+        },
+      },
+      queueIfBusy: true,
+      skipPreSubmitResume: true,
+    });
   });
 
   it("App Server submit 返回 notification 时应投递到请求里的前端 stream event", async () => {
@@ -432,6 +559,263 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server turn/start pending 时也应提前注册 drain 路由并投递首个增量", async () => {
+    const appServerClient = appServerClientMock();
+    let resolveStartTurn:
+      | ((value: Awaited<ReturnType<AgentRuntimeAppServerClient["startTurn"]>>) => void)
+      | undefined;
+    vi.mocked(appServerClient.startTurn).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveStartTurn = resolve;
+      }),
+    );
+    vi.mocked(appServerClient.drainEvents).mockResolvedValueOnce([
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-pending-delta",
+            sequence: 1,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-pending",
+            type: "message.delta",
+            timestamp: "2026-06-06T00:00:00.000Z",
+            payload: {
+              text: "提前增量",
+            },
+          },
+        },
+      },
+    ]);
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+      enableAppServerEventDrain: true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_pending",
+      listener,
+    );
+    const submitPromise = client.submitAgentRuntimeTurn({
+      message: "生成草稿",
+      session_id: "session-1",
+      turn_id: "turn-pending",
+      event_name: "aster_stream_pending",
+    });
+
+    await vi.waitFor(() => {
+      expect(appServerClient.drainEvents).toHaveBeenCalledWith(50);
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "text_delta",
+          text: "提前增量",
+          event_id: "evt-pending-delta",
+          session_id: "session-1",
+          turn_id: "turn-pending",
+        }),
+      });
+    });
+
+    resolveStartTurn?.({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-pending",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-pending",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-pending-delta",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-pending",
+              type: "message.delta",
+              timestamp: "2026-06-06T00:00:00.000Z",
+              payload: {
+                text: "提前增量",
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-pending-done",
+              sequence: 2,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-pending",
+              type: "turn.final_done",
+              timestamp: "2026-06-06T00:00:01.000Z",
+              payload: {},
+            },
+          },
+        },
+      ],
+    });
+    await submitPromise;
+    expect(
+      listener.mock.calls.filter(
+        ([event]) => event?.payload?.event_id === "evt-pending-delta",
+      ),
+    ).toHaveLength(1);
+
+    unlisten();
+  });
+
+  it("App Server drain 收到 turn.completed 后不应关闭路由，后续正文仍应投递", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [],
+    });
+    vi.mocked(appServerClient.drainEvents)
+      .mockResolvedValueOnce([
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-drain-completed",
+              sequence: 2,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "turn.completed",
+              timestamp: "2026-06-06T00:00:01.000Z",
+              payload: {},
+            },
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-drain-delta-after-completed",
+              sequence: 3,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "message.delta",
+              timestamp: "2026-06-06T00:00:02.000Z",
+              payload: {
+                text: "最终答复",
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-drain-final-done",
+              sequence: 4,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "turn.final_done",
+              timestamp: "2026-06-06T00:00:03.000Z",
+              payload: {},
+            },
+          },
+        },
+      ]);
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+      enableAppServerEventDrain: true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_message-drain-completed",
+      listener,
+    );
+
+    await client.submitAgentRuntimeTurn({
+      message: "生成草稿",
+      session_id: "session-1",
+      event_name: "aster_stream_message-drain-completed",
+    });
+
+    await vi.waitFor(() => {
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "turn_completed",
+          event_id: "evt-drain-completed",
+          session_id: "session-1",
+          turn_id: "turn-1",
+        }),
+      });
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "text_delta",
+          text: "最终答复",
+          event_id: "evt-drain-delta-after-completed",
+          session_id: "session-1",
+          turn_id: "turn-1",
+        }),
+      });
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "final_done",
+          event_id: "evt-drain-final-done",
+          session_id: "session-1",
+          turn_id: "turn-1",
+        }),
+      });
+    });
+
+    expect(appServerClient.drainEvents).toHaveBeenCalledTimes(2);
+    unlisten();
+  });
+
   it("App Server submit error 前的 notification 应先投递到当前前端 stream event", async () => {
     const appServerClient = appServerClientMock();
     const notifications = [
@@ -621,7 +1005,7 @@ describe("agentRuntime threadClient", () => {
       request_id: "req-1",
       action_type: "ask_user",
       confirmed: true,
-      response: "{\"answer\":\"继续\"}",
+      response: '{"answer":"继续"}',
       user_data: { answer: "继续" },
       metadata: { source: "inline-action" },
       event_name: "agentSession/event/session-1",
@@ -637,7 +1021,7 @@ describe("agentRuntime threadClient", () => {
       requestId: "req-1",
       actionType: "ask_user",
       confirmed: true,
-      response: "{\"answer\":\"继续\"}",
+      response: '{"answer":"继续"}',
       userData: { answer: "继续" },
       metadata: { source: "inline-action" },
       eventName: "agentSession/event/session-1",
@@ -735,7 +1119,9 @@ describe("agentRuntime threadClient", () => {
       isAppServerTurnLifecycleAvailable: () => true,
     });
 
-    await expect(client.getAgentRuntimeThreadRead("session-1")).resolves.toEqual(
+    await expect(
+      client.getAgentRuntimeThreadRead("session-1"),
+    ).resolves.toEqual(
       expect.objectContaining({
         thread_id: "thread-1",
         status: "blocked",
@@ -885,6 +1271,7 @@ describe("agentRuntime threadClient", () => {
             message: "继续",
             session_id: "session-1",
             event_name: "agentSession/event/session-1",
+            workspace_id: "",
           },
         },
       },
@@ -1010,12 +1397,112 @@ describe("agentRuntime threadClient", () => {
         },
       }),
     ).toMatchObject({
-      type: "done",
-      usage: {
-        inputTokens: 10,
-        outputTokens: 5,
+      type: "turn_completed",
+      turn: {
+        id: "turn-1",
+        thread_id: "session-1",
+        prompt_text: "",
+        status: "completed",
       },
       event_id: "evt-completed",
+      session_id: "session-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-batch",
+            sequence: 7,
+            sessionId: "session-1",
+            turnId: "turn-1",
+            type: "message.delta_batch",
+            timestamp: "2026-06-06T00:00:06.000Z",
+            payload: {
+              chunks: ["最终", "答复"],
+              boundary: "provider",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "text_delta_batch",
+      text: "最终答复",
+      chunks: ["最终", "答复"],
+      boundary: "provider",
+      event_id: "evt-batch",
+      session_id: "session-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-claw-batch",
+            sequence: 8,
+            sessionId: "session-1",
+            turnId: "turn-1",
+            type: "message.delta",
+            timestamp: "2026-06-06T00:00:07.000Z",
+            payload: {
+              type: "text_delta_batch",
+              text: "Claw 批量输出",
+              chunks: ["Claw ", "批量", "输出"],
+              boundary: "backlog",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "text_delta_batch",
+      text: "Claw 批量输出",
+      chunks: ["Claw ", "批量", "输出"],
+      boundary: "backlog",
+      event_id: "evt-claw-batch",
+      session_id: "session-1",
+      turn_id: "turn-1",
+    });
+
+    expect(
+      projectAppServerAgentEventPayload({
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-item-message",
+            sequence: 9,
+            sessionId: "session-1",
+            turnId: "turn-1",
+            type: "item.completed",
+            timestamp: "2026-06-06T00:00:07.000Z",
+            payload: {
+              item: {
+                id: "item-1",
+                type: "agent_message",
+                text: "最终答复",
+                phase: "final_answer",
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "message",
+      message: {
+        id: "item-1",
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "最终答复",
+          },
+        ],
+        timestamp: Date.parse("2026-06-06T00:00:07.000Z"),
+      },
+      event_id: "evt-item-message",
       session_id: "session-1",
       turn_id: "turn-1",
     });

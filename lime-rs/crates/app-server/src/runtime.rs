@@ -4,6 +4,10 @@ use crate::CapabilityListContext;
 use crate::CapabilitySource;
 use app_server_protocol::error_codes;
 use app_server_protocol::AgentAppInstalledListResponse;
+use app_server_protocol::AgentAppUiRuntimeStartParams;
+use app_server_protocol::AgentAppUiRuntimeStatusParams;
+use app_server_protocol::AgentAppUiRuntimeStatusResponse;
+use app_server_protocol::AgentAppUiRuntimeStopParams;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionRespondParams;
@@ -22,6 +26,8 @@ use app_server_protocol::AgentSessionTurnCancelParams;
 use app_server_protocol::AgentSessionTurnCancelResponse;
 use app_server_protocol::AgentSessionTurnStartParams;
 use app_server_protocol::AgentSessionTurnStartResponse;
+use app_server_protocol::AgentSessionUpdateParams;
+use app_server_protocol::AgentSessionUpdateResponse;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::ArtifactContentStatus;
@@ -32,9 +38,22 @@ use app_server_protocol::AutomationJobListResponse;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::CapabilityListResponse;
 use app_server_protocol::ClientInfo;
+use app_server_protocol::ConnectCallbackSendParams;
+use app_server_protocol::ConnectCallbackSendResponse;
+use app_server_protocol::ConnectDeepLinkResolveParams;
+use app_server_protocol::ConnectDeepLinkResolveResponse;
+use app_server_protocol::ConnectOpenDeepLinkResolveParams;
+use app_server_protocol::ConnectOpenDeepLinkResolveResponse;
+use app_server_protocol::ConnectRelayApiKeySaveParams;
+use app_server_protocol::ConnectRelayApiKeySaveResponse;
 use app_server_protocol::EvidenceExportParams;
 use app_server_protocol::EvidenceExportResponse;
 use app_server_protocol::EvidencePackSummary;
+use app_server_protocol::FileSystemDirectoryListing;
+use app_server_protocol::FileSystemFileEntry;
+use app_server_protocol::FileSystemFilePreview;
+use app_server_protocol::FileSystemListDirectoryParams;
+use app_server_protocol::FileSystemReadFilePreviewParams;
 use app_server_protocol::JsonRpcError;
 use app_server_protocol::KnowledgeListPacksParams;
 use app_server_protocol::KnowledgeListPacksResponse;
@@ -61,6 +80,8 @@ use app_server_protocol::WorkspaceProjectPathResolveResponse;
 use app_server_protocol::WorkspaceProjectsRootReadResponse;
 use app_server_protocol::WorkspaceReadParams;
 use app_server_protocol::WorkspaceReadResponse;
+use app_server_protocol::WorkspaceRegisteredSkillsListParams;
+use app_server_protocol::WorkspaceRegisteredSkillsListResponse;
 use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::WorkspaceSkillBindingsListResponse;
 use async_trait::async_trait;
@@ -71,15 +92,24 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Read;
+use std::net::TcpListener;
 use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
+use std::time::Instant;
 use thiserror::Error;
+use tokio::process::Child;
+use tokio::process::Command;
+use tokio::time::sleep;
 use uuid::Uuid;
 
 pub const DEFAULT_ARTIFACT_CONTENT_MAX_BYTES: u64 = 1024 * 1024;
+const AGENT_APP_DATA_DIR: &str = "agent-apps";
+const AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS: u64 = 45;
 
 #[derive(Debug, Error)]
 pub enum RuntimeCoreError {
@@ -196,6 +226,11 @@ pub trait AppDataSource: Send + Sync {
         params: AgentSessionReadParams,
     ) -> Result<Option<AgentSessionReadResponse>, RuntimeCoreError>;
 
+    async fn update_current_timeline_session(
+        &self,
+        params: AgentSessionUpdateParams,
+    ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError>;
+
     async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError>;
 
     async fn read_workspace(
@@ -238,6 +273,11 @@ pub trait AppDataSource: Send + Sync {
         params: WorkspaceSkillBindingsListParams,
     ) -> Result<WorkspaceSkillBindingsListResponse, RuntimeCoreError>;
 
+    async fn list_workspace_registered_skills(
+        &self,
+        params: WorkspaceRegisteredSkillsListParams,
+    ) -> Result<WorkspaceRegisteredSkillsListResponse, RuntimeCoreError>;
+
     async fn list_agent_app_installed(
         &self,
     ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError>;
@@ -279,6 +319,42 @@ pub trait AppDataSource: Send + Sync {
     async fn list_model_provider_aliases(
         &self,
     ) -> Result<ModelProviderAliasListResponse, RuntimeCoreError>;
+
+    async fn resolve_connect_deep_link(
+        &self,
+        _params: ConnectDeepLinkResolveParams,
+    ) -> Result<ConnectDeepLinkResolveResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "connectDeepLink/resolve is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn resolve_connect_open_deep_link(
+        &self,
+        _params: ConnectOpenDeepLinkResolveParams,
+    ) -> Result<ConnectOpenDeepLinkResolveResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "connectOpenDeepLink/resolve is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn save_connect_relay_api_key(
+        &self,
+        _params: ConnectRelayApiKeySaveParams,
+    ) -> Result<ConnectRelayApiKeySaveResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "connectRelayApiKey/save is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn deliver_connect_callback(
+        &self,
+        _params: ConnectCallbackSendParams,
+    ) -> Result<ConnectCallbackSendResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "connectCallback/send is not available without an app data source".to_string(),
+        ))
+    }
 }
 
 #[derive(Debug, Default)]
@@ -359,6 +435,13 @@ impl AppDataSource for NoopAppDataSource {
         _params: AgentSessionReadParams,
     ) -> Result<Option<AgentSessionReadResponse>, RuntimeCoreError> {
         Ok(None)
+    }
+
+    async fn update_current_timeline_session(
+        &self,
+        params: AgentSessionUpdateParams,
+    ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::SessionNotFound(params.session_id))
     }
 
     async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
@@ -450,6 +533,13 @@ impl AppDataSource for NoopAppDataSource {
                 "bindings": []
             }),
         })
+    }
+
+    async fn list_workspace_registered_skills(
+        &self,
+        _params: WorkspaceRegisteredSkillsListParams,
+    ) -> Result<WorkspaceRegisteredSkillsListResponse, RuntimeCoreError> {
+        Ok(WorkspaceRegisteredSkillsListResponse::default())
     }
 
     async fn list_agent_app_installed(
@@ -696,6 +786,7 @@ pub struct RuntimeCoreEventAppender {
 #[derive(Debug, Default)]
 struct RuntimeCoreState {
     sessions: HashMap<String, StoredSession>,
+    agent_app_ui_runtimes: HashMap<String, AgentAppUiRuntimeProcess>,
 }
 
 #[derive(Debug, Clone)]
@@ -703,6 +794,23 @@ struct StoredSession {
     session: AgentSession,
     turns: Vec<AgentTurn>,
     events: Vec<AgentEvent>,
+}
+
+#[derive(Debug)]
+struct AgentAppUiRuntimeProcess {
+    child: Child,
+    app_dir: PathBuf,
+    port: u16,
+    base_url: String,
+    entry_key: String,
+    route: String,
+    started_at: String,
+}
+
+#[derive(Debug, Clone)]
+struct AgentAppUiRuntimeEntry {
+    entry_key: String,
+    route: String,
 }
 
 fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
@@ -757,6 +865,52 @@ fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
     }
 }
 
+fn file_system_directory_listing_from_service(
+    listing: lime_services::file_browser_service::DirectoryListing,
+) -> FileSystemDirectoryListing {
+    FileSystemDirectoryListing {
+        path: listing.path,
+        parent_path: listing.parent_path,
+        entries: listing
+            .entries
+            .into_iter()
+            .map(file_system_file_entry_from_service)
+            .collect(),
+        error: listing.error,
+    }
+}
+
+fn file_system_file_entry_from_service(
+    entry: lime_services::file_browser_service::FileEntry,
+) -> FileSystemFileEntry {
+    FileSystemFileEntry {
+        name: entry.name,
+        path: entry.path,
+        is_dir: entry.is_dir,
+        size: entry.size,
+        modified_at: entry.modified_at,
+        file_type: entry.file_type,
+        is_hidden: entry.is_hidden,
+        mode_str: entry.mode_str,
+        mode: entry.mode,
+        mime_type: entry.mime_type,
+        is_symlink: entry.is_symlink,
+        icon_data_url: entry.icon_data_url,
+    }
+}
+
+fn file_system_file_preview_from_service(
+    preview: lime_services::file_browser_service::FilePreview,
+) -> FileSystemFilePreview {
+    FileSystemFilePreview {
+        path: preview.path,
+        content: preview.content,
+        is_binary: preview.is_binary,
+        size: preview.size,
+        error: preview.error,
+    }
+}
+
 fn stored_session_hidden_from_user_recents(stored: &StoredSession) -> bool {
     stored
         .session
@@ -764,6 +918,121 @@ fn stored_session_hidden_from_user_recents(stored: &StoredSession) -> bool {
         .as_ref()
         .and_then(|reference| reference.metadata.as_ref())
         .is_some_and(metadata_hidden_from_user_recents)
+}
+
+fn update_session_business_object_title(session: &mut AgentSession, title: &str) {
+    let title = title.trim();
+    if title.is_empty() {
+        return;
+    }
+    match session.business_object_ref.as_mut() {
+        Some(reference) => {
+            reference.title = Some(title.to_string());
+            match reference.metadata.take() {
+                Some(serde_json::Value::Object(mut metadata)) => {
+                    metadata.insert(
+                        "title".to_string(),
+                        serde_json::Value::String(title.to_string()),
+                    );
+                    reference.metadata = Some(serde_json::Value::Object(metadata));
+                }
+                Some(metadata) => {
+                    reference.metadata = Some(json!({
+                        "title": title,
+                        "previousMetadata": metadata,
+                    }));
+                }
+                None => {
+                    reference.metadata = Some(json!({ "title": title }));
+                }
+            }
+        }
+        None => {
+            session.business_object_ref = Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: session.session_id.clone(),
+                title: Some(title.to_string()),
+                uri: None,
+                metadata: Some(json!({ "title": title })),
+            });
+        }
+    }
+}
+
+fn update_session_business_object_metadata(
+    session: &mut AgentSession,
+    params: &AgentSessionUpdateParams,
+) {
+    let mut updates = serde_json::Map::new();
+    insert_trimmed_metadata_string(
+        &mut updates,
+        "providerSelector",
+        params.provider_selector.as_deref(),
+    );
+    insert_trimmed_metadata_string(
+        &mut updates,
+        "providerName",
+        params.provider_name.as_deref(),
+    );
+    insert_trimmed_metadata_string(&mut updates, "modelName", params.model_name.as_deref());
+    insert_trimmed_metadata_string(
+        &mut updates,
+        "executionStrategy",
+        params.execution_strategy.as_deref(),
+    );
+    insert_trimmed_metadata_string(
+        &mut updates,
+        "recentAccessMode",
+        params.recent_access_mode.as_deref(),
+    );
+    if let Some(value) = params.recent_preferences.as_ref() {
+        updates.insert("recentPreferences".to_string(), value.clone());
+    }
+    if let Some(value) = params.recent_team_selection.as_ref() {
+        updates.insert("recentTeamSelection".to_string(), value.clone());
+    }
+    if updates.is_empty() {
+        return;
+    }
+
+    let session_id = session.session_id.clone();
+    let reference =
+        session
+            .business_object_ref
+            .get_or_insert_with(|| app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: session_id,
+                title: None,
+                uri: None,
+                metadata: None,
+            });
+    match reference.metadata.take() {
+        Some(serde_json::Value::Object(mut metadata)) => {
+            metadata.extend(updates);
+            reference.metadata = Some(serde_json::Value::Object(metadata));
+        }
+        Some(metadata) => {
+            updates.insert("previousMetadata".to_string(), metadata);
+            reference.metadata = Some(serde_json::Value::Object(updates));
+        }
+        None => {
+            reference.metadata = Some(serde_json::Value::Object(updates));
+        }
+    }
+}
+
+fn insert_trimmed_metadata_string(
+    metadata: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: Option<&str>,
+) {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return;
+    };
+    metadata.insert(
+        key.to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
 }
 
 fn metadata_hidden_from_user_recents(metadata: &serde_json::Value) -> bool {
@@ -980,11 +1249,12 @@ impl RuntimeCore {
             .sessions
             .get(&params.session_id)
             .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
+        let detail = runtime_session_read_detail(stored);
 
         Ok(AgentSessionReadResponse {
             session: stored.session.clone(),
             turns: stored.turns.clone(),
-            detail: None,
+            detail: Some(detail),
         })
     }
 
@@ -1001,6 +1271,65 @@ impl RuntimeCore {
                 .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id)),
             Err(error) => Err(error),
         }
+    }
+
+    pub async fn update_session_current(
+        &self,
+        params: AgentSessionUpdateParams,
+    ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError> {
+        let normalized_session_id = params.session_id.trim().to_string();
+        if normalized_session_id.is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "sessionId is required for agentSession/update".to_string(),
+            ));
+        }
+        if let Some(session) =
+            self.update_runtime_core_session_overview(params.clone(), &normalized_session_id)?
+        {
+            return Ok(AgentSessionUpdateResponse { session });
+        }
+        self.app_data_source
+            .update_current_timeline_session(AgentSessionUpdateParams {
+                session_id: normalized_session_id,
+                title: params.title,
+                archived: params.archived,
+                provider_selector: params.provider_selector,
+                provider_name: params.provider_name,
+                model_name: params.model_name,
+                execution_strategy: params.execution_strategy,
+                recent_access_mode: params.recent_access_mode,
+                recent_preferences: params.recent_preferences,
+                recent_team_selection: params.recent_team_selection,
+            })
+            .await
+    }
+
+    fn update_runtime_core_session_overview(
+        &self,
+        params: AgentSessionUpdateParams,
+        session_id: &str,
+    ) -> Result<Option<AgentSessionOverview>, RuntimeCoreError> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let Some(stored) = state.sessions.get_mut(session_id) else {
+            return Ok(None);
+        };
+        if let Some(title) = params.title.as_deref().map(str::trim) {
+            if !title.is_empty() {
+                update_session_business_object_title(&mut stored.session, title);
+            }
+        }
+        update_session_business_object_metadata(&mut stored.session, &params);
+        stored.session.updated_at = timestamp();
+        if params.archived.unwrap_or(false) {
+            return Err(RuntimeCoreError::Backend(
+                "agentSession/update archived is only supported for persisted current timeline sessions"
+                    .to_string(),
+            ));
+        }
+        Ok(Some(stored_session_to_overview(stored)))
     }
 
     pub async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
@@ -1064,6 +1393,45 @@ impl RuntimeCore {
         self.app_data_source.read_skill(params).await
     }
 
+    pub async fn list_directory(
+        &self,
+        params: FileSystemListDirectoryParams,
+    ) -> Result<FileSystemDirectoryListing, RuntimeCoreError> {
+        let path = params.path.trim();
+        if path.is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "path is required for fileSystem/listDirectory".to_string(),
+            ));
+        }
+        let path = path.to_string();
+        let listing = tokio::task::spawn_blocking(move || {
+            lime_services::file_browser_service::list_directory(&path)
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("目录读取任务失败: {error}")))?;
+        Ok(file_system_directory_listing_from_service(listing))
+    }
+
+    pub async fn read_file_preview(
+        &self,
+        params: FileSystemReadFilePreviewParams,
+    ) -> Result<FileSystemFilePreview, RuntimeCoreError> {
+        let path = params.path.trim();
+        if path.is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "path is required for fileSystem/readFilePreview".to_string(),
+            ));
+        }
+        let path = path.to_string();
+        let max_size = params.max_size;
+        let preview = tokio::task::spawn_blocking(move || {
+            lime_services::file_browser_service::read_file_preview(&path, max_size)
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("文件预览任务失败: {error}")))?;
+        Ok(file_system_file_preview_from_service(preview))
+    }
+
     pub async fn list_workspace_skill_bindings(
         &self,
         params: WorkspaceSkillBindingsListParams,
@@ -1073,10 +1441,118 @@ impl RuntimeCore {
             .await
     }
 
+    pub async fn list_workspace_registered_skills(
+        &self,
+        params: WorkspaceRegisteredSkillsListParams,
+    ) -> Result<WorkspaceRegisteredSkillsListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_workspace_registered_skills(params)
+            .await
+    }
+
     pub async fn list_agent_app_installed(
         &self,
     ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
         self.app_data_source.list_agent_app_installed().await
+    }
+
+    pub async fn start_agent_app_ui_runtime(
+        &self,
+        params: AgentAppUiRuntimeStartParams,
+    ) -> Result<AgentAppUiRuntimeStatusResponse, RuntimeCoreError> {
+        validate_agent_app_id(&params.app_id)?;
+        let state = self.find_agent_app_installed_state(&params.app_id).await?;
+        let entry = resolve_agent_app_ui_entry(&state, params.entry_key.as_deref())?;
+        if let Some(status) = self
+            .running_agent_app_ui_runtime(&params.app_id, Some(&entry))
+            .await?
+        {
+            return Ok(status);
+        }
+
+        let app_dir = resolve_agent_app_runtime_dir(&state)?;
+        ensure_agent_app_runtime_folder(&app_dir)?;
+        let port = reserve_local_port()?;
+        let base_url = format!("http://127.0.0.1:{port}");
+        let mut child = spawn_agent_app_ui_process(&app_dir, port)?;
+        wait_for_agent_app_ui_runtime_ready(&mut child, &base_url).await?;
+        let pid = child.id();
+        let process = AgentAppUiRuntimeProcess {
+            child,
+            app_dir,
+            port,
+            base_url: base_url.clone(),
+            entry_key: entry.entry_key.clone(),
+            route: entry.route.clone(),
+            started_at: timestamp(),
+        };
+        self.state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .agent_app_ui_runtimes
+            .insert(params.app_id.clone(), process);
+
+        Ok(AgentAppUiRuntimeStatusResponse {
+            app_id: params.app_id,
+            status: "running".to_string(),
+            base_url: Some(base_url.clone()),
+            entry_url: Some(join_agent_app_runtime_url(&base_url, &entry.route)),
+            port: Some(port),
+            pid,
+            message: None,
+            entry_key: Some(entry.entry_key),
+            route: Some(entry.route),
+        })
+    }
+
+    pub async fn agent_app_ui_runtime_status(
+        &self,
+        params: AgentAppUiRuntimeStatusParams,
+    ) -> Result<AgentAppUiRuntimeStatusResponse, RuntimeCoreError> {
+        validate_agent_app_id(&params.app_id)?;
+        if let Some(status) = self
+            .running_agent_app_ui_runtime(&params.app_id, None)
+            .await?
+        {
+            return Ok(status);
+        }
+        Ok(stopped_agent_app_ui_runtime_status(
+            params.app_id,
+            "Agent App UI runtime 未启动。",
+        ))
+    }
+
+    pub async fn stop_agent_app_ui_runtime(
+        &self,
+        params: AgentAppUiRuntimeStopParams,
+    ) -> Result<AgentAppUiRuntimeStatusResponse, RuntimeCoreError> {
+        validate_agent_app_id(&params.app_id)?;
+        let process = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned")
+            .agent_app_ui_runtimes
+            .remove(&params.app_id);
+        let Some(mut process) = process else {
+            return Ok(stopped_agent_app_ui_runtime_status(
+                params.app_id,
+                "Agent App UI runtime 未启动。",
+            ));
+        };
+        let pid = process.child.id();
+        terminate_agent_app_ui_process(&mut process.child).await;
+
+        Ok(AgentAppUiRuntimeStatusResponse {
+            app_id: params.app_id,
+            status: "stopped".to_string(),
+            base_url: Some(process.base_url),
+            entry_url: None,
+            port: Some(process.port),
+            pid,
+            message: Some("Agent App UI runtime 已停止。".to_string()),
+            entry_key: Some(process.entry_key),
+            route: Some(process.route),
+        })
     }
 
     pub async fn list_knowledge_packs(
@@ -1141,6 +1617,38 @@ impl RuntimeCore {
         &self,
     ) -> Result<ModelProviderAliasListResponse, RuntimeCoreError> {
         self.app_data_source.list_model_provider_aliases().await
+    }
+
+    pub async fn resolve_connect_deep_link(
+        &self,
+        params: ConnectDeepLinkResolveParams,
+    ) -> Result<ConnectDeepLinkResolveResponse, RuntimeCoreError> {
+        self.app_data_source.resolve_connect_deep_link(params).await
+    }
+
+    pub async fn resolve_connect_open_deep_link(
+        &self,
+        params: ConnectOpenDeepLinkResolveParams,
+    ) -> Result<ConnectOpenDeepLinkResolveResponse, RuntimeCoreError> {
+        self.app_data_source
+            .resolve_connect_open_deep_link(params)
+            .await
+    }
+
+    pub async fn save_connect_relay_api_key(
+        &self,
+        params: ConnectRelayApiKeySaveParams,
+    ) -> Result<ConnectRelayApiKeySaveResponse, RuntimeCoreError> {
+        self.app_data_source
+            .save_connect_relay_api_key(params)
+            .await
+    }
+
+    pub async fn deliver_connect_callback(
+        &self,
+        params: ConnectCallbackSendParams,
+    ) -> Result<ConnectCallbackSendResponse, RuntimeCoreError> {
+        self.app_data_source.deliver_connect_callback(params).await
     }
 
     pub fn read_artifacts(
@@ -1295,6 +1803,9 @@ impl RuntimeCore {
         host: RuntimeHostContext,
         event_callback: Option<&mut RuntimeEventCallback<'_>>,
     ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError> {
+        self.ensure_current_timeline_session_hydrated(&params.session_id)
+            .await?;
+
         if let Some(capability_id) = params
             .runtime_options
             .as_ref()
@@ -1415,6 +1926,49 @@ impl RuntimeCore {
             },
             events,
         })
+    }
+
+    async fn ensure_current_timeline_session_hydrated(
+        &self,
+        session_id: &str,
+    ) -> Result<(), RuntimeCoreError> {
+        if self.has_runtime_core_session(session_id) {
+            return Ok(());
+        }
+
+        let response = self
+            .app_data_source
+            .read_current_timeline_session(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+        self.insert_hydrated_session(response);
+        Ok(())
+    }
+
+    fn has_runtime_core_session(&self, session_id: &str) -> bool {
+        let state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        state.sessions.contains_key(session_id)
+    }
+
+    fn insert_hydrated_session(&self, response: AgentSessionReadResponse) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let session_id = response.session.session_id.clone();
+        state.sessions.entry(session_id).or_insert(StoredSession {
+            session: response.session,
+            turns: response.turns,
+            events: Vec::new(),
+        });
     }
 
     fn stored_turn(
@@ -2045,6 +2599,197 @@ fn artifact_summary_from_event(event: &AgentEvent) -> Option<ArtifactSummary> {
     })
 }
 
+fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value {
+    let thread_read = runtime_thread_read_from_stored_session(stored);
+    json!({
+        "id": stored.session.session_id,
+        "session_id": stored.session.session_id,
+        "thread_id": stored.session.thread_id,
+        "workspace_id": stored.session.workspace_id,
+        "status": agent_session_status_label(stored.session.status),
+        "execution_strategy": session_execution_strategy(&stored.session),
+        "turns": stored.turns,
+        "items": [],
+        "queued_turns": [],
+        "artifacts": artifact_summaries_for_turn(&stored.events, None),
+        "thread_read": thread_read,
+    })
+}
+
+fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json::Value {
+    let latest_turn_status = stored
+        .turns
+        .last()
+        .map(|turn| agent_turn_status_label(turn.status));
+    let active_turn_id = stored
+        .turns
+        .iter()
+        .rev()
+        .find(|turn| agent_turn_is_active(turn.status))
+        .map(|turn| turn.turn_id.clone());
+    json!({
+        "session_id": stored.session.session_id,
+        "thread_id": stored.session.thread_id,
+        "status": agent_session_status_label(stored.session.status),
+        "execution_strategy": session_execution_strategy(&stored.session),
+        "turns": stored.turns,
+        "pending_requests": [],
+        "queued_turns": stored.turns
+            .iter()
+            .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
+            .collect::<Vec<_>>(),
+        "active_turn_id": active_turn_id,
+        "tool_calls": tool_calls_from_events(&stored.events),
+        "artifacts": artifact_summaries_for_turn(&stored.events, None),
+        "diagnostics": {
+            "latest_turn_status": latest_turn_status,
+        },
+        "runtime_summary": {
+            "latestTurnStatus": latest_turn_status,
+        },
+    })
+}
+
+fn tool_calls_from_events(events: &[AgentEvent]) -> Vec<serde_json::Value> {
+    let mut calls: Vec<serde_json::Value> = Vec::new();
+    for event in events {
+        let Some(tool_call) = tool_call_from_event(event) else {
+            continue;
+        };
+        let call_id = tool_call_id_from_event_payload(&event.payload);
+        let tool_name = string_field(&tool_call, &["tool_name", "toolName", "name"]);
+        if let Some(existing) = calls.iter_mut().find(|existing| {
+            if let Some(call_id) = call_id.as_deref() {
+                string_field(existing, &["id", "tool_call_id", "toolCallId"]).as_deref()
+                    == Some(call_id)
+            } else if let Some(tool_name) = tool_name.as_deref() {
+                string_field(existing, &["tool_name", "toolName", "name"]).as_deref()
+                    == Some(tool_name)
+                    && string_field(existing, &["turn_id", "turnId"]).as_deref()
+                        == event.turn_id.as_deref()
+            } else {
+                false
+            }
+        }) {
+            merge_tool_call(existing, tool_call);
+        } else {
+            calls.push(tool_call);
+        }
+    }
+    calls
+}
+
+fn tool_call_id_from_event_payload(payload: &serde_json::Value) -> Option<String> {
+    string_field(
+        payload,
+        &["id", "tool_call_id", "toolCallId", "toolId", "tool_id"],
+    )
+}
+
+fn tool_call_from_event(event: &AgentEvent) -> Option<serde_json::Value> {
+    let status = match event.event_type.as_str() {
+        "tool.started" => "running",
+        "tool.result" => "completed",
+        "tool.failed" => "failed",
+        _ => return None,
+    };
+    let payload = &event.payload;
+    let mut record = serde_json::Map::new();
+    let id = tool_call_id_from_event_payload(payload).unwrap_or_else(|| event.event_id.clone());
+    record.insert("id".to_string(), json!(id));
+    if let Some(tool_name) = string_field(payload, &["tool_name", "toolName", "name"]) {
+        record.insert("tool_name".to_string(), json!(tool_name));
+    }
+    record.insert("status".to_string(), json!(status));
+    record.insert(
+        "success".to_string(),
+        json!(event.event_type.as_str() != "tool.failed"),
+    );
+    if let Some(output) = tool_output_from_event_payload(payload) {
+        record.insert("output_preview".to_string(), json!(output));
+        record.insert("output".to_string(), json!(output));
+    }
+    if let Some(error) = payload.get("error").cloned() {
+        record.insert("error".to_string(), error);
+    }
+    record.insert("event_id".to_string(), json!(event.event_id));
+    record.insert("turn_id".to_string(), json!(event.turn_id));
+    record.insert("timestamp".to_string(), json!(event.timestamp));
+    Some(serde_json::Value::Object(record))
+}
+
+fn merge_tool_call(existing: &mut serde_json::Value, next: serde_json::Value) {
+    let (Some(existing), Some(next)) = (existing.as_object_mut(), next.as_object()) else {
+        return;
+    };
+    for (key, value) in next {
+        if value.is_null() {
+            continue;
+        }
+        existing.insert(key.clone(), value.clone());
+    }
+}
+
+fn tool_output_from_event_payload(payload: &serde_json::Value) -> Option<String> {
+    string_field(
+        payload,
+        &[
+            "output",
+            "output_preview",
+            "outputPreview",
+            "text",
+            "content",
+            "result",
+        ],
+    )
+    .or_else(|| {
+        payload
+            .get("result")
+            .filter(|value| !value.is_string() && !value.is_null())
+            .map(|value| value.to_string())
+    })
+}
+
+fn agent_turn_is_active(status: AgentTurnStatus) -> bool {
+    matches!(
+        status,
+        AgentTurnStatus::Accepted
+            | AgentTurnStatus::Queued
+            | AgentTurnStatus::Running
+            | AgentTurnStatus::WaitingAction
+    )
+}
+
+fn agent_session_status_label(status: AgentSessionStatus) -> &'static str {
+    match status {
+        AgentSessionStatus::Idle => "idle",
+        AgentSessionStatus::Running => "running",
+        AgentSessionStatus::WaitingAction => "waitingAction",
+        AgentSessionStatus::Completed => "completed",
+        AgentSessionStatus::Failed => "failed",
+        AgentSessionStatus::Canceled => "canceled",
+    }
+}
+
+fn agent_turn_status_label(status: AgentTurnStatus) -> &'static str {
+    match status {
+        AgentTurnStatus::Accepted => "accepted",
+        AgentTurnStatus::Queued => "queued",
+        AgentTurnStatus::Running => "running",
+        AgentTurnStatus::WaitingAction => "waitingAction",
+        AgentTurnStatus::Completed => "completed",
+        AgentTurnStatus::Failed => "failed",
+        AgentTurnStatus::Canceled => "canceled",
+    }
+}
+
+fn session_execution_strategy(session: &AgentSession) -> Option<String> {
+    session.business_object_ref.as_ref().and_then(|reference| {
+        metadata_string(reference.metadata.as_ref(), "executionStrategy")
+            .or_else(|| metadata_string(reference.metadata.as_ref(), "execution_strategy"))
+    })
+}
+
 fn string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
     keys.iter()
         .filter_map(|key| value.get(*key))
@@ -2102,6 +2847,477 @@ fn timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
+impl RuntimeCore {
+    async fn find_agent_app_installed_state(
+        &self,
+        app_id: &str,
+    ) -> Result<serde_json::Value, RuntimeCoreError> {
+        let list = self.list_agent_app_installed().await?;
+        list.states
+            .into_iter()
+            .find(|state| json_string(state, &["appId"]).as_deref() == Some(app_id))
+            .ok_or_else(|| RuntimeCoreError::Backend(format!("Agent App 未安装: {app_id}")))
+    }
+
+    async fn running_agent_app_ui_runtime(
+        &self,
+        app_id: &str,
+        entry: Option<&AgentAppUiRuntimeEntry>,
+    ) -> Result<Option<AgentAppUiRuntimeStatusResponse>, RuntimeCoreError> {
+        let status = self.agent_app_ui_runtime_status_by_process(app_id, entry)?;
+        let Some(status) = status else {
+            return Ok(None);
+        };
+        if status.status != "running" {
+            return Ok(Some(status));
+        }
+        let Some(base_url) = status.base_url.as_deref() else {
+            return Ok(Some(status));
+        };
+        if probe_agent_app_ui_runtime_ready(base_url).await {
+            return Ok(Some(status));
+        }
+        self.remove_unready_agent_app_ui_runtime(app_id, status.pid)
+            .await;
+        Ok(None)
+    }
+
+    fn agent_app_ui_runtime_status_by_process(
+        &self,
+        app_id: &str,
+        entry: Option<&AgentAppUiRuntimeEntry>,
+    ) -> Result<Option<AgentAppUiRuntimeStatusResponse>, RuntimeCoreError> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let Some(process) = state.agent_app_ui_runtimes.get_mut(app_id) else {
+            return Ok(None);
+        };
+        let pid = process.child.id();
+        let mut remove_runtime = false;
+        let status = match process.child.try_wait() {
+            Ok(None) => {
+                if let Some(entry) = entry {
+                    process.entry_key = entry.entry_key.clone();
+                    process.route = entry.route.clone();
+                }
+                let route = process.route.clone();
+                let base_url = process.base_url.clone();
+                AgentAppUiRuntimeStatusResponse {
+                    app_id: app_id.to_string(),
+                    status: "running".to_string(),
+                    base_url: Some(base_url.clone()),
+                    entry_url: Some(join_agent_app_runtime_url(&base_url, &route)),
+                    port: Some(process.port),
+                    pid,
+                    message: Some(format!(
+                        "Agent App UI runtime 已运行，启动时间 {}，目录 {}。",
+                        process.started_at,
+                        process.app_dir.display()
+                    )),
+                    entry_key: Some(process.entry_key.clone()),
+                    route: Some(route),
+                }
+            }
+            Ok(Some(status)) => {
+                remove_runtime = true;
+                AgentAppUiRuntimeStatusResponse {
+                    app_id: app_id.to_string(),
+                    status: "failed".to_string(),
+                    base_url: None,
+                    entry_url: None,
+                    port: None,
+                    pid,
+                    message: Some(format!("Agent App UI runtime 已退出: {status}")),
+                    entry_key: None,
+                    route: None,
+                }
+            }
+            Err(error) => {
+                remove_runtime = true;
+                AgentAppUiRuntimeStatusResponse {
+                    app_id: app_id.to_string(),
+                    status: "failed".to_string(),
+                    base_url: None,
+                    entry_url: None,
+                    port: None,
+                    pid,
+                    message: Some(format!("读取 Agent App UI runtime 状态失败: {error}")),
+                    entry_key: None,
+                    route: None,
+                }
+            }
+        };
+        if remove_runtime {
+            state.agent_app_ui_runtimes.remove(app_id);
+        }
+        Ok(Some(status))
+    }
+
+    async fn remove_unready_agent_app_ui_runtime(&self, app_id: &str, expected_pid: Option<u32>) {
+        let process = {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let Some(process) = state.agent_app_ui_runtimes.get(app_id) else {
+                return;
+            };
+            if expected_pid.is_some_and(|pid| Some(pid) != process.child.id()) {
+                return;
+            }
+            state.agent_app_ui_runtimes.remove(app_id)
+        };
+        if let Some(mut process) = process {
+            terminate_agent_app_ui_process(&mut process.child).await;
+        }
+    }
+}
+
+fn validate_agent_app_id(app_id: &str) -> Result<(), RuntimeCoreError> {
+    if app_id.is_empty()
+        || app_id.len() > 96
+        || !app_id
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+    {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Agent App appId 不合法: {app_id}"
+        )));
+    }
+    Ok(())
+}
+
+fn resolve_agent_app_ui_entry(
+    state: &serde_json::Value,
+    entry_key: Option<&str>,
+) -> Result<AgentAppUiRuntimeEntry, RuntimeCoreError> {
+    let entries = state
+        .pointer("/projection/entries")
+        .and_then(serde_json::Value::as_array)
+        .or_else(|| {
+            state
+                .pointer("/manifest/entries")
+                .and_then(serde_json::Value::as_array)
+        })
+        .ok_or_else(|| {
+            RuntimeCoreError::Backend("Agent App installed state 缺少 entries。".to_string())
+        })?;
+    let entry = entry_key
+        .and_then(|key| {
+            entries
+                .iter()
+                .find(|entry| json_string(entry, &["key"]).as_deref() == Some(key))
+        })
+        .or_else(|| {
+            entries.iter().find(|entry| {
+                json_string(entry, &["key"]).as_deref() == Some("dashboard")
+                    && is_agent_app_ui_entry(entry)
+            })
+        })
+        .or_else(|| entries.iter().find(|entry| is_agent_app_ui_entry(entry)))
+        .ok_or_else(|| {
+            RuntimeCoreError::Backend("Agent App 未声明可打开的 UI entry。".to_string())
+        })?;
+    if !is_agent_app_ui_entry(entry) {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Agent App entry {} 不是 UI entry。",
+            json_string(entry, &["key"]).unwrap_or_else(|| "<unknown>".to_string())
+        )));
+    }
+    let entry_key = json_string(entry, &["key"])
+        .ok_or_else(|| RuntimeCoreError::Backend("Agent App UI entry 缺少 key。".to_string()))?;
+    let route = normalize_agent_app_runtime_route(
+        json_string(entry, &["route"]).as_deref().unwrap_or("/"),
+    )?;
+    Ok(AgentAppUiRuntimeEntry { entry_key, route })
+}
+
+fn is_agent_app_ui_entry(entry: &serde_json::Value) -> bool {
+    matches!(
+        json_string(entry, &["kind"]).as_deref(),
+        Some("page" | "panel" | "settings")
+    )
+}
+
+fn resolve_agent_app_runtime_dir(state: &serde_json::Value) -> Result<PathBuf, RuntimeCoreError> {
+    let source_kind = json_string(state, &["identity", "sourceKind"]).unwrap_or_default();
+    let source_uri = json_string(state, &["identity", "sourceUri"]).unwrap_or_default();
+    if source_kind == "local_folder" {
+        return canonicalize_existing_agent_app_dir(&source_uri);
+    }
+
+    let package_hash = json_string(state, &["identity", "packageHash"]).ok_or_else(|| {
+        RuntimeCoreError::Backend("Agent App installed state 缺少 packageHash。".to_string())
+    })?;
+    let package_dir_name = package_hash.replace(':', "_");
+    let app_dir = lime_core::app_paths::preferred_data_dir()
+        .map_err(RuntimeCoreError::Backend)?
+        .join(AGENT_APP_DATA_DIR)
+        .join("packages")
+        .join(package_dir_name);
+    canonicalize_existing_agent_app_dir(&app_dir.to_string_lossy())
+}
+
+fn canonicalize_existing_agent_app_dir(value: &str) -> Result<PathBuf, RuntimeCoreError> {
+    let path = PathBuf::from(value);
+    let canonical = fs::canonicalize(&path).map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "无法解析 Agent App runtime 目录 {}: {error}",
+            path.display()
+        ))
+    })?;
+    if !canonical.is_dir() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Agent App runtime 路径不是目录: {}",
+            canonical.display()
+        )));
+    }
+    Ok(canonical)
+}
+
+fn ensure_agent_app_runtime_folder(app_dir: &Path) -> Result<(), RuntimeCoreError> {
+    if !app_dir.join("package.json").is_file() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Agent App runtime 目录缺少 package.json: {}",
+            app_dir.display()
+        )));
+    }
+    Ok(())
+}
+
+fn reserve_local_port() -> Result<u16, RuntimeCoreError> {
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|error| {
+        RuntimeCoreError::Backend(format!("分配 Agent App UI runtime 端口失败: {error}"))
+    })?;
+    listener
+        .local_addr()
+        .map(|addr| addr.port())
+        .map_err(|error| {
+            RuntimeCoreError::Backend(format!("读取 Agent App UI runtime 端口失败: {error}"))
+        })
+}
+
+fn spawn_agent_app_ui_process(app_dir: &Path, port: u16) -> Result<Child, RuntimeCoreError> {
+    let mut last_error = None;
+    for candidate in agent_app_npm_launch_candidates() {
+        let mut command = Command::new(&candidate.binary);
+        command
+            .args(["run", "dev", "--silent"])
+            .current_dir(app_dir)
+            .env("PORT", port.to_string())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if let Some(path_env) = candidate.path_env.as_deref() {
+            command.env("PATH", path_env);
+        }
+        for key in inherited_agent_app_secret_env_keys() {
+            command.env_remove(key);
+        }
+        match command.spawn() {
+            Ok(child) => return Ok(child),
+            Err(error) => last_error = Some(format!("{}: {error}", candidate.binary)),
+        }
+    }
+    Err(RuntimeCoreError::Backend(format!(
+        "启动 Agent App UI runtime 失败，请确认已安装 Node.js/npm: {}",
+        last_error.unwrap_or_else(|| "npm 不可用".to_string())
+    )))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AgentAppNpmLaunchCandidate {
+    binary: String,
+    path_env: Option<String>,
+}
+
+fn agent_app_npm_launch_candidates() -> Vec<AgentAppNpmLaunchCandidate> {
+    let mut candidates = Vec::new();
+    if let Some(path_env) = std::env::var("PATH").ok() {
+        if !path_env.trim().is_empty() {
+            #[cfg(windows)]
+            {
+                push_agent_app_npm_candidate(
+                    &mut candidates,
+                    AgentAppNpmLaunchCandidate {
+                        binary: "npm.cmd".to_string(),
+                        path_env: Some(path_env.clone()),
+                    },
+                );
+            }
+            push_agent_app_npm_candidate(
+                &mut candidates,
+                AgentAppNpmLaunchCandidate {
+                    binary: "npm".to_string(),
+                    path_env: Some(path_env),
+                },
+            );
+        }
+    }
+    push_agent_app_npm_candidate(
+        &mut candidates,
+        AgentAppNpmLaunchCandidate {
+            binary: "npm".to_string(),
+            path_env: None,
+        },
+    );
+    candidates
+}
+
+fn push_agent_app_npm_candidate(
+    candidates: &mut Vec<AgentAppNpmLaunchCandidate>,
+    candidate: AgentAppNpmLaunchCandidate,
+) {
+    if candidate.binary.trim().is_empty() {
+        return;
+    }
+    if candidates
+        .iter()
+        .any(|current| current.binary == candidate.binary && current.path_env == candidate.path_env)
+    {
+        return;
+    }
+    candidates.push(candidate);
+}
+
+fn inherited_agent_app_secret_env_keys() -> &'static [&'static str] {
+    &[
+        "LIME_ACCESS_TOKEN",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "OPENROUTER_API_KEY",
+        "MISTRAL_API_KEY",
+        "XAI_API_KEY",
+        "DASHSCOPE_API_KEY",
+        "MOONSHOT_API_KEY",
+        "ZHIPUAI_API_KEY",
+        "GROQ_API_KEY",
+        "FAL_KEY",
+    ]
+}
+
+async fn wait_for_agent_app_ui_runtime_ready(
+    child: &mut Child,
+    base_url: &str,
+) -> Result<(), RuntimeCoreError> {
+    let deadline = Instant::now() + Duration::from_secs(AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                return Err(RuntimeCoreError::Backend(format!(
+                    "Agent App UI runtime 启动后退出: {status}"
+                )));
+            }
+            Ok(None) => {}
+            Err(error) => {
+                return Err(RuntimeCoreError::Backend(format!(
+                    "检查 Agent App UI runtime 进程状态失败: {error}"
+                )));
+            }
+        }
+
+        if probe_agent_app_ui_runtime_ready(base_url).await {
+            return Ok(());
+        }
+
+        if Instant::now() >= deadline {
+            terminate_agent_app_ui_process(child).await;
+            return Err(RuntimeCoreError::Backend(format!(
+                "Agent App UI runtime 未在 {} 秒内就绪: {}",
+                AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS,
+                agent_app_ui_runtime_health_url(base_url)
+            )));
+        }
+        sleep(Duration::from_millis(250)).await;
+    }
+}
+
+async fn probe_agent_app_ui_runtime_ready(base_url: &str) -> bool {
+    let client = match reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_millis(800))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => reqwest::Client::new(),
+    };
+    match client
+        .get(agent_app_ui_runtime_health_url(base_url))
+        .send()
+        .await
+    {
+        Ok(response) => response.status().is_success(),
+        Err(_) => false,
+    }
+}
+
+fn agent_app_ui_runtime_health_url(base_url: &str) -> String {
+    format!("{base_url}/api/bootstrap")
+}
+
+async fn terminate_agent_app_ui_process(child: &mut Child) {
+    let _ = child.start_kill();
+    let _ = child.wait().await;
+}
+
+fn stopped_agent_app_ui_runtime_status(
+    app_id: String,
+    message: &str,
+) -> AgentAppUiRuntimeStatusResponse {
+    AgentAppUiRuntimeStatusResponse {
+        app_id,
+        status: "stopped".to_string(),
+        base_url: None,
+        entry_url: None,
+        port: None,
+        pid: None,
+        message: Some(message.to_string()),
+        entry_key: None,
+        route: None,
+    }
+}
+
+fn normalize_agent_app_runtime_route(route: &str) -> Result<String, RuntimeCoreError> {
+    let trimmed = route.trim();
+    if trimmed.is_empty() {
+        return Ok("/".to_string());
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Err(RuntimeCoreError::Backend(
+            "Agent App UI entry route 必须是本地 runtime 相对路径。".to_string(),
+        ));
+    }
+    if trimmed.starts_with('/') {
+        return Ok(trimmed.to_string());
+    }
+    Ok(format!("/{trimmed}"))
+}
+
+fn join_agent_app_runtime_url(base_url: &str, route: &str) -> String {
+    if route == "/" {
+        return format!("{base_url}/");
+    }
+    format!("{base_url}{route}")
+}
+
+fn json_string(value: &serde_json::Value, path: &[&str]) -> Option<String> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2147,6 +3363,64 @@ mod tests {
         }
     }
 
+    struct ToolReadModelBackend;
+
+    #[async_trait]
+    impl ExecutionBackend for ToolReadModelBackend {
+        async fn start_turn(
+            &self,
+            _request: ExecutionRequest,
+            sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+            sink.emit(RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolName": "WebFetch",
+                }),
+            ))?;
+            sink.emit(RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolName": "WebFetch",
+                    "output": "fetched https://example.com",
+                }),
+            ))?;
+            sink.emit(RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "search-call-1",
+                    "toolName": "WebSearch",
+                }),
+            ))?;
+            sink.emit(RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "search-call-1",
+                    "toolName": "WebSearch",
+                    "outputPreview": "search results",
+                }),
+            ))?;
+            sink.emit(RuntimeEvent::new("turn.final_done", json!({})))
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: CancelExecutionRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: ActionRespondRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+    }
+
     struct TestCapabilitySource;
 
     impl CapabilitySource for TestCapabilitySource {
@@ -2162,6 +3436,248 @@ mod tests {
                 description: None,
                 methods: vec!["test/method".to_string()],
             }]
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingBackend {
+        requests: Mutex<Vec<ExecutionRequest>>,
+    }
+
+    #[async_trait]
+    impl ExecutionBackend for RecordingBackend {
+        async fn start_turn(
+            &self,
+            request: ExecutionRequest,
+            sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            self.requests
+                .lock()
+                .expect("test backend requests mutex poisoned")
+                .push(request);
+            sink.emit(RuntimeEvent::new("turn.accepted", json!({})))
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: CancelExecutionRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: ActionRespondRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+    }
+
+    struct TestCurrentTimelineDataSource {
+        persisted: Option<AgentSessionReadResponse>,
+        read_requests: Mutex<Vec<AgentSessionReadParams>>,
+    }
+
+    impl TestCurrentTimelineDataSource {
+        fn new(persisted: AgentSessionReadResponse) -> Self {
+            Self {
+                persisted: Some(persisted),
+                read_requests: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn read_requests(&self) -> Vec<AgentSessionReadParams> {
+            self.read_requests
+                .lock()
+                .expect("test current timeline read requests mutex poisoned")
+                .clone()
+        }
+    }
+
+    #[async_trait]
+    impl AppDataSource for TestCurrentTimelineDataSource {
+        async fn list_current_timeline_sessions(
+            &self,
+            params: AgentSessionListParams,
+        ) -> Result<AgentSessionListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .list_current_timeline_sessions(params)
+                .await
+        }
+
+        async fn read_current_timeline_session(
+            &self,
+            params: AgentSessionReadParams,
+        ) -> Result<Option<AgentSessionReadResponse>, RuntimeCoreError> {
+            self.read_requests
+                .lock()
+                .expect("test current timeline read requests mutex poisoned")
+                .push(params.clone());
+            Ok(self
+                .persisted
+                .as_ref()
+                .filter(|response| response.session.session_id == params.session_id)
+                .cloned())
+        }
+
+        async fn update_current_timeline_session(
+            &self,
+            params: AgentSessionUpdateParams,
+        ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .update_current_timeline_session(params)
+                .await
+        }
+
+        async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_workspaces().await
+        }
+
+        async fn read_workspace(
+            &self,
+            params: WorkspaceReadParams,
+        ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_workspace(params).await
+        }
+
+        async fn read_workspace_by_path(
+            &self,
+            params: WorkspacePathReadParams,
+        ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_workspace_by_path(params).await
+        }
+
+        async fn read_default_workspace(&self) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_default_workspace().await
+        }
+
+        async fn ensure_default_workspace(
+            &self,
+        ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.ensure_default_workspace().await
+        }
+
+        async fn ensure_workspace_ready(
+            &self,
+            params: WorkspaceEnsureParams,
+        ) -> Result<WorkspaceEnsureReadyResponse, RuntimeCoreError> {
+            NoopAppDataSource.ensure_workspace_ready(params).await
+        }
+
+        async fn read_workspace_projects_root(
+            &self,
+        ) -> Result<WorkspaceProjectsRootReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_workspace_projects_root().await
+        }
+
+        async fn resolve_workspace_project_path(
+            &self,
+            params: WorkspaceProjectPathResolveParams,
+        ) -> Result<WorkspaceProjectPathResolveResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .resolve_workspace_project_path(params)
+                .await
+        }
+
+        async fn list_skills(&self) -> Result<SkillListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_skills().await
+        }
+
+        async fn read_skill(
+            &self,
+            params: SkillReadParams,
+        ) -> Result<SkillReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_skill(params).await
+        }
+
+        async fn list_workspace_skill_bindings(
+            &self,
+            params: WorkspaceSkillBindingsListParams,
+        ) -> Result<WorkspaceSkillBindingsListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .list_workspace_skill_bindings(params)
+                .await
+        }
+
+        async fn list_workspace_registered_skills(
+            &self,
+            params: WorkspaceRegisteredSkillsListParams,
+        ) -> Result<WorkspaceRegisteredSkillsListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .list_workspace_registered_skills(params)
+                .await
+        }
+
+        async fn list_agent_app_installed(
+            &self,
+        ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_agent_app_installed().await
+        }
+
+        async fn list_knowledge_packs(
+            &self,
+            params: KnowledgeListPacksParams,
+        ) -> Result<KnowledgeListPacksResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_knowledge_packs(params).await
+        }
+
+        async fn list_automation_jobs(
+            &self,
+        ) -> Result<AutomationJobListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_automation_jobs().await
+        }
+
+        async fn read_project_memory(
+            &self,
+            params: ProjectMemoryReadParams,
+        ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_project_memory(params).await
+        }
+
+        async fn list_models(
+            &self,
+            params: ModelListParams,
+        ) -> Result<ModelListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_models(params).await
+        }
+
+        async fn list_model_preferences(
+            &self,
+        ) -> Result<ModelPreferencesListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_model_preferences().await
+        }
+
+        async fn read_model_sync_state(
+            &self,
+        ) -> Result<ModelSyncStateReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_model_sync_state().await
+        }
+
+        async fn list_model_providers(
+            &self,
+        ) -> Result<ModelProviderListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_model_providers().await
+        }
+
+        async fn list_model_provider_catalog(
+            &self,
+        ) -> Result<ModelProviderCatalogListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_model_provider_catalog().await
+        }
+
+        async fn read_model_provider_alias(
+            &self,
+            params: ModelProviderAliasReadParams,
+        ) -> Result<ModelProviderAliasReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_model_provider_alias(params).await
+        }
+
+        async fn list_model_provider_aliases(
+            &self,
+        ) -> Result<ModelProviderAliasListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_model_provider_aliases().await
         }
     }
 
@@ -2373,6 +3889,316 @@ mod tests {
             error.into_jsonrpc_error().code,
             error_codes::SESSION_NOT_FOUND
         );
+    }
+
+    #[tokio::test]
+    async fn start_turn_hydrates_current_timeline_session_before_backend_submit() {
+        let persisted_session = AgentSession {
+            session_id: "sess_persisted".to_string(),
+            thread_id: "thread_persisted".to_string(),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: "sess_persisted".to_string(),
+                title: Some("Persisted Session".to_string()),
+                uri: None,
+                metadata: Some(json!({
+                    "model": "gpt-test",
+                    "workingDir": "/workspace/current"
+                })),
+            }),
+            status: AgentSessionStatus::Completed,
+            created_at: "2026-06-06T00:00:00.000Z".to_string(),
+            updated_at: "2026-06-06T00:00:10.000Z".to_string(),
+        };
+        let persisted_turn = AgentTurn {
+            turn_id: "turn_existing".to_string(),
+            session_id: persisted_session.session_id.clone(),
+            thread_id: persisted_session.thread_id.clone(),
+            status: AgentTurnStatus::Completed,
+            started_at: Some("2026-06-06T00:00:01.000Z".to_string()),
+            completed_at: Some("2026-06-06T00:00:09.000Z".to_string()),
+        };
+        let app_data_source = Arc::new(TestCurrentTimelineDataSource::new(
+            AgentSessionReadResponse {
+                session: persisted_session.clone(),
+                turns: vec![persisted_turn],
+                detail: None,
+            },
+        ));
+        let backend = Arc::new(RecordingBackend::default());
+        let core = RuntimeCore::with_backend_and_capability_source(
+            backend.clone(),
+            Arc::new(crate::CapabilityInventorySource::new(vec![
+                crate::CapabilityInventoryRecord::new(CapabilityDescriptor {
+                    id: "session.resume".to_string(),
+                    title: "Resume Session".to_string(),
+                    description: None,
+                    methods: vec![METHOD_AGENT_SESSION_TURN_START.to_string()],
+                })
+                .for_apps(["content-studio"])
+                .for_workspaces(["workspace-main"])
+                .for_sessions(["sess_persisted"]),
+            ])),
+        )
+        .with_app_data_source(app_data_source.clone());
+
+        let output = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: "sess_persisted".to_string(),
+                    turn_id: Some("turn_resumed".to_string()),
+                    input: AgentInput {
+                        text: "继续".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: Some(RuntimeOptions {
+                        capability_id: Some("session.resume".to_string()),
+                        stream: false,
+                        event_name: None,
+                        provider_preference: None,
+                        model_preference: None,
+                        metadata: None,
+                        queued_turn_id: None,
+                        host_options: None,
+                    }),
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("resumed turn");
+
+        assert_eq!(output.response.turn.turn_id, "turn_resumed");
+        let requests = backend
+            .requests
+            .lock()
+            .expect("test backend requests mutex poisoned");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].session.session_id, "sess_persisted");
+        assert_eq!(requests[0].session.thread_id, "thread_persisted");
+        assert_eq!(requests[0].turn.turn_id, "turn_resumed");
+        drop(requests);
+
+        let read = core
+            .read_session(AgentSessionReadParams {
+                session_id: "sess_persisted".to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("hydrated session remains readable");
+        let turn_ids = read
+            .turns
+            .iter()
+            .map(|turn| turn.turn_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(turn_ids, vec!["turn_existing", "turn_resumed"]);
+
+        let read_requests = app_data_source.read_requests();
+        assert_eq!(read_requests.len(), 1);
+        assert_eq!(read_requests[0].session_id, "sess_persisted");
+    }
+
+    #[tokio::test]
+    async fn read_session_projects_runtime_events_into_thread_read_tool_calls() {
+        let core = RuntimeCore::with_backend(Arc::new(ToolReadModelBackend));
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_tool_read".to_string()),
+            thread_id: Some("thread_tool_read".to_string()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: "sess_tool_read".to_string(),
+                title: Some("Tool Read".to_string()),
+                uri: None,
+                metadata: Some(json!({
+                    "executionStrategy": "react"
+                })),
+            }),
+            locale: None,
+        })
+        .expect("session");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_tool_read".to_string(),
+                turn_id: Some("turn_tool_read".to_string()),
+                input: AgentInput {
+                    text: "整理今天的国际新闻".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+
+        let read = core
+            .read_session(AgentSessionReadParams {
+                session_id: "sess_tool_read".to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("read session");
+        let detail = read.detail.expect("session detail");
+        assert_eq!(detail["execution_strategy"], "react");
+        assert_eq!(detail["thread_read"]["status"], "completed");
+        assert_eq!(detail["thread_read"]["execution_strategy"], "react");
+        let tool_calls = detail["thread_read"]["tool_calls"]
+            .as_array()
+            .expect("tool calls");
+        assert_eq!(tool_calls.len(), 2);
+        let web_fetch = tool_calls
+            .iter()
+            .find(|call| call["tool_name"] == "WebFetch")
+            .expect("WebFetch call");
+        assert_eq!(web_fetch["status"], "completed");
+        assert_eq!(web_fetch["success"], true);
+        assert_eq!(web_fetch["output_preview"], "fetched https://example.com");
+
+        let web_search = tool_calls
+            .iter()
+            .find(|call| call["tool_name"] == "WebSearch")
+            .expect("WebSearch call");
+        assert_eq!(web_search["id"], "search-call-1");
+        assert_eq!(web_search["status"], "completed");
+        assert_eq!(web_search["success"], true);
+        assert_eq!(web_search["output_preview"], "search results");
+    }
+
+    #[tokio::test]
+    async fn read_session_projects_runtime_events_into_thread_read_artifacts() {
+        let core = RuntimeCore::default();
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_thread_read_artifacts".to_string()),
+            thread_id: Some("thread_read_artifacts".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+
+        let turn = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: "sess_thread_read_artifacts".to_string(),
+                    turn_id: Some("turn_thread_read_artifacts".to_string()),
+                    input: AgentInput {
+                        text: "生成内容工厂产物".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("turn")
+            .response
+            .turn;
+        core.append_external_runtime_events(
+            "sess_thread_read_artifacts",
+            Some(&turn.turn_id),
+            vec![RuntimeEvent::new(
+                "artifact.snapshot",
+                json!({
+                    "artifact": {
+                        "artifactId": "artifact-content-batch",
+                        "path": ".lime/artifacts/content-batch.json",
+                        "title": "Content Batch",
+                        "kind": "content_factory.workspace_patch",
+                        "status": "ready",
+                        "metadata": {
+                            "contentFactoryWorkspacePatch": {
+                                "kind": "content_batch",
+                                "contentBatch": {
+                                    "count": 1
+                                }
+                            }
+                        }
+                    }
+                }),
+            )],
+        )
+        .expect("append artifact event");
+
+        let read = core
+            .read_session(AgentSessionReadParams {
+                session_id: "sess_thread_read_artifacts".to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("read session");
+        let detail = read.detail.expect("session detail");
+        let artifacts = detail["thread_read"]["artifacts"]
+            .as_array()
+            .expect("thread read artifacts");
+
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(detail["artifacts"], detail["thread_read"]["artifacts"]);
+        assert_eq!(artifacts[0]["artifactRef"], "artifact-content-batch");
+        assert_eq!(artifacts[0]["path"], ".lime/artifacts/content-batch.json");
+        assert_eq!(artifacts[0]["kind"], "content_factory.workspace_patch");
+        assert_eq!(artifacts[0]["status"], "ready");
+        assert_eq!(
+            artifacts[0]["metadata"]["contentFactoryWorkspacePatch"]["kind"],
+            "content_batch"
+        );
+        assert!(artifacts[0]["content"].is_null());
+        assert_eq!(artifacts[0]["contentStatus"], "notRequested");
+    }
+
+    #[tokio::test]
+    async fn start_turn_missing_current_timeline_session_still_fails_closed() {
+        let app_data_source = Arc::new(TestCurrentTimelineDataSource {
+            persisted: None,
+            read_requests: Mutex::new(Vec::new()),
+        });
+        let backend = Arc::new(RecordingBackend::default());
+        let core = RuntimeCore::with_backend(backend.clone())
+            .with_app_data_source(app_data_source.clone());
+
+        let error = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: "sess_missing".to_string(),
+                    turn_id: Some("turn_missing".to_string()),
+                    input: AgentInput {
+                        text: "继续".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect_err("missing session should fail closed");
+
+        assert_eq!(
+            error.into_jsonrpc_error().code,
+            error_codes::SESSION_NOT_FOUND
+        );
+        assert!(backend
+            .requests
+            .lock()
+            .expect("test backend requests mutex poisoned")
+            .is_empty());
+        let read_requests = app_data_source.read_requests();
+        assert_eq!(read_requests.len(), 1);
+        assert_eq!(read_requests[0].session_id, "sess_missing");
     }
 
     #[test]

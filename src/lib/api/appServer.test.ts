@@ -3,11 +3,14 @@ import { safeInvoke } from "@/lib/dev-bridge";
 import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+  APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_CAPABILITY_LIST,
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
+  APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+  APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   APP_SERVER_METHOD_INITIALIZED,
   APP_SERVER_METHOD_INITIALIZE,
   APP_SERVER_PROTOCOL_VERSION,
@@ -159,6 +162,43 @@ describe("App Server API", () => {
     });
   });
 
+  it("request 应兼容 Electron safeInvoke result 包络", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      result: {
+        lines: [
+          line({
+            id: 3,
+            result: {
+              capabilities: [
+                {
+                  id: "session.read",
+                  title: "Session Read",
+                  methods: [],
+                },
+              ],
+            },
+          }),
+        ],
+      },
+    });
+
+    const client = new AppServerClient({ initialRequestId: 3 });
+    const result = await client.listCapabilities();
+
+    expect(result.result.capabilities[0].id).toBe("session.read");
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 3,
+            method: APP_SERVER_METHOD_CAPABILITY_LIST,
+            params: {},
+          }),
+        ],
+      },
+    });
+  });
+
   it("readArtifacts 应通过 App Server JSON-RPC 读取 artifact summary/content", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       lines: [
@@ -220,6 +260,92 @@ describe("App Server API", () => {
         ],
       },
     });
+  });
+
+  it("listDirectory/readFilePreview 应通过 App Server JSON-RPC 读取文件浏览数据", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 6,
+            result: {
+              path: "/workspace",
+              parentPath: "/",
+              entries: [
+                {
+                  name: "README.md",
+                  path: "/workspace/README.md",
+                  isDir: false,
+                  size: 12,
+                  modifiedAt: 1,
+                  isHidden: false,
+                  isSymlink: false,
+                },
+              ],
+              error: null,
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 7,
+            result: {
+              path: "/workspace/README.md",
+              content: "# Lime",
+              isBinary: false,
+              size: 6,
+              error: null,
+            },
+          }),
+        ],
+      });
+
+    const client = new AppServerClient({ initialRequestId: 6 });
+    const listing = await client.listDirectory({ path: "/workspace" });
+    const preview = await client.readFilePreview({
+      path: "/workspace/README.md",
+      maxSize: 1024,
+    });
+
+    expect(listing.result.entries[0].name).toBe("README.md");
+    expect(preview.result.content).toBe("# Lime");
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 6,
+              method: APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+              params: {
+                path: "/workspace",
+              },
+            }),
+          ],
+        },
+      },
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      2,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 7,
+              method: APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+              params: {
+                path: "/workspace/README.md",
+                maxSize: 1024,
+              },
+            }),
+          ],
+        },
+      },
+    );
   });
 
   it("exportEvidence 应通过 App Server JSON-RPC 导出 current evidence snapshot", async () => {
@@ -463,6 +589,52 @@ describe("App Server API", () => {
     });
   });
 
+  it("updateSession 应通过 App Server JSON-RPC 写 current session 状态", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 9,
+          result: {
+            session: {
+              sessionId: "session-1",
+              title: "新标题",
+              model: "gpt-5.4",
+              createdAt: "2026-06-06T00:00:00.000Z",
+              updatedAt: "2026-06-06T00:00:01.000Z",
+              archivedAt: "2026-06-06T00:00:01.000Z",
+              messagesCount: 2,
+            },
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 9 });
+    const result = await client.updateSession({
+      sessionId: "session-1",
+      title: "新标题",
+      archived: true,
+    });
+
+    expect(result.result.session.sessionId).toBe("session-1");
+    expect(result.result.session.archivedAt).toBe("2026-06-06T00:00:01.000Z");
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 9,
+            method: APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
+            params: {
+              sessionId: "session-1",
+              title: "新标题",
+              archived: true,
+            },
+          }),
+        ],
+      },
+    });
+  });
+
   it("respondAction 应通过 App Server JSON-RPC 响应 action.required", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       lines: [
@@ -624,6 +796,46 @@ describe("App Server API", () => {
     ]);
     expect(safeInvoke).toHaveBeenCalledWith("app_server_drain_events", {
       request: { limit: 5 },
+    });
+  });
+
+  it("drainEvents 应兼容 Electron safeInvoke result 包络", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      result: {
+        lines: [
+          line({
+            method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+            params: {
+              event: {
+                eventId: "evt-envelope-1",
+                sequence: 3,
+                sessionId: "session-1",
+                type: "turn.completed",
+                timestamp: "2026-06-04T00:00:01Z",
+                payload: {},
+              },
+            },
+          }),
+        ],
+      },
+    });
+
+    const client = new AppServerClient();
+    const messages = await client.drainEvents(1);
+
+    expect(messages).toEqual([
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: expect.objectContaining({
+            eventId: "evt-envelope-1",
+            type: "turn.completed",
+          }),
+        },
+      },
+    ]);
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_drain_events", {
+      request: { limit: 1 },
     });
   });
 

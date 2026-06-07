@@ -4,6 +4,10 @@ import {
   defaultReleaseManifestPath,
   encodeMessage,
   isJsonRpcNotification,
+  isJsonRpcResponse,
+  isJsonRpcErrorResponse,
+  type AgentSessionTurnStartParams,
+  type AgentSessionTurnStartResponse,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
   readReleaseManifest,
@@ -14,6 +18,7 @@ import {
   type InitializeParams,
   type JsonRpcRequest,
   type JsonRpcMessage,
+  type RequestId,
   type SidecarLaunchConfig,
 } from "app-server-client";
 import { app } from "electron";
@@ -23,6 +28,10 @@ import path from "node:path";
 const DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS = 30_000;
 const APP_SERVER_BACKEND_TIMEOUT_GRACE_MS = 30_000;
 const APP_SERVER_TURN_START_METHOD = "agentSession/turn/start";
+const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD = "agentAppUiRuntime/start";
+const APP_SERVER_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS = 60_000;
+const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
+const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 
 type ElectronAppServerLaunchConfig = {
   config: SidecarLaunchConfig;
@@ -37,10 +46,15 @@ type DrainEventsRequest = {
   limit?: number;
 };
 
+type JsonRpcRequestWithParams = JsonRpcRequest & {
+  params?: unknown;
+};
+
 export class ElectronAppServerHost {
   #lifecycle: AppServerSidecarLifecycle | null = null;
   #connected: ConnectedAppServerSidecar | null = null;
   #connectPromise: Promise<ConnectedAppServerSidecar> | null = null;
+  #nextProxyRequestId = 1;
 
   async warmup(): Promise<InitializeResponse> {
     const connected = await this.#connect();
@@ -72,14 +86,29 @@ export class ElectronAppServerHost {
         continue;
       }
       if (isJsonRpcRequestLike(message)) {
+        const proxiedMessage = this.#proxyRequestMessage(message);
+        if (proxiedMessage.message.method === APP_SERVER_TURN_START_METHOD) {
+          responses.push(
+            ...(await this.#requestStreamingTurnStart(
+              connected,
+              message,
+              proxiedMessage.message,
+            )),
+          );
+          continue;
+        }
         const result = await connected.connection.request<unknown>(
-          message,
-          message.method,
+          proxiedMessage.message,
+          proxiedMessage.message.method,
           {
-            timeoutMs: resolveAppServerRequestTimeoutMs(message.method),
+            timeoutMs: resolveAppServerRequestTimeoutMs(proxiedMessage.message.method),
           },
         );
-        responses.push(...result.messages);
+        responses.push(
+          ...result.messages.map((response) =>
+            restoreProxyResponseId(response, proxiedMessage.originalId),
+          ),
+        );
         continue;
       }
       connected.connection.transport.send(message);
@@ -161,6 +190,117 @@ export class ElectronAppServerHost {
 
     return await this.#lifecycle.start();
   }
+
+  #proxyRequestMessage(message: JsonRpcRequest): {
+    message: JsonRpcRequest;
+    originalId: RequestId;
+  } {
+    const originalId = message.id;
+    const id = `${APP_SERVER_PROXY_REQUEST_ID_PREFIX}:${this.#nextProxyRequestId}`;
+    this.#nextProxyRequestId += 1;
+    return {
+      message: {
+        ...message,
+        id,
+      },
+      originalId,
+    };
+  }
+
+  async #requestStreamingTurnStart(
+    connected: ConnectedAppServerSidecar,
+    originalMessage: JsonRpcRequest,
+    message: JsonRpcRequest,
+  ): Promise<JsonRpcMessage[]> {
+    const requestPromise = connected.connection
+      .request<AgentSessionTurnStartResponse>(message, message.method, {
+        timeoutMs: resolveAppServerRequestTimeoutMs(message.method),
+      });
+
+    const fastResult = await Promise.race<
+      { kind: "done"; messages: JsonRpcMessage[] } | { kind: "pending" }
+    >([
+      requestPromise.then((result) => ({
+        kind: "done" as const,
+        messages: result.messages.map((response) =>
+          restoreProxyResponseId(response, originalMessage.id),
+        ),
+      })),
+      wait(APP_SERVER_STREAMING_TURN_ACK_GRACE_MS).then(() => ({
+        kind: "pending" as const,
+      })),
+    ]);
+
+    if (fastResult.kind === "done") {
+      return fastResult.messages;
+    }
+
+    requestPromise.catch((error) => {
+        console.warn("[electron-host] app-server streaming turn failed", error);
+      });
+
+    return [
+      streamingTurnStartAcceptedResponse(
+        originalMessage,
+        message,
+      ),
+    ];
+  }
+}
+
+function streamingTurnStartAcceptedResponse(
+  originalMessage: JsonRpcRequest,
+  proxiedMessage: JsonRpcRequest,
+): JsonRpcMessage {
+  const params = turnStartParams(proxiedMessage);
+  const now = new Date().toISOString();
+  const sessionId = nonEmptyString(params?.sessionId) || "";
+  const turnId = nonEmptyString(params?.turnId) || `turn_${String(proxiedMessage.id)}`;
+  return {
+    id: originalMessage.id,
+    result: {
+      turn: {
+        turnId,
+        sessionId,
+        threadId: sessionId,
+        status: "accepted",
+        startedAt: now,
+      },
+    },
+  } satisfies JsonRpcMessage;
+}
+
+function turnStartParams(
+  message: JsonRpcRequest,
+): AgentSessionTurnStartParams | undefined {
+  const params = (message as JsonRpcRequestWithParams).params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return undefined;
+  }
+  return params as AgentSessionTurnStartParams;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+function restoreProxyResponseId(
+  message: JsonRpcMessage,
+  originalId: RequestId,
+): JsonRpcMessage {
+  if (isJsonRpcResponse(message) || isJsonRpcErrorResponse(message)) {
+    return {
+      ...message,
+      id: originalId,
+    };
+  }
+  return message;
 }
 
 async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
@@ -314,6 +454,9 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
 }
 
 function resolveAppServerRequestTimeoutMs(method: string): number {
+  if (method === APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD) {
+    return APP_SERVER_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS;
+  }
   if (method !== APP_SERVER_TURN_START_METHOD) {
     return DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS;
   }

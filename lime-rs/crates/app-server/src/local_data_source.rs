@@ -8,10 +8,22 @@ use app_server_protocol::AgentSessionOverview;
 use app_server_protocol::AgentSessionReadParams;
 use app_server_protocol::AgentSessionReadResponse;
 use app_server_protocol::AgentSessionStatus;
+use app_server_protocol::AgentSessionUpdateParams;
+use app_server_protocol::AgentSessionUpdateResponse;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use app_server_protocol::AutomationJobListResponse;
 use app_server_protocol::BusinessObjectRef;
+use app_server_protocol::ConnectCallbackSendParams;
+use app_server_protocol::ConnectCallbackSendResponse;
+use app_server_protocol::ConnectCallbackStatus;
+use app_server_protocol::ConnectDeepLinkResolveParams;
+use app_server_protocol::ConnectDeepLinkResolveResponse;
+use app_server_protocol::ConnectOpenDeepLinkResolveParams;
+use app_server_protocol::ConnectOpenDeepLinkResolveResponse;
+use app_server_protocol::ConnectPayload;
+use app_server_protocol::ConnectRelayApiKeySaveParams;
+use app_server_protocol::ConnectRelayApiKeySaveResponse;
 use app_server_protocol::KnowledgeListPacksParams;
 use app_server_protocol::KnowledgeListPacksResponse;
 use app_server_protocol::ModelListParams;
@@ -23,6 +35,7 @@ use app_server_protocol::ModelProviderAliasReadResponse;
 use app_server_protocol::ModelProviderCatalogListResponse;
 use app_server_protocol::ModelProviderListResponse;
 use app_server_protocol::ModelSyncStateReadResponse;
+use app_server_protocol::OpenDeepLinkPayload;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::SkillListResponse;
@@ -37,18 +50,22 @@ use app_server_protocol::WorkspaceProjectPathResolveResponse;
 use app_server_protocol::WorkspaceProjectsRootReadResponse;
 use app_server_protocol::WorkspaceReadParams;
 use app_server_protocol::WorkspaceReadResponse;
+use app_server_protocol::WorkspaceRegisteredSkillsListParams;
+use app_server_protocol::WorkspaceRegisteredSkillsListResponse;
 use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::WorkspaceSkillBindingsListResponse;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use lime_core::app_paths;
+use lime_core::connect;
 use lime_core::database;
 use lime_core::database::dao::agent_timeline::AgentThreadItem;
 use lime_core::database::dao::agent_timeline::AgentThreadTurn;
 use lime_core::database::dao::agent_timeline::AgentThreadTurnStatus;
 use lime_core::database::dao::agent_timeline::AgentTimelineDao;
 use lime_core::database::dao::api_key_provider::ApiKeyEntry;
+use lime_core::database::dao::api_key_provider::ApiProviderType;
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
 use lime_core::database::dao::automation_job::AutomationJobDao;
 use lime_core::database::system_providers::get_system_providers;
@@ -191,6 +208,71 @@ impl AppDataSource for LocalAppDataSource {
         }
 
         Ok(None)
+    }
+
+    async fn update_current_timeline_session(
+        &self,
+        params: AgentSessionUpdateParams,
+    ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError> {
+        let session_id = params.session_id.trim();
+        if session_id.is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "sessionId is required for agentSession/update".to_string(),
+            ));
+        }
+
+        let title = params
+            .title
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let provider_selector = params
+            .provider_selector
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let provider_name = params
+            .provider_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let model_name = params
+            .model_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let execution_strategy = params
+            .execution_strategy
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let recent_access_mode = params
+            .recent_access_mode
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        update_current_timeline_session_row(
+            &conn,
+            session_id,
+            title,
+            provider_selector,
+            provider_name,
+            model_name,
+            execution_strategy,
+            params.archived,
+            recent_access_mode,
+            params.recent_preferences.as_ref(),
+            params.recent_team_selection.as_ref(),
+        )
+        .map_err(data_error)?;
+        let session = query_current_timeline_session(&conn, session_id)
+            .map_err(data_error)?
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+
+        Ok(AgentSessionUpdateResponse {
+            session: current_timeline_session_overview(session),
+        })
     }
 
     async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
@@ -349,6 +431,15 @@ impl AppDataSource for LocalAppDataSource {
         })
     }
 
+    async fn list_workspace_registered_skills(
+        &self,
+        params: WorkspaceRegisteredSkillsListParams,
+    ) -> Result<WorkspaceRegisteredSkillsListResponse, RuntimeCoreError> {
+        Ok(WorkspaceRegisteredSkillsListResponse {
+            skills: list_workspace_registered_skills_value(params).map_err(data_error)?,
+        })
+    }
+
     async fn list_agent_app_installed(
         &self,
     ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
@@ -476,6 +567,158 @@ impl AppDataSource for LocalAppDataSource {
         }
         Ok(ModelProviderAliasListResponse { configs })
     }
+
+    async fn resolve_connect_deep_link(
+        &self,
+        params: ConnectDeepLinkResolveParams,
+    ) -> Result<ConnectDeepLinkResolveResponse, RuntimeCoreError> {
+        let payload = connect::parse_deep_link(&params.url).map_err(connect_deep_link_error)?;
+        let relay_info = match load_connect_registry_best_effort().await {
+            Some(registry) => registry.get(&payload.relay),
+            None => None,
+        };
+        let is_verified = relay_info.is_some();
+        Ok(ConnectDeepLinkResolveResponse {
+            payload: connect_payload_to_protocol(payload),
+            relay_info: relay_info
+                .map(serde_json::to_value)
+                .transpose()
+                .map_err(data_error)?,
+            is_verified,
+        })
+    }
+
+    async fn resolve_connect_open_deep_link(
+        &self,
+        params: ConnectOpenDeepLinkResolveParams,
+    ) -> Result<ConnectOpenDeepLinkResolveResponse, RuntimeCoreError> {
+        let payload = connect::parse_open_deep_link(&params.url).map_err(connect_deep_link_error)?;
+        Ok(ConnectOpenDeepLinkResolveResponse {
+            payload: open_deep_link_payload_to_protocol(payload),
+        })
+    }
+
+    async fn save_connect_relay_api_key(
+        &self,
+        params: ConnectRelayApiKeySaveParams,
+    ) -> Result<ConnectRelayApiKeySaveResponse, RuntimeCoreError> {
+        let relay_id = params.relay_id.trim();
+        if relay_id.is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "relayId is required for connectRelayApiKey/save".to_string(),
+            ));
+        }
+        if params.api_key.trim().is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "apiKey is required for connectRelayApiKey/save".to_string(),
+            ));
+        }
+
+        let registry = load_connect_registry_required().await?;
+        let relay_info = registry.get(relay_id).ok_or_else(|| {
+            RuntimeCoreError::Backend(format!("中转商 {relay_id} 不在注册表中"))
+        })?;
+        let provider_type = connect_protocol_to_provider_type(&relay_info.api.protocol);
+        let provider_id = format!("connect-{relay_id}");
+        let existing_provider = self
+            .api_key_provider_service
+            .get_provider(&self.db, &provider_id)
+            .map_err(data_error)?;
+
+        let (final_provider_id, is_new_provider) = if existing_provider.is_some() {
+            (provider_id, false)
+        } else {
+            let provider_name = params
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("[Connect] {}", relay_info.name));
+            let provider = self
+                .api_key_provider_service
+                .add_custom_provider(
+                    &self.db,
+                    provider_name,
+                    provider_type,
+                    relay_info.api.base_url.clone(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .map_err(data_error)?;
+            (provider.id, true)
+        };
+
+        let key_alias = params
+            .name
+            .clone()
+            .or_else(|| Some(format!("[Connect] {}", relay_info.name)));
+        let api_key_entry = self
+            .api_key_provider_service
+            .add_api_key(
+                &self.db,
+                &final_provider_id,
+                &params.api_key,
+                key_alias.clone(),
+                false,
+            )
+            .map_err(data_error)?;
+
+        Ok(ConnectRelayApiKeySaveResponse {
+            provider_id: final_provider_id,
+            key_id: api_key_entry.id,
+            provider_name: key_alias.unwrap_or_else(|| relay_info.name.clone()),
+            is_new_provider,
+        })
+    }
+
+    async fn deliver_connect_callback(
+        &self,
+        params: ConnectCallbackSendParams,
+    ) -> Result<ConnectCallbackSendResponse, RuntimeCoreError> {
+        let relay_id = params.relay_id.trim();
+        if relay_id.is_empty() || params.api_key.trim().is_empty() {
+            return Ok(ConnectCallbackSendResponse { delivered: false });
+        }
+
+        let Some(registry) = load_connect_registry_best_effort().await else {
+            return Ok(ConnectCallbackSendResponse { delivered: false });
+        };
+        let Some(relay_info) = registry.get(relay_id) else {
+            return Ok(ConnectCallbackSendResponse { delivered: false });
+        };
+        let Some(webhook) = relay_info.webhook else {
+            return Ok(ConnectCallbackSendResponse { delivered: false });
+        };
+        let Some(callback_url) = webhook.callback_url else {
+            return Ok(ConnectCallbackSendResponse { delivered: false });
+        };
+
+        match params.status {
+            ConnectCallbackStatus::Success => connect::send_success_callback(
+                &callback_url,
+                relay_id,
+                &params.api_key,
+                params.ref_code,
+            ),
+            ConnectCallbackStatus::Cancelled => connect::send_cancelled_callback(
+                &callback_url,
+                relay_id,
+                &params.api_key,
+                params.ref_code,
+            ),
+            ConnectCallbackStatus::Error => connect::send_error_callback(
+                &callback_url,
+                relay_id,
+                &params.api_key,
+                params.ref_code,
+                params.error_code.as_deref().unwrap_or("UNKNOWN"),
+                params.error_message.as_deref().unwrap_or("未知错误"),
+            ),
+        }
+
+        Ok(ConnectCallbackSendResponse { delivered: true })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -488,6 +731,8 @@ struct CurrentTimelineSessionRow {
     archived_at: Option<String>,
     working_dir: Option<String>,
     execution_strategy: Option<String>,
+    provider_name: Option<String>,
+    model_config_json: Option<String>,
     session_type: String,
     extension_data_json: String,
     workspace_id: Option<String>,
@@ -540,6 +785,8 @@ fn query_current_timeline_session_overviews(
                 s.archived_at,
                 s.working_dir,
                 s.execution_strategy,
+                s.provider_name,
+                s.model_config_json,
                 s.session_type,
                 s.extension_data_json,
                 w.id AS workspace_id,
@@ -623,6 +870,8 @@ fn query_current_timeline_session(
             s.archived_at,
             s.working_dir,
             s.execution_strategy,
+            s.provider_name,
+            s.model_config_json,
             s.session_type,
             s.extension_data_json,
             w.id AS workspace_id,
@@ -651,19 +900,19 @@ fn current_timeline_session_row(
     row: &Row<'_>,
 ) -> Result<CurrentTimelineSessionRow, rusqlite::Error> {
     let latest_turn_status = row
-        .get::<_, Option<String>>(13)?
+        .get::<_, Option<String>>(15)?
         .as_deref()
         .map(AgentThreadTurnStatus::try_from)
         .transpose()
         .map_err(|_| {
             rusqlite::Error::InvalidColumnType(
-                13,
+                15,
                 "latest_turn_status".into(),
                 rusqlite::types::Type::Text,
             )
         })?;
-    let timeline_item_count = row.get::<_, i64>(11)?.max(0) as usize;
-    let timeline_turn_count = row.get::<_, i64>(12)?.max(0) as usize;
+    let timeline_item_count = row.get::<_, i64>(13)?.max(0) as usize;
+    let timeline_turn_count = row.get::<_, i64>(14)?.max(0) as usize;
 
     Ok(CurrentTimelineSessionRow {
         id: row.get(0)?,
@@ -674,9 +923,11 @@ fn current_timeline_session_row(
         archived_at: row.get(5)?,
         working_dir: row.get(6)?,
         execution_strategy: row.get(7)?,
-        session_type: row.get(8)?,
-        extension_data_json: row.get(9)?,
-        workspace_id: row.get(10)?,
+        provider_name: row.get(8)?,
+        model_config_json: row.get(9)?,
+        session_type: row.get(10)?,
+        extension_data_json: row.get(11)?,
+        workspace_id: row.get(12)?,
         timeline_item_count,
         timeline_turn_count,
         latest_turn_status,
@@ -698,6 +949,142 @@ fn current_timeline_session_overview(row: CurrentTimelineSessionRow) -> AgentSes
         execution_strategy: row.execution_strategy,
         messages_count,
     }
+}
+
+fn update_current_timeline_session_row(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    title: Option<&str>,
+    provider_selector: Option<&str>,
+    provider_name: Option<&str>,
+    model_name: Option<&str>,
+    execution_strategy: Option<&str>,
+    archived: Option<bool>,
+    recent_access_mode: Option<&str>,
+    recent_preferences: Option<&Value>,
+    recent_team_selection: Option<&Value>,
+) -> Result<(), String> {
+    let Some(existing) = query_current_timeline_session(conn, session_id)? else {
+        return Err(format!("session not found: {session_id}"));
+    };
+
+    let now = Utc::now().to_rfc3339();
+    if let Some(title) = title {
+        conn.execute(
+            "UPDATE agent_sessions SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![title, now, session_id],
+        )
+        .map_err(|error| format!("update current timeline session title failed: {error}"))?;
+    }
+    if let Some(execution_strategy) = execution_strategy {
+        conn.execute(
+            "UPDATE agent_sessions SET execution_strategy = ?1, updated_at = ?2 WHERE id = ?3",
+            params![execution_strategy, now, session_id],
+        )
+        .map_err(|error| {
+            format!("update current timeline session execution strategy failed: {error}")
+        })?;
+    }
+    if provider_name.is_some() || model_name.is_some() {
+        let model_config_json =
+            model_name.map(|model_name| json!({ "model_name": model_name }).to_string());
+        conn.execute(
+            "UPDATE agent_sessions SET
+                provider_name = COALESCE(?1, provider_name),
+                model = COALESCE(?2, model),
+                model_config_json = CASE WHEN ?3 IS NULL THEN model_config_json ELSE ?3 END,
+                updated_at = ?4
+             WHERE id = ?5",
+            params![
+                provider_name,
+                model_name,
+                model_config_json,
+                now,
+                session_id
+            ],
+        )
+        .map_err(|error| {
+            format!("update current timeline session provider/model failed: {error}")
+        })?;
+    }
+    if let Some(archived) = archived {
+        let archived_at = archived.then_some(now.as_str());
+        conn.execute(
+            "UPDATE agent_sessions SET archived_at = ?1, updated_at = ?2 WHERE id = ?3",
+            params![archived_at, now, session_id],
+        )
+        .map_err(|error| {
+            format!("update current timeline session archive state failed: {error}")
+        })?;
+    }
+    let routing_provider_selector = provider_selector.or(provider_name);
+    if routing_provider_selector.is_some()
+        || recent_access_mode.is_some()
+        || recent_preferences.is_some()
+        || recent_team_selection.is_some()
+    {
+        let extension_data_json = merge_session_runtime_extension_data(
+            &existing.extension_data_json,
+            routing_provider_selector,
+            recent_access_mode,
+            recent_preferences,
+            recent_team_selection,
+        )?;
+        conn.execute(
+            "UPDATE agent_sessions SET extension_data_json = ?1, updated_at = ?2 WHERE id = ?3",
+            params![extension_data_json, now, session_id],
+        )
+        .map_err(|error| {
+            format!("update current timeline session extension data failed: {error}")
+        })?;
+    }
+    Ok(())
+}
+
+fn merge_session_runtime_extension_data(
+    existing: &str,
+    provider_selector: Option<&str>,
+    recent_access_mode: Option<&str>,
+    recent_preferences: Option<&Value>,
+    recent_team_selection: Option<&Value>,
+) -> Result<String, String> {
+    let mut extension_data = match serde_json::from_str::<Value>(existing) {
+        Ok(Value::Object(map)) => map,
+        Ok(_) | Err(_) => Map::new(),
+    };
+    if let Some(provider_selector) = normalized_text(provider_selector) {
+        extension_data.insert(
+            "lime_provider_routing.v0".to_string(),
+            json!({ "providerSelector": provider_selector }),
+        );
+    }
+    if let Some(recent_access_mode) = normalized_text(recent_access_mode) {
+        extension_data.insert(
+            "lime_recent_access_mode.v0".to_string(),
+            Value::String(recent_access_mode),
+        );
+    }
+    if let Some(recent_preferences) = recent_preferences {
+        extension_data.insert(
+            "lime_recent_preferences.v0".to_string(),
+            recent_preferences.clone(),
+        );
+    }
+    if let Some(recent_team_selection) = recent_team_selection {
+        extension_data.insert(
+            "lime_recent_team_selection.v0".to_string(),
+            recent_team_selection.clone(),
+        );
+    }
+    serde_json::to_string(&Value::Object(extension_data))
+        .map_err(|error| format!("serialize current timeline extension data failed: {error}"))
+}
+
+fn normalized_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 fn current_timeline_session_has_entries(
@@ -803,6 +1190,7 @@ fn current_timeline_detail_value(
 ) -> Result<Value, RuntimeCoreError> {
     let loaded_count = items.len();
     let start_index = messages_count.saturating_sub(history_offset + loaded_count);
+    let execution_runtime = current_timeline_execution_runtime(session);
     Ok(json!({
         "id": session.id,
         "thread_id": session.id,
@@ -813,6 +1201,7 @@ fn current_timeline_detail_value(
         "workspace_id": session.workspace_id,
         "working_dir": session.working_dir,
         "execution_strategy": session.execution_strategy,
+        "execution_runtime": execution_runtime,
         "messages_count": messages_count,
         "history_limit": history_limit,
         "history_offset": history_offset,
@@ -830,6 +1219,57 @@ fn current_timeline_detail_value(
         "todo_items": [],
         "child_subagent_sessions": [],
     }))
+}
+
+fn current_timeline_execution_runtime(session: &CurrentTimelineSessionRow) -> Value {
+    let extension_data = extension_data_json_value(&session.extension_data_json);
+    let provider_selector = extension_data
+        .pointer("/lime_provider_routing.v0/providerSelector")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            extension_data
+                .pointer("/lime_provider_routing.v0/provider_selector")
+                .and_then(Value::as_str)
+        });
+    let recent_access_mode = extension_data
+        .get("lime_recent_access_mode.v0")
+        .and_then(Value::as_str);
+    json!({
+        "session_id": session.id,
+        "provider_selector": normalized_text(provider_selector),
+        "provider_name": normalized_text(session.provider_name.as_deref()),
+        "model_name": current_timeline_model_name(session),
+        "execution_strategy": normalized_text(session.execution_strategy.as_deref()),
+        "source": "session",
+        "recent_access_mode": normalized_text(recent_access_mode),
+        "recent_preferences": extension_data
+            .get("lime_recent_preferences.v0")
+            .cloned()
+            .unwrap_or(Value::Null),
+        "recent_team_selection": extension_data
+            .get("lime_recent_team_selection.v0")
+            .cloned()
+            .unwrap_or(Value::Null),
+    })
+}
+
+fn current_timeline_model_name(session: &CurrentTimelineSessionRow) -> Option<String> {
+    session
+        .model_config_json
+        .as_deref()
+        .and_then(|value| serde_json::from_str::<Value>(value).ok())
+        .and_then(|value| model_name_from_config_value(&value))
+        .or_else(|| normalized_text(Some(&session.model)))
+}
+
+fn model_name_from_config_value(value: &Value) -> Option<String> {
+    value
+        .get("modelName")
+        .or_else(|| value.get("model_name"))
+        .or_else(|| value.get("model"))
+        .or_else(|| value.get("name"))
+        .and_then(Value::as_str)
+        .and_then(|value| normalized_text(Some(value)))
 }
 
 fn normalized_title(value: Option<String>) -> Option<String> {
@@ -1094,100 +1534,15 @@ fn list_workspace_skill_bindings_value(
 ) -> Result<Value, String> {
     let caller = lime_core::tool_calling::normalize_tool_caller(params.caller.as_deref())
         .unwrap_or_else(|| "assistant".to_string());
-    let workspace_root = PathBuf::from(params.workspace_root.trim());
-    if !workspace_root.is_absolute() {
-        return Err(format!(
-            "workspaceRoot must be absolute: {}",
-            workspace_root.display()
-        ));
-    }
-    let skills_root = workspace_root.join(".agents").join("skills");
-    let mut bindings = Vec::new();
-    if skills_root.is_dir() {
-        let mut entries = fs::read_dir(&skills_root)
-            .map_err(|error| format!("read workspace skills failed: {error}"))?
-            .flatten()
-            .collect::<Vec<_>>();
-        entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_string());
-        for entry in entries {
-            let skill_dir = entry.path();
-            if !skill_dir.is_dir() {
-                continue;
-            }
-            let skill_file = skill_dir.join("SKILL.md");
-            let registration_file = skill_dir.join(".lime").join("registration.json");
-            if !skill_file.is_file() || !registration_file.is_file() {
-                continue;
-            }
-            let directory = entry.file_name().to_string_lossy().to_string();
-            let skill = load_skill_from_file(&directory, &skill_file)?;
-            let registration: Value = fs::read_to_string(&registration_file)
-                .map_err(|error| format!("read skill registration failed: {error}"))
-                .and_then(|content| {
-                    serde_json::from_str(&content)
-                        .map_err(|error| format!("parse skill registration failed: {error}"))
-                })?;
-            let source_verification_report_id = registration
-                .get("sourceVerificationReportId")
-                .or_else(|| registration.get("source_verification_report_id"))
-                .and_then(Value::as_str);
-            let standard_compliance = serde_json::to_value(&skill.standard_compliance)
-                .map_err(|error| format!("serialize skill standard compliance failed: {error}"))?;
-            let resource_summary = skill_resource_summary(&skill_dir)?;
-            let permission_summary = registration
-                .get("permissionSummary")
-                .or_else(|| registration.get("permission_summary"))
-                .and_then(Value::as_array)
-                .map(|values| {
-                    values
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            let allowed_tools = skill.allowed_tools.clone().unwrap_or_default();
-            let binding_status = if skill.standard_compliance.validation_errors.is_empty()
-                && source_verification_report_id.is_some()
-            {
-                "ready_for_manual_enable"
-            } else {
-                "blocked"
-            };
-            let binding_status_reason = if binding_status == "ready_for_manual_enable" {
-                "已具备 workspace skill runtime binding 候选资格；当前仍未注入默认工具面。"
-            } else if !skill.standard_compliance.validation_errors.is_empty() {
-                "Agent Skills 标准检查仍有问题，不能进入 runtime binding。"
-            } else {
-                "缺少来源 verification report，不能证明该 Skill 通过注册前验证。"
-            };
-            bindings.push(json!({
-                "key": format!("workspace_skill:{directory}"),
-                "name": skill.display_name,
-                "description": skill.description,
-                "directory": directory,
-                "registered_skill_directory": skill_dir.to_string_lossy().to_string(),
-                "registration": registration,
-                "permission_summary": permission_summary,
-                "metadata": skill.metadata,
-                "allowed_tools": allowed_tools,
-                "resource_summary": resource_summary,
-                "standard_compliance": standard_compliance,
-                "runtime_binding_target": "workspace_skill",
-                "binding_status": binding_status,
-                "binding_status_reason": binding_status_reason,
-                "next_gate": if binding_status == "ready_for_manual_enable" {
-                    "manual_runtime_enable"
-                } else {
-                    "restore_verification_provenance"
-                },
-                "query_loop_visible": false,
-                "tool_runtime_visible": false,
-                "launch_enabled": false,
-                "runtime_gate": "等待显式 session enable 与 tool_runtime 授权裁剪。",
-            }));
-        }
-    }
+    let workspace_root = workspace_root_path(&params.workspace_root)?;
+    let registered_skills =
+        list_workspace_registered_skills_value(WorkspaceRegisteredSkillsListParams {
+            workspace_root: params.workspace_root,
+        })?;
+    let mut bindings = registered_skills
+        .into_iter()
+        .map(workspace_registered_skill_to_binding_value)
+        .collect::<Vec<_>>();
 
     bindings.sort_by(|left, right| {
         let left_key = left
@@ -1231,6 +1586,218 @@ fn list_workspace_skill_bindings_value(
     }))
 }
 
+fn list_workspace_registered_skills_value(
+    params: WorkspaceRegisteredSkillsListParams,
+) -> Result<Vec<Value>, String> {
+    let workspace_root = workspace_root_path(&params.workspace_root)?;
+    let skills_root = workspace_root.join(".agents").join("skills");
+    let mut skills = Vec::new();
+    if !skills_root.exists() {
+        return Ok(skills);
+    }
+    let skills_root_metadata = fs::symlink_metadata(&skills_root)
+        .map_err(|error| format!("read workspace skills root failed: {error}"))?;
+    if skills_root_metadata.file_type().is_symlink() {
+        return Err(format!(
+            "workspace skills root must not be a symlink: {}",
+            skills_root.display()
+        ));
+    }
+    if !skills_root_metadata.is_dir() {
+        return Err(format!(
+            "workspace skills root must be a directory: {}",
+            skills_root.display()
+        ));
+    }
+    let canonical_skills_root = fs::canonicalize(&skills_root)
+        .map_err(|error| format!("canonicalize workspace skills root failed: {error}"))?;
+
+    let mut entries = fs::read_dir(&skills_root)
+        .map_err(|error| format!("read workspace skills failed: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("read workspace skill entry failed: {error}"))?;
+    entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_string());
+    for entry in entries {
+        let skill_dir = entry.path();
+        let skill_dir_metadata = fs::symlink_metadata(&skill_dir)
+            .map_err(|error| format!("read workspace skill metadata failed: {error}"))?;
+        if skill_dir_metadata.file_type().is_symlink() {
+            return Err(format!(
+                "workspace registered skill must not be a symlink: {}",
+                skill_dir.display()
+            ));
+        }
+        if !skill_dir_metadata.is_dir() {
+            continue;
+        }
+        let skill_file = skill_dir.join("SKILL.md");
+        let registration_file = skill_dir.join(".lime").join("registration.json");
+        let skill_file_metadata = match fs::symlink_metadata(&skill_file) {
+            Ok(metadata) => metadata,
+            Err(_) => continue,
+        };
+        let registration_file_metadata = match fs::symlink_metadata(&registration_file) {
+            Ok(metadata) => metadata,
+            Err(_) => continue,
+        };
+        if skill_file_metadata.file_type().is_symlink()
+            || registration_file_metadata.file_type().is_symlink()
+        {
+            return Err(format!(
+                "workspace registered skill files must not be symlinks: {}",
+                skill_dir.display()
+            ));
+        }
+        if !skill_file_metadata.is_file() || !registration_file_metadata.is_file() {
+            continue;
+        }
+        let canonical_skill_dir = fs::canonicalize(&skill_dir)
+            .map_err(|error| format!("canonicalize workspace skill directory failed: {error}"))?;
+        let canonical_skill_file = fs::canonicalize(&skill_file)
+            .map_err(|error| format!("canonicalize workspace skill file failed: {error}"))?;
+        let canonical_registration_file =
+            fs::canonicalize(&registration_file).map_err(|error| {
+                format!("canonicalize workspace skill registration failed: {error}")
+            })?;
+        if !canonical_skill_dir.starts_with(&canonical_skills_root)
+            || !canonical_skill_file.starts_with(&canonical_skill_dir)
+            || !canonical_registration_file.starts_with(&canonical_skill_dir)
+        {
+            return Err(format!(
+                "workspace registered skill path escaped workspace root: {}",
+                skill_dir.display()
+            ));
+        }
+        let directory = entry.file_name().to_string_lossy().to_string();
+        let skill = load_skill_from_file(&directory, &skill_file)?;
+        let registration: Value = fs::read_to_string(&registration_file)
+            .map_err(|error| format!("read skill registration failed: {error}"))
+            .and_then(|content| {
+                serde_json::from_str(&content)
+                    .map_err(|error| format!("parse skill registration failed: {error}"))
+            })?;
+        let standard_compliance = serde_json::to_value(&skill.standard_compliance)
+            .map_err(|error| format!("serialize skill standard compliance failed: {error}"))?;
+        let permission_summary = registration_permission_summary(&registration);
+        let allowed_tools = skill.allowed_tools.clone().unwrap_or_default();
+        skills.push(json!({
+            "key": format!("workspace:{directory}"),
+            "name": skill.display_name,
+            "description": skill.description,
+            "directory": directory,
+            "registered_skill_directory": skill_dir.to_string_lossy().to_string(),
+            "registration": registration,
+            "permission_summary": permission_summary,
+            "metadata": skill.metadata,
+            "allowed_tools": allowed_tools,
+            "resource_summary": skill_resource_summary(&skill_dir)?,
+            "standard_compliance": standard_compliance,
+            "launch_enabled": false,
+            "runtime_gate": "已注册为 Workspace 本地 Skill 包；进入运行前还需要 P3C runtime binding 与 tool_runtime 授权。",
+        }));
+    }
+
+    Ok(skills)
+}
+
+fn workspace_registered_skill_to_binding_value(skill: Value) -> Value {
+    let directory = skill
+        .get("directory")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let registration = skill.get("registration").cloned().unwrap_or(Value::Null);
+    let source_verification_report_id = registration
+        .get("sourceVerificationReportId")
+        .or_else(|| registration.get("source_verification_report_id"))
+        .and_then(Value::as_str);
+    let validation_errors = skill
+        .pointer("/standard_compliance/validation_errors")
+        .or_else(|| skill.pointer("/standard_compliance/validationErrors"))
+        .or_else(|| skill.pointer("/standardCompliance/validationErrors"))
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let binding_status = if validation_errors == 0 && source_verification_report_id.is_some() {
+        "ready_for_manual_enable"
+    } else {
+        "blocked"
+    };
+    let binding_status_reason = if binding_status == "ready_for_manual_enable" {
+        "已具备 workspace skill runtime binding 候选资格；当前仍未注入默认工具面。"
+    } else if validation_errors > 0 {
+        "Agent Skills 标准检查仍有问题，不能进入 runtime binding。"
+    } else {
+        "缺少来源 verification report，不能证明该 Skill 通过注册前验证。"
+    };
+
+    json!({
+        "key": format!("workspace_skill:{directory}"),
+        "name": skill.get("name").cloned().unwrap_or(Value::Null),
+        "description": skill.get("description").cloned().unwrap_or(Value::Null),
+        "directory": skill.get("directory").cloned().unwrap_or(Value::Null),
+        "registered_skill_directory": skill
+            .get("registered_skill_directory")
+            .cloned()
+            .unwrap_or(Value::Null),
+        "registration": registration,
+        "permission_summary": skill
+            .get("permission_summary")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+        "metadata": skill.get("metadata").cloned().unwrap_or_else(|| json!({})),
+        "allowed_tools": skill
+            .get("allowed_tools")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+        "resource_summary": skill
+            .get("resource_summary")
+            .cloned()
+            .unwrap_or_else(|| json!({})),
+        "standard_compliance": skill
+            .get("standard_compliance")
+            .cloned()
+            .unwrap_or_else(|| json!({})),
+        "runtime_binding_target": "workspace_skill",
+        "binding_status": binding_status,
+        "binding_status_reason": binding_status_reason,
+        "next_gate": if binding_status == "ready_for_manual_enable" {
+            "manual_runtime_enable"
+        } else {
+            "restore_verification_provenance"
+        },
+        "query_loop_visible": false,
+        "tool_runtime_visible": false,
+        "launch_enabled": false,
+        "runtime_gate": "等待显式 session enable 与 tool_runtime 授权裁剪。",
+    })
+}
+
+fn registration_permission_summary(registration: &Value) -> Vec<String> {
+    registration
+        .get("permissionSummary")
+        .or_else(|| registration.get("permission_summary"))
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn workspace_root_path(workspace_root: &str) -> Result<PathBuf, String> {
+    let workspace_root = PathBuf::from(workspace_root.trim());
+    if !workspace_root.is_absolute() {
+        return Err(format!(
+            "workspaceRoot must be absolute: {}",
+            workspace_root.display()
+        ));
+    }
+    Ok(workspace_root)
+}
+
 fn skill_resource_summary(skill_dir: &Path) -> Result<Value, String> {
     let references = skill_dir.join("references");
     let scripts = skill_dir.join("scripts");
@@ -1249,6 +1816,65 @@ fn values_from_serializable_vec<T: serde::Serialize>(
         .into_iter()
         .map(|value| serde_json::to_value(value).map_err(data_error))
         .collect()
+}
+
+async fn load_connect_registry_best_effort() -> Option<connect::RelayRegistry> {
+    let registry = connect::RelayRegistry::new(connect_registry_cache_path());
+    if registry.load_from_cache().is_ok() {
+        return Some(registry);
+    }
+    if registry.load_from_remote().await.is_ok() {
+        return Some(registry);
+    }
+    None
+}
+
+async fn load_connect_registry_required() -> Result<connect::RelayRegistry, RuntimeCoreError> {
+    load_connect_registry_best_effort()
+        .await
+        .ok_or_else(|| RuntimeCoreError::Backend("无法加载中转商注册表".to_string()))
+}
+
+fn connect_registry_cache_path() -> PathBuf {
+    app_paths::best_effort_data_dir()
+        .join("connect")
+        .join("registry.json")
+}
+
+fn connect_payload_to_protocol(payload: connect::ConnectPayload) -> ConnectPayload {
+    ConnectPayload {
+        relay: payload.relay,
+        key: payload.key,
+        name: payload.name,
+        ref_code: payload.ref_code,
+    }
+}
+
+fn open_deep_link_payload_to_protocol(
+    payload: connect::OpenDeepLinkPayload,
+) -> OpenDeepLinkPayload {
+    let kind = match payload.kind {
+        connect::OpenDeepLinkKind::Skill => "skill",
+        connect::OpenDeepLinkKind::Prompt => "prompt",
+    };
+    OpenDeepLinkPayload {
+        kind: kind.to_string(),
+        slug: payload.slug,
+        source: payload.source,
+        version: payload.version,
+        action: payload.action,
+    }
+}
+
+fn connect_protocol_to_provider_type(protocol: &str) -> ApiProviderType {
+    match protocol.trim().to_ascii_lowercase().as_str() {
+        "anthropic" | "claude" => ApiProviderType::Anthropic,
+        _ => ApiProviderType::Openai,
+    }
+}
+
+fn connect_deep_link_error(error: connect::DeepLinkError) -> RuntimeCoreError {
+    RuntimeCoreError::Backend(error.to_string())
 }
 
 fn list_agent_app_installed_state() -> Result<AgentAppInstalledListResponse, String> {
@@ -1460,6 +2086,7 @@ mod tests {
     use rusqlite::Connection;
     use std::sync::Arc;
     use std::sync::Mutex;
+    use tempfile::TempDir;
 
     const WORKSPACE_ID: &str = "workspace-current";
     const WORKSPACE_ROOT: &str = "/tmp/lime-current-workspace";
@@ -1623,6 +2250,133 @@ mod tests {
         AgentTimelineDao::create_turn(conn, &turn).expect("insert smoke title turn");
     }
 
+    fn write_registered_skill(workspace_root: &Path, directory: &str) -> PathBuf {
+        let skill_dir = workspace_root
+            .join(".agents")
+            .join("skills")
+            .join(directory);
+        fs::create_dir_all(skill_dir.join(".lime")).expect("create registered skill dir");
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            [
+                "---",
+                "name: 只读报告",
+                "description: 读取本地数据并生成报告。",
+                "allowed-tools: Read",
+                "---",
+                "",
+                "# 只读报告",
+            ]
+            .join("\n"),
+        )
+        .expect("write skill");
+        fs::write(
+            skill_dir.join(".lime").join("registration.json"),
+            json!({
+                "registrationId": "capreg-1",
+                "registeredAt": "2026-06-06T00:00:00.000Z",
+                "skillDirectory": directory,
+                "registeredSkillDirectory": skill_dir.to_string_lossy(),
+                "sourceDraftId": "capdraft-1",
+                "sourceVerificationReportId": "capver-1",
+                "generatedFileCount": 2,
+                "permissionSummary": ["Level 0 只读发现"]
+            })
+            .to_string(),
+        )
+        .expect("write registration");
+        skill_dir
+    }
+
+    #[test]
+    fn list_workspace_registered_skills_value_discovers_registered_skill() {
+        let temp = TempDir::new().expect("temp dir");
+        let skill_dir = write_registered_skill(temp.path(), "readonly-report");
+
+        let skills = list_workspace_registered_skills_value(WorkspaceRegisteredSkillsListParams {
+            workspace_root: temp.path().to_string_lossy().to_string(),
+        })
+        .expect("list registered skills");
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0]["key"], json!("workspace:readonly-report"));
+        assert_eq!(skills[0]["name"], json!("只读报告"));
+        assert_eq!(
+            skills[0]["registered_skill_directory"],
+            json!(skill_dir.to_string_lossy().to_string())
+        );
+        assert_eq!(
+            skills[0]["registration"]["sourceVerificationReportId"],
+            json!("capver-1")
+        );
+        assert_eq!(skills[0]["permission_summary"], json!(["Level 0 只读发现"]));
+        assert_eq!(skills[0]["launch_enabled"], json!(false));
+    }
+
+    #[test]
+    fn list_workspace_registered_skills_value_ignores_standard_skill_without_registration() {
+        let temp = TempDir::new().expect("temp dir");
+        let skill_dir = temp
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join("manual-standard-skill");
+        fs::create_dir_all(&skill_dir).expect("create standard skill dir");
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            [
+                "---",
+                "name: 手工标准 Skill",
+                "description: 没有 P3A provenance。",
+                "---",
+                "",
+                "# 手工标准 Skill",
+            ]
+            .join("\n"),
+        )
+        .expect("write skill");
+
+        let skills = list_workspace_registered_skills_value(WorkspaceRegisteredSkillsListParams {
+            workspace_root: temp.path().to_string_lossy().to_string(),
+        })
+        .expect("list registered skills");
+
+        assert!(skills.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_workspace_registered_skills_value_rejects_symlink_skill_directory() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().expect("temp dir");
+        let skills_root = temp.path().join(".agents").join("skills");
+        let outside = temp.path().join("outside-skill");
+        fs::create_dir_all(&outside).expect("create outside skill");
+        fs::create_dir_all(&skills_root).expect("create skills root");
+        fs::write(
+            outside.join("SKILL.md"),
+            [
+                "---",
+                "name: 外部 Skill",
+                "description: 不应通过 symlink 暴露。",
+                "---",
+                "",
+                "# 外部 Skill",
+            ]
+            .join("\n"),
+        )
+        .expect("write outside skill");
+        symlink(&outside, skills_root.join("outside-skill")).expect("symlink skill");
+
+        let error = list_workspace_registered_skills_value(WorkspaceRegisteredSkillsListParams {
+            workspace_root: temp.path().to_string_lossy().to_string(),
+        })
+        .expect_err("reject symlink skill directory");
+
+        assert!(error.contains("must not be a symlink"));
+    }
+
     #[tokio::test]
     async fn list_current_timeline_sessions_excludes_legacy_message_only_sessions() {
         let data_source = setup_data_source();
@@ -1769,6 +2523,105 @@ mod tests {
             .expect("read hidden session")
             .expect("hidden session remains readable by id");
         assert_eq!(hidden.session.session_id, "hidden-harness-session");
+    }
+
+    #[tokio::test]
+    async fn update_current_timeline_session_updates_title_and_archive_state() {
+        let data_source = setup_data_source();
+        {
+            let conn = database::lock_db(&data_source.db).expect("lock db");
+            insert_current_timeline_session(&conn);
+        }
+
+        let updated = data_source
+            .update_current_timeline_session(AgentSessionUpdateParams {
+                session_id: "current-session".to_string(),
+                title: Some("更新后的对话".to_string()),
+                archived: Some(true),
+                provider_selector: Some("custom-provider".to_string()),
+                provider_name: Some("OpenAI Compatible".to_string()),
+                model_name: Some("gpt-5.4".to_string()),
+                execution_strategy: Some("react".to_string()),
+                recent_access_mode: Some("full-access".to_string()),
+                recent_preferences: Some(json!({
+                    "task": true,
+                    "subagent": false
+                })),
+                recent_team_selection: Some(json!({
+                    "disabled": true
+                })),
+                ..AgentSessionUpdateParams::default()
+            })
+            .await
+            .expect("update current session");
+
+        assert_eq!(updated.session.session_id, "current-session");
+        assert_eq!(updated.session.title.as_deref(), Some("更新后的对话"));
+        assert!(updated.session.archived_at.is_some());
+
+        let recent = data_source
+            .list_current_timeline_sessions(AgentSessionListParams {
+                workspace_id: Some(WORKSPACE_ID.to_string()),
+                limit: Some(20),
+                ..AgentSessionListParams::default()
+            })
+            .await
+            .expect("list recent sessions");
+        assert!(recent.sessions.is_empty());
+
+        let archived = data_source
+            .list_current_timeline_sessions(AgentSessionListParams {
+                archived_only: Some(true),
+                workspace_id: Some(WORKSPACE_ID.to_string()),
+                limit: Some(20),
+                ..AgentSessionListParams::default()
+            })
+            .await
+            .expect("list archived sessions");
+        assert_eq!(archived.sessions.len(), 1);
+        assert_eq!(archived.sessions[0].session_id, "current-session");
+        assert_eq!(archived.sessions[0].model, "gpt-5.4");
+        assert_eq!(
+            archived.sessions[0].execution_strategy.as_deref(),
+            Some("react")
+        );
+
+        let detail = data_source
+            .read_current_timeline_session(AgentSessionReadParams {
+                session_id: "current-session".to_string(),
+                history_limit: Some(10),
+                history_offset: Some(0),
+                history_before_message_id: None,
+            })
+            .await
+            .expect("read updated session")
+            .expect("updated session detail")
+            .detail
+            .expect("compat detail");
+        assert_eq!(
+            detail.pointer("/execution_runtime/provider_selector"),
+            Some(&json!("custom-provider"))
+        );
+        assert_eq!(
+            detail.pointer("/execution_runtime/provider_name"),
+            Some(&json!("OpenAI Compatible"))
+        );
+        assert_eq!(
+            detail.pointer("/execution_runtime/model_name"),
+            Some(&json!("gpt-5.4"))
+        );
+        assert_eq!(
+            detail.pointer("/execution_runtime/recent_access_mode"),
+            Some(&json!("full-access"))
+        );
+        assert_eq!(
+            detail.pointer("/execution_runtime/recent_preferences/task"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            detail.pointer("/execution_runtime/recent_team_selection/disabled"),
+            Some(&json!(true))
+        );
     }
 
     #[tokio::test]

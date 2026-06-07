@@ -337,6 +337,7 @@ impl CompanionServiceState {
 
     pub async fn launch_pet(
         &self,
+        app_handle: AppHandle,
         request: CompanionLaunchPetRequest,
     ) -> Result<CompanionLaunchPetResult, String> {
         let endpoint = request
@@ -360,6 +361,8 @@ impl CompanionServiceState {
                 ),
             });
         };
+
+        self.start(app_handle).await?;
 
         let mut command = Command::new(&target.exec_path);
         command
@@ -1446,9 +1449,10 @@ pub async fn get_pet_status_global(
 
 pub async fn launch_pet_global(
     state: &CompanionServiceState,
+    app_handle: AppHandle,
     request: CompanionLaunchPetRequest,
 ) -> Result<CompanionLaunchPetResult, String> {
-    state.launch_pet(request).await
+    state.launch_pet(app_handle, request).await
 }
 
 pub async fn send_pet_command_global(

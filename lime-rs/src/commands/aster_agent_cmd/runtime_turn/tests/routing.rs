@@ -217,7 +217,7 @@ fn resolve_turn_execution_profile_should_keep_fast_chat_for_allowed_web_search()
 }
 
 #[test]
-fn natural_language_news_turn_should_allow_web_search_without_required_mode() {
+fn natural_language_news_turn_should_leave_search_mode_to_model_tool_choice() {
     let request = build_runtime_turn_test_request("整理今天的国际新闻", None);
     let policy = lime_agent::resolve_request_tool_policy_with_mode(None, None, true);
 
@@ -238,6 +238,19 @@ fn natural_language_news_turn_should_allow_web_search_without_required_mode() {
         resolve_fast_chat_tool_surface_mode(&request, TurnExecutionProfile::FastChat, &policy),
         None
     );
+}
+
+#[test]
+fn natural_language_news_turn_should_respect_explicit_search_disabled() {
+    let request = build_runtime_turn_test_request("整理今天的国际新闻", None);
+    let policy = lime_agent::resolve_request_tool_policy_with_mode(
+        Some(false),
+        None,
+        true,
+    );
+
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
+    assert!(!policy.allows_web_search());
 }
 
 #[test]

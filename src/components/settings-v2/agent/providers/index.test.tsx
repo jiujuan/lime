@@ -237,7 +237,11 @@ describe("CloudProviderSettings", () => {
     expect(
       container.querySelector('[data-testid="api-key-provider-stub"]')
         ?.className,
-    ).toContain("h-[calc(100vh-220px)]");
+    ).toContain("h-[calc(100vh-280px)]");
+    expect(container.querySelector("h1")?.textContent).toBe("AI 服务商");
+    expect(
+      container.querySelector('[data-testid="provider-settings-title"]'),
+    ).not.toBeNull();
     expect(
       container.querySelectorAll('[data-testid="provider-workspace-switcher"]')
         .length,

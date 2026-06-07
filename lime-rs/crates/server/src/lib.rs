@@ -44,7 +44,14 @@ pub fn record_request_telemetry(
 ) {
     use lime_infra::telemetry::RequestLog;
 
-    let provider = ctx.provider.unwrap_or(lime_core::ProviderType::Kiro);
+    let Some(provider) = ctx.provider else {
+        tracing::warn!(
+            "[TELEMETRY] request_id={} skip_request_log reason=missing_provider model={}",
+            ctx.request_id,
+            ctx.resolved_model
+        );
+        return;
+    };
 
     // 清理错误消息中的敏感信息
     let sanitized_error = error_message.map(|msg| state.sanitizer.sanitize(&msg));
@@ -127,7 +134,14 @@ pub fn record_token_usage(
         return;
     }
 
-    let provider = ctx.provider.unwrap_or(lime_core::ProviderType::Kiro);
+    let Some(provider) = ctx.provider else {
+        tracing::warn!(
+            "[TOKEN] request_id={} skip_token_log reason=missing_provider model={}",
+            ctx.request_id,
+            ctx.resolved_model
+        );
+        return;
+    };
     let record = TokenUsageRecord::new(
         uuid::Uuid::new_v4().to_string(),
         provider,
@@ -482,7 +496,7 @@ impl ServerState {
                         default_provider_str
                     );
                     eprintln!(
-                        "[SERVER] 警告：默认 Provider '{default_provider_str}' 不是标准 Provider 类型（kiro/openai/claude等），\
+                        "[SERVER] 警告：默认 Provider '{default_provider_str}' 不是标准 Provider 类型（openai/claude/gemini等），\
                         可能是自定义 Provider ID。如果这是预期行为，请忽略此警告。"
                     );
                 }

@@ -28,10 +28,6 @@ vi.mock("@/lib/api/project", () => ({
   ensureDefaultWorkspaceReady: projectMocks.ensureDefaultWorkspaceReady,
 }));
 
-vi.mock("@/lib/utils/connectError", () => ({
-  showRegistryLoadError: vi.fn(),
-}));
-
 vi.mock("@/lib/workspaceHealthTelemetry", () => ({
   recordWorkspaceRepair: vi.fn(),
 }));
@@ -56,7 +52,6 @@ let mountedHarness: MountedHarness | null = null;
 function HookHarness() {
   useAppStartupEffects({
     currentPage: "agent",
-    registryError: null,
   });
   return <main data-testid="main" />;
 }

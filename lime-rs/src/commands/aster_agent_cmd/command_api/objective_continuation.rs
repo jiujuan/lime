@@ -2,7 +2,7 @@ use super::objective_support::resolve_objective_workspace_id;
 use super::*;
 use crate::agent::runtime_queue_service::AgentRuntimeQueueContext;
 use crate::commands::aster_agent_cmd::app_server_host::{
-    build_tauri_aster_app_server, submit_desktop_aster_chat_request, DesktopAsterChatSubmitInput,
+    build_desktop_aster_app_server, submit_desktop_aster_chat_request, DesktopAsterChatSubmitInput,
 };
 use crate::database::{lock_db, DbConnection};
 use lime_core::database::dao::agent_run::{AgentRun, AgentRunDao};
@@ -279,7 +279,7 @@ pub(crate) async fn maybe_submit_managed_objective_auto_continuation(
                 &context.mcp_manager,
                 &context.automation_state,
             );
-            let app_server = build_tauri_aster_app_server(runtime);
+            let app_server = build_desktop_aster_app_server(runtime);
             let queued_turn_id = submit_desktop_aster_chat_request(
                 &app_server,
                 DesktopAsterChatSubmitInput {

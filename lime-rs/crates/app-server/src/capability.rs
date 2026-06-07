@@ -5,6 +5,9 @@ use app_server_protocol::METHOD_AGENT_SESSION_READ;
 use app_server_protocol::METHOD_AGENT_SESSION_START;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
+use lime_agent::agent_tools::catalog::{
+    tool_catalog_entries_for_surface, ToolLifecycle, WorkspaceToolSurface,
+};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -119,11 +122,23 @@ impl CapabilityInventorySource {
     pub fn default_agent_session() -> Self {
         Self::new(vec![CapabilityInventoryRecord::agent_session()])
     }
+
+    pub fn default_current_surface() -> Self {
+        let mut records = vec![CapabilityInventoryRecord::agent_session()];
+        for tool in
+            tool_catalog_entries_for_surface(WorkspaceToolSurface::workbench_with_browser_assist())
+                .into_iter()
+                .filter(|tool| tool.lifecycle == ToolLifecycle::Current)
+        {
+            records.push(current_tool_capability_record(tool.name));
+        }
+        Self::new(records)
+    }
 }
 
 impl Default for CapabilityInventorySource {
     fn default() -> Self {
-        Self::default_agent_session()
+        Self::default_current_surface()
     }
 }
 
@@ -248,6 +263,14 @@ fn agent_session_descriptor() -> CapabilityDescriptor {
     }
 }
 
+fn current_tool_capability_record(tool_name: &str) -> CapabilityInventoryRecord {
+    CapabilityInventoryRecord::executable_agent_turn(
+        format!("tool.{tool_name}"),
+        tool_name.to_string(),
+        Some("Current App Server tool catalog capability.".to_string()),
+    )
+}
+
 fn scope_matches(allowed: &[String], requested: Option<&str>) -> bool {
     allowed.is_empty()
         || requested.is_some_and(|requested| allowed.iter().any(|value| value == requested))
@@ -284,6 +307,30 @@ mod tests {
         assert_eq!(record.app_ids, vec!["content-studio".to_string()]);
         assert_eq!(record.workspace_ids, vec!["workspace-main".to_string()]);
         assert_eq!(record.session_ids, vec!["sess_allowed".to_string()]);
+    }
+
+    #[test]
+    fn default_inventory_source_exposes_current_tool_capabilities() {
+        let source = CapabilityInventorySource::default();
+        let capabilities = source.list_capabilities(&CapabilityListContext::default());
+        let ids = capabilities
+            .iter()
+            .map(|capability| capability.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(ids.contains(&"agent.session"));
+        assert!(ids.contains(&"tool.WebFetch"));
+        assert!(ids.contains(&"tool.WebSearch"));
+
+        let web_search = capabilities
+            .iter()
+            .find(|capability| capability.id == "tool.WebSearch")
+            .expect("WebSearch capability");
+        assert_eq!(web_search.title, "WebSearch");
+        assert_eq!(
+            web_search.methods,
+            vec![METHOD_AGENT_SESSION_TURN_START.to_string()]
+        );
     }
 
     #[test]

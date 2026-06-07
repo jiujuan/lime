@@ -143,8 +143,8 @@ mod tests {
     #[test]
     fn test_request_context_set_provider() {
         let mut ctx = RequestContext::new("model".to_string());
-        ctx.set_provider(ProviderType::Kiro);
-        assert_eq!(ctx.provider, Some(ProviderType::Kiro));
+        ctx.set_provider(ProviderType::Gemini);
+        assert_eq!(ctx.provider, Some(ProviderType::Gemini));
     }
 
     #[test]

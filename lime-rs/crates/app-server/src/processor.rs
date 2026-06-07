@@ -3,14 +3,24 @@ use crate::RuntimeCore;
 use crate::RuntimeCoreError;
 use crate::RuntimeHostContext;
 use app_server_protocol::error_codes;
+use app_server_protocol::AgentAppUiRuntimeStartParams;
+use app_server_protocol::AgentAppUiRuntimeStatusParams;
+use app_server_protocol::AgentAppUiRuntimeStopParams;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSessionActionRespondParams;
 use app_server_protocol::AgentSessionEventParams;
 use app_server_protocol::AgentSessionListParams;
+use app_server_protocol::AgentSessionUpdateParams;
 use app_server_protocol::ArtifactReadParams;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::ClientInfo;
+use app_server_protocol::ConnectCallbackSendParams;
+use app_server_protocol::ConnectDeepLinkResolveParams;
+use app_server_protocol::ConnectOpenDeepLinkResolveParams;
+use app_server_protocol::ConnectRelayApiKeySaveParams;
 use app_server_protocol::EvidenceExportParams;
+use app_server_protocol::FileSystemListDirectoryParams;
+use app_server_protocol::FileSystemReadFilePreviewParams;
 use app_server_protocol::InitializeParams;
 use app_server_protocol::InitializeResponse;
 use app_server_protocol::JsonRpcError;
@@ -31,8 +41,12 @@ use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspacePathReadParams;
 use app_server_protocol::WorkspaceProjectPathResolveParams;
 use app_server_protocol::WorkspaceReadParams;
+use app_server_protocol::WorkspaceRegisteredSkillsListParams;
 use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
+use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START;
+use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS;
+use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
 use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
 use app_server_protocol::METHOD_AGENT_SESSION_LIST;
@@ -40,10 +54,17 @@ use app_server_protocol::METHOD_AGENT_SESSION_READ;
 use app_server_protocol::METHOD_AGENT_SESSION_START;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
+use app_server_protocol::METHOD_AGENT_SESSION_UPDATE;
 use app_server_protocol::METHOD_ARTIFACT_READ;
 use app_server_protocol::METHOD_AUTOMATION_JOB_LIST;
 use app_server_protocol::METHOD_CAPABILITY_LIST;
+use app_server_protocol::METHOD_CONNECT_CALLBACK_SEND;
+use app_server_protocol::METHOD_CONNECT_DEEP_LINK_RESOLVE;
+use app_server_protocol::METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE;
+use app_server_protocol::METHOD_CONNECT_RELAY_API_KEY_SAVE;
 use app_server_protocol::METHOD_EVIDENCE_EXPORT;
+use app_server_protocol::METHOD_FILE_SYSTEM_LIST_DIRECTORY;
+use app_server_protocol::METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
 use app_server_protocol::METHOD_INITIALIZE;
 use app_server_protocol::METHOD_INITIALIZED;
 use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
@@ -65,6 +86,7 @@ use app_server_protocol::METHOD_WORKSPACE_LIST;
 use app_server_protocol::METHOD_WORKSPACE_PROJECTS_ROOT_READ;
 use app_server_protocol::METHOD_WORKSPACE_PROJECT_PATH_RESOLVE;
 use app_server_protocol::METHOD_WORKSPACE_READ;
+use app_server_protocol::METHOD_WORKSPACE_REGISTERED_SKILLS_LIST;
 use app_server_protocol::METHOD_WORKSPACE_SKILL_BINDINGS_LIST;
 use app_server_protocol::PROTOCOL_VERSION;
 use app_server_protocol::SERVER_NAME;
@@ -124,8 +146,13 @@ impl RequestProcessor {
             METHOD_INITIALIZE => self.initialize(params).map(RpcDispatch::single),
             METHOD_CAPABILITY_LIST => self.handle_capability_list(params),
             METHOD_ARTIFACT_READ => self.handle_artifact_read(params),
+            METHOD_FILE_SYSTEM_LIST_DIRECTORY => self.handle_file_system_list_directory(params).await,
+            METHOD_FILE_SYSTEM_READ_FILE_PREVIEW => {
+                self.handle_file_system_read_file_preview(params).await
+            }
             METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params).await,
             METHOD_AGENT_SESSION_LIST => self.handle_session_list(params).await,
+            METHOD_AGENT_SESSION_UPDATE => self.handle_session_update(params).await,
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
             METHOD_AGENT_SESSION_READ => self.handle_session_read(params).await,
             METHOD_WORKSPACE_LIST => self.handle_workspace_list().await,
@@ -143,7 +170,17 @@ impl RequestProcessor {
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
                 self.handle_workspace_skill_bindings_list(params).await
             }
+            METHOD_WORKSPACE_REGISTERED_SKILLS_LIST => {
+                self.handle_workspace_registered_skills_list(params).await
+            }
             METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list().await,
+            METHOD_AGENT_APP_UI_RUNTIME_START => {
+                self.handle_agent_app_ui_runtime_start(params).await
+            }
+            METHOD_AGENT_APP_UI_RUNTIME_STATUS => {
+                self.handle_agent_app_ui_runtime_status(params).await
+            }
+            METHOD_AGENT_APP_UI_RUNTIME_STOP => self.handle_agent_app_ui_runtime_stop(params).await,
             METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list(params).await,
             METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list().await,
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
@@ -154,6 +191,14 @@ impl RequestProcessor {
             METHOD_MODEL_PROVIDER_CATALOG_LIST => self.handle_model_provider_catalog_list().await,
             METHOD_MODEL_PROVIDER_ALIAS_READ => self.handle_model_provider_alias_read(params).await,
             METHOD_MODEL_PROVIDER_ALIAS_LIST => self.handle_model_provider_alias_list().await,
+            METHOD_CONNECT_DEEP_LINK_RESOLVE => self.handle_connect_deep_link_resolve(params).await,
+            METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE => {
+                self.handle_connect_open_deep_link_resolve(params).await
+            }
+            METHOD_CONNECT_RELAY_API_KEY_SAVE => {
+                self.handle_connect_relay_api_key_save(params).await
+            }
+            METHOD_CONNECT_CALLBACK_SEND => self.handle_connect_callback_send(params).await,
             METHOD_AGENT_SESSION_TURN_START => self.handle_turn_start(params, event_callback).await,
             METHOD_AGENT_SESSION_TURN_CANCEL => self.handle_turn_cancel(params).await,
             METHOD_AGENT_SESSION_ACTION_RESPOND => self.handle_action_respond(params).await,
@@ -228,6 +273,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .list_agent_sessions(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_session_current(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -377,11 +436,67 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_workspace_registered_skills_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: WorkspaceRegisteredSkillsListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_workspace_registered_skills(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_agent_app_installed_list(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
             .list_agent_app_installed()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_ui_runtime_start(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppUiRuntimeStartParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .start_agent_app_ui_runtime(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_ui_runtime_status(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppUiRuntimeStatusParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .agent_app_ui_runtime_status(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_ui_runtime_stop(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppUiRuntimeStopParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .stop_agent_app_ui_runtime(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -503,6 +618,62 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_connect_deep_link_resolve(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ConnectDeepLinkResolveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .resolve_connect_deep_link(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_connect_open_deep_link_resolve(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ConnectOpenDeepLinkResolveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .resolve_connect_open_deep_link(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_connect_relay_api_key_save(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ConnectRelayApiKeySaveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .save_connect_relay_api_key(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_connect_callback_send(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ConnectCallbackSendParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .deliver_connect_callback(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     fn handle_artifact_read(
         &self,
         params: Option<serde_json::Value>,
@@ -512,6 +683,34 @@ impl RequestProcessor {
         let response = self
             .runtime
             .read_artifacts(params)
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_file_system_list_directory(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: FileSystemListDirectoryParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_directory(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_file_system_read_file_preview(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: FileSystemReadFilePreviewParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_file_preview(params)
+            .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
@@ -928,6 +1127,112 @@ mod tests {
                     "notRequested"
                 );
                 assert!(response.result["artifacts"][0].get("content").is_none());
+            }
+            other => panic!("expected response, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn app_server_file_system_methods_require_initialized_and_return_current_results() {
+        let processor = RequestProcessor::new(RuntimeCore::default());
+        let blocked = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(1),
+                METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+                Some(json!({ "path": "." })),
+            ))
+            .await
+            .expect("blocked response");
+        assert!(matches!(
+            &blocked[0],
+            JsonRpcMessage::Error(error) if error.error.code == error_codes::NOT_INITIALIZED
+        ));
+
+        processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(2),
+                METHOD_INITIALIZE,
+                Some(
+                    serde_json::to_value(InitializeParams {
+                        client_info: ClientInfo {
+                            name: "test-client".to_string(),
+                            title: None,
+                            version: None,
+                        },
+                        capabilities: ClientCapabilities::default(),
+                    })
+                    .expect("initialize params"),
+                ),
+            ))
+            .await
+            .expect("initialize");
+        processor.handle_notification(JsonRpcNotification::new(
+            METHOD_INITIALIZED,
+            Some(json!({})),
+        ));
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let file_path = temp_dir.path().join("README.md");
+        std::fs::write(&file_path, "# Lime").expect("write file");
+        let expected_dir_path = std::fs::canonicalize(temp_dir.path())
+            .expect("canonical temp dir")
+            .to_string_lossy()
+            .into_owned();
+        let expected_file_path = std::fs::canonicalize(&file_path)
+            .expect("canonical file")
+            .to_string_lossy()
+            .into_owned();
+
+        let listing_messages = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(3),
+                METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+                Some(json!({ "path": temp_dir.path() })),
+            ))
+            .await
+            .expect("directory listing response");
+        match &listing_messages[0] {
+            JsonRpcMessage::Response(response) => {
+                let actual_dir_path = std::fs::canonicalize(
+                    response.result["path"].as_str().expect("listing path"),
+                )
+                .expect("canonical response dir")
+                .to_string_lossy()
+                .into_owned();
+                assert_eq!(
+                    actual_dir_path.as_str(),
+                    expected_dir_path.as_str()
+                );
+                assert_eq!(response.result["entries"][0]["name"], "README.md");
+            }
+            other => panic!("expected response, got {other:?}"),
+        }
+
+        let preview_messages = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(4),
+                METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+                Some(json!({
+                    "path": file_path,
+                    "maxSize": 1024,
+                })),
+            ))
+            .await
+            .expect("file preview response");
+        match &preview_messages[0] {
+            JsonRpcMessage::Response(response) => {
+                let actual_file_path = std::fs::canonicalize(
+                    response.result["path"].as_str().expect("preview path"),
+                )
+                .expect("canonical response file")
+                .to_string_lossy()
+                .into_owned();
+                assert_eq!(
+                    actual_file_path.as_str(),
+                    expected_file_path.as_str()
+                );
+                assert_eq!(response.result["content"], "# Lime");
+                assert_eq!(response.result["isBinary"], false);
             }
             other => panic!("expected response, got {other:?}"),
         }

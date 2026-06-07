@@ -306,11 +306,10 @@ pub async fn generate_persona(
 ) -> Result<GeneratedPersonaCommandResult, String> {
     use aster::conversation::message::Message;
     use futures::StreamExt;
-    const PERSONA_FALLBACK_PROVIDER_CHAIN: [(&str, &str); 4] = [
+    const PERSONA_FALLBACK_PROVIDER_CHAIN: [(&str, &str); 3] = [
         ("deepseek", "deepseek-chat"),
         ("openai", "gpt-4o-mini"),
         ("anthropic", "claude-3-haiku-20240307"),
-        ("kiro", "anthropic.claude-3-haiku-20240307-v1:0"),
     ];
 
     tracing::info!("[Persona] AI 生成人设: prompt={}", prompt);

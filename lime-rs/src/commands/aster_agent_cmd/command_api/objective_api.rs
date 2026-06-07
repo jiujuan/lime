@@ -1,6 +1,6 @@
 use super::*;
 use crate::commands::aster_agent_cmd::app_server_host::{
-    build_tauri_aster_app_server, submit_desktop_aster_chat_request, DesktopAsterChatSubmitInput,
+    build_desktop_aster_app_server, submit_desktop_aster_chat_request, DesktopAsterChatSubmitInput,
 };
 use crate::database::lock_db;
 use lime_core::database::managed_objective_repository::{
@@ -174,7 +174,7 @@ pub async fn agent_runtime_continue_objective(
         ManagedObjectiveContinuationSource::ManualGui,
         resolve_objective_workspace_id(runtime.db(), &objective)?,
     );
-    let app_server = build_tauri_aster_app_server(runtime);
+    let app_server = build_desktop_aster_app_server(runtime);
     let queued_turn_id = submit_desktop_aster_chat_request(
         &app_server,
         DesktopAsterChatSubmitInput {

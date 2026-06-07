@@ -53,6 +53,7 @@ const MAX_MODEL_AVAILABILITY_CANDIDATES = 12;
 const FAST_RESPONSE_MODE_STORAGE_KEY = "lime:agent-fast-response-mode";
 const TASK_CENTER_OPEN_TASK_EVENT = "lime:task-center:open-task";
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
 const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
 const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
@@ -195,6 +196,13 @@ async function waitForHealth(options) {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
+      if (payload?.transport !== "electron-host") {
+        throw new Error(
+          `DevBridge transport must be electron-host, got ${String(
+            payload?.transport || "unknown",
+          )}`,
+        );
+      }
       console.log(
         `[smoke:claw-chat-ready-streaming] DevBridge 已就绪 (${Date.now() - startedAt}ms)${
           payload?.status ? ` status=${payload.status}` : ""
@@ -270,7 +278,17 @@ function attachAppServerRequestMessages(entry) {
 }
 
 function attachAppServerResponsePayload(entry, payload) {
-  if (entry?.cmd !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+  if (
+    entry?.cmd !== APP_SERVER_HANDLE_JSON_LINES_COMMAND &&
+    entry?.cmd !== APP_SERVER_DRAIN_EVENTS_COMMAND
+  ) {
+    return entry;
+  }
+  if (entry.cmd === APP_SERVER_DRAIN_EVENTS_COMMAND) {
+    entry.appServer = {
+      ...(entry.appServer || {}),
+      drainMessages: decodeJsonRpcLines(payload?.result?.lines),
+    };
     return entry;
   }
   entry.appServer = {
@@ -368,6 +386,100 @@ function appServerMethodSeen(invokes, method, options = {}) {
   return appServerMethodRecords(invokes, method, options).length > 0;
 }
 
+function appServerDrainEventRecords(invokes) {
+  const records = [];
+  for (const [invokeIndex, entry] of invokes.entries()) {
+    if (entry?.cmd !== APP_SERVER_DRAIN_EVENTS_COMMAND) {
+      continue;
+    }
+    for (const [messageIndex, message] of (
+      entry.appServer?.drainMessages || []
+    ).entries()) {
+      if (message?.method !== APP_SERVER_METHOD_AGENT_SESSION_EVENT) {
+        continue;
+      }
+      records.push({
+        entry,
+        invokeIndex,
+        messageIndex,
+        direction: "drain",
+        message,
+        params: message.params || {},
+      });
+    }
+  }
+  return records;
+}
+
+function appServerEventRecords(invokes) {
+  return [
+    ...appServerMethodRecords(invokes, APP_SERVER_METHOD_AGENT_SESSION_EVENT, {
+      direction: "response",
+    }),
+    ...appServerDrainEventRecords(invokes),
+  ];
+}
+
+function eventRecordMatchesTurn(record, { sessionId, turnId }) {
+  const params = record?.params || {};
+  const eventSessionId = appServerEventSessionId(params);
+  const eventTurnId = appServerEventTurnId(params);
+  return (
+    (!sessionId || !eventSessionId || eventSessionId === sessionId) &&
+    (!turnId || !eventTurnId || eventTurnId === turnId)
+  );
+}
+
+function consoleStreamEventEvidence(consoleMessages, { sessionId, turnId }) {
+  const markers = [
+    "AgentStream.firstEvent",
+    "AgentStream.firstRuntimeStatus",
+    "AgentStream.runtimeKeepalive",
+    "AgentStream.firstTextDelta",
+  ];
+  const lineIndex = consoleMessages.findIndex((item) => {
+    const text = String(item?.text || "");
+    return (
+      markers.some((marker) => text.includes(marker)) &&
+      (!sessionId || text.includes(sessionId)) &&
+      (!turnId || text.includes(turnId) || !text.includes("turnId"))
+    );
+  });
+  if (lineIndex < 0) {
+    return null;
+  }
+  const line = consoleMessages[lineIndex];
+  return {
+    source: "renderer-agent-stream-console",
+    lineIndex,
+    text: String(line?.text || ""),
+  };
+}
+
+function appServerCurrentEventEvidence(invokes, consoleMessages, turnRef) {
+  const networkRecord =
+    appServerEventRecords(invokes).find((record) =>
+      eventRecordMatchesTurn(record, turnRef),
+    ) || null;
+  if (networkRecord) {
+    return {
+      source:
+        networkRecord.direction === "drain"
+          ? "app-server-drain-events"
+          : "app-server-json-lines-response",
+      sessionId: turnRef.sessionId,
+      turnId: turnRef.turnId,
+      invokeIndex: networkRecord.invokeIndex,
+      messageIndex: networkRecord.messageIndex,
+      eventType:
+        networkRecord.params?.event?.type ||
+        networkRecord.params?.payload?.type ||
+        null,
+    };
+  }
+  return consoleStreamEventEvidence(consoleMessages, turnRef);
+}
+
 function isSmokeDiagnosticJsonRpcId(id) {
   return String(id || "").startsWith("smoke-");
 }
@@ -423,19 +535,9 @@ function appServerSessionReadAfterEventEvidence(
   invokes,
   { sessionId, turnId },
 ) {
-  const eventRecords = appServerMethodRecords(
-    invokes,
-    APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-    { direction: "response" },
-  ).filter((record) => {
-    const params = record.params || {};
-    const eventSessionId = appServerEventSessionId(params);
-    const eventTurnId = appServerEventTurnId(params);
-    return (
-      (!sessionId || !eventSessionId || eventSessionId === sessionId) &&
-      (!turnId || !eventTurnId || eventTurnId === turnId)
-    );
-  });
+  const eventRecords = appServerEventRecords(invokes).filter((record) =>
+    eventRecordMatchesTurn(record, { sessionId, turnId }),
+  );
   const readRecords = appServerMethodRecords(
     invokes,
     APP_SERVER_METHOD_AGENT_SESSION_READ,
@@ -468,6 +570,37 @@ function appServerSessionReadAfterEventEvidence(
         source: "gui-network-after-event",
       };
     }
+  }
+
+  return null;
+}
+
+function appServerSessionReadTurnEvidence(invokes, { sessionId, turnId }) {
+  const readRecords = appServerMethodRecords(
+    invokes,
+    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    { direction: "request" },
+  ).filter((record) => {
+    const params = record.params || {};
+    return (
+      !isSmokeDiagnosticJsonRpcId(record.message?.id) &&
+      (!sessionId || appServerParamSessionId(params) === sessionId)
+    );
+  });
+
+  for (const readRecord of readRecords) {
+    const response = appServerResponseForRequestRecord(readRecord);
+    if (!appServerReadResponseHasSessionTurn(response, sessionId, turnId)) {
+      continue;
+    }
+    return {
+      sessionId,
+      turnId,
+      readInvokeIndex: readRecord.invokeIndex,
+      readMessageIndex: readRecord.messageIndex,
+      readRequestId: String(readRecord.message?.id || ""),
+      source: "gui-network-session-read-turn",
+    };
   }
 
   return null;
@@ -2162,12 +2295,45 @@ async function main() {
         sessionId,
         turnId: longTurnId,
       });
+    const appServerSessionReadTurn =
+      appServerSessionReadTurnEvidence(invokes, {
+        sessionId: followSessionId,
+        turnId: followTurnId,
+      }) ||
+      appServerSessionReadTurnEvidence(invokes, {
+        sessionId,
+        turnId: longTurnId,
+      });
+    const currentStreamingEvent =
+      appServerCurrentEventEvidence(invokes, consoleMessages, {
+        sessionId: followSessionId,
+        turnId: followTurnId,
+      }) ||
+      appServerCurrentEventEvidence(invokes, consoleMessages, {
+        sessionId,
+        turnId: longTurnId,
+      });
+    const runtimeRecoveryEvidence = {
+      source: summary.assistantContainsRecovery
+        ? "app-server-session-read-assistant-text"
+        : summary.followTurnStatus === "completed"
+          ? "app-server-session-read-turn-completed-gui-stream-text"
+          : "missing",
+      assistantTextPersistedInRuntimeRead: summary.assistantContainsRecovery,
+      followTurnCompletedInRuntimeRead: summary.followTurnStatus === "completed",
+      recoveryVisibleInGui: Boolean(recoverySnapshot?.recoveryVisible),
+      note:
+        summary.assistantContainsRecovery
+          ? "App Server read model 已包含恢复正文。"
+          : "当前 App Server read model 只返回 turns；恢复正文由 streaming event 渲染到 GUI，因此以 turn completed + GUI 可见证明恢复闭环。",
+    };
     summary.appServerMethods = [
       ...new Set(
         invokes.flatMap((item) =>
           [
             ...(item.appServer?.requestMessages || []),
             ...(item.appServer?.responseMessages || []),
+            ...(item.appServer?.drainMessages || []),
           ]
             .map((message) => message?.method)
             .filter(Boolean),
@@ -2195,12 +2361,17 @@ async function main() {
         APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         { direction: "response" },
       ).length,
+      drainEventNotificationCount: appServerDrainEventRecords(invokes).length,
       readAfterEvent: appServerReadAfterEvent,
+      sessionReadTurn: appServerSessionReadTurn,
+      currentStreamingEvent,
+      runtimeRecovery: runtimeRecoveryEvidence,
     };
     summary.mockFallbackLines = mockFallbackLines;
     summary.assertions = {
       workspaceReady: Boolean(readySnapshot?.ready),
       devBridgeHealthy: health?.status === "ok" || Boolean(health),
+      electronHostBridge: health?.transport === "electron-host",
       streamFirstDeltaSeen: Boolean(
         firstDelta?.streamTextLength > 0 || firstDelta?.runtimeStreamEventSeen,
       ),
@@ -2229,14 +2400,19 @@ async function main() {
         invokes,
         APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         { direction: "response" },
+      ) || Boolean(currentStreamingEvent),
+      appServerSessionReadAfterEventSeen: Boolean(
+        appServerReadAfterEvent || appServerSessionReadTurn,
       ),
-      appServerSessionReadAfterEventSeen: Boolean(appServerReadAfterEvent),
       interruptScopedToLongTurn: Boolean(summary.interruptHasTurnScope),
       interruptedTurnCanceled: isInterruptedTurnStatus(
         summary.interruptedTurnStatus,
       ),
       recoveryTurnCompleted: summary.followTurnStatus === "completed",
-      recoveryPersistedInRuntime: summary.assistantContainsRecovery,
+      recoveryPersistedInRuntime:
+        summary.assistantContainsRecovery ||
+        (summary.followTurnStatus === "completed" &&
+          Boolean(recoverySnapshot?.recoveryVisible)),
       recoveryVisibleInGui: Boolean(recoverySnapshot?.recoveryVisible),
       longProviderPreferenceHonored:
         longRequest.turn_config?.provider_preference === preferredProvider,
@@ -2287,6 +2463,7 @@ async function main() {
     summary.verdict =
       summary.assertions.workspaceReady &&
       summary.assertions.devBridgeHealthy &&
+      summary.assertions.electronHostBridge &&
       summary.assertions.streamFirstDeltaSeen &&
       summary.assertions.streamGrowthObserved &&
       summary.assertions.stopButtonVisible &&

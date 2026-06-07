@@ -1,7 +1,7 @@
 # Electron Release / Updater 边界
 
 > 状态：current planning source
-> 更新时间：2026-06-06
+> 更新时间：2026-06-07
 > 作用：固定 Lime Desktop 下线上一代前端宿主后的 release、签名、公证、updater feed 与平稳迁移口径。
 
 ## 1. 事实源
@@ -10,14 +10,17 @@ Lime Desktop 的发布与更新链路由 Electron current 接管：
 
 | 边界             | current 事实源                                  | 负责                                                                                            |
 | ---------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Desktop host     | `electron/main.ts`、`electron/updateHost.ts`    | updater IPC、下载、安装会话、用户可见状态                                                       |
-| 打包配置         | `electron-builder.yml`                          | appId、productName、icon、协议、macOS hardened runtime、notarization、installer 与 generic feed |
-| 发布 CI          | `.github/workflows/release.yml`                 | 多平台构建、签名、公证、staging、GitHub Release、Cloudflare R2 feed                             |
-| 资产 staging     | `scripts/stage-electron-release-assets.mjs`     | 从 `release-electron` 提取 installer、metadata 与 blockmap                                      |
-| updater 上传计划 | `scripts/plan-electron-updater-r2-upload.mjs`   | 生成按 feed 与版本隔离的 R2 upload plan                                                         |
-| 包资源校验       | `scripts/verify-electron-package-resources.mjs` | 校验 packaged app 内 desktop assets、App Server sidecar 与 release manifest                     |
+| Desktop host     | `electron/main.ts`、`electron/updateHost.ts`    | updater IPC、下载、安装会话、用户可见状态                                   |
+| 打包配置         | `forge.config.mjs`                              | Electron Forge package / make、appId、productName、icon、协议、签名、公证、installer 与 generic feed |
+| Windows maker    | `electron/forge/nsisMaker.mjs`                  | 在 Forge maker 管线内生成 NSIS installer，保持 Windows updater 兼容语义      |
+| 发布 CI          | `.github/workflows/release.yml`                 | 多平台构建、签名、公证、staging、GitHub Release、Cloudflare R2 feed         |
+| 资产 staging     | `scripts/stage-electron-release-assets.mjs`     | 从 `release-electron` 提取 installer、metadata 与 blockmap                  |
+| updater 上传计划 | `scripts/plan-electron-updater-r2-upload.mjs`   | 生成按 feed 与版本隔离的 R2 upload plan                                     |
+| 包资源校验       | `scripts/verify-electron-package-resources.mjs` | 校验 packaged app 内 desktop assets、App Server sidecar 与 release manifest |
 
 Codex CLI / `codex-rs` 只作为 App Server protocol / daemon lifecycle / client 分层参考；release、updater、tray、Dock、窗口和桌面产品交互都以 Lime Electron Desktop Host 为事实源，不从 Codex App UI 推断。
+
+`electron-builder.yml`、`electron-builder` CLI 与 builder yml 事实源已按 `dead` 处理，不再作为 release、updater、签名、公证、CI、i18n app metadata 或版本同步输入。
 
 ## 2. 架构图
 
@@ -31,9 +34,10 @@ flowchart TB
     Feed --> R2["Cloudflare R2<br/>lime/stable/<feed>/..."]
 
     Tag["Git tag / workflow_dispatch"] --> ReleaseWorkflow[".github/workflows/release.yml"]
-    ReleaseWorkflow --> Builder["electron-builder"]
-    Builder --> SignedApp["signed / notarized installers"]
-    Builder --> Metadata["latest-mac.yml / latest.yml / blockmap"]
+    ReleaseWorkflow --> Forge["Electron Forge make"]
+    Forge --> Makers["MakerDMG / MakerZIP / MakerNsis"]
+    Makers --> SignedApp["signed / notarized installers"]
+    Makers --> Metadata["latest-mac.yml / latest.yml / blockmap"]
     SignedApp --> Stage["stage-electron-release-assets"]
     Metadata --> Stage
     Stage --> GitHubRelease["GitHub Release archive"]
@@ -68,21 +72,33 @@ lime/stable/vX.Y.Z/<feed>/<asset>
 
 `latest-mac.yml` / `latest.yml` 使用短缓存；installer、zip、blockmap 使用长缓存。GitHub Release 是归档和人工下载入口，客户端热路径直接读 R2 自域名。
 
-## 4. 签名与公证
+## 4. 打包与签名
 
-macOS 发布使用 Electron Builder 的签名和公证链：
+发布使用 Electron Forge 的 `package` / `make` 管线：
 
-| GitHub secret                | Electron Builder env          | 用途                               |
+| 平台        | Forge maker                    | 说明                                                       |
+| ----------- | ------------------------------ | ---------------------------------------------------------- |
+| macOS       | `@electron-forge/maker-dmg`    | 生成 DMG 安装包                                            |
+| macOS       | `@electron-forge/maker-zip`    | 生成供 `electron-updater` 使用的 ZIP updater archive       |
+| Windows x64 | `electron/forge/nsisMaker.mjs` | 在 Forge maker 内委托 `app-builder-lib` 生成 NSIS installer |
+
+`forge.config.mjs` 会在 package 阶段把 `app-server.release.json`、`app-server/` 与 `desktop-assets/` 放入 Electron resources，并写入 `app-update.yml`。`scripts/stage-electron-release-assets.mjs` 在 staging 阶段生成 `latest-mac.yml` / `latest.yml`，并复制 installer、ZIP 与 blockmap。
+
+macOS 发布签名 / 公证由 release workflow 显式启用：
+
+| GitHub secret                | Forge / packager env          | 用途                               |
 | ---------------------------- | ----------------------------- | ---------------------------------- |
-| `APPLE_CERTIFICATE`          | `CSC_LINK`                    | Developer ID Application 证书      |
-| `APPLE_CERTIFICATE_PASSWORD` | `CSC_KEY_PASSWORD`            | 证书解锁                           |
+| `APPLE_CERTIFICATE`          | 导入临时 keychain             | Developer ID Application 证书      |
+| `APPLE_CERTIFICATE_PASSWORD` | 导入临时 keychain             | 证书解锁                           |
+| 临时 keychain path           | `LIME_MACOS_KEYCHAIN`         | Forge packager signing keychain    |
+| release workflow             | `LIME_ELECTRON_SIGN=1`        | 显式打开签名 / 公证                |
 | `APPLE_ID`                   | `APPLE_ID`                    | notarization Apple ID              |
 | `APPLE_PASSWORD`             | `APPLE_APP_SPECIFIC_PASSWORD` | notarization app-specific password |
 | `APPLE_TEAM_ID`              | `APPLE_TEAM_ID`               | Team 绑定                          |
 
 `.github/workflows/release.yml` 在 macOS matrix 中先校验这些 secret，缺失时直接失败，不等到打包或公证中途才暴露问题。
 
-Windows 当前通过 `electron-builder --win nsis --x64` 生成 NSIS installer；后续若接入 Windows code signing，必须在 `electron-builder.yml`、release workflow、secret preflight 和本文档中成组更新。
+Windows 当前通过 `npx electron-forge make --platform win32 --arch x64 --targets nsis` 生成 NSIS installer；后续若接入 Windows code signing，必须在 `forge.config.mjs`、`electron/forge/nsisMaker.mjs`、release workflow、secret preflight 和本文档中成组更新。
 
 ## 5. 客户端命令
 
@@ -102,12 +118,13 @@ Renderer 仍通过既有命令名进入更新体验，但实现 owner 已切到 
 
 下个版本发布必须保持以下稳定标识：
 
-1. `electron-builder.yml#appId` 继续为 `com.limecloud.lime`。
-2. `electron-builder.yml#productName` 继续为 `Lime`，Dock、菜单、托盘和安装器展示不能退回默认 `Electron`。
+1. `forge.config.mjs#APP_ID` 继续为 `com.limecloud.lime`。
+2. `forge.config.mjs#PRODUCT_NAME` 继续为 `Lime`，Dock、菜单、托盘和安装器展示不能退回默认 `Electron`。
 3. URL scheme 继续为 `lime`。
 4. macOS icon 继续走 `lime-rs/icons/icon.icns`，Windows icon 继续走 `lime-rs/icons/icon.ico`。
 5. `extraResources` 必须包含 `app-server.release.json` 与 `app-server/` sidecar，发布包启动后仍能完成 App Server JSON-RPC `initialize`。
-6. release workflow 必须拒绝旧 updater 资产进入 Electron 发布物；current workflow 只发布 Electron installer、`latest-mac.yml` / `latest.yml`、blockmap 与 GitHub Release 归档资产。
+6. `stage-electron-release-assets` 必须在 `release-electron` staging 阶段 fail-fast 拒绝旧 updater 资产，不能静默忽略 `*.app.tar.gz`、`*.sig` 或 `latest.json`。
+7. `prepare-github-release-assets` 与 release workflow 必须拒绝旧 updater 资产进入 Electron 发布物；current workflow 只发布 Electron installer、`latest-mac.yml` / `latest.yml`、blockmap 与 GitHub Release 归档资产。
 
 ## 7. 验证入口
 

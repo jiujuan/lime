@@ -95,6 +95,19 @@ function githubAssetName(filePath, context) {
   return `${duplicateTargetLabel(target)}-${basename}`;
 }
 
+function assertNoRetiredUpdaterAssets(files) {
+  const retiredAssets = files.filter((filePath) =>
+    /(?:\.app\.tar\.gz|\.sig|latest(?:-mac)?\.yml|\.blockmap|latest\.json)$/i.test(
+      path.basename(filePath),
+    ),
+  );
+  if (retiredAssets.length > 0) {
+    throw new Error(
+      `legacy updater assets are not allowed in Electron GitHub release assets: ${retiredAssets.join(", ")}`,
+    );
+  }
+}
+
 function prepareGitHubReleaseAssets(options) {
   const assetsDir = path.resolve(options.assetsDir || "release-assets");
   const outDir = path.resolve(options.outDir || "release-github-assets");
@@ -106,9 +119,9 @@ function prepareGitHubReleaseAssets(options) {
     throw new Error(`assets directory is missing: ${assetsDir}`);
   }
 
-  const releaseAssetFiles = listFilesRecursive(assetsDir).filter(
-    (filePath) => !/^latest.*\.json$/i.test(path.basename(filePath)),
-  );
+  const releaseAssetFiles = listFilesRecursive(assetsDir);
+  assertNoRetiredUpdaterAssets([...releaseAssetFiles, ...extraAssets]);
+
   const inputFiles = [...releaseAssetFiles, ...extraAssets].sort();
 
   for (const filePath of inputFiles) {

@@ -73,8 +73,8 @@ mod tests {
 
     #[test]
     fn test_new_router() {
-        let router = Router::new(ProviderType::Kiro);
-        assert_eq!(router.default_provider(), Some(ProviderType::Kiro));
+        let router = Router::new(ProviderType::Gemini);
+        assert_eq!(router.default_provider(), Some(ProviderType::Gemini));
     }
 
     #[test]

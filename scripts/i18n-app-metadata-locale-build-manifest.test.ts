@@ -46,6 +46,29 @@ function writeScope(root: string, items: unknown[]): void {
   );
 }
 
+function forgeConfigFixture(): string {
+  return [
+    'const PRODUCT_NAME = "Lime";',
+    'const APP_ID = "com.limecloud.lime";',
+    "",
+    "function nsisConfig() {",
+    "  return {",
+    '    artifactName: "${productName}_${version}_${arch}-setup.${ext}",',
+    "  };",
+    "}",
+    "",
+    "export default {",
+    "  packagerConfig: {",
+    "    protocols: [",
+    "      {",
+    '        schemes: ["lime"],',
+    "      },",
+    "    ],",
+    "  },",
+    "};",
+  ].join("\n");
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   for (const dir of tempDirs.splice(0)) {
@@ -70,12 +93,8 @@ describe("i18n app metadata locale build manifest", () => {
     );
     writeFile(
       root,
-      "electron-builder.yml",
-      [
-        "appId: com.limecloud.lime",
-        "productName: Lime",
-        "artifactName: ${productName}_${version}_${arch}.${ext}",
-      ].join("\n"),
+      "forge.config.mjs",
+      forgeConfigFixture(),
     );
     writeScope(root, [
       {
@@ -90,11 +109,11 @@ describe("i18n app metadata locale build manifest", () => {
         priority: "required-before-multilingual-release",
       },
       {
-        consumer: "electron-builder",
+        consumer: "electron-forge",
         field: "productName",
         kind: "app-product-name",
         localization: "stable-brand",
-        path: "electron-builder.yml",
+        path: "forge.config.mjs",
         priority: "stable",
       },
       {

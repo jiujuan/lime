@@ -10,7 +10,6 @@ import {
   type AppServerAgentSessionTurnCancelParams,
   type AppServerAgentSessionTurnStartParams,
   type AppServerJsonRpcNotification,
-  type AppServerRequestResult,
 } from "@/lib/api/appServer";
 import { isDevBridgeAvailable } from "@/lib/dev-bridge";
 import { isElectronHostCommandAvailable } from "@/lib/electron-host";
@@ -79,16 +78,15 @@ export function createThreadClient({
     request: AgentRuntimeSubmitTurnRequest,
   ): Promise<void> {
     assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
+    const route = appServerEventRouter?.register({
+      eventName: request.event_name,
+      sessionId: request.session_id,
+      turnId: request.turn_id,
+    });
     try {
       const result = await appServerClient.startTurn(
         appServerTurnStartParamsFromRequest(request),
       );
-      const turnId = resolveStartTurnRouteTurnId(result, request);
-      const route = appServerEventRouter?.register({
-        eventName: request.event_name,
-        sessionId: request.session_id,
-        turnId,
-      });
       if (route) {
         route.publish(result.notifications);
       } else {
@@ -333,21 +331,9 @@ type AppServerAgentSessionEventRouteParams = {
 type AppServerAgentSessionEventRoute = {
   eventName: string;
   expiresAt: number;
+  seenEventIds: Set<string>;
   sessionId: string;
   turnId?: string;
-};
-
-type AppServerAgentSessionTurnStartResult = AppServerRequestResult<{
-  turn?: {
-    turnId?: string;
-  };
-}> | {
-  result?: {
-    turn?: {
-      turnId?: string;
-    };
-  };
-  notifications?: AppServerJsonRpcNotification[];
 };
 
 class AppServerAgentSessionEventDrainRouter {
@@ -372,6 +358,7 @@ class AppServerAgentSessionEventDrainRouter {
       eventName,
       sessionId,
       turnId: params.turnId?.trim() || undefined,
+      seenEventIds: new Set(),
       expiresAt: Date.now() + APP_SERVER_EVENT_ROUTE_TTL_MS,
     };
     this.#routes.set(routeKey(route), route);
@@ -410,9 +397,10 @@ class AppServerAgentSessionEventDrainRouter {
           break;
         }
 
-        const messages = await this.#appServerClient
-          .drainEvents(APP_SERVER_EVENT_DRAIN_LIMIT)
-          .catch(() => []);
+        const drainedMessages = await Promise.resolve(
+          this.#appServerClient.drainEvents(APP_SERVER_EVENT_DRAIN_LIMIT),
+        ).catch(() => []);
+        const messages = Array.isArray(drainedMessages) ? drainedMessages : [];
         const notifications: AppServerJsonRpcNotification[] = [];
         for (const message of messages) {
           if (isAppServerJsonRpcNotification(message)) {
@@ -460,6 +448,10 @@ class AppServerAgentSessionEventDrainRouter {
     }
 
     for (const route of matchedRoutes) {
+      if (route.seenEventIds.has(event.eventId)) {
+        continue;
+      }
+      route.seenEventIds.add(event.eventId);
       publishAppServerAgentSessionNotifications(route.eventName, [
         notification,
       ]);
@@ -499,7 +491,6 @@ function isTerminalAppServerAgentEvent(event: AppServerAgentEvent): boolean {
   return (
     event.type === "turn.done" ||
     event.type === "turn.final_done" ||
-    event.type === "turn.completed" ||
     event.type === "turn.failed" ||
     event.type === "turn.canceled" ||
     event.type === "turn.cancelled"
@@ -518,31 +509,6 @@ async function waitForAppServerEventDrainInterval(): Promise<void> {
       maybeUnref.call(timer);
     }
   });
-}
-
-function resolveStartTurnRouteTurnId(
-  result: AppServerAgentSessionTurnStartResult,
-  request: AgentRuntimeSubmitTurnRequest,
-): string | undefined {
-  const resultTurnId = result.result?.turn?.turnId?.trim();
-  if (resultTurnId) {
-    return resultTurnId;
-  }
-
-  const requestTurnId = request.turn_id?.trim();
-  if (requestTurnId) {
-    return requestTurnId;
-  }
-
-  for (const notification of result.notifications ?? []) {
-    const event = readAppServerAgentEvent(notification.params);
-    const notificationTurnId = event?.turnId?.trim();
-    if (notificationTurnId) {
-      return notificationTurnId;
-    }
-  }
-
-  return undefined;
 }
 
 export function publishAppServerAgentSessionNotifications(
@@ -586,11 +552,39 @@ export function projectAppServerAgentEventPayload(
 
   switch (event.type) {
     case "message.delta":
+      if (readString(payload, "type") === "text_delta_batch") {
+        return projectTextDeltaBatchPayload(basePayload, payload);
+      }
       return {
         ...basePayload,
         type: "text_delta",
         text: readString(payload, "text", "delta", "message") ?? "",
       };
+    case "message.delta_batch":
+    case "message.batch":
+      return projectTextDeltaBatchPayload(basePayload, payload);
+    case "message":
+    case "message.completed":
+      return {
+        ...basePayload,
+        type: "message",
+        message: readAgentMessageFromPayload(payload, event.timestamp),
+      };
+    case "item.completed": {
+      const item = readAgentThreadItemFromPayload(payload);
+      if (item?.type === "agent_message") {
+        return {
+          ...basePayload,
+          type: "message",
+          message: readAgentMessageFromThreadItem(item, event.timestamp),
+        };
+      }
+      return {
+        ...basePayload,
+        type: "item_completed",
+        item,
+      };
+    }
     case "thinking.delta":
       return {
         ...basePayload,
@@ -626,8 +620,23 @@ export function projectAppServerAgentEventPayload(
         type: "runtime_status",
         status: normalizeRecord(payload.status) ?? payload,
       };
-    case "turn.done":
     case "turn.completed":
+      return {
+        ...basePayload,
+        type: "turn_completed",
+        turn: normalizeRecord(payload.turn) ?? {
+          id: event.turnId ?? "",
+          thread_id: event.threadId ?? event.sessionId,
+          prompt_text:
+            readString(payload, "prompt_text", "promptText", "prompt") ?? "",
+          status: "completed",
+          started_at: event.timestamp,
+          completed_at: event.timestamp,
+          created_at: event.timestamp,
+          updated_at: event.timestamp,
+        },
+      };
+    case "turn.done":
       return {
         ...basePayload,
         type: "done",
@@ -717,6 +726,115 @@ function readString(
   return undefined;
 }
 
+function readStringArray(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): string[] | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === "string");
+    }
+  }
+  return undefined;
+}
+
+function projectTextDeltaBatchPayload(
+  basePayload: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const chunks = readStringArray(payload, "chunks", "deltas") ?? [];
+  return {
+    ...basePayload,
+    type: "text_delta_batch",
+    text: readString(payload, "text", "delta", "message") ?? chunks.join(""),
+    chunks,
+    boundary:
+      readString(payload, "boundary", "streamBoundary", "stream_kind") ??
+      "provider",
+  };
+}
+
+function readAgentMessageFromPayload(
+  payload: Record<string, unknown>,
+  timestamp: string,
+) {
+  const message = normalizeRecord(payload.message);
+  const content = Array.isArray(message?.content)
+    ? message.content
+    : Array.isArray(payload.content)
+      ? payload.content
+      : readString(payload, "text", "delta", "message")
+        ? [
+            {
+              type: "text",
+              text: readString(payload, "text", "delta", "message") ?? "",
+            },
+          ]
+        : [];
+
+  return {
+    id: readString(message ?? payload, "id", "messageId"),
+    role: readString(message ?? payload, "role") ?? "assistant",
+    content,
+    timestamp: readTimestampMs(message?.timestamp, timestamp),
+  };
+}
+
+function readAgentThreadItemFromPayload(
+  payload: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const item = normalizeRecord(payload.item) ?? payload;
+  const itemType = readString(item, "type");
+  if (!itemType) {
+    return undefined;
+  }
+
+  if (itemType === "agent_message") {
+    return {
+      ...item,
+      type: "agent_message",
+      text: readString(item, "text", "content", "message") ?? "",
+      phase: readString(item, "phase"),
+    };
+  }
+
+  return item;
+}
+
+function readAgentMessageFromThreadItem(
+  item: Record<string, unknown>,
+  timestamp: string,
+) {
+  return {
+    id: readString(item, "id", "messageId"),
+    role: "assistant",
+    content: [
+      {
+        type: "text",
+        text: readString(item, "text", "content", "message") ?? "",
+      },
+    ],
+    timestamp: readTimestampMs(item.timestamp, timestamp),
+  };
+}
+
+function readTimestampMs(value: unknown, fallback: string): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  const parsedFallback = Date.parse(fallback);
+  return Number.isFinite(parsedFallback) ? parsedFallback : Date.now();
+}
+
 export function appServerTurnStartParamsFromRequest(
   request: AgentRuntimeSubmitTurnRequest,
 ): AppServerAgentSessionTurnStartParams {
@@ -735,7 +853,7 @@ export function appServerTurnStartParamsFromRequest(
       metadata: request.turn_config?.metadata,
       queuedTurnId: request.queued_turn_id,
       hostOptions: {
-        asterChatRequest: request,
+        asterChatRequest: appServerAsterChatRequestFromRequest(request),
       },
     }),
     queueIfBusy: request.queue_if_busy,
@@ -768,6 +886,34 @@ export function appServerActionRespondParamsFromRequest(
     metadata: request.metadata,
     eventName: request.event_name,
     actionScope: appServerActionScopeFromRequest(request.action_scope),
+  });
+}
+
+function appServerAsterChatRequestFromRequest(
+  request: AgentRuntimeSubmitTurnRequest,
+): Record<string, unknown> {
+  return omitUndefined({
+    message: request.message,
+    session_id: request.session_id,
+    event_name: request.event_name,
+    images: request.images,
+    provider_config: request.turn_config?.provider_config,
+    provider_preference: request.turn_config?.provider_preference,
+    model_preference: request.turn_config?.model_preference,
+    reasoning_effort: request.turn_config?.reasoning_effort,
+    thinking_enabled: request.turn_config?.thinking_enabled,
+    approval_policy: request.turn_config?.approval_policy,
+    sandbox_policy: request.turn_config?.sandbox_policy,
+    workspace_id: request.workspace_id ?? "",
+    web_search: request.turn_config?.web_search,
+    search_mode: request.turn_config?.search_mode,
+    execution_strategy: request.turn_config?.execution_strategy,
+    auto_continue: request.turn_config?.auto_continue,
+    system_prompt: request.turn_config?.system_prompt,
+    metadata: request.turn_config?.metadata,
+    turn_id: request.turn_id,
+    queue_if_busy: request.queue_if_busy,
+    queued_turn_id: request.queued_turn_id,
   });
 }
 

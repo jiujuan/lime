@@ -324,50 +324,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn read_file_preview_command_is_bridged() {
+    async fn retired_file_browser_read_commands_are_not_dev_bridge_facades() {
         let state = make_test_state();
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("preview.txt");
         fs::write(&file_path, "三国人物设定").unwrap();
 
-        let value = handle_command(
-            &state,
-            "read_file_preview_cmd",
-            Some(serde_json::json!({
-                "path": file_path.to_string_lossy().to_string(),
-                "maxSize": 1024
-            })),
-        )
-        .await
-        .unwrap();
+        for command in ["read_file_preview_cmd", "list_dir"] {
+            let error = handle_command(
+                &state,
+                command,
+                Some(serde_json::json!({
+                    "path": file_path.to_string_lossy().to_string(),
+                    "maxSize": 1024
+                })),
+            )
+            .await
+            .expect_err("retired file browser read command should be unknown");
 
-        assert_eq!(value["content"], "三国人物设定");
-        assert_eq!(value["isBinary"], false);
-        assert_eq!(value["path"], file_path.to_string_lossy().to_string());
+            assert!(error.to_string().contains("[DevBridge] 未知命令"));
+        }
     }
 
     #[tokio::test]
-    async fn file_browser_directory_commands_are_bridged() {
+    async fn file_browser_file_name_command_is_bridged() {
         let state = make_test_state();
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("default-source.md");
         fs::write(&file_path, "# Smoke 默认项目资料").unwrap();
-
-        let list_value = handle_command(
-            &state,
-            "list_dir",
-            Some(serde_json::json!({
-                "path": temp_dir.path().to_string_lossy().to_string(),
-            })),
-        )
-        .await
-        .unwrap();
-        let entries = list_value["entries"].as_array().unwrap();
-
-        assert!(entries
-            .iter()
-            .any(|entry| entry["name"] == "default-source.md"));
-        assert_eq!(list_value["error"], serde_json::Value::Null);
 
         let file_name_value = handle_command(
             &state,

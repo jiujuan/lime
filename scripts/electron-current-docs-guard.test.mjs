@@ -342,18 +342,26 @@ describe("Electron current testing docs guard", () => {
     const releaseUpdater = readFile(
       "internal/roadmap/appserver/release-updater.md",
     );
-    expect(releaseUpdater).toContain("electron-builder.yml");
+    expect(releaseUpdater).toContain("forge.config.mjs");
+    expect(releaseUpdater).toContain("Electron Forge");
     expect(releaseUpdater).toContain("electron/updateHost.ts");
     expect(releaseUpdater).toContain("electron-updater");
     expect(releaseUpdater).toContain("ElectronUpdateHost");
+    expect(releaseUpdater).toContain("electron/forge/nsisMaker.mjs");
     expect(releaseUpdater).toContain("LIME_ELECTRON_UPDATES_URL");
     expect(releaseUpdater).toContain("latest-mac.yml");
     expect(releaseUpdater).toContain("latest.yml");
+    expect(releaseUpdater).toContain("stage-electron-release-assets");
+    expect(releaseUpdater).toContain("fail-fast");
+    expect(releaseUpdater).toContain("*.app.tar.gz");
+    expect(releaseUpdater).toContain("*.sig");
+    expect(releaseUpdater).toContain("latest.json");
     expect(releaseUpdater).toContain("darwin-arm64");
     expect(releaseUpdater).toContain("darwin-x64");
     expect(releaseUpdater).toContain("win32-x64");
     expect(releaseUpdater).toContain("Cloudflare R2");
-    expect(releaseUpdater).toContain("CSC_LINK");
+    expect(releaseUpdater).toContain("LIME_ELECTRON_SIGN");
+    expect(releaseUpdater).toContain("LIME_MACOS_KEYCHAIN");
     expect(releaseUpdater).toContain("APPLE_APP_SPECIFIC_PASSWORD");
     expect(releaseUpdater).toContain("app-server.release.json");
     expect(releaseUpdater).toContain("不进入 App Server JSON-RPC");
@@ -363,13 +371,21 @@ describe("Electron current testing docs guard", () => {
       "internal/roadmap/appserver/release-updater.md",
     );
 
-    const electronBuilder = readFile("electron-builder.yml");
-    expect(electronBuilder).toContain("appId: com.limecloud.lime");
-    expect(electronBuilder).toContain("productName: Lime");
-    expect(electronBuilder).toContain("provider: generic");
-    expect(electronBuilder).toContain("url: ${env.LIME_ELECTRON_UPDATES_URL}");
-    expect(electronBuilder).toContain("app-server.release.json");
-    expect(electronBuilder).toContain("app-server");
+    const forgeConfig = readFile("forge.config.mjs");
+    expect(forgeConfig).toContain('const APP_ID = "com.limecloud.lime"');
+    expect(forgeConfig).toContain('const PRODUCT_NAME = "Lime"');
+    expect(forgeConfig).toContain('provider: "generic"');
+    expect(forgeConfig).toContain("LIME_ELECTRON_UPDATES_URL");
+    expect(forgeConfig).toContain("app-server.release.json");
+    expect(forgeConfig).toContain("dist-electron/app-server");
+    expect(forgeConfig).toContain("new MakerDMG");
+    expect(forgeConfig).toContain("new MakerZIP");
+    expect(forgeConfig).toContain("new MakerNsis");
+
+    const nsisMaker = readFile("electron/forge/nsisMaker.mjs");
+    expect(nsisMaker).toContain('name = "nsis"');
+    expect(nsisMaker).toContain("buildForge");
+    expect(nsisMaker).toContain('win: [`nsis:${targetArch}`]');
 
     const updateHost = readFile("electron/updateHost.ts");
     expect(updateHost).toContain(
@@ -385,12 +401,13 @@ describe("Electron current testing docs guard", () => {
 
     const releaseWorkflow = readFile(".github/workflows/release.yml");
     expect(releaseWorkflow).toContain("Build Electron");
-    expect(releaseWorkflow).toContain("npx electron-builder");
+    expect(releaseWorkflow).toContain("npx electron-forge make");
     expect(releaseWorkflow).toContain("LIME_ELECTRON_UPDATES_URL");
     expect(releaseWorkflow).toContain(
       "Validate Electron macOS signing secrets",
     );
-    expect(releaseWorkflow).toContain("CSC_LINK");
+    expect(releaseWorkflow).toContain("LIME_ELECTRON_SIGN");
+    expect(releaseWorkflow).toContain("LIME_MACOS_KEYCHAIN");
     expect(releaseWorkflow).toContain("APPLE_APP_SPECIFIC_PASSWORD");
     expect(releaseWorkflow).toContain(
       "Publish Electron updater assets to Cloudflare R2",
@@ -400,12 +417,26 @@ describe("Electron current testing docs guard", () => {
       "Legacy updater assets must not be published by the Electron release workflow",
     );
 
+    const githubReleaseAssets = readFile(
+      "scripts/prepare-github-release-assets.mjs",
+    );
+    expect(githubReleaseAssets).toContain("assertNoRetiredUpdaterAssets");
+    expect(githubReleaseAssets).toContain(
+      "legacy updater assets are not allowed in Electron GitHub release assets",
+    );
+
     const uploadPlan = readFile("scripts/plan-electron-updater-r2-upload.mjs");
     expect(uploadPlan).toContain('"aarch64-apple-darwin": "darwin-arm64"');
     expect(uploadPlan).toContain('"x86_64-apple-darwin": "darwin-x64"');
     expect(uploadPlan).toContain('"x86_64-pc-windows-msvc": "win32-x64"');
     expect(uploadPlan).toContain("latest(?:-mac)?");
     expect(uploadPlan).toContain("legacy updater assets are not allowed");
+
+    const stageAssets = readFile("scripts/stage-electron-release-assets.mjs");
+    expect(stageAssets).toContain("assertNoRetiredUpdaterAssets");
+    expect(stageAssets).toContain(
+      "legacy updater assets are not allowed in Electron release staging",
+    );
   });
 
   it("keeps Electron frontend host docs as current contract, not a future migration", () => {
@@ -435,13 +466,13 @@ describe("Electron current testing docs guard", () => {
     expect(roadmap).not.toContain("Lime 前端切换到 Electron Desktop Host");
   });
 
-  it("keeps i18n app metadata workflow on Electron Builder current sources", () => {
+  it("keeps i18n app metadata workflow on Electron Forge current sources", () => {
     const evaluation = readFile(
       "internal/roadmap/i18n/app-metadata-workflow-evaluation.md",
     );
-    expect(evaluation).toContain("electron-builder.yml");
+    expect(evaluation).toContain("forge.config.mjs");
     expect(evaluation).toContain("当前 Electron 发布元数据事实源");
-    expect(evaluation).toContain("Electron Builder / 平台发布链路");
+    expect(evaluation).toContain("Electron Forge / 平台发布链路");
     expect(evaluation).toContain("deprecated cleanup candidate");
     expect(evaluation).toContain(
       "不是 current app metadata、installer、release、updater、签名或版本同步事实源",
@@ -458,9 +489,9 @@ describe("Electron current testing docs guard", () => {
       "## 2026-05-27：P0-P4 全路线图 readiness 审计",
       "\n## 2026-05-27：P4 Chrome extension standard locale decision 收口",
     );
-    expect(currentSection).toContain("Electron Builder / installer 配置");
-    expect(currentSection).toContain("electron-builder.yml");
-    expect(currentSection).toContain("Electron Builder 配置");
+    expect(currentSection).toContain("Electron Forge / installer 配置");
+    expect(currentSection).toContain("forge.config.mjs");
+    expect(currentSection).toContain("Electron Forge 配置");
     expect(currentSection).not.toContain("真实 Tauri");
     expect(currentSection).not.toContain("tauri.conf");
   });
