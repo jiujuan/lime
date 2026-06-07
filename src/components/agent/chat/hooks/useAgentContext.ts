@@ -344,7 +344,7 @@ export function useAgentContext(options: UseAgentContextOptions) {
         const mappedWorkspaceId = loadStoredSessionWorkspaceIdRaw(session.id);
 
         if (!mappedWorkspaceId) {
-          return true;
+          return false;
         }
 
         if (isLegacyDefaultProjectId(mappedWorkspaceId)) {

@@ -137,7 +137,7 @@ import {
   selectActiveSessionTransientItems,
   selectActiveSessionTransientMessages,
   selectActiveSessionTransientTurns,
-  shouldAutoResumeHydratedRuntimeThread,
+  sortTopicsByRecentActivity,
   type TopicSnapshotPatch,
   upsertFreshSessionDraftTopic,
   upsertTopicFromSessionDetail,
@@ -440,7 +440,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const executionRuntimeRef = useRef<AsterSessionExecutionRuntime | null>(
     executionRuntime,
   );
-  const autoResumeRuntimeSessionIdsRef = useRef<Set<string>>(new Set());
   const appServerConfirmedSessionIdsRef = useRef<Set<string>>(new Set());
   const restoreCandidateSessionIdRef = useRef<string | null>(
     loadScopedSessionRestoreCandidate(),
@@ -540,7 +539,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     );
     const auxiliaryFilterDurationMs = Date.now() - auxiliaryFilterStartedAt;
     const topicMapStartedAt = Date.now();
-    const topicList = visibleSessions.map(mapSessionToTopic);
+    const topicList = sortTopicsByRecentActivity(
+      visibleSessions.map(mapSessionToTopic),
+      { workspaceId },
+    );
     const topicMapDurationMs = Date.now() - topicMapStartedAt;
     const metricContext = {
       auxiliaryFilterDurationMs,
@@ -609,78 +611,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       setThreadRead(snapshot.threadRead);
     },
     [],
-  );
-
-  const maybeAutoResumeHydratedRuntimeThread = useCallback(
-    (
-      targetSessionId: string,
-      threadRead: AgentRuntimeThreadReadModel | null | undefined,
-    ) => {
-      const resolvedSessionId = targetSessionId.trim();
-      if (
-        !resolvedSessionId ||
-        !shouldAutoResumeHydratedRuntimeThread(threadRead)
-      ) {
-        return;
-      }
-
-      if (autoResumeRuntimeSessionIdsRef.current.has(resolvedSessionId)) {
-        return;
-      }
-      autoResumeRuntimeSessionIdsRef.current.add(resolvedSessionId);
-
-      void (async () => {
-        try {
-          const resumed = await runtime.resumeThread(resolvedSessionId);
-          if (resumed && sessionIdRef.current === resolvedSessionId) {
-            await refreshAgentSessionReadModelState({
-              runtime,
-              sessionIdRef,
-              targetSessionId: resolvedSessionId,
-              applyReadModelSnapshot,
-              onWarn: (error) => {
-                console.warn(
-                  "[AsterChat] 自动恢复后刷新运行态摘要失败:",
-                  error,
-                );
-              },
-            });
-          }
-        } catch (error) {
-          console.warn("[AsterChat] 自动恢复运行时线程失败:", error);
-        } finally {
-          autoResumeRuntimeSessionIdsRef.current.delete(resolvedSessionId);
-        }
-      })();
-    },
-    [applyReadModelSnapshot, runtime, sessionIdRef],
-  );
-
-  const maybeAutoResumeSessionDetail = useCallback(
-    (
-      targetSessionId: string,
-      detail: Awaited<ReturnType<AgentRuntimeAdapter["getSession"]>>,
-    ) => {
-      if (shouldAutoResumeHydratedRuntimeThread(detail.thread_read)) {
-        maybeAutoResumeHydratedRuntimeThread(
-          targetSessionId,
-          detail.thread_read,
-        );
-        return;
-      }
-
-      const queuedTurns = detail.queued_turns;
-      if (!queuedTurns || queuedTurns.length === 0) {
-        return;
-      }
-
-      maybeAutoResumeHydratedRuntimeThread(targetSessionId, {
-        thread_id: detail.thread_id ?? targetSessionId,
-        status: "queued",
-        queued_turns: queuedTurns,
-      });
-    },
-    [maybeAutoResumeHydratedRuntimeThread],
   );
 
   const resolveSessionHistoryWindow = useCallback(
@@ -1625,6 +1555,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             detail,
             postFinalizePersistencePlan.topicWorkspaceId,
           ),
+          { workspaceId },
         ),
       );
 
@@ -1666,8 +1597,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         "switchTopic.success",
         finalizeLocalStatePlan.switchSuccessMetricContext,
       );
-
-      maybeAutoResumeSessionDetail(topicId, detail);
 
       if (postFinalizePersistenceApplyPlan.sessionWorkspaceIdToPersist) {
         savePersistedSessionWorkspaceId(
@@ -1775,7 +1704,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       loadSessionModelPreference,
       markSessionExecutionStrategySynced,
       markSessionModelPreferenceSynced,
-      maybeAutoResumeSessionDetail,
       persistSessionAccessMode,
       persistSessionRestoreCandidate,
       resolveSessionHistoryWindow,
@@ -2276,6 +2204,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
             normalizeProjectId(detail.workspace_id) ||
               normalizeProjectId(workspaceId),
           ),
+          { workspaceId },
         ),
       );
       logAgentDebug("useAgentSession", "loadFullHistory.success", {
@@ -2711,7 +2640,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
           appServerConfirmedSessionIdsRef.current.add(sessionId);
           setTopics((prev) =>
-            prependVerifiedSessionTopicFromDetail(prev, sessionId, detail),
+            prependVerifiedSessionTopicFromDetail(prev, sessionId, detail, {
+              workspaceId,
+            }),
           );
         })
         .catch((error) => {

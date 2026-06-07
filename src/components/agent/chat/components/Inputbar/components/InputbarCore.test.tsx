@@ -833,6 +833,42 @@ describe("InputbarCore", () => {
     });
   });
 
+  it("语音快捷键订阅失败时应保持输入框可用", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockOnVoiceStartRecording.mockRejectedValueOnce(
+      new Error("bridge unavailable"),
+    );
+    mockOnVoiceStopRecording.mockRejectedValueOnce(
+      new Error("bridge unavailable"),
+    );
+
+    try {
+      const container = await renderInputbarCore({
+        listenForVoiceShortcut: true,
+        visualVariant: "default",
+        toolMode: "default",
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(container.querySelector("textarea")).toBeTruthy();
+      expect(mockOnVoiceStartRecording).toHaveBeenCalledTimes(1);
+      expect(mockOnVoiceStopRecording).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[输入栏] 注册语音开始快捷键失败:",
+        expect.any(Error),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[输入栏] 注册语音停止快捷键失败:",
+        expect.any(Error),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("未启用快捷键监听时不应注册语音快捷键事件", async () => {
     await renderInputbarCore({
       listenForVoiceShortcut: false,

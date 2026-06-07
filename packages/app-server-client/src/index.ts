@@ -162,7 +162,7 @@ export const DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME = "manifest.json";
 export type SidecarLaunchConfig = {
   binaryPath: string;
   listenUrl: string;
-  backendMode?: "external" | "mock" | "unavailable";
+  backendMode?: "external" | "runtime" | "mock" | "unavailable";
   backendCommand?: string;
   backendArgs?: string[];
   backendTimeoutMs?: number;

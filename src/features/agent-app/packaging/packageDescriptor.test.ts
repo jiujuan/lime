@@ -54,13 +54,12 @@ function buildMacOsStandaloneTarget() {
   return {
     kind: "standalone" as const,
     platform: "macos" as const,
-    packageFormat: "pkg" as const,
+    packageFormat: "dmg" as const,
     macosIdentity: buildMacOsStandaloneIdentity({
       teamId: "TEAMID1234",
       bundleId: "com.limecloud.agentapp.contentfactory",
       appGroups: ["group.com.limecloud.agentapps"],
       keychainAccessGroups: ["TEAMID1234.com.limecloud.agentapps"],
-      installerCertificateKind: "developer_id_installer",
     }),
     productionReady: false as const,
   };
@@ -139,13 +138,13 @@ describe("Agent App v2 package descriptor", () => {
     );
   });
 
-  it("pkg 分发必须声明 Developer ID Installer 身份", () => {
+  it("Forge dmg 分发只要求独立 macOS 应用身份", () => {
     const shell = buildStandaloneShell();
     const descriptor = buildPackageDescriptor({
       target: {
         kind: "standalone",
         platform: "macos",
-        packageFormat: "pkg",
+        packageFormat: "dmg",
         macosIdentity: buildMacOsStandaloneIdentity({
           teamId: "TEAMID1234",
           bundleId: "com.limecloud.agentapp.contentfactory",
@@ -155,11 +154,9 @@ describe("Agent App v2 package descriptor", () => {
       shell,
     });
 
-    expect(descriptor.warnings).toEqual(
+    expect(descriptor.warnings).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          code: "MACOS_INSTALLER_CERTIFICATE_MISSING",
-        }),
+        expect.objectContaining({ code: "MACOS_IDENTITY_MISSING" }),
       ]),
     );
   });
@@ -406,13 +403,11 @@ describe("Agent App v2 package descriptor", () => {
       channel: "stable",
       signing: {
         applicationCertificateKind: "developer_id_application",
-        installerCertificateKind: "developer_id_installer",
         notarizationConfigured: true,
         notarizationProfileRef: "notarytool:lime-prod",
       },
       updater: {
         enabled: true,
-        pubkey: "lime-prod-updater-pubkey",
         endpoint: "https://updates.limecloud.example/content-factory",
       },
       rollback: {
@@ -440,13 +435,12 @@ describe("Agent App v2 package descriptor", () => {
     );
     expect(plan.signing).toMatchObject({
       applicationCertificateKind: "developer_id_application",
-      installerCertificateKind: "developer_id_installer",
       notarizationConfigured: true,
       notarizationProfileRef: "notarytool:lime-prod",
     });
     expect(plan.updater).toEqual({
       enabled: true,
-      pubkeyConfigured: true,
+      endpointConfigured: true,
       endpoint: "https://updates.limecloud.example/content-factory",
     });
     expect(plan.rollback).toMatchObject({
@@ -472,7 +466,6 @@ describe("Agent App v2 package descriptor", () => {
     expect(plan.blockers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "APPLICATION_SIGNING_MISSING" }),
-        expect.objectContaining({ code: "INSTALLER_SIGNING_MISSING" }),
         expect.objectContaining({ code: "MACOS_NOTARIZATION_MISSING" }),
         expect.objectContaining({ code: "UPDATER_CONFIG_MISSING" }),
         expect.objectContaining({ code: "ROLLBACK_PLAN_MISSING" }),
@@ -480,7 +473,7 @@ describe("Agent App v2 package descriptor", () => {
     );
     expect(plan.updater).toEqual({
       enabled: false,
-      pubkeyConfigured: false,
+      endpointConfigured: false,
       endpoint: undefined,
     });
     expect(plan.rollback).toMatchObject({
@@ -500,13 +493,11 @@ describe("Agent App v2 package descriptor", () => {
       channel: "stable",
       signing: {
         applicationCertificateKind: "developer_id_application",
-        installerCertificateKind: "developer_id_installer",
         notarizationConfigured: true,
         notarizationProfileRef: "notarytool:lime-prod",
       },
       updater: {
         enabled: true,
-        pubkey: "lime-prod-updater-pubkey",
         endpoint: "https://updates.limecloud.example/content-factory",
       },
       rollback: {
@@ -545,8 +536,7 @@ describe("Agent App v2 package descriptor", () => {
         "electron_artifact_builder",
         "app_bundle_builder",
         "macos_application_signer",
-        "macos_pkg_builder",
-        "macos_installer_signer",
+        "macos_dmg_builder",
         "macos_notarization_submitter",
         "updater_manifest_writer",
         "rollback_manifest_writer",
@@ -703,12 +693,10 @@ describe("Agent App v2 package descriptor", () => {
       channel: "stable",
       signing: {
         applicationCertificateKind: "developer_id_application",
-        installerCertificateKind: "developer_id_installer",
         notarizationConfigured: true,
       },
       updater: {
         enabled: true,
-        pubkey: "lime-prod-updater-pubkey",
         endpoint: "https://updates.limecloud.example/content-factory",
       },
       rollback: {
@@ -731,7 +719,7 @@ describe("Agent App v2 package descriptor", () => {
       appId: "content-factory-app",
       channel: "stable",
       endpoint: "https://updates.limecloud.example/content-factory",
-      pubkeyConfigured: true,
+      endpointConfigured: true,
       rollbackRequired: true,
       rollbackConfigured: true,
       status: "blocked",

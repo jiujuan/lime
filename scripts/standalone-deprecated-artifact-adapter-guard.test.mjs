@@ -70,8 +70,8 @@ function readFile(filePath) {
 
 describe("standalone deprecated artifact adapter guard", () => {
   it.each([
-    "scripts/agent-app-standalone-native-shell-config-writer.mjs",
-    "scripts/agent-app-standalone-native-build-runner.mjs",
+    "scripts/agent-app/standalone-native-shell-config-writer.mjs",
+    "scripts/agent-app/standalone-native-build-runner.mjs",
   ])("%s exits through the deprecated artifact adapter gate", (entrypoint) => {
     const result = spawnSync(process.execPath, [path.resolve(entrypoint)], {
       encoding: "utf8",
@@ -119,7 +119,7 @@ describe("standalone deprecated artifact adapter guard", () => {
       "scripts/lib/agent-app-standalone-release-evidence-core.mjs",
       "scripts/lib/agent-app-standalone-macos-release-commands-core.mjs",
       "scripts/lib/agent-app-standalone-updater-publisher-core.mjs",
-      "scripts/agent-apps-standalone-evidence-pack.mjs",
+      "scripts/agent-app/standalone-evidence-pack.mjs",
       "src/features/agent-app/packaging/releasePipeline.ts",
     ];
 

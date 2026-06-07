@@ -301,9 +301,7 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ConnectDeepLinkResolveResponse>("ConnectDeepLinkResolveResponse"),
         typed_schema::<ConnectOpenDeepLinkResolveParams>("ConnectOpenDeepLinkResolveParams"),
         typed_schema::<OpenDeepLinkPayload>("OpenDeepLinkPayload"),
-        typed_schema::<ConnectOpenDeepLinkResolveResponse>(
-            "ConnectOpenDeepLinkResolveResponse",
-        ),
+        typed_schema::<ConnectOpenDeepLinkResolveResponse>("ConnectOpenDeepLinkResolveResponse"),
         typed_schema::<ConnectRelayApiKeySaveParams>("ConnectRelayApiKeySaveParams"),
         typed_schema::<ConnectRelayApiKeySaveResponse>("ConnectRelayApiKeySaveResponse"),
         typed_schema::<ConnectCallbackStatus>("ConnectCallbackStatus"),

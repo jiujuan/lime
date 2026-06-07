@@ -177,7 +177,7 @@
       "domain": "session",
       "requestType": "{ workspaceId: string; name?: string; executionStrategy?: AsterExecutionStrategy }",
       "responseType": "string",
-      "lifecycle": "current",
+      "lifecycle": "compat",
       "mockStrategy": "bridge-only",
       "docsSection": "agent-runtime.session"
     },
@@ -186,7 +186,7 @@
       "domain": "session",
       "requestType": "{ includeArchived?: boolean; archivedOnly?: boolean; workspaceId?: string; limit?: number } | void",
       "responseType": "AsterSessionInfo[]",
-      "lifecycle": "current",
+      "lifecycle": "compat",
       "mockStrategy": "bridge-only",
       "docsSection": "agent-runtime.session"
     },
@@ -195,7 +195,7 @@
       "domain": "session",
       "requestType": "{ sessionId: string; resumeSessionStartHooks?: boolean; historyLimit?: number; historyOffset?: number; historyBeforeMessageId?: number }",
       "responseType": "AsterSessionDetail",
-      "lifecycle": "current",
+      "lifecycle": "compat",
       "mockStrategy": "bridge-only",
       "docsSection": "agent-runtime.session"
     },
@@ -204,7 +204,7 @@
       "domain": "session",
       "requestType": "AgentRuntimeUpdateSessionRequest",
       "responseType": "void",
-      "lifecycle": "current",
+      "lifecycle": "compat",
       "mockStrategy": "bridge-only",
       "docsSection": "agent-runtime.session"
     },
@@ -213,7 +213,7 @@
       "domain": "session",
       "requestType": "{ sessionId: string }",
       "responseType": "void",
-      "lifecycle": "current",
+      "lifecycle": "compat",
       "mockStrategy": "bridge-only",
       "docsSection": "agent-runtime.session"
     },

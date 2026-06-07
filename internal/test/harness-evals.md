@@ -20,10 +20,10 @@ Lime 当前不直接把“真实模型重放平台”一次做完，而是先固
      如果样本已经完成人工审核，还可以额外挂载可选的 `review-decision.json` / `review-decision.md`，但它不是 replay case 的必填件。
 
 3. **固定摘要出口**  
-   由 `scripts/harness-eval-runner.mjs` 统一产出 JSON / Markdown 摘要，后续 nightly 与趋势报表都从这里接。
+   由 `scripts/harness/eval-runner.mjs` 统一产出 JSON / Markdown 摘要，后续 nightly 与趋势报表都从这里接。
 
 4. **固定趋势入口**  
-   由 `scripts/harness-eval-trend-report.mjs` 把一个或多个 summary JSON 聚合成 trend 报告。
+   由 `scripts/harness/eval-trend-report.mjs` 把一个或多个 summary JSON 聚合成 trend 报告。
 
 这一步对应 Harness 路线图里的 `P3-2 Eval runner`，不是终点，但它把“评估理念”升级成了仓库内可执行入口。
 
@@ -67,7 +67,7 @@ Lime 当前不直接把“真实模型重放平台”一次做完，而是先固
 2. **仓库沉淀 Replay 样本**
    - 用于把高价值真实失败从工作区提升为仓库 current 资产
    - 默认进入 `repo-promoted-replays` suite
-   - 由 `scripts/harness-replay-promote.mjs` 负责：
+   - 由 `scripts/harness/replay-promote.mjs` 负责：
      - 复制最小四件套
      - 把绝对工作区路径脱敏为稳定占位路径
      - 回写 manifest case
@@ -86,7 +86,7 @@ Lime 当前不直接把“真实模型重放平台”一次做完，而是先固
 
 ## Runner 做什么
 
-`scripts/harness-eval-runner.mjs` 当前负责四件事：
+`scripts/harness/eval-runner.mjs` 当前负责四件事：
 
 1. 读取 manifest
 2. 解析固定 fixture 与工作区自动发现 case
@@ -123,7 +123,7 @@ npm run harness:eval:promote -- \
 也可以直接指定 replay 目录：
 
 ```bash
-node scripts/harness-replay-promote.mjs \
+node scripts/harness/replay-promote.mjs \
   --replay-dir ".lime/harness/sessions/session-123/replay" \
   --slug "pending-request-runtime"
 ```
@@ -156,7 +156,7 @@ node scripts/harness-replay-promote.mjs \
 
 ## Trend Report 做什么
 
-`scripts/harness-eval-trend-report.mjs` 当前负责三件事：
+`scripts/harness/eval-trend-report.mjs` 当前负责三件事：
 
 1. 读取一个或多个 `harness eval summary` JSON
 2. 生成 baseline / latest 对比、suite 级 delta，以及 `suite tag / failure mode / review decision status / risk level` 聚合变化
@@ -177,7 +177,7 @@ node scripts/harness-replay-promote.mjs \
 从当前主线开始，nightly 不再手工串 `runner -> trend -> cleanup` 三段命令，而是统一走：
 
 ```bash
-node scripts/harness-eval-history-record.mjs \
+node scripts/harness/eval-history-record.mjs \
   --history-dir "./artifacts/history" \
   --summary-json "./artifacts/harness-eval-summary.json" \
   --summary-markdown "./artifacts/harness-eval-summary.md" \
@@ -190,9 +190,9 @@ node scripts/harness-eval-history-record.mjs \
 
 这样本地与 nightly 复用同一条 `summary -> history -> trend -> cleanup -> dashboard` 主线，也让 `current / degraded` observability gap 角色在两侧保持同口径，并把 `browser/gui/artifact` 的 verification outcome 焦点直接带进 nightly HTML 仪表板，继续绑定到同一事实源。
 
-从 `2026-03-27` 起，这个历史窗口不再依赖 workflow 里的 `cp / ls / xargs` 拼接；当前唯一 current 入口是 `scripts/harness-eval-history-record.mjs`，统一负责写入和裁剪 history window，保证本地与 nightly 走同一条跨平台主链。
+从 `2026-03-27` 起，这个历史窗口不再依赖 workflow 里的 `cp / ls / xargs` 拼接；当前唯一 current 入口是 `scripts/harness/eval-history-record.mjs`，统一负责写入和裁剪 history window，保证本地与 nightly 走同一条跨平台主链。
 
-同一天新增的 `scripts/harness-eval-history-record.mjs` 又把这条主链向前推了一步：
+同一天新增的 `scripts/harness/eval-history-record.mjs` 又把这条主链向前推了一步：
 
 - 本地可以一次命令完成 `summary -> history -> trend -> cleanup -> dashboard`
 - 本地默认把 history window 写到 `./.lime/harness/history`，并把 `summary / trend / cleanup / dashboard` 全部写到 `./.lime/harness/reports`
@@ -219,10 +219,10 @@ npm run harness:eval:promote -- --session-id "session-123" --slug "pending-reque
 npm run harness:eval:trend
 
 # 指定工作区根目录扫描真实 replay 样本
-node scripts/harness-eval-runner.mjs --workspace-root "/path/to/workspace"
+node scripts/harness/eval-runner.mjs --workspace-root "/path/to/workspace"
 
 # 生成 nightly 可上传的双格式摘要
-node scripts/harness-eval-runner.mjs \
+node scripts/harness/eval-runner.mjs \
   --output-json "./tmp/harness-eval-summary.json" \
   --output-markdown "./tmp/harness-eval-summary.md"
 
@@ -239,12 +239,12 @@ npm run harness:eval:history:record
 # ./.lime/harness/reports/harness-dashboard.html
 
 # 如需覆盖 dashboard 产物路径
-node scripts/harness-eval-history-record.mjs \
+node scripts/harness/eval-history-record.mjs \
   --history-dir "./.lime/harness/history" \
   --dashboard-html "./tmp/harness-dashboard.html"
 
 # 从历史 summary 目录生成趋势报告
-node scripts/harness-eval-trend-report.mjs \
+node scripts/harness/eval-trend-report.mjs \
   --history-dir "./.lime/harness/history" \
   --output-json "./tmp/harness-eval-trend.json" \
   --output-markdown "./tmp/harness-eval-trend.md"
@@ -280,19 +280,19 @@ Trend 报告至少还要回答：
 
 ## 与其他事实源的关系
 
-| 文档 / 文件                                                                                | 角色                                            |
-| ------------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| [agent-evaluation.md](agent-evaluation.md)                                                 | 解释评估原则、pass@k / pass^k、grader 类型      |
-| [testing-strategy-2026.md](testing-strategy-2026.md)                                       | 解释为什么 eval 工程化排在 smoke 之后           |
-| [../tech/harness/implementation-blueprint.md](../tech/harness/implementation-blueprint.md) | 解释 `P3-2 Eval runner` 在 Harness 主线中的位置 |
-| [../tech/harness/tooling-roadmap.md](../tech/harness/tooling-roadmap.md)                   | 解释 runner、nightly、trend 的后续工具面        |
-| [../tech/harness/entropy-governance-workflow.md](../tech/harness/entropy-governance-workflow.md) | 解释 trend 怎样回挂到 cleanup / governance 建议 |
-| `scripts/harness-eval-runner.mjs`                                                          | 当前唯一的 runner 入口                          |
-| `scripts/harness-eval-trend-report.mjs`                                                    | 当前 trend 聚合与 nightly 趋势出口              |
-| `scripts/report-generated-slop.mjs`                                                        | 当前 cleanup/slop 聚合与治理建议入口            |
-| `scripts/check-doc-freshness.mjs`                                                          | 当前 Harness 文档保鲜检查入口                   |
-| [../../.github/workflows/harness-nightly.yml](../../.github/workflows/harness-nightly.yml) | 当前 nightly summary / trend / cleanup artifact 主入口 |
-| [harness-evals.manifest.json](harness-evals.manifest.json)                                 | 当前任务集与 suite 机可读事实源                 |
+| 文档 / 文件                                                                                      | 角色                                                   |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| [agent-evaluation.md](agent-evaluation.md)                                                       | 解释评估原则、pass@k / pass^k、grader 类型             |
+| [testing-strategy-2026.md](testing-strategy-2026.md)                                             | 解释为什么 eval 工程化排在 smoke 之后                  |
+| [../tech/harness/implementation-blueprint.md](../tech/harness/implementation-blueprint.md)       | 解释 `P3-2 Eval runner` 在 Harness 主线中的位置        |
+| [../tech/harness/tooling-roadmap.md](../tech/harness/tooling-roadmap.md)                         | 解释 runner、nightly、trend 的后续工具面               |
+| [../tech/harness/entropy-governance-workflow.md](../tech/harness/entropy-governance-workflow.md) | 解释 trend 怎样回挂到 cleanup / governance 建议        |
+| `scripts/harness/eval-runner.mjs`                                                                | 当前唯一的 runner 入口                                 |
+| `scripts/harness/eval-trend-report.mjs`                                                          | 当前 trend 聚合与 nightly 趋势出口                     |
+| `scripts/report-generated-slop.mjs`                                                              | 当前 cleanup/slop 聚合与治理建议入口                   |
+| `scripts/check-doc-freshness.mjs`                                                                | 当前 Harness 文档保鲜检查入口                          |
+| [../../.github/workflows/harness-nightly.yml](../../.github/workflows/harness-nightly.yml)       | 当前 nightly summary / trend / cleanup artifact 主入口 |
+| [harness-evals.manifest.json](harness-evals.manifest.json)                                       | 当前任务集与 suite 机可读事实源                        |
 
 ## 下一刀
 

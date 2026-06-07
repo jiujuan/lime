@@ -17,6 +17,15 @@ Current scope:
 - route `agentSession/event` notifications into app-owned renderer state;
 - use `AppServerConnection` for typed `agentSession/*` request / response flows.
 
+Session archive semantics:
+
+- list archived sessions with `agentSession/list` and `archivedOnly: true`;
+- archive or unarchive sessions with `agentSession/update` and `archived: true`
+  or `archived: false`;
+- preserve App Server JSON-RPC errors as `AppServerRequestError`; callers must
+  fail closed instead of falling back to legacy `agent_runtime_*` commands or
+  mock responses.
+
 Electron main integration shape:
 
 ```ts
@@ -25,12 +34,15 @@ import {
   startPackagedAppServerSidecar,
 } from "app-server-client";
 
-const { connected, lifecycle } = await startPackagedAppServerSidecar({
-  clientInfo: { name: "content_studio", version: app.getVersion() },
-}, {
-  resourcesPath: process.resourcesPath,
-  restartPolicy: { maxAttempts: 3, initialDelayMs: 500, maxDelayMs: 30_000 },
-});
+const { connected, lifecycle } = await startPackagedAppServerSidecar(
+  {
+    clientInfo: { name: "content_studio", version: app.getVersion() },
+  },
+  {
+    resourcesPath: process.resourcesPath,
+    restartPolicy: { maxAttempts: 3, initialDelayMs: 500, maxDelayMs: 30_000 },
+  },
+);
 
 const { connection } = connected;
 app.on("before-quit", () => void lifecycle.stop());

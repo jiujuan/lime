@@ -147,16 +147,16 @@ sqlite3 -readonly ".lime/qc/qcloop-isolated-worker-preflight.db" \
 
 分类口径：
 
-| 状态 | 解释 | 下一步 |
-| --- | --- | --- |
-| `running` 且有 stdout/stderr | 仍可能在正常执行 | 继续观察，必要时导出 sidecar |
-| `running` 且长期无输出 | 疑似 worker 卡住或外部进程阻塞 | 记录 stale，不中断；等待或请求 owner 判断 |
-| `pending` | 队列尚未调度 | 不做产品结论，等待前序 item 结束 |
-| `exhausted` 且 stdout 包含 `QCLOOP_WORKER_RESULT=BLOCKED` | worker 明确证明环境 / 权限前置检查阻断 | 归类为 `blocked`，修 qcloop worker 环境后重跑，不写官方 pass |
-| `failed` 且 stderr 包含 `QCLOOP_CODEX_BIN 不可用` / 内层认证或 sandbox 配置错误 | qcloop worker 执行器环境阻断 | 归类为 `blocked`，修 CLI 路径 / 认证 / extra args 后新建隔离批次 |
-| `failed` 且 stdout 包含 `QCLOOP_WORKER_RESULT=PASS` | worker 自评通过，但 qcloop 进程或 verifier 未通过 | 归类为 `fail`，记录 `worker_self_report_pass_not_verified`，不要把自评 PASS 当成 release 证据 |
-| `exhausted` | worker 或 verifier 未满足 QC | 修产品缺陷或补 evidence，再新建重跑 job |
-| `success` | 当前 item 通过 qcloop verifier | 仍需等待全部 P0 success 才能写官方 evidence |
+| 状态                                                                            | 解释                                              | 下一步                                                                                        |
+| ------------------------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `running` 且有 stdout/stderr                                                    | 仍可能在正常执行                                  | 继续观察，必要时导出 sidecar                                                                  |
+| `running` 且长期无输出                                                          | 疑似 worker 卡住或外部进程阻塞                    | 记录 stale，不中断；等待或请求 owner 判断                                                     |
+| `pending`                                                                       | 队列尚未调度                                      | 不做产品结论，等待前序 item 结束                                                              |
+| `exhausted` 且 stdout 包含 `QCLOOP_WORKER_RESULT=BLOCKED`                       | worker 明确证明环境 / 权限前置检查阻断            | 归类为 `blocked`，修 qcloop worker 环境后重跑，不写官方 pass                                  |
+| `failed` 且 stderr 包含 `QCLOOP_CODEX_BIN 不可用` / 内层认证或 sandbox 配置错误 | qcloop worker 执行器环境阻断                      | 归类为 `blocked`，修 CLI 路径 / 认证 / extra args 后新建隔离批次                              |
+| `failed` 且 stdout 包含 `QCLOOP_WORKER_RESULT=PASS`                             | worker 自评通过，但 qcloop 进程或 verifier 未通过 | 归类为 `fail`，记录 `worker_self_report_pass_not_verified`，不要把自评 PASS 当成 release 证据 |
+| `exhausted`                                                                     | worker 或 verifier 未满足 QC                      | 修产品缺陷或补 evidence，再新建重跑 job                                                       |
+| `success`                                                                       | 当前 item 通过 qcloop verifier                    | 仍需等待全部 P0 success 才能写官方 evidence                                                   |
 
 ## 7. 重跑策略
 
@@ -240,13 +240,13 @@ npm run agent-qc:qcloop-job -- \
 
 2026-05-10 19:58 只读刷新显示，当前不应继续开新 full P0 抢资源：
 
-| 批次 | 只读状态 | 处理 |
-| --- | --- | --- |
-| `1778405842243079000` isolated full P0 v1 | 4 success / 1 running / 3 pending，`browser-runtime-site-adapter` stale 约 8002 秒 | 继续观察；记录 stale sidecar，不中断 |
-| `1778410956075020000` no-MCP P0 v2 | 2 success / 1 failed / 1 running / 4 pending | `tool-approval-sandbox-boundary` 已 failed；该批次不能证明 `mcp_servers={}` 足以关闭嵌套 MCP |
-| `1778412160003934000` MCP-disabled P0 v1 | 1 failed / 1 running / 6 pending，`claw-chat-ready-streaming` stale 约 674 秒 | 失败来自旧 no-change verifier；后续 payload 已修正，当前批次不抢占 |
-| `1778412499745993000` fast P0 v1 | 1 success / 1 running / 6 pending | `--ignore-rules` 后进入 `claw-chat-ready-streaming`；继续观察 |
-| `1778412738097137000` fast-mini readonly P0 v1 | failed，8 exhausted | sidecar evidence 为 6 fail / 2 blocked；verifier 正确拒绝缺 deep evidence 的浅层 smoke 摘要，并额外暴露 `workspace-ready-session-restore` 中 `smoke:design-canvas` 保存成功状态断言失败；`release-package-startup-smoke` 因 GUI smoke 未自然收口被 blocked；用于修正证据分层和产品回归，不覆盖官方 Evidence Pack |
+| 批次                                           | 只读状态                                                                           | 处理                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `1778405842243079000` isolated full P0 v1      | 4 success / 1 running / 3 pending，`browser-runtime-site-adapter` stale 约 8002 秒 | 继续观察；记录 stale sidecar，不中断                                                                                                                                                                                                                                                                             |
+| `1778410956075020000` no-MCP P0 v2             | 2 success / 1 failed / 1 running / 4 pending                                       | `tool-approval-sandbox-boundary` 已 failed；该批次不能证明 `mcp_servers={}` 足以关闭嵌套 MCP                                                                                                                                                                                                                     |
+| `1778412160003934000` MCP-disabled P0 v1       | 1 failed / 1 running / 6 pending，`claw-chat-ready-streaming` stale 约 674 秒      | 失败来自旧 no-change verifier；后续 payload 已修正，当前批次不抢占                                                                                                                                                                                                                                               |
+| `1778412499745993000` fast P0 v1               | 1 success / 1 running / 6 pending                                                  | `--ignore-rules` 后进入 `claw-chat-ready-streaming`；继续观察                                                                                                                                                                                                                                                    |
+| `1778412738097137000` fast-mini readonly P0 v1 | failed，8 exhausted                                                                | sidecar evidence 为 6 fail / 2 blocked；verifier 正确拒绝缺 deep evidence 的浅层 smoke 摘要，并额外暴露 `workspace-ready-session-restore` 中 `smoke:design-canvas` 保存成功状态断言失败；`release-package-startup-smoke` 因 GUI smoke 未自然收口被 blocked；用于修正证据分层和产品回归，不覆盖官方 Evidence Pack |
 
 当 qcloop worker 能快速跑完确定性 smoke 但 verifier 仍拒绝时，不要把拒绝当成坏事。它说明当前输出还缺 live transcript、trace、console/network、cleanup、approval/sandbox 或 SkillTool gate 证据；应拆分并补证据，而不是降低 P0 release gate。
 
@@ -342,13 +342,13 @@ npm run verify:gui-smoke -- --reuse-running
 
 按用户要求，本轮没有 push、没有 commit、没有 kill / pause / interrupt 任何仍在运行的 qcloop 或 Codex worker。只读刷新结果如下：
 
-| 批次 | 当前状态 | 结论 |
-| --- | --- | --- |
-| `1778405842243079000` isolated full P0 v1 | `stale`，4 success / 1 running / 3 pending，`browser-runtime-site-adapter` stale 约 8522 秒 | 仍是唯一 active GUI owner；继续观察，不启动新的 GUI P0。 |
-| `1778410956075020000` no-MCP P0 v2 | `fail`，2 success / 6 failed | 终态失败；部分失败来自 worker / verifier 证据不足或 verifier 输出格式错误。 |
-| `1778412160003934000` MCP-disabled P0 v1 | `fail`，8 failed | 终态失败；不能作为 MCP-disabled 方案有效证据。 |
-| `1778412499745993000` fast P0 v1 | `fail`，1 success / 7 failed | 终态失败；`--ignore-rules` 降噪不足以形成 P0 Evidence Pack。 |
-| `1778412738097137000` fast-mini readonly P0 v1 | `fail`，8 exhausted | verifier 正确拒绝浅层 smoke 摘要；同时暴露 design canvas / evidence artifact 缺口。 |
+| 批次                                           | 当前状态                                                                                    | 结论                                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `1778405842243079000` isolated full P0 v1      | `stale`，4 success / 1 running / 3 pending，`browser-runtime-site-adapter` stale 约 8522 秒 | 仍是唯一 active GUI owner；继续观察，不启动新的 GUI P0。                            |
+| `1778410956075020000` no-MCP P0 v2             | `fail`，2 success / 6 failed                                                                | 终态失败；部分失败来自 worker / verifier 证据不足或 verifier 输出格式错误。         |
+| `1778412160003934000` MCP-disabled P0 v1       | `fail`，8 failed                                                                            | 终态失败；不能作为 MCP-disabled 方案有效证据。                                      |
+| `1778412499745993000` fast P0 v1               | `fail`，1 success / 7 failed                                                                | 终态失败；`--ignore-rules` 降噪不足以形成 P0 Evidence Pack。                        |
+| `1778412738097137000` fast-mini readonly P0 v1 | `fail`，8 exhausted                                                                         | verifier 正确拒绝浅层 smoke 摘要；同时暴露 design canvas / evidence artifact 缺口。 |
 
 `agent-qc:gui-owner-check` 输出 `ownerCount=1`、`verdict.status=blocked`，原因是 isolated full P0 v1 仍持有 active GUI owner。因此当前不允许启动新的 full P0 GUI 批次；下一步只能继续只读观察，或在 owner 明确处理后再重跑。
 
@@ -399,30 +399,30 @@ QCLOOP_EVIDENCE_SUMMARY_JSON=<json>
 
 最新只读状态：
 
-| 项目 | 当前值 |
-| --- | --- |
-| qcloop server | `127.0.0.1:18080` |
-| qcloop job | `1778405842243079000` |
-| job verdict | `stale` |
-| counts | 8 total / 4 success / 1 running / 3 pending / 1 stale |
-| stale scenario | `browser-runtime-site-adapter` |
-| worker output | stdout/stderr `0 / 0` |
-| worker duration | 约 `10508s` |
-| observed PID | `69738` |
-| GUI owner gate | `blocked`，`ownerCount=1`，`staleOwnerCount=1` |
+| 项目            | 当前值                                                |
+| --------------- | ----------------------------------------------------- |
+| qcloop server   | `127.0.0.1:18080`                                     |
+| qcloop job      | `1778405842243079000`                                 |
+| job verdict     | `stale`                                               |
+| counts          | 8 total / 4 success / 1 running / 3 pending / 1 stale |
+| stale scenario  | `browser-runtime-site-adapter`                        |
+| worker output   | stdout/stderr `0 / 0`                                 |
+| worker duration | 约 `10508s`                                           |
+| observed PID    | `69738`                                               |
+| GUI owner gate  | `blocked`，`ownerCount=1`，`staleOwnerCount=1`        |
 
 安全动作矩阵：
 
-| 动作 | 当前是否允许 | 说明 |
-| --- | --- | --- |
-| 刷新 `agent-qc:qcloop-status` sidecar | 允许 | 只读，不改变 qcloop job |
-| 刷新 `agent-qc:gui-owner-check` sidecar | 允许 | 只读，用于阻止新 GUI P0 抢占 |
-| 更新 `internal/tests` 运行手册 | 允许 | 记录事实和 runbook，不改变运行中 job |
-| 导出 partial sidecar evidence | 允许，但不能覆盖官方 evidence | 仅用于排障 |
-| 启动新的 full GUI P0 | 禁止 | 当前 GUI owner 未释放 |
-| 覆盖 `.lime/qc/agent-qc-evidence.json` | 禁止 | 还没有 8/8 P0 structured evidence pass |
-| kill / pause / interrupt PID `69738` | 禁止，除非 owner 明确确认 | 需要按 stale owner 处置协议执行 |
-| commit / push / tag / release | 禁止 | 用户明确要求 Lime 不推送 |
+| 动作                                    | 当前是否允许                  | 说明                                   |
+| --------------------------------------- | ----------------------------- | -------------------------------------- |
+| 刷新 `agent-qc:qcloop-status` sidecar   | 允许                          | 只读，不改变 qcloop job                |
+| 刷新 `agent-qc:gui-owner-check` sidecar | 允许                          | 只读，用于阻止新 GUI P0 抢占           |
+| 更新 `internal/tests` 运行手册          | 允许                          | 记录事实和 runbook，不改变运行中 job   |
+| 导出 partial sidecar evidence           | 允许，但不能覆盖官方 evidence | 仅用于排障                             |
+| 启动新的 full GUI P0                    | 禁止                          | 当前 GUI owner 未释放                  |
+| 覆盖 `.lime/qc/agent-qc-evidence.json`  | 禁止                          | 还没有 8/8 P0 structured evidence pass |
+| kill / pause / interrupt PID `69738`    | 禁止，除非 owner 明确确认     | 需要按 stale owner 处置协议执行        |
+| commit / push / tag / release           | 禁止                          | 用户明确要求 Lime 不推送               |
 
 下一次真正能推进 release gate 的动作只有两种：
 
@@ -478,7 +478,7 @@ npm run agent-qc:gui-owner-check -- \
 
 2026-05-11 03:01 追加 raw process owner watch history：`agent-qc:process-owner-check -- --watch-history-output ./.lime/qc/raw-process-owner-watch-history.jsonl` 已可追加 JSONL 观察记录。最新记录仍为 `busy`，唯一 active blocker 是 PID `59011`，`etime=07:16:00`。该历史只用于证明持续 stale，不构成处置授权。
 
-2026-05-11 03:04 追加 objective checklist 脚本化：新增 `scripts/agent-qc-objective-checklist.mjs` 与 `npm run agent-qc:objective-checklist`。该脚本读取 completion audit、GUI owner、raw process owner，生成 `.lime/qc/objective-completion-checklist-current.json` / `.md`，并在 `--check` 下对 incomplete 状态 exit `1`。当前 checklist 仍为 `4/7`，不会把 sidecar 或 partial pass 误判为完成。
+2026-05-11 03:04 追加 objective checklist 脚本化：新增 `scripts/agent-qc/objective-checklist.mjs` 与 `npm run agent-qc:objective-checklist`。该脚本读取 completion audit、GUI owner、raw process owner，生成 `.lime/qc/objective-completion-checklist-current.json` / `.md`，并在 `--check` 下对 incomplete 状态 exit `1`。当前 checklist 仍为 `4/7`，不会把 sidecar 或 partial pass 误判为完成。
 
 2026-05-11 03:07 追加 objective checklist core 回归：新增 `scripts/lib/agent-qc-objective-checklist-core.mjs` 与 `scripts/lib/agent-qc-objective-checklist-core.test.ts`，覆盖 owner clear / owner busy / official evidence fail / verify:local fail / Markdown 渲染。`npx vitest run scripts/lib/agent-qc-objective-checklist-core.test.ts scripts/lib/agent-qc-process-owner-core.test.ts scripts/lib/agent-qc-completion-audit-core.test.ts` 通过 `25 tests`。当前实际 checklist 仍为 `4/7`，`--check` 继续按预期 exit `1`。
 
@@ -490,7 +490,7 @@ npm run agent-qc:gui-owner-check -- \
 
 2026-05-11 04:24 追加隔离 P0 full v3 终态记录：观察到 job `1778442773271496000`（`lime-agent-qc-isolated-p0-full-v3-2026-05-11-0354`）运行在 `127.0.0.1:18087` 并进入终态 `failed`，`qcloop-status.isolated-p0-full-v3-current.json` 为 `4 success / 4 exhausted / 0 stale`。已导出 sidecar `.lime/qc/agent-qc-evidence.isolated-p0-full-v3-2026-05-11-0354.json`，release summary `--check` 正确 exit `1`。v3 pass 场景为 `command-bridge-contract`、`claw-chat-ready-streaming`、`tool-approval-sandbox-boundary`、`harness-replay-regression`；剩余失败 / blocked 场景为 `skill-forge-register-bind-enable`、`browser-runtime-site-adapter`、`workspace-ready-session-restore`、`release-package-startup-smoke`。最新 process owner 仍为 `busy`：activeGuiSmoke=`1`、qcloopRelated=`0`，cargoOrRust 数量随外部编译进度波动。PID `59011` 仍是 stale `smoke:design-canvas`，`etime≈8h41m`；同时外部 Rust 定向测试 / rustc 编译仍在跑。因此仍不得覆盖官方 `.lime/qc/agent-qc-evidence.json`，也不得发布。
 
-2026-05-11 04:31 追加 Skill Forge P0 定向补证：v3 中 `skill-forge-register-bind-enable` 失败的核心原因是此前 `smoke:agent-service-skill-entry` 的 Rust exact filter 实际运行 0 tests，verifier 正确拒绝 runtime / SkillTool gate 证据。随后观察到当前 `scripts/agent-service-skill-entry-smoke.mjs` 已改为显式 `-p lime` / `-p lime-agent`、完整 test path + `--exact`，并拒绝没有 `N passed` 的 Rust 定向测试。证据 `.lime/qc/smoke-agent-service-skill-entry-after-rust-exact-fix-2026-05-11-0430.log` 显示当前 smoke 已通过，关键 Rust tests 均出现 `running 1 test` / `1 passed`，服务技能入口路由与 Agent A2UI 挂起主链 Vitest 也通过。该结果只关闭 Skill Forge 的本地定向 smoke 缺口，不能回写 v3 sidecar，也不能替代新的 single-owner full P0。
+2026-05-11 04:31 追加 Skill Forge P0 定向补证：v3 中 `skill-forge-register-bind-enable` 失败的核心原因是此前 `smoke:agent-service-skill-entry` 的 Rust exact filter 实际运行 0 tests，verifier 正确拒绝 runtime / SkillTool gate 证据。随后观察到当前 `scripts/agent-runtime/service-skill-entry-smoke.mjs` 已改为显式 `-p lime` / `-p lime-agent`、完整 test path + `--exact`，并拒绝没有 `N passed` 的 Rust 定向测试。证据 `.lime/qc/smoke-agent-service-skill-entry-after-rust-exact-fix-2026-05-11-0430.log` 显示当前 smoke 已通过，关键 Rust tests 均出现 `running 1 test` / `1 passed`，服务技能入口路由与 Agent A2UI 挂起主链 Vitest 也通过。该结果只关闭 Skill Forge 的本地定向 smoke 缺口，不能回写 v3 sidecar，也不能替代新的 single-owner full P0。
 
 2026-05-11 04:32 追加 owner 复核：外部 Rust/Cargo owner 已自然清空，`agent-qc:process-owner-check` 最新 sidecar 为 `activeGuiSmoke=1`、`cargoOrRust=0`、`qcloopRelated=0`、`staleActiveGuiSmoke=1`。唯一 active blocker 仍是 PID `59011` 的 stale `smoke:design-canvas`；确认前仍不得 kill / pause / interrupt，也不得启动新的 full GUI P0。
 
@@ -508,7 +508,7 @@ npm run agent-qc:gui-owner-check -- \
 
 2026-05-11 04:57 追加 post-owner-clear full P0 runbook：新增 `.lime/qc/post-owner-clear-full-p0-runbook-2026-05-11-0457.md` 与 `.lime/qc/qcloop-p0-single-owner-ready-submit-curl-2026-05-11-0457.txt`。该 runbook 明确 owner 清空后先跑 process owner / GUI owner / DevBridge preflight，再使用 dedicated qcloop port 提交 ready payload；只有 8/8 P0 success 后才允许覆盖官方 `.lime/qc/agent-qc-evidence.json` 并运行 release summary / audit / objective checklist。生成时未提交 job，未改 DB，未覆盖官方 evidence。
 
-2026-05-11 04:59 追加 payload coverage 脚本化：新增 `npm run agent-qc:payload-coverage`，由 `scripts/agent-qc-payload-coverage.mjs` 读取 manifest、ready payload 和 raw process owner sidecar，输出 coverage / owner gate 状态。当前 `.lime/qc/qcloop-p0-single-owner-ready-coverage-current.json` 显示 coverage `passed=true`、missing=`[]`、extra=`[]`、owner=`busy`、status=`blocked`。`scripts/lib/agent-qc-payload-coverage-core.test.ts` 已覆盖 P0 提取、字符串 item 解析、ready / blocked / missing 场景。
+2026-05-11 04:59 追加 payload coverage 脚本化：新增 `npm run agent-qc:payload-coverage`，由 `scripts/agent-qc/payload-coverage.mjs` 读取 manifest、ready payload 和 raw process owner sidecar，输出 coverage / owner gate 状态。当前 `.lime/qc/qcloop-p0-single-owner-ready-coverage-current.json` 显示 coverage `passed=true`、missing=`[]`、extra=`[]`、owner=`busy`、status=`blocked`。`scripts/lib/agent-qc-payload-coverage-core.test.ts` 已覆盖 P0 提取、字符串 item 解析、ready / blocked / missing 场景。
 
 2026-05-11 05:02 追加 completion audit 同步：`agent-qc:audit` 新增 `qcloop-payload-coverage` 检查项，最新 `.lime/qc/objective-completion-audit-current.json` 为 `17/18`，只剩 `real-qcloop-evidence`。该同步把 ready payload coverage 纳入目标审计，但不放宽发布门禁；payload coverage pass 仍不能替代 qcloop 8/8 full P0 pass。
 

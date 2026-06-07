@@ -61,7 +61,12 @@ function collectNpmScriptName(command) {
 function validateNpmCommands(commands, packageScripts, pathPrefix, issues) {
   for (const [index, command] of asArray(commands).entries()) {
     if (!isNonEmptyString(command)) {
-      addIssue(issues, "error", `${pathPrefix}.commands[${index}]`, "命令必须是非空字符串。");
+      addIssue(
+        issues,
+        "error",
+        `${pathPrefix}.commands[${index}]`,
+        "命令必须是非空字符串。",
+      );
       continue;
     }
 
@@ -76,7 +81,6 @@ function validateNpmCommands(commands, packageScripts, pathPrefix, issues) {
     }
   }
 }
-
 
 function validateQCLoopConfig(qcloop, issues) {
   if (!qcloop || typeof qcloop !== "object") {
@@ -160,7 +164,10 @@ function validateQCLoopConfig(qcloop, issues) {
     }
   }
 
-  if (!template.includes("{{qc_history}}") && !template.includes("{{issue_ledger}}")) {
+  if (
+    !template.includes("{{qc_history}}") &&
+    !template.includes("{{issue_ledger}}")
+  ) {
     addIssue(
       issues,
       "error",
@@ -199,7 +206,12 @@ function validateQCLoopConfig(qcloop, issues) {
 
 function validateEvidenceSchema(schema, issues) {
   if (!schema || typeof schema !== "object") {
-    addIssue(issues, "error", "evidenceSchema", "Evidence schema 必须是 JSON object。");
+    addIssue(
+      issues,
+      "error",
+      "evidenceSchema",
+      "Evidence schema 必须是 JSON object。",
+    );
     return;
   }
 
@@ -210,17 +222,41 @@ function validateEvidenceSchema(schema, issues) {
   }
 
   const required = asArray(schema.required);
-  for (const field of ["schemaVersion", "runId", "generatedAt", "subject", "laneResults", "scenarioResults", "verdict"]) {
+  for (const field of [
+    "schemaVersion",
+    "runId",
+    "generatedAt",
+    "subject",
+    "laneResults",
+    "scenarioResults",
+    "verdict",
+  ]) {
     if (!required.includes(field)) {
-      addIssue(issues, "error", "evidenceSchema.required", `缺少必填字段 ${field}。`);
+      addIssue(
+        issues,
+        "error",
+        "evidenceSchema.required",
+        `缺少必填字段 ${field}。`,
+      );
     }
   }
 
   const verdictStatus = schema?.properties?.verdict?.properties?.status?.enum;
   if (Array.isArray(verdictStatus)) {
-    for (const status of ["pass", "fail", "blocked", "needs-human-review", "waived"]) {
+    for (const status of [
+      "pass",
+      "fail",
+      "blocked",
+      "needs-human-review",
+      "waived",
+    ]) {
       if (!verdictStatus.includes(status)) {
-        addIssue(issues, "error", "evidenceSchema.verdict.status", `verdict.status 缺少 ${status}。`);
+        addIssue(
+          issues,
+          "error",
+          "evidenceSchema.verdict.status",
+          `verdict.status 缺少 ${status}。`,
+        );
       }
     }
   }
@@ -234,12 +270,22 @@ function validateLane(lane, index, packageScripts, issues) {
   }
 
   if (!VALID_LANE_IDS.has(lane.id)) {
-    addIssue(issues, "warn", `${pathPrefix}.id`, `Lane id ${lane.id} 不在当前标准集合中。`);
+    addIssue(
+      issues,
+      "warn",
+      `${pathPrefix}.id`,
+      `Lane id ${lane.id} 不在当前标准集合中。`,
+    );
   }
 
   for (const field of ["title", "objective", "gatePolicy"]) {
     if (!isNonEmptyString(lane[field])) {
-      addIssue(issues, "error", `${pathPrefix}.${field}`, `Lane 缺少 ${field}。`);
+      addIssue(
+        issues,
+        "error",
+        `${pathPrefix}.${field}`,
+        `Lane 缺少 ${field}。`,
+      );
     }
   }
 
@@ -250,34 +296,72 @@ function validateScenario(scenario, index, laneIds, packageScripts, issues) {
   const pathPrefix = `scenarios[${index}]`;
   for (const field of ["id", "title", "risk", "executor", "goal", "verifier"]) {
     if (!isNonEmptyString(scenario?.[field])) {
-      addIssue(issues, "error", `${pathPrefix}.${field}`, `Scenario 缺少 ${field}。`);
+      addIssue(
+        issues,
+        "error",
+        `${pathPrefix}.${field}`,
+        `Scenario 缺少 ${field}。`,
+      );
     }
   }
 
   if (isNonEmptyString(scenario?.risk) && !VALID_RISKS.has(scenario.risk)) {
-    addIssue(issues, "error", `${pathPrefix}.risk`, `未知风险等级 ${scenario.risk}。`);
+    addIssue(
+      issues,
+      "error",
+      `${pathPrefix}.risk`,
+      `未知风险等级 ${scenario.risk}。`,
+    );
   }
 
-  if (isNonEmptyString(scenario?.executor) && !VALID_EXECUTORS.has(scenario.executor)) {
-    addIssue(issues, "error", `${pathPrefix}.executor`, `未知执行器 ${scenario.executor}。`);
+  if (
+    isNonEmptyString(scenario?.executor) &&
+    !VALID_EXECUTORS.has(scenario.executor)
+  ) {
+    addIssue(
+      issues,
+      "error",
+      `${pathPrefix}.executor`,
+      `未知执行器 ${scenario.executor}。`,
+    );
   }
 
   const lanes = asArray(scenario?.lanes);
   if (lanes.length === 0) {
-    addIssue(issues, "error", `${pathPrefix}.lanes`, "Scenario 至少要归属一个 lane。");
+    addIssue(
+      issues,
+      "error",
+      `${pathPrefix}.lanes`,
+      "Scenario 至少要归属一个 lane。",
+    );
   }
   for (const laneId of lanes) {
     if (!laneIds.has(laneId)) {
-      addIssue(issues, "error", `${pathPrefix}.lanes`, `引用了不存在的 lane: ${laneId}`);
+      addIssue(
+        issues,
+        "error",
+        `${pathPrefix}.lanes`,
+        `引用了不存在的 lane: ${laneId}`,
+      );
     }
   }
 
   if (asArray(scenario?.evidenceRequired).length === 0) {
-    addIssue(issues, "error", `${pathPrefix}.evidenceRequired`, "Scenario 必须声明证据要求。");
+    addIssue(
+      issues,
+      "error",
+      `${pathPrefix}.evidenceRequired`,
+      "Scenario 必须声明证据要求。",
+    );
   }
 
   if (asArray(scenario?.failureModes).length === 0) {
-    addIssue(issues, "error", `${pathPrefix}.failureModes`, "Scenario 必须声明失败模式。");
+    addIssue(
+      issues,
+      "error",
+      `${pathPrefix}.failureModes`,
+      "Scenario 必须声明失败模式。",
+    );
   }
 
   const evidenceLayers = asArray(scenario?.evidenceLayers);
@@ -303,23 +387,43 @@ function validateScenario(scenario, index, laneIds, packageScripts, issues) {
   validateNpmCommands(scenario?.commands, packageScripts, pathPrefix, issues);
 }
 
-function validateAgentQcManifest(manifest, { packageScripts = {}, evidenceSchema = null } = {}) {
+function validateAgentQcManifest(
+  manifest,
+  { packageScripts = {}, evidenceSchema = null } = {},
+) {
   const issues = [];
   if (!manifest || typeof manifest !== "object") {
     return {
       valid: false,
-      issues: [{ severity: "error", path: "manifest", message: "Manifest 必须是 JSON object。" }],
+      issues: [
+        {
+          severity: "error",
+          path: "manifest",
+          message: "Manifest 必须是 JSON object。",
+        },
+      ],
     };
   }
 
-  for (const field of ["manifestVersion", "title", "evidenceSchema", "lanes", "scenarios"]) {
+  for (const field of [
+    "manifestVersion",
+    "title",
+    "evidenceSchema",
+    "lanes",
+    "scenarios",
+  ]) {
     if (!Object.hasOwn(manifest, field)) {
       addIssue(issues, "error", field, `Manifest 缺少 ${field}。`);
     }
   }
 
   if (manifest.manifestVersion !== "v1") {
-    addIssue(issues, "error", "manifestVersion", "当前只接受 manifestVersion=v1。");
+    addIssue(
+      issues,
+      "error",
+      "manifestVersion",
+      "当前只接受 manifestVersion=v1。",
+    );
   }
 
   validateQCLoopConfig(manifest.qcloop, issues);
@@ -337,7 +441,12 @@ function validateAgentQcManifest(manifest, { packageScripts = {}, evidenceSchema
     validateLane(lane, index, packageScripts, issues);
     if (isNonEmptyString(lane?.id)) {
       if (laneIds.has(lane.id)) {
-        addIssue(issues, "error", `lanes[${index}].id`, `重复 lane id: ${lane.id}`);
+        addIssue(
+          issues,
+          "error",
+          `lanes[${index}].id`,
+          `重复 lane id: ${lane.id}`,
+        );
       }
       laneIds.add(lane.id);
     }
@@ -351,7 +460,12 @@ function validateAgentQcManifest(manifest, { packageScripts = {}, evidenceSchema
     validateScenario(scenario, index, laneIds, packageScripts, issues);
     if (isNonEmptyString(scenario?.id)) {
       if (scenarioIds.has(scenario.id)) {
-        addIssue(issues, "error", `scenarios[${index}].id`, `重复 scenario id: ${scenario.id}`);
+        addIssue(
+          issues,
+          "error",
+          `scenarios[${index}].id`,
+          `重复 scenario id: ${scenario.id}`,
+        );
       }
       scenarioIds.add(scenario.id);
     }
@@ -388,16 +502,21 @@ function summarizeAgentQcManifest(manifest, validation) {
     evidenceSchema: manifest?.evidenceSchema ?? "",
     valid: validation.valid,
     issueCount: validation.issues.length,
-    errorCount: validation.issues.filter((issue) => issue.severity === "error").length,
-    warnCount: validation.issues.filter((issue) => issue.severity === "warn").length,
+    errorCount: validation.issues.filter((issue) => issue.severity === "error")
+      .length,
+    warnCount: validation.issues.filter((issue) => issue.severity === "warn")
+      .length,
     laneCount: lanes.length,
     scenarioCount: scenarios.length,
-    p0ScenarioCount: scenarios.filter((scenario) => scenario.risk === "P0").length,
+    p0ScenarioCount: scenarios.filter((scenario) => scenario.risk === "P0")
+      .length,
     lanes: lanes.map((lane) => ({
       id: lane.id,
       title: lane.title,
       defaultCommandCount: asArray(lane.defaultCommands).length,
-      scenarioCount: scenarios.filter((scenario) => asArray(scenario.lanes).includes(lane.id)).length,
+      scenarioCount: scenarios.filter((scenario) =>
+        asArray(scenario.lanes).includes(lane.id),
+      ).length,
     })),
     scenarios: scenarios.map((scenario) => ({
       id: scenario.id,
@@ -407,7 +526,10 @@ function summarizeAgentQcManifest(manifest, validation) {
       lanes: asArray(scenario.lanes),
     })),
     riskBreakdown: countBy(scenarios, (scenario) => scenario.risk || "unknown"),
-    executorBreakdown: countBy(scenarios, (scenario) => scenario.executor || "unknown"),
+    executorBreakdown: countBy(
+      scenarios,
+      (scenario) => scenario.executor || "unknown",
+    ),
     issues: validation.issues,
   };
 }
@@ -418,7 +540,10 @@ function renderIssueList(issues) {
   }
 
   return issues
-    .map((issue) => `- ${issue.severity.toUpperCase()} ${issue.path}: ${issue.message}`)
+    .map(
+      (issue) =>
+        `- ${issue.severity.toUpperCase()} ${issue.path}: ${issue.message}`,
+    )
     .join("\n");
 }
 
@@ -482,7 +607,11 @@ ${renderIssueList(summary.issues)}
 `;
 }
 
-function createAgentQcReport({ manifest, packageJson = {}, evidenceSchema = null }) {
+function createAgentQcReport({
+  manifest,
+  packageJson = {},
+  evidenceSchema = null,
+}) {
   const validation = validateAgentQcManifest(manifest, {
     packageScripts: packageJson.scripts ?? {},
     evidenceSchema,

@@ -20,7 +20,11 @@ import {
   OEM_LIME_HUB_PROVIDER_ID,
   resolveOemLimeHubProviderName,
 } from "@/lib/oemLimeHubProvider";
-import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
+import {
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
+import { isElectronHostCommandAvailable } from "@/lib/electron-host";
 
 const LEGACY_MANAGED_LIME_HUB_KEY_ALIAS = "Lime 云端模型";
 const MANAGED_LIME_HUB_KEY_MODELS_STATE =
@@ -154,6 +158,16 @@ function isManagedLimeHubKey(
   );
 }
 
+function canSyncLimeHubProvider(): boolean {
+  if (!hasDesktopHostInvokeCapability()) {
+    return false;
+  }
+  if (hasDesktopHostRuntimeMarkers()) {
+    return isElectronHostCommandAvailable("update_api_key_provider");
+  }
+  return true;
+}
+
 async function ensureLocalLimeHubApiKey(input: {
   runtime: NonNullable<ReturnType<typeof resolveOemCloudRuntimeContext>>;
   customModels: string[];
@@ -233,7 +247,7 @@ export function useOemLimeHubProviderSync() {
     }),
     [t],
   );
-  const syncEnabled = hasDesktopHostInvokeCapability();
+  const syncEnabled = canSyncLimeHubProvider();
   const lastAppliedSignatureRef = useRef<string>("");
 
   useEffect(() => {

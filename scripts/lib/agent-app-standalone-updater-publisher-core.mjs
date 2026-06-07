@@ -19,7 +19,6 @@ function normalizeArtifact(artifact, { appId, channel, endpoint, version }) {
     kind: artifact.kind,
     path: artifact.path,
     contentHash: artifact.contentHash,
-    signature: artifact.updaterSignature,
     size: artifact.size,
     url: `${trimSlash(endpoint)}/${appId}/${channel}/${version}/${encodeURIComponent(name)}`,
   };
@@ -34,7 +33,6 @@ export function buildStandaloneUpdaterPublishPlan({
   outputDir = "",
   previousArtifactRef = "",
   previousManifestRef = "",
-  pubkey = "",
   publishedAt = new Date().toISOString(),
   version = "",
 }) {
@@ -58,12 +56,6 @@ export function buildStandaloneUpdaterPublishPlan({
       message: "Updater publish plan requires endpoint.",
     });
   }
-  if (!String(pubkey).trim()) {
-    blockers.push({
-      code: "UPDATER_PUBKEY_MISSING",
-      message: "Updater publish plan requires updater public key.",
-    });
-  }
   if (!String(outputDir).trim()) {
     blockers.push({
       code: "OUTPUT_DIR_MISSING",
@@ -85,10 +77,11 @@ export function buildStandaloneUpdaterPublishPlan({
         details: { artifact },
       });
     }
-    if (!artifact?.updaterSignature) {
+    if (!artifact?.signed) {
       blockers.push({
-        code: "ARTIFACT_UPDATER_SIGNATURE_MISSING",
-        message: "Updater artifact refs require updater signature evidence.",
+        code: "ARTIFACT_SIGNING_EVIDENCE_MISSING",
+        message:
+          "Updater artifact refs require platform signing evidence before publishing.",
         details: { artifact: artifactKey(artifact) },
       });
     }
@@ -126,7 +119,6 @@ export function buildStandaloneUpdaterPublishPlan({
     version,
     channel,
     notes,
-    pubkey,
     pubDate: publishedAt,
     artifacts: normalizedArtifacts.map((artifact) =>
       normalizeArtifact(artifact, { appId, channel, endpoint, version }),

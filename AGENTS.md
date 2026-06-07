@@ -30,11 +30,12 @@
 6. **优先平台无关入口** - 优先复用 `npm`、`cargo`、Electron / App Server 命令和仓库脚本，不新增只适用于 Bash/zsh 的流程
 7. **未验证的平台假设要显式说明** - 涉及文件系统、进程、终端、快捷键、窗口、托盘、权限时尤其如此
 8. **新增命名禁止品牌前缀** - 新程序、目录、crate/package、Electron IPC channel、App Server 方法、API 网关、类型、模块和脚本默认不得添加 `Lime` / `lime_` / `lime-` 品牌前缀；直接使用领域名，如 `app_server_*`、`app-server`。只有对外发布品牌标识、历史兼容或第三方生态已固定命名时才允许保留，并在执行计划说明原因
-9. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力默认落到 `app-server` crates、JSON-RPC 协议、client 与 RuntimeCore；Electron 只作为 Desktop Host bridge，负责 IPC、窗口、托盘、Dock、updater 和 sidecar 生命周期，不是第二套后端或业务 adapter；`agent_runtime_*` / Aster 旧命令只作为 Desktop 兼容 facade，不再直接承接新业务逻辑，除非执行计划明确说明过渡原因和退出条件
-10. **Electron 打包事实源统一 Forge** - Electron packaging / installer / signing / notarization / updater metadata 的 current 配置只允许走 `forge.config.mjs`、`electron-forge package`、`electron-forge make` 与仓库内 Forge maker；`electron-builder.yml`、`electron-builder` CLI 和 builder yml 事实源按 `dead` 处理，不得新增引用或把它们写回文档、CI、守卫、i18n evidence。运行时更新仍以 `electron/updateHost.ts` + `electron-updater` 为 current；Windows NSIS updater 语义由 Forge maker 承接。
-11. **不要继续扩展 compat / deprecated 路径** - 新 API、新命令、新前端入口默认落在当前 `current` 主路径
-12. **规划改了且明确无需兼容时，优先删旧实现** - 如果用户已明确“上一版无人使用 / 不用兼容 / 旧实现阻碍主线”，旧实现默认按 `dead` 或带退出条件的 `deprecated` 处理，不要继续修补、包裹或平移
-13. **`legacy current reference` 不是续命许可** - 旧路线图、旧实现锚点只用于理解现状与迁移，不等于允许继续往旧页面、旧命令、旧协议上加功能
+9. **`scripts/` 根目录冻结** - `scripts/` 根目录是历史入口区，不再作为新增脚本默认落点；新增可执行脚本默认放到 `scripts/<domain>/`、`scripts/lib/` 或所属 package，并通过 `npm run governance:scripts` 守住根目录基线。只有公开稳定入口且无法归入领域子目录时才允许例外，必须同步 `scripts/README.md`、`scripts/script-root-governance-baseline.json` 和执行计划退出条件
+10. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力默认落到 `app-server` crates、JSON-RPC 协议、client 与 RuntimeCore；Electron 只作为 Desktop Host bridge，负责 IPC、窗口、托盘、Dock、updater 和 sidecar 生命周期，不是第二套后端或业务 adapter；`agent_runtime_*` / Aster 旧命令只作为 Desktop 兼容 facade，不再直接承接新业务逻辑，除非执行计划明确说明过渡原因和退出条件
+11. **Electron 打包事实源统一 Forge** - Electron packaging / installer / signing / notarization / updater metadata 的 current 配置只允许走 `forge.config.mjs`、`electron-forge package`、`electron-forge make` 与 Forge 官方 maker；运行时更新只允许走 `electron/updateHost.ts` + Electron 内置 `autoUpdater`。旧 builder 配置 / CLI、自定义 Windows installer maker、旧 YAML / blockmap updater metadata 均按 `dead` 处理，不得新增引用或写回文档、CI、守卫、i18n evidence；Windows current installer 为 Forge Squirrel，macOS current updater metadata 为 `RELEASES.json`，Windows current updater metadata 为 `RELEASES`。
+12. **不要继续扩展 compat / deprecated 路径** - 新 API、新命令、新前端入口默认落在当前 `current` 主路径
+13. **规划改了且明确无需兼容时，优先删旧实现** - 如果用户已明确“上一版无人使用 / 不用兼容 / 旧实现阻碍主线”，旧实现默认按 `dead` 或带退出条件的 `deprecated` 处理，不要继续修补、包裹或平移
+14. **`legacy current reference` 不是续命许可** - 旧路线图、旧实现锚点只用于理解现状与迁移，不等于允许继续往旧页面、旧命令、旧协议上加功能
 
 ## 工程硬规则
 

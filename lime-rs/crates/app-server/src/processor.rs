@@ -146,7 +146,9 @@ impl RequestProcessor {
             METHOD_INITIALIZE => self.initialize(params).map(RpcDispatch::single),
             METHOD_CAPABILITY_LIST => self.handle_capability_list(params),
             METHOD_ARTIFACT_READ => self.handle_artifact_read(params),
-            METHOD_FILE_SYSTEM_LIST_DIRECTORY => self.handle_file_system_list_directory(params).await,
+            METHOD_FILE_SYSTEM_LIST_DIRECTORY => {
+                self.handle_file_system_list_directory(params).await
+            }
             METHOD_FILE_SYSTEM_READ_FILE_PREVIEW => {
                 self.handle_file_system_read_file_preview(params).await
             }
@@ -1193,16 +1195,12 @@ mod tests {
             .expect("directory listing response");
         match &listing_messages[0] {
             JsonRpcMessage::Response(response) => {
-                let actual_dir_path = std::fs::canonicalize(
-                    response.result["path"].as_str().expect("listing path"),
-                )
-                .expect("canonical response dir")
-                .to_string_lossy()
-                .into_owned();
-                assert_eq!(
-                    actual_dir_path.as_str(),
-                    expected_dir_path.as_str()
-                );
+                let actual_dir_path =
+                    std::fs::canonicalize(response.result["path"].as_str().expect("listing path"))
+                        .expect("canonical response dir")
+                        .to_string_lossy()
+                        .into_owned();
+                assert_eq!(actual_dir_path.as_str(), expected_dir_path.as_str());
                 assert_eq!(response.result["entries"][0]["name"], "README.md");
             }
             other => panic!("expected response, got {other:?}"),
@@ -1221,16 +1219,12 @@ mod tests {
             .expect("file preview response");
         match &preview_messages[0] {
             JsonRpcMessage::Response(response) => {
-                let actual_file_path = std::fs::canonicalize(
-                    response.result["path"].as_str().expect("preview path"),
-                )
-                .expect("canonical response file")
-                .to_string_lossy()
-                .into_owned();
-                assert_eq!(
-                    actual_file_path.as_str(),
-                    expected_file_path.as_str()
-                );
+                let actual_file_path =
+                    std::fs::canonicalize(response.result["path"].as_str().expect("preview path"))
+                        .expect("canonical response file")
+                        .to_string_lossy()
+                        .into_owned();
+                assert_eq!(actual_file_path.as_str(), expected_file_path.as_str());
                 assert_eq!(response.result["content"], "# Lime");
                 assert_eq!(response.result["isBinary"], false);
             }

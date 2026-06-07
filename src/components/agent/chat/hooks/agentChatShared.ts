@@ -538,19 +538,53 @@ export function resolveRecentTopicActionLabel(
   }
 }
 
+function resolveSessionTimestampDate(value: unknown): Date {
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isFinite(time) ? value : new Date(0);
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return new Date(0);
+    }
+    const millis = Math.abs(value) >= 1_000_000_000_000 ? value : value * 1000;
+    return new Date(millis);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return new Date(0);
+    }
+    const parsedNumber = Number(trimmed);
+    if (Number.isFinite(parsedNumber)) {
+      return resolveSessionTimestampDate(parsedNumber);
+    }
+    const parsed = new Date(trimmed);
+    return Number.isFinite(parsed.getTime()) ? parsed : new Date(0);
+  }
+
+  return new Date(0);
+}
+
+function buildSessionFallbackTitle(createdAt: Date): string {
+  return createdAt.getTime() > 0
+    ? `任务 ${createdAt.toLocaleDateString("zh-CN")}`
+    : "新任务";
+}
+
 export const mapSessionToTopic = (session: AsterSessionInfo): Topic => {
-  const updatedAtEpoch = Number.isFinite(session.updated_at)
-    ? session.updated_at
-    : session.created_at;
+  const updatedAtValue = session.updated_at ?? session.created_at;
   const messagesCount = session.messages_count ?? 0;
+  const createdAt = resolveSessionTimestampDate(session.created_at);
+  const updatedAt = resolveSessionTimestampDate(updatedAtValue);
 
   return {
     id: session.id,
-    title:
-      session.name ||
-      `任务 ${new Date(session.created_at * 1000).toLocaleDateString("zh-CN")}`,
-    createdAt: new Date(session.created_at * 1000),
-    updatedAt: new Date(updatedAtEpoch * 1000),
+    title: session.name || buildSessionFallbackTitle(createdAt),
+    createdAt,
+    updatedAt,
     workspaceId: normalizeProjectId(session.workspace_id),
     messagesCount,
     executionStrategy: normalizeExecutionStrategy(session.execution_strategy),

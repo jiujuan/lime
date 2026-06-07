@@ -265,6 +265,36 @@ test("builds workspace and skill read requests with current methods", () => {
   });
 });
 
+test("builds session archive and unarchive requests with current App Server methods", () => {
+  const client = new AppServerClient();
+
+  const archivedSessions = client.listSessions({
+    archivedOnly: true,
+    limit: 9,
+  });
+  const unarchiveSession = client.updateSession({
+    sessionId: "session-main",
+    archived: false,
+  });
+
+  assert.equal(archivedSessions.method, METHOD_AGENT_SESSION_LIST);
+  assert.deepEqual(archivedSessions.params, {
+    archivedOnly: true,
+    limit: 9,
+  });
+  assert.equal(unarchiveSession.method, METHOD_AGENT_SESSION_UPDATE);
+  assert.deepEqual(unarchiveSession.params, {
+    sessionId: "session-main",
+    archived: false,
+  });
+  assert.equal(
+    APP_SERVER_METHODS.some(
+      ({ method }) => method === "agent_runtime_delete_session",
+    ),
+    false,
+  );
+});
+
 test("builds app data surface requests with current methods", () => {
   const client = new AppServerClient();
 
@@ -520,7 +550,10 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_PROJECT_MEMORY_READ), true);
-  assert.equal(isAppServerRequestMethod(METHOD_CONNECT_DEEP_LINK_RESOLVE), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_CONNECT_DEEP_LINK_RESOLVE),
+    true,
+  );
   assert.equal(
     isAppServerRequestMethod(METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE),
     true,
@@ -763,6 +796,56 @@ test("connection request errors preserve streamed notifications and response con
   );
 
   assert.equal(sent[0].method, METHOD_AGENT_SESSION_TURN_START);
+});
+
+test("connection keeps session archive failures fail-closed", async () => {
+  const sent = [];
+  const archiveFailure =
+    "agentSession/update archived is only supported for persisted current timeline sessions";
+  const inbound = [
+    {
+      id: 1,
+      error: {
+        code: ERROR_CODES.runtimeError,
+        message: archiveFailure,
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error("empty transport");
+      }
+      return message;
+    },
+  });
+
+  await assert.rejects(
+    connection.updateSession({
+      sessionId: "sess_memory",
+      archived: true,
+    }),
+    (error) => {
+      assert.equal(error instanceof AppServerRequestError, true);
+      assert.equal(error.method, METHOD_AGENT_SESSION_UPDATE);
+      assert.equal(error.response.id, 1);
+      assert.equal(error.response.error.code, ERROR_CODES.runtimeError);
+      assert.equal(error.response.error.message, archiveFailure);
+      assert.equal(error.notifications.length, 0);
+      assert.equal(error.messages.length, 1);
+      return true;
+    },
+  );
+
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_UPDATE);
+  assert.deepEqual(sent[0].params, {
+    sessionId: "sess_memory",
+    archived: true,
+  });
 });
 
 test("connection wraps capability list response", async () => {
@@ -1419,6 +1502,14 @@ test("uses codex style stdio sidecar launch args", () => {
       backendMode: "unavailable",
     }),
     ["--stdio", "--backend", "unavailable"],
+  );
+  assert.deepEqual(
+    sidecarArgs({
+      binaryPath: "app-server",
+      listenUrl: "stdio://",
+      backendMode: "runtime",
+    }),
+    ["--stdio", "--backend", "runtime"],
   );
   assert.deepEqual(
     sidecarArgs({

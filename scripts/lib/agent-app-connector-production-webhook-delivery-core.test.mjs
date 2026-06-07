@@ -121,7 +121,7 @@ describe("agent app connector production webhook delivery", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-connector-production-webhook-delivery.mjs"),
+        path.resolve("scripts/agent-app/connector-production-webhook-delivery.mjs"),
         "--help",
       ],
       { encoding: "utf8", env: { PATH: process.env.PATH } },

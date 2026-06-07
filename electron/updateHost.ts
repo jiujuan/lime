@@ -39,6 +39,17 @@ type VersionInfo = {
   error?: string | null;
 };
 
+type UpdateNotificationAnchorRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type UpdateWindowOpenParams = VersionInfo & {
+  anchorRect?: UpdateNotificationAnchorRect | null;
+};
+
 type DownloadUpdateResult = {
   success: boolean;
   message: string;
@@ -55,7 +66,7 @@ type UpdateInfo = {
 
 type Broadcast = (event: string, payload?: unknown) => void;
 type UpdateWindowController = {
-  open: (params?: VersionInfo | null) => Promise<void> | void;
+  open: (params?: UpdateWindowOpenParams | null) => Promise<void> | void;
   close: () => Promise<void> | void;
 };
 
@@ -84,7 +95,10 @@ export class ElectronUpdateHost {
     this.#session = this.#idleSession();
   }
 
-  async invoke(command: string): Promise<unknown> {
+  async invoke(
+    command: string,
+    args?: Record<string, unknown>,
+  ): Promise<unknown> {
     switch (command) {
       case "check_for_updates":
         return await this.checkForUpdates();
@@ -111,15 +125,19 @@ export class ElectronUpdateHost {
         return {};
       case "open_update_window":
       case "test_update_window":
-        await this.#windowController.open(this.#currentVersionInfo());
+        await this.#windowController.open({
+          ...this.#currentVersionInfo(),
+          anchorRect: parseUpdateNotificationAnchorRect(args?.anchorRect),
+        });
         return {};
       default:
-        throw new Error(`Electron update command is not implemented: ${command}`);
+        throw new Error(
+          `Electron update command is not implemented: ${command}`,
+        );
     }
   }
 
   async checkForUpdates(): Promise<VersionInfo> {
-    this.#configure();
     if (!this.#canUseUpdater()) {
       return {
         current: app.getVersion(),
@@ -127,8 +145,13 @@ export class ElectronUpdateHost {
         error: "Electron updater is only enabled for packaged builds.",
       };
     }
+    this.#configure();
 
-    this.#setSession({ stage: "checking", message: "正在检查更新", isActive: true });
+    this.#setSession({
+      stage: "checking",
+      message: "正在检查更新",
+      isActive: true,
+    });
     try {
       const info = await this.#checkForUpdatesOnce();
       this.#latestInfo = info;
@@ -159,13 +182,14 @@ export class ElectronUpdateHost {
   }
 
   async downloadUpdate(): Promise<DownloadUpdateResult> {
-    this.#configure();
     if (!this.#canUseUpdater()) {
       return {
         success: false,
-        message: "Electron updater is only enabled for packaged macOS and Windows builds.",
+        message:
+          "Electron updater is only enabled for packaged macOS and Windows builds.",
       };
     }
+    this.#configure();
 
     this.#setSession({
       stage: "checking",
@@ -214,17 +238,19 @@ export class ElectronUpdateHost {
   }
 
   async startInstallSession(): Promise<UpdateInstallSession> {
-    this.#configure();
     if (!this.#canUseUpdater()) {
       this.#setSession({
         stage: "failed",
-        error: "Electron updater is only enabled for packaged macOS and Windows builds.",
-        message: "Electron updater is only enabled for packaged macOS and Windows builds.",
+        error:
+          "Electron updater is only enabled for packaged macOS and Windows builds.",
+        message:
+          "Electron updater is only enabled for packaged macOS and Windows builds.",
         isActive: false,
         completedAt: Date.now(),
       });
       return this.#session;
     }
+    this.#configure();
 
     try {
       if (this.#session.stage !== "completed") {
@@ -280,19 +306,16 @@ export class ElectronUpdateHost {
         process.platform,
       ),
     });
-    autoUpdater.on(
-      "update-available",
-      () => {
-        this.#latestInfo = {};
-        this.#setSession({
-          stage: "downloading",
-          latestVersion: null,
-          downloadUrl: null,
-          message: "发现新版本，正在下载更新",
-          isActive: true,
-        });
-      },
-    );
+    autoUpdater.on("update-available", () => {
+      this.#latestInfo = {};
+      this.#setSession({
+        stage: "downloading",
+        latestVersion: null,
+        downloadUrl: null,
+        message: "发现新版本，正在下载更新",
+        isActive: true,
+      });
+    });
     autoUpdater.on("update-not-available", () => {
       this.#setSession({
         stage: "up_to_date",
@@ -335,10 +358,16 @@ export class ElectronUpdateHost {
   }
 
   #canUseUpdater(): boolean {
-    return (
-      isAutoUpdaterSupportedPlatform(process.platform) &&
-      (app.isPackaged || process.env.LIME_ELECTRON_ENABLE_DEV_UPDATER === "1")
-    );
+    if (!isAutoUpdaterSupportedPlatform(process.platform)) {
+      return false;
+    }
+    if (process.env.LIME_ELECTRON_ENABLE_DEV_UPDATER === "1") {
+      return true;
+    }
+    if (process.env.VITE_DEV_SERVER_URL) {
+      return false;
+    }
+    return app.isPackaged;
   }
 
   #versionInfo(info: UpdateInfo | null, hasUpdate: boolean): VersionInfo {
@@ -347,7 +376,8 @@ export class ElectronUpdateHost {
       latest: info?.version ?? null,
       hasUpdate,
       downloadUrl: this.#downloadUrl(info),
-      releaseNotes: typeof info?.releaseNotes === "string" ? info.releaseNotes : null,
+      releaseNotes:
+        typeof info?.releaseNotes === "string" ? info.releaseNotes : null,
       releaseNotesUrl: null,
       pubDate: info?.releaseDate ?? null,
       error: null,
@@ -509,7 +539,35 @@ export class ElectronUpdateHost {
   }
 }
 
-function normalizeUpdateDate(value: Date | string | undefined): string | undefined {
+function parseUpdateNotificationAnchorRect(
+  value: unknown,
+): UpdateNotificationAnchorRect | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const input = value as Record<string, unknown>;
+  const x = Number(input.x);
+  const y = Number(input.y);
+  const width = Number(input.width);
+  const height = Number(input.height);
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+
+  return { x, y, width, height };
+}
+
+function normalizeUpdateDate(
+  value: Date | string | undefined,
+): string | undefined {
   if (value instanceof Date) {
     return value.toISOString();
   }
@@ -543,9 +601,7 @@ function runtimeUpdateFeedUrl(
   if (explicitFeedUrl) {
     return explicitFeedUrl.replace(/\/+$/, "");
   }
-  const baseUrl = (
-    process.env.LIME_UPDATES_BASE_URL || DEFAULT_UPDATE_BASE_URL
-  )
+  const baseUrl = (process.env.LIME_UPDATES_BASE_URL || DEFAULT_UPDATE_BASE_URL)
     .trim()
     .replace(/\/+$/, "");
   return `${baseUrl}/lime/stable/${updateFeedLabel(platform, arch)}`;
@@ -564,7 +620,10 @@ function updateFeedLabel(
   return `${platform}-${arch}`;
 }
 
-function updateFeedUrlForPlatform(feedUrl: string, platform: NodeJS.Platform): string {
+function updateFeedUrlForPlatform(
+  feedUrl: string,
+  platform: NodeJS.Platform,
+): string {
   const normalized = feedUrl.trim().replace(/\/+$/, "");
   if (platform !== "darwin") {
     return normalized;

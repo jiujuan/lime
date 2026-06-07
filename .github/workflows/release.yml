@@ -97,7 +97,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: macos-15
             target: aarch64-apple-darwin
             host_platform: darwin
             arch: arm64
@@ -184,7 +184,23 @@ jobs:
             printf 'Missing Electron macOS signing/notarization secrets: %s\n' "${missing[*]}" >&2
             exit 1
           fi
-      
+
+      - name: Validate Electron Windows signing secrets
+        if: matrix.host_platform == 'win32'
+        shell: bash
+        env:
+          WINDOWS_SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${WINDOWS_SIGNING_CERTIFICATE:-}" ] || missing+=("WINDOWS_SIGNING_CERTIFICATE")
+          [ -n "${WINDOWS_SIGNING_CERTIFICATE_PASSWORD:-}" ] || missing+=("WINDOWS_SIGNING_CERTIFICATE_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing Electron Windows signing secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
       - name: Import Electron macOS signing certificate
         if: startsWith(matrix.platform, 'macos')
         shell: bash
@@ -213,6 +229,24 @@ jobs:
             "$KEYCHAIN_PATH"
           echo "LIME_MACOS_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
+      - name: Prepare Electron Windows signing certificate
+        if: matrix.host_platform == 'win32'
+        shell: bash
+        env:
+          WINDOWS_SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERTIFICATE_PATH="$RUNNER_TEMP/lime-electron-signing.pfx"
+          WINDOWS_SIGNING_CERTIFICATE_PATH="$CERTIFICATE_PATH" node - <<'NODE'
+          const fs = require("node:fs");
+          const certificate = process.env.WINDOWS_SIGNING_CERTIFICATE || "";
+          const certificatePath = process.env.WINDOWS_SIGNING_CERTIFICATE_PATH;
+          fs.writeFileSync(certificatePath, Buffer.from(certificate, "base64"));
+          NODE
+          echo "LIME_WINDOWS_SIGNING_CERTIFICATE_FILE=$CERTIFICATE_PATH" >> "$GITHUB_ENV"
+          echo "LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD=$WINDOWS_SIGNING_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
+
       - name: Build Electron app
         shell: bash
         env:
@@ -222,7 +256,7 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/lime-rs/target
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: sccache
-          LIME_ELECTRON_SIGN: ${{ startsWith(matrix.platform, 'macos') && '1' || '' }}
+          LIME_ELECTRON_SIGN: ${{ (startsWith(matrix.platform, 'macos') || matrix.host_platform == 'win32') && '1' || '' }}
           APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_SIGNING_IDENTITY || '' }}
           APPLE_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_PASSWORD || '' }}
@@ -240,7 +274,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/verify-electron-package-resources.mjs \
+          node scripts/electron/verify-package-resources.mjs \
             --package-root release-electron \
             --platform "${{ matrix.host_platform }}" \
             --arch "${{ matrix.arch }}"
@@ -251,7 +285,7 @@ jobs:
           RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
         run: |
           set -euo pipefail
-          node scripts/stage-electron-release-assets.mjs \
+          node scripts/electron/stage-release-assets.mjs \
             --forge-dir release-electron \
             --out-dir "release-assets/${{ matrix.target }}" \
             --target-triple "${{ matrix.target }}" \
@@ -322,7 +356,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/prepare-github-release-assets.mjs \
+          node scripts/electron/prepare-github-release-assets.mjs \
             --assets-dir release-assets \
             --out-dir release-github-assets \
             --version "$RELEASE_TAG"
@@ -397,7 +431,7 @@ jobs:
           set -euo pipefail
           BUCKET="${LIME_RELEASES_R2_BUCKET:-lime-releases}"
           PLAN="$RUNNER_TEMP/electron-r2-upload-plan.json"
-          node scripts/plan-electron-updater-r2-upload.mjs \
+          node scripts/electron/update-feed-r2-upload-plan.mjs \
             --assets-dir release-assets \
             --bucket "$BUCKET" \
             --channel stable \
@@ -445,7 +479,7 @@ jobs:
             --remote \
             --prefix "lime/stable/v" \
             --json > "$RUNNER_TEMP/r2-objects.json"
-          node scripts/plan-r2-release-cleanup.mjs \
+          node scripts/electron/r2-release-cleanup-plan.mjs \
             --input "$RUNNER_TEMP/r2-objects.json" \
             --output "$RUNNER_TEMP/r2-delete-keys.txt" \
             --current "$RELEASE_TAG" \

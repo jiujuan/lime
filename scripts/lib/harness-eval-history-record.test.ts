@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runNodeScriptJson } from "./node-script-test-runner.mjs";
-import { deriveHistoryRecordVerificationFacts } from "../harness-eval-history-record.mjs";
+import { deriveHistoryRecordVerificationFacts } from "../harness/eval-history-record.mjs";
 
 const repoRoot = process.cwd();
 const tempRoots: string[] = [];
@@ -172,7 +172,7 @@ describe("harness-eval-history-record", () => {
     const workspaceRoot = path.join(tempRoot, "workspace");
 
     const result = (await runNodeScriptAsync(
-      "scripts/harness-eval-history-record.mjs",
+      "scripts/harness/eval-history-record.mjs",
       [
         "--format",
         "json",
@@ -297,7 +297,7 @@ describe("harness-eval-history-record", () => {
     );
 
     const firstResult = (await runNodeScriptAsync(
-      "scripts/harness-eval-history-record.mjs",
+      "scripts/harness/eval-history-record.mjs",
       [
         "--format",
         "json",
@@ -317,7 +317,7 @@ describe("harness-eval-history-record", () => {
     )) as Record<string, any>;
 
     const secondResult = (await runNodeScriptAsync(
-      "scripts/harness-eval-history-record.mjs",
+      "scripts/harness/eval-history-record.mjs",
       [
         "--format",
         "json",
@@ -434,7 +434,7 @@ describe("harness-eval-history-record", () => {
     const workspaceRoot = path.join(tempRoot, "workspace");
 
     const [firstResult, secondResult] = (await Promise.all([
-      runNodeScriptAsync("scripts/harness-eval-history-record.mjs", [
+      runNodeScriptAsync("scripts/harness/eval-history-record.mjs", [
         "--format",
         "json",
         "--history-dir",
@@ -442,7 +442,7 @@ describe("harness-eval-history-record", () => {
         "--workspace-root",
         workspaceRoot,
       ]),
-      runNodeScriptAsync("scripts/harness-eval-history-record.mjs", [
+      runNodeScriptAsync("scripts/harness/eval-history-record.mjs", [
         "--format",
         "json",
         "--history-dir",

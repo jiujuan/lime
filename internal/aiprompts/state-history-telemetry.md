@@ -20,7 +20,7 @@
 - 调整 `build_pending_requests(...)`、`build_last_outcome(...)`、`build_incidents(...)`
 - 调整 request correlation headers、`RequestLog`、`requestTelemetry`
 - 调整 `agent_runtime_export_*`、handoff bundle、evidence pack、replay case、analysis handoff、review decision
-- 调整 `scripts/harness-eval-history-record.mjs`、cleanup/dashboard、`HarnessStatusPanel.tsx`、`AgentThreadReliabilityPanel.tsx`
+- 调整 `scripts/harness/eval-history-record.mjs`、cleanup/dashboard、`HarnessStatusPanel.tsx`、`AgentThreadReliabilityPanel.tsx`
 - 讨论“状态模型”“可靠性”“证据链”“历史窗口”这几个词时，发现大家已经在混用不同层的语言
 
 如果一个需求同时碰到“会话历史 + 线程状态”“request telemetry + evidence 导出”“history-record + cleanup/dashboard”中的两项以上，默认属于本主链。
@@ -142,7 +142,7 @@
 
 ### 5. 历史窗口与下游汇总
 
-- `scripts/harness-eval-history-record.mjs`
+- `scripts/harness/eval-history-record.mjs`
 - `scripts/lib/harness-verification-facts.mjs`
 
 当前这里负责：
@@ -191,7 +191,7 @@
 - `lime-rs/src/services/runtime_replay_case_service.rs`
 - `lime-rs/src/services/runtime_analysis_handoff_service.rs`
 - `lime-rs/src/services/runtime_review_decision_service.rs`
-- `scripts/harness-eval-history-record.mjs`
+- `scripts/harness/eval-history-record.mjs`
 - `scripts/lib/harness-verification-facts.mjs`
 - `src/components/agent/chat/components/HarnessStatusPanel.tsx`
 - `src/components/agent/chat/components/AgentThreadReliabilityPanel.tsx`

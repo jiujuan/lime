@@ -19,7 +19,8 @@ const manifest = {
 function owner(status: string) {
   return {
     verdict: { status, summary: `owner=${status}` },
-    ownerIntervention: status === "busy" ? { status: "requires_owner_confirmation" } : null,
+    ownerIntervention:
+      status === "busy" ? { status: "requires_owner_confirmation" } : null,
   };
 }
 
@@ -28,7 +29,8 @@ function payload(items: unknown[], overrides = {}) {
     _validation: { valid: true },
     max_qc_rounds: 1,
     max_executor_retries: 0,
-    prompt_template: "只允许执行场景命令，不要顺手修复；不得修改源码、配置、文档、锁文件或 git 状态。",
+    prompt_template:
+      "只允许执行场景命令，不要顺手修复；不得修改源码、配置、文档、锁文件或 git 状态。",
     items,
     ...overrides,
   };
@@ -60,9 +62,9 @@ describe("agent-qc-payload-coverage-core", () => {
     const report = buildAgentQcPayloadCoverageReport({
       manifest,
       payload: payload([
-          JSON.stringify({ scenario_id: "command-bridge-contract" }),
-          JSON.stringify({ scenario_id: "workspace-ready-session-restore" }),
-        ]),
+        JSON.stringify({ scenario_id: "command-bridge-contract" }),
+        JSON.stringify({ scenario_id: "workspace-ready-session-restore" }),
+      ]),
       processOwner: owner("pass"),
       generatedAt: "2026-05-11T00:00:00.000Z",
     });
@@ -77,14 +79,16 @@ describe("agent-qc-payload-coverage-core", () => {
     const report = buildAgentQcPayloadCoverageReport({
       manifest,
       payload: payload([
-          { scenario_id: "command-bridge-contract" },
-          { scenario_id: "workspace-ready-session-restore" },
-        ]),
+        { scenario_id: "command-bridge-contract" },
+        { scenario_id: "workspace-ready-session-restore" },
+      ]),
       processOwner: owner("busy"),
     });
 
     expect(report.status).toBe("blocked");
-    expect(report.ownerGate.ownerIntervention?.status).toBe("requires_owner_confirmation");
+    expect(report.ownerGate.ownerIntervention?.status).toBe(
+      "requires_owner_confirmation",
+    );
   });
 
   it("缺少 P0 场景时应 fail 并渲染 Markdown", () => {
@@ -96,7 +100,9 @@ describe("agent-qc-payload-coverage-core", () => {
     const markdown = renderAgentQcPayloadCoverageMarkdown(report);
 
     expect(report.status).toBe("fail");
-    expect(report.coverage.missingScenarioIds).toEqual(["workspace-ready-session-restore"]);
+    expect(report.coverage.missingScenarioIds).toEqual([
+      "workspace-ready-session-restore",
+    ]);
     expect(markdown).toContain("qcloop P0 Payload Coverage");
     expect(markdown).toContain("Missing scenarios");
   });
@@ -114,10 +120,14 @@ describe("agent-qc-payload-coverage-core", () => {
       processOwner: owner("pass"),
     });
 
-    expect(buildRepairGuard(payload([], { max_qc_rounds: 3 })).passed).toBe(false);
+    expect(buildRepairGuard(payload([], { max_qc_rounds: 3 })).passed).toBe(
+      false,
+    );
     expect(report.repairGuard.passed).toBe(false);
     expect(report.status).toBe("fail");
     expect(report.repairGuard.maxQcRoundsPassed).toBe(false);
-    expect(renderAgentQcPayloadCoverageMarkdown(report)).toContain("Repair Guard");
+    expect(renderAgentQcPayloadCoverageMarkdown(report)).toContain(
+      "Repair Guard",
+    );
   });
 });

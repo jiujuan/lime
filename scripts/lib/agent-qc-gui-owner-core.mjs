@@ -13,7 +13,9 @@ function normalizeScenarioId(value) {
 function collectGuiScenarioIds(manifest) {
   return asArray(manifest?.scenarios)
     .filter((scenario) =>
-      asArray(scenario?.evidenceRequired).includes("GUI session owner / isolation statement"),
+      asArray(scenario?.evidenceRequired).includes(
+        "GUI session owner / isolation statement",
+      ),
     )
     .map((scenario) => normalizeScenarioId(scenario?.id))
     .filter(Boolean);
@@ -22,7 +24,9 @@ function collectGuiScenarioIds(manifest) {
 function summarizeActiveGuiItems(status, guiScenarioIds) {
   const guiScenarioIdSet = new Set(guiScenarioIds);
   return asArray(status?.items)
-    .filter((item) => guiScenarioIdSet.has(normalizeScenarioId(item?.scenarioId)))
+    .filter((item) =>
+      guiScenarioIdSet.has(normalizeScenarioId(item?.scenarioId)),
+    )
     .filter((item) => item?.terminal !== true)
     .filter((item) => !isUnstartedPendingItem(item))
     .map((item) => ({
@@ -96,15 +100,19 @@ function createAgentQcGuiOwnerReport({
       continue;
     }
 
-    const existingStaleCount = existing.activeItems.filter((item) => item.stale).length;
-    const ownerStaleCount = owner.activeItems.filter((item) => item.stale).length;
+    const existingStaleCount = existing.activeItems.filter(
+      (item) => item.stale,
+    ).length;
+    const ownerStaleCount = owner.activeItems.filter(
+      (item) => item.stale,
+    ).length;
     if (ownerStaleCount > existingStaleCount) {
       activeOwnerByJobId.set(jobId, owner);
     }
   }
 
-  const activeOwners = Array.from(activeOwnerByJobId.values()).sort((left, right) =>
-    left.jobId.localeCompare(right.jobId),
+  const activeOwners = Array.from(activeOwnerByJobId.values()).sort(
+    (left, right) => left.jobId.localeCompare(right.jobId),
   );
   const ownerCount = activeOwners.length;
   const staleOwners = activeOwners.filter((owner) =>
@@ -197,7 +205,9 @@ function isTerminalJobStatus(status) {
 }
 
 function selectRepresentativeSidecar(sidecars) {
-  const terminal = asArray(sidecars).find((sidecar) => isTerminalJobStatus(sidecar?.status || sidecar));
+  const terminal = asArray(sidecars).find((sidecar) =>
+    isTerminalJobStatus(sidecar?.status || sidecar),
+  );
   if (terminal) {
     return terminal;
   }
@@ -232,7 +242,9 @@ function selectRepresentativeSidecar(sidecars) {
     if (candidateRunning < selectedRunning) {
       return selected;
     }
-    return generatedAtMs(candidateStatus) > generatedAtMs(selectedStatus) ? candidate : selected;
+    return generatedAtMs(candidateStatus) > generatedAtMs(selectedStatus)
+      ? candidate
+      : selected;
   }, null);
 }
 
@@ -260,11 +272,14 @@ function renderAgentQcGuiOwnerSummary(report) {
   ];
   for (const owner of report.activeOwners) {
     const items = owner.activeItems
-      .map((item) =>
-        `${item.scenarioId}:${item.qcloopStatus}${item.stale ? `:stale=${item.staleSeconds ?? 0}s` : ""}`,
+      .map(
+        (item) =>
+          `${item.scenarioId}:${item.qcloopStatus}${item.stale ? `:stale=${item.staleSeconds ?? 0}s` : ""}`,
       )
       .join(",");
-    lines.push(`owner=${owner.jobId} jobStatus=${owner.jobStatus} verdict=${owner.verdictStatus} path=${owner.path} items=${items}`);
+    lines.push(
+      `owner=${owner.jobId} jobStatus=${owner.jobStatus} verdict=${owner.verdictStatus} path=${owner.path} items=${items}`,
+    );
   }
   return `${lines.join("\n")}\n`;
 }

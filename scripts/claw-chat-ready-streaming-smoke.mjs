@@ -6,6 +6,10 @@ import path from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
 import {
+  REQUIRED_LIVE_WEB_TOOL_NAMES,
+  liveWebToolEvidenceFromSession,
+} from "./lib/claw-chat-live-web-tool-evidence.mjs";
+import {
   assertLiveProviderSmokeAllowed,
   liveProviderSmokeAllowed,
 } from "./lib/live-provider-smoke-gate.mjs";
@@ -48,6 +52,12 @@ const LONG_PROMPT = [
 ].join("\n");
 const RECOVERY_EXPECTED_TEXT = "复原完成";
 const RECOVERY_PROMPT = `停止后恢复测试：这是一个新的独立回合，请忽略上一条输出 ${LONG_TURN_LINE_COUNT} 行的要求。只输出“复原完成”这四个字，不要输出行号、解释或其他内容。`;
+const LIVE_WEB_TOOL_PROMPT = [
+  "联网工具验证：请使用 WebSearch 查询今天 AI 行业的一条公开新闻。",
+  "然后从搜索结果中选择一个公开来源 URL，继续使用 WebFetch 打开该来源页面。",
+  "最后用两句话回答来源标题、URL 和你从页面中确认到的一点事实。",
+  "如果 WebSearch 或 WebFetch 不可用，请明确说明不可用；不要用训练记忆替代工具调用。",
+].join("\n");
 const MODEL_AVAILABILITY_PROMPT = "请只回复 QC_OK。";
 const MAX_MODEL_AVAILABILITY_CANDIDATES = 12;
 const FAST_RESPONSE_MODE_STORAGE_KEY = "lime:agent-fast-response-mode";
@@ -681,6 +691,12 @@ function appServerSessionDetailFromRead(readResult) {
 
 function appServerThreadReadFromSessionRead(readResult) {
   const detail = appServerSessionDetailFromRead(readResult);
+  const currentThreadRead =
+    detail.thread_read && typeof detail.thread_read === "object"
+      ? detail.thread_read
+      : detail.threadRead && typeof detail.threadRead === "object"
+        ? detail.threadRead
+        : {};
   const turns = Array.isArray(detail.turns) ? detail.turns : [];
   const activeTurn =
     turns.find((turn) =>
@@ -695,22 +711,31 @@ function appServerThreadReadFromSessionRead(readResult) {
   const latestTurn = turns.at(-1) || null;
   const latestTurnStatus = latestTurn?.status || null;
   return {
+    ...currentThreadRead,
     source: APP_SERVER_METHOD_AGENT_SESSION_READ,
     session_id: detail.session_id || "",
     active_turn_id: activeTurn?.id || null,
-    status: activeTurn ? "running" : "idle",
+    status: currentThreadRead.status || (activeTurn ? "running" : "idle"),
     queued_turns: Array.isArray(detail.queued_turns)
       ? detail.queued_turns
       : Array.isArray(detail.queuedTurns)
         ? detail.queuedTurns
         : [],
     diagnostics: {
+      ...(currentThreadRead.diagnostics || {}),
       latest_turn_status: latestTurnStatus,
     },
     runtime_summary: {
+      ...(currentThreadRead.runtime_summary ||
+        currentThreadRead.runtimeSummary ||
+        {}),
       latestTurnStatus,
     },
-    model_routing: detail.execution_runtime?.routing_decision || null,
+    model_routing:
+      currentThreadRead.model_routing ||
+      currentThreadRead.modelRouting ||
+      detail.execution_runtime?.routing_decision ||
+      null,
   };
 }
 
@@ -1627,6 +1652,17 @@ async function main() {
     verdict: "fail",
     appUrl: options.appUrl,
     bridge: health,
+    e2eBoundary: {
+      runner: "playwright-chromium",
+      browserAutomation: "chromium.launchPersistentContext",
+      currentBridge: "DevBridge transport=electron-host",
+      provenPath:
+        "Chromium GUI -> DevBridge -> Electron Desktop Host IPC -> App Server JSON-RPC -> RuntimeCore/backend",
+      electronHostTransportRequired: true,
+      electronRendererIpcE2e: false,
+      electronLaunch: false,
+      note: "该 smoke 证明浏览器 GUI 经 DevBridge(electron-host transport) 进入 Electron Desktop Host 和 App Server current 主链；它不是 Playwright _electron.launch() renderer IPC E2E。",
+    },
     workspaceId,
     providerPreference: preferredProvider,
     modelPreference: preferredModel,
@@ -1649,6 +1685,8 @@ async function main() {
   let submittedLongTurnId = "";
   let submittedFollowSessionId = "";
   let submittedFollowTurnId = "";
+  let submittedLiveWebSessionId = "";
+  let submittedLiveWebTurnId = "";
   const invokeEntryByRequest = new WeakMap();
 
   try {
@@ -2206,10 +2244,137 @@ async function main() {
       fullPage: true,
     });
 
+    logStage("submit-live-web-tools-turn");
+    const liveWebSubmitStart = invokes.length;
+    const liveTextarea = page
+      .locator('textarea[name="agent-chat-message"]')
+      .last();
+    await liveTextarea.waitFor({ state: "visible", timeout: 60_000 });
+    await page.waitForFunction(
+      () => {
+        const textareas = Array.from(
+          document.querySelectorAll('textarea[name="agent-chat-message"]'),
+        );
+        const textarea = textareas.at(-1);
+        return Boolean(textarea && !textarea.disabled);
+      },
+      null,
+      { timeout: 60_000 },
+    );
+    await liveTextarea.fill(LIVE_WEB_TOOL_PROMPT);
+    await clickLastEnabledButton(page, "发送");
+    const liveWebSubmit = await waitForCondition(
+      "等待 live WebSearch/WebFetch turn App Server submit",
+      () =>
+        findAppServerMethodRecord(
+          invokes.slice(liveWebSubmitStart),
+          APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+          (record) =>
+            appServerTurnInputText(record.params).includes("联网工具验证"),
+          { direction: "request" },
+        ),
+      30_000,
+      250,
+    );
+    const liveWebParams = liveWebSubmit.params || {};
+    const liveWebRequest = {
+      session_id: appServerParamSessionId(liveWebParams) || followSessionId,
+      turn_id: appServerParamTurnId(liveWebParams),
+      turn_config: legacyTurnConfigFromAppServerParams(liveWebParams),
+    };
+    const liveWebSessionId = String(liveWebRequest.session_id || "");
+    const liveWebTurnId = String(liveWebRequest.turn_id || "");
+    assert(liveWebSessionId, "live WebSearch/WebFetch turn 缺少 session_id");
+    assert(liveWebTurnId, "live WebSearch/WebFetch turn 缺少 turn_id");
+    submittedLiveWebSessionId = liveWebSessionId;
+    submittedLiveWebTurnId = liveWebTurnId;
+    summary.liveWebToolPrompt = LIVE_WEB_TOOL_PROMPT;
+    summary.liveWebSessionId = liveWebSessionId;
+    summary.liveWebTurnId = liveWebTurnId;
+    summary.liveWebSubmitAppServer =
+      appServerTurnEvidenceFromRecord(liveWebSubmit);
+    summary.liveWebSubmitTurnConfig = liveWebRequest.turn_config || null;
+
+    const liveWebCompleted = await waitForCondition(
+      "等待 live WebSearch/WebFetch turn 完成",
+      async () => {
+        const session = await readAppServerSession(
+          options,
+          liveWebSessionId,
+          20_000,
+        ).catch(() => null);
+        const turn = findTurn(session, liveWebTurnId);
+        if (!turn || !isTerminalTurnStatus(turn.status)) {
+          return null;
+        }
+        return {
+          turn,
+          session,
+          toolEvidence: liveWebToolEvidenceFromSession(session, {
+            turnId: liveWebTurnId,
+          }),
+        };
+      },
+      180_000,
+      1_000,
+    );
+    latestSession = liveWebCompleted.session || latestSession;
+    summary.liveWebTurn = liveWebCompleted.turn;
+    summary.liveWebTurnStatus = liveWebCompleted.turn?.status || null;
+    summary.liveWebToolEvidence = liveWebCompleted.toolEvidence;
+    if (!summary.liveWebToolEvidence?.allRequiredCompletedForTurn) {
+      const settledToolEvidence = await waitForCondition(
+        "等待 read model 出现 live WebSearch/WebFetch 工具事实",
+        async () => {
+          const session = await readAppServerSession(
+            options,
+            liveWebSessionId,
+            20_000,
+          ).catch(() => null);
+          const toolEvidence = liveWebToolEvidenceFromSession(session, {
+            turnId: liveWebTurnId,
+          });
+          summary.liveWebToolEvidenceWait = {
+            passed: false,
+            latest: toolEvidence,
+          };
+          return toolEvidence.allRequiredCompletedForTurn
+            ? { session, toolEvidence }
+            : null;
+        },
+        30_000,
+        1_000,
+      ).catch((toolEvidenceWaitError) => {
+        summary.liveWebToolEvidenceWait = {
+          passed: false,
+          error:
+            toolEvidenceWaitError instanceof Error
+              ? toolEvidenceWaitError.message
+              : String(toolEvidenceWaitError),
+          latest: summary.liveWebToolEvidenceWait?.latest || null,
+        };
+        return null;
+      });
+      if (settledToolEvidence) {
+        latestSession = settledToolEvidence.session || latestSession;
+        summary.liveWebToolEvidence = settledToolEvidence.toolEvidence;
+        summary.liveWebToolEvidenceWait = {
+          passed: true,
+          latest: settledToolEvidence.toolEvidence,
+        };
+      }
+    }
+    summary.steps.push("live-web-tools-final");
+    await page.screenshot({
+      path: path.join(evidenceDir, `${prefix}-05-live-web-tools-final.png`),
+      fullPage: true,
+    });
+
     logStage("collect-runtime-evidence");
+    const runtimeReadSessionId = summary.liveWebSessionId || followSessionId;
     const threadRead = await readAppServerThreadRead(
       options,
-      followSessionId,
+      runtimeReadSessionId,
       20_000,
     ).catch((error) => ({
       __error: error instanceof Error ? error.message : String(error),
@@ -2256,6 +2421,18 @@ async function main() {
       followRequest.turn_config?.model_preference === preferredModel ||
       latestRuntimeRouting?.selectedModel === preferredModel ||
       latestRuntimeRouting?.requestedModel === preferredModel;
+    const liveWebProviderPreferenceHonored =
+      liveWebRequest.turn_config?.provider_preference === preferredProvider ||
+      latestRuntimeRouting?.selectedProvider === preferredProvider ||
+      latestRuntimeRouting?.requestedProvider === preferredProvider;
+    const liveWebModelPreferenceHonored =
+      liveWebRequest.turn_config?.model_preference === preferredModel ||
+      latestRuntimeRouting?.selectedModel === preferredModel ||
+      latestRuntimeRouting?.requestedModel === preferredModel;
+    const liveWebFastResponseRoutingDisabled = Boolean(
+      liveWebRequest.turn_config &&
+      !liveWebRequest.turn_config?.metadata?.harness?.fast_response_routing,
+    );
     summary.followRoutingEvidence = {
       selectedProvider: latestRuntimeRouting?.selectedProvider || null,
       selectedModel: latestRuntimeRouting?.selectedModel || null,
@@ -2288,6 +2465,10 @@ async function main() {
     summary.devBridgeCommands = [...new Set(invokes.map((item) => item.cmd))];
     const appServerReadAfterEvent =
       appServerSessionReadAfterEventEvidence(invokes, {
+        sessionId: submittedLiveWebSessionId,
+        turnId: submittedLiveWebTurnId,
+      }) ||
+      appServerSessionReadAfterEventEvidence(invokes, {
         sessionId: followSessionId,
         turnId: followTurnId,
       }) ||
@@ -2297,6 +2478,10 @@ async function main() {
       });
     const appServerSessionReadTurn =
       appServerSessionReadTurnEvidence(invokes, {
+        sessionId: submittedLiveWebSessionId,
+        turnId: submittedLiveWebTurnId,
+      }) ||
+      appServerSessionReadTurnEvidence(invokes, {
         sessionId: followSessionId,
         turnId: followTurnId,
       }) ||
@@ -2305,6 +2490,10 @@ async function main() {
         turnId: longTurnId,
       });
     const currentStreamingEvent =
+      appServerCurrentEventEvidence(invokes, consoleMessages, {
+        sessionId: submittedLiveWebSessionId,
+        turnId: submittedLiveWebTurnId,
+      }) ||
       appServerCurrentEventEvidence(invokes, consoleMessages, {
         sessionId: followSessionId,
         turnId: followTurnId,
@@ -2320,12 +2509,12 @@ async function main() {
           ? "app-server-session-read-turn-completed-gui-stream-text"
           : "missing",
       assistantTextPersistedInRuntimeRead: summary.assistantContainsRecovery,
-      followTurnCompletedInRuntimeRead: summary.followTurnStatus === "completed",
+      followTurnCompletedInRuntimeRead:
+        summary.followTurnStatus === "completed",
       recoveryVisibleInGui: Boolean(recoverySnapshot?.recoveryVisible),
-      note:
-        summary.assistantContainsRecovery
-          ? "App Server read model 已包含恢复正文。"
-          : "当前 App Server read model 只返回 turns；恢复正文由 streaming event 渲染到 GUI，因此以 turn completed + GUI 可见证明恢复闭环。",
+      note: summary.assistantContainsRecovery
+        ? "App Server read model 已包含恢复正文。"
+        : "当前 App Server read model 只返回 turns；恢复正文由 streaming event 渲染到 GUI，因此以 turn completed + GUI 可见证明恢复闭环。",
     };
     summary.appServerMethods = [
       ...new Set(
@@ -2396,11 +2585,10 @@ async function main() {
         APP_SERVER_METHOD_AGENT_SESSION_READ,
         { direction: "request" },
       ),
-      appServerEventSeen: appServerMethodSeen(
-        invokes,
-        APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-        { direction: "response" },
-      ) || Boolean(currentStreamingEvent),
+      appServerEventSeen:
+        appServerMethodSeen(invokes, APP_SERVER_METHOD_AGENT_SESSION_EVENT, {
+          direction: "response",
+        }) || Boolean(currentStreamingEvent),
       appServerSessionReadAfterEventSeen: Boolean(
         appServerReadAfterEvent || appServerSessionReadTurn,
       ),
@@ -2420,9 +2608,29 @@ async function main() {
         longRequest.turn_config?.model_preference === preferredModel,
       followProviderPreferenceHonored,
       followModelPreferenceHonored,
+      liveWebProviderPreferenceHonored,
+      liveWebModelPreferenceHonored,
+      liveWebTurnCompleted: summary.liveWebTurnStatus === "completed",
+      liveWebSearchCompleted: Boolean(
+        summary.liveWebToolEvidence?.requiredForTurn?.find(
+          (item) => item.name === "WebSearch",
+        )?.completed,
+      ),
+      liveWebFetchCompleted: Boolean(
+        summary.liveWebToolEvidence?.requiredForTurn?.find(
+          (item) => item.name === "WebFetch",
+        )?.completed,
+      ),
+      liveWebRequiredToolsCompleted: Boolean(
+        summary.liveWebToolEvidence?.allRequiredCompletedForTurn,
+      ),
+      liveWebRequiredToolOutputsPresent: Boolean(
+        summary.liveWebToolEvidence?.allRequiredOutputPresentForTurn,
+      ),
       fastResponseRoutingDisabled:
         !longRequest.turn_config?.metadata?.harness?.fast_response_routing &&
         !followRequest.turn_config?.metadata?.harness?.fast_response_routing,
+      liveWebFastResponseRoutingDisabled,
       noRuntimeMockFallbackSeen: runtimeMockLines.length === 0,
       noBlockingConsoleErrors: blockingConsoleErrors.length === 0,
     };
@@ -2452,6 +2660,7 @@ async function main() {
         `${prefix}-02-running-stop-visible.png`,
         `${prefix}-03-after-stop.png`,
         `${prefix}-04-recovery-final.png`,
+        `${prefix}-05-live-web-tools-final.png`,
       ],
       console: `${prefix}-console.txt`,
       network: `${prefix}-network-invoke.json`,
@@ -2481,7 +2690,15 @@ async function main() {
       summary.assertions.longModelPreferenceHonored &&
       summary.assertions.followProviderPreferenceHonored &&
       summary.assertions.followModelPreferenceHonored &&
+      summary.assertions.liveWebProviderPreferenceHonored &&
+      summary.assertions.liveWebModelPreferenceHonored &&
+      summary.assertions.liveWebTurnCompleted &&
+      summary.assertions.liveWebSearchCompleted &&
+      summary.assertions.liveWebFetchCompleted &&
+      summary.assertions.liveWebRequiredToolsCompleted &&
+      summary.assertions.liveWebRequiredToolOutputsPresent &&
       summary.assertions.fastResponseRoutingDisabled &&
+      summary.assertions.liveWebFastResponseRoutingDisabled &&
       summary.assertions.noRuntimeMockFallbackSeen &&
       summary.assertions.noBlockingConsoleErrors &&
       summary.queueCountFinal === 0 &&
@@ -2592,9 +2809,34 @@ async function main() {
                 : String(interruptError),
           }));
       }
+      if (
+        submittedLiveWebSessionId &&
+        (submittedLiveWebSessionId !== submittedFollowSessionId ||
+          submittedLiveWebTurnId !== submittedFollowTurnId)
+      ) {
+        summary.failureCleanupLiveWebInterrupt = await cancelAppServerTurn(
+          options,
+          submittedLiveWebSessionId,
+          submittedLiveWebTurnId,
+          20_000,
+        )
+          .then(() => ({ attempted: true, status: "sent" }))
+          .catch((interruptError) => ({
+            attempted: true,
+            status: "failed",
+            error:
+              interruptError instanceof Error
+                ? interruptError.message
+                : String(interruptError),
+          }));
+      }
+      const failureSessionId =
+        submittedLiveWebSessionId ||
+        submittedFollowSessionId ||
+        submittedSessionId;
       const failureSession = await readAppServerSession(
         options,
-        submittedFollowSessionId || submittedSessionId,
+        failureSessionId,
         20_000,
       ).catch((sessionError) => ({
         __error:
@@ -2604,7 +2846,7 @@ async function main() {
       }));
       const failureThreadRead = await readAppServerThreadRead(
         options,
-        submittedFollowSessionId || submittedSessionId,
+        failureSessionId,
         20_000,
       ).catch((threadError) => ({
         __error:
@@ -2621,7 +2863,7 @@ async function main() {
         failureThreadRead,
       );
       summary.failureRuntime = {
-        sessionId: submittedSessionId,
+        sessionId: failureSessionId,
         sessionError: failureSession?.__error || null,
         threadReadError: failureThreadRead?.__error || null,
         turns: Array.isArray(failureSession?.turns)

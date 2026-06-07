@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import styled from "styled-components";
 import { Bell, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -8,6 +8,7 @@ import {
   isUpdateInstallSessionActive,
   listenUpdateInstallSession,
   openUpdateWindow,
+  type UpdateNotificationAnchorRect,
   type UpdateInstallSession,
   type VersionInfo,
 } from "@/lib/api/appUpdate";
@@ -23,6 +24,26 @@ function shouldShowInstallSession(
   return Boolean(
     session && session.stage !== "idle" && session.stage !== "up_to_date",
   );
+}
+
+function readUpdateNotificationAnchorRect(
+  element: HTMLElement | null,
+): UpdateNotificationAnchorRect | null {
+  if (!element) {
+    return null;
+  }
+
+  const rect = element.getBoundingClientRect();
+  if (!rect.width || !rect.height) {
+    return null;
+  }
+
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  };
 }
 
 const EntryRoot = styled.div<{ $collapsed?: boolean }>`
@@ -148,14 +169,19 @@ export function AppUpdateEntry({
   const shouldShowEntry = updateAvailable || sessionVisible;
   const openLabel = t("navigation.sidebar.update.open");
 
-  const handleOpenUpdateWindow = useCallback(async () => {
-    onOpenPanel?.();
-    try {
-      await openUpdateWindow();
-    } catch (error) {
-      console.error("打开更新窗口失败:", error);
-    }
-  }, [onOpenPanel]);
+  const handleOpenUpdateWindow = useCallback(
+    async (event: MouseEvent<HTMLButtonElement>) => {
+      const anchorRect = readUpdateNotificationAnchorRect(event.currentTarget);
+
+      onOpenPanel?.();
+      try {
+        await openUpdateWindow(anchorRect);
+      } catch (error) {
+        console.error("打开更新窗口失败:", error);
+      }
+    },
+    [onOpenPanel],
+  );
 
   if (!shouldShowEntry) {
     return null;
@@ -173,6 +199,7 @@ export function AppUpdateEntry({
         title={openLabel}
         aria-label={openLabel}
         data-testid="app-sidebar-update-button"
+        data-update-notification-anchor="true"
         onClick={handleOpenUpdateWindow}
       >
         {installActive ? <SpinningIcon /> : <Bell />}

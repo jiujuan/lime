@@ -52,12 +52,32 @@ describe("AppSidebar preferences", () => {
       container.querySelector('[data-testid="app-sidebar-update-panel"]'),
     ).toBeNull();
 
+    updateButton!.getBoundingClientRect = vi.fn(
+      () =>
+        ({
+          x: 18,
+          y: 816,
+          width: 30,
+          height: 30,
+          top: 816,
+          right: 48,
+          bottom: 846,
+          left: 18,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    );
+
     await act(async () => {
       updateButton?.click();
       await Promise.resolve();
     });
 
-    expect(mockOpenUpdateWindow).toHaveBeenCalledTimes(1);
+    expect(mockOpenUpdateWindow).toHaveBeenCalledWith({
+      x: 18,
+      y: 816,
+      width: 30,
+      height: 30,
+    });
     expect(
       container.querySelector('[data-testid="app-sidebar-update-panel"]'),
     ).toBeNull();

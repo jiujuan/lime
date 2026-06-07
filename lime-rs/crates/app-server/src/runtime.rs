@@ -9,6 +9,7 @@ use app_server_protocol::AgentAppUiRuntimeStatusParams;
 use app_server_protocol::AgentAppUiRuntimeStatusResponse;
 use app_server_protocol::AgentAppUiRuntimeStopParams;
 use app_server_protocol::AgentEvent;
+use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionRespondParams;
 use app_server_protocol::AgentSessionActionRespondResponse;
@@ -793,6 +794,7 @@ struct RuntimeCoreState {
 struct StoredSession {
     session: AgentSession,
     turns: Vec<AgentTurn>,
+    turn_inputs: HashMap<String, AgentInput>,
     events: Vec<AgentEvent>,
 }
 
@@ -861,7 +863,7 @@ fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
                     metadata_string(reference.metadata.as_ref(), "execution_strategy")
                 })
             }),
-        messages_count: stored.turns.len(),
+        messages_count: runtime_session_messages(stored).len(),
     }
 }
 
@@ -1230,6 +1232,7 @@ impl RuntimeCore {
             StoredSession {
                 session: session.clone(),
                 turns: Vec::new(),
+                turn_inputs: HashMap::new(),
                 events: Vec::new(),
             },
         );
@@ -1843,6 +1846,9 @@ impl RuntimeCore {
 
             stored.session.status = AgentSessionStatus::Running;
             stored.session.updated_at = timestamp();
+            stored
+                .turn_inputs
+                .insert(turn.turn_id.clone(), params.input.clone());
             stored.turns.push(turn.clone());
 
             (stored.session.clone(), previous_session, turn)
@@ -1906,7 +1912,21 @@ impl RuntimeCore {
             let mut sink = CollectingRuntimeEventSink::default();
             let backend_result = self.backend.start_turn(request, &mut sink).await;
             if let Err(error) = backend_result {
-                self.rollback_started_turn(&session.session_id, &turn.turn_id, previous_session);
+                if sink.emitted_count() == 0 {
+                    self.rollback_started_turn(
+                        &session.session_id,
+                        &turn.turn_id,
+                        previous_session,
+                    );
+                } else {
+                    sink.emit_failure(&error)?;
+                    self.append_runtime_events(
+                        &session.session_id,
+                        &session.thread_id,
+                        Some(&turn.turn_id),
+                        sink.into_events(),
+                    )?;
+                }
                 return Err(error);
             }
             self.append_runtime_events(
@@ -1967,6 +1987,7 @@ impl RuntimeCore {
         state.sessions.entry(session_id).or_insert(StoredSession {
             session: response.session,
             turns: response.turns,
+            turn_inputs: HashMap::new(),
             events: Vec::new(),
         });
     }
@@ -2030,42 +2051,34 @@ impl RuntimeCore {
             (stored.session.clone(), turn.clone())
         };
 
-        let mut sink = CollectingRuntimeEventSink::default();
-        self.backend
-            .cancel_turn(
-                CancelExecutionRequest {
-                    host,
-                    session: session.clone(),
-                    turn: turn_snapshot.clone(),
-                },
-                &mut sink,
-            )
-            .await?;
         let events = self.append_runtime_events(
             &session.session_id,
             &session.thread_id,
             Some(&turn_snapshot.turn_id),
-            sink.into_events(),
+            vec![RuntimeEvent::new(
+                "turn.canceled",
+                json!({
+                    "source": "agentSession/turn/cancel",
+                    "backend": "runtime_core",
+                }),
+            )],
         )?;
 
-        {
-            let mut state = self
-                .state
-                .lock()
-                .expect("runtime core state mutex poisoned");
-            let stored = state
-                .sessions
-                .get_mut(&params.session_id)
-                .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
-            let turn = stored
-                .turns
-                .iter_mut()
-                .find(|turn| turn.turn_id == params.turn_id)
-                .ok_or_else(|| RuntimeCoreError::TurnNotActive(params.turn_id.clone()))?;
-            turn.status = AgentTurnStatus::Canceled;
-            turn.completed_at = Some(timestamp());
-            stored.session.status = AgentSessionStatus::Canceled;
-            stored.session.updated_at = timestamp();
+        if agent_turn_is_active(turn_snapshot.status) {
+            let backend = self.backend.clone();
+            tokio::spawn(async move {
+                let mut sink = CollectingRuntimeEventSink::default();
+                let _ = backend
+                    .cancel_turn(
+                        CancelExecutionRequest {
+                            host,
+                            session,
+                            turn: turn_snapshot,
+                        },
+                        &mut sink,
+                    )
+                    .await;
+            });
         }
 
         Ok(RuntimeCoreOutput {
@@ -2293,6 +2306,9 @@ fn append_runtime_events_to_state(
         .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
     let mut events = Vec::with_capacity(runtime_events.len());
     for runtime_event in runtime_events {
+        if should_ignore_runtime_event_for_terminal_turn(stored, turn_id) {
+            continue;
+        }
         apply_runtime_event_state_transition(stored, turn_id, &runtime_event);
         let event = AgentEvent {
             event_id: new_id("evt"),
@@ -2308,6 +2324,20 @@ fn append_runtime_events_to_state(
         events.push(event);
     }
     Ok(events)
+}
+
+fn should_ignore_runtime_event_for_terminal_turn(
+    stored: &StoredSession,
+    turn_id: Option<&str>,
+) -> bool {
+    let Some(turn_id) = turn_id else {
+        return false;
+    };
+    stored
+        .turns
+        .iter()
+        .find(|turn| turn.turn_id == turn_id)
+        .is_some_and(|turn| agent_turn_is_terminal(turn.status))
 }
 
 fn apply_runtime_event_state_transition(
@@ -2368,8 +2398,21 @@ struct CollectingRuntimeEventSink {
 }
 
 impl CollectingRuntimeEventSink {
+    fn emitted_count(&self) -> usize {
+        self.events.len()
+    }
+
     fn into_events(self) -> Vec<RuntimeEvent> {
         self.events
+    }
+
+    fn emit_failure(&mut self, error: &RuntimeCoreError) -> Result<(), RuntimeCoreError> {
+        self.emit(RuntimeEvent::new(
+            "turn.failed",
+            json!({
+                "message": error.to_string(),
+            }),
+        ))
     }
 }
 
@@ -2601,6 +2644,9 @@ fn artifact_summary_from_event(event: &AgentEvent) -> Option<ArtifactSummary> {
 
 fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value {
     let thread_read = runtime_thread_read_from_stored_session(stored);
+    let messages = runtime_session_messages(stored);
+    let items = runtime_error_items_from_events(stored);
+    let messages_count = messages.len();
     json!({
         "id": stored.session.session_id,
         "session_id": stored.session.session_id,
@@ -2608,12 +2654,161 @@ fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value {
         "workspace_id": stored.session.workspace_id,
         "status": agent_session_status_label(stored.session.status),
         "execution_strategy": session_execution_strategy(&stored.session),
+        "messages_count": messages_count,
+        "history_limit": messages_count,
+        "history_offset": 0,
+        "history_cursor": {
+            "oldest_message_id": null,
+            "start_index": 0,
+            "loaded_count": messages_count,
+        },
+        "history_truncated": false,
+        "messages": messages,
         "turns": stored.turns,
-        "items": [],
+        "items": items,
         "queued_turns": [],
         "artifacts": artifact_summaries_for_turn(&stored.events, None),
         "thread_read": thread_read,
     })
+}
+
+fn runtime_session_messages(stored: &StoredSession) -> Vec<serde_json::Value> {
+    let mut messages = Vec::new();
+    for turn in &stored.turns {
+        if let Some(input) = stored.turn_inputs.get(&turn.turn_id) {
+            if let Some(message) = runtime_user_message_from_turn(turn, input) {
+                messages.push(message);
+            }
+        }
+        if let Some(message) = runtime_assistant_message_from_events(turn, &stored.events) {
+            messages.push(message);
+        }
+    }
+    messages
+}
+
+fn runtime_user_message_from_turn(
+    turn: &AgentTurn,
+    input: &AgentInput,
+) -> Option<serde_json::Value> {
+    let text = input.text.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    Some(json!({
+        "id": format!("{}:user", turn.turn_id),
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": text,
+            }
+        ],
+        "timestamp": timestamp_seconds(turn.started_at.as_deref()),
+    }))
+}
+
+fn runtime_assistant_message_from_events(
+    turn: &AgentTurn,
+    events: &[AgentEvent],
+) -> Option<serde_json::Value> {
+    let mut text = String::new();
+    let mut timestamp_value: Option<&str> = None;
+    for event in events.iter().filter(|event| {
+        event.turn_id.as_deref() == Some(turn.turn_id.as_str())
+            && event.event_type == "message.delta"
+    }) {
+        if let Some(delta) = raw_string_field(
+            &event.payload,
+            &[
+                "text",
+                "delta",
+                "content",
+                "message",
+                "outputText",
+                "output_text",
+            ],
+        ) {
+            text.push_str(&delta);
+            timestamp_value = Some(event.timestamp.as_str());
+        }
+    }
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    Some(json!({
+        "id": format!("{}:assistant", turn.turn_id),
+        "role": "assistant",
+        "content": [
+            {
+                "type": "text",
+                "text": text,
+            }
+        ],
+        "timestamp": timestamp_seconds(timestamp_value.or(turn.completed_at.as_deref())),
+    }))
+}
+
+fn runtime_error_items_from_events(stored: &StoredSession) -> Vec<serde_json::Value> {
+    stored
+        .events
+        .iter()
+        .filter(|event| matches!(event.event_type.as_str(), "turn.failed" | "runtime.error"))
+        .filter_map(|event| {
+            let message = runtime_error_message_from_event(event)?;
+            let turn_id = event
+                .turn_id
+                .clone()
+                .or_else(|| stored.turns.last().map(|turn| turn.turn_id.clone()))?;
+            Some(json!({
+                "id": format!("{}:error:{}", turn_id, event.event_id),
+                "thread_id": event.thread_id.clone().unwrap_or_else(|| stored.session.thread_id.clone()),
+                "turn_id": turn_id,
+                "sequence": event.sequence,
+                "type": "error",
+                "status": "failed",
+                "message": message,
+                "started_at": event.timestamp,
+                "completed_at": event.timestamp,
+                "updated_at": event.timestamp,
+            }))
+        })
+        .collect()
+}
+
+fn runtime_error_message_from_event(event: &AgentEvent) -> Option<String> {
+    if !matches!(event.event_type.as_str(), "turn.failed" | "runtime.error") {
+        return None;
+    }
+    raw_string_field(
+        &event.payload,
+        &[
+            "message",
+            "error",
+            "reason",
+            "detail",
+            "details",
+            "error_message",
+            "errorMessage",
+        ],
+    )
+    .map(|message| message.trim().to_string())
+    .filter(|message| !message.is_empty())
+}
+
+fn latest_turn_error_message(stored: &StoredSession, turn_id: Option<&str>) -> Option<String> {
+    stored
+        .events
+        .iter()
+        .rev()
+        .filter(|event| match turn_id {
+            Some(turn_id) => event.turn_id.as_deref() == Some(turn_id),
+            None => true,
+        })
+        .find_map(runtime_error_message_from_event)
 }
 
 fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json::Value {
@@ -2621,6 +2816,8 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
         .turns
         .last()
         .map(|turn| agent_turn_status_label(turn.status));
+    let latest_turn_id = stored.turns.last().map(|turn| turn.turn_id.as_str());
+    let latest_turn_error_message = latest_turn_error_message(stored, latest_turn_id);
     let active_turn_id = stored
         .turns
         .iter()
@@ -2643,9 +2840,11 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
         "artifacts": artifact_summaries_for_turn(&stored.events, None),
         "diagnostics": {
             "latest_turn_status": latest_turn_status,
+            "latest_turn_error_message": latest_turn_error_message,
         },
         "runtime_summary": {
             "latestTurnStatus": latest_turn_status,
+            "latestTurnErrorMessage": latest_turn_error_message,
         },
     })
 }
@@ -2760,6 +2959,13 @@ fn agent_turn_is_active(status: AgentTurnStatus) -> bool {
     )
 }
 
+fn agent_turn_is_terminal(status: AgentTurnStatus) -> bool {
+    matches!(
+        status,
+        AgentTurnStatus::Completed | AgentTurnStatus::Failed | AgentTurnStatus::Canceled
+    )
+}
+
 fn agent_session_status_label(status: AgentSessionStatus) -> &'static str {
     match status {
         AgentSessionStatus::Idle => "idle",
@@ -2795,6 +3001,14 @@ fn string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
         .filter_map(|key| value.get(*key))
         .find_map(|value| value.as_str())
         .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn raw_string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(|value| value.as_str())
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
 }
@@ -2845,6 +3059,13 @@ fn is_safe_relative_path(path: &Path) -> bool {
 
 fn timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
+fn timestamp_seconds(value: Option<&str>) -> i64 {
+    value
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.timestamp())
+        .unwrap_or_else(|| Utc::now().timestamp())
 }
 
 impl RuntimeCore {
@@ -3328,6 +3549,7 @@ mod tests {
     use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
+    use tokio::time::timeout;
 
     struct FinalDoneBackend;
 
@@ -3409,6 +3631,71 @@ mod tests {
             _request: CancelExecutionRequest,
             _sink: &mut dyn RuntimeEventSink,
         ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: ActionRespondRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+    }
+
+    struct PartialFailureBackend;
+
+    #[async_trait]
+    impl ExecutionBackend for PartialFailureBackend {
+        async fn start_turn(
+            &self,
+            _request: ExecutionRequest,
+            sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+            Err(RuntimeCoreError::Backend(
+                "provider stream timed out after 60s".to_string(),
+            ))
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: CancelExecutionRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: ActionRespondRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+    }
+
+    struct HangingCancelBackend {
+        cancel_count: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl ExecutionBackend for HangingCancelBackend {
+        async fn start_turn(
+            &self,
+            _request: ExecutionRequest,
+            sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            sink.emit(RuntimeEvent::new("turn.started", json!({})))
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: CancelExecutionRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            self.cancel_count.fetch_add(1, Ordering::SeqCst);
+            std::future::pending::<()>().await;
             Ok(())
         }
 
@@ -3888,6 +4175,147 @@ mod tests {
         assert_eq!(
             error.into_jsonrpc_error().code,
             error_codes::SESSION_NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn read_session_projects_runtime_turns_into_gui_messages() {
+        let core = RuntimeCore::with_backend(Arc::new(FinalDoneBackend));
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_messages".to_string()),
+            thread_id: Some("thread_messages".to_string()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: "sess_messages".to_string(),
+                title: Some("Messages Read".to_string()),
+                uri: None,
+                metadata: None,
+            }),
+            locale: None,
+        })
+        .expect("session");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_messages".to_string(),
+                turn_id: Some("turn_messages".to_string()),
+                input: AgentInput {
+                    text: "你好，帮我整理今天的计划".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+
+        let read = core
+            .read_session(AgentSessionReadParams {
+                session_id: "sess_messages".to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("read session");
+        let detail = read.detail.expect("session detail");
+        let messages = detail["messages"].as_array().expect("messages");
+
+        assert_eq!(detail["messages_count"], 2);
+        assert_eq!(detail["history_cursor"]["loaded_count"], 2);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0]["id"], "turn_messages:user");
+        assert_eq!(messages[0]["role"], "user");
+        assert_eq!(
+            messages[0]["content"][0]["text"],
+            "你好，帮我整理今天的计划"
+        );
+        assert_eq!(messages[1]["id"], "turn_messages:assistant");
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(
+            messages[1]["content"][0]["text"],
+            "你好！有什么可以帮你的吗？"
+        );
+    }
+
+    #[tokio::test]
+    async fn read_session_projects_failed_runtime_event_into_diagnostics_and_error_item() {
+        let core = RuntimeCore::with_backend(Arc::new(PartialFailureBackend));
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_failed_read".to_string()),
+            thread_id: Some("thread_failed_read".to_string()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: "sess_failed_read".to_string(),
+                title: Some("Failed Read".to_string()),
+                uri: None,
+                metadata: None,
+            }),
+            locale: None,
+        })
+        .expect("session");
+
+        let error = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: "sess_failed_read".to_string(),
+                    turn_id: Some("turn_failed_read".to_string()),
+                    input: AgentInput {
+                        text: "整理今天的国际新闻".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect_err("backend failure should propagate");
+        let expected_error_message = error.to_string();
+        assert!(expected_error_message.contains("provider stream timed out"));
+
+        let read = core
+            .read_session(AgentSessionReadParams {
+                session_id: "sess_failed_read".to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("read failed session");
+        let detail = read.detail.expect("session detail");
+
+        assert_eq!(
+            detail["thread_read"]["diagnostics"]["latest_turn_status"],
+            "failed"
+        );
+        assert_eq!(
+            detail["thread_read"]["diagnostics"]["latest_turn_error_message"].as_str(),
+            Some(expected_error_message.as_str())
+        );
+        assert_eq!(
+            detail["thread_read"]["runtime_summary"]["latestTurnErrorMessage"].as_str(),
+            Some(expected_error_message.as_str())
+        );
+
+        let messages = detail["messages"].as_array().expect("messages");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0]["role"], "user");
+        assert_eq!(messages[0]["content"][0]["text"], "整理今天的国际新闻");
+
+        let items = detail["items"].as_array().expect("items");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["type"], "error");
+        assert_eq!(items[0]["status"], "failed");
+        assert_eq!(
+            items[0]["message"].as_str(),
+            Some(expected_error_message.as_str())
         );
     }
 
@@ -5019,6 +5447,147 @@ mod tests {
         assert_eq!(read.turns.len(), 1);
         assert_eq!(read.turns[0].status, AgentTurnStatus::Completed);
         assert!(read.turns[0].completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn cancel_turn_returns_canceled_without_waiting_for_backend_cancel() {
+        let backend = Arc::new(HangingCancelBackend {
+            cancel_count: AtomicUsize::new(0),
+        });
+        let core = RuntimeCore::with_backend(backend.clone());
+        let session = core
+            .start_session(AgentSessionStartParams {
+                session_id: Some("sess_cancel_fast".to_string()),
+                thread_id: Some("thread_cancel_fast".to_string()),
+                app_id: "content-studio".to_string(),
+                workspace_id: Some("default".to_string()),
+                business_object_ref: None,
+                locale: None,
+            })
+            .expect("session")
+            .session;
+        let turn = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: session.session_id.clone(),
+                    turn_id: Some("turn_cancel_fast".to_string()),
+                    input: AgentInput {
+                        text: "please keep running".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("turn")
+            .response
+            .turn;
+        assert_eq!(turn.status, AgentTurnStatus::Running);
+
+        let output = timeout(
+            Duration::from_millis(100),
+            core.cancel_turn(
+                AgentSessionTurnCancelParams {
+                    session_id: session.session_id.clone(),
+                    turn_id: turn.turn_id.clone(),
+                },
+                RuntimeHostContext::default(),
+            ),
+        )
+        .await
+        .expect("cancel should not wait for backend")
+        .expect("cancel");
+
+        assert_eq!(output.events.len(), 1);
+        assert_eq!(output.events[0].event_type, "turn.canceled");
+
+        let read = core
+            .read_session(AgentSessionReadParams {
+                session_id: session.session_id,
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("read session");
+        assert_eq!(read.session.status, AgentSessionStatus::Canceled);
+        assert_eq!(read.turns[0].status, AgentTurnStatus::Canceled);
+        assert!(read.turns[0].completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn canceled_turn_ignores_late_runtime_events() {
+        let core = RuntimeCore::with_backend(Arc::new(HangingCancelBackend {
+            cancel_count: AtomicUsize::new(0),
+        }));
+        let session = core
+            .start_session(AgentSessionStartParams {
+                session_id: Some("sess_cancel_late".to_string()),
+                thread_id: Some("thread_cancel_late".to_string()),
+                app_id: "content-studio".to_string(),
+                workspace_id: Some("default".to_string()),
+                business_object_ref: None,
+                locale: None,
+            })
+            .expect("session")
+            .session;
+        let turn = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: session.session_id.clone(),
+                    turn_id: Some("turn_cancel_late".to_string()),
+                    input: AgentInput {
+                        text: "please keep running".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("turn")
+            .response
+            .turn;
+        core.cancel_turn(
+            AgentSessionTurnCancelParams {
+                session_id: session.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("cancel");
+
+        let late_events = core
+            .append_external_runtime_events(
+                &session.session_id,
+                Some(&turn.turn_id),
+                vec![
+                    RuntimeEvent::new("message.delta", json!({ "text": "late reply" })),
+                    RuntimeEvent::new("turn.final_done", json!({})),
+                ],
+            )
+            .expect("append late events");
+
+        assert!(late_events.is_empty());
+        let read = core
+            .read_session(AgentSessionReadParams {
+                session_id: session.session_id,
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .expect("read session");
+        assert_eq!(read.session.status, AgentSessionStatus::Canceled);
+        assert_eq!(read.turns[0].status, AgentTurnStatus::Canceled);
+        assert_eq!(
+            read.detail.unwrap()["messages"].as_array().unwrap().len(),
+            1
+        );
     }
 
     #[tokio::test]

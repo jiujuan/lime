@@ -8,16 +8,12 @@ import {
   type AppServerSessionClient,
   type AppServerSessionRpcClient,
 } from "./appServerSessionClient";
-import { AGENT_RUNTIME_COMMANDS } from "./commandManifest.generated";
 import {
   normalizeSubagentParentContext,
   normalizeSubagentSessionInfo,
   normalizeThreadReadModel,
 } from "./normalizers";
-import {
-  invokeAgentRuntimeCommand,
-  type AgentRuntimeCommandInvoke,
-} from "./transport";
+import type { AgentRuntimeCommandInvoke } from "./transport";
 import type {
   AsterExecutionStrategy,
   AsterSessionDetail,
@@ -53,7 +49,6 @@ export interface AgentRuntimeSessionClientDeps {
 export function createSessionClient({
   appServerClient,
   appServerSessionClient = createAppServerSessionClient({ appServerClient }),
-  invokeCommand = invokeAgentRuntimeCommand,
 }: AgentRuntimeSessionClientDeps = {}) {
   async function createAgentRuntimeSession(
     workspaceId: string,
@@ -339,8 +334,9 @@ export function createSessionClient({
   }
 
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
-    return await invokeCommand<void>(AGENT_RUNTIME_COMMANDS.deleteSession, {
-      sessionId,
+    return await updateAgentRuntimeSession({
+      session_id: sessionId,
+      archived: true,
     });
   }
 

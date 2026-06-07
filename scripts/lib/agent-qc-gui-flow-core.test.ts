@@ -32,7 +32,10 @@ const flowManifest = {
 
 describe("agent-qc-gui-flow-core", () => {
   it("应接受引用现有 scenario 的 GUI flow manifest", () => {
-    const result = validateAgentQcGuiFlowManifest(flowManifest, scenarioManifest);
+    const result = validateAgentQcGuiFlowManifest(
+      flowManifest,
+      scenarioManifest,
+    );
 
     expect(result.valid).toBe(true);
     expect(result.issues).toEqual([]);
@@ -51,7 +54,10 @@ describe("agent-qc-gui-flow-core", () => {
   });
 
   it("应汇总 flow 数、步骤数和证据数", () => {
-    const report = createAgentQcGuiFlowReport({ flowManifest, scenarioManifest });
+    const report = createAgentQcGuiFlowReport({
+      flowManifest,
+      scenarioManifest,
+    });
 
     expect(report.valid).toBe(true);
     expect(report.flowCount).toBe(1);
@@ -60,7 +66,10 @@ describe("agent-qc-gui-flow-core", () => {
   });
 
   it("应渲染 Markdown 报告", () => {
-    const report = createAgentQcGuiFlowReport({ flowManifest, scenarioManifest });
+    const report = createAgentQcGuiFlowReport({
+      flowManifest,
+      scenarioManifest,
+    });
     const markdown = renderAgentQcGuiFlowMarkdown(report);
 
     expect(markdown).toContain("GUI Flow Manifest");

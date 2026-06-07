@@ -80,11 +80,11 @@ jobs:
           npm run electron:build
           npx electron-forge make --platform win32 --arch x64 --targets squirrel
           VERSION="$(node -p "require('./package.json').version")"
-          node scripts/verify-electron-package-resources.mjs \
+          node scripts/electron/verify-package-resources.mjs \
             --package-root release-electron \
             --platform win32 \
             --arch x64
-          node scripts/stage-electron-release-assets.mjs \
+          node scripts/electron/stage-release-assets.mjs \
             --forge-dir release-electron \
             --out-dir windows-test-package \
             --target-triple x86_64-pc-windows-msvc \

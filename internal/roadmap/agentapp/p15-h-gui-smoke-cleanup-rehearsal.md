@@ -18,7 +18,7 @@ P15 已经串起 `source → install review → verify/cache → installed state
 
 | 项 | 状态 | 证据 |
 |---|---|---|
-| Lab GUI smoke 脚本 | 已落地 | `scripts/agent-app-lab-smoke.mjs`。 |
+| Lab GUI smoke 脚本 | 已落地 | `scripts/agent-app/lab-smoke.mjs`。 |
 | npm 入口 | 已落地 | `npm run smoke:agent-app-lab`。 |
 | GUI smoke feature flags | 已落地 | `resolveAgentAppHostFlags()` 支持 `lime.agentAppHost.flags` localStorage JSON，仅服务本地 Lab / smoke。 |
 | P15 flow 可见性 | 已验证 | smoke 检查 `[data-testid="agent-app-install-flow"]`。 |

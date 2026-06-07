@@ -16,7 +16,10 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use super::base::{ConfigKey, Provider, ProviderMetadata, ProviderUsage, Usage};
+use super::base::{
+    stream_from_single_message, ConfigKey, MessageStream, Provider, ProviderMetadata,
+    ProviderUsage, Usage,
+};
 use super::codex::{CODEX_DEFAULT_MODEL, CODEX_DOC_URL, CODEX_KNOWN_MODELS};
 use super::codex_app_server::{AppServerEvent, CodexSessionManager};
 use super::errors::ProviderError;
@@ -46,7 +49,7 @@ fn get_session_manager(command: &Path) -> Result<(), ProviderError> {
 }
 
 /// Codex 有状态 Provider
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CodexStatefulProvider {
     command: PathBuf,
     model: ModelConfig,
@@ -180,7 +183,7 @@ impl CodexStatefulProvider {
         };
 
         // 从事件中提取 usage 信息
-        let usage = self.extract_usage_from_events(&events);
+        let usage = Self::extract_usage_from_events(&events);
 
         if std::env::var("ASTER_CODEX_DEBUG").is_ok() {
             println!("=== CODEX STATEFUL DEBUG ===");
@@ -195,10 +198,19 @@ impl CodexStatefulProvider {
     }
 
     /// 从事件中提取 usage 信息
-    fn extract_usage_from_events(&self, _events: &[AppServerEvent]) -> Usage {
+    fn extract_usage_from_events(_events: &[AppServerEvent]) -> Usage {
         // TODO: 从 turn/completed 事件中提取 token 使用量
         // 目前 app-server 协议的 usage 信息可能在 turn/completed 的 params 中
         Usage::default()
+    }
+
+    fn message_from_app_server_event(event: &AppServerEvent) -> Option<Message> {
+        match event {
+            AppServerEvent::AgentMessageDelta { text, .. } if !text.is_empty() => {
+                Some(Message::assistant().with_text(text.clone()))
+            }
+            _ => None,
+        }
     }
 
     /// 生成简单的会话描述
@@ -320,6 +332,125 @@ impl Provider for CodexStatefulProvider {
             message,
             ProviderUsage::new(model_config.model_name.clone(), usage),
         ))
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+
+    async fn stream(
+        &self,
+        system: &str,
+        messages: &[Message],
+        tools: &[Tool],
+    ) -> Result<MessageStream, ProviderError> {
+        self.stream_with_model(&self.model, system, messages, tools)
+            .await
+    }
+
+    async fn stream_with_model(
+        &self,
+        model_config: &ModelConfig,
+        system: &str,
+        messages: &[Message],
+        _tools: &[Tool],
+    ) -> Result<MessageStream, ProviderError> {
+        if system.contains("four words or less") || system.contains("4 words or less") {
+            let (message, usage) = self.generate_simple_session_description(messages)?;
+            return Ok(stream_from_single_message(message, usage));
+        }
+
+        get_session_manager(&self.command)?;
+
+        let conversation_id = self.generate_conversation_id(messages);
+        let input = self.messages_to_input(system, messages);
+        let cwd = std::env::current_dir()
+            .ok()
+            .map(|p| p.to_string_lossy().to_string());
+        let command_model = model_config.model_name.clone();
+        let effort = self.reasoning_effort.clone();
+        let turn_context = crate::session_context::current_turn_context();
+        let (sender, mut receiver) = tokio::sync::mpsc::channel::<
+            Result<(Option<Message>, Option<ProviderUsage>), ProviderError>,
+        >(32);
+
+        std::thread::spawn(move || {
+            let mut emitted_message = false;
+            let send_result = {
+                let manager = match SESSION_MANAGER.lock() {
+                    Ok(manager) => manager,
+                    Err(error) => {
+                        let _ = sender.blocking_send(Err(ProviderError::RequestFailed(format!(
+                            "获取会话管理器锁失败: {}",
+                            error
+                        ))));
+                        return;
+                    }
+                };
+
+                let Some(mgr) = manager.as_ref() else {
+                    let _ = sender.blocking_send(Err(ProviderError::RequestFailed(
+                        "会话管理器未初始化".to_string(),
+                    )));
+                    return;
+                };
+
+                mgr.get_or_create_connection_with_context(
+                    &conversation_id,
+                    cwd.as_deref(),
+                    Some(&command_model),
+                    turn_context.as_ref(),
+                )
+                .and_then(|()| {
+                    mgr.send_message_with_context_and_event_callback(
+                        &conversation_id,
+                        &input,
+                        Some(&command_model),
+                        Some(&effort),
+                        turn_context.as_ref(),
+                        |event| {
+                            let Some(message) = Self::message_from_app_server_event(event) else {
+                                return Ok(());
+                            };
+                            emitted_message = true;
+                            sender
+                                .blocking_send(Ok((Some(message), None)))
+                                .map_err(|_| {
+                                    ProviderError::RequestFailed(
+                                        "Codex app-server stream receiver dropped".to_string(),
+                                    )
+                                })
+                        },
+                    )
+                })
+            };
+
+            match send_result {
+                Ok((response_text, events)) => {
+                    if !emitted_message && !response_text.trim().is_empty() {
+                        let _ = sender.blocking_send(Ok((
+                            Some(Message::assistant().with_text(response_text)),
+                            None,
+                        )));
+                    }
+                    let usage = Self::extract_usage_from_events(&events);
+                    let _ = sender
+                        .blocking_send(Ok((None, Some(ProviderUsage::new(command_model, usage)))));
+                }
+                Err(error) => {
+                    let _ = sender.blocking_send(Err(error));
+                }
+            }
+        });
+
+        Ok(Box::pin(async_stream::try_stream! {
+            while let Some(item) = receiver.recv().await {
+                match item {
+                    Ok(value) => yield value,
+                    Err(error) => Err(error)?,
+                }
+            }
+        }))
     }
 }
 

@@ -124,7 +124,7 @@ describe("agent app connector production preflight", () => {
     const blocked = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-connector-production-preflight.mjs"),
+        path.resolve("scripts/agent-app/connector-production-preflight.mjs"),
         "--connector",
         "notion",
         "--output",
@@ -144,7 +144,7 @@ describe("agent app connector production preflight", () => {
     const ready = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-connector-production-preflight.mjs"),
+        path.resolve("scripts/agent-app/connector-production-preflight.mjs"),
         "--connector",
         "webhook",
         "--output",
@@ -170,7 +170,7 @@ describe("agent app connector production preflight", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-connector-production-preflight.mjs"),
+        path.resolve("scripts/agent-app/connector-production-preflight.mjs"),
         "--connector",
         "webhook",
         "--check",
@@ -187,7 +187,7 @@ describe("agent app connector production preflight", () => {
   it("CLI --help 描述 webhook env/file secret source", () => {
     const result = spawnSync(
       process.execPath,
-      [path.resolve("scripts/agent-app-connector-production-preflight.mjs"), "--help"],
+      [path.resolve("scripts/agent-app/connector-production-preflight.mjs"), "--help"],
       { encoding: "utf8", env: { PATH: process.env.PATH } },
     );
 

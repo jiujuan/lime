@@ -30,6 +30,7 @@ interface MessageAssistantBodyProps {
   hasImageWorkbenchLeadContent: boolean;
   historicalAssistantPreviewContent: string;
   imageWorkbenchRendererState: ImageWorkbenchRendererState;
+  isCurrentInteractiveAssistantMessage: boolean;
   message: Message;
   sessionId?: string | null;
   messageCanvasShortcutPath: string | null;
@@ -84,6 +85,7 @@ export function MessageAssistantBody({
   hasImageWorkbenchLeadContent,
   historicalAssistantPreviewContent,
   imageWorkbenchRendererState,
+  isCurrentInteractiveAssistantMessage,
   message,
   sessionId,
   messageCanvasShortcutPath,
@@ -120,6 +122,15 @@ export function MessageAssistantBody({
   shouldSuppressRendererProcessFlow,
   suppressedActionRequestId,
 }: MessageAssistantBodyProps) {
+  const hasTerminalRuntimeStatus =
+    message.runtimeStatus?.phase === "failed" ||
+    message.runtimeStatus?.phase === "cancelled";
+  const isMessageStreaming = Boolean(
+    message.isThinking &&
+      isCurrentInteractiveAssistantMessage &&
+      !hasTerminalRuntimeStatus,
+  );
+
   return (
     <>
       {shouldRenderPrimaryTimelineOutsideBubble ? null : primaryTimeline}
@@ -146,8 +157,8 @@ export function MessageAssistantBody({
           <StreamingRenderer
             content={rendererContent}
             rawContent={rendererRawContent}
-            isStreaming={message.isThinking}
-            showCursor={message.isThinking && !displayContent}
+            isStreaming={isMessageStreaming}
+            showCursor={isMessageStreaming && !displayContent}
             thinkingContent={imageWorkbenchRendererState.thinkingContent}
             contentParts={imageWorkbenchRendererState.contentParts}
             toolCalls={imageWorkbenchRendererState.toolCalls}
@@ -166,9 +177,9 @@ export function MessageAssistantBody({
         <StreamingRenderer
           content={rendererContent}
           rawContent={rendererRawContent}
-          isStreaming={message.isThinking}
+          isStreaming={isMessageStreaming}
           toolCalls={rendererToolCalls}
-          showCursor={message.isThinking && !displayContent}
+          showCursor={isMessageStreaming && !displayContent}
           thinkingContent={rendererThinkingContent}
           runtimeStatus={message.runtimeStatus}
           contentParts={rendererContentParts}

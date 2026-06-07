@@ -1,28 +1,42 @@
 import path from "node:path";
+import { readFileSync } from "node:fs";
 
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 
-import { brandMacHelperApps } from "./scripts/brand-electron-mac-helper-apps.mjs";
+import { brandMacHelperApps } from "./scripts/electron/brand-mac-helper-apps.mjs";
 
 const PRODUCT_NAME = "Lime";
 const APP_ID = "com.limecloud.lime";
-const RELEASE_OUTPUT_DIR = "release-electron";
+const RELEASE_OUTPUT_DIR =
+  process.env.LIME_ELECTRON_FORGE_OUT_DIR || "release-electron";
 const SQUIRREL_PACKAGE_NAME = "lime";
+const PACKAGE_VERSION = JSON.parse(
+  readFileSync("package.json", "utf8"),
+).version;
 const UPDATE_BASE_URL =
   process.env.LIME_UPDATES_BASE_URL || "https://updates.limecloud.com";
 
 const retainedPackageRoots = new Set(["dist", "node_modules", "package.json"]);
+const retainedPackageDirectories = new Set([
+  "dist-electron",
+  "dist-electron/main",
+  "dist-electron/preload",
+]);
 const retainedPackagePrefixes = [
   "dist-electron/main/",
   "dist-electron/preload/",
 ];
 
 function ignorePackagerInput(filePath) {
-  const relativePath = filePath.startsWith(path.sep)
-    ? path.relative(process.cwd(), filePath)
-    : filePath;
+  const normalizedInput = filePath.replace(/\\/g, "/");
+  const normalizedCwd = process.cwd().replace(/\\/g, "/");
+  const relativePath =
+    normalizedInput === normalizedCwd ||
+    normalizedInput.startsWith(`${normalizedCwd}/`)
+      ? path.relative(process.cwd(), filePath)
+      : normalizedInput;
   const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!normalized) {
     return false;
@@ -30,6 +44,9 @@ function ignorePackagerInput(filePath) {
 
   const root = normalized.split("/")[0];
   if (retainedPackageRoots.has(root)) {
+    return false;
+  }
+  if (retainedPackageDirectories.has(normalized)) {
     return false;
   }
   if (retainedPackagePrefixes.some((prefix) => normalized.startsWith(prefix))) {
@@ -42,8 +59,7 @@ function ignorePackagerInput(filePath) {
 function macSignOptions() {
   if (
     process.platform !== "darwin" ||
-    (process.env.LIME_ELECTRON_SIGN !== "1" &&
-      !process.env.LIME_MACOS_KEYCHAIN)
+    (process.env.LIME_ELECTRON_SIGN !== "1" && !process.env.LIME_MACOS_KEYCHAIN)
   ) {
     return undefined;
   }
@@ -65,8 +81,7 @@ function macSignOptions() {
 function macNotarizeOptions() {
   if (
     process.platform !== "darwin" ||
-    (process.env.LIME_ELECTRON_SIGN !== "1" &&
-      !process.env.LIME_MACOS_KEYCHAIN)
+    (process.env.LIME_ELECTRON_SIGN !== "1" && !process.env.LIME_MACOS_KEYCHAIN)
   ) {
     return undefined;
   }
@@ -104,21 +119,41 @@ function updateFeedUrl(platform = process.platform, arch = process.arch) {
   return `${normalizedUpdateBaseUrl()}/lime/stable/${updateFeedLabel(platform, arch)}`;
 }
 
-function macZipConfig() {
+function macZipConfig(arch = process.arch) {
   return {
-    macUpdateManifestBaseUrl: updateFeedUrl("darwin", process.arch),
+    macUpdateManifestBaseUrl: updateFeedUrl("darwin", arch),
   };
 }
 
-function squirrelConfig() {
+function windowsSigningOptions() {
+  if (process.platform !== "win32" || process.env.LIME_ELECTRON_SIGN !== "1") {
+    return {};
+  }
+
+  const certificateFile =
+    process.env.LIME_WINDOWS_SIGNING_CERTIFICATE_FILE?.trim();
+  const certificatePassword =
+    process.env.LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD;
+  if (!certificateFile || !certificatePassword) {
+    return {};
+  }
+
+  return {
+    certificateFile,
+    certificatePassword,
+  };
+}
+
+function squirrelConfig(arch = process.arch) {
   return {
     authors: "Lime",
     exe: `${PRODUCT_NAME}.exe`,
     name: SQUIRREL_PACKAGE_NAME,
     noMsi: true,
-    remoteReleases: updateFeedUrl("win32", process.arch),
-    setupExe: `${PRODUCT_NAME}-${process.env.npm_package_version || "0.0.0"} Setup.exe`,
+    remoteReleases: updateFeedUrl("win32", arch),
+    setupExe: `${PRODUCT_NAME}-${PACKAGE_VERSION} Setup.exe`,
     setupIcon: "lime-rs/icons/icon.ico",
+    ...windowsSigningOptions(),
   };
 }
 
@@ -148,10 +183,8 @@ export default {
       },
     ],
     extendInfo: {
-      NSMicrophoneUsageDescription:
-        "Lime 需要访问麦克风以使用语音输入功能",
-      NSAppleEventsUsageDescription:
-        "Lime 需要控制其他应用以输入识别的文本",
+      NSMicrophoneUsageDescription: "Lime 需要访问麦克风以使用语音输入功能",
+      NSAppleEventsUsageDescription: "Lime 需要控制其他应用以输入识别的文本",
     },
     osxSign: macSignOptions(),
     osxNotarize: macNotarizeOptions(),
@@ -182,7 +215,7 @@ export default {
       },
       ["darwin"],
     ),
-    new MakerZIP(macZipConfig(), ["darwin"]),
-    new MakerSquirrel(squirrelConfig(), ["win32"]),
+    new MakerZIP((arch) => macZipConfig(arch), ["darwin"]),
+    new MakerSquirrel((arch) => squirrelConfig(arch), ["win32"]),
   ],
 };

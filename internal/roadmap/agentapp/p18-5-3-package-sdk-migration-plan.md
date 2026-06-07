@@ -100,7 +100,7 @@ rg -n "pendingRequests|requestHostBridge|buildMessage|postMessage|createLimeHost
 本段是当前最新事实，只读运行：
 
 ```bash
-node scripts/agent-app-package-handoff-check.mjs --package-dir /Users/coso/Documents/dev/ai/limecloud/content-factory-app
+node scripts/agent-app/package-handoff-check.mjs --package-dir /Users/coso/Documents/dev/ai/limecloud/content-factory-app
 ```
 
 输出摘要：
@@ -421,7 +421,7 @@ cd /Users/coso/Documents/dev/ai/limecloud/content-factory-app && nice -n 10 npm 
 | 外部 `npm test` | 低优先级只读重跑，46 tests passed。 | 只证明当前业务测试仍绿；测试仍基于私有 bridge transport。 |
 | Lime-side SDK seam | 低优先级重跑 `npm test -- src/features/agent-app/sdk/hostBridgeClient.test.ts src/features/agent-app/sdk/contentFactorySdkRegression.test.ts src/features/agent-app/index.test.ts`，3 files / 8 tests passed；`src/features/agent-app` 越界扫描无输出。 | Lime SDK target 仍可用；仍不能替代外部 package 迁移。 |
 | 运行面 | 当前未再发现 cwd 在 `content-factory-app` 的 `npm run dev` 进程，但 Lime Vite 与 `tauri:dev:headless` 仍在。 | 进程空闲不是 handoff；未获明确接管前继续只读。 |
-| 机械 handoff gate | 新增 `scripts/agent-app-package-handoff-check.mjs` 与 core unit tests；对当前外部 package 只读运行输出 `status=blocked`、dirty `tracked:36 / untracked:3`、hostBridge SDK marker `none`、highRiskScripts `build / verify / e2e:user-flow / e2e:user-flow:fake-model`。 | 后续 owner 接管前可用同一脚本复核；当前仍不能执行 package-side 迁移。 |
+| 机械 handoff gate | 新增 `scripts/agent-app/package-handoff-check.mjs` 与 core unit tests；对当前外部 package 只读运行输出 `status=blocked`、dirty `tracked:36 / untracked:3`、hostBridge SDK marker `none`、highRiskScripts `build / verify / e2e:user-flow / e2e:user-flow:fake-model`。 | 后续 owner 接管前可用同一脚本复核；当前仍不能执行 package-side 迁移。 |
 
 2026-05-16 10:33 gate 已覆盖上述历史状态：当前输出为 `status=needs_handoff`，私有 marker 为 `none`，SDK marker 已出现，blockers 为 `none`；后续不再执行 source-side 迁移，只处理 owner handoff、package verify 与 `dist/*` 验收。
 

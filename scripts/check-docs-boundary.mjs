@@ -45,6 +45,8 @@ const requiredIgnoreRules = [
 const skippedDirectories = new Set([
   ".git",
   ".lime",
+  ".tmp",
+  ".tmp-smoke",
   "node_modules",
   "target",
   "dist",

@@ -6,7 +6,6 @@ import type {
 export type AgentAppStandaloneReleaseArtifactKind =
   | "app_bundle"
   | "dmg"
-  | "pkg"
   | "windows_installer";
 
 export interface AgentAppStandaloneReleaseArtifactRef {
@@ -26,7 +25,6 @@ export interface AgentAppStandaloneBuildEvidence {
 
 export interface AgentAppStandaloneSigningEvidence {
   applicationSignedArtifactRefs?: string[];
-  installerSignedArtifactRefs?: string[];
   evidenceRef?: string;
 }
 
@@ -54,7 +52,6 @@ export type AgentAppStandaloneReleasePipelineBlockerCode =
   | "BUILD_EVIDENCE_MISSING"
   | "BUILD_NOT_COMPLETED"
   | "DISTRIBUTABLE_ARTIFACT_MISSING"
-  | "INSTALLER_ARTIFACT_SIGNING_MISSING"
   | "NOTARIZATION_EVIDENCE_MISSING"
   | "ROLLBACK_MANIFEST_MISSING"
   | "UPDATER_MANIFEST_MISSING";
@@ -123,7 +120,6 @@ function expectedDistributableKind(
   releasePlan: AgentAppStandaloneReleasePlan,
 ): AgentAppStandaloneReleaseArtifactKind {
   if (releasePlan.target.platform === "windows") return "windows_installer";
-  if (releasePlan.target.packageFormat === "pkg") return "pkg";
   if (releasePlan.target.packageFormat === "dmg") return "dmg";
   return "app_bundle";
 }
@@ -212,25 +208,6 @@ export function buildStandaloneReleasePipelinePlan(
           "macOS standalone release requires application signing evidence for the .app bundle.",
           "signing",
           { artifact: artifactKey(appBundle) },
-        ),
-      );
-    }
-
-    if (
-      releasePlan.target.packageFormat === "pkg" &&
-      distributable?.kind === "pkg" &&
-      !distributable.signed &&
-      !hasEvidenceRef(
-        input.signingEvidence?.installerSignedArtifactRefs,
-        distributable,
-      )
-    ) {
-      blockers.push(
-        blocker(
-          "INSTALLER_ARTIFACT_SIGNING_MISSING",
-          "pkg release requires Developer ID Installer signing evidence for the package artifact.",
-          "signing",
-          { artifact: artifactKey(distributable) },
         ),
       );
     }

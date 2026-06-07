@@ -108,7 +108,7 @@ describe("agent-app standalone native shell config writer core", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-standalone-native-shell-config-writer.mjs"),
+        path.resolve("scripts/agent-app/standalone-native-shell-config-writer.mjs"),
         "--plan",
         planPath,
         "--output-root",

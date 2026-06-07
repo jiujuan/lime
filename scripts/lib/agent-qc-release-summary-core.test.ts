@@ -20,7 +20,10 @@ const passPack = {
     {
       scenarioId: "workspace-ready-session-restore",
       status: "pass",
-      evidenceRefs: ["qcloop:item:item-2", ".lime/qc/gui-trace/workspace-ready.trace.zip"],
+      evidenceRefs: [
+        "qcloop:item:item-2",
+        ".lime/qc/gui-trace/workspace-ready.trace.zip",
+      ],
     },
   ],
 };
@@ -28,18 +31,34 @@ const passPack = {
 const failPack = {
   runId: "run-fail",
   generatedAt: "2026-05-10T00:00:00.000Z",
-  verdict: { status: "fail", summary: "bad", blockers: ["workspace: smoke failed"] },
+  verdict: {
+    status: "fail",
+    summary: "bad",
+    blockers: ["workspace: smoke failed"],
+  },
   laneResults: [{ laneId: "L4-behavior-eval", status: "fail" }],
-  scenarioResults: [{ scenarioId: "workspace-ready-session-restore", status: "fail", evidenceRefs: [] }],
+  scenarioResults: [
+    {
+      scenarioId: "workspace-ready-session-restore",
+      status: "fail",
+      evidenceRefs: [],
+    },
+  ],
 };
 
 describe("agent-qc-release-summary-core", () => {
   it("应把全 pass Evidence Pack 汇总为 pass release summary", () => {
     const summary = buildAgentQcReleaseSummary({
       evidencePacks: [{ pack: passPack, sourcePath: "evidence.json" }],
-      harnessSummary: { generatedAt: "now", totals: { readyCount: 2, invalidCount: 0 } },
+      harnessSummary: {
+        generatedAt: "now",
+        totals: { readyCount: 2, invalidCount: 0 },
+      },
       harnessTrend: { sampleCount: 3, signals: ["current gap 保持为 0。"] },
-      requiredScenarioIds: ["command-bridge-contract", "workspace-ready-session-restore"],
+      requiredScenarioIds: [
+        "command-bridge-contract",
+        "workspace-ready-session-restore",
+      ],
       tag: "v1.2.3",
     });
 
@@ -79,9 +98,13 @@ describe("agent-qc-release-summary-core", () => {
     const validation = validateReleaseSummary(summary);
 
     expect(summary.status).toBe("pass");
-    expect(summary.missingRequiredScenarioIds).toEqual(["release-package-startup-smoke"]);
+    expect(summary.missingRequiredScenarioIds).toEqual([
+      "release-package-startup-smoke",
+    ]);
     expect(validation.valid).toBe(false);
-    expect(validation.issues.join("\n")).toContain("release-package-startup-smoke");
+    expect(validation.issues.join("\n")).toContain(
+      "release-package-startup-smoke",
+    );
   });
 
   it("Evidence Pack pass 但 pass 场景只有 qcloop id 时应阻断 release", () => {
@@ -102,8 +125,12 @@ describe("agent-qc-release-summary-core", () => {
     const validation = validateReleaseSummary(summary);
 
     expect(summary.status).toBe("fail");
-    expect(summary.weakEvidenceScenarioIds).toEqual(["command-bridge-contract"]);
-    expect(summary.blockers.join("\n")).toContain("structured-evidence:command-bridge-contract");
+    expect(summary.weakEvidenceScenarioIds).toEqual([
+      "command-bridge-contract",
+    ]);
+    expect(summary.blockers.join("\n")).toContain(
+      "structured-evidence:command-bridge-contract",
+    );
     expect(validation.valid).toBe(false);
     expect(validation.issues.join("\n")).toContain("结构化 evidenceRefs");
   });
@@ -111,7 +138,10 @@ describe("agent-qc-release-summary-core", () => {
   it("应渲染 release note 可用的 Markdown", () => {
     const summary = buildAgentQcReleaseSummary({
       evidencePacks: [{ pack: passPack, sourcePath: "evidence.json" }],
-      requiredScenarioIds: ["command-bridge-contract", "workspace-ready-session-restore"],
+      requiredScenarioIds: [
+        "command-bridge-contract",
+        "workspace-ready-session-restore",
+      ],
       tag: "v1.2.3",
     });
     const markdown = renderAgentQcReleaseMarkdown(summary);

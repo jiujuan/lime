@@ -368,6 +368,8 @@ export interface AgentEventItemCompleted {
 export interface AgentEventTurnCompleted {
   type: "turn_completed";
   turn: AgentThreadTurn;
+  text?: string;
+  usage?: AgentTokenUsage;
 }
 
 export interface AgentEventTurnFailed {
@@ -986,6 +988,8 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
       return {
         type: "turn_completed",
         turn: event.turn as AgentThreadTurn,
+        text: pickStringField(event, "text", "delta", "message", "content"),
+        usage: event.usage as AgentTokenUsage | undefined,
       };
     case "turn_failed":
       return {

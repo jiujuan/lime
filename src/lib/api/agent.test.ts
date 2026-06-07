@@ -69,8 +69,22 @@ function line(value: unknown): string {
   return `${JSON.stringify(value)}\n`;
 }
 
+const appServerResponseQueue: unknown[] = [];
+
 function mockAppServerResponse(result: unknown): void {
-  mockSafeInvoke.mockImplementationOnce(async (_command, args) => {
+  appServerResponseQueue.push(result);
+}
+
+function installAppServerMock(): void {
+  mockSafeInvoke.mockImplementation(async (command, args) => {
+    if (command === "app_server_drain_events") {
+      return { lines: [] };
+    }
+    if (command !== "app_server_handle_json_lines") {
+      return undefined;
+    }
+
+    const result = appServerResponseQueue.shift();
     const requestLine = args?.request?.lines?.[0];
     const request =
       typeof requestLine === "string"
@@ -93,7 +107,9 @@ function expectAppServerRequest(
   method: string,
   params: Record<string, unknown>,
 ): void {
-  const call = mockSafeInvoke.mock.calls[callIndex - 1];
+  const call = mockSafeInvoke.mock.calls.filter(
+    (safeInvokeCall) => safeInvokeCall[0] === "app_server_handle_json_lines",
+  )[callIndex - 1];
   expect(call?.[0]).toBe("app_server_handle_json_lines");
   const requestLine = call?.[1]?.request?.lines?.[0];
   expect(typeof requestLine).toBe("string");
@@ -107,6 +123,8 @@ function expectAppServerRequest(
 describe("Agent API 治理护栏", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    appServerResponseQueue.length = 0;
+    installAppServerMock();
     mockIsElectronHostCommandAvailable.mockReturnValue(true);
     mockSafeListen.mockResolvedValue(vi.fn());
   });
@@ -207,16 +225,14 @@ describe("Agent API 治理护栏", () => {
             session_id: "session-runtime",
             event_name: "event-runtime",
             workspace_id: "workspace-runtime",
-            turn_config: {
-              execution_strategy: "react",
-              provider_config: {
-                provider_id: "provider-runtime",
-                provider_name: "Provider Runtime",
-                model_name: "model-runtime",
-              },
-              metadata: {
-                source: "hook-facade",
-              },
+            execution_strategy: "react",
+            provider_config: {
+              provider_id: "provider-runtime",
+              provider_name: "Provider Runtime",
+              model_name: "model-runtime",
+            },
+            metadata: {
+              source: "hook-facade",
             },
           },
         },
@@ -265,11 +281,8 @@ describe("Agent API 治理护栏", () => {
             workspace_id: "workspace-runtime-search",
             queue_if_busy: true,
             queued_turn_id: "queued-turn-1",
-            skip_pre_submit_resume: true,
-            turn_config: {
-              execution_strategy: "react",
-              web_search: true,
-            },
+            execution_strategy: "react",
+            web_search: true,
           },
         },
       },
@@ -318,13 +331,11 @@ describe("Agent API 治理护栏", () => {
             session_id: "session-runtime-preference",
             event_name: "event-runtime-preference",
             workspace_id: "workspace-runtime-preference",
-            turn_config: {
-              provider_preference: "custom-provider",
-              model_preference: "gpt-5.3-codex",
-              thinking_enabled: true,
-              approval_policy: "on-request",
-              sandbox_policy: "workspace-write",
-            },
+            provider_preference: "custom-provider",
+            model_preference: "gpt-5.3-codex",
+            thinking_enabled: true,
+            approval_policy: "on-request",
+            sandbox_policy: "workspace-write",
           },
         },
       },
@@ -967,6 +978,8 @@ describe("Agent API 治理护栏", () => {
           text: "直接回答优先\n当前请求无需默认升级为搜索或任务。",
         },
       ],
+      todo_items: [],
+      turns: [],
     });
     expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_READ, {
       sessionId: "session-runtime-2",
@@ -1914,7 +1927,7 @@ describe("Agent API 治理护栏", () => {
   });
 
   it("deleteAgentRuntimeSession / updateAgentRuntimeSession 应走 current 边界，标题生成只做本地投影", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(undefined);
+    mockAppServerResponse({});
     mockAppServerResponse({
       session: {
         sessionId: "session-runtime-3",
@@ -1939,13 +1952,10 @@ describe("Agent API 治理护栏", () => {
       ),
     ).resolves.toBe("新的智能标题");
 
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      1,
-      "agent_runtime_delete_session",
-      {
-        sessionId: "session-runtime-3",
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+      sessionId: "session-runtime-3",
+      archived: true,
+    });
     expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
       sessionId: "session-runtime-3",
       title: "重命名后的标题",

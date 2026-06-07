@@ -28,7 +28,7 @@ P16-H 已完成进入 P17 设计前的最小技术证据：多 App repository、
 | disable / enable lifecycle | `installedAppState.test.ts`；smoke summary `managerDisableBlocked=true`、`managerEnableAvailable=true`、`managerReenabled=true`。 | 通过 | UI 层能证明 disabled App 不可启动并可恢复。 |
 | cleanup rehearsal evidence | `cleanupRehearsalEvidence.test.ts`；smoke summary `cleanupEvidenceJson=true`、`cleanupEvidenceSelectedApp=true`、`cleanupEvidenceStrategy=true`、`cleanupEvidenceBlockedCount=true`。 | 通过 | delete-data 仍是 rehearsal，不执行真实删除。 |
 | residual audit | `cleanupResidualAudit.test.ts`；smoke summary `residualAuditVisible=true`、`residualAuditPending=true`。 | 通过 | 能区分 pending / retained / blocked / repository issue。 |
-| flag-off regression | `scripts/agent-app-lab-smoke.mjs`；smoke summary `flagOffLabNavHidden=true`、`flagOffLabPageHidden=true`、`flagOffAgentAppsNavVisible=true`、`flagOffNoConsoleErrors=true`。 | 通过 | 关闭 Lab flags 后实验 Lab 不进主路径；受控 Agent Apps 入口仍可见。 |
+| flag-off regression | `scripts/agent-app/lab-smoke.mjs`；smoke summary `flagOffLabNavHidden=true`、`flagOffLabPageHidden=true`、`flagOffAgentAppsNavVisible=true`、`flagOffNoConsoleErrors=true`。 | 通过 | 关闭 Lab flags 后实验 Lab 不进主路径；受控 Agent Apps 入口仍可见。 |
 | 正式 Agent Apps 入口基本可用 | `AgentAppsPage.test.tsx`、`AgentAppRuntimePage.test.tsx`、`sidebarNav.test.ts`。 | 通过 | P17 可以基于现有 `agent-apps` 受控入口 harden，不另起页面事实源。 |
 | 五语言文案覆盖 | `translation-coverage.test.ts`、`loadNamespace.test.ts`、`types.test.ts`。 | 通过 | 新增 runtime loading / empty 文案已覆盖五语言。 |
 | TypeScript 类型正确 | `npm run typecheck`。 | 通过 | Agent App runtime / Agent Apps page / i18n key 类型已通过 `tsc --noEmit`。 |
@@ -48,8 +48,8 @@ P16-H 已完成进入 P17 设计前的最小技术证据：多 App repository、
 | `npm run smoke:agent-app-lab -- --timeout-ms 180000` | 通过；summary: `.lime/qc/gui-evidence/agent-app-lab/agent-app-lab-smoke-summary.json`。 |
 | `npm run typecheck` | 通过。 |
 | `npm run test:contracts` | 通过。 |
-| `node --check scripts/agent-app-lab-smoke.mjs` | 通过。 |
-| `git diff --check -- internal/roadmap/agentapp src/features/agent-app scripts/agent-app-lab-smoke.mjs package.json src/i18n/resources` | 通过。 |
+| `node --check scripts/agent-app/lab-smoke.mjs` | 通过。 |
+| `git diff --check -- internal/roadmap/agentapp src/features/agent-app scripts/agent-app/lab-smoke.mjs package.json src/i18n/resources` | 通过。 |
 | boundary / legacy `rg` audit | 通过。 |
 
 ## P17 进入条件判定

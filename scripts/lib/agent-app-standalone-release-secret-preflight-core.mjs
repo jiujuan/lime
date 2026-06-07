@@ -13,31 +13,15 @@ function secretRule({ aliases = [], category, key, reason }) {
   return { aliases, category, key, reason };
 }
 
-function baseRules({ channel, remoteUpload, updaterEnabled }) {
+function baseRules({ channel, remoteUpload }) {
   const rules = [];
-  if (updaterEnabled) {
-    rules.push(
-      secretRule({
-        key: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY",
-        aliases: [
-          "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_RAW",
-        ],
-        category: "updater_signing",
-        reason: "Updater artifacts must be signed before publishing manifests.",
-      }),
-      secretRule({
-        key: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_PASSWORD",
-        category: "updater_signing",
-        reason: "Updater signing private key must be unlocked in CI.",
-      }),
-    );
-  }
   if (channel === "stable") {
     rules.push(
       secretRule({
         key: "LIME_AGENT_APP_PREVIOUS_RELEASE_REF",
         category: "rollback",
-        reason: "Stable channel release requires a previous release ref for rollback.",
+        reason:
+          "Stable channel release requires a previous release ref for rollback.",
       }),
     );
   }
@@ -46,15 +30,16 @@ function baseRules({ channel, remoteUpload, updaterEnabled }) {
       secretRule({
         key: "LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN",
         category: "remote_upload",
-        reason: "Remote updater/artifact upload requires an explicit upload token.",
+        reason:
+          "Remote updater/artifact upload requires an explicit upload token.",
       }),
     );
   }
   return rules;
 }
 
-function macosRules({ packageFormat }) {
-  const rules = [
+function macosRules() {
+  return [
     secretRule({
       key: "APPLE_CERTIFICATE",
       category: "macos_signing",
@@ -73,30 +58,22 @@ function macosRules({ packageFormat }) {
     secretRule({
       key: "APPLE_ID",
       category: "macos_notarization",
-      reason: "notarytool authentication requires an Apple ID or equivalent profile.",
+      reason:
+        "notarytool authentication requires an Apple ID or equivalent profile.",
     }),
     secretRule({
       key: "APPLE_PASSWORD",
       category: "macos_notarization",
-      reason: "notarytool authentication requires an app-specific password or equivalent profile.",
+      reason:
+        "notarytool authentication requires an app-specific password or equivalent profile.",
     }),
     secretRule({
       key: "APPLE_TEAM_ID",
       category: "macos_notarization",
-      reason: "notarytool authentication must be scoped to the Apple Developer Team.",
+      reason:
+        "notarytool authentication must be scoped to the Apple Developer Team.",
     }),
   ];
-  if (packageFormat === "pkg") {
-    rules.push(
-      secretRule({
-        key: "APPLE_INSTALLER_SIGNING_IDENTITY",
-        aliases: ["APPLE_SIGNING_IDENTITY_INSTALLER"],
-        category: "macos_installer_signing",
-        reason: "pkg release requires a Developer ID Installer identity ref.",
-      }),
-    );
-  }
-  return rules;
 }
 
 function windowsRules() {
@@ -116,13 +93,11 @@ function windowsRules() {
 
 function rulesFor(input) {
   const platform = input.platform ?? "macos";
-  const packageFormat = input.packageFormat ?? "app";
   const channel = input.channel ?? "stable";
   const remoteUpload = Boolean(input.remoteUpload);
-  const updaterEnabled = input.updaterEnabled !== false;
-  const rules = baseRules({ channel, remoteUpload, updaterEnabled });
+  const rules = baseRules({ channel, remoteUpload });
   if (platform === "macos" || platform === "all") {
-    rules.push(...macosRules({ packageFormat }));
+    rules.push(...macosRules());
   }
   if (platform === "windows" || platform === "all") {
     rules.push(...windowsRules());
@@ -130,9 +105,29 @@ function rulesFor(input) {
   return rules;
 }
 
+function configurationIssuesFor(input) {
+  const platform = input.platform ?? "macos";
+  const packageFormat = input.packageFormat ?? "app";
+  if (
+    (platform === "macos" || platform === "all") &&
+    !["app", "dmg"].includes(packageFormat)
+  ) {
+    return [
+      {
+        code: "PACKAGE_FORMAT_UNSUPPORTED",
+        message:
+          "macOS Forge release preflight only supports app or dmg package formats.",
+        details: { packageFormat },
+      },
+    ];
+  }
+  return [];
+}
+
 export function buildStandaloneReleaseSecretPreflight(input = {}) {
   const env = input.env ?? process.env;
   const rules = rulesFor(input);
+  const configurationIssues = configurationIssuesFor(input);
   const missingSecrets = [];
   const presentSecretKeys = [];
 
@@ -157,18 +152,20 @@ export function buildStandaloneReleaseSecretPreflight(input = {}) {
 
   return {
     schemaVersion: 1,
-    status: missingSecrets.length === 0 ? "ready" : "blocked",
-    ready: missingSecrets.length === 0,
+    status:
+      missingSecrets.length === 0 && configurationIssues.length === 0
+        ? "ready"
+        : "blocked",
+    ready: missingSecrets.length === 0 && configurationIssues.length === 0,
     platform: input.platform ?? "macos",
     packageFormat: input.packageFormat ?? "app",
     channel: input.channel ?? "stable",
-    updaterEnabled: input.updaterEnabled !== false,
     remoteUpload: Boolean(input.remoteUpload),
     presentSecretKeys,
     missingSecrets,
+    configurationIssues,
     checkedSecretCount: rules.length,
-    note:
-      "This preflight records only secret names and categories. It never serializes secret values.",
+    note: "This preflight records only secret names and categories. It never serializes secret values.",
   };
 }
 

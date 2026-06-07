@@ -166,7 +166,25 @@ describe("commandPolicy", () => {
           ],
         },
       }),
-    ).toBe("truth");
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "knowledge",
+              method: "knowledgePack/list",
+              params: {},
+            }),
+            JSON.stringify({
+              id: "models",
+              method: "modelProvider/list",
+              params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
     expect(resolveDevBridgeCommandTimeoutProfile("unknown_command")).toBe(
       "default",
     );

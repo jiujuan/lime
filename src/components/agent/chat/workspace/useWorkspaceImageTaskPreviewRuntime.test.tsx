@@ -339,6 +339,85 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(messageDispatchCount).toBe(0);
   });
 
+  it("普通代码产物会话不应触发旧媒体任务索引恢复", async () => {
+    const { render, getValue } = renderHook(
+      {},
+      {
+        initialMessages: [
+          {
+            id: "assistant-code-artifact-1",
+            role: "assistant",
+            content: "已生成代码产物，可在工作台查看。",
+            timestamp: new Date("2026-06-07T07:27:17.000Z"),
+            artifacts: [
+              {
+                id: "code-artifact-workbench:greeting",
+                type: "code",
+                title: "greeting.ts",
+                content:
+                  "export function greeting() returns Hello Lime Workbench.",
+                status: "complete",
+                createdAt: 1780817237000,
+                updatedAt: 1780817237000,
+                position: { start: 0, end: 52 },
+                meta: {
+                  filePath:
+                    ".lime/qc/code-artifact-workbench-electron-fixture/src/greeting.ts",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(listMediaTaskArtifacts).not.toHaveBeenCalled();
+    expect(listDirectory).not.toHaveBeenCalled();
+    expect(readFilePreview).not.toHaveBeenCalled();
+    expect(getValue().messages).toHaveLength(1);
+    expect(getValue().imageWorkbenchState.tasks).toEqual([]);
+  });
+
+  it("普通新闻文本会话不应触发旧媒体任务索引恢复", async () => {
+    const { render, getValue } = renderHook(
+      {},
+      {
+        initialMessages: [
+          {
+            id: "user-news-1",
+            role: "user",
+            content: "整理今天的国际新闻",
+            timestamp: new Date("2026-06-07T07:30:00.000Z"),
+          },
+          {
+            id: "assistant-news-1",
+            role: "assistant",
+            content: "已整理今天的国际新闻摘要。",
+            timestamp: new Date("2026-06-07T07:30:05.000Z"),
+          },
+        ],
+      },
+    );
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(listMediaTaskArtifacts).not.toHaveBeenCalled();
+    expect(listDirectory).not.toHaveBeenCalled();
+    expect(readFilePreview).not.toHaveBeenCalled();
+    expect(getValue().messages).toHaveLength(2);
+    expect(getValue().imageWorkbenchState.tasks).toEqual([]);
+  });
+
   it("空白新草稿不应从旧图片工作台状态回灌轻卡", async () => {
     let messageDispatchCount = 0;
     const staleImageWorkbenchState: SessionImageWorkbenchState = {
@@ -1700,7 +1779,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     ]);
   });
 
-  it("应优先通过媒体任务接口恢复最近的图片任务，避免大 task file 截断", async () => {
+  it("存在图片恢复线索时，应优先通过媒体任务接口恢复最近的图片任务，避免大 task file 截断", async () => {
     const taskId = "task-image-restored-api";
     vi.mocked(listMediaTaskArtifacts).mockResolvedValueOnce({
       success: true,
@@ -1736,12 +1815,34 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       ],
     });
 
-    const { render, getValue } = renderHook();
+    const { render, getValue } = renderHook(
+      {},
+      {
+        initialImageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [
+            {
+              sessionId: DEFAULT_SESSION_ID,
+              id: taskId,
+              mode: "generate",
+              status: "running",
+              prompt: "通过 API 恢复的青柠主视觉",
+              rawText: "@配图 通过 API 恢复的青柠主视觉",
+              expectedCount: 1,
+              outputIds: [],
+              createdAt: Date.now(),
+              hookImageIds: [],
+              applyTarget: null,
+            },
+          ],
+        },
+      },
+    );
     await render();
 
     await vi.waitFor(() => {
       expectImageUserMessage(getValue().messages, {
-        content: "通过 API 恢复的青柠主视觉",
+        content: "@配图 通过 API 恢复的青柠主视觉",
       });
       expectSingleImageAssistantMessage(getValue().messages, {
         id: `image-workbench:${taskId}:assistant`,
@@ -3009,7 +3110,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
   });
 
-  it("应在进入会话时从 task file 恢复最近的图片任务", async () => {
+  it("存在文稿图片占位时，应从 task file 恢复最近的图片任务", async () => {
     vi.mocked(listDirectory)
       .mockResolvedValueOnce(
         createDirectoryListingResult("/workspace/project-image-1/.lime/tasks", [
@@ -3068,7 +3169,11 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       ),
     );
 
-    const { render, getValue } = renderHook();
+    const { render, getValue } = renderHook({
+      canvasState: createInitialDocumentState(
+        "# 标题\n\n![恢复出来的青柠主视觉](pending-image-task://task-image-restored?status=running&prompt=%E6%81%A2%E5%A4%8D%E5%87%BA%E6%9D%A5%E7%9A%84%E9%9D%92%E6%9F%A0%E4%B8%BB%E8%A7%86%E8%A7%89)\n",
+      ),
+    });
     await render();
 
     await act(async () => {
@@ -3106,7 +3211,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     ]);
   });
 
-  it("进入旧会话时不应从工作区恢复陈旧非终态图片任务", async () => {
+  it("存在文稿图片占位时，进入旧会话也不应从工作区恢复陈旧非终态图片任务", async () => {
     vi.setSystemTime(new Date("2026-04-27T00:00:00Z"));
     vi.mocked(listDirectory)
       .mockResolvedValueOnce(
@@ -3152,7 +3257,11 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       ),
     );
 
-    const { render, getValue } = renderHook();
+    const { render, getValue } = renderHook({
+      canvasState: createInitialDocumentState(
+        "# 标题\n\n![旧会话里陈旧的排队图片任务](pending-image-task://task-image-stale-pending?status=running&prompt=%E6%97%A7%E4%BC%9A%E8%AF%9D%E9%87%8C%E9%99%88%E6%97%A7%E7%9A%84%E6%8E%92%E9%98%9F%E5%9B%BE%E7%89%87%E4%BB%BB%E5%8A%A1)\n",
+      ),
+    });
     await render();
 
     await act(async () => {
@@ -3485,9 +3594,47 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
 
 ## 收尾
 这里是结尾。`;
-    const { render, getValue } = renderHook({
-      canvasState: createInitialDocumentState(baseContent),
-    });
+    const { render, getValue } = renderHook(
+      {
+        canvasState: createInitialDocumentState(baseContent),
+      },
+      {
+        initialMessages: [
+          {
+            id: "user-inline-section-restore-1",
+            role: "user",
+            content: "@配图 为正文生成一张核心观点配图",
+            timestamp: new Date("2026-04-04T11:09:00Z"),
+          },
+          {
+            id: "assistant-inline-section-restore-1",
+            role: "assistant",
+            content: "正在为正文创建图片任务。",
+            timestamp: new Date("2026-04-04T11:09:03Z"),
+            isThinking: true,
+            toolCalls: [
+              {
+                id: "tool-inline-section-restore-1",
+                name: "image_generate",
+                status: "running",
+                startTime: new Date("2026-04-04T11:09:03Z"),
+              },
+            ],
+            contentParts: [
+              {
+                type: "tool_use",
+                toolCall: {
+                  id: "tool-inline-section-restore-1",
+                  name: "image_generate",
+                  status: "running",
+                  startTime: new Date("2026-04-04T11:09:03Z"),
+                },
+              },
+            ],
+          },
+        ],
+      },
+    );
     await render();
 
     await act(async () => {
@@ -3660,25 +3807,26 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         ),
       );
 
-    const { render, getValue } = renderHook();
+    const { render, getValue } = renderHook({
+      canvasState: createInitialDocumentState(
+        "# 标题\n\n![青柠实验室主视觉](pending-image-task://task-image-cancelled-1?status=running&prompt=%E9%9D%92%E6%9F%A0%E5%AE%9E%E9%AA%8C%E5%AE%A4%E4%B8%BB%E8%A7%86%E8%A7%89)\n",
+      ),
+    });
     await render();
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expectImageUserMessage(getValue().messages, {
-      content: "青柠实验室主视觉",
-    });
-    expectSingleImageAssistantMessage(getValue().messages, {
-      id: "image-workbench:task-image-cancelled-1:assistant",
-      content: "",
-      imageWorkbenchPreview: expect.objectContaining({
-        taskId: "task-image-cancelled-1",
-        status: "cancelled",
-        caption: "已停止生成",
-      }),
+    await vi.waitFor(() => {
+      expectImageUserMessage(getValue().messages, {
+        content: "青柠实验室主视觉",
+      });
+      expectSingleImageAssistantMessage(getValue().messages, {
+        id: "image-workbench:task-image-cancelled-1:assistant",
+        content: "",
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId: "task-image-cancelled-1",
+          status: "cancelled",
+          caption: "已停止生成",
+        }),
+      });
     });
 
     await act(async () => {

@@ -158,7 +158,7 @@ npm run agent-qc:release-summary -- \
   --output "./.lime/qc/release-agent-qc.current-audit.md" \
   --check
 
-node scripts/agent-qc-completion-audit.mjs --format json > ".lime/qc/agent-qc-audit-current.json"
+node scripts/agent-qc/completion-audit.mjs --format json > ".lime/qc/agent-qc-audit-current.json"
 ```
 
 如果 release summary 报缺少结构化 evidenceRefs，不能手工补假路径；应回到 qcloop worker stdout，确认 `QCLOOP_EVIDENCE_SUMMARY_JSON` 的 `artifacts[]`、`gui_session_owner` 和 `release_scope` 是否真实存在。

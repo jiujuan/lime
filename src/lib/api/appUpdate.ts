@@ -69,6 +69,13 @@ export interface UpdateNotificationMetrics {
   dismiss_rate: number;
 }
 
+export interface UpdateNotificationAnchorRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export async function checkForUpdates(): Promise<VersionInfo> {
   return safeInvoke<VersionInfo>("check_for_updates");
 }
@@ -129,8 +136,16 @@ export async function testUpdateWindow(): Promise<void> {
   await safeInvoke("test_update_window");
 }
 
-export async function openUpdateWindow(): Promise<void> {
-  await safeInvoke("open_update_window");
+export async function openUpdateWindow(
+  anchorRect?: UpdateNotificationAnchorRect | null,
+): Promise<void> {
+  const request = normalizeUpdateNotificationAnchorRect(anchorRect);
+  if (!request) {
+    await safeInvoke("open_update_window");
+    return;
+  }
+
+  await safeInvoke("open_update_window", { anchorRect: request });
 }
 
 export async function closeUpdateWindow(): Promise<void> {
@@ -157,4 +172,27 @@ export async function remindUpdateLater(hours: number): Promise<number> {
 
 export async function skipUpdateVersion(version: string): Promise<void> {
   await safeInvoke("skip_update_version", { version });
+}
+
+function normalizeUpdateNotificationAnchorRect(
+  anchorRect: UpdateNotificationAnchorRect | null | undefined,
+): UpdateNotificationAnchorRect | null {
+  if (
+    !anchorRect ||
+    !Number.isFinite(anchorRect.x) ||
+    !Number.isFinite(anchorRect.y) ||
+    !Number.isFinite(anchorRect.width) ||
+    !Number.isFinite(anchorRect.height) ||
+    anchorRect.width <= 0 ||
+    anchorRect.height <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    x: Math.round(anchorRect.x),
+    y: Math.round(anchorRect.y),
+    width: Math.round(anchorRect.width),
+    height: Math.round(anchorRect.height),
+  };
 }

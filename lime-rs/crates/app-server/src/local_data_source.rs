@@ -592,7 +592,8 @@ impl AppDataSource for LocalAppDataSource {
         &self,
         params: ConnectOpenDeepLinkResolveParams,
     ) -> Result<ConnectOpenDeepLinkResolveResponse, RuntimeCoreError> {
-        let payload = connect::parse_open_deep_link(&params.url).map_err(connect_deep_link_error)?;
+        let payload =
+            connect::parse_open_deep_link(&params.url).map_err(connect_deep_link_error)?;
         Ok(ConnectOpenDeepLinkResolveResponse {
             payload: open_deep_link_payload_to_protocol(payload),
         })
@@ -615,9 +616,9 @@ impl AppDataSource for LocalAppDataSource {
         }
 
         let registry = load_connect_registry_required().await?;
-        let relay_info = registry.get(relay_id).ok_or_else(|| {
-            RuntimeCoreError::Backend(format!("中转商 {relay_id} 不在注册表中"))
-        })?;
+        let relay_info = registry
+            .get(relay_id)
+            .ok_or_else(|| RuntimeCoreError::Backend(format!("中转商 {relay_id} 不在注册表中")))?;
         let provider_type = connect_protocol_to_provider_type(&relay_info.api.protocol);
         let provider_id = format!("connect-{relay_id}");
         let existing_provider = self

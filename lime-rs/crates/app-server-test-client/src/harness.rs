@@ -1,3 +1,4 @@
+use app_server_protocol::JsonRpcErrorResponse;
 use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcResponse;
 use app_server_protocol::RequestId;
@@ -31,6 +32,10 @@ pub enum HarnessCommand {
         extra_args: Vec<String>,
     },
     LaunchSessionFacadeStdio {
+        app_server_bin: PathBuf,
+        extra_args: Vec<String>,
+    },
+    LaunchSessionFacadeArchiveFailureStdio {
         app_server_bin: PathBuf,
         extra_args: Vec<String>,
     },
@@ -121,6 +126,32 @@ impl SessionFacadeStdioSmokeReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionFacadeArchiveFailureStdioSmokeReport {
+    pub app_server_bin: PathBuf,
+    pub session_id: String,
+    pub initialize_response_id: RequestId,
+    pub start_session_response_id: RequestId,
+    pub archive_error_response_id: RequestId,
+    pub archive_error_code: i64,
+    pub archive_error_message: String,
+}
+
+impl SessionFacadeArchiveFailureStdioSmokeReport {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "[app-server-test-client] ok appServerBin={} sessionId={} initializeResponseId={} startSessionResponseId={} archiveErrorResponseId={} archiveErrorCode={} expectedArchiveFailure=true archiveErrorMessage={}",
+            self.app_server_bin.display(),
+            self.session_id,
+            self.initialize_response_id,
+            self.start_session_response_id,
+            self.archive_error_response_id,
+            self.archive_error_code,
+            self.archive_error_message
+        )
+    }
+}
+
 pub fn parse_cli_args(args: impl IntoIterator<Item = String>) -> TestClientCli {
     let mut args = args.into_iter();
     let command = args.next();
@@ -163,6 +194,17 @@ pub fn parse_cli_args(args: impl IntoIterator<Item = String>) -> TestClientCli {
                 .unwrap_or_else(|| PathBuf::from("app-server"));
             let extra_args = args.collect::<Vec<_>>();
             HarnessCommand::LaunchSessionFacadeStdio {
+                app_server_bin,
+                extra_args,
+            }
+        }
+        Some("launch-session-facade-archive-failure-stdio") => {
+            let app_server_bin = args
+                .next()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("app-server"));
+            let extra_args = args.collect::<Vec<_>>();
+            HarnessCommand::LaunchSessionFacadeArchiveFailureStdio {
                 app_server_bin,
                 extra_args,
             }
@@ -210,6 +252,20 @@ pub fn run_session_facade_stdio_smoke(
         .spawn()
         .map_err(|error| format!("failed to spawn app-server stdio process: {error}"))?;
     let result = run_session_facade_stdio_smoke_with_child(&mut child, &config, input_lines);
+    cleanup_child(&mut child);
+    result
+}
+
+pub fn run_session_facade_archive_failure_stdio_smoke(
+    config: StdioLaunchConfig,
+    input_lines: &[String],
+) -> Result<SessionFacadeArchiveFailureStdioSmokeReport, String> {
+    let mut child = config
+        .command()
+        .spawn()
+        .map_err(|error| format!("failed to spawn app-server stdio process: {error}"))?;
+    let result =
+        run_session_facade_archive_failure_stdio_smoke_with_child(&mut child, &config, input_lines);
     cleanup_child(&mut child);
     result
 }
@@ -292,6 +348,44 @@ fn run_session_facade_stdio_smoke_with_child(
     })
 }
 
+fn run_session_facade_archive_failure_stdio_smoke_with_child(
+    child: &mut Child,
+    config: &StdioLaunchConfig,
+    input_lines: &[String],
+) -> Result<SessionFacadeArchiveFailureStdioSmokeReport, String> {
+    write_input_lines(child, input_lines)?;
+
+    let (initialize, start, archive_error) = {
+        let stdout = child
+            .stdout
+            .as_mut()
+            .ok_or_else(|| "app-server stdio stdout is not available".to_string())?;
+        let mut stdout = BufReader::new(stdout);
+        (
+            read_response(&mut stdout, RequestId::Integer(1))?,
+            read_response(&mut stdout, RequestId::Integer(2))?,
+            read_error(&mut stdout, RequestId::Integer(3))?,
+        )
+    };
+
+    let session_id = crate::SESSION_FACADE_SAMPLE_SESSION_ID;
+    expect_result_session_id(&start, &["session", "sessionId"], session_id)?;
+    expect_runtime_memory_archive_failure(&archive_error)?;
+
+    drop(child.stdin.take());
+    wait_for_exit(child, Duration::from_secs(2))?;
+
+    Ok(SessionFacadeArchiveFailureStdioSmokeReport {
+        app_server_bin: config.app_server_bin.clone(),
+        session_id: session_id.to_string(),
+        initialize_response_id: initialize.id,
+        start_session_response_id: start.id,
+        archive_error_response_id: archive_error.id,
+        archive_error_code: archive_error.error.code,
+        archive_error_message: archive_error.error.message,
+    })
+}
+
 fn write_input_lines(child: &mut Child, input_lines: &[String]) -> Result<(), String> {
     {
         let stdin = child
@@ -332,6 +426,31 @@ fn read_response(
             error.id, error.error.message
         )),
         other => Err(format!("expected JSON-RPC response, got {other:?}")),
+    }
+}
+
+fn read_error(
+    stdout: &mut impl BufRead,
+    expected_id: RequestId,
+) -> Result<JsonRpcErrorResponse, String> {
+    let mut line = String::new();
+    stdout
+        .read_line(&mut line)
+        .map_err(|error| format!("failed to read app-server stdio response: {error}"))?;
+    if line.is_empty() {
+        return Err("app-server stdio closed before expected response".to_string());
+    }
+    match decode_message(&line).map_err(|error| format!("failed to decode response: {error}"))? {
+        JsonRpcMessage::Error(error) if error.id == expected_id => Ok(error),
+        JsonRpcMessage::Error(error) => Err(format!(
+            "unexpected error id: expected {expected_id}, got {}",
+            error.id
+        )),
+        JsonRpcMessage::Response(response) => Err(format!(
+            "expected JSON-RPC error for request {expected_id}, got success response {}",
+            response.id
+        )),
+        other => Err(format!("expected JSON-RPC error response, got {other:?}")),
     }
 }
 
@@ -384,6 +503,26 @@ fn expect_list_contains_session(
         Err(format!(
             "response {} sessions did not include sessionId {expected_session_id}",
             response.id
+        ))
+    }
+}
+
+fn expect_runtime_memory_archive_failure(error: &JsonRpcErrorResponse) -> Result<(), String> {
+    let expected_message =
+        "agentSession/update archived is only supported for persisted current timeline sessions";
+    if error.error.code != app_server_protocol::error_codes::RUNTIME_ERROR {
+        return Err(format!(
+            "archive failure code mismatch: expected {}, got {}",
+            app_server_protocol::error_codes::RUNTIME_ERROR,
+            error.error.code
+        ));
+    }
+    if error.error.message.contains(expected_message) {
+        Ok(())
+    } else {
+        Err(format!(
+            "archive failure message mismatch: expected fragment {expected_message:?}, got {:?}",
+            error.error.message
         ))
     }
 }
@@ -488,6 +627,20 @@ mod tests {
             }
         );
         assert_eq!(
+            parse_cli_args(vec![
+                "launch-session-facade-archive-failure-stdio".to_string(),
+                "/bin/app-server".to_string(),
+                "--backend".to_string(),
+                "unavailable".to_string(),
+            ]),
+            TestClientCli {
+                command: HarnessCommand::LaunchSessionFacadeArchiveFailureStdio {
+                    app_server_bin: PathBuf::from("/bin/app-server"),
+                    extra_args: vec!["--backend".to_string(), "unavailable".to_string()]
+                }
+            }
+        );
+        assert_eq!(
             parse_cli_args(vec!["legacy-client".to_string()]),
             TestClientCli {
                 command: HarnessCommand::InitializeLine {
@@ -562,6 +715,26 @@ mod tests {
         assert_eq!(
             report.summary_line(),
             "[app-server-test-client] ok appServerBin=/bin/app-server sessionId=sess_test_client_facade initializeResponseId=1 startSessionResponseId=2 listSessionsResponseId=3 readSessionResponseId=4 updateSessionResponseId=5 listedSessions=1"
+        );
+    }
+
+    #[test]
+    fn session_facade_archive_failure_stdio_smoke_report_summary_is_stable() {
+        let report = SessionFacadeArchiveFailureStdioSmokeReport {
+            app_server_bin: PathBuf::from("/bin/app-server"),
+            session_id: "sess_test_client_facade".to_string(),
+            initialize_response_id: RequestId::Integer(1),
+            start_session_response_id: RequestId::Integer(2),
+            archive_error_response_id: RequestId::Integer(3),
+            archive_error_code: app_server_protocol::error_codes::RUNTIME_ERROR,
+            archive_error_message:
+                "agentSession/update archived is only supported for persisted current timeline sessions"
+                    .to_string(),
+        };
+
+        assert_eq!(
+            report.summary_line(),
+            "[app-server-test-client] ok appServerBin=/bin/app-server sessionId=sess_test_client_facade initializeResponseId=1 startSessionResponseId=2 archiveErrorResponseId=3 archiveErrorCode=-32000 expectedArchiveFailure=true archiveErrorMessage=agentSession/update archived is only supported for persisted current timeline sessions"
         );
     }
 }

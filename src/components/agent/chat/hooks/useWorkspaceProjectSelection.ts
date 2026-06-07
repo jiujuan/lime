@@ -97,6 +97,9 @@ export function useWorkspaceProjectSelection(
       normalizedExternalProjectId ? "none" : resolveInitialSelection().source,
     );
   const handledNewChatRequestRef = useRef<string | null>(null);
+  const [handledNewChatRequestKey, setHandledNewChatRequestKey] = useState<
+    string | null
+  >(null);
   const pendingTopicSwitchRef = useRef<PendingTopicSwitchState | null>(null);
   const isResolvingTopicProjectRef = useRef(false);
 
@@ -104,20 +107,30 @@ export function useWorkspaceProjectSelection(
     typeof newChatAt === "number" ? String(newChatAt) : null;
   const hasExplicitInitialSession =
     typeof initialSessionId === "string" && initialSessionId.trim().length > 0;
+  const hasHandledIncomingNewChatRequest =
+    incomingNewChatRequestKey !== null &&
+    (handledNewChatRequestKey === incomingNewChatRequestKey ||
+      handledNewChatRequestRef.current === incomingNewChatRequestKey);
   const shouldDisableSessionRestore =
-    incomingNewChatRequestKey !== null || hasExplicitInitialSession;
+    hasExplicitInitialSession ||
+    (incomingNewChatRequestKey !== null && !hasHandledIncomingNewChatRequest);
   const projectId =
     normalizedExternalProjectId ?? internalProjectId ?? undefined;
   const projectSelectionSource: WorkspaceProjectSelectionSource =
     normalizedExternalProjectId ? "external" : internalProjectSelectionSource;
 
   const hasHandledNewChatRequest = useCallback(
-    (requestKey: string) => handledNewChatRequestRef.current === requestKey,
-    [],
+    (requestKey: string) =>
+      handledNewChatRequestRef.current === requestKey ||
+      handledNewChatRequestKey === requestKey,
+    [handledNewChatRequestKey],
   );
 
   const markNewChatRequestHandled = useCallback((requestKey: string) => {
     handledNewChatRequestRef.current = requestKey;
+    setHandledNewChatRequestKey((currentKey) =>
+      currentKey === requestKey ? currentKey : requestKey,
+    );
   }, []);
 
   const clearProjectSelectionRuntime = useCallback(() => {

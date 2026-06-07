@@ -97,6 +97,8 @@ describe("useWorkspaceProjectSelection", () => {
         harness.getValue().markNewChatRequestHandled("123");
       });
 
+      expect(harness.getValue().hasHandledNewChatRequest("123")).toBe(true);
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(false);
       expect(harness.getValue().projectId).toBe("project-local");
       expect(harness.getValue().projectSelectionSource).toBe("remembered");
     } finally {

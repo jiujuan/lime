@@ -11,9 +11,7 @@ export type AgentAppProductionArtifactAdapterKind =
   | "electron_artifact_builder"
   | "macos_application_signer"
   | "macos_dmg_builder"
-  | "macos_installer_signer"
   | "macos_notarization_submitter"
-  | "macos_pkg_builder"
   | "native_shell_config_writer"
   | "rollback_manifest_writer"
   | "updater_manifest_writer"
@@ -95,9 +93,6 @@ function requiredAdaptersForReleasePlan(
     adapters.push("app_bundle_builder", "macos_application_signer");
     if (target.packageFormat === "dmg") {
       adapters.push("macos_dmg_builder");
-    }
-    if (target.packageFormat === "pkg") {
-      adapters.push("macos_pkg_builder", "macos_installer_signer");
     }
     adapters.push("macos_notarization_submitter");
   } else if (target.platform === "windows") {

@@ -24,21 +24,21 @@
 
 | 分类                          | 测试事实源                                                      | 说明                                                                                                                                          |
 | ----------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `current`                     | `scripts/electron-current-entrypoints.test.mjs`                 | 固定 `dev / build / preview / verify:gui-smoke` 默认走 Electron。                                                                             |
+| `current`                     | `scripts/electron/current-entrypoints.test.mjs`                 | 固定 `dev / build / preview / verify:gui-smoke` 默认走 Electron。                                                                             |
 | `current`                     | `scripts/lib/electron-dev-sidecar.test.mjs`                     | 验证 Electron dev sidecar 的 app-server binary 解析与构建入口。                                                                               |
 | `current`                     | `scripts/lib/electron-app-server-assets.test.mjs`               | 验证 Electron packaged app-server resources 和 release manifest。                                                                             |
 | `current`                     | `electron/ipcChannels.test.ts`                                  | 验证 Electron IPC channel catalog。                                                                                                           |
 | `current`                     | `src/features/agent-app/architecture/importBoundaries.test.ts`  | 阻止 Agent App current 代码直接 import legacy Tauri host API。                                                                                |
 | `current`                     | `packages/app-server-client/tests/client.test.mjs`              | 验证外部 App 通过 App Server client 消费协议。                                                                                                |
 | `current`                     | `scripts/lib/agent-qc-process-owner-current.test.mjs`           | 验证 raw process owner sidecar 识别 Electron smoke / dev runtime，不再只围绕 Tauri dev 判断。                                                 |
-| `current`                     | `scripts/electron-current-docs-guard.test.mjs`                  | 阻止 current 测试文档、GUI 续测 skill 和 qcloop 当前操作段继续推荐 Tauri GUI 启动、Tauri E2E 框架或把 Tauri 壳写成 GUI smoke 证据。           |
-| `current`                     | `scripts/electron-current-rules-guard.test.mjs`                 | 验证根规则、`internal/aiprompts` 与核心 skills 已锁定 Electron / App Server current、禁止新增品牌前缀命名，并要求新 Agent 逻辑走 App Server。 |
+| `current`                     | `scripts/electron/current-docs-guard.test.mjs`                  | 阻止 current 测试文档、GUI 续测 skill 和 qcloop 当前操作段继续推荐 Tauri GUI 启动、Tauri E2E 框架或把 Tauri 壳写成 GUI smoke 证据。           |
+| `current`                     | `scripts/electron/current-rules-guard.test.mjs`                 | 验证根规则、`internal/aiprompts` 与核心 skills 已锁定 Electron / App Server current、禁止新增品牌前缀命名，并要求新 Agent 逻辑走 App Server。 |
 | `current`                     | `scripts/lib/agent-qc-report-core.test.ts`                      | 验证 Agent QC package script fixture 中的 `verify:gui-smoke` 指向 `smoke:electron`，不再把旧 `scripts/verify-gui-smoke.mjs` 当 current 证据。 |
 | `current`                     | `scripts/lib/gui-smoke-run-lock.test.mjs`                       | 验证 GUI smoke run lock owner fixture 使用 `npm run smoke:electron`，不再把旧脚本路径写进 current owner metadata。                            |
 | `current`                     | `scripts/verify-gui-smoke.mjs`                                  | 保留旧文件名作为兼容入口，但直接委托 `npm run smoke:electron`，直接执行也只验证 Electron Desktop Host。                                       |
-| `deprecated guard`            | `scripts/standalone-deprecated-artifact-adapter-guard.test.mjs` | 验证旧 standalone Tauri config / build adapter CLI 与 core helper 默认 blocked，且不回流 current release evidence / GUI 证据。                |
-| `deprecated artifact adapter` | `scripts/lib/agent-app-standalone-tauri-*.test.mjs`             | 只允许证明旧 standalone artifact adapter 没回流 current。                                                                                     |
-| `dead guard`                  | `scripts/electron-current-entrypoints.test.mjs`                 | 验证 root Tauri GUI app entry files 已删除，不能重新作为 Desktop current 或 deprecated runner 入口回流。                                      |
+| `deprecated guard`            | `scripts/standalone-deprecated-artifact-adapter-guard.test.mjs` | 验证旧 standalone artifact adapter 默认 blocked，且不回流 current release evidence / GUI 证据。                                              |
+| `deprecated artifact adapter` | `scripts/lib/agent-app-standalone-native-*.test.mjs`            | 只允许证明 standalone artifact adapter fail-closed，不作为 current 发布链证据。                                                              |
+| `dead guard`                  | `scripts/electron/current-entrypoints.test.mjs`                 | 验证 root Tauri GUI app entry files 已删除，不能重新作为 Desktop current 或 deprecated runner 入口回流。                                      |
 
 ## 3. 迁移规则
 
@@ -84,12 +84,12 @@ npm run test:contracts
 
 1. DevBridge transport 测试，确保 `electron-ipc -> App Server -> mock` 顺序可观测。
 2. Agent QC / raw process owner sidecar 输出继续使用 Electron current 字段；legacy `passiveTauriRuntime` 只作为过渡期观察上下文。
-3. 等 package/release 命名整体迁移稳定后，再把历史 `tauriConfig` / `tauri_build_runner` 变量名集中改成中性 artifact adapter 命名。
+3. 等 Forge / Electron release 链路完成真实 package evidence 后，删除仍只作为 deprecated guard 存在的 standalone artifact adapter。
 
 暂缓处理：
 
 1. `src/lib/governance/legacySurfaceCatalog.json` 当前也在并行进程 staged 写集，本轮不覆盖；后续需要补脚本级 surface，覆盖 legacy smoke / artifact adapter，并限制 allowed paths 只允许 dead guard、deprecated guard 与历史说明。
-2. 只剩变量名含 `tauriConfig` 的历史 artifact adapter，等 package/release 命名整体迁移时再集中处理。
+2. 只剩历史命名的 package materializer 只能作为 deprecated adapter 依赖，不得重新进入 current release 证据。
 3. Rust crate 内依赖 host state 的 Aster backend 测试，等 RuntimeCore / ExecutionBackend 解耦后再迁。
 
 ## 5. 当前验证证据
@@ -97,7 +97,7 @@ npm run test:contracts
 2026-06-06 已跑通：
 
 ```bash
-npm test -- "scripts/electron-current-entrypoints.test.mjs" "scripts/tauri-deprecated-entrypoints.test.mjs" "src/features/agent-app/architecture/importBoundaries.test.ts" "src/features/agent-app/packaging/releasePipeline.test.ts" "scripts/lib/agent-app-standalone-release-evidence-core.test.mjs" "scripts/lib/electron-dev-sidecar.test.mjs" "scripts/lib/electron-app-server-assets.test.mjs" "electron/ipcChannels.test.ts"
+npm test -- "scripts/electron/current-entrypoints.test.mjs" "src/features/agent-app/architecture/importBoundaries.test.ts" "src/features/agent-app/packaging/releasePipeline.test.ts" "scripts/lib/agent-app-standalone-release-evidence-core.test.mjs" "scripts/lib/electron-dev-sidecar.test.mjs" "scripts/lib/electron-app-server-assets.test.mjs" "electron/ipcChannels.test.ts"
 npm run test:contracts
 npm run test:bridge
 npm --prefix "packages/app-server-client" test
@@ -108,40 +108,40 @@ npm run docs:boundary
 2026-06-06 追加 docs current guard：
 
 ```bash
-node --check "scripts/electron-current-docs-guard.test.mjs"
-npm test -- "scripts/electron-current-docs-guard.test.mjs" "scripts/electron-current-entrypoints.test.mjs" "scripts/tauri-deprecated-entrypoints.test.mjs"
-git diff --check -- "internal/testing/skills-e2e-testing.md" "internal/tests/lime-agent-qc-rollout-plan.md" "scripts/electron-current-docs-guard.test.mjs"
+node --check "scripts/electron/current-docs-guard.test.mjs"
+npm test -- "scripts/electron/current-docs-guard.test.mjs" "scripts/electron/current-entrypoints.test.mjs"
+git diff --check -- "internal/testing/skills-e2e-testing.md" "internal/tests/lime-agent-qc-rollout-plan.md" "scripts/electron/current-docs-guard.test.mjs"
 ```
 
 2026-06-06 追加 Agent QC fixture current guard：
 
 ```bash
-npm test -- "scripts/lib/agent-qc-report-core.test.ts" "scripts/electron-current-docs-guard.test.mjs" "scripts/electron-current-entrypoints.test.mjs" "scripts/tauri-deprecated-entrypoints.test.mjs"
+npm test -- "scripts/lib/agent-qc-report-core.test.ts" "scripts/electron/current-docs-guard.test.mjs" "scripts/electron/current-entrypoints.test.mjs"
 git diff --check -- "internal/testing/skills-e2e-testing.md" "internal/tests/lime-agent-qc-rollout-plan.md" "internal/tests/lime-agent-qc-qcloop-operations.md" "scripts/lib/agent-qc-report-core.test.ts"
 ```
 
 2026-06-06 追加 GUI smoke run lock fixture current guard：
 
 ```bash
-npm test -- "scripts/lib/gui-smoke-run-lock.test.mjs" "scripts/lib/agent-qc-report-core.test.ts" "scripts/electron-current-docs-guard.test.mjs" "scripts/electron-current-entrypoints.test.mjs" "scripts/tauri-deprecated-entrypoints.test.mjs"
+npm test -- "scripts/lib/gui-smoke-run-lock.test.mjs" "scripts/lib/agent-qc-report-core.test.ts" "scripts/electron/current-docs-guard.test.mjs" "scripts/electron/current-entrypoints.test.mjs"
 git diff --check -- "scripts/lib/gui-smoke-run-lock.test.mjs" "scripts/lib/agent-qc-report-core.test.ts"
 ```
 
 2026-06-06 追加 process owner 与 Skills E2E current guard：
 
 ```bash
-node --check "scripts/electron-current-docs-guard.test.mjs"
-npm test -- "scripts/lib/agent-qc-process-owner-current.test.mjs" "scripts/electron-current-docs-guard.test.mjs" "scripts/tauri-deprecated-entrypoints.test.mjs" "scripts/lib/gui-smoke-run-lock.test.mjs" "scripts/lib/agent-qc-report-core.test.ts"
-rg -n "Tauri 的测试框架|npm run tauri(?::dev)?\\b|\\btauri dev\\b|headless Tauri|验证 Tauri 壳" "internal/testing/skills-e2e-testing.md" "internal/tests/lime-agent-qc-rollout-plan.md" "internal/tests/lime-agent-qc-qcloop-operations.md" "scripts/electron-current-docs-guard.test.mjs"
-git diff --check -- "internal/testing/skills-e2e-testing.md" "scripts/electron-current-docs-guard.test.mjs" "scripts/lib/agent-qc-process-owner-current.test.mjs" "scripts/tauri-deprecated-entrypoints.test.mjs" "scripts/lib/gui-smoke-run-lock.test.mjs" "scripts/lib/agent-qc-report-core.test.ts"
+node --check "scripts/electron/current-docs-guard.test.mjs"
+npm test -- "scripts/lib/agent-qc-process-owner-current.test.mjs" "scripts/electron/current-docs-guard.test.mjs" "scripts/lib/gui-smoke-run-lock.test.mjs" "scripts/lib/agent-qc-report-core.test.ts"
+rg -n "Tauri 的测试框架|npm run tauri(?::dev)?\\b|\\btauri dev\\b|headless Tauri|验证 Tauri 壳" "internal/testing/skills-e2e-testing.md" "internal/tests/lime-agent-qc-rollout-plan.md" "internal/tests/lime-agent-qc-qcloop-operations.md" "scripts/electron/current-docs-guard.test.mjs"
+git diff --check -- "internal/testing/skills-e2e-testing.md" "scripts/electron/current-docs-guard.test.mjs" "scripts/lib/agent-qc-process-owner-current.test.mjs" "scripts/lib/gui-smoke-run-lock.test.mjs" "scripts/lib/agent-qc-report-core.test.ts"
 ```
 
-2026-06-06 追加 deprecated Tauri runner guard：
+2026-06-06 追加旧 runner dead guard：
 
 ```bash
-npx vitest run "scripts/tauri-deprecated-entrypoints.test.mjs" "scripts/electron-current-entrypoints.test.mjs"
+npx vitest run "scripts/electron/current-entrypoints.test.mjs"
 npm run verify:app-version
-rg -n "tauri dev|tauri\.conf|src-tauri|npm run tauri|@tauri-apps/cli" "scripts/run-tauri-dev.mjs" "scripts/run-tauri-profile.mjs" "scripts/update-version.sh" "scripts/tauri-deprecated-entrypoints.test.mjs" "package.json"
+rg -n "tauri dev|tauri\.conf|src-tauri|npm run tauri|@tauri-apps/cli" "package.json" "forge.config.mjs" "scripts/electron/current-entrypoints.test.mjs"
 ```
 
 这组证据证明：
@@ -154,42 +154,42 @@ rg -n "tauri dev|tauri\.conf|src-tauri|npm run tauri|@tauri-apps/cli" "scripts/r
 6. GUI smoke run lock 的 owner fixture 不再写入 legacy `scripts/verify-gui-smoke.mjs`。
 7. Skills E2E 的未来自动化测试方向已改为 Playwright / Electron smoke / App Server contract，不再推荐 Tauri 测试框架。
 8. raw process owner sidecar 已覆盖 Electron smoke active owner 与 Electron dev host passive desktop runtime；旧 `tauri dev` 只保留 `deprecatedTauriRuntime` 旁路观测，不再计入 current desktop runtime 或 Cargo/Rust blocker。
-9. `scripts/run-tauri-dev.mjs` 与 `scripts/run-tauri-profile.mjs` 已固定为 deprecated entrypoint，只输出 Electron current 退役提示，不再启动 `tauri dev`。
+9. 旧 runner 根入口已删除；current 入口只允许 Electron / Forge。
 10. `scripts/update-version.sh` 只更新 `package.json`、`packages/lime-cli-npm/package.json` 与 `lime-rs/Cargo.toml`，不再写 `tauri.conf`。
 
 2026-06-06 追加 direct GUI smoke current wrapper：
 
 ```bash
 node --check "scripts/verify-gui-smoke.mjs"
-npx vitest run "scripts/electron-current-entrypoints.test.mjs" "scripts/tauri-deprecated-entrypoints.test.mjs" "scripts/electron-current-docs-guard.test.mjs"
-rg -n "tauri dev|tauri\.conf|src-tauri|headless Tauri|node_modules/.bin/tauri" "scripts/verify-gui-smoke.mjs" "scripts/electron-current-entrypoints.test.mjs" "internal/roadmap/appserver/testing-migration.md"
+npx vitest run "scripts/electron/current-entrypoints.test.mjs" "scripts/electron/current-docs-guard.test.mjs"
+rg -n "tauri dev|tauri\.conf|src-tauri|headless Tauri|node_modules/.bin/tauri" "scripts/verify-gui-smoke.mjs" "scripts/electron/current-entrypoints.test.mjs" "internal/roadmap/appserver/testing-migration.md"
 ```
 
 这组证据证明：
 
 1. 直接执行 `scripts/verify-gui-smoke.mjs` 也只委托 `npm run smoke:electron`，不再启动 legacy GUI 宿主。
-2. `scripts/electron-current-entrypoints.test.mjs` 已锁定旧脚本名不能重新引入 `tauri.conf`、headless 启动链或 CLI 直连。
+2. `scripts/electron/current-entrypoints.test.mjs` 已锁定旧脚本名不能重新引入 `tauri.conf`、headless 启动链或 CLI 直连。
 
 2026-06-06 追加 standalone deprecated artifact adapter guard：
 
 ```bash
 node --check "scripts/standalone-deprecated-artifact-adapter-guard.test.mjs"
-npm test -- "scripts/standalone-deprecated-artifact-adapter-guard.test.mjs" "scripts/lib/agent-app-standalone-tauri-config-writer-core.test.mjs" "scripts/lib/agent-app-standalone-tauri-build-runner-core.test.mjs" "scripts/tauri-deprecated-entrypoints.test.mjs" "scripts/electron-current-entrypoints.test.mjs" "scripts/lib/agent-app-standalone-release-evidence-core.test.mjs" "src/features/agent-app/packaging/releasePipeline.test.ts"
-rg -n "npm run tauri|run\", \"tauri|tauri -- build|node_modules/.bin/tauri|agent-app-standalone-tauri-(config-writer|build-runner).*--execute" "scripts/agent-app-standalone-tauri-config-writer.mjs" "scripts/agent-app-standalone-tauri-build-runner.mjs" "scripts/lib/agent-app-standalone-tauri-config-writer-core.mjs" "scripts/lib/agent-app-standalone-tauri-build-runner-core.mjs" "scripts/standalone-deprecated-artifact-adapter-guard.test.mjs"
-git diff --check -- "scripts/standalone-deprecated-artifact-adapter-guard.test.mjs" "scripts/agent-app-standalone-tauri-config-writer.mjs" "scripts/agent-app-standalone-tauri-build-runner.mjs" "scripts/lib/agent-app-standalone-tauri-config-writer-core.mjs" "scripts/lib/agent-app-standalone-tauri-build-runner-core.mjs" "internal/roadmap/appserver/testing-migration.md"
+npm test -- "scripts/standalone-deprecated-artifact-adapter-guard.test.mjs" "scripts/lib/agent-app-standalone-native-shell-config-writer-core.test.mjs" "scripts/lib/agent-app-standalone-native-build-runner-core.test.mjs" "scripts/electron/current-entrypoints.test.mjs" "scripts/lib/agent-app-standalone-release-evidence-core.test.mjs" "src/features/agent-app/packaging/releasePipeline.test.ts"
+rg -n "npm run tauri|run\", \"tauri|tauri -- build|node_modules/.bin/tauri|agent-app-standalone-tauri-(config-writer|build-runner).*--execute" "scripts/agent-app/standalone-native-shell-config-writer.mjs" "scripts/agent-app/standalone-native-build-runner.mjs" "scripts/lib/agent-app-standalone-native-shell-config-writer-core.mjs" "scripts/lib/agent-app-standalone-native-build-runner-core.mjs" "scripts/standalone-deprecated-artifact-adapter-guard.test.mjs"
+git diff --check -- "scripts/standalone-deprecated-artifact-adapter-guard.test.mjs" "scripts/agent-app/standalone-native-shell-config-writer.mjs" "scripts/agent-app/standalone-native-build-runner.mjs" "scripts/lib/agent-app-standalone-native-shell-config-writer-core.mjs" "scripts/lib/agent-app-standalone-native-build-runner-core.mjs" "internal/roadmap/appserver/testing-migration.md"
 ```
 
 这组证据证明：
 
-1. 旧 standalone Tauri config writer / build runner CLI 只能进入 deprecated gate，不再执行真实构建。
-2. 旧 standalone Tauri config / build core helper 默认 `blocked`，且 core 内不再包含 `npm run tauri -- build` 可执行命令计划。
-3. current release evidence、macOS release command、updater publisher、standalone evidence pack 与 release pipeline 不再引用 `tauri_config` / `tauri_build_runner` / `agent-app-standalone-tauri` 作为 current 证据名。
+1. standalone artifact adapter CLI 只能进入 deprecated gate，不再执行真实构建。
+2. standalone native shell config / build core helper 默认 `blocked`，且 core 内不再包含旧宿主可执行命令计划。
+3. current release evidence、macOS release command、updater publisher、standalone evidence pack 与 release pipeline 不再引用旧 standalone artifact adapter 作为 current 证据名。
 
 2026-06-06 追加 Electron current rules guard：
 
 ```bash
-node --check "scripts/electron-current-rules-guard.test.mjs"
-npm test -- "scripts/electron-current-rules-guard.test.mjs"
+node --check "scripts/electron/current-rules-guard.test.mjs"
+npm test -- "scripts/electron/current-rules-guard.test.mjs"
 ```
 
 这组证据证明：
@@ -201,21 +201,21 @@ npm test -- "scripts/electron-current-rules-guard.test.mjs"
 2026-06-06 追加 legacy profiling docs guard：
 
 ```bash
-node --check "scripts/electron-current-docs-guard.test.mjs"
-npm test -- "scripts/electron-current-docs-guard.test.mjs"
+node --check "scripts/electron/current-docs-guard.test.mjs"
+npm test -- "scripts/electron/current-docs-guard.test.mjs"
 ```
 
 这组证据证明：
 
 1. `internal/aiprompts/performance-profiling.md` 中的 `npm run tauri:dev:profile:*` 只允许保留为 legacy profiling 口径。
 2. Electron profiling 入口补齐前，旧 profiling 脚本不能被写成 current Electron 证据。
-3. current GUI / DevBridge / qcloop 文档守卫与 profiling 文档守卫共用同一个 `scripts/electron-current-docs-guard.test.mjs`。
+3. current GUI / DevBridge / qcloop 文档守卫与 profiling 文档守卫共用同一个 `scripts/electron/current-docs-guard.test.mjs`。
 
 2026-06-06 追加 internal testing entrypoint current guard：
 
 ```bash
-node --check "scripts/electron-current-docs-guard.test.mjs"
-npm test -- "scripts/electron-current-docs-guard.test.mjs"
+node --check "scripts/electron/current-docs-guard.test.mjs"
+npm test -- "scripts/electron/current-docs-guard.test.mjs"
 ```
 
 这组证据证明：
@@ -227,8 +227,8 @@ npm test -- "scripts/electron-current-docs-guard.test.mjs"
 2026-06-06 追加 E2E / testing strategy current section guard：
 
 ```bash
-node --check "scripts/electron-current-docs-guard.test.mjs"
-npm test -- "scripts/electron-current-docs-guard.test.mjs"
+node --check "scripts/electron/current-docs-guard.test.mjs"
+npm test -- "scripts/electron/current-docs-guard.test.mjs"
 ```
 
 这组证据证明：
@@ -240,9 +240,9 @@ npm test -- "scripts/electron-current-docs-guard.test.mjs"
 2026-06-06 追加 Vitest smoke runner current naming guard：
 
 ```bash
-node --check "scripts/lib/vitest-smoke-runner.mjs" "scripts/electron-current-rules-guard.test.mjs"
+node --check "scripts/lib/vitest-smoke-runner.mjs" "scripts/electron/current-rules-guard.test.mjs"
 node --check "scripts/lib/vitest-smoke-runner.test.mjs"
-npm test -- "scripts/lib/vitest-smoke-runner.test.mjs" "scripts/electron-current-rules-guard.test.mjs"
+npm test -- "scripts/lib/vitest-smoke-runner.test.mjs" "scripts/electron/current-rules-guard.test.mjs"
 ```
 
 这组证据证明：
@@ -255,10 +255,10 @@ npm test -- "scripts/lib/vitest-smoke-runner.test.mjs" "scripts/electron-current
 2026-06-06 追加 process owner deprecated Tauri runtime 分离：
 
 ```bash
-node --check "scripts/agent-qc-process-owner-check.mjs" "scripts/lib/agent-qc-process-owner-core.mjs" "scripts/lib/agent-qc-process-owner-current.test.mjs"
+node --check "scripts/agent-qc/process-owner-check.mjs" "scripts/lib/agent-qc-process-owner-core.mjs" "scripts/lib/agent-qc-process-owner-current.test.mjs"
 npx vitest run "scripts/lib/agent-qc-process-owner-core.test.ts" "scripts/lib/agent-qc-process-owner-current.test.mjs"
-rg -n "passiveTauriRuntime=|Passive Tauri dev runtime|passiveDesktopRuntime.*Tauri|isPassiveElectronRuntime\\(entry\\) \\|\\| isPassiveTauriRuntime" "scripts/lib/agent-qc-process-owner-core.mjs" "scripts/lib/agent-qc-process-owner-core.test.ts" "scripts/lib/agent-qc-process-owner-current.test.mjs" "scripts/agent-qc-process-owner-check.mjs"
-git diff --check -- "scripts/lib/agent-qc-process-owner-core.mjs" "scripts/lib/agent-qc-process-owner-core.test.ts" "scripts/lib/agent-qc-process-owner-current.test.mjs" "scripts/agent-qc-process-owner-check.mjs"
+rg -n "passiveTauriRuntime=|Passive Tauri dev runtime|passiveDesktopRuntime.*Tauri|isPassiveElectronRuntime\\(entry\\) \\|\\| isPassiveTauriRuntime" "scripts/lib/agent-qc-process-owner-core.mjs" "scripts/lib/agent-qc-process-owner-core.test.ts" "scripts/lib/agent-qc-process-owner-current.test.mjs" "scripts/agent-qc/process-owner-check.mjs"
+git diff --check -- "scripts/lib/agent-qc-process-owner-core.mjs" "scripts/lib/agent-qc-process-owner-core.test.ts" "scripts/lib/agent-qc-process-owner-current.test.mjs" "scripts/agent-qc/process-owner-check.mjs"
 ```
 
 这组证据证明：
@@ -271,16 +271,16 @@ git diff --check -- "scripts/lib/agent-qc-process-owner-core.mjs" "scripts/lib/a
 
 ```bash
 bash -n "scripts/monitor-build.sh"
-npx vitest run "scripts/electron-current-entrypoints.test.mjs"
-rg -n "Tauri 打包|tauri build|/tmp/tauri-build|src-tauri/target|lime-rs/target/release/bundle" "scripts/monitor-build.sh" "scripts/electron-current-entrypoints.test.mjs"
-git diff --check -- "scripts/monitor-build.sh" "scripts/electron-current-entrypoints.test.mjs"
+npx vitest run "scripts/electron/current-entrypoints.test.mjs"
+rg -n "Tauri 打包|tauri build|/tmp/tauri-build|src-tauri/target|lime-rs/target/release/bundle" "scripts/monitor-build.sh" "scripts/electron/current-entrypoints.test.mjs"
+git diff --check -- "scripts/monitor-build.sh" "scripts/electron/current-entrypoints.test.mjs"
 ```
 
 这组证据证明：
 
 1. `scripts/monitor-build.sh` 已监控 Electron package output `release-electron`，不再监控旧 Tauri bundle 目录。
 2. build log 入口已从 `/tmp/tauri-build.log` 改为 `/tmp/electron-build.log`。
-3. 进程判断已从 `tauri build` 改为 `electron-builder|electron:package:dir|electron:dist`。
+3. 进程判断已从 `tauri build` 改为 `electron-forge|electron:package:dir|electron:dist`。
 
 2026-06-06 追加 sherpa runtime Rust workspace 口径收口：
 
@@ -330,29 +330,29 @@ git diff --check -- "src/features/agent-app/packaging/artifactBuilder.ts" "src/f
 2026-06-06 追加 Vitest layer classifier current / legacy desktop host contract 分离：
 
 ```bash
-node --check "scripts/lib/vitest-layer-classifier.mjs" "scripts/lib/vitest-layer-classifier.unit.test.mjs" "scripts/electron-current-rules-guard.test.mjs"
-npx vitest run "scripts/lib/vitest-layer-classifier.unit.test.mjs" "scripts/electron-current-rules-guard.test.mjs"
-rg -n "desktop-host-api|legacy-desktop-host-api|@tauri-apps/api|__TAURI__" "scripts/lib/vitest-layer-classifier.mjs" "scripts/lib/vitest-layer-classifier.unit.test.mjs" "scripts/electron-current-rules-guard.test.mjs"
-git diff --check -- "scripts/lib/vitest-layer-classifier.mjs" "scripts/lib/vitest-layer-classifier.unit.test.mjs" "scripts/electron-current-rules-guard.test.mjs" "internal/roadmap/appserver/testing-migration.md"
+node --check "scripts/lib/vitest-layer-classifier.mjs" "scripts/lib/vitest-layer-classifier.unit.test.mjs" "scripts/electron/current-rules-guard.test.mjs"
+npx vitest run "scripts/lib/vitest-layer-classifier.unit.test.mjs" "scripts/electron/current-rules-guard.test.mjs"
+rg -n "desktop-host-api|legacy-desktop-host-api|@tauri-apps/api|__TAURI__" "scripts/lib/vitest-layer-classifier.mjs" "scripts/lib/vitest-layer-classifier.unit.test.mjs" "scripts/electron/current-rules-guard.test.mjs"
+git diff --check -- "scripts/lib/vitest-layer-classifier.mjs" "scripts/lib/vitest-layer-classifier.unit.test.mjs" "scripts/electron/current-rules-guard.test.mjs" "internal/roadmap/appserver/testing-migration.md"
 ```
 
 这组证据证明：
 
 1. Vitest 分层统计中的 `desktop-host-api` 只匹配 Electron Desktop Host current 信号。
 2. `@tauri-apps/api` 与 `__TAURI__` 已单独归为 `legacy-desktop-host-api` contract 信号，只能用于 legacy / deprecated adapter 守卫。
-3. `scripts/electron-current-rules-guard.test.mjs` 已阻止旧 Tauri API 被重新标成 desktop-host current 证据。
+3. `scripts/electron/current-rules-guard.test.mjs` 已阻止旧 Tauri API 被重新标成 desktop-host current 证据。
 
 2026-06-06 追加 Electron / App Server current 闭环定向验证：
 
 ```bash
-npm test -- "scripts/electron-current-entrypoints.test.mjs" "scripts/electron-current-rules-guard.test.mjs" "scripts/electron-current-docs-guard.test.mjs" "scripts/lib/electron-dev-sidecar.test.mjs" "scripts/lib/electron-app-server-assets.test.mjs"
+npm test -- "scripts/electron/current-entrypoints.test.mjs" "scripts/electron/current-rules-guard.test.mjs" "scripts/electron/current-docs-guard.test.mjs" "scripts/lib/electron-dev-sidecar.test.mjs" "scripts/lib/electron-app-server-assets.test.mjs"
 npm --prefix "packages/app-server-client" test
 npm run test:contracts
 npm run verify:app-version
 cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol -p app-server-client -p app-server-transport
 cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --lib
 npm run smoke:electron
-git diff --check -- "lime-rs/crates/app-server-protocol/src/protocol/v0.rs" "scripts/electron-current-rules-guard.test.mjs" "internal/roadmap/appserver/testing-migration.md"
+git diff --check -- "lime-rs/crates/app-server-protocol/src/protocol/v0.rs" "scripts/electron/current-rules-guard.test.mjs" "internal/roadmap/appserver/testing-migration.md"
 ```
 
 这组证据证明：
@@ -366,45 +366,45 @@ git diff --check -- "lime-rs/crates/app-server-protocol/src/protocol/v0.rs" "scr
 2026-06-06 追加 Electron current build / release / CI runtime input guard：
 
 ```bash
-node --check "scripts/electron-current-entrypoints.test.mjs"
-npx vitest run "scripts/electron-current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
-npx vitest run "scripts/electron-current-docs-guard.test.mjs" "scripts/electron-current-rules-guard.test.mjs" --silent=passed-only --disableConsoleIntercept
-npx prettier --check "scripts/electron-current-entrypoints.test.mjs"
+node --check "scripts/electron/current-entrypoints.test.mjs"
+npx vitest run "scripts/electron/current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
+npx vitest run "scripts/electron/current-docs-guard.test.mjs" "scripts/electron/current-rules-guard.test.mjs" --silent=passed-only --disableConsoleIntercept
+npx prettier --check "scripts/electron/current-entrypoints.test.mjs"
 npm run test:contracts
-git diff --check -- "scripts/electron-current-entrypoints.test.mjs" "internal/roadmap/appserver/testing-migration.md"
+git diff --check -- "scripts/electron/current-entrypoints.test.mjs" "internal/roadmap/appserver/testing-migration.md"
 ```
 
 这组证据证明：
 
-1. `scripts/electron-current-entrypoints.test.mjs` 已递归扫描 `.github/` 与 `electron/`，并覆盖 Electron build / package / release / updater / smoke / version current 入口。
+1. `scripts/electron/current-entrypoints.test.mjs` 已递归扫描 `.github/` 与 `electron/`，并覆盖 Electron build / package / release / updater / smoke / version current 入口。
 2. current Electron 构建、发布、CI 与 host 文件不得重新消费旧宿主 config、CLI、全局对象、runtime marker 或命令宏。
 3. `npm run test:contracts` 通过，`mock priority commands: 0`，确认这次守卫补强没有让生产 bridge 回退 mock 或旧宿主路径。
 
 2026-06-06 追加 root Tauri GUI app 删除与 Rust layer virtual workspace 口径：
 
 ```bash
-node --check "scripts/rust-test-layer-classifier.mjs" "scripts/run-rust-layer.mjs" "scripts/electron-current-entrypoints.test.mjs"
-npx vitest run "scripts/rust-test-layer-classifier.test.mjs" "scripts/lib/legacy-surface-report-core.test.ts" "scripts/electron-current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
+node --check "scripts/rust-test-layer-classifier.mjs" "scripts/run-rust-layer.mjs" "scripts/electron/current-entrypoints.test.mjs"
+npx vitest run "scripts/rust-test-layer-classifier.test.mjs" "scripts/lib/legacy-surface-report-core.test.ts" "scripts/electron/current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
 node "scripts/run-rust-layer.mjs" unit --list --json
 ```
 
 这组证据证明：
 
 1. `lime-rs/build.rs`、`lime-rs/src/main.rs`、`lime-rs/src/lib.rs`、`lime-rs/tauri.conf.json`、`lime-rs/tauri.conf.headless.json` 已按 `dead` root GUI app entry 删除。
-2. `scripts/electron-current-entrypoints.test.mjs` 已守住这些 root app entry files 不能重新出现；Desktop current 只允许 Electron / App Server 入口。
+2. `scripts/electron/current-entrypoints.test.mjs` 已守住这些 root app entry files 不能重新出现；Desktop current 只允许 Electron / App Server 入口。
 3. Rust layer classifier 现在按 virtual workspace 事实源识别真实 `crates/*` package；无 root `[package]` 时，`lime-rs/src` 残留旧模块只计为 `unmanaged-root` 治理统计，不再进入默认 Rust test 执行口径。
 
 2026-06-07 追加 retired Windows host config current 回流守卫：
 
 ```bash
-node --check "scripts/electron-current-entrypoints.test.mjs"
-npx vitest run "scripts/electron-current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
-rg -n "lime-rs/tauri.windows.conf|tauri.windows.conf" "package.json" "electron-builder.yml" ".github" "electron" "scripts/check-app-version-consistency.mjs"
-git diff --check -- "scripts/electron-current-entrypoints.test.mjs" "internal/roadmap/appserver/testing-migration.md"
+node --check "scripts/electron/current-entrypoints.test.mjs"
+npx vitest run "scripts/electron/current-entrypoints.test.mjs" --silent=passed-only --disableConsoleIntercept
+rg -n "lime-rs/tauri.windows.conf|tauri.windows.conf" "package.json" "forge.config.mjs" ".github" "electron" "scripts/check-app-version-consistency.mjs"
+git diff --check -- "scripts/electron/current-entrypoints.test.mjs" "internal/roadmap/appserver/testing-migration.md"
 ```
 
 这组证据证明：
 
-1. `lime-rs/tauri.windows.conf.json` 只允许作为 `dead cleanup candidate` 暂存，不能回流 package scripts、Electron Builder、CI、Electron host 或版本一致性检查。
-2. `scripts/electron-current-entrypoints.test.mjs` 已把该 Windows 旧宿主配置加入 retired build input 禁止词，并扫描 Electron current build / release / CI / host 文件。
+1. `lime-rs/tauri.windows.conf.json` 只允许作为 `dead cleanup candidate` 暂存，不能回流 package scripts、Electron Forge、CI、Electron host 或版本一致性检查。
+2. `scripts/electron/current-entrypoints.test.mjs` 已把该 Windows 旧宿主配置加入 retired build input 禁止词，并扫描 Electron current build / release / CI / host 文件。
 3. 物理删除该文件属于文件删除动作，需要按危险操作确认后再执行；删除后同一守卫应继续通过。

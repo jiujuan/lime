@@ -5,6 +5,7 @@ use crate::EvidenceExportProvider;
 use crate::ExternalBackend;
 use crate::ExternalBackendConfig;
 use crate::MockBackend;
+use crate::RuntimeBackend;
 use crate::RuntimeCore;
 use crate::UnavailableBackend;
 #[cfg(feature = "aster-backend")]
@@ -15,6 +16,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppServerBackendMode {
     External,
+    Runtime,
     Mock,
     Unavailable,
 }
@@ -23,6 +25,7 @@ impl AppServerBackendMode {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::External => "external",
+            Self::Runtime => "runtime",
             Self::Mock => "mock",
             Self::Unavailable => "unavailable",
         }
@@ -32,6 +35,7 @@ impl AppServerBackendMode {
         let normalized = value.trim().to_ascii_lowercase();
         match normalized.as_str() {
             "external" => Ok(Self::External),
+            "runtime" => Ok(Self::Runtime),
             "mock" => Ok(Self::Mock),
             "unavailable" => Ok(Self::Unavailable),
             _ => Err(UnsupportedBackendMode {
@@ -84,6 +88,31 @@ impl AppServerRuntimeFactory {
     ) -> AppServer {
         AppServer::with_runtime(Self::external_runtime_core_with_capability_source(
             config,
+            capability_source,
+        ))
+    }
+
+    pub fn runtime_backend_core() -> RuntimeCore {
+        RuntimeCore::with_backend(Arc::new(RuntimeBackend::new()))
+    }
+
+    pub fn runtime_backend_core_with_capability_source(
+        capability_source: Arc<dyn CapabilitySource>,
+    ) -> RuntimeCore {
+        RuntimeCore::with_backend_and_capability_source(
+            Arc::new(RuntimeBackend::new()),
+            capability_source,
+        )
+    }
+
+    pub fn runtime_app_server() -> AppServer {
+        AppServer::with_runtime(Self::runtime_backend_core())
+    }
+
+    pub fn runtime_app_server_with_capability_source(
+        capability_source: Arc<dyn CapabilitySource>,
+    ) -> AppServer {
+        AppServer::with_runtime(Self::runtime_backend_core_with_capability_source(
             capability_source,
         ))
     }
@@ -216,11 +245,16 @@ mod tests {
     #[test]
     fn backend_mode_is_explicit_for_standalone_binary() {
         assert_eq!(AppServerBackendMode::External.as_str(), "external");
+        assert_eq!(AppServerBackendMode::Runtime.as_str(), "runtime");
         assert_eq!(AppServerBackendMode::Mock.as_str(), "mock");
         assert_eq!(AppServerBackendMode::Unavailable.as_str(), "unavailable");
         assert_eq!(
             AppServerBackendMode::parse(" external ").expect("external mode"),
             AppServerBackendMode::External
+        );
+        assert_eq!(
+            AppServerBackendMode::parse(" runtime ").expect("runtime mode"),
+            AppServerBackendMode::Runtime
         );
         assert_eq!(
             AppServerBackendMode::parse(" mock ").expect("mock mode"),
@@ -244,6 +278,39 @@ mod tests {
     fn factory_builds_external_runtime_without_host_dependencies() {
         let _server =
             AppServerRuntimeFactory::external_app_server(ExternalBackendConfig::new("backend"));
+    }
+
+    #[test]
+    fn factory_builds_runtime_backend_without_host_dependencies() {
+        let _server = AppServerRuntimeFactory::runtime_app_server();
+    }
+
+    #[test]
+    fn factory_builds_runtime_backend_with_injected_capability_source() {
+        let runtime = AppServerRuntimeFactory::runtime_backend_core_with_capability_source(
+            Arc::new(CapabilityInventorySource::new(vec![
+                CapabilityInventoryRecord::new(CapabilityDescriptor {
+                    id: "content.draft.generate".to_string(),
+                    title: "Generate Draft".to_string(),
+                    description: None,
+                    methods: vec!["agentSession/turn/start".to_string()],
+                })
+                .for_apps(["content-studio"]),
+            ])),
+        );
+
+        let response = runtime
+            .list_capabilities(CapabilityListParams {
+                app_id: Some("content-studio".to_string()),
+                workspace_id: None,
+                session_id: None,
+                cursor: None,
+                limit: None,
+            })
+            .expect("capability list");
+
+        assert_eq!(response.capabilities.len(), 1);
+        assert_eq!(response.capabilities[0].id, "content.draft.generate");
     }
 
     #[test]

@@ -589,4 +589,30 @@ describe("threadTimelineView", () => {
     expect(() => mergeThreadTurns([persistedTurn])).not.toThrow();
     expect(mergeThreadTurns([persistedTurn])).toEqual([persistedTurn]);
   });
+
+  it("历史 turn 或 item 缺少 started_at 时不应中断排序", () => {
+    const turnWithoutStart = {
+      id: "turn-without-start",
+      thread_id: "thread-1",
+      prompt_text: "整理今天的国际新闻",
+      status: "failed",
+      created_at: "2026-06-07T07:53:20.000Z",
+      updated_at: "2026-06-07T07:55:20.000Z",
+    } as AgentThreadTurn;
+    const itemWithoutStart = {
+      id: "item-without-start",
+      thread_id: "thread-1",
+      turn_id: "turn-without-start",
+      sequence: 1,
+      status: "failed",
+      updated_at: "2026-06-07T07:55:20.000Z",
+      type: "error",
+      message: "执行已中断",
+    } as AgentThreadItem;
+
+    expect(() => mergeThreadTurns([turnWithoutStart])).not.toThrow();
+    expect(() => mergeThreadItems([itemWithoutStart])).not.toThrow();
+    expect(mergeThreadTurns([turnWithoutStart])).toEqual([turnWithoutStart]);
+    expect(mergeThreadItems([itemWithoutStart])).toEqual([itemWithoutStart]);
+  });
 });

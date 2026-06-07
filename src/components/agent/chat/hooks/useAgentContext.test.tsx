@@ -335,11 +335,11 @@ describe("useAgentContext", () => {
             workspace_id: "workspace-2",
           },
           {
-            id: "session-legacy-fallback",
+            id: "session-legacy-without-workspace",
           },
         ])
         .map((session) => session.id),
-    ).toEqual(["session-runtime-current", "session-legacy-fallback"]);
+    ).toEqual(["session-runtime-current"]);
     expect(loadPersistedSessionWorkspaceId("session-runtime-current")).toBe(
       "workspace-1",
     );

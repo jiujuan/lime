@@ -160,7 +160,7 @@ flowchart TD
 | `src/features/agent-app/ui/*` | 新增 Manager list / status / lifecycle panels，仍只在 Lab feature flag 下渲染。 |
 | `src/features/agent-app/install/*` | 复用 installed state、package cache、setup state、cleanup plan，不新增第二套 repository。 |
 | `src/features/agent-app/runtime/entryRuntimeGuard.ts` | 继续作为所有 entry launch 的唯一 guard。 |
-| `scripts/agent-app-lab-smoke.mjs` | 扩展覆盖 Manager list、entry launcher、disable / uninstall preview。 |
+| `scripts/agent-app/lab-smoke.mjs` | 扩展覆盖 Manager list、entry launcher、disable / uninstall preview。 |
 | `internal/roadmap/agentapp/*` | 更新 P16 验证证据和进入正式入口的 gate 判定。 |
 
 ## 验收标准
@@ -185,7 +185,7 @@ npm run smoke:agent-app-lab -- --timeout-ms 180000
 npm run typecheck
 npm run test:contracts
 
-git diff --check -- internal/roadmap/agentapp src/features/agent-app scripts/agent-app-lab-smoke.mjs package.json
+git diff --check -- internal/roadmap/agentapp src/features/agent-app scripts/agent-app/lab-smoke.mjs package.json
 
 rg -n "safeInvoke|invoke\(|tauri::|generate_handler|mockPriorityCommands|defaultMocks|new Worker|Worker\(" src/features/agent-app || true
 ```
@@ -200,7 +200,7 @@ rg -n "safeInvoke|invoke\(|tauri::|generate_handler|mockPriorityCommands|default
 | `npm run smoke:agent-app-lab -- --timeout-ms 180000` | 通过；summary 增加 `managerVisible`、`managerRepository` 与 `managerEvidence`。 |
 | `npm run verify:gui-smoke` | 通过；覆盖 workspace-ready、browser-runtime、site-adapters、Agent runtime tool surface、Claw Chat ready streaming、Knowledge GUI 与 Design Canvas。 |
 | `npm run test:contracts` | 通过。 |
-| `git diff --check -- internal/roadmap/agentapp src/features/agent-app scripts/agent-app-lab-smoke.mjs package.json src/i18n/resources src/components/agent/chat/workspace/useSceneAppExecutionSummaryRuntime.test.tsx` | 通过。 |
+| `git diff --check -- internal/roadmap/agentapp src/features/agent-app scripts/agent-app/lab-smoke.mjs package.json src/i18n/resources src/components/agent/chat/workspace/useSceneAppExecutionSummaryRuntime.test.tsx` | 通过。 |
 | `rg` boundary / legacy audit | 通过，`src/features/agent-app` 无 `safeInvoke` / Tauri / raw Worker 越界，未复活旧内容工程化 key。 |
 
 ## 剩余差距

@@ -7,6 +7,7 @@ export type DevBridgeCommandTimeoutProfile =
   | "agent-session-patch"
   | "agent-session-create"
   | "app-server-turn-start"
+  | "app-server-read"
   | "agent-runtime"
   | "agent-app-ui-runtime-start"
   | "agent-app-package"
@@ -235,6 +236,31 @@ const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
 const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
 const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD =
   "agentAppUiRuntime/start";
+const APP_SERVER_READ_METHODS = new Set([
+  "capability/list",
+  "artifact/read",
+  "fileSystem/listDirectory",
+  "fileSystem/readFilePreview",
+  "agentSession/read",
+  "skill/list",
+  "skill/read",
+  "workspaceSkillBindings/list",
+  "workspaceRegisteredSkills/list",
+  "agentAppInstalled/list",
+  "agentAppUiRuntime/status",
+  "knowledgePack/list",
+  "automationJob/list",
+  "projectMemory/read",
+  "model/list",
+  "modelPreferences/list",
+  "modelSyncState/read",
+  "modelProvider/list",
+  "modelProvider/catalog/list",
+  "modelProviderAlias/read",
+  "modelProviderAlias/list",
+  "connectDeepLink/resolve",
+  "connectOpenDeepLink/resolve",
+]);
 const APP_SERVER_STARTUP_TRUTH_METHODS = new Set([
   "workspace/default/read",
   "workspace/default/ensure",
@@ -323,6 +349,9 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerStartupTruthCommand(command, args)) {
     return "startup-truth";
   }
+  if (isAppServerReadCommand(command, args)) {
+    return "app-server-read";
+  }
   if (
     command.startsWith("agent_app_runtime_") ||
     command.startsWith("agent_runtime_")
@@ -401,6 +430,15 @@ function isAppServerStartupTruthCommand(
   }
   return extractAppServerJsonLines(args).some((line) =>
     jsonRpcLineHasAnyMethod(line, APP_SERVER_STARTUP_TRUTH_METHODS),
+  );
+}
+
+function isAppServerReadCommand(command: string, args: unknown): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasAnyMethod(line, APP_SERVER_READ_METHODS),
   );
 }
 

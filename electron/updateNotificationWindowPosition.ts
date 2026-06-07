@@ -38,13 +38,16 @@ export function buildUpdateNotificationWindowBounds({
     : buildFallbackAnchorRect(contentBounds);
   const width = Math.max(1, Math.round(updateWindowSize.width));
   const height = Math.max(1, Math.round(updateWindowSize.height));
-  const minX = workArea.x + margin;
-  const maxX = workArea.x + workArea.width - width - margin;
+  const minX = Math.max(workArea.x + margin, contentBounds.x + margin);
+  const maxX = Math.min(
+    workArea.x + workArea.width - width - margin,
+    contentBounds.x + contentBounds.width - width - margin,
+  );
   const minY = workArea.y + margin;
   const maxY = workArea.y + workArea.height - height - margin;
   const anchorScreenX = contentBounds.x + anchor.x;
   const anchorScreenY = contentBounds.y + anchor.y;
-  const preferredX = anchorScreenX + anchor.width / 2 - width / 2;
+  const preferredX = anchorScreenX;
   const preferredY = anchorScreenY - height - gap;
   const fallbackY = anchorScreenY + anchor.height + gap;
   const y = preferredY >= minY || fallbackY > maxY ? preferredY : fallbackY;

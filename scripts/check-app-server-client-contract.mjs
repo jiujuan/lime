@@ -25,6 +25,13 @@ const retiredAsterRuntimeCoreBuilder = [
   "aster",
   "runtime_core",
 ].join("_");
+const legacySessionCompatCommandSpecs = [
+  { command: "agent_runtime_create_session", key: "createSession" },
+  { command: "agent_runtime_list_sessions", key: "listSessions" },
+  { command: "agent_runtime_get_session", key: "getSession" },
+  { command: "agent_runtime_update_session", key: "updateSession" },
+  { command: "agent_runtime_delete_session", key: "deleteSession" },
+];
 
 const checks = [
   {
@@ -1349,7 +1356,7 @@ const checks = [
   },
   {
     name: "Electron Agent App runtime fixture proves Desktop Host facade to App Server runtime state",
-    file: "scripts/agent-app-runtime-electron-task-fixture-smoke.mjs",
+    file: "scripts/agent-app/runtime-electron-task-fixture-smoke.mjs",
     snippets: [
       "[smoke:agent-app-runtime-electron-task-fixture]",
       "import { _electron as electron }",
@@ -1398,7 +1405,7 @@ const checks = [
   },
   {
     name: "Electron Agent App SDK fixture proves iframe Host Bridge to App Server runtime state",
-    file: "scripts/agent-app-runtime-electron-sdk-fixture-smoke.mjs",
+    file: "scripts/agent-app/runtime-electron-sdk-fixture-smoke.mjs",
     snippets: [
       "[smoke:agent-app-runtime-electron-sdk-fixture]",
       "import { _electron as electron }",
@@ -1487,7 +1494,7 @@ const checks = [
   },
   {
     name: "Electron session history fixture proves App Server current read list update path",
-    file: "scripts/agent-session-history-electron-fixture-smoke.mjs",
+    file: "scripts/electron/session-history-fixture-smoke.mjs",
     snippets: [
       "[smoke:agent-session-history-electron-fixture]",
       "import { _electron as electron }",
@@ -1505,6 +1512,45 @@ const checks = [
       '"agentSession/list"',
       'const FORBIDDEN_METHODS = ["agentSession/turn/start"]',
       "forbiddenMethodsSeen.length === 0",
+      "ARCHIVE_FAIL_CLOSED_MESSAGE",
+      "archived: true",
+      "callExpectError",
+      "archiveRequestSeen",
+      "archiveFailClosed",
+      "listedSessionArchivedAt == null",
+      "seedPersistedCurrentTimelineSession",
+      "SQLITE3_BINARY",
+      "PERSISTED_SESSION_ID",
+      "launchElectronFixture",
+      "closeElectronFixture",
+      '"archive-readback"',
+      '"unarchive-readback"',
+      "sidecarRestartReadback",
+      "persistedArchiveReopenSummary",
+      "persistedUnarchiveReopenSummary",
+      "archived: false",
+      "PERSISTED_SESSION_FORBIDDEN_METHODS",
+      "SIDEBAR_GUI_REQUIRED_METHODS",
+      "SIDEBAR_GUI_FORBIDDEN_METHODS",
+      "LAST_PROJECT_ID_KEY",
+      "APP_SIDEBAR_COLLAPSED_STORAGE_KEY",
+      "runSidebarGuiArchivePhase",
+      "primeSidebarWorkspace",
+      "openSidebarConversationMenu",
+      "clickSidebarArchiveMenuItem",
+      "waitForSidebarGuiUpdateTrace",
+      "parseJsonRpcRequestsFromInvokeTrace",
+      "SIDEBAR_RECENT_LIST_SELECTOR",
+      "SIDEBAR_ARCHIVED_LIST_SELECTOR",
+      "SIDEBAR_ARCHIVE_MENU_ITEM_SELECTOR",
+      "app-sidebar-conversation-menu-archive",
+      'request.status === "success"',
+      "sidebarGuiArchiveSummary",
+      "sidebarGuiArchive",
+      "archiveTrace",
+      "unarchiveTrace",
+      "侧栏 GUI 点击未发起 agentSession/update archived=true",
+      "侧栏 GUI 点击未发起 agentSession/update archived=false",
       "detail.turns",
       "detail.items",
       "detail.queued_turns",
@@ -1524,6 +1570,109 @@ const checks = [
       "defaultMocks",
       "invokeMockOnly",
       'backendMode: "mock"',
+    ],
+  },
+  {
+    name: "Electron code artifact workbench fixture proves App Server current artifact path",
+    file: "scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
+    snippets: [
+      "[smoke:code-artifact-workbench-electron-fixture]",
+      "import { _electron as electron }",
+      "electron.launch({",
+      '"--use-mock-keychain"',
+      'APP_SERVER_BACKEND_MODE: "external"',
+      "APP_SERVER_BACKEND_COMMAND: process.execPath",
+      "writeFixtureBackend(",
+      "readJsonl(runtimeEnv.backendLedgerPath)",
+      "writeJsonFile(backendLedgerEvidencePath",
+      'LIME_ELECTRON_DEV_HTTP_BRIDGE: "0"',
+      "window.__LIME_ELECTRON__ === true",
+      "window.electronAPI.supportsCommand",
+      'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
+      '"agentSession/start"',
+      '"agentSession/update"',
+      '"agentSession/turn/start"',
+      '"agentSession/read"',
+      '"agentSession/list"',
+      'type: "artifact.snapshot"',
+      'type: "turn.final_done"',
+      "Hello Lime Workbench",
+      "openFixtureSessionFromSidebar",
+      "openWorkbench",
+      "workbenchOpened",
+      "artifactPersisted",
+      "appServerJsonRpcUsed",
+      "externalFixtureBackendUsed",
+      "liveProviderNotUsed",
+      "noInvokeErrors",
+    ],
+    absentSnippets: [
+      'APP_SERVER_BACKEND_MODE: "mock"',
+      'backendMode: "mock"',
+      "--allow-live-provider",
+      "agent_runtime_",
+      "mockPriorityCommands",
+      "defaultMocks",
+      "invokeMockOnly",
+      "explicitMockFallback",
+    ],
+  },
+  {
+    name: "npm exposes explicit Electron current fixture smokes",
+    file: "package.json",
+    snippets: [
+      '"smoke:agent-session-history-electron-fixture"',
+      "scripts/electron/session-history-fixture-smoke.mjs",
+      '"smoke:code-artifact-workbench-electron-fixture"',
+      "scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
+    ],
+  },
+  {
+    name: "Electron session messages fixture proves App Server read detail messages after turn",
+    file: "scripts/smoke/agent-session-messages-electron-fixture-smoke.mjs",
+    snippets: [
+      "[smoke:agent-session-messages-electron-fixture]",
+      "import { _electron as electron }",
+      "electron.launch({",
+      '"--use-mock-keychain"',
+      'APP_SERVER_BACKEND_MODE: "external"',
+      "APP_SERVER_BACKEND_COMMAND: process.execPath",
+      "APP_SERVER_BACKEND_ARGS: JSON.stringify",
+      'LIME_ELECTRON_DEV_HTTP_BRIDGE: "0"',
+      "window.__LIME_ELECTRON__ === true",
+      "window.electronAPI.supportsCommand",
+      'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
+      '"initialize"',
+      '"agentSession/start"',
+      '"agentSession/turn/start"',
+      '"agentSession/read"',
+      "writeFixtureBackend(",
+      "readBackendLedger(",
+      'input.kind === "turnStart"',
+      'type: "message.delta"',
+      "waitForReadModel",
+      "readModelConverged",
+      "readSnapshots",
+      "detail?.messages_count",
+      "detailMessagesLength",
+      "contentTextFromMessage",
+      "summary.detailMessagesCount === 2",
+      "summary.detailMessagesLength === 2",
+      "summary.userMessageText === USER_TEXT",
+      "summary.assistantMessageText === ASSISTANT_TEXT",
+      "用户消息未从 App Server detail.messages 恢复",
+      "助手消息未从 message.delta 投影",
+      "backendTurnStartSeen",
+    ],
+    absentSnippets: [
+      'APP_SERVER_BACKEND_MODE: "mock"',
+      'backendMode: "mock"',
+      "--allow-live-provider",
+      "agent_runtime_",
+      "mockPriorityCommands",
+      "defaultMocks",
+      "invokeMockOnly",
+      "explicitMockFallback",
     ],
   },
   {
@@ -1694,7 +1843,7 @@ const checks = [
       "(AppServerBackendMode::Unavailable, Some(capability_source))",
       "AppServerRuntimeFactory::unavailable_runtime_core_with_capability_source(",
       "AppServerRuntimeFactory::unavailable_runtime_core()",
-      "--backend external|mock|unavailable",
+      "--backend external|runtime|mock|unavailable",
       "--app-policy path",
       "app_policy_path: Option<String>",
       ".map(load_app_policy_source)",
@@ -1719,7 +1868,7 @@ const checks = [
       "--backend-arg",
       "--backend-timeout-ms",
       "invalid --backend-timeout-ms",
-      "--backend external|mock|unavailable",
+      "--backend external|runtime|mock|unavailable",
       "[--backend-command path]",
       "[--backend-arg value]",
       "[--backend-timeout-ms ms]",
@@ -1728,16 +1877,17 @@ const checks = [
     ],
   },
   {
-    name: "Standalone App Server runtime exposes external backend mode",
+    name: "Standalone App Server runtime exposes App Server RuntimeBackend mode",
     file: "lime-rs/crates/app-server/src/runtime_factory.rs",
     snippets: [
-      "External",
-      'Self::External => "external"',
-      '"external" => Ok(Self::External)',
-      "pub fn external_runtime_core(config: ExternalBackendConfig) -> RuntimeCore",
-      "pub fn external_app_server(config: ExternalBackendConfig) -> AppServer",
-      "factory_builds_external_runtime_without_host_dependencies",
-      "factory_builds_external_runtime_with_injected_capability_source",
+      "Runtime",
+      'Self::Runtime => "runtime"',
+      '"runtime" => Ok(Self::Runtime)',
+      "pub fn runtime_backend_core() -> RuntimeCore",
+      "pub fn runtime_backend_core_with_capability_source(",
+      "pub fn runtime_app_server() -> AppServer",
+      "factory_builds_runtime_backend_without_host_dependencies",
+      "factory_builds_runtime_backend_with_injected_capability_source",
     ],
   },
   {
@@ -1767,18 +1917,18 @@ const checks = [
     absentSnippets: ["child.wait_with_output()"],
   },
   {
-    name: "Standalone App Server has non-Tauri real agent external backend command",
+    name: "Standalone App Server current runtime backend embeds Claw Aster execution chain",
     files: [
-      "lime-rs/crates/app-server-agent-backend/Cargo.toml",
-      "lime-rs/crates/app-server-agent-backend/src/main.rs",
+      "lime-rs/crates/app-server/src/lib.rs",
+      "lime-rs/crates/app-server/src/runtime_backend.rs",
     ],
     snippets: [
-      'name = "app-server-agent-backend"',
-      "lime-agent.workspace = true",
-      "lime-core.workspace = true",
-      "lime-services.workspace = true",
+      "mod runtime_backend;",
+      "pub use runtime_backend::RuntimeBackend",
+      "pub struct RuntimeBackend",
+      "impl ExecutionBackend for RuntimeBackend",
       "initialize_aster_runtime(",
-      "failed to initialize Aster runtime for external backend",
+      "failed to initialize Aster runtime for App Server runtime backend",
       "AsterAgentState::new()",
       "direct_provider_config_from_request",
       "configure_provider(provider_config.clone(), &session_scope.session_id, &db)",
@@ -1789,16 +1939,18 @@ const checks = [
       "resolve_request_tool_policy_with_mode(web_search, search_mode, true)",
       "natural_language_news_turn_leaves_search_mode_to_model_tool_choice",
       "direct_host_provider_config_allows_localhost_fixture_without_database_provider",
-      "host_provider_config_without_direct_credentials_stays_database_backed",
+      "if request.api_key.is_none() && request.base_url.is_none() {",
       '"message.delta"',
       '"turn.final_done"',
       "selection_from_explicit_preferences",
       "selection_from_host_provider_config",
       "selection_from_session_default",
-      "session_default_provider_model_is_used_after_frontend_compaction",
+      '"/providerSelector"',
+      '"/modelName"',
       "current_timeline_extension_data_provider_routing_is_used_as_session_default",
-      "incomplete_session_default_is_not_a_runtime_selection",
-      "App Server external backend requires provider/model selection",
+      "let provider = session_default_provider(metadata)?;",
+      "let model = session_default_model(metadata)?;",
+      "App Server runtime backend requires provider/model selection",
       "persist a complete session provider/model default",
     ],
     absentSnippets: [
@@ -1898,7 +2050,7 @@ const checks = [
   },
   {
     name: "Standalone App Server external backend smoke proves independent app query loop",
-    file: "scripts/app-server-external-backend-smoke.mjs",
+    file: "scripts/app-server/external-backend-smoke.mjs",
     snippets: [
       "[smoke:app-server-external-backend] ok",
       "connectAppServerSidecar",
@@ -1928,7 +2080,7 @@ const checks = [
     file: "package.json",
     snippets: [
       '"smoke:app-server-external-backend"',
-      "scripts/app-server-external-backend-smoke.mjs",
+      "scripts/app-server/external-backend-smoke.mjs",
       'npm --prefix \\"packages/app-server-client\\" run build',
     ],
   },
@@ -2810,17 +2962,22 @@ const checks = [
       "appServerSessionClient.listAgentRuntimeSessions({",
       "appServerSessionClient.getAgentRuntimeSession(",
       "appServerSessionClient.updateAgentRuntimeSession(request)",
-      "AGENT_RUNTIME_COMMANDS.deleteSession",
+      "async function deleteAgentRuntimeSession(sessionId: string): Promise<void>",
+      "return await updateAgentRuntimeSession({",
+      "session_id: sessionId",
+      "archived: true",
     ],
     absentSnippets: [
       "AGENT_RUNTIME_COMMANDS.createSession",
       "AGENT_RUNTIME_COMMANDS.listSessions",
       "AGENT_RUNTIME_COMMANDS.getSession",
       "AGENT_RUNTIME_COMMANDS.updateSession",
+      "AGENT_RUNTIME_COMMANDS.deleteSession",
       '"agent_runtime_create_session"',
       '"agent_runtime_list_sessions"',
       '"agent_runtime_get_session"',
       '"agent_runtime_update_session"',
+      '"agent_runtime_delete_session"',
     ],
   },
   {
@@ -2849,6 +3006,52 @@ const checks = [
       '"agent_runtime_get_session"',
       '"agent_runtime_create_session"',
       '"agent_runtime_update_session"',
+    ],
+  },
+  {
+    name: "Renderer App Server session facade tests preserve read detail messages",
+    file: "src/lib/api/agentRuntime/appServerSessionClient.test.ts",
+    snippets: [
+      "get 应优先返回 App Server detail 并透传 history 游标",
+      "messages_count: 2",
+      "history_cursor: {",
+      "loaded_count: 2",
+      "请整理 App Server 对话历史",
+      "已从 App Server detail.messages 读取。",
+      "client.getAgentRuntimeSession(",
+      "appServerClient.readSession",
+      'sessionId: "session-1"',
+      "historyLimit: 40",
+      "historyOffset: 2",
+      "historyBeforeMessageId: 100",
+    ],
+    absentSnippets: [
+      '"agent_runtime_get_session"',
+      "invokeMockOnly",
+      "mockPriorityCommands",
+      "defaultMocks",
+    ],
+  },
+  {
+    name: "Renderer chat history hydration tests consume App Server read detail messages",
+    file: "src/components/agent/chat/hooks/agentChatHistory.test.ts",
+    snippets: [
+      "App Server read detail.messages 当前形状应直接恢复用户与助手消息",
+      "messages_count: 2",
+      "history_cursor: {",
+      "loaded_count: 2",
+      "请整理 App Server 对话历史",
+      "已从 App Server detail.messages 读取。",
+      "hydrateSessionDetailMessages(",
+      "session-app-server-messages-0",
+      "session-app-server-messages-1",
+      "contentParts: [",
+    ],
+    absentSnippets: [
+      "agent_runtime_get_session",
+      "invokeMockOnly",
+      "mockPriorityCommands",
+      "defaultMocks",
     ],
   },
   {
@@ -4154,7 +4357,7 @@ const checks = [
     snippets: [
       "export const DEFAULT_STANDALONE_BACKEND_MODE",
       '= "unavailable"',
-      'backendMode?: "external" | "mock" | "unavailable"',
+      'backendMode?: "external" | "runtime" | "mock" | "unavailable"',
       "backendCommand?: string",
       "backendArgs?: string[]",
       "backendTimeoutMs?: number",
@@ -4187,6 +4390,8 @@ const checks = [
       '"--stdio"',
       '"--backend"',
       '"unavailable"',
+      'backendMode: "runtime"',
+      '"runtime"',
       "policyConfig.appPolicyPath",
       '"--app-policy"',
       '"/tmp/content-studio.policy.json"',
@@ -4206,33 +4411,39 @@ const checks = [
     ],
   },
   {
-    name: "Electron dev sidecar builds and injects real external agent backend",
+    name: "Electron dev sidecar defaults to App Server runtime backend and only keeps explicit external override",
     files: [
       "scripts/lib/electron-dev-sidecar.mjs",
       "scripts/lib/electron-dev-sidecar.test.mjs",
-      "scripts/run-electron-dev.mjs",
+      "scripts/electron/run-dev.mjs",
     ],
     snippets: [
-      "appServerAgentBackendBinaryName",
-      "localAppServerAgentBackendBinaryPath",
-      "resolveDevAppServerAgentBackendBinary",
-      "shouldUseDevAppServerExternalBackend",
       "resolveDevAppServerBackendEnv",
+      'defaultMode = "runtime"',
+      "APP_SERVER_BACKEND_MODE: defaultMode",
+      "APP_SERVER_BACKEND_MODE: requestedMode",
       'APP_SERVER_BACKEND_MODE: "external"',
       "APP_SERVER_BACKEND_COMMAND",
       "APP_SERVER_BACKEND_TIMEOUT_MS",
-      "app-server-agent-backend",
-      "默认 dev App Server backend 使用 external",
-      "显式 unavailable 时 dev App Server backend 不注入 external",
-      "调用 cargo build 构建 app-server sidecar 和 agent backend",
+      "默认 dev App Server backend 使用 App Server 内部 runtime",
+      "显式 unavailable 时 dev App Server backend 不接 external",
+      "调用 cargo build 只构建 app-server sidecar",
     ],
-    absentSnippets: ['APP_SERVER_BACKEND_MODE: "mock"', 'backendMode: "mock"'],
+    absentSnippets: [
+      "resolveDevAppServerAgentBackendBinary",
+      "shouldUseDevAppServerExternalBackend",
+      "appServerAgentBackendBinaryName",
+      "localAppServerAgentBackendBinaryPath",
+      "app-server-agent-backend",
+      'APP_SERVER_BACKEND_MODE: "mock"',
+      'backendMode: "mock"',
+    ],
   },
   {
     name: "Electron App Server host preserves external backend env for resources manifest",
     file: "electron/appServerHost.ts",
     snippets: [
-      'resolveRuntimeBackendLaunchOptions("unavailable")',
+      'resolveRuntimeBackendLaunchOptions("runtime")',
       "...resolveRuntimeBackendLaunchOptions(defaultBackendMode)",
       'const APP_SERVER_TURN_START_METHOD = "agentSession/turn/start"',
       "APP_SERVER_BACKEND_TIMEOUT_GRACE_MS",
@@ -4289,7 +4500,7 @@ const checks = [
   },
   {
     name: "Sidecar lifecycle smoke verifies packaged manifest flow and unavailable backend fail-closed behavior",
-    file: "scripts/app-server-sidecar-lifecycle-smoke.mjs",
+    file: "scripts/app-server/sidecar-lifecycle-smoke.mjs",
     snippets: [
       "startPackagedAppServerSidecar",
       "defaultReleaseManifestPath",
@@ -4317,12 +4528,12 @@ const checks = [
     file: "package.json",
     snippets: [
       '"smoke:app-server-sidecar-lifecycle"',
-      "node scripts/app-server-sidecar-lifecycle-smoke.mjs",
+      "node scripts/app-server/sidecar-lifecycle-smoke.mjs",
     ],
   },
   {
     name: "Packaged sidecar failure smoke preserves streamed failure evidence",
-    file: "scripts/app-server-packaged-external-backend-failure-smoke.mjs",
+    file: "scripts/app-server/packaged-external-backend-failure-smoke.mjs",
     snippets: [
       "[smoke:app-server-packaged-external-backend-failure] ok",
       "startPackagedAppServerSidecar",
@@ -4355,17 +4566,17 @@ const checks = [
     file: "package.json",
     snippets: [
       '"smoke:app-server-packaged-external-backend-failure"',
-      "scripts/app-server-packaged-external-backend-failure-smoke.mjs",
+      "scripts/app-server/packaged-external-backend-failure-smoke.mjs",
       'npm --prefix \\"packages/app-server-client\\" run build',
       '"electron:package:dir"',
-      "node scripts/run-electron-package-dir.mjs",
+      "node scripts/electron/run-package-dir.mjs",
       '"electron:verify:package"',
-      "scripts/verify-electron-package-resources.mjs && npm run smoke:app-server-packaged-external-backend-failure",
+      "scripts/electron/verify-package-resources.mjs && npm run smoke:app-server-packaged-external-backend-failure",
     ],
   },
   {
     name: "Electron directory package uses Forge package",
-    file: "scripts/run-electron-package-dir.mjs",
+    file: "scripts/electron/run-package-dir.mjs",
     snippets: [
       '"electron-forge"',
       '"package"',
@@ -4503,6 +4714,8 @@ for (const check of checks) {
   }
 }
 
+checkLegacySessionCompatContracts();
+
 if (failures.length > 0) {
   console.error("[app-server-client-contract] failed");
   for (const failure of failures) {
@@ -4512,3 +4725,148 @@ if (failures.length > 0) {
 }
 
 console.log(`[app-server-client-contract] ok (${checks.length} checks)`);
+
+function checkLegacySessionCompatContracts() {
+  const schema = JSON.parse(
+    fs.readFileSync(
+      path.join(repoRoot, "src/lib/governance/agentRuntimeCommandSchema.json"),
+      "utf8",
+    ),
+  );
+  const schemaEntries = new Map(
+    (schema.commands ?? []).map((entry) => [entry.command, entry]),
+  );
+  const generatedManifest = fs.readFileSync(
+    path.join(
+      repoRoot,
+      "src/lib/api/agentRuntime/commandManifest.generated.ts",
+    ),
+    "utf8",
+  );
+  const generatedDeclaration = fs.readFileSync(
+    path.join(
+      repoRoot,
+      "src/lib/api/agentRuntime/commandManifest.generated.d.ts",
+    ),
+    "utf8",
+  );
+
+  for (const spec of legacySessionCompatCommandSpecs) {
+    const schemaEntry = schemaEntries.get(spec.command);
+    if (!schemaEntry) {
+      failures.push(`legacy session command schema: missing ${spec.command}`);
+      continue;
+    }
+    if (schemaEntry.domain !== "session") {
+      failures.push(
+        `legacy session command schema: ${spec.command} domain must stay session`,
+      );
+    }
+    if (schemaEntry.lifecycle !== "compat") {
+      failures.push(
+        `legacy session command schema: ${spec.command} lifecycle must stay compat`,
+      );
+    }
+    if (schemaEntry.mockStrategy !== "bridge-only") {
+      failures.push(
+        `legacy session command schema: ${spec.command} mockStrategy must stay bridge-only`,
+      );
+    }
+
+    const manifestBlock = descriptorBlock(
+      generatedManifest,
+      `key: "${spec.key}",`,
+    );
+    if (!manifestBlock) {
+      failures.push(
+        `legacy session command manifest: missing descriptor ${spec.key}`,
+      );
+    } else {
+      assertBlockIncludes(
+        manifestBlock,
+        `command: AGENT_RUNTIME_COMMANDS.${spec.key}`,
+        `legacy session command manifest: ${spec.key} command reference`,
+      );
+      assertBlockIncludes(
+        manifestBlock,
+        'domain: "session"',
+        `legacy session command manifest: ${spec.key} domain`,
+      );
+      assertBlockIncludes(
+        manifestBlock,
+        'lifecycle: "compat"',
+        `legacy session command manifest: ${spec.key} lifecycle`,
+      );
+      assertBlockIncludes(
+        manifestBlock,
+        'mockStrategy: "bridge-only"',
+        `legacy session command manifest: ${spec.key} mockStrategy`,
+      );
+      assertBlockExcludes(
+        manifestBlock,
+        'lifecycle: "current"',
+        `legacy session command manifest: ${spec.key} must not be current`,
+      );
+    }
+
+    const declarationBlock = descriptorBlock(
+      generatedDeclaration,
+      `readonly key: "${spec.key}";`,
+    );
+    if (!declarationBlock) {
+      failures.push(
+        `legacy session command declaration: missing descriptor ${spec.key}`,
+      );
+    } else {
+      assertBlockIncludes(
+        declarationBlock,
+        `readonly command: "${spec.command}";`,
+        `legacy session command declaration: ${spec.key} command literal`,
+      );
+      assertBlockIncludes(
+        declarationBlock,
+        'readonly domain: "session";',
+        `legacy session command declaration: ${spec.key} domain`,
+      );
+      assertBlockIncludes(
+        declarationBlock,
+        'readonly lifecycle: "compat";',
+        `legacy session command declaration: ${spec.key} lifecycle`,
+      );
+      assertBlockIncludes(
+        declarationBlock,
+        'readonly mockStrategy: "bridge-only";',
+        `legacy session command declaration: ${spec.key} mockStrategy`,
+      );
+      assertBlockExcludes(
+        declarationBlock,
+        'readonly lifecycle: "current";',
+        `legacy session command declaration: ${spec.key} must not be current`,
+      );
+    }
+  }
+}
+
+function descriptorBlock(content, marker) {
+  const startIndex = content.indexOf(marker);
+  if (startIndex < 0) {
+    return null;
+  }
+  const endIndex = content.indexOf("\n  },", startIndex);
+  if (endIndex < 0) {
+    return null;
+  }
+  return content.slice(startIndex, endIndex + "\n  },".length);
+}
+
+function assertBlockIncludes(block, snippet, description) {
+  if (!block.includes(snippet)) {
+    failures.push(`${description}: missing ${JSON.stringify(snippet)}`);
+  }
+}
+
+function assertBlockExcludes(block, snippet, description) {
+  if (block.includes(snippet)) {
+    failures.push(`${description}: forbidden ${JSON.stringify(snippet)}`);
+  }
+}

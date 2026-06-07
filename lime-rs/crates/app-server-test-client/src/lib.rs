@@ -14,9 +14,11 @@ mod harness;
 pub use harness::decode_exchange;
 pub use harness::encode_exchange;
 pub use harness::parse_cli_args;
+pub use harness::run_session_facade_archive_failure_stdio_smoke;
 pub use harness::run_session_facade_stdio_smoke;
 pub use harness::run_stdio_smoke;
 pub use harness::HarnessCommand;
+pub use harness::SessionFacadeArchiveFailureStdioSmokeReport;
 pub use harness::SessionFacadeStdioSmokeReport;
 pub use harness::StdioLaunchConfig;
 pub use harness::StdioSmokeReport;
@@ -134,6 +136,21 @@ pub fn sample_session_facade_stdio_lines(
         AppServerClient::encode_request(list)?,
         AppServerClient::encode_request(read)?,
         AppServerClient::encode_request(update)?,
+    ])
+}
+
+pub fn sample_session_facade_archive_failure_stdio_lines(
+    client_name: impl Into<String>,
+) -> anyhow::Result<Vec<String>> {
+    let mut client = initialized_session_facade_client(client_name)?;
+    let start = sample_session_start_request(&mut client)?;
+    let archive = sample_session_update_request(&mut client, Some(true), None)?;
+
+    Ok(vec![
+        AppServerClient::encode_request(client.initialize_request)?,
+        AppServerClient::encode_notification(client.initialized_notification)?,
+        AppServerClient::encode_request(start)?,
+        AppServerClient::encode_request(archive)?,
     ])
 }
 
@@ -282,5 +299,21 @@ mod tests {
         assert!(lines[5].contains("\"method\":\"agentSession/update\""));
         assert!(lines[5].contains("\"archived\":false"));
         assert!(!lines[5].contains("\"archived\":true"));
+    }
+
+    #[test]
+    fn session_facade_archive_failure_stdio_lines_cover_memory_archive_gap() {
+        let lines = sample_session_facade_archive_failure_stdio_lines("fixture").expect("lines");
+
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].contains("\"id\":1"));
+        assert!(lines[0].contains("\"method\":\"initialize\""));
+        assert!(lines[1].contains("\"method\":\"initialized\""));
+        assert!(!lines[1].contains("\"id\""));
+        assert!(lines[2].contains("\"id\":2"));
+        assert!(lines[2].contains("\"method\":\"agentSession/start\""));
+        assert!(lines[3].contains("\"id\":3"));
+        assert!(lines[3].contains("\"method\":\"agentSession/update\""));
+        assert!(lines[3].contains("\"archived\":true"));
     }
 }

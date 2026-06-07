@@ -451,6 +451,128 @@ describe("agentSessionState", () => {
     });
   });
 
+  it("同会话 hydrate 保护本地 timeline 时仍应合入 App Server thread_read.tool_calls", () => {
+    const currentMessages = [
+      createMessage({
+        id: "local-user-tool-read",
+        role: "user",
+        content: "生成 TypeScript greeting 代码产物",
+        timestamp: new Date("2026-06-07T10:41:40.000Z"),
+      }),
+      createMessage({
+        id: "local-assistant-tool-read",
+        role: "assistant",
+        content: "已生成代码产物，可在工作台查看。",
+        timestamp: new Date("2026-06-07T10:41:42.000Z"),
+        contentParts: [
+          {
+            type: "text",
+            text: "已生成代码产物，可在工作台查看。",
+          },
+        ],
+      }),
+    ];
+    const detail = {
+      id: "topic-tool-read",
+      thread_id: "thread-tool-read",
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1780704100,
+          content: [
+            { type: "text", text: "生成 TypeScript greeting 代码产物" },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1780704102,
+          content: [{ type: "text", text: "已生成代码产物，可在工作台查看。" }],
+        },
+      ],
+      turns: [
+        createTurn({
+          id: "turn-tool-read",
+          thread_id: "thread-tool-read",
+          prompt_text: "生成 TypeScript greeting 代码产物",
+          status: "completed",
+          started_at: "2026-06-07T10:41:40.000Z",
+          completed_at: "2026-06-07T10:41:42.000Z",
+          updated_at: "2026-06-07T10:41:42.000Z",
+        }),
+      ],
+      thread_read: {
+        thread_id: "thread-tool-read",
+        status: "completed",
+        profile_status: "completed",
+        turns: [
+          {
+            turn_id: "turn-tool-read",
+            status: "completed",
+            native_status: "completed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        tool_calls: [
+          {
+            tool_call_id: "tool-webfetch-read",
+            turn_id: "turn-tool-read",
+            tool_name: "WebFetch",
+            status: "completed",
+            started_at: "2026-06-07T10:41:41.000Z",
+            finished_at: "2026-06-07T10:41:42.000Z",
+            arguments: {
+              url: "https://example.com/lime-workbench-tool",
+            },
+            output_preview:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+            output:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+            success: true,
+          },
+        ],
+      },
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-tool-read",
+      detail,
+      currentSessionId: "topic-tool-read",
+      currentMessages,
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+    });
+
+    expect(result.snapshot.messages).toHaveLength(2);
+    expect(result.snapshot.messages[1]).toMatchObject({
+      id: "local-assistant-tool-read",
+      role: "assistant",
+      content: "已生成代码产物，可在工作台查看。",
+      runtimeTurnId: "turn-tool-read",
+      toolCalls: [
+        {
+          id: "tool-webfetch-read",
+          name: "WebFetch",
+          status: "completed",
+          result: {
+            success: true,
+            output:
+              "已获取 fixture 工具事实: https://example.com/lime-workbench-tool",
+          },
+        },
+      ],
+    });
+    expect(
+      result.snapshot.messages[1]?.contentParts?.map((part) => part.type),
+    ).toEqual(["tool_use", "text"]);
+  });
+
   it("同会话 hydrate 时远端暂未返回最新 assistant 消息也应保留本地尾部消息", () => {
     const now = new Date("2026-04-08T10:00:02.000Z");
     const currentMessages = [
@@ -967,9 +1089,7 @@ describe("agentSessionState", () => {
     });
 
     expect(result.snapshot.messages).toHaveLength(2);
-    expect(result.snapshot.messages[1]?.content).toBe(
-      "服务型 Skill 最终回复",
-    );
+    expect(result.snapshot.messages[1]?.content).toBe("服务型 Skill 最终回复");
     expect(result.snapshot.messages[1]?.runtimeTurnId).toBe(
       "turn-service-skill-runtime",
     );
@@ -1039,8 +1159,7 @@ describe("agentSessionState", () => {
           content: "最终 Skill 回复",
           timestamp: now,
           runtimeTurnId: "skill-exec-local-detached-skill-assistant",
-          thinkingContent:
-            "正在执行 Skill: brand-product-knowledge-builder...",
+          thinkingContent: "正在执行 Skill: brand-product-knowledge-builder...",
           contentParts: [
             {
               type: "thinking",

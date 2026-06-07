@@ -12,7 +12,6 @@ export interface MacOsStandaloneIdentity {
   appGroups: string[];
   keychainAccessGroups: string[];
   signingCertificateKind: MacOsSigningCertificateKind;
-  installerCertificateKind?: "developer_id_installer";
   notarizationRequired: boolean;
 }
 
@@ -22,13 +21,11 @@ export interface MacOsStandaloneIdentityInput {
   appGroups?: string[];
   keychainAccessGroups?: string[];
   signingCertificateKind?: MacOsSigningCertificateKind;
-  installerCertificateKind?: "developer_id_installer";
   notarizationRequired?: boolean;
 }
 
 export interface MacOsIdentityValidationOptions {
   desktopBundleIds?: string[];
-  requiresInstallerCertificate?: boolean;
 }
 
 export interface MacOsIdentityValidationIssue {
@@ -37,7 +34,6 @@ export interface MacOsIdentityValidationIssue {
     | "MACOS_APP_GROUP_INVALID"
     | "MACOS_BUNDLE_ID_INVALID"
     | "MACOS_BUNDLE_ID_REUSES_DESKTOP"
-    | "MACOS_INSTALLER_CERTIFICATE_MISSING"
     | "MACOS_KEYCHAIN_GROUP_TEAM_MISMATCH"
     | "MACOS_NOTARIZATION_REQUIRED"
     | "MACOS_SHARED_GROUP_TEAM_MISMATCH"
@@ -67,7 +63,6 @@ export function buildMacOsStandaloneIdentity(
     keychainAccessGroups: input.keychainAccessGroups ?? [],
     signingCertificateKind:
       input.signingCertificateKind ?? "developer_id_application",
-    installerCertificateKind: input.installerCertificateKind,
     notarizationRequired: input.notarizationRequired ?? true,
   };
 }
@@ -87,7 +82,8 @@ export function validateMacOsStandaloneIdentity(
   if (!identity.teamId.trim()) {
     issues.push({
       code: "MACOS_TEAM_ID_MISSING",
-      message: "macOS standalone identity must include the Apple Developer Team ID.",
+      message:
+        "macOS standalone identity must include the Apple Developer Team ID.",
     });
   }
   if (!BUNDLE_ID_PATTERN.test(identity.bundleId)) {
@@ -129,17 +125,6 @@ export function validateMacOsStandaloneIdentity(
         "Developer ID distribution should require notarization for production macOS release.",
     });
   }
-  if (
-    options.requiresInstallerCertificate &&
-    identity.installerCertificateKind !== "developer_id_installer"
-  ) {
-    issues.push({
-      code: "MACOS_INSTALLER_CERTIFICATE_MISSING",
-      message:
-        "pkg distribution requires a Developer ID Installer signing identity.",
-    });
-  }
-
   for (const group of identity.appGroups) {
     if (group && !group.startsWith("group.")) {
       issues.push({

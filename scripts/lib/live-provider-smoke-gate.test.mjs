@@ -84,7 +84,7 @@ describe("live-provider-smoke-gate", () => {
   it("内容工厂 full-flow 默认应在调用 DevBridge 前阻断 live Provider", () => {
     const result = spawnSync(
       "node",
-      ["scripts/agent-apps-content-factory-flow.mjs"],
+      ["scripts/agent-app/content-factory-flow.mjs"],
       {
         cwd: process.cwd(),
         encoding: "utf8",
@@ -103,7 +103,10 @@ describe("live-provider-smoke-gate", () => {
   it("Agent Apps 内容工厂 action E2E 默认应阻断 live Provider", () => {
     const result = spawnSync(
       "node",
-      ["scripts/agent-apps-smoke.mjs", "--include-content-factory-action-e2e"],
+      [
+        "scripts/agent-app/apps-smoke.mjs",
+        "--include-content-factory-action-e2e",
+      ],
       {
         cwd: process.cwd(),
         encoding: "utf8",
@@ -138,6 +141,90 @@ describe("live-provider-smoke-gate", () => {
     expect(result.status).toBe(1);
     expect(output).toContain("默认禁止执行");
     expect(output).not.toContain("stage=wait-health");
+  });
+
+  it("Claw streaming GUI E2E 授权后必须要求真实 WebSearch/WebFetch 工具事实", () => {
+    const content = fs.readFileSync(
+      path.join(process.cwd(), "scripts/claw-chat-ready-streaming-smoke.mjs"),
+      "utf8",
+    );
+
+    expect(content).toContain("e2eBoundary");
+    expect(content).toContain('"playwright-chromium"');
+    expect(content).toContain('"chromium.launchPersistentContext"');
+    expect(content).toContain('"DevBridge transport=electron-host"');
+    expect(content).toContain("electronRendererIpcE2e: false");
+    expect(content).toContain("electronLaunch: false");
+    expect(content).toContain(
+      "它不是 Playwright _electron.launch() renderer IPC E2E。",
+    );
+    expect(content).toContain("LIVE_WEB_TOOL_PROMPT");
+    expect(content).toContain("REQUIRED_LIVE_WEB_TOOL_NAMES");
+    expect(content).toContain("./lib/claw-chat-live-web-tool-evidence.mjs");
+    expect(content).toContain("liveWebToolEvidenceFromSession");
+    expect(content).toContain("turnId: liveWebTurnId");
+    expect(content).toContain("allRequiredCompletedForTurn");
+    expect(content).toContain("summary.assertions.liveWebSearchCompleted");
+    expect(content).toContain("summary.assertions.liveWebFetchCompleted");
+    expect(content).toContain(
+      "summary.assertions.liveWebProviderPreferenceHonored",
+    );
+    expect(content).toContain(
+      "summary.assertions.liveWebModelPreferenceHonored",
+    );
+    expect(content).toContain(
+      "summary.assertions.liveWebFastResponseRoutingDisabled",
+    );
+    expect(content).toContain(
+      "summary.assertions.liveWebRequiredToolsCompleted",
+    );
+    expect(content).toContain(
+      "summary.assertions.liveWebRequiredToolOutputsPresent",
+    );
+    expect(content).toContain("submit-live-web-tools-turn");
+    expect(content).toContain("failureCleanupLiveWebInterrupt");
+  });
+
+  it("Claw streaming GUI E2E 的 WebSearch/WebFetch helper 必须定义真实联网工具集合", () => {
+    const content = fs.readFileSync(
+      path.join(
+        process.cwd(),
+        "scripts/lib/claw-chat-live-web-tool-evidence.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(content).toContain('["WebSearch", "WebFetch"]');
+    expect(content).toContain("export function liveWebToolEvidenceFromSession");
+    expect(content).toContain("export function collectToolCallsFromValue");
+    expect(content).toContain("export function toolCallMatchesTurn");
+    expect(content).toContain("value.result");
+    expect(content).toContain("value.detail");
+    expect(content).toContain("requiredForTurn");
+    expect(content).toContain("allRequiredCompletedForTurn");
+    expect(content).toContain("allRequiredOutputPresentForTurn");
+    expect(content).toContain("outputPresent");
+  });
+
+  it("Claw streaming GUI E2E 的 WebSearch/WebFetch 判定必须有行为单测覆盖 turn scope", () => {
+    const content = fs.readFileSync(
+      path.join(
+        process.cwd(),
+        "scripts/lib/claw-chat-live-web-tool-evidence.test.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(content).toContain("liveWebToolEvidenceFromSession");
+    expect(content).toContain("allRequiredCompletedForTurn");
+    expect(content).toContain("requiredForTurn");
+    expect(content).toContain("turnScopedToolCalls");
+    expect(content).toContain('"old-turn"');
+    expect(content).toContain('"live-turn"');
+    expect(content).toContain("toolCallMatchesTurn");
+    expect(content).toContain("toolCallTurnId");
+    expect(content).toContain("result.detail");
+    expect(content).toContain("output present");
   });
 
   it("知识库真实 Provider E2E 即使指定 provider/model 也必须显式授权", () => {
@@ -226,22 +313,38 @@ describe("live-provider-smoke-gate", () => {
 
 function listSmokeScripts() {
   const scriptsDir = path.join(process.cwd(), "scripts");
-  return fs
-    .readdirSync(scriptsDir, { withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() &&
-        entry.name.endsWith(".mjs") &&
-        !entry.name.endsWith(".test.mjs") &&
-        !entry.name.startsWith("check-"),
-    )
-    .map((entry) => {
-      const filePath = path.join(scriptsDir, entry.name);
-      return {
-        relativePath: path
-          .relative(process.cwd(), filePath)
-          .replaceAll("\\", "/"),
+  const files = [];
+
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const filePath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "lib") {
+          continue;
+        }
+        walk(filePath);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".mjs")) {
+        continue;
+      }
+      const relativePath = path
+        .relative(process.cwd(), filePath)
+        .replaceAll("\\", "/");
+      if (
+        entry.name.endsWith(".test.mjs") ||
+        entry.name.startsWith("check-") ||
+        relativePath.includes("/test-fixtures/")
+      ) {
+        continue;
+      }
+      files.push({
+        relativePath,
         content: fs.readFileSync(filePath, "utf8"),
-      };
-    });
+      });
+    }
+  }
+
+  walk(scriptsDir);
+  return files;
 }

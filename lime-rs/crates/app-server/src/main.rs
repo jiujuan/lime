@@ -69,6 +69,10 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
         (AppServerBackendMode::External, None) => {
             AppServerRuntimeFactory::external_runtime_core(config.external_backend_config()?)
         }
+        (AppServerBackendMode::Runtime, Some(capability_source)) => {
+            AppServerRuntimeFactory::runtime_backend_core_with_capability_source(capability_source)
+        }
+        (AppServerBackendMode::Runtime, None) => AppServerRuntimeFactory::runtime_backend_core(),
         (AppServerBackendMode::Mock, Some(capability_source)) => {
             AppServerRuntimeFactory::mock_runtime_core_with_capability_source(capability_source)
         }
@@ -138,7 +142,7 @@ fn parse_args_from(args: impl IntoIterator<Item = String>) -> anyhow::Result<Cli
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: app-server [--stdio] [--listen stdio://] [--backend external|mock|unavailable] [--backend-command path] [--backend-arg value] [--backend-timeout-ms ms] [--app-policy path]"
+                    "Usage: app-server [--stdio] [--listen stdio://] [--backend external|runtime|mock|unavailable] [--backend-command path] [--backend-arg value] [--backend-timeout-ms ms] [--app-policy path]"
                 );
                 std::process::exit(0);
             }
@@ -201,6 +205,18 @@ mod tests {
 
         assert_eq!(config.listen, DEFAULT_LISTEN_URL);
         assert_eq!(config.backend_mode, AppServerBackendMode::Unavailable);
+        assert_eq!(config.app_policy_path, None);
+        assert_eq!(config.backend_command, None);
+        assert!(config.backend_args.is_empty());
+    }
+
+    #[test]
+    fn parse_args_accepts_explicit_runtime_backend() {
+        let config = parse_args_from(["--stdio", "--backend", "runtime"].map(str::to_string))
+            .expect("config");
+
+        assert_eq!(config.listen, DEFAULT_LISTEN_URL);
+        assert_eq!(config.backend_mode, AppServerBackendMode::Runtime);
         assert_eq!(config.app_policy_path, None);
         assert_eq!(config.backend_command, None);
         assert!(config.backend_args.is_empty());

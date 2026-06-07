@@ -242,7 +242,7 @@ describe("agent app connector production delivery gate", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-connector-production-delivery-gate.mjs"),
+        path.resolve("scripts/agent-app/connector-production-delivery-gate.mjs"),
         "--preflight",
         preflightPath,
         "--delivery",
@@ -278,7 +278,7 @@ describe("agent app connector production delivery gate", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-connector-production-delivery-gate.mjs"),
+        path.resolve("scripts/agent-app/connector-production-delivery-gate.mjs"),
         "--preflight",
         preflightPath,
         "--delivery",
@@ -303,7 +303,7 @@ describe("agent app connector production delivery gate", () => {
   it("CLI --help 描述 GUI / redaction / nextRequired 门禁", () => {
     const result = spawnSync(
       process.execPath,
-      [path.resolve("scripts/agent-app-connector-production-delivery-gate.mjs"), "--help"],
+      [path.resolve("scripts/agent-app/connector-production-delivery-gate.mjs"), "--help"],
       { encoding: "utf8", env: { PATH: process.env.PATH } },
     );
 

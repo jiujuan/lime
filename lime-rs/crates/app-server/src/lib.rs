@@ -6,6 +6,7 @@ mod external_backend;
 mod local_data_source;
 mod processor;
 mod runtime;
+mod runtime_backend;
 mod runtime_factory;
 
 pub use app_server_protocol::error_codes;
@@ -110,6 +111,7 @@ pub use runtime::RuntimeEvent;
 pub use runtime::RuntimeEventSink;
 pub use runtime::RuntimeHostContext;
 pub use runtime::UnavailableBackend;
+pub use runtime_backend::RuntimeBackend;
 pub use runtime_factory::AppServerBackendMode;
 pub use runtime_factory::AppServerRuntimeFactory;
 pub use runtime_factory::UnsupportedBackendMode;

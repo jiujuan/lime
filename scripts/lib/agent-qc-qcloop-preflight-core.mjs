@@ -15,12 +15,24 @@ function createCheck(id, title, passed, detail = "") {
   };
 }
 
-function buildQCLoopPreflightReport({ cwd, expectedCwd = "", tmpWritable = false, devBridge = null } = {}) {
+function buildQCLoopPreflightReport({
+  cwd,
+  expectedCwd = "",
+  tmpWritable = false,
+  devBridge = null,
+} = {}) {
   const checks = [];
   const normalizedCwd = normalizePathText(cwd);
   const normalizedExpectedCwd = normalizePathText(expectedCwd);
 
-  checks.push(createCheck("cwd-present", "当前工作目录可读", Boolean(normalizedCwd), normalizedCwd));
+  checks.push(
+    createCheck(
+      "cwd-present",
+      "当前工作目录可读",
+      Boolean(normalizedCwd),
+      normalizedCwd,
+    ),
+  );
   if (normalizedExpectedCwd) {
     checks.push(
       createCheck(

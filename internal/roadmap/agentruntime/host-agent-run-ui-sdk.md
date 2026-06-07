@@ -185,7 +185,7 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 - `git diff --check -- "internal/roadmap/agentruntime/host-agent-run-ui-sdk.md" "src/components/agent/chat/components/ThinkingBlock.tsx" "src/components/agent/chat/components/thinkingBlockDisplay.ts" "src/components/agent/chat/components/StreamingRenderer.tsx" "src/features/agent-app/ui/AgentRunHostDrawer.tsx" "src/features/agent-app/ui/AgentAppRuntimePage.test.tsx"`：通过。
 - `npm run typecheck`：通过，300s 受控窗口内完成，取得全量类型绿色。
 - `/Users/coso/Documents/dev/ai/limecloud/content-factory-app`: `npm test`：通过，63 tests passed；覆盖 Host Bridge 发起 AgentRuntime、Host connected 时不走本地生成 API、Host 流式 JSON workspace patch 写回业务对象、右侧面板承载真实流式输出、模型/Token/费用/Skill facts 回写。
-- `npm run verify:gui-smoke`：通过，复用已运行 headless Tauri；覆盖 workspace ready、browser runtime、site adapters、Skill Forge entry、runtime tool surface/page、`@` command registry、Agent Apps、Claw streaming、Knowledge GUI、Design Canvas。该验证使用当前脏工作树，不代表并行 `scripts/agent-apps-smoke.mjs` 改动归属本线程。
+- `npm run verify:gui-smoke`：通过，复用已运行 headless Tauri；覆盖 workspace ready、browser runtime、site adapters、Skill Forge entry、runtime tool surface/page、`@` command registry、Agent Apps、Claw streaming、Knowledge GUI、Design Canvas。该验证使用当前脏工作树，不代表并行 `scripts/agent-app/apps-smoke.mjs` 改动归属本线程。
 - `npm run smoke:agent-apps -- --timeout-ms 540000 --prefix agent-run-renderer-content-factory-completion --include-content-factory-completion-e2e --completion-timeout-ms 420000`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-run-renderer-content-factory-completion-summary.json` 断言 `contentFactoryCompletionReady=true`、`contentFactoryActionNoHostFallback=true`、`contentFactoryActionRequiredSkillsProjected=true`，Host task `agent-app-task-42a3c2e4-c327-4312-a869-6c9bbd7d07ff` / session `agent-app-runtime-3b12fc2d-1e29-4515-bacf-6cc828ea0408` 成功完成，`modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady / terminalReady` 全为 true。
 - 历史深水位：`.lime/qc/gui-evidence/agent-apps/agent-apps-smoke-p18-7-completion-run-scenarios-success-summary.json` 已覆盖“生成/更新场景包”完成态；本轮未重跑该动作，作为 P18.7 并行验证证据引用。
 
@@ -197,9 +197,9 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 - `npm run typecheck`：通过。
 - `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-run-renderer-content-factory-run-production-skill-projection --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-run-renderer-content-factory-run-production-skill-projection-summary.json` 证明 run-production completion ready，但暴露 `article-w / content-review` 前缀污染，本轮随后在数据层修复。
 - `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-run-renderer-content-factory-run-production-skill-projection-clean --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-run-renderer-content-factory-run-production-skill-projection-clean-summary.json` 证明 run-production completion ready，`modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady / terminalReady` 全为 true；随后继续收窄前缀清理规则。
-- `scripts/agent-apps-smoke.mjs` 已将 content factory action 的 `taskAccepted / hostTaskRecordSeen` 从只认 `hostTaskRecord.taskId` 收敛为同时接受 `sdkTaskId`，用于覆盖 failure raw record 中已有 `bridgeRecord / taskRecord / sdkTaskId` 但 summary 判定失败的形态。
+- `scripts/agent-app/apps-smoke.mjs` 已将 content factory action 的 `taskAccepted / hostTaskRecordSeen` 从只认 `hostTaskRecord.taskId` 收敛为同时接受 `sdkTaskId`，用于覆盖 failure raw record 中已有 `bridgeRecord / taskRecord / sdkTaskId` 但 summary 判定失败的形态。
 - `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-run-renderer-content-factory-run-production-skill-projection-final3 --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-run-renderer-content-factory-run-production-skill-projection-final3-summary.json` 证明 Host task record gate 修复后，run-production completion ready，且 `article-writer / content-reviewer` 均进入 `invokedSkillNames`，不再出现 `article-w / content-review` partial。
-- `scripts/agent-apps-smoke.mjs` 随后新增 `contentFactoryActionExpectedSkillsInvoked`，completion E2E 不再只接受“required skills 出现在 prompt/callLog”，必须在完成态 `runtimeProcess.invokedSkillNames` 看到每个 expected skill。
+- `scripts/agent-app/apps-smoke.mjs` 随后新增 `contentFactoryActionExpectedSkillsInvoked`，completion E2E 不再只接受“required skills 出现在 prompt/callLog”，必须在完成态 `runtimeProcess.invokedSkillNames` 看到每个 expected skill。
 - `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-run-renderer-content-factory-run-production-strict-skills --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000`：失败；failure `.lime/qc/gui-evidence/agent-apps/agent-run-renderer-content-factory-run-production-strict-skills-failure.json` 显示本轮 run-production 未稳定同时调用 `article-writer / content-reviewer`。这不是脚本假失败，而是“required skills 有时只声明、不一定被真实调用”的产品缺口。
 - `npm run verify:gui-smoke`：执行到 `smoke:claw-chat-ready-streaming` 时失败；前置 `workspace-ready / browser-runtime / site-adapters / Skill Forge / runtime tool surface / @ command registry / agent-apps` 均通过，失败原因是 Claw smoke 中一次 `aster_agent_init` DevBridge fetch timeout 形成 console error，和本轮 `runtimeProcess` Skill 投影变更无直接耦合。
 
@@ -209,7 +209,7 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 - `cargo test -p lime agent_app_skill_contract_should_resolve_required_skill_allowlist --lib`：通过，证明 `content_factory_skill_contract` 仍能解析为 `article-writer / content-reviewer` allowlist。
 - `cargo test -p lime agent_app_runtime_runtime_event_projection --lib`：通过，证明 Runtime event projection 对 artifact / evidence / stream text 仍保持兼容。
 - `npm test -- "src/features/agent-app/runtime/agentRuntimeProcess.test.ts"`：通过，证明 Host `runtimeProcess.invokedSkillNames` 继续能消费 Runtime ToolEnd metadata，并过滤流式半截 Skill 名。
-- `node --check "scripts/agent-apps-smoke.mjs"`：通过，确认 strict smoke 脚本语法仍可执行。
+- `node --check "scripts/agent-app/apps-smoke.mjs"`：通过，确认 strict smoke 脚本语法仍可执行。
 - `npm run typecheck`：通过。
 - `git diff --check -- "lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs" "internal/roadmap/agentruntime/host-agent-run-ui-sdk.md"`：通过。
 - `npm run smoke:agent-apps -- --timeout-ms 720000 --prefix agent-app-required-skills-runtime-enforced-run-production --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 600000`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-app-required-skills-runtime-enforced-run-production-summary.json` 证明 run-production completion ready，完成态 `runtimeProcess.invokedSkillNames=["article-writer","content-reviewer"]`，`modelReady / usageReady / costReady / skillInvocationReady / artifactReady / evidenceReady / workspacePatchReady / terminalReady` 全为 true。
@@ -225,7 +225,7 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 - `cargo test -p lime agent_app_skill_contract_should_resolve_required_skill_allowlist --lib`：通过。
 - `cargo test -p lime agent_app_runtime_runtime_event_projection --lib`：通过。
 - `npm test -- "src/features/agent-app/runtime/agentRuntimeProcess.test.ts"`：通过。
-- `node --check "scripts/agent-apps-smoke.mjs"`：通过。
+- `node --check "scripts/agent-app/apps-smoke.mjs"`：通过。
 - `npm run typecheck`：通过。
 - `npm run test:contracts`：通过。
 - `git diff --check -- "lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs" "internal/roadmap/agentruntime/host-agent-run-ui-sdk.md"`：通过。
@@ -237,19 +237,19 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 
 2026-05-17 Direct runtime snapshot 复核：
 
-- `node "scripts/agent-apps-smoke.mjs" --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 120000 --prefix agent-app-run-production-direct-audit`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-app-run-production-direct-audit-summary.json` 证明 `run-production` 完成态全 ready，`directRuntimeSnapshot.hasWorkspacePatch=true`，`directRuntimeSnapshot.artifactCount=1`，`toolCallCount=2`，`runtimeProcess.invokedSkillNames=["article-writer","content-reviewer"]`，模型为 `deepseek/deepseek-v4-flash`，usage / cost 均 ready。
-- `node "scripts/agent-apps-smoke.mjs" --include-content-factory-completion-e2e --content-factory-action only-copy --completion-timeout-ms 120000 --prefix agent-app-only-copy-direct-audit`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-app-only-copy-direct-audit-summary.json` 证明 `only-copy` 完成态全 ready，`runtimeProcess.invokedSkillNames=["article-writer","content-reviewer"]`，usage / cost / artifact / workspace patch 均 ready。
+- `node "scripts/agent-app/apps-smoke.mjs" --include-content-factory-completion-e2e --content-factory-action run-production --completion-timeout-ms 120000 --prefix agent-app-run-production-direct-audit`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-app-run-production-direct-audit-summary.json` 证明 `run-production` 完成态全 ready，`directRuntimeSnapshot.hasWorkspacePatch=true`，`directRuntimeSnapshot.artifactCount=1`，`toolCallCount=2`，`runtimeProcess.invokedSkillNames=["article-writer","content-reviewer"]`，模型为 `deepseek/deepseek-v4-flash`，usage / cost 均 ready。
+- `node "scripts/agent-app/apps-smoke.mjs" --include-content-factory-completion-e2e --content-factory-action only-copy --completion-timeout-ms 120000 --prefix agent-app-only-copy-direct-audit`：通过；summary `.lime/qc/gui-evidence/agent-apps/agent-app-only-copy-direct-audit-summary.json` 证明 `only-copy` 完成态全 ready，`runtimeProcess.invokedSkillNames=["article-writer","content-reviewer"]`，usage / cost / artifact / workspace patch 均 ready。
 - `.lime/qc/gui-evidence/agent-apps/agent-app-direct-runtime-postcheck.json`：对上面两次 task 再次调用 `agent_app_runtime_get_task` 复核，`run-production` 与 `only-copy` 的 direct snapshot 都已能看到 `contentFactoryWorkspacePatch / workspacePatch`，且 Artifact 路径分别落到 `.lime/artifacts/agent-app/<task>/<turn>/content_batch.workspace-patch.json`。
 - 复核结论：`run-production` 的 direct snapshot 弱证据已收口；`only-copy` summary 中的 `directRuntimeSnapshot.hasWorkspacePatch=false / artifactCount=0` 是 completion loop 先以 Host live record 达到 ready 后立刻返回导致的毫秒级读时序差，后续 direct get 已返回 `threadArtifactCount=1 / hasWorkspacePatchByDirectSnapshot=true`。产品侧不应把该 summary 字段单独当成失败，但 smoke 脚本后续应在 `latestReadiness.ready` 前补一次 direct workspace patch stabilization gate。
 
 2026-05-17 单会话流程 runner 与新发现：
 
-- `scripts/agent-apps-content-factory-flow.mjs`：新增独立验收入口，不夹写并行脏 `scripts/agent-apps-smoke.mjs`；默认在同一 Lime 页面 / 内容工厂 iframe 中串 `run-scenarios -> run-production -> run-scripts -> run-strategy -> run-review`，并记录每步模型、Skill、Artifact、workspace patch、Evidence。
+- `scripts/agent-app/content-factory-flow.mjs`：新增独立验收入口，不夹写并行脏 `scripts/agent-app/apps-smoke.mjs`；默认在同一 Lime 页面 / 内容工厂 iframe 中串 `run-scenarios -> run-production -> run-scripts -> run-strategy -> run-review`，并记录每步模型、Skill、Artifact、workspace patch、Evidence。
 - `cargo test --manifest-path "lime-rs/crates/agent/Cargo.toml" agent_app_content_factory_skill_should_use_fast_path_for_text_args`：通过；修正模型二次调用 `Skill(content-reviewer)` 且 `args` 是自然语言时可能进入 nested Skill 长跑的问题。
 - `cargo test --manifest-path "lime-rs/Cargo.toml" -p lime agent_app_output_contract --lib`：通过，4 tests；新增 `script_batch` review draft materialization，仍保持 `content_batch` 无结构化 patch 时不伪造内容。
-- `node "scripts/agent-apps-smoke.mjs" --timeout-ms 720000 --prefix agent-app-run-scripts-recheck-after-fast-path --include-content-factory-completion-e2e --content-factory-action run-scripts --completion-timeout-ms 600000`：通过；证明单个 `run-scripts` key action 在 fast path 修正后仍 completion ready，direct snapshot `hasWorkspacePatch=true`。
-- `node "scripts/agent-apps-content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-full-flow-20260517`：失败；真实串联显示 `build-store` 后会把已确认样例带回“资料还不能生产”门禁，`run-scenarios` 不可见，说明“知识库整理 -> 场景生成”的产品状态递进还没闭环。
-- `node "scripts/agent-apps-content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-operational-flow-fast-skill-20260517`：失败；从已确认样例知识库出发，`run-scenarios` 可进入真实 runtime，但继续串到后续动作时仍暴露 startTask 等待 / 页面热更新 / 模型输出 patch 稳定性问题。结论：key action 已可交付，单会话全流程仍不能宣称完成。
+- `node "scripts/agent-app/apps-smoke.mjs" --timeout-ms 720000 --prefix agent-app-run-scripts-recheck-after-fast-path --include-content-factory-completion-e2e --content-factory-action run-scripts --completion-timeout-ms 600000`：通过；证明单个 `run-scripts` key action 在 fast path 修正后仍 completion ready，direct snapshot `hasWorkspacePatch=true`。
+- `node "scripts/agent-app/content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-full-flow-20260517`：失败；真实串联显示 `build-store` 后会把已确认样例带回“资料还不能生产”门禁，`run-scenarios` 不可见，说明“知识库整理 -> 场景生成”的产品状态递进还没闭环。
+- `node "scripts/agent-app/content-factory-flow.mjs" --timeout-ms 720000 --completion-timeout-ms 600000 --prefix content-factory-operational-flow-fast-skill-20260517`：失败；从已确认样例知识库出发，`run-scenarios` 可进入真实 runtime，但继续串到后续动作时仍暴露 startTask 等待 / 页面热更新 / 模型输出 patch 稳定性问题。结论：key action 已可交付，单会话全流程仍不能宣称完成。
 
 ## 10. Prompt-to-artifact 完成检查表
 
@@ -266,7 +266,7 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 | 模型选择、Token、费用都要支持 | `AgentRunMetricCards` 已读取 `model / usage / cost`；completion E2E 证明 `deepseek/deepseek-v4-flash`、usage、cost 均 ready | covered for first flow | 继续覆盖用户手动切换模型和低余额/限额分支 |
 | UI 应由 Lime Host / SDK 提供，不让每个 App 自己实现 | `AgentRunRenderer`、`AgentRunHostDrawer` 位于 Lime Host；内容工厂 Host connected 时隐藏 App 私有运行抽屉，仅保留 fallback | mostly covered | 需要把该规则固化为 Agent App 标准与 lint/fixture 检查 |
 | 文档要同步更新边界和审计 | 本文件第 2 / 4 / 8 / 9 / 10 节记录 Host/App/Runtime 边界、渲染原则、完成审计和验证记录 | covered | 后续每一刀继续把验证结果回写 |
-| 不和并行进程打架 | 本轮先只读审计并行 `scripts/agent-apps-smoke.mjs`，确认 Host task record 判定是主线阻塞后只接管 `taskAccepted / expectedSkillsInvoked` 两个最小补丁点；继续避让 `internal/roadmap/agentapp/*` 和 0.7 写集 | covered | 若继续扩展 chained seed / 多动作 flow，需要继续按脚本写集合并窗口处理 |
+| 不和并行进程打架 | 本轮先只读审计并行 `scripts/agent-app/apps-smoke.mjs`，确认 Host task record 判定是主线阻塞后只接管 `taskAccepted / expectedSkillsInvoked` 两个最小补丁点；继续避让 `internal/roadmap/agentapp/*` 和 0.7 写集 | covered | 若继续扩展 chained seed / 多动作 flow，需要继续按脚本写集合并窗口处理 |
 | 达到 Lime 可交付门槛 | Runtime required Skill enforcement、Agent App 文本参数 Skill fast path、output contract materialization 已落 current 主链；Rust 定向测试、前端 runtimeProcess 测试、`typecheck`、`test:contracts`、run-production/only-copy/run-scripts/run-strategy/run-review strict completion、完整 `verify:gui-smoke` 均通过 | covered for current key actions / partial for full content factory | 单会话全流程 runner 已新增但仍红；还需修知识库 readiness 回退、连续 startTask 稳定性、失败/人工确认分支和终态展开视觉断言 |
 
 ## 11. 剩余主线缺口
@@ -276,5 +276,5 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 1. **单会话全流程仍未完整串联**：本轮已新增独立 runner 并真实执行，但结果仍红；`build-store` 后可能回退到“资料还不能生产”，从已确认知识库出发继续串联也会遇到 startTask 等待、页面热更新或模型输出 patch 变体。当前关键动作已分别通过 strict completion，但还缺一条从知识库 / 场景 / 内容 / 脚本 / 交付 / 复盘连续跑完的绿色用户旅程。
 2. **完整共享 renderer 尚未抽包**：Host 已复用 Claw 工具名、工具摘要、Tool/Skill 步骤、ThinkingBlock 和 MarkdownRenderer，但 timeline shell / facts rail 仍是 Host 专用；后续应继续下沉为 Lime SDK 层共享组件，而不是让每个 Agent App 自绘。
 3. **终态手动展开视觉断言仍缺**：当前已有组件回归与 smoke，但还缺一条直接点击终态折叠组并确认 thinking / execution / output 仍可展开的 Playwright 级断言。
-4. **direct snapshot stabilization 应进入 smoke gate**：产品 direct get 已能复核 `run-production / only-copy` workspace patch，但 `scripts/agent-apps-smoke.mjs` 在 Host live record 已 ready 时会立即返回，可能留下过时的 `directRuntimeSnapshot.hasWorkspacePatch=false` 摘要；该脚本当前是并行写集，后续由持有脚本写集的进程补“ready 前再等一次 direct workspace patch”的稳定门。
+4. **direct snapshot stabilization 应进入 smoke gate**：产品 direct get 已能复核 `run-production / only-copy` workspace patch，但 `scripts/agent-app/apps-smoke.mjs` 在 Host live record 已 ready 时会立即返回，可能留下过时的 `directRuntimeSnapshot.hasWorkspacePatch=false` 摘要；该脚本当前是并行写集，后续由持有脚本写集的进程补“ready 前再等一次 direct workspace patch”的稳定门。
 5. **报告类 patch 字段已回灌到 Agent App runtime metadata/events 事实源**：`agent_app_runtime_cmd` 已把 `strategyReport / pptOutline / reviewReport / riskCheck` 纳入 accepted/extract 字段，并用 `agent_app_runtime` Rust 回归固定，避免不同投影层对“workspace patch 是否完整”的判断口径不一致；后续只需在脚本写集可用时补产品 smoke 复核。

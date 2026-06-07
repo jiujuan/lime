@@ -562,7 +562,9 @@ describe("agentRuntime threadClient", () => {
   it("App Server turn/start pending 时也应提前注册 drain 路由并投递首个增量", async () => {
     const appServerClient = appServerClientMock();
     let resolveStartTurn:
-      | ((value: Awaited<ReturnType<AgentRuntimeAppServerClient["startTurn"]>>) => void)
+      | ((
+          value: Awaited<ReturnType<AgentRuntimeAppServerClient["startTurn"]>>,
+        ) => void)
       | undefined;
     vi.mocked(appServerClient.startTurn).mockReturnValueOnce(
       new Promise((resolve) => {
@@ -687,7 +689,7 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
-  it("App Server drain 收到 turn.completed 后不应关闭路由，后续正文仍应投递", async () => {
+  it("App Server drain 收到 turn.completed 后应关闭路由，后续事件不应再投递", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
       id: 1,
@@ -713,58 +715,55 @@ describe("agentRuntime threadClient", () => {
       messages: [],
       notifications: [],
     });
-    vi.mocked(appServerClient.drainEvents)
-      .mockResolvedValueOnce([
-        {
-          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-          params: {
-            event: {
-              eventId: "evt-drain-completed",
-              sequence: 2,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "turn.completed",
-              timestamp: "2026-06-06T00:00:01.000Z",
-              payload: {},
+    vi.mocked(appServerClient.drainEvents).mockResolvedValueOnce([
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-drain-completed",
+            sequence: 2,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "turn.completed",
+            timestamp: "2026-06-06T00:00:01.000Z",
+            payload: {},
+          },
+        },
+      },
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-drain-delta-after-completed",
+            sequence: 3,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "message.delta",
+            timestamp: "2026-06-06T00:00:02.000Z",
+            payload: {
+              text: "不应投递",
             },
           },
         },
-      ])
-      .mockResolvedValueOnce([
-        {
-          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-          params: {
-            event: {
-              eventId: "evt-drain-delta-after-completed",
-              sequence: 3,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "message.delta",
-              timestamp: "2026-06-06T00:00:02.000Z",
-              payload: {
-                text: "最终答复",
-              },
-            },
+      },
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-drain-final-done",
+            sequence: 4,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "turn.final_done",
+            timestamp: "2026-06-06T00:00:03.000Z",
+            payload: {},
           },
         },
-        {
-          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
-          params: {
-            event: {
-              eventId: "evt-drain-final-done",
-              sequence: 4,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "turn.final_done",
-              timestamp: "2026-06-06T00:00:03.000Z",
-              payload: {},
-            },
-          },
-        },
-      ]);
+      },
+    ]);
     const client = createThreadClient({
       appServerClient,
       invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
@@ -793,26 +792,19 @@ describe("agentRuntime threadClient", () => {
           turn_id: "turn-1",
         }),
       });
-      expect(listener).toHaveBeenCalledWith({
-        payload: expect.objectContaining({
-          type: "text_delta",
-          text: "最终答复",
-          event_id: "evt-drain-delta-after-completed",
-          session_id: "session-1",
-          turn_id: "turn-1",
-        }),
-      });
-      expect(listener).toHaveBeenCalledWith({
-        payload: expect.objectContaining({
-          type: "final_done",
-          event_id: "evt-drain-final-done",
-          session_id: "session-1",
-          turn_id: "turn-1",
-        }),
-      });
     });
 
-    expect(appServerClient.drainEvents).toHaveBeenCalledTimes(2);
+    expect(listener).not.toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        event_id: "evt-drain-delta-after-completed",
+      }),
+    });
+    expect(listener).not.toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        event_id: "evt-drain-final-done",
+      }),
+    });
+    expect(appServerClient.drainEvents).toHaveBeenCalledTimes(1);
     unlisten();
   });
 
@@ -953,6 +945,67 @@ describe("agentRuntime threadClient", () => {
       turnId: "turn-1",
     });
     expect(invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("App Server cancel response notification 应发布到当前 stream event", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.cancelTurn).mockResolvedValueOnce({
+      id: 12,
+      result: {},
+      response: {
+        id: 12,
+        result: {},
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-canceled",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "turn.canceled",
+              timestamp: "2026-06-06T00:00:01.000Z",
+              payload: {
+                reason: "user_cancelled",
+              },
+            },
+          },
+        },
+      ],
+    });
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_cancel",
+      listener,
+    );
+
+    await expect(
+      client.interruptAgentRuntimeTurn({
+        session_id: "session-1",
+        turn_id: "turn-1",
+        event_name: "aster_stream_cancel",
+      }),
+    ).resolves.toBe(true);
+
+    expect(listener).toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        type: "error",
+        message: "user_cancelled",
+        event_id: "evt-canceled",
+        session_id: "session-1",
+        turn_id: "turn-1",
+      }),
+    });
+    unlisten();
   });
 
   it("App Server 不可用时 interrupt 应 fail closed，不回退 legacy command", async () => {
@@ -1388,6 +1441,7 @@ describe("agentRuntime threadClient", () => {
             type: "turn.completed",
             timestamp: "2026-06-06T00:00:05.000Z",
             payload: {
+              text: "CLAW_NEWS_FIXTURE_DONE",
               usage: {
                 inputTokens: 10,
                 outputTokens: 5,
@@ -1398,6 +1452,11 @@ describe("agentRuntime threadClient", () => {
       }),
     ).toMatchObject({
       type: "turn_completed",
+      text: "CLAW_NEWS_FIXTURE_DONE",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 5,
+      },
       turn: {
         id: "turn-1",
         thread_id: "session-1",

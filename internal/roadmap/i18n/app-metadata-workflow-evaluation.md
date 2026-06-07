@@ -14,12 +14,12 @@
 
 - 根级 `package.json`、`lime-rs/Cargo.toml`、`forge.config.mjs` 与 `lime-rs/capabilities/agent-app-shell.json` 是当前 installer / app metadata 审阅事实源。
 - 这些字段的真实配置目前仍是单语事实源；多语言发布前的审阅链路现在由 metadata translation scope 与 build-time locale manifest 承担。
-- `forge.config.mjs` 的 `PRODUCT_NAME`、`APP_ID`、artifact name template、deep-link scheme、macOS icon 与 Windows icon 是当前 Electron 发布元数据事实源。
+- `forge.config.mjs` 的 `PRODUCT_NAME`、`APP_ID`、deep-link scheme、macOS / Windows icon 与 Forge maker target 是当前 Electron 发布元数据事实源。
 - `package.json` 与 `lime-rs/Cargo.toml` 的 description 仍是单一英文描述，不是分 locale 的 metadata bundle。
 - `agent-app-shell.json` 的 description 仍是单一中文说明，没有 companion 版本。
 - `internal/roadmap/i18n/app-metadata-translation-scope.json` 已定义 installer / app metadata 的最小 ownership 与字段分类：`forge.config.mjs#productName`、`appId` 与 deep-link scheme 属于稳定品牌 / 标识字段，`package.json#description` 属于多语言发布前需要处理的 translatable 字段。
-- `internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json` 已把 scope 转成 build-time locale manifest；当前 `workflowStatus=ready`，9 个 metadata entry 中 1 个 localized entry、3 个 stable entry、5 个 source-only entry，missing field 与 required localized missing 均为 `0`。
-- `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 已增加 metadata field coverage 与 manifest readiness：当前审计到 `9` 个真实 app / installer metadata 字段，全部纳入 scope，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`，且 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`。
+- `internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json` 已把 scope 转成 build-time locale manifest；当前 `workflowStatus=ready`，10 个 metadata entry 中 1 个 localized entry、3 个 stable entry、6 个 source-only entry，missing field 与 required localized missing 均为 `0`。
+- `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 已增加 metadata field coverage 与 manifest readiness：当前审计到 `10` 个真实 app / installer metadata 字段，全部纳入 scope，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`，且 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`。
 - `lime-rs/` 下仍被 git 跟踪的旧宿主配置文件只允许作为 deprecated cleanup candidate 讨论；它们不是 current app metadata、installer、release、updater、签名或版本同步事实源。
 
 ## 结论

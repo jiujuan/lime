@@ -85,7 +85,7 @@ const UPDATE_NOTIFICATION_ANCHOR_SELECTOR =
   '[data-testid="app-sidebar-update-button"]';
 const UPDATE_NOTIFICATION_WINDOW_SIZE = {
   width: 232,
-  height: 182,
+  height: 128,
 };
 
 let mainWindow: BrowserWindow | null = null;
@@ -803,6 +803,7 @@ async function openUpdateNotificationWindow(
     current?: string | null;
     latest?: string | null;
     downloadUrl?: string | null;
+    anchorRect?: RectangleLike | null;
   } | null,
 ): Promise<void> {
   const url = buildUpdateNotificationWindowUrl({
@@ -815,7 +816,10 @@ async function openUpdateNotificationWindow(
 
   if (updateNotificationWindow && !updateNotificationWindow.isDestroyed()) {
     await loadMainWindowUrl(updateNotificationWindow, url);
-    await positionUpdateNotificationWindow(updateNotificationWindow);
+    await positionUpdateNotificationWindow(
+      updateNotificationWindow,
+      params?.anchorRect,
+    );
     updateNotificationWindow.show();
     updateNotificationWindow.focus();
     return;
@@ -825,12 +829,13 @@ async function openUpdateNotificationWindow(
     width: UPDATE_NOTIFICATION_WINDOW_SIZE.width,
     height: UPDATE_NOTIFICATION_WINDOW_SIZE.height,
     minWidth: 220,
-    minHeight: 160,
+    minHeight: 112,
     maxWidth: 320,
-    maxHeight: 260,
+    maxHeight: 180,
     title: "Lime Update",
     frame: false,
     transparent: true,
+    hasShadow: false,
     resizable: false,
     movable: true,
     show: false,
@@ -862,7 +867,10 @@ async function openUpdateNotificationWindow(
     },
   );
 
-  await positionUpdateNotificationWindow(updateNotificationWindow);
+  await positionUpdateNotificationWindow(
+    updateNotificationWindow,
+    params?.anchorRect,
+  );
   await loadMainWindowUrl(updateNotificationWindow, url);
 }
 
@@ -876,13 +884,15 @@ async function closeUpdateNotificationWindow(): Promise<void> {
 
 async function positionUpdateNotificationWindow(
   window: BrowserWindow,
+  preferredAnchorRect?: RectangleLike | null,
 ): Promise<void> {
   if (window.isDestroyed()) {
     return;
   }
 
   const contentBounds = getUpdateNotificationReferenceContentBounds();
-  const anchorRect = await readUpdateNotificationAnchorRect();
+  const anchorRect =
+    preferredAnchorRect ?? (await readUpdateNotificationAnchorRect());
   const display = screen.getDisplayMatching(contentBounds);
   window.setBounds(
     buildUpdateNotificationWindowBounds({
@@ -913,9 +923,11 @@ async function readUpdateNotificationAnchorRect(): Promise<RectangleLike | null>
   try {
     return (await referenceWindow.webContents.executeJavaScript(
       `(() => {
-        const element = document.querySelector(${JSON.stringify(
-          UPDATE_NOTIFICATION_ANCHOR_SELECTOR,
-        )});
+        const element =
+          document.querySelector('[data-update-notification-anchor="true"]') ||
+          document.querySelector(${JSON.stringify(
+            UPDATE_NOTIFICATION_ANCHOR_SELECTOR,
+          )});
         if (!element) {
           return null;
         }
@@ -1086,7 +1098,7 @@ async function handleHostInvoke(
     return takePendingSkillPackageOpenRequests();
   }
   if (isElectronUpdateCommand(command)) {
-    return await updateHost.invoke(command);
+    return await updateHost.invoke(command, args);
   }
   return await hostCommands.invoke(command, args);
 }

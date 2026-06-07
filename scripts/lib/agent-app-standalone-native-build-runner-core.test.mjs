@@ -153,7 +153,7 @@ describe("agent-app standalone native build runner core", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-standalone-native-build-runner.mjs"),
+        path.resolve("scripts/agent-app/standalone-native-build-runner.mjs"),
         "--writer-evidence",
         writerEvidencePath,
         "--output-root",

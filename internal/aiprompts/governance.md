@@ -216,17 +216,37 @@ npm run test:contracts
 
 ## Lime 特别关注的边界
 
-### 0. Electron 打包事实源
+### 0. `scripts/` 目录治理
 
-Electron packaging / installer / signing / notarization / updater metadata 只能继续向 `forge.config.mjs`、`electron-forge package`、`electron-forge make` 与仓库内 Forge maker 收敛。
+`scripts/` 根目录是冻结的历史入口区，不再作为新增脚本默认落点。
+
+- `current`：`scripts/lib/` 共享实现、`scripts/<domain>/` 领域脚本、被 `package.json` / CI 明确引用且仍在基线内的根入口脚本
+- `compat`：仍在根目录、但后续需要按领域迁移的历史入口脚本
+- `deprecated`：只服务旧迁移、旧发布或旧宿主证据的脚本，只能下线或并入 current 入口
+- `dead`：已删除脚本、旧产物路径、只允许作为 fail-fast fixture 出现的旧脚本名
+
+新增可执行脚本默认放到 `scripts/<domain>/`、`scripts/lib/` 或所属 package。只有公开稳定入口且无法归入领域子目录时，才允许新增根脚本例外；例外必须同步 `scripts/README.md`、`scripts/script-root-governance-baseline.json` 与执行计划退出条件。
+
+根目录回流守卫：
+
+```bash
+npm run governance:scripts
+```
+
+该守卫用冻结基线拒绝新增 tracked 根脚本；未跟踪根脚本只作为并行工作区警告，不得直接写入基线。
+
+### 1. Electron 打包事实源
+
+Electron packaging / installer / signing / notarization / updater metadata 只能继续向 `forge.config.mjs`、`electron-forge package`、`electron-forge make` 与 Forge 官方 maker 收敛。
 
 - `current`：`forge.config.mjs`、`electron/forge/*`、Forge CLI、release workflow、staging / verifier / docs / contract guards
-- `current`：`electron/updateHost.ts` + `electron-updater`，只负责运行时更新检查、下载和安装会话
-- `dead`：`electron-builder.yml`、`electron-builder` CLI、builder yml 事实源、把 Electron Builder 当 current 的文档或 i18n evidence
+- `current`：`electron/updateHost.ts` + Electron 内置 `autoUpdater`，只负责运行时更新检查、下载和安装会话
+- `current`：macOS `MakerDMG` / `MakerZIP` 产物与 `RELEASES.json`，Windows `MakerSquirrel` 产物与 `RELEASES` / `.nupkg` / Setup
+- `dead`：旧 builder 配置 / CLI、自定义 Windows installer maker、旧 YAML / blockmap updater metadata、把旧打包链当 current 的文档或 i18n evidence
 
-Windows 仍保持 NSIS installer / generic feed 语义，但必须由 Forge maker 承接；不得为了“统一 Forge”把 updater 语义改成另一套不兼容机制。发现新引用 `electron-builder.yml` 或 `npx electron-builder` 时，默认先判为旧路回流，而不是新增 compat。
+发现新引用旧 builder 配置 / CLI、自定义 Windows installer maker、旧 YAML / blockmap updater metadata 时，默认先判为旧路回流，而不是新增 compat。
 
-### 1. 命令边界
+### 2. 命令边界
 
 只要改动涉及 Electron IPC、App Server JSON-RPC、Bridge、mock、前端 API 网关或 legacy desktop facade，至少同时看这几处：
 
@@ -241,7 +261,7 @@ Windows 仍保持 NSIS installer / generic feed 语义，但必须由 Forge make
 
 - `internal/aiprompts/commands.md`
 
-### 2. 运行时路径边界
+### 3. 运行时路径边界
 
 涉及用户数据、日志、缓存、凭证、workspace、历史目录兼容时，优先收口到统一路径入口，例如 `app_paths` 或等价边界。
 
@@ -253,7 +273,7 @@ Windows 仍保持 NSIS installer / generic feed 语义，但必须由 Forge make
 
 路径兼容是边界问题，不应该变成业务层到处散落的字符串问题。
 
-### 3. 数据迁移与语义暴露
+### 4. 数据迁移与语义暴露
 
 一旦历史数据迁移已接入启动流程：
 

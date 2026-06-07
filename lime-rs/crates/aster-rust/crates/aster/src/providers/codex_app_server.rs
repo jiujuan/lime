@@ -20,6 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use super::errors::ProviderError;
+use crate::session::TurnContextOverride;
 
 /// JSON-RPC 请求 ID 生成器
 static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
@@ -45,18 +46,22 @@ fn build_turn_start_sandbox_policy(sandbox_policy: &str) -> Option<Value> {
     })
 }
 
-fn resolve_codex_runtime_policies() -> (String, String) {
-    let turn_context = crate::session_context::current_turn_context();
+fn resolve_codex_runtime_policies_with_context(
+    turn_context: Option<&TurnContextOverride>,
+) -> (String, String) {
     let approval_policy = turn_context
-        .as_ref()
         .and_then(|context| context.approval_policy.clone())
         .unwrap_or_else(|| "never".to_string());
     let sandbox_policy = turn_context
-        .as_ref()
         .and_then(|context| context.sandbox_policy.clone())
         .unwrap_or_else(|| "danger-full-access".to_string());
 
     (approval_policy, sandbox_policy)
+}
+
+fn resolve_codex_runtime_policies() -> (String, String) {
+    let turn_context = crate::session_context::current_turn_context();
+    resolve_codex_runtime_policies_with_context(turn_context.as_ref())
 }
 
 fn build_turn_start_params(
@@ -65,7 +70,25 @@ fn build_turn_start_params(
     model: Option<&str>,
     effort: Option<&str>,
 ) -> Value {
-    let (approval_policy, sandbox_policy) = resolve_codex_runtime_policies();
+    let turn_context = crate::session_context::current_turn_context();
+    build_turn_start_params_with_context(
+        thread_id,
+        input_text,
+        model,
+        effort,
+        turn_context.as_ref(),
+    )
+}
+
+fn build_turn_start_params_with_context(
+    thread_id: &str,
+    input_text: &str,
+    model: Option<&str>,
+    effort: Option<&str>,
+    turn_context: Option<&TurnContextOverride>,
+) -> Value {
+    let (approval_policy, sandbox_policy) =
+        resolve_codex_runtime_policies_with_context(turn_context);
     let mut params = json!({
         "threadId": thread_id,
         "input": [
@@ -84,8 +107,8 @@ fn build_turn_start_params(
     if let Some(e) = effort {
         params["effort"] = json!(e);
     }
-    if let Some(turn_context) = crate::session_context::current_turn_context() {
-        if let Some(output_schema) = turn_context.output_schema {
+    if let Some(turn_context) = turn_context {
+        if let Some(output_schema) = turn_context.output_schema.clone() {
             params["outputSchema"] = output_schema;
         }
     }
@@ -451,11 +474,53 @@ impl CodexAppServerConnection {
         model: Option<&str>,
         effort: Option<&str>,
     ) -> Result<(String, Vec<AppServerEvent>), ProviderError> {
+        self.turn_start_with_event_callback(input_text, model, effort, |_| Ok(()))
+    }
+
+    /// 启动一个 turn，读取事件流时同步回调每个事件
+    pub fn turn_start_with_event_callback<F>(
+        &mut self,
+        input_text: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+        on_event: F,
+    ) -> Result<(String, Vec<AppServerEvent>), ProviderError>
+    where
+        F: FnMut(&AppServerEvent) -> Result<(), ProviderError>,
+    {
+        let turn_context = crate::session_context::current_turn_context();
+        self.turn_start_with_context_and_event_callback(
+            input_text,
+            model,
+            effort,
+            turn_context.as_ref(),
+            on_event,
+        )
+    }
+
+    /// 启动一个 turn，使用显式运行时上下文构造请求
+    pub fn turn_start_with_context_and_event_callback<F>(
+        &mut self,
+        input_text: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+        turn_context: Option<&TurnContextOverride>,
+        mut on_event: F,
+    ) -> Result<(String, Vec<AppServerEvent>), ProviderError>
+    where
+        F: FnMut(&AppServerEvent) -> Result<(), ProviderError>,
+    {
         let thread_id = self.current_thread_id.clone().ok_or_else(|| {
             ProviderError::RequestFailed("没有活动的 thread，请先调用 thread_start".to_string())
         })?;
 
-        let params = build_turn_start_params(&thread_id, input_text, model, effort);
+        let params = build_turn_start_params_with_context(
+            &thread_id,
+            input_text,
+            model,
+            effort,
+            turn_context,
+        );
 
         let id = self.send_request("turn/start", params)?;
 
@@ -501,6 +566,7 @@ impl CodexAppServerConnection {
                     _ => {}
                 }
 
+                on_event(&event)?;
                 events.push(event);
             }
         }
@@ -698,6 +764,23 @@ impl CodexSessionManager {
         cwd: Option<&str>,
         model: Option<&str>,
     ) -> Result<(), ProviderError> {
+        let turn_context = crate::session_context::current_turn_context();
+        self.get_or_create_connection_with_context(
+            conversation_id,
+            cwd,
+            model,
+            turn_context.as_ref(),
+        )
+    }
+
+    /// 获取或创建连接，并使用显式运行时上下文创建 Codex thread
+    pub fn get_or_create_connection_with_context(
+        &self,
+        conversation_id: &str,
+        cwd: Option<&str>,
+        model: Option<&str>,
+        turn_context: Option<&TurnContextOverride>,
+    ) -> Result<(), ProviderError> {
         let mut connections = self
             .connections
             .lock()
@@ -733,7 +816,8 @@ impl CodexSessionManager {
                 Err(e) => {
                     tracing::warn!("恢复会话失败，创建新会话: {}", e);
                     drop(session_map);
-                    let (approval_policy, sandbox_policy) = resolve_codex_runtime_policies();
+                    let (approval_policy, sandbox_policy) =
+                        resolve_codex_runtime_policies_with_context(turn_context);
                     let thread = conn.thread_start(
                         model,
                         cwd,
@@ -749,7 +833,8 @@ impl CodexSessionManager {
         } else {
             drop(session_map);
             // 创建新会话
-            let (approval_policy, sandbox_policy) = resolve_codex_runtime_policies();
+            let (approval_policy, sandbox_policy) =
+                resolve_codex_runtime_policies_with_context(turn_context);
             let thread =
                 conn.thread_start(model, cwd, Some(&approval_policy), Some(&sandbox_policy))?;
             let mut session_map = self
@@ -776,6 +861,45 @@ impl CodexSessionManager {
         model: Option<&str>,
         effort: Option<&str>,
     ) -> Result<(String, Vec<AppServerEvent>), ProviderError> {
+        self.send_message_with_event_callback(conversation_id, message, model, effort, |_| Ok(()))
+    }
+
+    /// 发送消息并在读取 stdout 事件时同步回调
+    pub fn send_message_with_event_callback<F>(
+        &self,
+        conversation_id: &str,
+        message: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+        on_event: F,
+    ) -> Result<(String, Vec<AppServerEvent>), ProviderError>
+    where
+        F: FnMut(&AppServerEvent) -> Result<(), ProviderError>,
+    {
+        let turn_context = crate::session_context::current_turn_context();
+        self.send_message_with_context_and_event_callback(
+            conversation_id,
+            message,
+            model,
+            effort,
+            turn_context.as_ref(),
+            on_event,
+        )
+    }
+
+    /// 发送消息并使用显式运行时上下文构造 turn/start 请求
+    pub fn send_message_with_context_and_event_callback<F>(
+        &self,
+        conversation_id: &str,
+        message: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+        turn_context: Option<&TurnContextOverride>,
+        on_event: F,
+    ) -> Result<(String, Vec<AppServerEvent>), ProviderError>
+    where
+        F: FnMut(&AppServerEvent) -> Result<(), ProviderError>,
+    {
         let mut connections = self
             .connections
             .lock()
@@ -785,7 +909,13 @@ impl CodexSessionManager {
             ProviderError::RequestFailed(format!("会话不存在: {}", conversation_id))
         })?;
 
-        conn.turn_start(message, model, effort)
+        conn.turn_start_with_context_and_event_callback(
+            message,
+            model,
+            effort,
+            turn_context,
+            on_event,
+        )
     }
 
     /// 获取会话的 thread_id

@@ -41,6 +41,10 @@ function maxTimestampMs(
     : Number.NaN;
 }
 
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function hasRecoverableSilentTurnActivity(
   detail: Pick<AsterSessionDetail, "turns" | "items" | "queued_turns">,
   requestStartedAt: number,
@@ -55,7 +59,7 @@ export function hasRecoverableSilentTurnActivity(
   const hasRecentMatchingTurn = (detail.turns ?? []).some((turn) => {
     const promptMatches =
       normalizedPrompt.length > 0 &&
-      turn.prompt_text.trim() === normalizedPrompt;
+      normalizeText(turn.prompt_text) === normalizedPrompt;
     const latestTurnTimestampMs = maxTimestampMs(
       turn.started_at,
       turn.created_at,
@@ -89,7 +93,8 @@ export function hasRecoverableSilentTurnActivity(
   const hasRecentMatchingQueuedTurn = (detail.queued_turns ?? []).some(
     (queuedTurn) => {
       const messageText =
-        queuedTurn.message_text.trim() || queuedTurn.message_preview.trim();
+        normalizeText(queuedTurn.message_text) ||
+        normalizeText(queuedTurn.message_preview);
       return (
         normalizedPrompt.length > 0 &&
         messageText === normalizedPrompt &&

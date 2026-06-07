@@ -10,13 +10,13 @@ import {
   writeJsonFile,
 } from "./agent-app-standalone-release-evidence-core.mjs";
 
-function macosPkgEvidence() {
+function macosDmgEvidence() {
   return {
     appId: "content-factory-app",
     version: "0.8.0",
     channel: "stable",
     platform: "macos",
-    packageFormat: "pkg",
+    packageFormat: "dmg",
     secretPreflightEvidence: { status: "ready" },
     buildEvidence: {
       status: "completed",
@@ -28,9 +28,9 @@ function macosPkgEvidence() {
           signed: true,
         },
         {
-          kind: "pkg",
-          path: "dist/Content Factory.pkg",
-          contentHash: "sha256:pkg",
+          kind: "dmg",
+          path: "dist/Content Factory.dmg",
+          contentHash: "sha256:dmg",
           signed: true,
           notarized: true,
           stapled: true,
@@ -39,25 +39,25 @@ function macosPkgEvidence() {
     },
     signingEvidence: {
       applicationSignedArtifactRefs: ["sha256:app"],
-      installerSignedArtifactRefs: ["sha256:pkg"],
+      distributableSignedArtifactRefs: ["sha256:dmg"],
     },
     notarizationEvidence: {
-      acceptedArtifactRefs: ["sha256:pkg"],
-      stapledArtifactRefs: ["sha256:pkg"],
+      acceptedArtifactRefs: ["sha256:dmg"],
+      stapledArtifactRefs: ["sha256:dmg"],
     },
     installerVerificationEvidence: {
       status: "completed",
       commandsRun: [
         { id: "codesign-verify-app", exitCode: 0 },
         { id: "spctl-assess-app", exitCode: 0 },
-        { id: "pkgutil-check-signature", exitCode: 0 },
+        { id: "hdiutil-verify-dmg", exitCode: 0 },
         { id: "stapler-validate", exitCode: 0 },
       ],
     },
     updaterPublishEvidence: {
       status: "uploaded",
       manifestRef: "r2://lime-agent-apps/content-factory/latest.json",
-      artifactRefs: ["sha256:pkg"],
+      artifactRefs: ["sha256:dmg"],
     },
     rollbackEvidence: {
       manifestRef: "r2://lime-agent-apps/content-factory/rollback.json",
@@ -72,7 +72,7 @@ function sha256(value) {
 
 describe("agent-app standalone final release evidence", () => {
   it("build evidence blocker 使用 standalone build 口径，不回流旧宿主 build 命名", () => {
-    const evidence = macosPkgEvidence();
+    const evidence = macosDmgEvidence();
     delete evidence.buildEvidence;
 
     const result = checkStandaloneReleaseEvidence(evidence);
@@ -86,8 +86,8 @@ describe("agent-app standalone final release evidence", () => {
     expect(message).not.toMatch(/\bold\s+host\s+build\b/i);
   });
 
-  it("accepts complete macOS pkg final release evidence", () => {
-    const result = checkStandaloneReleaseEvidence(macosPkgEvidence());
+  it("accepts complete macOS dmg final release evidence", () => {
+    const result = checkStandaloneReleaseEvidence(macosDmgEvidence());
 
     expect(result).toMatchObject({
       status: "ready",
@@ -96,7 +96,7 @@ describe("agent-app standalone final release evidence", () => {
       requiredInstallerVerificationCommandIds: [
         "codesign-verify-app",
         "spctl-assess-app",
-        "pkgutil-check-signature",
+        "hdiutil-verify-dmg",
         "stapler-validate",
       ],
       blockers: [],
@@ -104,7 +104,7 @@ describe("agent-app standalone final release evidence", () => {
   });
 
   it("blocks when installer verification and remote upload evidence are missing", () => {
-    const evidence = macosPkgEvidence();
+    const evidence = macosDmgEvidence();
     delete evidence.installerVerificationEvidence;
     delete evidence.updaterPublishEvidence;
 
@@ -128,14 +128,14 @@ describe("agent-app standalone final release evidence", () => {
       recursive: true,
     });
     fs.mkdirSync(path.join(artifactRoot, "dist"), { recursive: true });
-    const pkgBytes = "signed pkg bytes";
+    const pkgBytes = "signed dmg bytes";
     fs.writeFileSync(
-      path.join(artifactRoot, "dist", "Content Factory.pkg"),
+      path.join(artifactRoot, "dist", "Content Factory.dmg"),
       pkgBytes,
       "utf8",
     );
 
-    const evidence = macosPkgEvidence();
+    const evidence = macosDmgEvidence();
     evidence.buildEvidence.artifactRefs[1].contentHash = sha256(pkgBytes);
     evidence.updaterPublishEvidence.artifactRefs = [sha256(pkgBytes)];
 
@@ -157,12 +157,12 @@ describe("agent-app standalone final release evidence", () => {
     });
     fs.mkdirSync(path.join(artifactRoot, "dist"), { recursive: true });
     fs.writeFileSync(
-      path.join(artifactRoot, "dist", "Content Factory.pkg"),
-      "signed pkg bytes",
+      path.join(artifactRoot, "dist", "Content Factory.dmg"),
+      "signed dmg bytes",
       "utf8",
     );
 
-    const result = checkStandaloneReleaseEvidence(macosPkgEvidence(), {
+    const result = checkStandaloneReleaseEvidence(macosDmgEvidence(), {
       artifactRoot,
     });
 
@@ -220,7 +220,7 @@ describe("agent-app standalone final release evidence", () => {
   });
 
   it("does not accept remote upload evidence unless it references the distributable", () => {
-    const evidence = macosPkgEvidence();
+    const evidence = macosDmgEvidence();
     evidence.updaterPublishEvidence = {
       status: "uploaded",
       manifestRef: "r2://lime-agent-apps/content-factory/latest.json",
@@ -243,7 +243,7 @@ describe("agent-app standalone final release evidence", () => {
     );
     const evidencePath = path.join(outputRoot, "release-evidence.json");
     const auditPath = path.join(outputRoot, "release-audit.json");
-    const evidence = macosPkgEvidence();
+    const evidence = macosDmgEvidence();
     evidence.secretPreflightEvidence = { status: "blocked" };
     delete evidence.installerVerificationEvidence;
     writeJsonFile(evidencePath, evidence);
@@ -251,7 +251,7 @@ describe("agent-app standalone final release evidence", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-standalone-release-evidence-check.mjs"),
+        path.resolve("scripts/agent-app/standalone-release-evidence-check.mjs"),
         "--evidence",
         evidencePath,
         "--output",

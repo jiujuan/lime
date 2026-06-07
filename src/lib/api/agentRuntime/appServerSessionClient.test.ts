@@ -206,7 +206,37 @@ describe("appServerSessionClient", () => {
         created_at: 1780704000000,
         updated_at: 1780704002000,
         workspace_id: "workspace-1",
-        messages: [],
+        messages_count: 2,
+        history_limit: 2,
+        history_offset: 0,
+        history_cursor: {
+          oldest_message_id: null,
+          start_index: 0,
+          loaded_count: 2,
+        },
+        history_truncated: false,
+        messages: [
+          {
+            role: "user",
+            timestamp: 1780704000,
+            content: [
+              {
+                type: "text",
+                text: "请整理 App Server 对话历史",
+              },
+            ],
+          },
+          {
+            role: "assistant",
+            timestamp: 1780704002,
+            content: [
+              {
+                type: "text",
+                text: "已从 App Server detail.messages 读取。",
+              },
+            ],
+          },
+        ],
       },
     };
     vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
@@ -232,7 +262,37 @@ describe("appServerSessionClient", () => {
       created_at: 1780704000000,
       updated_at: 1780704002000,
       workspace_id: "workspace-1",
-      messages: [],
+      messages_count: 2,
+      history_limit: 2,
+      history_offset: 0,
+      history_cursor: {
+        oldest_message_id: null,
+        start_index: 0,
+        loaded_count: 2,
+      },
+      history_truncated: false,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1780704000,
+          content: [
+            {
+              type: "text",
+              text: "请整理 App Server 对话历史",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1780704002,
+          content: [
+            {
+              type: "text",
+              text: "已从 App Server detail.messages 读取。",
+            },
+          ],
+        },
+      ],
     });
 
     expect(appServerClient.readSession).toHaveBeenCalledWith({

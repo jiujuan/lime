@@ -23,6 +23,15 @@ const controlPlaneMocks = vi.hoisted(() => ({
   listClientProviderOfferModels: vi.fn(),
 }));
 
+const desktopRuntimeMocks = vi.hoisted(() => ({
+  hasDesktopHostInvokeCapability: vi.fn(() => true),
+  hasDesktopHostRuntimeMarkers: vi.fn(() => false),
+}));
+
+const electronHostMocks = vi.hoisted(() => ({
+  isElectronHostCommandAvailable: vi.fn(() => true),
+}));
+
 vi.mock("@/lib/api/apiKeyProvider", () => ({
   apiKeyProviderApi: {
     addApiKey: apiKeyProviderMocks.addApiKey,
@@ -41,7 +50,15 @@ vi.mock("@/lib/api/oemCloudControlPlane", () => ({
 }));
 
 vi.mock("@/lib/desktop-runtime", () => ({
-  hasDesktopHostInvokeCapability: () => true,
+  hasDesktopHostInvokeCapability:
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers:
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers,
+}));
+
+vi.mock("@/lib/electron-host", () => ({
+  isElectronHostCommandAvailable:
+    electronHostMocks.isElectronHostCommandAvailable,
 }));
 
 import { useOemLimeHubProviderSync } from "./useOemLimeHubProviderSync";
@@ -106,6 +123,9 @@ describe("useOemLimeHubProviderSync", () => {
     apiKeyProviderMocks.setUiState.mockResolvedValue(undefined);
     apiKeyProviderMocks.toggleApiKey.mockResolvedValue({ id: "old-key-001" });
     apiKeyProviderMocks.updateProvider.mockResolvedValue(undefined);
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(false);
+    electronHostMocks.isElectronHostCommandAvailable.mockReturnValue(true);
     controlPlaneMocks.createClientAccessToken.mockResolvedValue({
       token: { id: "cloud-token-001" },
       apiKey: "sk-lime-desktop",
@@ -136,6 +156,38 @@ describe("useOemLimeHubProviderSync", () => {
       mountedHarness = null;
     }
     await changeLimeLocale("zh-CN");
+  });
+
+  it("Electron Host 不支持 Provider 写命令时不应触发旧 update_api_key_provider", async () => {
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
+    electronHostMocks.isElectronHostCommandAvailable.mockReturnValue(false);
+    setStoredOemCloudSessionState({
+      token: "session-token-001",
+      tenant: {
+        id: "tenant-0001",
+      },
+      user: {
+        id: "user-001",
+      },
+      session: {
+        id: "session-001",
+      },
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mountedHarness = { container, root };
+
+    act(() => {
+      root.render(<HookHarness />);
+    });
+
+    await flushEffects();
+
+    expect(apiKeyProviderMocks.getProviders).not.toHaveBeenCalled();
+    expect(apiKeyProviderMocks.updateProvider).not.toHaveBeenCalled();
+    expect(controlPlaneMocks.createClientAccessToken).not.toHaveBeenCalled();
   });
 
   it("应把默认云端来源的模型目录同步到内部 lime-hub provider", async () => {

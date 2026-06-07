@@ -262,6 +262,7 @@ export interface AgentRuntimeThreadReadModel {
     incidents?: AgentRuntimeIncidentView[];
     queued_turns?: QueuedTurnSnapshot[];
     tool_calls?: AgentRuntimeThreadToolCallView[];
+    artifacts?: Record<string, unknown>[];
     model_routing?: Record<string, unknown> | null;
     evidence_summary?: AgentRuntimeThreadEvidenceSummary | null;
     telemetry_summary?: AgentRuntimeThreadTelemetrySummary | null;
@@ -985,6 +986,7 @@ export interface AgentRuntimeCreateSessionOptions {
 export interface AgentRuntimeInterruptTurnRequest {
     session_id: string;
     turn_id?: string;
+    event_name?: string;
 }
 export interface AgentRuntimeCompactSessionRequest {
     session_id: string;

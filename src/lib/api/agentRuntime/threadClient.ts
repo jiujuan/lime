@@ -109,8 +109,12 @@ export function createThreadClient({
     request: AgentRuntimeInterruptTurnRequest,
   ): Promise<boolean> {
     assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
-    await appServerClient.cancelTurn(
+    const result = await appServerClient.cancelTurn(
       appServerTurnCancelParamsFromRequest(request),
+    );
+    publishAppServerAgentSessionNotifications(
+      request.event_name,
+      result.notifications,
     );
     return true;
   }
@@ -338,6 +342,7 @@ type AppServerAgentSessionEventRoute = {
 
 class AppServerAgentSessionEventDrainRouter {
   readonly #appServerClient: AgentRuntimeAppServerClient;
+  readonly #closedRouteKeys = new Set<string>();
   readonly #routes = new Map<string, AppServerAgentSessionEventRoute>();
   #draining = false;
 
@@ -361,7 +366,9 @@ class AppServerAgentSessionEventDrainRouter {
       seenEventIds: new Set(),
       expiresAt: Date.now() + APP_SERVER_EVENT_ROUTE_TTL_MS,
     };
-    this.#routes.set(routeKey(route), route);
+    const key = routeKey(route);
+    this.#closedRouteKeys.delete(key);
+    this.#routes.set(key, route);
     this.#startDrainLoop();
 
     return {
@@ -440,7 +447,11 @@ class AppServerAgentSessionEventDrainRouter {
     }
 
     const matchedRoutes = this.#matchingRoutes(event);
-    if (matchedRoutes.length === 0 && fallbackEventName) {
+    if (
+      matchedRoutes.length === 0 &&
+      fallbackEventName &&
+      !this.#isClosedFallbackRoute(event, fallbackEventName)
+    ) {
       publishAppServerAgentSessionNotifications(fallbackEventName, [
         notification,
       ]);
@@ -456,9 +467,32 @@ class AppServerAgentSessionEventDrainRouter {
         notification,
       ]);
       if (isTerminalAppServerAgentEvent(event)) {
-        this.#routes.delete(routeKey(route));
+        const key = routeKey(route);
+        this.#closedRouteKeys.add(key);
+        this.#routes.delete(key);
       }
     }
+  }
+
+  #isClosedFallbackRoute(
+    event: AppServerAgentEvent,
+    fallbackEventName: string,
+  ): boolean {
+    return (
+      this.#closedRouteKeys.has(
+        routeKey({
+          eventName: fallbackEventName,
+          sessionId: event.sessionId,
+          turnId: event.turnId,
+        }),
+      ) ||
+      this.#closedRouteKeys.has(
+        routeKey({
+          eventName: fallbackEventName,
+          sessionId: event.sessionId,
+        }),
+      )
+    );
   }
 
   #matchingRoutes(
@@ -489,6 +523,7 @@ class AppServerAgentSessionEventDrainRouter {
 
 function isTerminalAppServerAgentEvent(event: AppServerAgentEvent): boolean {
   return (
+    event.type === "turn.completed" ||
     event.type === "turn.done" ||
     event.type === "turn.final_done" ||
     event.type === "turn.failed" ||
@@ -497,7 +532,7 @@ function isTerminalAppServerAgentEvent(event: AppServerAgentEvent): boolean {
   );
 }
 
-function routeKey(route: AppServerAgentSessionEventRoute): string {
+function routeKey(route: AppServerAgentSessionEventRouteParams): string {
   return `${route.sessionId}\u0000${route.turnId ?? ""}\u0000${route.eventName}`;
 }
 
@@ -624,6 +659,8 @@ export function projectAppServerAgentEventPayload(
       return {
         ...basePayload,
         type: "turn_completed",
+        text: readString(payload, "text", "delta", "message", "content"),
+        usage: payload.usage,
         turn: normalizeRecord(payload.turn) ?? {
           id: event.turnId ?? "",
           thread_id: event.threadId ?? event.sessionId,

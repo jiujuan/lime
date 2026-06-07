@@ -132,10 +132,7 @@ internal/knowledge
 internal/knowledge/*
 !internal/knowledge/README.md
 internal/research/**
-!internal/research/
-!internal/research/skill-forge/
-internal/research/skill-forge/**
-!internal/research/skill-forge/*.md
+
 
 # Issues tracking (internal use only)
 .issues/
@@ -183,6 +180,7 @@ target-codex*
 .lime/
 
 tmp/
+.tmp/
 
 governance/
 !src/lib/governance/

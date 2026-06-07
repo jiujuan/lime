@@ -101,13 +101,17 @@ impl RuntimeBackend {
                 "App Server runtime backend failed to initialize Aster agent".to_string(),
             )
         })?;
+        let cancel_token = self
+            .agent_state
+            .create_cancel_token(&session_scope.session_id)
+            .await;
         let mut emit_error = None;
-        let execution = stream_reply_with_policy(
+        let execution_result = stream_reply_with_policy(
             agent,
             &request.input.text,
             None,
             session_config,
-            None,
+            Some(cancel_token),
             &request_tool_policy,
             |event| {
                 if emit_error.is_some() {
@@ -118,10 +122,31 @@ impl RuntimeBackend {
                 }
             },
         )
-        .await
-        .map_err(|error| RuntimeCoreError::Backend(error.message))?;
+        .await;
+        self.agent_state
+            .remove_cancel_token(&session_scope.session_id)
+            .await;
+        let execution =
+            execution_result.map_err(|error| RuntimeCoreError::Backend(error.message))?;
         if let Some(error) = emit_error {
             return Err(error);
+        }
+
+        if execution.cancelled {
+            sink.emit(RuntimeEvent::new(
+                "turn.canceled",
+                json!({
+                    "backend": "runtime",
+                    "model": provider_config.model_name,
+                    "provider": provider_config
+                        .provider_selector
+                        .as_deref()
+                        .unwrap_or(&selection.provider),
+                    "searchMode": request_tool_policy.search_mode.as_str(),
+                    "attempts": execution.attempts_summary,
+                }),
+            ))?;
+            return Ok(());
         }
 
         self.agent_state
@@ -156,9 +181,12 @@ impl ExecutionBackend for RuntimeBackend {
 
     async fn cancel_turn(
         &self,
-        _request: CancelExecutionRequest,
+        request: CancelExecutionRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
+        self.agent_state
+            .cancel_session(&request.session.session_id)
+            .await;
         sink.emit(RuntimeEvent::new(
             "turn.canceled",
             json!({ "backend": "runtime" }),
@@ -178,8 +206,9 @@ impl ExecutionBackend for RuntimeBackend {
 }
 
 fn initialize_runtime_database() -> Result<DbConnection, RuntimeCoreError> {
-    let db = database::init_database()
-        .map_err(|error| RuntimeCoreError::Backend(format!("failed to initialize database: {error}")))?;
+    let db = database::init_database().map_err(|error| {
+        RuntimeCoreError::Backend(format!("failed to initialize database: {error}"))
+    })?;
     initialize_aster_runtime(db.clone()).map_err(|error| {
         RuntimeCoreError::Backend(format!(
             "failed to initialize Aster runtime for App Server runtime backend: {error}"
@@ -420,9 +449,13 @@ fn request_system_prompt(request: &ExecutionRequest) -> String {
         })
 }
 
-fn session_scope_from_request(request: &ExecutionRequest) -> Result<RuntimeSessionScope, RuntimeCoreError> {
+fn session_scope_from_request(
+    request: &ExecutionRequest,
+) -> Result<RuntimeSessionScope, RuntimeCoreError> {
     let session_id = non_empty(Some(&request.session.session_id)).ok_or_else(|| {
-        RuntimeCoreError::Backend("App Server runtime backend session.sessionId is empty".to_string())
+        RuntimeCoreError::Backend(
+            "App Server runtime backend session.sessionId is empty".to_string(),
+        )
     })?;
     let thread_id = non_empty(Some(&request.turn.thread_id))
         .or_else(|| non_empty(Some(&request.session.thread_id)))
@@ -715,7 +748,10 @@ fn emit_runtime_agent_event(
         payload_object.insert("backend".to_string(), Value::String("runtime".to_string()));
         payload_object.insert("runtimeEvent".to_string(), runtime_event);
     }
-    sink.emit(RuntimeEvent::new(runtime_event_type_from_raw(&raw_type), payload))
+    sink.emit(RuntimeEvent::new(
+        runtime_event_type_from_raw(&raw_type),
+        payload,
+    ))
 }
 
 fn json_pointer_string(value: &Value, pointers: &[&str]) -> Option<String> {
@@ -836,6 +872,7 @@ struct RuntimeSessionScope {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RuntimeHostContext;
     use app_server_protocol::AgentInput;
     use app_server_protocol::AgentSession;
     use app_server_protocol::AgentSessionStatus;
@@ -843,7 +880,18 @@ mod tests {
     use app_server_protocol::AgentTurnStatus;
     use app_server_protocol::BusinessObjectRef;
     use app_server_protocol::RuntimeOptions;
-    use crate::RuntimeHostContext;
+
+    #[derive(Default)]
+    struct TestRuntimeEventSink {
+        events: Vec<RuntimeEvent>,
+    }
+
+    impl RuntimeEventSink for TestRuntimeEventSink {
+        fn emit(&mut self, event: RuntimeEvent) -> Result<(), RuntimeCoreError> {
+            self.events.push(event);
+            Ok(())
+        }
+    }
 
     fn request_for_test(
         message: &str,
@@ -907,6 +955,33 @@ mod tests {
         request
     }
 
+    #[tokio::test]
+    async fn cancel_turn_cancels_runtime_stream_token() {
+        let backend = RuntimeBackend::new();
+        let request = request_for_test("请持续输出", None, None);
+        let cancel_token = backend
+            .agent_state
+            .create_cancel_token(&request.session.session_id)
+            .await;
+        let mut sink = TestRuntimeEventSink::default();
+
+        ExecutionBackend::cancel_turn(
+            &backend,
+            CancelExecutionRequest {
+                host: RuntimeHostContext::default(),
+                session: request.session,
+                turn: request.turn,
+            },
+            &mut sink,
+        )
+        .await
+        .expect("cancel should emit a runtime event");
+
+        assert!(cancel_token.is_cancelled());
+        assert_eq!(sink.events.len(), 1);
+        assert_eq!(sink.events[0].event_type, "turn.canceled");
+    }
+
     #[test]
     fn explicit_runtime_preferences_win() {
         let mut request = request_for_test("hello", None, None);
@@ -926,6 +1001,38 @@ mod tests {
                 reasoning_effort: None,
             }
         );
+    }
+
+    #[test]
+    fn host_provider_config_without_direct_credentials_stays_database_backed() {
+        let request = request_for_test(
+            "hello",
+            Some(json!({
+                "asterChatRequest": {
+                    "provider_config": {
+                        "provider_id": "database-openai",
+                        "provider_name": "openai",
+                        "model_name": "gpt-4.1"
+                    },
+                    "provider_preference": "database-openai",
+                    "model_preference": "gpt-4.1"
+                }
+            })),
+            None,
+        );
+        let host_request = aster_chat_request_from_request(&request);
+        let selection = selection_from_host_provider_config(&request).expect("selection");
+
+        let direct_config = direct_provider_config_from_request(
+            host_request.as_ref(),
+            &selection,
+            selection.reasoning_effort.clone(),
+        );
+
+        assert!(direct_config.is_none());
+        assert_eq!(selection.provider, "database-openai");
+        assert_eq!(selection.model, "gpt-4.1");
+        assert_eq!(selection.source, "host_options_provider_config");
     }
 
     #[test]
@@ -972,6 +1079,33 @@ mod tests {
         );
         assert_eq!(direct_config.reasoning_effort.as_deref(), Some("high"));
         assert!(!direct_config.toolshim);
+    }
+
+    #[test]
+    fn session_default_provider_model_is_used_after_frontend_compaction() {
+        let request = request_with_session_metadata(json!({
+            "providerSelector": "openai-compatible",
+            "modelName": "gpt-4.1-mini"
+        }));
+
+        let selection = selection_from_session_default(&request).expect("selection");
+
+        assert_eq!(selection.provider, "openai-compatible");
+        assert_eq!(selection.model, "gpt-4.1-mini");
+        assert_eq!(selection.source, "session_default");
+    }
+
+    #[test]
+    fn incomplete_session_default_is_not_a_runtime_selection() {
+        let missing_model = request_with_session_metadata(json!({
+            "providerSelector": "openai-compatible"
+        }));
+        let missing_provider = request_with_session_metadata(json!({
+            "modelName": "gpt-4.1-mini"
+        }));
+
+        assert!(selection_from_session_default(&missing_model).is_none());
+        assert!(selection_from_session_default(&missing_provider).is_none());
     }
 
     #[test]

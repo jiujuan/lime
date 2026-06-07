@@ -10,11 +10,11 @@ import {
 } from "./agent-app-standalone-release-secret-preflight-core.mjs";
 
 describe("agent-app standalone release secret preflight", () => {
-  it("macOS pkg stable remote upload 缺少 secrets 时必须 blocked 且不泄露值", () => {
+  it("macOS dmg stable remote upload 缺少 secrets 时必须 blocked 且不泄露值", () => {
     const result = buildStandaloneReleaseSecretPreflight({
       channel: "stable",
       env: {},
-      packageFormat: "pkg",
+      packageFormat: "dmg",
       platform: "macos",
       remoteUpload: true,
     });
@@ -24,17 +24,13 @@ describe("agent-app standalone release secret preflight", () => {
       ready: false,
       missingSecrets: expect.arrayContaining([
         expect.objectContaining({ key: "APPLE_CERTIFICATE" }),
-        expect.objectContaining({ key: "APPLE_INSTALLER_SIGNING_IDENTITY" }),
-        expect.objectContaining({
-          key: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY",
-        }),
         expect.objectContaining({ key: "LIME_AGENT_APP_RELEASE_UPLOAD_TOKEN" }),
       ]),
     });
     expect(JSON.stringify(result)).not.toContain("secret-value");
   });
 
-  it("接受 Electron updater signing secret", () => {
+  it("macOS dmg beta 只需要 Apple 签名与公证 secrets", () => {
     const result = buildStandaloneReleaseSecretPreflight({
       channel: "beta",
       env: {
@@ -45,8 +41,6 @@ describe("agent-app standalone release secret preflight", () => {
         APPLE_SIGNING_IDENTITY:
           "Developer ID Application: Lime Cloud (TEAMID1234)",
         APPLE_TEAM_ID: "TEAMID1234",
-        LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
-        LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_RAW: "secret-value",
       },
       packageFormat: "dmg",
       platform: "macos",
@@ -56,12 +50,6 @@ describe("agent-app standalone release secret preflight", () => {
       status: "ready",
       ready: true,
       missingSecrets: [],
-      presentSecretKeys: expect.arrayContaining([
-        expect.objectContaining({
-          key: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_RAW",
-          canonicalKey: "LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY",
-        }),
-      ]),
     });
     expect(JSON.stringify(result)).not.toContain("secret-value");
   });
@@ -69,10 +57,7 @@ describe("agent-app standalone release secret preflight", () => {
   it("Windows release 需要独立签名 secret", () => {
     const result = buildStandaloneReleaseSecretPreflight({
       channel: "dev",
-      env: {
-        LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY: "secret-value",
-        LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
-      },
+      env: {},
       platform: "windows",
     });
 
@@ -94,11 +79,13 @@ describe("agent-app standalone release secret preflight", () => {
     const blocked = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-standalone-release-secret-preflight.mjs"),
+        path.resolve(
+          "scripts/agent-app/standalone-release-secret-preflight.mjs",
+        ),
         "--platform",
         "macos",
         "--package-format",
-        "pkg",
+        "dmg",
         "--remote-upload",
         "--output",
         blockedPath,
@@ -117,7 +104,9 @@ describe("agent-app standalone release secret preflight", () => {
     const ready = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app-standalone-release-secret-preflight.mjs"),
+        path.resolve(
+          "scripts/agent-app/standalone-release-secret-preflight.mjs",
+        ),
         "--platform",
         "macos",
         "--package-format",
@@ -139,8 +128,6 @@ describe("agent-app standalone release secret preflight", () => {
             "Developer ID Application: Lime Cloud (TEAMID1234)",
           APPLE_TEAM_ID: "TEAMID1234",
           PATH: process.env.PATH,
-          LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY: "secret-value",
-          LIME_AGENT_APP_UPDATER_SIGNING_PRIVATE_KEY_PASSWORD: "secret-value",
         },
       },
     );

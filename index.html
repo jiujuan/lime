@@ -9,6 +9,13 @@
       (() => {
         try {
           const params = new URLSearchParams(window.location.search);
+          const limeWindow = params.get("lime_window");
+          if (
+            limeWindow === "update-notification" ||
+            window.location.pathname.endsWith("/update-notification")
+          ) {
+            document.documentElement.dataset.limeWindow = "update-notification";
+          }
           if (params.get("nativeStartup") === "1") {
             document.documentElement.dataset.limeNativeStartup = "1";
           }
@@ -16,18 +23,19 @@
           const locale = (navigator.languages?.[0] || navigator.language || "")
             .toLowerCase()
             .replace(/_/g, "-");
-          const startupLocale = locale.startsWith("zh-tw") ||
+          const startupLocale =
+            locale.startsWith("zh-tw") ||
             locale.startsWith("zh-hk") ||
             locale.startsWith("zh-mo") ||
             locale.includes("hant")
-            ? "zh-TW"
-            : locale.startsWith("en")
-              ? "en-US"
-              : locale.startsWith("ja")
-                ? "ja-JP"
-                : locale.startsWith("ko")
-                  ? "ko-KR"
-                  : "zh-CN";
+              ? "zh-TW"
+              : locale.startsWith("en")
+                ? "en-US"
+                : locale.startsWith("ja")
+                  ? "ja-JP"
+                  : locale.startsWith("ko")
+                    ? "ko-KR"
+                    : "zh-CN";
           document.documentElement.dataset.limeStartupLocale = startupLocale;
         } catch {
           document.documentElement.dataset.limeStartupLocale = "zh-CN";
@@ -52,12 +60,38 @@
       body {
         margin: 0;
         background:
-          radial-gradient(circle at 20% 18%, rgba(132, 204, 22, 0.18), transparent 30%),
-          radial-gradient(circle at 78% 12%, rgba(250, 204, 21, 0.14), transparent 28%),
-          radial-gradient(circle at 50% 84%, rgba(34, 197, 94, 0.1), transparent 28%),
+          radial-gradient(
+            circle at 20% 18%,
+            rgba(132, 204, 22, 0.18),
+            transparent 30%
+          ),
+          radial-gradient(
+            circle at 78% 12%,
+            rgba(250, 204, 21, 0.14),
+            transparent 28%
+          ),
+          radial-gradient(
+            circle at 50% 84%,
+            rgba(34, 197, 94, 0.1),
+            transparent 28%
+          ),
           linear-gradient(180deg, #fbfff8 0%, #edf5ea 48%, #fbfff8 100%);
         color: #0f172a;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+          sans-serif;
+      }
+
+      html[data-lime-window="update-notification"],
+      html[data-lime-window="update-notification"] body,
+      html[data-lime-window="update-notification"] #root {
+        background: transparent !important;
+        background-color: transparent !important;
+        background-image: none !important;
+      }
+
+      html[data-lime-window="update-notification"] .index-startup-shell {
+        display: none !important;
       }
 
       .index-startup-shell {
@@ -69,9 +103,21 @@
         justify-content: center;
         overflow: hidden;
         background:
-          radial-gradient(circle at 20% 18%, rgba(132, 204, 22, 0.18), transparent 30%),
-          radial-gradient(circle at 78% 12%, rgba(250, 204, 21, 0.14), transparent 28%),
-          radial-gradient(circle at 50% 84%, rgba(34, 197, 94, 0.1), transparent 28%),
+          radial-gradient(
+            circle at 20% 18%,
+            rgba(132, 204, 22, 0.18),
+            transparent 30%
+          ),
+          radial-gradient(
+            circle at 78% 12%,
+            rgba(250, 204, 21, 0.14),
+            transparent 28%
+          ),
+          radial-gradient(
+            circle at 50% 84%,
+            rgba(34, 197, 94, 0.1),
+            transparent 28%
+          ),
           linear-gradient(180deg, #fbfff8 0%, #edf5ea 48%, #fbfff8 100%);
         -webkit-app-region: drag;
         user-select: none;
@@ -83,7 +129,8 @@
         display: flex;
       }
 
-      html[data-lime-native-startup="1"][data-lime-native-startup-ready="1"] .index-startup-shell {
+      html[data-lime-native-startup="1"][data-lime-native-startup-ready="1"]
+        .index-startup-shell {
         opacity: 0;
       }
 
@@ -215,7 +262,11 @@
         width: min(320px, 72vw);
         height: 8px;
         border-radius: 999px;
-        background: linear-gradient(90deg, rgba(226, 232, 240, 0.82) 0%, rgba(226, 232, 240, 0.96) 100%);
+        background: linear-gradient(
+          90deg,
+          rgba(226, 232, 240, 0.82) 0%,
+          rgba(226, 232, 240, 0.96) 100%
+        );
         box-shadow:
           inset 0 1px 0 rgba(255, 255, 255, 0.32),
           0 12px 28px rgba(15, 23, 42, 0.08);
@@ -262,28 +313,63 @@
   <body>
     <div id="root"></div>
     <main class="index-startup-shell" data-lime-startup-shell>
-      <div class="index-startup-orb index-startup-orb-primary" aria-hidden="true"></div>
-      <div class="index-startup-orb index-startup-orb-secondary" aria-hidden="true"></div>
-      <div class="index-startup-orb index-startup-orb-tertiary" aria-hidden="true"></div>
+      <div
+        class="index-startup-orb index-startup-orb-primary"
+        aria-hidden="true"
+      ></div>
+      <div
+        class="index-startup-orb index-startup-orb-secondary"
+        aria-hidden="true"
+      ></div>
+      <div
+        class="index-startup-orb index-startup-orb-tertiary"
+        aria-hidden="true"
+      ></div>
       <section class="index-startup-stage">
         <div class="index-startup-logo-stack">
           <div class="index-startup-logo-glow" aria-hidden="true"></div>
-          <img class="index-startup-logo" src="./logo.png" alt="Lime" data-lime-startup-logo />
+          <img
+            class="index-startup-logo"
+            src="./logo.png"
+            alt="Lime"
+            data-lime-startup-logo
+          />
         </div>
         <div class="index-startup-copy">
           <h1 class="index-startup-slogan">
-            <span class="index-startup-copy-locale index-startup-copy-zh-cn">青柠一下，灵感即来</span>
-            <span class="index-startup-copy-locale index-startup-copy-zh-tw">青檸一下，靈感即來</span>
-            <span class="index-startup-copy-locale index-startup-copy-en-us">Tap Lime, inspiration arrives</span>
-            <span class="index-startup-copy-locale index-startup-copy-ja-jp">Lime で、ひらめきをすぐに</span>
-            <span class="index-startup-copy-locale index-startup-copy-ko-kr">Lime으로, 영감이 바로</span>
+            <span class="index-startup-copy-locale index-startup-copy-zh-cn"
+              >青柠一下，灵感即来</span
+            >
+            <span class="index-startup-copy-locale index-startup-copy-zh-tw"
+              >青檸一下，靈感即來</span
+            >
+            <span class="index-startup-copy-locale index-startup-copy-en-us"
+              >Tap Lime, inspiration arrives</span
+            >
+            <span class="index-startup-copy-locale index-startup-copy-ja-jp"
+              >Lime で、ひらめきをすぐに</span
+            >
+            <span class="index-startup-copy-locale index-startup-copy-ko-kr"
+              >Lime으로, 영감이 바로</span
+            >
           </h1>
           <p class="index-startup-subtitle">
-            <span class="index-startup-copy-locale index-startup-copy-zh-cn">从一句想法，到成稿、成图、成片、成事</span>
-            <span class="index-startup-copy-locale index-startup-copy-zh-tw">從一句想法，到成稿、成圖、成片、成事</span>
-            <span class="index-startup-copy-locale index-startup-copy-en-us">From one thought to polished copy, images, videos, and finished work</span>
-            <span class="index-startup-copy-locale index-startup-copy-ja-jp">一つのアイデアから、原稿・画像・動画・成果まで</span>
-            <span class="index-startup-copy-locale index-startup-copy-ko-kr">한 줄의 아이디어에서 글, 이미지, 영상, 완성된 일까지</span>
+            <span class="index-startup-copy-locale index-startup-copy-zh-cn"
+              >从一句想法，到成稿、成图、成片、成事</span
+            >
+            <span class="index-startup-copy-locale index-startup-copy-zh-tw"
+              >從一句想法，到成稿、成圖、成片、成事</span
+            >
+            <span class="index-startup-copy-locale index-startup-copy-en-us"
+              >From one thought to polished copy, images, videos, and finished
+              work</span
+            >
+            <span class="index-startup-copy-locale index-startup-copy-ja-jp"
+              >一つのアイデアから、原稿・画像・動画・成果まで</span
+            >
+            <span class="index-startup-copy-locale index-startup-copy-ko-kr"
+              >한 줄의 아이디어에서 글, 이미지, 영상, 완성된 일까지</span
+            >
           </p>
         </div>
         <div class="index-startup-progress-track" aria-hidden="true">

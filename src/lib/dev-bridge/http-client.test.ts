@@ -742,7 +742,25 @@ describe("http-client", () => {
           ],
         },
       }),
-    ).toBe(5000);
+    ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "knowledge",
+              method: "knowledgePack/list",
+              params: {},
+            }),
+            JSON.stringify({
+              id: "providers",
+              method: "modelProvider/list",
+              params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
   });
 
   it("图层设计工程落盘命令应使用长请求窗口", async () => {

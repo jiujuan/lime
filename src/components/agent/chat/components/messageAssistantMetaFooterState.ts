@@ -7,6 +7,10 @@ export function shouldRenderAssistantRuntimeStatusPill(
   return status?.phase === "failed" || status?.phase === "cancelled";
 }
 
+function hasTerminalAssistantRuntimeStatus(message: Message): boolean {
+  return shouldRenderAssistantRuntimeStatusPill(message.runtimeStatus);
+}
+
 export interface MessageAssistantMetaFooterState {
   shouldRenderTailRuntimeStatusLine: boolean;
   shouldRenderActiveRuntimeFooterIndicator: boolean;
@@ -39,6 +43,7 @@ export function resolveMessageAssistantMetaFooterState({
   shouldSuppressStandaloneImageWorkbenchProcess,
   tailRuntimeStatusLine,
 }: ResolveMessageAssistantMetaFooterStateOptions): MessageAssistantMetaFooterState {
+  const hasTerminalRuntimeStatus = hasTerminalAssistantRuntimeStatus(message);
   const shouldSuppressActiveRuntimeLine =
     tailRuntimeStatusLine?.status === "running" ||
     tailRuntimeStatusLine?.status === "queued";
@@ -47,6 +52,7 @@ export function resolveMessageAssistantMetaFooterState({
     !message.imageWorkbenchPreview &&
     message.id === lastAssistantMessageId &&
     isConversationTailAssistant &&
+    !hasTerminalRuntimeStatus &&
     Boolean(tailRuntimeStatusLine) &&
     !shouldSuppressActiveRuntimeLine;
   const shouldRenderActiveRuntimeFooterIndicator =
@@ -55,6 +61,7 @@ export function resolveMessageAssistantMetaFooterState({
     message.id === lastAssistantMessageId &&
     isConversationTailAssistant &&
     hasAssistantBodyContent &&
+    !hasTerminalRuntimeStatus &&
     Boolean(activeConversationRuntimeStatusLine) &&
     (activeConversationRuntimeStatusLine?.status === "running" ||
       activeConversationRuntimeStatusLine?.status === "queued") &&
@@ -85,7 +92,7 @@ export function resolveMessageAssistantMetaFooterState({
     !message.imageWorkbenchPreview &&
     !shouldSuppressAssistantMetaFooter &&
     !shouldRenderTailRuntimeStatusLine &&
-    shouldRenderAssistantRuntimeStatusPill(message.runtimeStatus);
+    hasTerminalRuntimeStatus;
   const hasAssistantMetaFooter =
     message.role === "assistant" &&
     !shouldSuppressAssistantMetaFooter &&

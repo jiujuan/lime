@@ -264,6 +264,8 @@ export interface AgentEventItemCompleted {
 export interface AgentEventTurnCompleted {
     type: "turn_completed";
     turn: AgentThreadTurn;
+    text?: string;
+    usage?: AgentTokenUsage;
 }
 export interface AgentEventTurnFailed {
     type: "turn_failed";

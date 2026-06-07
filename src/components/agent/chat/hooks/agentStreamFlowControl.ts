@@ -154,16 +154,25 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
   }
 
   const activeSessionId = activeStream?.sessionId || sessionIdRef.current;
-  if (activeSessionId) {
+  const runInterruptAndRefresh = async () => {
+    if (!activeSessionId) {
+      return;
+    }
     try {
       await runtime.interruptTurn(
         activeSessionId,
         resolveInterruptTurnId(activeStream),
+        activeStream?.eventName,
       );
     } catch (error) {
       onInterruptError?.(error);
     }
-  }
+    try {
+      await refreshSessionReadModel(activeSessionId);
+    } catch (error) {
+      onInterruptError?.(error);
+    }
+  };
 
   setQueuedTurns([]);
 
@@ -199,10 +208,8 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
   }
 
   setActiveStream(null);
-  if (activeSessionId) {
-    await refreshSessionReadModel(activeSessionId);
-  }
   notify.info("已停止生成");
+  void runInterruptAndRefresh();
 }
 
 export async function removeQueuedAgentTurn(options: RemoveQueuedTurnOptions) {

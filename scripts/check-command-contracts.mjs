@@ -888,21 +888,34 @@ function collectProductionBridgeGuardFailures() {
   const devSidecarPath = "scripts/lib/electron-dev-sidecar.mjs";
   const devSidecarSource = readSource(devSidecarPath);
   for (const snippet of [
-    "appServerAgentBackendBinaryName",
-    "localAppServerAgentBackendBinaryPath",
-    "resolveDevAppServerAgentBackendBinary",
-    "shouldUseDevAppServerExternalBackend",
     "resolveDevAppServerBackendEnv",
+    'defaultMode = "runtime"',
+    "APP_SERVER_BACKEND_MODE: defaultMode",
+    "APP_SERVER_BACKEND_MODE: requestedMode",
     'APP_SERVER_BACKEND_MODE: "external"',
     "APP_SERVER_BACKEND_COMMAND",
-    "app-server-agent-backend",
   ]) {
     if (!devSidecarSource.includes(snippet)) {
       failures.push({
         file: devSidecarPath,
         message:
-          "Electron dev 必须默认接入真实 App Server external agent backend",
+          "Electron dev 必须默认接入 App Server runtime backend，并只保留显式 external override",
         token: snippet,
+      });
+    }
+  }
+  for (const token of [
+    "appServerAgentBackendBinaryName",
+    "localAppServerAgentBackendBinaryPath",
+    "resolveDevAppServerAgentBackendBinary",
+    "shouldUseDevAppServerExternalBackend",
+    "app-server-agent-backend",
+  ]) {
+    if (devSidecarSource.includes(token)) {
+      failures.push({
+        file: devSidecarPath,
+        message: "Electron dev 不能继续默认解析或构建旧 external agent backend",
+        token,
       });
     }
   }
@@ -963,26 +976,34 @@ function collectProductionBridgeGuardFailures() {
     }
   }
 
-  const runElectronDevPath = "scripts/run-electron-dev.mjs";
+  const runElectronDevPath = "scripts/electron/run-dev.mjs";
   const runElectronDevSource = readSource(runElectronDevPath);
-  for (const snippet of [
-    "resolveDevAppServerAgentBackendBinary",
-    "resolveDevAppServerBackendEnv",
-    "shouldUseDevAppServerExternalBackend",
-    "backendCommand: appServerAgentBackendBin",
-  ]) {
+  for (const snippet of ["resolveDevAppServerBackendEnv"]) {
     if (!runElectronDevSource.includes(snippet)) {
       failures.push({
         file: runElectronDevPath,
-        message: "Electron dev 启动必须成组注入 App Server external backend",
+        message: "Electron dev 启动必须注入 App Server runtime backend env",
         token: snippet,
+      });
+    }
+  }
+  for (const token of [
+    "resolveDevAppServerAgentBackendBinary",
+    "shouldUseDevAppServerExternalBackend",
+    "backendCommand: appServerAgentBackendBin",
+  ]) {
+    if (runElectronDevSource.includes(token)) {
+      failures.push({
+        file: runElectronDevPath,
+        message: "Electron dev 启动不能再自动接旧 external agent backend",
+        token,
       });
     }
   }
 
   for (const smokePath of [
-    "scripts/app-server-stdio-smoke.mjs",
-    "scripts/app-server-sidecar-lifecycle-smoke.mjs",
+    "scripts/app-server/stdio-smoke.mjs",
+    "scripts/app-server/sidecar-lifecycle-smoke.mjs",
   ]) {
     const smokeSource = readSource(smokePath);
     if (/backendMode:\s*["'`]mock["'`]/.test(smokeSource)) {
@@ -1128,23 +1149,28 @@ function collectRetiredFileBrowserFacadeSourceFailures() {
   const restrictedSources = [
     {
       path: "src/lib/desktop-host/fileSystemMocks.ts",
-      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能继续保留 desktop-host mock fixture",
+      message:
+        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能继续保留 desktop-host mock fixture",
     },
     {
       path: "lime-rs/src/app/runner.rs",
-      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 legacy Tauri generate_handler",
+      message:
+        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 legacy Tauri generate_handler",
     },
     {
       path: "lime-rs/src/dev_bridge/dispatcher/files.rs",
-      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 Rust DevBridge dispatcher",
+      message:
+        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 Rust DevBridge dispatcher",
     },
     {
       path: "lime-rs/src/services/file_browser_service.rs",
-      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 Tauri command wrapper",
+      message:
+        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 Tauri command wrapper",
     },
     {
       path: "lime-rs/crates/services/src/file_browser_service.rs",
-      message: "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 services compat wrapper",
+      message:
+        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 services compat wrapper",
     },
   ];
 

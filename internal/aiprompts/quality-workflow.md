@@ -64,6 +64,42 @@
 4. 保留的 legacy host / legacy mock 测试只作为 legacy guard：证明旧 facade 不接新命令、不伪造 current runtime、不成为 GUI 可交付证据。
 5. 删除或跳过旧测试前，先确认已有 current 测试覆盖同一用户风险；否则先迁移覆盖，再清退旧测试。
 
+Agent Runtime / Claw chat 主路径改动还必须先跑 current fixture 回归：
+
+```bash
+npm run smoke:agent-runtime-current-fixture
+```
+
+该入口借鉴 Codex app-server 测试实践：用本地 fixture backend / harness 驱动真实 client、App Server JSON-RPC、流式事件、read model 和 UI 投影，不把真实模型后端作为日常回归门槛。它覆盖历史 / 缓存恢复、`final_done` 工具收尾、完成态 UI、Electron session history / 代码产物工作台 fixture guard 和 Claw GUI current fixture guard；脚本必须保持 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=0`、`LIME_REAL_API_TEST=0`，不能引入 `--allow-live-provider`、App Server mock backend、renderer mock fallback、`mockPriorityCommands`、`defaultMocks` 或 `invokeMockOnly`。该 smoke 只证明 current fixture 回归，不替代 `verify:gui-smoke`、Playwright MCP 真实点击、或显式授权后的 live Provider streaming E2E。
+
+修 Agent Runtime / Claw chat 的 streaming 卡住、无法停止、输入框不可用、用户消息 / assistant 输出可见性、`final_done` 后仍显示“正在输出”等问题时，必须优先补状态机级回归：terminal 事件必须覆盖 App Server current `turn.completed` 投影后的 `turn_completed`，以及 `done` / `final_done` / 可软完成的 `error`；这些事件应清理对应 active stream、dispose listener，并在当前 stream 匹配或尚未激活时显式把 `isSending` 收回 `false`。不要用固定 timeout / grace timer 合成 `final_done` 作为产品收口；Codex app-server 语义下 `turn/completed` 是 turn 终态，最终正文来自已完成 message/item 或 `turn.completed` payload。定向测试必须覆盖陈旧 terminal 事件不能误停新的 active stream，优先放在 `agentStreamRuntimeHandler.unit.test.ts` / `agentStreamCompletionController.test.ts` / `MessageList.test.tsx`，再跑 `npm run smoke:agent-runtime-current-fixture` 和对应真实 Electron fixture。
+
+如果本轮问题直接涉及历史详情 hydrate、最近对话恢复、归档 / 反归档后的 read model 读取，聚合 guard 通过后再显式跑：
+
+```bash
+npm run smoke:agent-session-history-electron-fixture
+```
+
+该入口启动真实 Electron Desktop Host，经 preload `app_server_handle_json_lines` 读取 App Server current session start/read/update/list 形状；它使用 `APP_SERVER_BACKEND_MODE=unavailable`，不触发 `agentSession/turn/start`，不调用模型后端。
+
+如果本轮问题直接涉及代码产物、artifact snapshot、从历史打开工作台或工作台面板渲染，聚合 guard 通过后再显式跑：
+
+```bash
+npm run smoke:code-artifact-workbench-electron-fixture
+```
+
+该入口启动真实 Electron Desktop Host，使用本地 external fixture backend 产生 `artifact.snapshot` 与 `turn.final_done`，再从 GUI 历史会话打开工作台；它不调用正式模型，不使用 App Server mock backend、renderer mock fallback 或 legacy runtime command。
+
+代码产物工作台 fixture 必须分开验证后端事实源和 GUI 可见性：`toolTimelinePersisted` 只证明 App Server read model 的 `tool_calls` / `thread_read.tool_calls` 已持久化 fixture tool completed 记录；`toolTimelineEvidencePresent` 只认 GUI 页面可见工具轨迹文案或工具输出预览。不要用 read model 持久化替代 GUI 证据，也不要为了让 smoke 通过在生产路径新增前端 mock 或 legacy 工具展示。
+
+如果本轮问题直接涉及 Claw 输入框不可见、用户输入不显示、assistant 输出卡住、自然语言新闻请求或 `agentSession/turn/start` GUI 链路，聚合 guard 通过后再显式跑：
+
+```bash
+npm run smoke:claw-chat-current-fixture
+```
+
+该入口启动真实 Electron Desktop Host，通过 GUI textarea 发送“整理今天的国际新闻”，验证 Frontend -> Electron IPC -> App Server JSON-RPC -> RuntimeCore/backend current 链路、完成态 UI、read model 和 external fixture backend ledger；current fixture 应覆盖 `message.delta + turn.completed` 单终态即可完成，不要求 `turn.final_done`；它仍然禁止正式模型后端、App Server mock backend、renderer mock fallback 和 legacy runtime command。
+
 ## 路线图任务防跑偏
 
 如果任务明确绑定路线图主线，质量校验除了回答“是否通过”，还必须回答“这次改动是否真的推进了路线图目标”。
@@ -184,15 +220,28 @@ Electron 打包 / 发布 / updater metadata 的 current 事实源固定为 `forg
 - `electron/forge/*`
 - `package.json` 与 `package-lock.json`
 - `.github/workflows/release.yml` 与相关发布 workflow
-- `scripts/run-electron-package-dir.mjs`
-- `scripts/stage-electron-release-assets.mjs`
-- `scripts/verify-electron-package-resources.mjs`
-- `scripts/electron-current-entrypoints.test.mjs`
-- `scripts/electron-current-docs-guard.test.mjs`
+- `scripts/electron/run-package-dir.mjs`
+- `scripts/electron/stage-release-assets.mjs`
+- `scripts/electron/verify-package-resources.mjs`
+- `scripts/electron/current-entrypoints.test.mjs`
+- `scripts/electron/current-docs-guard.test.mjs`
 - `scripts/check-app-server-client-contract.mjs`
 - `internal/roadmap/appserver/release-updater.md`
 
-`electron-builder.yml`、`electron-builder` CLI 与 builder yml 事实源属于 `dead`，不得继续作为 current 文档、CI、质量任务、i18n app metadata evidence 或守卫输入。运行时更新链路仍以 `electron/updateHost.ts` + `electron-updater` 为 current；Windows NSIS installer / generic feed 语义由 Forge maker 承接，不能为了迁移 Forge 改坏 updater 兼容。
+旧 builder 配置 / CLI、自定义 Windows installer maker 与旧 YAML / blockmap updater metadata 属于 `dead`，不得继续作为 current 文档、CI、质量任务、i18n app metadata evidence 或守卫输入。运行时更新链路以 `electron/updateHost.ts` + Electron 内置 `autoUpdater` 为 current；Windows installer 以 Forge Squirrel 为 current，必须产出 `RELEASES` / `.nupkg` / Setup，macOS updater metadata 以 Forge ZIP maker 的 `RELEASES.json` 为 current。
+
+`scripts/` 根目录是冻结的历史入口区。新增可执行脚本默认必须放到 `scripts/<domain>/`、`scripts/lib/` 或所属 package；只有公开稳定入口且无法归入领域子目录时才允许新增根目录例外。涉及脚本目录、脚本入口或新增脚本时，必须同步检查：
+
+- `scripts/README.md`
+- `scripts/script-root-governance-baseline.json`
+- `scripts/check-scripts-governance.mjs`
+- `package.json#scripts`
+
+最低校验至少包含：
+
+```bash
+npm run governance:scripts
+```
 
 ### 5. Rust 校验先小后大
 
@@ -318,7 +367,21 @@ LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 npm run verify:gui-smoke
 LIME_REAL_API_TEST=1 npm run smoke:agent-runtime-approval-sandbox
 ```
 
-单项脚本统一使用 `--allow-live-provider`；`npm run smoke:managed-objective-continuation`、`npm run smoke:managed-objective-automation` 与 `npm run smoke:code-runtime-fixture` 默认启动 localhost OpenAI-compatible fixture，不读取 `LIME_AGENT_QC_PROVIDER / LIME_E2E_PROVIDER / LIME_DEFAULT_PROVIDER` 作为真实 Provider 兜底，只有显式 `--allow-live-provider` 或 live Provider 环境授权后才可指定真实 provider/model；Vitest 的 `*.live.test.*` 默认从 `npm test` / `npx vitest` 收集中排除，直接点名运行也必须设置 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1` 或 `LIME_REAL_API_TEST=1`；普通 Vitest 默认还会安装外部网络守卫，覆盖 `fetch`、`XMLHttpRequest`、Node `http` / `https` 与 `net` / `tls` 直连请求，只允许 localhost / data / blob / file 等离线路径，避免未按 `.live.test` 命名的测试或 SDK 误打 Deepseek、OpenAI 或图片 Provider；Rust 真实联网测试必须同时使用 `#[ignore]` 和 `LIME_REAL_API_TEST=1` 二次门禁。设计画布只有 `--image-task live-single-layer` 需要该授权，connector outbox 只有 `--mode live` 需要该授权，Agent Apps 内容工厂的 action / completion E2E 与 `scripts/agent-apps-content-factory-flow.mjs` 需要该授权，replay / fixture / registry-only 路径不应调用真实 Provider。
+单项脚本统一使用 `--allow-live-provider`；`npm run smoke:managed-objective-continuation`、`npm run smoke:managed-objective-automation` 与 `npm run smoke:code-runtime-fixture` 默认启动 localhost OpenAI-compatible fixture，不读取 `LIME_AGENT_QC_PROVIDER / LIME_E2E_PROVIDER / LIME_DEFAULT_PROVIDER` 作为真实 Provider 兜底，只有显式 `--allow-live-provider` 或 live Provider 环境授权后才可指定真实 provider/model；Vitest 的 `*.live.test.*` 默认从 `npm test` / `npx vitest` 收集中排除，直接点名运行也必须设置 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1` 或 `LIME_REAL_API_TEST=1`；普通 Vitest 默认还会安装外部网络守卫，覆盖 `fetch`、`XMLHttpRequest`、Node `http` / `https` 与 `net` / `tls` 直连请求，只允许 localhost / data / blob / file 等离线路径，避免未按 `.live.test` 命名的测试或 SDK 误打 Deepseek、OpenAI 或图片 Provider；Rust 真实联网测试必须同时使用 `#[ignore]` 和 `LIME_REAL_API_TEST=1` 二次门禁。设计画布只有 `--image-task live-single-layer` 需要该授权，connector outbox 只有 `--mode live` 需要该授权，Agent Apps 内容工厂的 action / completion E2E 与 `scripts/agent-app/content-factory-flow.mjs` 需要该授权，replay / fixture / registry-only 路径不应调用真实 Provider。
+
+Agent Runtime / Claw chat 主路径改动，在进入 GUI smoke 或 Playwright 前先跑：
+
+```bash
+npm run smoke:agent-runtime-current-fixture
+```
+
+该入口必须维持非 live Provider、非 App Server mock backend、非 renderer mock fallback。它用于快速拦截历史恢复、流式终态、消息列表完成态、Electron session history / 代码产物工作台 guard 与 Claw GUI current fixture guard 回归；如果它失败，先修 current fixture 回归，再进入更重的 Electron / Playwright 验证。
+
+若要验证真实 Electron 历史详情 hydrate / 最近对话恢复 current 链路，使用 `npm run smoke:agent-session-history-electron-fixture`。该脚本启动 Electron 并经 App Server current JSON-RPC 执行 session start/read/update/list，但不触发 turn，也不调用模型后端。
+
+若要验证真实 Electron 代码产物和工作台闭环，使用 `npm run smoke:code-artifact-workbench-electron-fixture`。该脚本启动 Electron，使用 external fixture backend 产生代码 artifact，再通过 GUI 历史入口打开工作台；不调用正式模型，不走 App Server mock backend。
+
+若要验证真实输入框发送和自然语言新闻请求 current 链路，使用 `npm run smoke:claw-chat-current-fixture`。该脚本比聚合 guard 更重，会启动 Electron 并通过 GUI 输入框发送“整理今天的国际新闻”，但仍使用 external fixture backend，不调用正式模型。
 
 ### Layer 3：契约与桥接边界
 
@@ -342,7 +405,7 @@ npm run harness:cleanup-report:check
 node scripts/check-generated-slop-report.mjs --input "<cleanup-json>"
 ```
 
-同时，`scripts/report-generated-slop.mjs`、`scripts/check-generated-slop-report.mjs`、`scripts/harness-eval-history-record.mjs`、`scripts/harness-eval-trend-report.mjs`、`scripts/lib/generated-slop-report-core.mjs`、`scripts/lib/harness-dashboard-core.mjs` 这条 harness cleanup/report 主链，在 `verify:local` 的 smart 模式里默认也按 bridge/contracts 风险处理。
+同时，`scripts/report-generated-slop.mjs`、`scripts/check-generated-slop-report.mjs`、`scripts/harness/eval-history-record.mjs`、`scripts/harness/eval-trend-report.mjs`、`scripts/lib/generated-slop-report-core.mjs`、`scripts/lib/harness-dashboard-core.mjs` 这条 harness cleanup/report 主链，在 `verify:local` 的 smart 模式里默认也按 bridge/contracts 风险处理。
 本地 `verify:local` 输出里如果看到 `bridge 校验（harness cleanup contract）`，说明命中的就是这条 cleanup/report 契约门禁，而不是普通 DevBridge 变更。
 CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge_reasons`，并写入 `GITHUB_STEP_SUMMARY`，用于区分这次是 `harness_cleanup_contract`、`bridge_runtime`，还是 `workflow_full_suite` / `fallback_full_suite` 这类全量触发。Agent QC / qcloop 保持为本地与人工证据工具，不进入 GitHub Actions 验证链路。
 结果摘要默认按 `Scope / Required Gates / Notes / Recommended Next Action / Failure` 分段，优先让人一眼看清“为什么触发”“哪些门禁必跑”“最终为什么失败”，以及失败后本地最应该先跑哪条命令。

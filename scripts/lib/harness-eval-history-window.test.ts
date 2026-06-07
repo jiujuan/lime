@@ -162,7 +162,7 @@ describe("Harness eval history window", () => {
 
     writeJson(manifestPath, createHarnessManifest(caseDir));
 
-    await runNodeScript("scripts/harness-eval-history-record.mjs", [
+    await runNodeScript("scripts/harness/eval-history-record.mjs", [
       "--format",
       "json",
       "--manifest",
@@ -174,7 +174,7 @@ describe("Harness eval history window", () => {
       "--skip-cleanup",
     ]);
     await delayMs(10);
-    await runNodeScript("scripts/harness-eval-history-record.mjs", [
+    await runNodeScript("scripts/harness/eval-history-record.mjs", [
       "--format",
       "json",
       "--manifest",
@@ -186,7 +186,7 @@ describe("Harness eval history window", () => {
       "--skip-cleanup",
     ]);
     await delayMs(10);
-    await runNodeScript("scripts/harness-eval-history-record.mjs", [
+    await runNodeScript("scripts/harness/eval-history-record.mjs", [
       "--format",
       "json",
       "--manifest",
@@ -205,7 +205,7 @@ describe("Harness eval history window", () => {
     expect(historyFiles).toHaveLength(2);
 
     const report = await runNodeScript(
-      "scripts/harness-eval-trend-report.mjs",
+      "scripts/harness/eval-trend-report.mjs",
       [
         "--format",
         "json",

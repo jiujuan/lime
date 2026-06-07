@@ -25,14 +25,14 @@
 
 ## 2. 测试分层
 
-| Lane | 名称 | 证明什么 | 当前入口 | 不能证明什么 |
-| --- | --- | --- | --- | --- |
-| `L0-static-unit` | 快速卫生与确定性单测 | 低级错误、类型、确定性逻辑 | `npm run verify:local` | GUI 真能用、Agent 行为质量 |
-| `L1-contract-bridge` | 契约、Bridge 与治理护栏 | 前端 / Rust / mock / catalog 同步 | `npm run test:contracts` | 用户路径体验 |
-| `L2-agent-runtime` | Agent Runtime 与工具面 | turn、streaming、tool、approval、sandbox、team | `smoke:agent-runtime-*` | 真实 GUI 表面 |
-| `L3-product-surface` | GUI / WebUI / 桌面产品表面 | DevBridge、workspace、browser runtime、页面可用 | `npm run verify:gui-smoke` | 长程语义退化 |
-| `L4-behavior-eval` | Agent 行为评测与回归样本 | replay、grader、语义质量、趋势 | `npm run harness:eval` | 安装包可用 |
-| `L5-release-ops` | 发布与运营门禁 | 版本、包、启动、release evidence | `verify:app-version` + release smoke | 未覆盖的线上新场景 |
+| Lane                 | 名称                       | 证明什么                                        | 当前入口                             | 不能证明什么               |
+| -------------------- | -------------------------- | ----------------------------------------------- | ------------------------------------ | -------------------------- |
+| `L0-static-unit`     | 快速卫生与确定性单测       | 低级错误、类型、确定性逻辑                      | `npm run verify:local`               | GUI 真能用、Agent 行为质量 |
+| `L1-contract-bridge` | 契约、Bridge 与治理护栏    | 前端 / Rust / mock / catalog 同步               | `npm run test:contracts`             | 用户路径体验               |
+| `L2-agent-runtime`   | Agent Runtime 与工具面     | turn、streaming、tool、approval、sandbox、team  | `smoke:agent-runtime-*`              | 真实 GUI 表面              |
+| `L3-product-surface` | GUI / WebUI / 桌面产品表面 | DevBridge、workspace、browser runtime、页面可用 | `npm run verify:gui-smoke`           | 长程语义退化               |
+| `L4-behavior-eval`   | Agent 行为评测与回归样本   | replay、grader、语义质量、趋势                  | `npm run harness:eval`               | 安装包可用                 |
+| `L5-release-ops`     | 发布与运营门禁             | 版本、包、启动、release evidence                | `verify:app-version` + release smoke | 未覆盖的线上新场景         |
 
 规则：任何 Agent runtime、GUI 主路径或发布改动，都不能只拿 L0 作为可交付结论。
 
@@ -51,14 +51,14 @@ Evidence Pack 是测试系统的事实源，schema 位于：
 
 状态语义固定为：
 
-| 状态 | 含义 |
-| --- | --- |
-| `pass` | 证据完整且通过 |
-| `fail` | 有明确失败，必须修复 |
-| `blocked` | 环境、权限、凭证或外部依赖阻断，不能假装通过 |
-| `needs-human-review` | 语义质量或风险接受需要人审 |
-| `waived` | 已记录 owner、原因、过期时间的临时放行 |
-| `skipped` | 当前改动不适用，必须有选择理由 |
+| 状态                 | 含义                                         |
+| -------------------- | -------------------------------------------- |
+| `pass`               | 证据完整且通过                               |
+| `fail`               | 有明确失败，必须修复                         |
+| `blocked`            | 环境、权限、凭证或外部依赖阻断，不能假装通过 |
+| `needs-human-review` | 语义质量或风险接受需要人审                   |
+| `waived`             | 已记录 owner、原因、过期时间的临时放行       |
+| `skipped`            | 当前改动不适用，必须有选择理由               |
 
 ## 4. 场景 Manifest
 
@@ -153,7 +153,7 @@ npm run agent-qc:export-evidence -- \
 离线排障时也可以从 qcloop API 保存的 JSON 导出：
 
 ```bash
-node scripts/agent-qc-export-evidence.mjs \
+node scripts/agent-qc/export-evidence.mjs \
   --job-json "./tmp/qcloop-job.json" \
   --items-json "./tmp/qcloop-items.json" \
   --output "./tmp/agent-qc-evidence.json" \
@@ -192,27 +192,27 @@ npm run agent-qc:audit
 
 Agent 产品不能依赖单一测试手段。当前仓库样本的默认组合如下：
 
-| 组合 | 用法 | 当前仓库示例 |
-| --- | --- | --- |
-| 白盒 + 黑盒 | 白盒看 transcript，黑盒看用户结果 | tool timeline + GUI 状态 |
-| 快照 + 语义评测 | UI 防结构漂移，Agent 防语义退化 | React snapshot + harness grader |
-| 冒烟 + 长程任务 | PR 快速验证，nightly 跑长链 | `verify:gui-smoke` + `harness:eval:trend` |
-| Mock + Real Backend | 本地可 mock，发布必须真实路径 | DevBridge mock + release startup smoke |
-| 确定性断言 + LLM Judge | 合同用代码断言，开放回答用 rubric | `test:contracts` + grader.md |
-| CI + qcloop | CI 跑通用质量门禁，qcloop 做本地 / 人工批量质检 | manifest item + verifier/repair |
+| 组合                   | 用法                                            | 当前仓库示例                              |
+| ---------------------- | ----------------------------------------------- | ----------------------------------------- |
+| 白盒 + 黑盒            | 白盒看 transcript，黑盒看用户结果               | tool timeline + GUI 状态                  |
+| 快照 + 语义评测        | UI 防结构漂移，Agent 防语义退化                 | React snapshot + harness grader           |
+| 冒烟 + 长程任务        | PR 快速验证，nightly 跑长链                     | `verify:gui-smoke` + `harness:eval:trend` |
+| Mock + Real Backend    | 本地可 mock，发布必须真实路径                   | DevBridge mock + release startup smoke    |
+| 确定性断言 + LLM Judge | 合同用代码断言，开放回答用 rubric               | `test:contracts` + grader.md              |
+| CI + qcloop            | CI 跑通用质量门禁，qcloop 做本地 / 人工批量质检 | manifest item + verifier/repair           |
 
 ## 7. 改动类型到测试选择
 
-| 改动类型 | 最小门槛 | 运营增强 |
-| --- | --- | --- |
-| 普通前端逻辑 | `npm run verify:local` | 受影响 UI snapshot |
-| Tauri 命令 / Bridge / mock | `verify:local` + `test:contracts` | qcloop 跑 `command-bridge-contract` |
-| GUI 壳 / Workspace / 主页面 | `verify:local` + `verify:gui-smoke` | Playwright MCP 跑真实交互 |
-| Agent Runtime / tool surface | Rust 定向测试 + `smoke:agent-runtime-*` | transcript 进入 Evidence Pack |
-| Skill Forge / SkillTool | contracts + runtime binding 定向测试 | `skill-forge-register-bind-enable` 场景 |
-| Browser Runtime / site adapter | `smoke:browser-runtime` + `smoke:site-adapters` | console/network/cleanup 证据 |
-| Knowledge 产品路径 | `smoke:knowledge-gui` + `knowledge:product-e2e` | 来源引用与空结果语义评测 |
-| 发布 / 版本 / 包 | `verify:app-version` + GUI smoke | release evidence pack + waiver 审核 |
+| 改动类型                       | 最小门槛                                        | 运营增强                                |
+| ------------------------------ | ----------------------------------------------- | --------------------------------------- |
+| 普通前端逻辑                   | `npm run verify:local`                          | 受影响 UI snapshot                      |
+| Tauri 命令 / Bridge / mock     | `verify:local` + `test:contracts`               | qcloop 跑 `command-bridge-contract`     |
+| GUI 壳 / Workspace / 主页面    | `verify:local` + `verify:gui-smoke`             | Playwright MCP 跑真实交互               |
+| Agent Runtime / tool surface   | Rust 定向测试 + `smoke:agent-runtime-*`         | transcript 进入 Evidence Pack           |
+| Skill Forge / SkillTool        | contracts + runtime binding 定向测试            | `skill-forge-register-bind-enable` 场景 |
+| Browser Runtime / site adapter | `smoke:browser-runtime` + `smoke:site-adapters` | console/network/cleanup 证据            |
+| Knowledge 产品路径             | `smoke:knowledge-gui` + `knowledge:product-e2e` | 来源引用与空结果语义评测                |
+| 发布 / 版本 / 包               | `verify:app-version` + GUI smoke                | release evidence pack + waiver 审核     |
 
 ## 8. 发布门禁
 
@@ -255,11 +255,11 @@ Quality evidence:
 - Agent QC 运营模型文档：本文件。
 - Evidence Pack schema：`internal/test/agent-qc-evidence.schema.json`。
 - 核心场景 manifest：`internal/test/agent-qc-scenarios.manifest.json`。
-- manifest 校验与报告脚本：`scripts/agent-qc-report.mjs`。
+- manifest 校验与报告脚本：`scripts/agent-qc/report.mjs`。
 - `agent-qc:check` 保持为本地显式入口，避免 QC 标准自身漂移；`test:contracts` 不再间接触发 Agent QC。
-- qcloop job 导出脚本：`scripts/agent-qc-export-evidence.mjs`，可把真实 job / items 转成 Evidence Pack sidecar。
-- qcloop 只读状态监控：`scripts/agent-qc-qcloop-status.mjs`，可识别 running / pending / exhausted / stale，并在 worker stdout 明确 `QCLOOP_WORKER_RESULT=BLOCKED` 时保留环境阻断语义。
-- release summary 与 completion audit：`scripts/agent-qc-release-summary.mjs`、`scripts/agent-qc-completion-audit.mjs`，发布门禁只接受官方 pass evidence。
+- qcloop job 导出脚本：`scripts/agent-qc/export-evidence.mjs`，可把真实 job / items 转成 Evidence Pack sidecar。
+- qcloop 只读状态监控：`scripts/agent-qc/qcloop-status.mjs`，可识别 running / pending / exhausted / stale，并在 worker stdout 明确 `QCLOOP_WORKER_RESULT=BLOCKED` 时保留环境阻断语义。
+- release summary 与 completion audit：`scripts/agent-qc/release-summary.mjs`、`scripts/agent-qc/completion-audit.mjs`，发布门禁只接受官方 pass evidence。
 - 隔离 qcloop sidecar：在 `127.0.0.1:18080`、独立 DB 和显式 Codex sandbox 配置下，worker preflight、workspace ready、browser runtime、Skill Forge、release source-tree startup smoke 已能通过；full P0 v1 已启动且当前 4/8 success、1 running/stale、3 pending；这些是排障证据，不能单独替代官方 8/8 P0 Evidence Pack。
 
 后续优先级：

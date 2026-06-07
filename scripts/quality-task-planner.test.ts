@@ -36,7 +36,7 @@ describe("quality-task-planner", () => {
     const tasks = detectTasks([
       "scripts/lib/generated-slop-report-core.mjs",
       "scripts/check-generated-slop-report.mjs",
-      "scripts/harness-eval-history-record.mjs",
+      "scripts/harness/eval-history-record.mjs",
     ]);
 
     expect(tasks.bridge).toBe(true);
@@ -116,7 +116,7 @@ describe("quality-task-planner", () => {
   });
 
   it("i18n workflow 脚本改动应触发翻译结构校验并推荐 PR pack", () => {
-    const tasks = detectTasks(["scripts/i18n-translation-pr-pack.ts"]);
+    const tasks = detectTasks(["scripts/i18n/i18n-translation-pr-pack.ts"]);
 
     expect(tasks.i18n).toBe(true);
     expect(tasks.i18nHardcoded).toBe(false);
@@ -130,7 +130,7 @@ describe("quality-task-planner", () => {
   });
 
   it("patch retirement 相关脚本改动应触发 GUI smoke 并推荐 gate", () => {
-    const tasks = detectTasks(["scripts/i18n-patch-retirement-gate.mjs"]);
+    const tasks = detectTasks(["scripts/i18n/i18n-patch-retirement-gate.mjs"]);
 
     expect(tasks.guiSmoke).toBe(true);
     expect(tasks.frontend).toBe(false);
@@ -141,7 +141,7 @@ describe("quality-task-planner", () => {
   });
 
   it("bundle strategy 脚本改动应触发 i18n 校验并推荐刷新 bundle evidence", () => {
-    const tasks = detectTasks(["scripts/i18n-bundle-report.ts"]);
+    const tasks = detectTasks(["scripts/i18n/i18n-bundle-report.ts"]);
 
     expect(tasks.i18n).toBe(true);
     expect(tasks.i18nHardcoded).toBe(false);
@@ -288,7 +288,7 @@ describe("quality-task-planner", () => {
   });
 
   it("P4 readiness 聚合脚本改动应推荐刷新 P4 总 evidence", () => {
-    const tasks = detectTasks(["scripts/i18n-p4-readiness-report.ts"]);
+    const tasks = detectTasks(["scripts/i18n/i18n-p4-readiness-report.ts"]);
 
     expect(tasks.i18n).toBe(true);
     expect(tasks.frontend).toBe(false);
@@ -300,7 +300,9 @@ describe("quality-task-planner", () => {
   });
 
   it("roadmap readiness 聚合脚本改动应推荐刷新全路线图 evidence", () => {
-    const tasks = detectTasks(["scripts/i18n-roadmap-readiness-report.ts"]);
+    const tasks = detectTasks([
+      "scripts/i18n/i18n-roadmap-readiness-report.ts",
+    ]);
 
     expect(tasks.i18n).toBe(true);
     expect(tasks.frontend).toBe(false);

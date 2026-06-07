@@ -254,6 +254,9 @@ describe("agentRuntime clientFactory", () => {
         archived: true,
       }),
     ).resolves.toBeUndefined();
+    await expect(client.deleteAgentRuntimeSession("session-1")).resolves.toBe(
+      undefined,
+    );
 
     expect(appServerClient.startSession).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -270,6 +273,10 @@ describe("agentRuntime clientFactory", () => {
     expect(appServerClient.updateSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       title: "新标题",
+      archived: true,
+    });
+    expect(appServerClient.updateSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
       archived: true,
     });
     expect(bridgeInvoke).not.toHaveBeenCalled();

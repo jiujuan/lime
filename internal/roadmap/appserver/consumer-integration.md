@@ -26,13 +26,13 @@ content-studio / other apps
 
 ## 2. 为什么不是源码同步
 
-| 方案 | 判断 | 原因 |
-| --- | --- | --- |
-| 直接 copy Lime Rust 代码到独立 App | `dead` | 无法治理版本、修复、安全和 runtime facts，会快速分叉。 |
-| Git submodule 引入 Lime 源码 | `deprecated for app consumption` | 适合 pin 外部源码，不适合高频演进 runtime SDK；App 会被迫理解 Lime 内部 workspace。 |
-| Git subtree / vendor | `dead` | 更像低频 vendoring，会制造双向同步成本。 |
-| 独立 App 直接依赖 Lime Rust crate | `not recommended` | Electron App 不应链接内部 Rust workspace；跨平台构建和发布成本过高。 |
-| 版本化 TS client + sidecar binary | `current` | App 只依赖稳定协议和可校验二进制；RuntimeCore 仍由 Lime 维护。 |
+| 方案                               | 判断                             | 原因                                                                                |
+| ---------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| 直接 copy Lime Rust 代码到独立 App | `dead`                           | 无法治理版本、修复、安全和 runtime facts，会快速分叉。                              |
+| Git submodule 引入 Lime 源码       | `deprecated for app consumption` | 适合 pin 外部源码，不适合高频演进 runtime SDK；App 会被迫理解 Lime 内部 workspace。 |
+| Git subtree / vendor               | `dead`                           | 更像低频 vendoring，会制造双向同步成本。                                            |
+| 独立 App 直接依赖 Lime Rust crate  | `not recommended`                | Electron App 不应链接内部 Rust workspace；跨平台构建和发布成本过高。                |
+| 版本化 TS client + sidecar binary  | `current`                        | App 只依赖稳定协议和可校验二进制；RuntimeCore 仍由 Lime 维护。                      |
 
 执行规则：
 
@@ -135,7 +135,7 @@ app-server.exe
 
 ## 4. content-studio 集成形态
 
-content-studio 当前是 Electron + electron-builder。推荐接入点：
+content-studio 当前是 Electron 桌面 App。推荐接入点：
 
 ```text
 content-studio
@@ -149,7 +149,7 @@ content-studio
 2026-06-05 只读审阅 content-studio 仓库后的具体接入点：
 
 1. `package.json`：新增 `app-server-client` npm 依赖，不拉 Lime Rust workspace。
-2. `electron-builder.yml`：通过 `extraResources` 打包 `app-server.release.json` 与 `app-server/<platform>/app-server(.exe)`；可执行文件不能放进 asar。
+2. 桌面打包配置：通过 Electron Forge `packagerConfig.extraResource` 打包 `app-server.release.json` 与 `app-server/<platform>/app-server(.exe)`；可执行文件不能放进 asar。
 3. `src/main/services/appServerSidecarService.ts`：封装 `startPackagedAppServerSidecar`、restart policy、stderr logging、`AppServerAgentEventRouter` 和 `stop()`。
 4. `src/main/ipc.ts`：集中注册 `appServer:*` IPC，例如 status、capability list、start session、start turn、cancel turn。
 5. `src/preload/index.ts`：只暴露 preload bridge；renderer 不直接 import `app-server-client`。
@@ -227,7 +227,7 @@ const event = await connection.nextNotification();
 
 ## 5. 打包方式
 
-content-studio 生产包应通过 `electron-builder` 的 `extraResources` 带上 sidecar。
+content-studio 生产包应通过 Electron Forge 的 `packagerConfig.extraResource` 带上 sidecar。
 
 建议路径：
 
@@ -241,12 +241,12 @@ resources/
     manifest.json
 ```
 
-`electron-builder.yml` 后续示意：
+`forge.config.mjs` 后续示意：
 
-```yaml
-extraResources:
-  - from: resources/app-server
-    to: app-server
+```js
+packagerConfig: {
+  extraResource: ["resources/app-server"],
+}
 ```
 
 运行时解析顺序：
@@ -298,7 +298,7 @@ flowchart LR
     Schema --> Manifest["Publish manifest + sha256"]
     Manifest --> AppCI["content-studio CI"]
     AppCI --> Verify["Download / verify artifact"]
-    Verify --> Bundle["electron-builder extraResources"]
+    Verify --> Bundle["Electron Forge extraResource"]
 ```
 
 content-studio CI 必须：
@@ -363,14 +363,14 @@ server 返回：
 
 应该独立管理的是 client package，不是 runtime 源码。
 
-| 代码 | 位置 | 分发 |
-| --- | --- | --- |
-| RuntimeCore | Lime Rust workspace | 不直接给 App import。 |
-| ExecutionBackend / AsterBackend | Lime Rust workspace | 不直接给 App import。 |
-| app-server-protocol Rust DTO | Lime Rust workspace | 生成 schema / TS types。 |
-| `app-server-client` | Lime 发布的 npm package | 独立 App 依赖。 |
-| `app-server` binary | Lime release artifact | 独立 App 打包。 |
-| App UI projection | 各 App repo | 自己实现。 |
+| 代码                            | 位置                    | 分发                     |
+| ------------------------------- | ----------------------- | ------------------------ |
+| RuntimeCore                     | Lime Rust workspace     | 不直接给 App import。    |
+| ExecutionBackend / AsterBackend | Lime Rust workspace     | 不直接给 App import。    |
+| app-server-protocol Rust DTO    | Lime Rust workspace     | 生成 schema / TS types。 |
+| `app-server-client`             | Lime 发布的 npm package | 独立 App 依赖。          |
+| `app-server` binary             | Lime release artifact   | 独立 App 打包。          |
+| App UI projection               | 各 App repo             | 自己实现。               |
 
 ## 10. 何时考虑 monorepo
 
@@ -391,8 +391,8 @@ server 返回：
 
 1. Cargo workspace 官方文档：适合在 Lime 内部统一管理 Rust packages。
    https://doc.rust-lang.org/cargo/reference/workspaces.html
-2. electron-builder application contents：`extraResources` 适合打包 app 运行期资源和 sidecar。
-   https://www.electron.build/docs/contents/
+2. Electron Forge makers / packager 配置适合统一桌面 App 打包、installer 与 sidecar resources。
+   https://www.electronforge.io/configuration
 3. Git submodule 官方文档：submodule 是源码嵌入 / pin commit 机制，不应作为高频 runtime SDK 主分发边界。
    https://git-scm.com/docs/git-submodule
 4. npm workspaces 官方文档：适合 TS client 本地开发和发布前联调。

@@ -9,7 +9,13 @@
  * pos: pages 层，独立 Desktop Host 窗口
  */
 
-import { useEffect, useState, useCallback, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type MouseEvent,
+} from "react";
 import { getCurrentWindow } from "@/lib/desktop-host/window";
 import { open as shellOpen } from "@/lib/desktop-host/plugin-shell";
 import {
@@ -68,8 +74,7 @@ export function UpdateNotificationPage() {
     installSession?.latestVersion || params.latestVersion || "";
   const currentVersion =
     installSession?.currentVersion || params.currentVersion || "";
-  const downloadUrl =
-    installSession?.downloadUrl || params.downloadUrl || "";
+  const downloadUrl = installSession?.downloadUrl || params.downloadUrl || "";
   const closeLabel = t("common.updateNotification.action.close");
   const hideLabel = t("common.updateNotification.action.hide");
   const sessionProgressLabel = (() => {
@@ -121,6 +126,19 @@ export function UpdateNotificationPage() {
         return t("common.updateNotification.action.updateNow");
     }
   })();
+
+  useLayoutEffect(() => {
+    const previousWindow = document.documentElement.dataset.limeWindow;
+    document.documentElement.dataset.limeWindow = "update-notification";
+
+    return () => {
+      if (previousWindow === undefined) {
+        delete document.documentElement.dataset.limeWindow;
+        return;
+      }
+      document.documentElement.dataset.limeWindow = previousWindow;
+    };
+  }, []);
 
   useEffect(() => {
     setParams(getUpdateParamsFromUrl());
@@ -320,7 +338,9 @@ export function UpdateNotificationPage() {
 
           {hasInstallSession ? (
             <div className="update-session-row" aria-live="polite">
-              <span className="update-session-text">{sessionProgressLabel}</span>
+              <span className="update-session-text">
+                {sessionProgressLabel}
+              </span>
               {installSession?.stage === "downloading" ||
               installSession?.stage === "installing" ||
               installSession?.stage === "restarting" ? (

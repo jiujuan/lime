@@ -310,7 +310,7 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
       config: stdioSidecarWithRuntimeBackend(
         envBinary,
         process.env.APP_SERVER_POLICY_PATH,
-        "unavailable",
+        "runtime",
       ),
     };
   }
@@ -332,7 +332,7 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
     config: stdioSidecarWithRuntimeBackend(
       devBinaryPath,
       process.env.APP_SERVER_POLICY_PATH,
-      "unavailable",
+      "runtime",
     ),
   };
 }
@@ -347,7 +347,7 @@ async function resolveResourceLaunchConfig(
       allowEnvOverride: false,
       resourcesPath,
       appPolicyPath: process.env.APP_SERVER_POLICY_PATH,
-      ...resolveRuntimeBackendLaunchOptions("unavailable"),
+      ...resolveRuntimeBackendLaunchOptions("runtime"),
     });
     if (resolved) {
       return {
@@ -424,10 +424,14 @@ function resolveBackendMode(
   const normalized = value?.trim();
   if (normalized === "mock") {
     throw new Error(
-      "Electron App Server host does not allow APP_SERVER_BACKEND_MODE=mock. Use APP_SERVER_BACKEND_MODE=external with APP_SERVER_BACKEND_COMMAND, or leave it unavailable.",
+      "Electron App Server host does not allow APP_SERVER_BACKEND_MODE=mock. Use APP_SERVER_BACKEND_MODE=runtime, APP_SERVER_BACKEND_MODE=external with APP_SERVER_BACKEND_COMMAND, or APP_SERVER_BACKEND_MODE=unavailable.",
     );
   }
-  if (normalized === "unavailable" || normalized === "external") {
+  if (
+    normalized === "runtime" ||
+    normalized === "unavailable" ||
+    normalized === "external"
+  ) {
     return normalized;
   }
   return fallback;

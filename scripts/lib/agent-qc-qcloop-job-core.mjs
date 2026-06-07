@@ -12,9 +12,14 @@ function normalizeRiskList(risks) {
     .filter(Boolean);
 }
 
-function selectScenarios(manifest, { risks = ["P0"], scenarioIds = [], includeAll = false } = {}) {
+function selectScenarios(
+  manifest,
+  { risks = ["P0"], scenarioIds = [], includeAll = false } = {},
+) {
   const normalizedRisks = new Set(normalizeRiskList(risks));
-  const normalizedScenarioIds = new Set(asArray(scenarioIds).filter(isNonEmptyString));
+  const normalizedScenarioIds = new Set(
+    asArray(scenarioIds).filter(isNonEmptyString),
+  );
   const scenarios = asArray(manifest?.scenarios);
 
   return scenarios.filter((scenario) => {
@@ -90,7 +95,10 @@ function ensureVerifierMetadataPlaceholders(template) {
   if (!template.includes("{{exit_code}}")) {
     missingLines.push("- exit_code: {{exit_code}}");
   }
-  if (!template.includes("{{qc_history}}") && !template.includes("{{issue_ledger}}")) {
+  if (
+    !template.includes("{{qc_history}}") &&
+    !template.includes("{{issue_ledger}}")
+  ) {
     missingLines.push("- issue_ledger: {{issue_ledger}}");
   }
   if (missingLines.length === 0) {
@@ -108,7 +116,10 @@ function ensureVerifierEvidencePlaceholders(template) {
     ? template
     : "审查 Agent QC 场景 {{item}} 的输出是否满足证据要求，只输出 JSON verdict。";
 
-  if (!normalized.includes("{{stdout}}") && !normalized.includes("{{output}}")) {
+  if (
+    !normalized.includes("{{stdout}}") &&
+    !normalized.includes("{{output}}")
+  ) {
     normalized = `${normalized}${VERIFIER_EVIDENCE_BLOCK}`;
   }
 
@@ -163,11 +174,15 @@ function buildQCLoopJobPayload(manifest, options = {}) {
 
   return {
     name,
-    prompt_template: [cwdLine, workerPromptTemplate].filter(Boolean).join("\n\n"),
+    prompt_template: [cwdLine, workerPromptTemplate]
+      .filter(Boolean)
+      .join("\n\n"),
     verifier_prompt_template: ensureVerifierEvidencePlaceholders(
       options.verifierPromptTemplate || qcloop.verifierPromptTemplate,
     ),
-    max_qc_rounds: Number(options.maxQcRounds || qcloop.recommendedMaxQcRounds || 3),
+    max_qc_rounds: Number(
+      options.maxQcRounds || qcloop.recommendedMaxQcRounds || 3,
+    ),
     max_executor_retries: Number(
       options.maxExecutorRetries ?? qcloop.recommendedMaxExecutorRetries ?? 1,
     ),
@@ -180,28 +195,38 @@ function buildQCLoopJobPayload(manifest, options = {}) {
   };
 }
 
-
 function validateVerifierPromptTemplate(template, issues) {
   if (!isNonEmptyString(template)) {
     issues.push("缺少 verifier_prompt_template。");
     return;
   }
   if (!template.includes("{{stdout}}") && !template.includes("{{output}}")) {
-    issues.push("verifier_prompt_template 必须包含 {{stdout}} 或 {{output}}，否则 verifier 看不到 worker 输出。");
+    issues.push(
+      "verifier_prompt_template 必须包含 {{stdout}} 或 {{output}}，否则 verifier 看不到 worker 输出。",
+    );
   }
   for (const placeholder of ["{{attempt_status}}", "{{exit_code}}"]) {
     if (!template.includes(placeholder)) {
       issues.push(`verifier_prompt_template 必须包含 ${placeholder}。`);
     }
   }
-  if (!template.includes("{{qc_history}}") && !template.includes("{{issue_ledger}}")) {
-    issues.push("verifier_prompt_template 必须包含 {{qc_history}} 或 {{issue_ledger}}。");
+  if (
+    !template.includes("{{qc_history}}") &&
+    !template.includes("{{issue_ledger}}")
+  ) {
+    issues.push(
+      "verifier_prompt_template 必须包含 {{qc_history}} 或 {{issue_ledger}}。",
+    );
   }
   if (!template.includes(WORKER_EVIDENCE_SUMMARY_MARKER)) {
-    issues.push(`verifier_prompt_template 必须要求审查 ${WORKER_EVIDENCE_SUMMARY_MARKER}。`);
+    issues.push(
+      `verifier_prompt_template 必须要求审查 ${WORKER_EVIDENCE_SUMMARY_MARKER}。`,
+    );
   }
   if (!template.includes('{"pass": true|false')) {
-    issues.push('verifier_prompt_template 必须声明只输出 {"pass": true|false, "feedback": "..."} JSON。');
+    issues.push(
+      'verifier_prompt_template 必须声明只输出 {"pass": true|false, "feedback": "..."} JSON。',
+    );
   }
 }
 
@@ -220,7 +245,9 @@ function validateQCLoopJobPayload(payload) {
       issues.push(`prompt_template 必须要求输出 ${WORKER_RESULT_MARKER}。 `);
     }
     if (!payload.prompt_template.includes(WORKER_EVIDENCE_SUMMARY_MARKER)) {
-      issues.push(`prompt_template 必须要求输出 ${WORKER_EVIDENCE_SUMMARY_MARKER}。 `);
+      issues.push(
+        `prompt_template 必须要求输出 ${WORKER_EVIDENCE_SUMMARY_MARKER}。 `,
+      );
     }
   }
   validateVerifierPromptTemplate(payload?.verifier_prompt_template, issues);

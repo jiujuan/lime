@@ -10,7 +10,7 @@
 
 ## 当前事实
 
-- 新增 `scripts/i18n-language-boundary-report.ts`，默认扫描 `src/` 与 `lime-rs/`，并把 language-like marker 分类为：
+- 新增 `scripts/i18n/i18n-language-boundary-report.ts`，默认扫描 `src/` 与 `lime-rs/`，并把 language-like marker 分类为：
   - `uiLocale`
   - `agentResponseLanguage`
   - `contentTargetLanguage`
@@ -92,5 +92,5 @@ Media task runtime 继续收口：`audio_generate` 会把显式 `target_language
 
 - [language-boundary-report.json](/Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/i18n/evidence/language-boundary-report.json)
 - [content-target-language-boundary-report.json](/Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/i18n/evidence/content-target-language-boundary-report.json)
-- [i18n-language-boundary-report.ts](/Users/coso/Documents/dev/ai/aiclientproxy/lime/scripts/i18n-language-boundary-report.ts)
+- [i18n-language-boundary-report.ts](/Users/coso/Documents/dev/ai/aiclientproxy/lime/scripts/i18n/i18n-language-boundary-report.ts)
 - [PRD](/Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/i18n/prd.md)

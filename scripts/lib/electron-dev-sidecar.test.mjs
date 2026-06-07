@@ -2,16 +2,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  appServerAgentBackendBinaryName,
   appServerBinaryName,
   buildLocalAppServer,
-  localAppServerAgentBackendBinaryPath,
   localAppServerBinaryPath,
-  resolveDevAppServerAgentBackendBinary,
   resolveDevAppServerBackendEnv,
   resolveDevAppServerBinary,
   resolveCargoTargetDirectory,
-  shouldUseDevAppServerExternalBackend,
 } from "./electron-dev-sidecar.mjs";
 
 describe("electron dev sidecar", () => {
@@ -19,18 +15,6 @@ describe("electron dev sidecar", () => {
     expect(appServerBinaryName("darwin")).toBe("app-server");
     expect(appServerBinaryName("linux")).toBe("app-server");
     expect(appServerBinaryName("win32")).toBe("app-server.exe");
-  });
-
-  it("按平台解析 app-server-agent-backend 二进制名称", () => {
-    expect(appServerAgentBackendBinaryName("darwin")).toBe(
-      "app-server-agent-backend",
-    );
-    expect(appServerAgentBackendBinaryName("linux")).toBe(
-      "app-server-agent-backend",
-    );
-    expect(appServerAgentBackendBinaryName("win32")).toBe(
-      "app-server-agent-backend.exe",
-    );
   });
 
   it("默认解析仓库内 debug app-server 路径", () => {
@@ -41,18 +25,6 @@ describe("electron dev sidecar", () => {
         targetDirectory: path.resolve("/repo/lime/lime-rs/target"),
       }),
     ).toBe(path.resolve("/repo/lime/lime-rs/target/debug/app-server"));
-  });
-
-  it("默认解析仓库内 debug app-server-agent-backend 路径", () => {
-    expect(
-      localAppServerAgentBackendBinaryPath({
-        repoRoot: "/repo/lime",
-        platform: "darwin",
-        targetDirectory: path.resolve("/repo/lime/lime-rs/target"),
-      }),
-    ).toBe(
-      path.resolve("/repo/lime/lime-rs/target/debug/app-server-agent-backend"),
-    );
   });
 
   it("读取仓库 cargo target-dir 配置", () => {
@@ -87,23 +59,6 @@ describe("electron dev sidecar", () => {
     });
 
     expect(resolved).toBe("/custom/app-server");
-    expect(calls).toHaveLength(0);
-  });
-
-  it("优先使用 APP_SERVER_BACKEND_COMMAND 环境变量", () => {
-    const calls = [];
-    const resolved = resolveDevAppServerAgentBackendBinary({
-      env: { APP_SERVER_BACKEND_COMMAND: "  /custom/agent-backend  " },
-      exists(pathValue) {
-        calls.push(pathValue);
-        return false;
-      },
-      build() {
-        throw new Error("should not build");
-      },
-    });
-
-    expect(resolved).toBe("/custom/agent-backend");
     expect(calls).toHaveLength(0);
   });
 
@@ -143,28 +98,6 @@ describe("electron dev sidecar", () => {
     expect(builds).toEqual([{ repoRoot: "/repo/lime", platform: "darwin" }]);
   });
 
-  it("本地 backend 二进制缺失时先构建再返回二进制路径", () => {
-    let existsCalls = 0;
-    const builds = [];
-    const resolved = resolveDevAppServerAgentBackendBinary({
-      env: {},
-      repoRoot: "/repo/lime",
-      platform: "darwin",
-      exists: () => {
-        existsCalls += 1;
-        return existsCalls > 1;
-      },
-      build(call) {
-        builds.push(call);
-      },
-    });
-
-    expect(resolved).toBe(
-      path.resolve("/repo/lime/lime-rs/target/debug/app-server-agent-backend"),
-    );
-    expect(builds).toEqual([{ repoRoot: "/repo/lime", platform: "darwin" }]);
-  });
-
   it("构建后仍缺失二进制时报错", () => {
     expect(() =>
       resolveDevAppServerBinary({
@@ -177,41 +110,26 @@ describe("electron dev sidecar", () => {
     ).toThrow(/app-server binary was not created/);
   });
 
-  it("构建后仍缺失 backend 二进制时报错", () => {
-    expect(() =>
-      resolveDevAppServerAgentBackendBinary({
-        env: {},
-        repoRoot: "/repo/lime",
-        exists: () => false,
-        build() {},
-      }),
-    ).toThrow(/app-server-agent-backend binary was not created/);
-  });
-
-  it("默认 dev App Server backend 使用 external", () => {
-    expect(shouldUseDevAppServerExternalBackend({ env: {} })).toBe(true);
+  it("默认 dev App Server backend 使用 App Server 内部 runtime", () => {
     expect(
       resolveDevAppServerBackendEnv({
         env: {},
-        backendCommand: "/repo/lime/lime-rs/target/debug/app-server-agent-backend",
       }),
     ).toEqual({
-      APP_SERVER_BACKEND_MODE: "external",
-      APP_SERVER_BACKEND_COMMAND:
-        "/repo/lime/lime-rs/target/debug/app-server-agent-backend",
-      APP_SERVER_BACKEND_TIMEOUT_MS: "120000",
+      APP_SERVER_BACKEND_MODE: "runtime",
     });
   });
 
-  it("显式 unavailable 时 dev App Server backend 不注入 external", () => {
+  it("显式 unavailable 时 dev App Server backend 不接 external", () => {
     const env = { APP_SERVER_BACKEND_MODE: "unavailable" };
-    expect(shouldUseDevAppServerExternalBackend({ env })).toBe(false);
     expect(
       resolveDevAppServerBackendEnv({
         env,
         backendCommand: "/repo/backend",
       }),
-    ).toEqual({});
+    ).toEqual({
+      APP_SERVER_BACKEND_MODE: "unavailable",
+    });
   });
 
   it("显式 external backend command 时保留用户配置", () => {
@@ -229,7 +147,22 @@ describe("electron dev sidecar", () => {
     });
   });
 
-  it("调用 cargo build 构建 app-server sidecar 和 agent backend", () => {
+  it("显式 external backend command 时可由 dev sidecar 注入命令", () => {
+    expect(
+      resolveDevAppServerBackendEnv({
+        env: {
+          APP_SERVER_BACKEND_MODE: "external",
+        },
+        backendCommand: "/repo/backend",
+      }),
+    ).toEqual({
+      APP_SERVER_BACKEND_MODE: "external",
+      APP_SERVER_BACKEND_COMMAND: "/repo/backend",
+      APP_SERVER_BACKEND_TIMEOUT_MS: "120000",
+    });
+  });
+
+  it("调用 cargo build 只构建 app-server sidecar", () => {
     const calls = [];
     buildLocalAppServer({
       repoRoot: "/repo/lime",
@@ -251,10 +184,6 @@ describe("electron dev sidecar", () => {
           "app-server",
           "--bin",
           "app-server",
-          "-p",
-          "app-server-agent-backend",
-          "--bin",
-          "app-server-agent-backend",
         ],
         options: {
           cwd: "/repo/lime",
