@@ -11,12 +11,13 @@ describe("agentAppMocks", () => {
     expect(agentAppMocks).not.toHaveProperty("agent_app_stop_ui_runtime");
   });
 
-  it("只保留 installed list 的 Agent App 默认 mock", () => {
-    expect(agentAppMocks).toHaveProperty("agent_app_list_installed");
+  it("Agent App installed list 默认 mock 不再注册", () => {
+    expect(agentAppMocks).not.toHaveProperty("agent_app_list_installed");
   });
 
   it("Agent App package / install / uninstall / shell / picker 默认 mock 不再注册", () => {
     const packageCommands = [
+      "agent_app_list_installed",
       "agent_app_inspect_local_package",
       "agent_app_fetch_cloud_package",
       "agent_app_save_installed_state",
