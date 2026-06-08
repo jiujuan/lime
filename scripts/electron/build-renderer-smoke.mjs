@@ -1,22 +1,14 @@
 process.env.LIME_ELECTRON_RENDERER = "1";
 
 const { spawn } = await import("node:child_process");
+const { rendererBuildEnv, startRendererBuildHeartbeat } =
+  await import("./renderer-build-env.mjs");
 
-const RENDERER_BUILD_NODE_OPTIONS = "--max-old-space-size=8192";
-
-await run("npx", ["vite", "build"]);
-
-function rendererBuildEnv() {
-  const nodeOptions = process.env.NODE_OPTIONS ?? "";
-  const hasOldSpaceSize = /(?:^|\s)--max-old-space-size(?:=|\s|$)/.test(
-    nodeOptions,
-  );
-  return {
-    ...process.env,
-    NODE_OPTIONS: hasOldSpaceSize
-      ? nodeOptions
-      : [nodeOptions, RENDERER_BUILD_NODE_OPTIONS].filter(Boolean).join(" "),
-  };
+const stopHeartbeat = startRendererBuildHeartbeat();
+try {
+  await run("npx", ["vite", "build"]);
+} finally {
+  stopHeartbeat();
 }
 
 function run(command, args) {

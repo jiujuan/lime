@@ -102,6 +102,7 @@ function currentElectronEntrypointFiles() {
     "scripts/electron/build-host.mjs",
     "scripts/electron/build-renderer.mjs",
     "scripts/electron/build-renderer-smoke.mjs",
+    "scripts/electron/renderer-build-env.mjs",
     "scripts/electron/copy-desktop-assets.mjs",
     "scripts/electron/smoke.mjs",
     "scripts/electron/make-zip-local-feed.mjs",
@@ -255,11 +256,19 @@ describe("Electron current package entrypoints", () => {
     const smokeBuildRenderer = readFile(
       "scripts/electron/build-renderer-smoke.mjs",
     );
+    const rendererBuildEnv = readFile(
+      "scripts/electron/renderer-build-env.mjs",
+    );
 
     expect(buildRenderer).toContain("LIME_ELECTRON_RENDERER");
+    expect(buildRenderer).toContain("rendererBuildEnv");
+    expect(buildRenderer).toContain("startRendererBuildHeartbeat");
     expect(smokeBuildRenderer).toContain("LIME_ELECTRON_RENDERER");
-    expect(smokeBuildRenderer).toContain("--max-old-space-size=8192");
-    expect(smokeBuildRenderer).toContain("NODE_OPTIONS");
+    expect(smokeBuildRenderer).toContain("rendererBuildEnv");
+    expect(smokeBuildRenderer).toContain("startRendererBuildHeartbeat");
+    expect(rendererBuildEnv).toContain("--max-old-space-size=8192");
+    expect(rendererBuildEnv).toContain("NODE_OPTIONS");
+    expect(rendererBuildEnv).toContain("still running after");
     expect(viteConfig).toContain("base:");
     expect(viteConfig).toContain('isElectronRenderer ? "./" : undefined');
     expect(viteConfig).toContain('find: "app-server-client"');

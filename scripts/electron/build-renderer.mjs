@@ -1,13 +1,20 @@
 process.env.LIME_ELECTRON_RENDERER = "1";
 
 const { spawn } = await import("node:child_process");
+const { rendererBuildEnv, startRendererBuildHeartbeat } =
+  await import("./renderer-build-env.mjs");
 
-await run("npm", ["run", "build:renderer"]);
+const stopHeartbeat = startRendererBuildHeartbeat();
+try {
+  await run("npm", ["run", "build:renderer"]);
+} finally {
+  stopHeartbeat();
+}
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      env: process.env,
+      env: rendererBuildEnv(),
       stdio: "inherit",
       shell: process.platform === "win32",
     });
