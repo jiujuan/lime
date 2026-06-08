@@ -259,7 +259,9 @@ export const mcpApi = {
       { appType },
     ).then((response) => {
       if (typeof response.importedCount !== "number") {
-        throw new Error(`${METHOD_MCP_SERVER_IMPORT_FROM_APP} did not return importedCount`);
+        throw new Error(
+          `${METHOD_MCP_SERVER_IMPORT_FROM_APP} did not return importedCount`,
+        );
       }
       return response.importedCount;
     }),

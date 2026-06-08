@@ -16,7 +16,6 @@ import {
   REMOVED_MACHINE_PATH,
   renderPage,
   resetAgentAppsPageTest,
-  setInputValue,
   toast,
 } from "./AgentAppsPage.testFixtures";
 
@@ -45,9 +44,9 @@ describe("AgentAppsPage", () => {
       '[data-testid="agent-apps-icon-content-factory-app"] img',
     ) as HTMLImageElement | null;
     expect(fallbackIcon?.getAttribute("src")).toContain("data:image/svg+xml");
-    expect(decodeURIComponent(fallbackIcon?.getAttribute("src") ?? "")).toContain(
-      "内容工厂",
-    );
+    expect(
+      decodeURIComponent(fallbackIcon?.getAttribute("src") ?? ""),
+    ).toContain("内容工厂");
     expect(
       container.querySelector(
         '[data-testid="agent-apps-open-detail-content-factory-app"]',
@@ -129,14 +128,12 @@ describe("AgentAppsPage", () => {
         ?.closest("section")?.className,
     ).toContain("space-y-4");
     expect(
-      container
-        .querySelector('[data-testid="agent-apps-list"]')
-        ?.className,
+      container.querySelector('[data-testid="agent-apps-list"]')?.className,
     ).toContain("lg:grid-cols-3");
     expect(
-      container
-        .querySelector('[data-testid="agent-apps-list-row-content-factory-app"]')
-        ?.className,
+      container.querySelector(
+        '[data-testid="agent-apps-list-row-content-factory-app"]',
+      )?.className,
     ).toContain("min-h-[188px]");
   });
 
@@ -304,9 +301,7 @@ describe("AgentAppsPage", () => {
         ?.getAttribute("role"),
     ).toBe("dialog");
     expect(
-      container
-        .querySelector('[data-testid="agent-apps-list"]')
-        ?.className,
+      container.querySelector('[data-testid="agent-apps-list"]')?.className,
     ).toContain("lg:grid-cols-3");
 
     const closeDetail = container.querySelector(
@@ -827,23 +822,22 @@ describe("AgentAppsPage", () => {
       '[data-testid="agent-apps-delete-data-confirmation-input"]',
     ) as HTMLInputElement | null;
     expect(phrase).toContain("DELETE_AGENT_APP_DATA content-factory-app");
+    expect(confirmationInput?.disabled).toBe(true);
     expect(confirmButton?.disabled).toBe(true);
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-delete-data-current-phase-gate"]',
+      )?.textContent,
+    ).toContain("agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly");
     expect(
       container.querySelector(
         '[data-testid="agent-apps-delete-data-confirmation-status"]',
       )?.textContent,
-    ).toContain("agentApp.apps.uninstallPreview.deleteDataGate.mismatch");
-    await act(async () => {
-      if (confirmationInput && phrase) {
-        setInputValue(confirmationInput, phrase);
-      }
-      await Promise.resolve();
-    });
-    await flush();
+    ).toContain("agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly");
     const readyConfirmButton = container.querySelector(
       '[data-testid="agent-apps-uninstall-confirm"]',
     ) as HTMLButtonElement | null;
-    expect(readyConfirmButton?.disabled).toBe(false);
+    expect(readyConfirmButton?.disabled).toBe(true);
 
     await act(async () => {
       readyConfirmButton?.click();
@@ -851,15 +845,7 @@ describe("AgentAppsPage", () => {
     });
     await flush();
 
-    expect(apiMocks.uninstallAgentApp).toHaveBeenCalledWith({
-      appId: "content-factory-app",
-      mode: "delete-data",
-      confirmationPhrase: phrase,
-    });
-    expect(
-      container.querySelector('[data-testid="agent-apps-launch-summary"]')
-        ?.textContent,
-    ).toContain("blocked:DELETE_DATA_NOT_ENABLED_IN_CURRENT_PHASE");
+    expect(apiMocks.uninstallAgentApp).not.toHaveBeenCalled();
     const appRowAfterDeleteDataBlocked = container.querySelector(
       '[data-testid="agent-apps-list-row-content-factory-app"]',
     );
@@ -913,5 +899,4 @@ describe("AgentAppsPage", () => {
         ?.textContent,
     ).toContain("agentApp.apps.uninstall.completed");
   });
-
 });

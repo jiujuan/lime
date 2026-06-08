@@ -4206,6 +4206,7 @@ const checks = [
   },
   {
     name: "Rust Agent App runtime start_task uses shared App Server JSON-RPC singleton",
+    allowMissingFiles: true,
     files: [
       "lime-rs/src/commands/agent_app_runtime_cmd/common.rs",
       "lime-rs/src/commands/agent_app_runtime_cmd/start_task.rs",
@@ -4344,6 +4345,7 @@ const checks = [
   },
   {
     name: "Rust Agent App runtime cancel read and host response facades stay on App Server JSON-RPC",
+    allowMissingFiles: true,
     files: [
       "lime-rs/src/commands/agent_app_runtime_cmd/common.rs",
       "lime-rs/src/commands/agent_app_runtime_cmd/cancel_task.rs",
@@ -4398,7 +4400,7 @@ const checks = [
     snippets: [
       "HTTP bridge 失败时 production invoke 直接抛出规范化错误",
       "无 Electron host 且无 HTTP bridge 时 production invoke fail-closed",
-      "显式 mock 入口可返回默认 mock，不访问 bridge",
+      "测试注册的配置 mock",
       "知识库 legacy 显式 mock 已退场",
       "工具库存显式 mock 不应返回空壳清单",
       "工具库存显式 mock 应按 workbench + browser surface 补齐当前工具面",
@@ -5633,7 +5635,20 @@ const failures = [];
 for (const check of checks) {
   const files = check.files ?? [check.file];
   const location = files.join(", ");
-  const content = files
+  const existingFiles = files.filter((file) =>
+    fs.existsSync(path.join(repoRoot, file)),
+  );
+  if (check.allowMissingFiles && existingFiles.length === 0) {
+    continue;
+  }
+  const missingFiles = files.filter((file) => !existingFiles.includes(file));
+  if (missingFiles.length > 0 && !check.allowMissingFiles) {
+    failures.push(
+      `${check.name}: missing file(s) ${missingFiles.join(", ")} in ${location}`,
+    );
+    continue;
+  }
+  const content = existingFiles
     .map((file) => fs.readFileSync(path.join(repoRoot, file), "utf8"))
     .join("\n");
   for (const snippet of check.snippets) {
@@ -5685,6 +5700,12 @@ function checkMcpRuntimeCurrentContracts() {
     [
       "lime-rs/crates/app-server-protocol/src/protocol/v0.rs",
       [
+        'pub const METHOD_MCP_SERVER_CREATE: &str = "mcpServer/create"',
+        'pub const METHOD_MCP_SERVER_UPDATE: &str = "mcpServer/update"',
+        'pub const METHOD_MCP_SERVER_DELETE: &str = "mcpServer/delete"',
+        'pub const METHOD_MCP_SERVER_ENABLED_SET: &str = "mcpServer/enabled/set"',
+        'pub const METHOD_MCP_SERVER_IMPORT_FROM_APP: &str = "mcpServer/importFromApp"',
+        'pub const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE: &str = "mcpServer/syncAllToLive"',
         'pub const METHOD_MCP_SERVER_START: &str = "mcpServer/start"',
         'pub const METHOD_MCP_SERVER_STOP: &str = "mcpServer/stop"',
         'pub const METHOD_MCP_TOOL_LIST_FOR_CONTEXT: &str = "mcpTool/listForContext"',
@@ -5693,6 +5714,12 @@ function checkMcpRuntimeCurrentContracts() {
         'pub const METHOD_MCP_TOOL_CALL_WITH_CALLER: &str = "mcpTool/callWithCaller"',
         'pub const METHOD_MCP_PROMPT_GET: &str = "mcpPrompt/get"',
         'pub const METHOD_MCP_RESOURCE_READ: &str = "mcpResource/read"',
+        "pub struct McpServerCreateParams",
+        "pub struct McpServerUpdateParams",
+        "pub struct McpServerDeleteParams",
+        "pub struct McpServerEnabledSetParams",
+        "pub struct McpServerImportFromAppParams",
+        "pub struct McpServerImportFromAppResponse",
         "pub struct McpToolCallParams",
         "pub struct McpToolCallResponse",
         "pub struct McpPromptGetParams",
@@ -5702,10 +5729,22 @@ function checkMcpRuntimeCurrentContracts() {
     [
       "lime-rs/crates/app-server/src/runtime.rs",
       [
+        "pub async fn create_mcp_server(",
+        "pub async fn update_mcp_server(",
+        "pub async fn delete_mcp_server(",
+        "pub async fn set_mcp_server_enabled(",
+        "pub async fn import_mcp_servers_from_app(",
+        "pub async fn sync_all_mcp_servers_to_live(",
         "pub async fn call_mcp_tool(",
         "pub async fn call_mcp_tool_with_caller(",
         "pub async fn get_mcp_prompt(",
         "pub async fn read_mcp_resource(",
+        "self.app_data_source.create_mcp_server(params).await",
+        "self.app_data_source.update_mcp_server(params).await",
+        "self.app_data_source.delete_mcp_server(params).await",
+        "self.app_data_source.set_mcp_server_enabled(params).await",
+        ".import_mcp_servers_from_app(params)",
+        "self.app_data_source.sync_all_mcp_servers_to_live().await",
         "self.app_data_source.call_mcp_tool(params).await",
         "self.app_data_source.call_mcp_tool_with_caller(params).await",
         "self.app_data_source.get_mcp_prompt(params).await",
@@ -5717,6 +5756,18 @@ function checkMcpRuntimeCurrentContracts() {
       [
         "mcp_manager: McpManagerState",
         "McpClientManager::new(None)",
+        "async fn create_mcp_server(",
+        "McpService::add(&self.db, server)",
+        "async fn update_mcp_server(",
+        "McpService::update(&self.db, server)",
+        "async fn delete_mcp_server(",
+        "McpService::delete(&self.db, &params.id)",
+        "async fn set_mcp_server_enabled(",
+        "McpService::toggle_enabled(",
+        "async fn import_mcp_servers_from_app(",
+        "McpService::import_from_app(&self.db, &params.app_type)",
+        "async fn sync_all_mcp_servers_to_live(",
+        "McpService::sync_all_to_live(&self.db)",
         "async fn call_mcp_tool(",
         "async fn call_mcp_tool_with_caller(",
         ".call_tool(&params.tool_name, params.arguments)",
@@ -5728,10 +5779,21 @@ function checkMcpRuntimeCurrentContracts() {
     [
       "lime-rs/crates/app-server/src/processor.rs",
       [
+        "METHOD_MCP_SERVER_CREATE => self.handle_mcp_server_create(params).await",
+        "METHOD_MCP_SERVER_UPDATE => self.handle_mcp_server_update(params).await",
+        "METHOD_MCP_SERVER_DELETE => self.handle_mcp_server_delete(params).await",
+        "METHOD_MCP_SERVER_ENABLED_SET => self.handle_mcp_server_enabled_set(params).await",
+        "METHOD_MCP_SERVER_IMPORT_FROM_APP =>",
+        "METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => self.handle_mcp_server_sync_all_to_live().await",
         "METHOD_MCP_TOOL_CALL => self.handle_mcp_tool_call(params).await",
         "METHOD_MCP_TOOL_CALL_WITH_CALLER =>",
         "METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get(params).await",
         "METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read(params).await",
+        "let params: McpServerCreateParams = parse_params(params)?",
+        "let params: McpServerUpdateParams = parse_params(params)?",
+        "let params: McpServerDeleteParams = parse_params(params)?",
+        "let params: McpServerEnabledSetParams = parse_params(params)?",
+        "let params: McpServerImportFromAppParams = parse_params(params)?",
         "let params: McpToolCallParams = parse_params(params)?",
         "let params: McpPromptGetParams = parse_params(params)?",
         "let params: McpResourceReadParams = parse_params(params)?",
@@ -5740,10 +5802,22 @@ function checkMcpRuntimeCurrentContracts() {
     [
       "packages/app-server-client/src/protocol.ts",
       [
+        'export const METHOD_MCP_SERVER_CREATE = "mcpServer/create"',
+        'export const METHOD_MCP_SERVER_UPDATE = "mcpServer/update"',
+        'export const METHOD_MCP_SERVER_DELETE = "mcpServer/delete"',
+        'export const METHOD_MCP_SERVER_ENABLED_SET = "mcpServer/enabled/set"',
+        'export const METHOD_MCP_SERVER_IMPORT_FROM_APP = "mcpServer/importFromApp"',
+        'export const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE = "mcpServer/syncAllToLive"',
         'export const METHOD_MCP_TOOL_CALL = "mcpTool/call"',
         'export const METHOD_MCP_TOOL_CALL_WITH_CALLER = "mcpTool/callWithCaller"',
         'export const METHOD_MCP_PROMPT_GET = "mcpPrompt/get"',
         'export const METHOD_MCP_RESOURCE_READ = "mcpResource/read"',
+        "export type McpServerCreateParams",
+        "export type McpServerUpdateParams",
+        "export type McpServerDeleteParams",
+        "export type McpServerEnabledSetParams",
+        "export type McpServerImportFromAppParams",
+        "export type McpServerImportFromAppResponse",
         "export type McpToolCallParams",
         "export type McpToolCallResponse",
         "export type McpPromptGetParams",
@@ -5753,6 +5827,12 @@ function checkMcpRuntimeCurrentContracts() {
     [
       "packages/app-server-client/src/index.ts",
       [
+        "createMcpServer(params: McpServerCreateParams): JsonRpcRequest",
+        "updateMcpServer(params: McpServerUpdateParams): JsonRpcRequest",
+        "deleteMcpServer(params: McpServerDeleteParams): JsonRpcRequest",
+        "setMcpServerEnabled(params: McpServerEnabledSetParams): JsonRpcRequest",
+        "importMcpServersFromApp(",
+        "syncAllMcpServersToLive(): JsonRpcRequest",
         "callMcpTool(params: McpToolCallParams): JsonRpcRequest",
         "callMcpToolWithCaller(",
         "getMcpPrompt(params: McpPromptGetParams): JsonRpcRequest",
@@ -5763,17 +5843,35 @@ function checkMcpRuntimeCurrentContracts() {
       "src/lib/api/mcp.ts",
       [
         'import { AppServerClient } from "@/lib/api/appServer"',
+        "METHOD_MCP_SERVER_CREATE",
+        "METHOD_MCP_SERVER_UPDATE",
+        "METHOD_MCP_SERVER_DELETE",
+        "METHOD_MCP_SERVER_ENABLED_SET",
+        "METHOD_MCP_SERVER_IMPORT_FROM_APP",
+        "METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE",
         "METHOD_MCP_TOOL_CALL",
         "METHOD_MCP_TOOL_CALL_WITH_CALLER",
         "METHOD_MCP_PROMPT_GET",
         "METHOD_MCP_RESOURCE_READ",
         "requestMcpAppServer",
+        "addServer: (server: McpServer): Promise<void> =>",
+        "updateServer: (server: McpServer): Promise<void> =>",
+        "deleteServer: (id: string): Promise<void> =>",
+        "toggleServer: (",
+        "importFromApp: (appType: string): Promise<number> =>",
+        "syncAllToLive: (): Promise<void> =>",
       ],
     ],
     [
       "src/lib/api/mcp.test.ts",
       [
         "appServerRequestMock",
+        '"mcpServer/create"',
+        '"mcpServer/update"',
+        '"mcpServer/delete"',
+        '"mcpServer/enabled/set"',
+        '"mcpServer/importFromApp"',
+        '"mcpServer/syncAllToLive"',
         '"mcpTool/call"',
         '"mcpTool/callWithCaller"',
         '"mcpPrompt/get"',
@@ -5785,6 +5883,12 @@ function checkMcpRuntimeCurrentContracts() {
       "src/lib/api/mcp.failClosed.test.ts",
       [
         "App Server unavailable",
+        '"mcpServer/create"',
+        '"mcpServer/update"',
+        '"mcpServer/delete"',
+        '"mcpServer/enabled/set"',
+        '"mcpServer/importFromApp"',
+        '"mcpServer/syncAllToLive"',
         '"mcpTool/call"',
         '"mcpPrompt/get"',
         '"mcpResource/read"',
@@ -5820,6 +5924,12 @@ function checkMcpRuntimeCurrentContracts() {
     '"mcp_search_tools"',
     '"mcp_start_server"',
     '"mcp_stop_server"',
+    '"add_mcp_server"',
+    '"update_mcp_server"',
+    '"delete_mcp_server"',
+    '"toggle_mcp_server"',
+    '"import_mcp_from_app"',
+    '"sync_all_mcp_to_live"',
   ];
   for (const snippet of forbiddenRendererSnippets) {
     if (rendererGateway.includes(snippet)) {

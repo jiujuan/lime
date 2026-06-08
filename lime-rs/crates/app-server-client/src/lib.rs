@@ -7,12 +7,12 @@ pub use app_server_protocol::AgentAppInstalledSaveParams;
 pub use app_server_protocol::AgentAppLocalPackageInspectParams;
 pub use app_server_protocol::AgentAppShellPrepareParams;
 pub use app_server_protocol::AgentAppShellPrepareResponse;
-pub use app_server_protocol::AgentAppUninstallParams;
-pub use app_server_protocol::AgentAppUninstallRehearsalParams;
 pub use app_server_protocol::AgentAppUiRuntimeStartParams;
 pub use app_server_protocol::AgentAppUiRuntimeStatusParams;
 pub use app_server_protocol::AgentAppUiRuntimeStatusResponse;
 pub use app_server_protocol::AgentAppUiRuntimeStopParams;
+pub use app_server_protocol::AgentAppUninstallParams;
+pub use app_server_protocol::AgentAppUninstallRehearsalParams;
 pub use app_server_protocol::AgentSessionActionRespondParams;
 pub use app_server_protocol::AgentSessionListParams;
 pub use app_server_protocol::AgentSessionReadParams;
@@ -86,8 +86,8 @@ pub use app_server_protocol::McpServerDeleteParams;
 pub use app_server_protocol::McpServerEnabledSetParams;
 pub use app_server_protocol::McpServerImportFromAppParams;
 pub use app_server_protocol::McpServerImportFromAppResponse;
-pub use app_server_protocol::McpServerListResponse;
 pub use app_server_protocol::McpServerLifecycleResponse;
+pub use app_server_protocol::McpServerListResponse;
 pub use app_server_protocol::McpServerStartParams;
 pub use app_server_protocol::McpServerStatusListResponse;
 pub use app_server_protocol::McpServerStopParams;
@@ -184,10 +184,10 @@ pub use app_server_protocol::METHOD_MCP_SERVER_DELETE;
 pub use app_server_protocol::METHOD_MCP_SERVER_ENABLED_SET;
 pub use app_server_protocol::METHOD_MCP_SERVER_IMPORT_FROM_APP;
 pub use app_server_protocol::METHOD_MCP_SERVER_LIST;
-pub use app_server_protocol::METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE;
 pub use app_server_protocol::METHOD_MCP_SERVER_START;
 pub use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
 pub use app_server_protocol::METHOD_MCP_SERVER_STOP;
+pub use app_server_protocol::METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE;
 pub use app_server_protocol::METHOD_MCP_SERVER_UPDATE;
 pub use app_server_protocol::METHOD_MCP_TOOL_CALL;
 pub use app_server_protocol::METHOD_MCP_TOOL_CALL_WITH_CALLER;
@@ -1165,21 +1165,15 @@ pub mod typed {
         TypedRequest::new(METHOD_MCP_SERVER_STATUS_LIST, serde_json::json!({}))
     }
 
-    pub fn create_mcp_server(
-        params: McpServerCreateParams,
-    ) -> TypedRequest<McpServerCreateParams> {
+    pub fn create_mcp_server(params: McpServerCreateParams) -> TypedRequest<McpServerCreateParams> {
         TypedRequest::new(METHOD_MCP_SERVER_CREATE, params)
     }
 
-    pub fn update_mcp_server(
-        params: McpServerUpdateParams,
-    ) -> TypedRequest<McpServerUpdateParams> {
+    pub fn update_mcp_server(params: McpServerUpdateParams) -> TypedRequest<McpServerUpdateParams> {
         TypedRequest::new(METHOD_MCP_SERVER_UPDATE, params)
     }
 
-    pub fn delete_mcp_server(
-        params: McpServerDeleteParams,
-    ) -> TypedRequest<McpServerDeleteParams> {
+    pub fn delete_mcp_server(params: McpServerDeleteParams) -> TypedRequest<McpServerDeleteParams> {
         TypedRequest::new(METHOD_MCP_SERVER_DELETE, params)
     }
 
@@ -1243,9 +1237,7 @@ pub mod typed {
         TypedRequest::new(METHOD_MCP_RESOURCE_LIST, serde_json::json!({}))
     }
 
-    pub fn read_mcp_resource(
-        params: McpResourceReadParams,
-    ) -> TypedRequest<McpResourceReadParams> {
+    pub fn read_mcp_resource(params: McpResourceReadParams) -> TypedRequest<McpResourceReadParams> {
         TypedRequest::new(METHOD_MCP_RESOURCE_READ, params)
     }
 
@@ -1437,6 +1429,43 @@ mod tests {
         let status = client
             .list_mcp_servers_with_status()
             .expect("server status");
+        let server = json!({
+            "id": "server-1",
+            "name": "filesystem",
+            "server_config": { "command": "node", "args": ["server.js"] },
+            "enabled_lime": true,
+            "enabled_claude": false,
+            "enabled_codex": true,
+            "enabled_gemini": false,
+        });
+        let create = client
+            .create_mcp_server(McpServerCreateParams {
+                server: server.clone(),
+            })
+            .expect("create server");
+        let update = client
+            .update_mcp_server(McpServerUpdateParams {
+                server: server.clone(),
+            })
+            .expect("update server");
+        let delete = client
+            .delete_mcp_server(McpServerDeleteParams {
+                id: "server-1".to_string(),
+            })
+            .expect("delete server");
+        let enabled = client
+            .set_mcp_server_enabled(McpServerEnabledSetParams {
+                id: "server-1".to_string(),
+                app_type: "codex".to_string(),
+                enabled: true,
+            })
+            .expect("set server enabled");
+        let imported = client
+            .import_mcp_servers_from_app(McpServerImportFromAppParams {
+                app_type: "codex".to_string(),
+            })
+            .expect("import servers");
+        let synced = client.sync_all_mcp_servers_to_live().expect("sync servers");
         let start = client
             .start_mcp_server(McpServerStartParams {
                 name: "filesystem".to_string(),
@@ -1495,10 +1524,37 @@ mod tests {
         assert_eq!(servers.params.expect("params"), json!({}));
         assert_eq!(status.method, METHOD_MCP_SERVER_STATUS_LIST);
         assert_eq!(status.params.expect("params"), json!({}));
+        assert_eq!(create.method, METHOD_MCP_SERVER_CREATE);
+        assert_eq!(
+            create.params.expect("params"),
+            json!({ "server": server.clone() })
+        );
+        assert_eq!(update.method, METHOD_MCP_SERVER_UPDATE);
+        assert_eq!(update.params.expect("params"), json!({ "server": server }));
+        assert_eq!(delete.method, METHOD_MCP_SERVER_DELETE);
+        assert_eq!(delete.params.expect("params"), json!({ "id": "server-1" }));
+        assert_eq!(enabled.method, METHOD_MCP_SERVER_ENABLED_SET);
+        assert_eq!(
+            enabled.params.expect("params"),
+            json!({ "id": "server-1", "appType": "codex", "enabled": true })
+        );
+        assert_eq!(imported.method, METHOD_MCP_SERVER_IMPORT_FROM_APP);
+        assert_eq!(
+            imported.params.expect("params"),
+            json!({ "appType": "codex" })
+        );
+        assert_eq!(synced.method, METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE);
+        assert_eq!(synced.params.expect("params"), json!({}));
         assert_eq!(start.method, METHOD_MCP_SERVER_START);
-        assert_eq!(start.params.expect("params"), json!({ "name": "filesystem" }));
+        assert_eq!(
+            start.params.expect("params"),
+            json!({ "name": "filesystem" })
+        );
         assert_eq!(stop.method, METHOD_MCP_SERVER_STOP);
-        assert_eq!(stop.params.expect("params"), json!({ "name": "filesystem" }));
+        assert_eq!(
+            stop.params.expect("params"),
+            json!({ "name": "filesystem" })
+        );
         assert_eq!(tools.method, METHOD_MCP_TOOL_LIST);
         assert_eq!(tools.params.expect("params"), json!({}));
         assert_eq!(context_tools.method, METHOD_MCP_TOOL_LIST_FOR_CONTEXT);

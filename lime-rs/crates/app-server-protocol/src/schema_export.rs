@@ -131,11 +131,17 @@ use crate::McpPromptMessage;
 use crate::McpResourceListResponse;
 use crate::McpResourceReadParams;
 use crate::McpResourceReadResponse;
+use crate::McpServerCreateParams;
+use crate::McpServerDeleteParams;
+use crate::McpServerEnabledSetParams;
+use crate::McpServerImportFromAppParams;
+use crate::McpServerImportFromAppResponse;
 use crate::McpServerLifecycleResponse;
 use crate::McpServerListResponse;
 use crate::McpServerStartParams;
 use crate::McpServerStatusListResponse;
 use crate::McpServerStopParams;
+use crate::McpServerUpdateParams;
 use crate::McpToolCallParams;
 use crate::McpToolCallResponse;
 use crate::McpToolCallWithCallerParams;
@@ -460,6 +466,12 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AutomationScheduleValidateResponse>("AutomationScheduleValidateResponse"),
         typed_schema::<McpServerListResponse>("McpServerListResponse"),
         typed_schema::<McpServerStatusListResponse>("McpServerStatusListResponse"),
+        typed_schema::<McpServerCreateParams>("McpServerCreateParams"),
+        typed_schema::<McpServerUpdateParams>("McpServerUpdateParams"),
+        typed_schema::<McpServerDeleteParams>("McpServerDeleteParams"),
+        typed_schema::<McpServerEnabledSetParams>("McpServerEnabledSetParams"),
+        typed_schema::<McpServerImportFromAppParams>("McpServerImportFromAppParams"),
+        typed_schema::<McpServerImportFromAppResponse>("McpServerImportFromAppResponse"),
         typed_schema::<McpServerStartParams>("McpServerStartParams"),
         typed_schema::<McpServerStopParams>("McpServerStopParams"),
         typed_schema::<McpServerLifecycleResponse>("McpServerLifecycleResponse"),

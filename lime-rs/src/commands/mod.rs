@@ -1,5 +1,3 @@
-pub mod agent_app_cmd;
-pub mod agent_app_runtime_cmd;
 pub mod agent_cmd;
 pub mod api_key_provider_cmd;
 pub mod asr_cmd;
@@ -20,7 +18,6 @@ pub mod hotkey_cmd;
 pub mod layered_design_cmd;
 pub mod machine_id_cmd;
 pub mod material_cmd;
-pub mod mcp_cmd;
 pub mod media_task_cmd;
 pub mod memory_cmd;
 pub mod memory_feedback_cmd;

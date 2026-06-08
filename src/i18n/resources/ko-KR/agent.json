@@ -1,8 +1,9 @@
 {
   "agentApp.apps.action.confirmUninstall": "제거 확인",
+  "agentApp.apps.action.deleteDataUnavailable": "데이터 삭제 미지원",
   "agentApp.apps.action.disable": "중지",
   "agentApp.apps.action.enable": "사용",
-  "agentApp.apps.action.uninstallDeleteData": "제거하고 데이터 삭제",
+  "agentApp.apps.action.uninstallDeleteData": "데이터 삭제 리허설",
   "agentApp.apps.action.uninstallKeepData": "데이터 유지하고 제거",
   "agentApp.apps.center.action.activate": "활성화",
   "agentApp.apps.center.action.details": "상세",
@@ -158,6 +159,7 @@
   "agentApp.apps.uninstall.blocked": "제거가 차단됨: {{codes}}.",
   "agentApp.apps.uninstall.completed": "제거 완료: {{removed}}개 삭제, {{missing}}개는 이미 없음.",
   "agentApp.apps.uninstallPreview.deleteDataGate.description": "이 앱의 로컬 데이터, 캐시, 기록을 삭제합니다. 계속하기 전에 아래 문구를 그대로 입력하세요.",
+  "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly": "데이터 삭제는 현재 리허설만 가능하며 실제 삭제는 실행할 수 없습니다. 데이터 유지하고 제거를 사용하세요.",
   "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel": "데이터 삭제 확인 문구 입력",
   "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder": "전체 확인 문구 입력",
   "agentApp.apps.uninstallPreview.deleteDataGate.mismatch": "확인 문구가 일치하지 않아 삭제가 잠겼습니다.",

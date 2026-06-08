@@ -23,11 +23,6 @@ import {
   METHOD_MODEL_PROVIDER_CATALOG_LIST,
   METHOD_MODEL_PROVIDER_LIST,
   METHOD_MODEL_SYNC_STATE_READ,
-  METHOD_MCP_PROMPT_LIST,
-  METHOD_MCP_RESOURCE_LIST,
-  METHOD_MCP_SERVER_LIST,
-  METHOD_MCP_SERVER_STATUS_LIST,
-  METHOD_MCP_TOOL_LIST,
   METHOD_PROJECT_MEMORY_READ,
   METHOD_SKILL_LIST,
   METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
@@ -67,11 +62,6 @@ import {
   type ModelProviderCatalogListResponse,
   type ModelProviderListResponse,
   type ModelSyncStateReadResponse,
-  type McpPromptListResponse,
-  type McpResourceListResponse,
-  type McpServerListResponse,
-  type McpServerStatusListResponse,
-  type McpToolListResponse,
   type ProjectMemoryReadResponse,
   type SkillListResponse,
   type UsageStatsDailyTrendsListResponse,
@@ -104,8 +94,10 @@ type FileManagerLocationCandidate = Omit<FileManagerLocation, "path"> & {
 };
 type ElectronKnownPathName = "home" | "desktop" | "documents" | "downloads";
 type UsageStatsSummaryWire = UsageStatsReadResponse["stats"];
-type UsageStatsModelUsageWire = UsageStatsModelRankingListResponse["ranking"][number];
-type UsageStatsDailyUsageWire = UsageStatsDailyTrendsListResponse["trends"][number];
+type UsageStatsModelUsageWire =
+  UsageStatsModelRankingListResponse["ranking"][number];
+type UsageStatsDailyUsageWire =
+  UsageStatsDailyTrendsListResponse["trends"][number];
 type AgentAppShellPrepareFields = {
   descriptorVersion?: number;
   appId: string;
@@ -308,16 +300,6 @@ export class ElectronHostCommands {
         return await this.#getEnvironmentPreview();
       case "unified_memory_stats":
         return this.#getUnifiedMemoryStats();
-      case "get_mcp_servers":
-        return await this.#listMcpServers();
-      case "mcp_list_servers_with_status":
-        return await this.#listMcpServersWithStatus();
-      case "mcp_list_tools":
-        return await this.#listMcpTools();
-      case "mcp_list_prompts":
-        return await this.#listMcpPrompts();
-      case "mcp_list_resources":
-        return await this.#listMcpResources();
       case "site_get_adapter_catalog_status":
         return this.#getSiteAdapterCatalogStatus();
       case "site_list_adapters":
@@ -621,14 +603,16 @@ export class ElectronHostCommands {
       title,
       properties: ["openDirectory"],
     });
-    const path = selected.canceled ? null : selected.filePaths[0] ?? null;
+    const path = selected.canceled ? null : (selected.filePaths[0] ?? null);
     return {
       path,
       cancelled: path === null,
     };
   }
 
-  async #launchAgentAppShell(args: HostArgs): Promise<AgentAppShellLaunchResult> {
+  async #launchAgentAppShell(
+    args: HostArgs,
+  ): Promise<AgentAppShellLaunchResult> {
     const launchedAt = new Date().toISOString();
     const request = readRequest(args);
     const prepare = await this.#appServerRequest<AgentAppShellPrepareResponse>(
@@ -659,7 +643,9 @@ export class ElectronHostCommands {
       });
     }
 
-    const packageMount = normalizeAgentAppShellPackageMount(prepare.packageMount);
+    const packageMount = normalizeAgentAppShellPackageMount(
+      prepare.packageMount,
+    );
     const runtimeStatus = await this.#startAgentAppUiRuntime({
       appId: fields.appId,
       entryKey: fields.entryKey,
@@ -1366,41 +1352,6 @@ export class ElectronHostCommands {
       METHOD_MODEL_SYNC_STATE_READ,
     );
     return response.syncState;
-  }
-
-  async #listMcpServers(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<McpServerListResponse>(
-      METHOD_MCP_SERVER_LIST,
-    );
-    return response.servers;
-  }
-
-  async #listMcpServersWithStatus(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<McpServerStatusListResponse>(
-      METHOD_MCP_SERVER_STATUS_LIST,
-    );
-    return response.servers;
-  }
-
-  async #listMcpTools(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<McpToolListResponse>(
-      METHOD_MCP_TOOL_LIST,
-    );
-    return response.tools;
-  }
-
-  async #listMcpPrompts(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<McpPromptListResponse>(
-      METHOD_MCP_PROMPT_LIST,
-    );
-    return response.prompts;
-  }
-
-  async #listMcpResources(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<McpResourceListResponse>(
-      METHOD_MCP_RESOURCE_LIST,
-    );
-    return response.resources;
   }
 
   async #listModelRegistryProviderIds(): Promise<string[]> {
@@ -2324,9 +2275,7 @@ function buildAgentRuntimeAsterChatRequest(params: {
     web_search: turnConfig?.web_search ?? turnConfig?.webSearch ?? null,
     search_mode: turnConfig?.search_mode ?? turnConfig?.searchMode ?? null,
     execution_strategy:
-      turnConfig?.execution_strategy ??
-      turnConfig?.executionStrategy ??
-      null,
+      turnConfig?.execution_strategy ?? turnConfig?.executionStrategy ?? null,
     auto_continue:
       turnConfig?.auto_continue ?? turnConfig?.autoContinue ?? null,
     system_prompt:
@@ -2661,7 +2610,8 @@ function toolCallProjectionsFromEvidenceEvent(
           readToolOutput(result) ??
           readToolOutput(payload) ??
           readToolOutput(runtimeEvent),
-        error: payload.error ?? runtimeEvent?.error ?? item?.error ?? result?.error,
+        error:
+          payload.error ?? runtimeEvent?.error ?? item?.error ?? result?.error,
         eventId: event.eventId,
         turnId: event.turnId,
         timestamp: event.timestamp,
@@ -3040,7 +2990,9 @@ function capabilitiesToToolInventory(
   };
 }
 
-function capabilityRuntimeToolNames(capability: CapabilityDescriptor): string[] {
+function capabilityRuntimeToolNames(
+  capability: CapabilityDescriptor,
+): string[] {
   const toolName = capabilityToolName(capability);
   if (toolName) {
     return [toolName];

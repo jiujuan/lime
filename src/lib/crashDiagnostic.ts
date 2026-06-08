@@ -424,7 +424,7 @@ export async function collectRuntimeSnapshotForDiagnostic(
     collectionNotes.push(
       buildCollectionFailureNote(
         "runtime_snapshot.mcp_summary",
-        "mcp_list_servers_with_status",
+        "mcpServerStatus/list",
         mcpResult.reason,
       ),
     );

@@ -100,6 +100,12 @@ const retiredAgentAppPackageFacadeCommands = new Set([
 const currentAgentAppShellDesktopHostCommands = new Set([
   "agent_app_launch_shell",
 ]);
+const currentAgentAppRuntimeDesktopHostCommands = new Set([
+  "agent_app_runtime_start_task",
+  "agent_app_runtime_cancel_task",
+  "agent_app_runtime_get_task",
+  "agent_app_runtime_submit_host_response",
+]);
 const currentFileBrowserDesktopHostShellCommands = new Set([
   "get_home_dir",
   "get_file_manager_locations",
@@ -108,9 +114,11 @@ const currentFileBrowserDesktopHostShellCommands = new Set([
   "open_with_default_app",
 ]);
 const retiredTauriGenerateHandlerCommands = new Set([
+  "add_mcp_server",
   "add_model_to_provider",
   "add_prompt",
   "add_provider",
+  "check_codex_cli_status",
   "create_a2ui_form",
   "auto_import_prompt",
   "clear_request_logs",
@@ -119,7 +127,12 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "companion_send_pet_command",
   "close_webview_panel",
   "create_webview_panel",
+  "create_persona",
+  "delete_mcp_server",
   "delete_prompt",
+  "delete_a2ui_form",
+  "delete_avatar",
+  "delete_persona",
   "enable_prompt",
   "execute_ecommerce_review_reply",
   "expand_path",
@@ -136,13 +149,20 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "get_config_status",
   "get_current_prompt_file_content",
   "get_daily_usage_trends",
+  "get_default_persona",
+  "get_external_tools",
   "get_experimental_config",
   "get_injection_config",
   "get_injection_rules",
   "get_model_usage_ranking",
   "get_models_config",
+  "get_memory_feedback_stats",
+  "get_materials_content",
   "get_provider_models",
+  "get_persona",
   "get_prompts",
+  "get_project_context",
+  "get_mcp_servers",
   "get_relay_info",
   "get_request_log_detail",
   "get_request_logs",
@@ -166,9 +186,22 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "import_config",
   "import_document",
   "import_document_to_session",
+  "import_mcp_from_app",
   "import_prompt_from_file",
   "get_telegram_remote_status",
   "list_relay_providers",
+  "mcp_call_tool",
+  "mcp_call_tool_with_caller",
+  "mcp_get_prompt",
+  "mcp_list_prompts",
+  "mcp_list_resources",
+  "mcp_list_servers_with_status",
+  "mcp_list_tools",
+  "mcp_list_tools_for_context",
+  "mcp_read_resource",
+  "mcp_search_tools",
+  "mcp_start_server",
+  "mcp_stop_server",
   "navigate_webview_panel",
   "open_auth_dir",
   "open_codex_cli_login",
@@ -195,18 +228,42 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "start_oem_cloud_oauth_callback_bridge",
   "stop_telegram_remote",
   "submit_a2ui_form",
+  "sync_all_mcp_to_live",
   "sync_tray_model_shortcuts",
   "test_tts",
   "toggle_model_enabled",
+  "toggle_mcp_server",
   "focus_webview_panel",
   "add_injection_rule",
   "remove_injection_rule",
   "update_prompt",
   "update_injection_rule",
+  "update_mcp_server",
   "upload_image_to_session",
   "upsert_prompt",
   "validate_config_yaml",
   "validate_import",
+]);
+const retiredMcpDesktopFacadeCommands = new Set([
+  "add_mcp_server",
+  "delete_mcp_server",
+  "get_mcp_servers",
+  "import_mcp_from_app",
+  "mcp_call_tool",
+  "mcp_call_tool_with_caller",
+  "mcp_get_prompt",
+  "mcp_list_prompts",
+  "mcp_list_resources",
+  "mcp_list_servers_with_status",
+  "mcp_list_tools",
+  "mcp_list_tools_for_context",
+  "mcp_read_resource",
+  "mcp_search_tools",
+  "mcp_start_server",
+  "mcp_stop_server",
+  "sync_all_mcp_to_live",
+  "toggle_mcp_server",
+  "update_mcp_server",
 ]);
 const retiredTauriCommandModules = new Set([
   "a2ui_form_cmd",
@@ -217,11 +274,14 @@ const retiredTauriCommandModules = new Set([
   "ecommerce_review_reply_cmd",
   "experimental_cmd",
   "external_tools_cmd",
+  "file_upload_cmd",
   "image_search_cmd",
   "image_upload_cmd",
   "injection_cmd",
   "knowledge_cmd",
   "models_cmd",
+  "mcp_cmd",
+  "persona_cmd",
   "prompt_cmd",
   "telemetry_cmd",
   "telegram_remote_cmd",
@@ -253,9 +313,14 @@ const currentElectronHostRequiredCommands = new Set([
   "agent_runtime_get_session",
   "agent_runtime_list_workspace_skill_bindings",
   "agent_app_launch_shell",
+  "agent_app_select_directory",
   "agent_app_get_ui_runtime_status",
   "agent_app_start_ui_runtime",
   "agent_app_stop_ui_runtime",
+  "agent_app_runtime_start_task",
+  "agent_app_runtime_cancel_task",
+  "agent_app_runtime_get_task",
+  "agent_app_runtime_submit_host_response",
   "get_all_alias_configs",
   "get_default_provider",
   "get_experimental_config",
@@ -284,9 +349,6 @@ const currentElectronHostRequiredCommands = new Set([
 ]);
 
 const currentDevBridgeTruthRequiredCommands = new Set([
-  "agent_app_get_ui_runtime_status",
-  "agent_app_start_ui_runtime",
-  "agent_app_stop_ui_runtime",
   "open_external_url",
   "start_oem_cloud_oauth_callback_bridge",
   "project_memory_get",
@@ -352,11 +414,6 @@ addDeferredCommands(
 
 addDeferredCommands(
   [
-    "agent_app_select_directory",
-    "agent_app_runtime_start_task",
-    "agent_app_runtime_cancel_task",
-    "agent_app_runtime_get_task",
-    "agent_app_runtime_submit_host_response",
     "execute_skill",
     "inspect_local_skill_detail_for_app",
     "reveal_local_skill_for_app",
@@ -700,6 +757,14 @@ function readSource(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
+function collectRustSourceFiles(relativeRoot) {
+  const absoluteRoot = path.join(repoRoot, relativeRoot);
+  return walkDirectory(absoluteRoot)
+    .map((absolutePath) => normalizePath(path.relative(repoRoot, absolutePath)))
+    .filter((relativePath) => relativePath.endsWith(".rs"))
+    .sort();
+}
+
 function isAllowedTestMockFixtureSource(relativePath) {
   return (
     relativePath === "src/lib/dev-bridge/explicitMockFallback.ts" ||
@@ -912,6 +977,22 @@ function collectProductionMockOnlyUsageFailures() {
             token: rule.token,
           });
         }
+      }
+    }
+  }
+
+  for (const relativePath of collectRustSourceFiles(
+    "lime-rs/src/dev_bridge/dispatcher",
+  )) {
+    const sourceCode = readProductionSourceForGuard(relativePath);
+    for (const command of retiredMcpDesktopFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: relativePath,
+          message:
+            "已迁到 App Server MCP current API 的旧 MCP 命令不能回到 Rust DevBridge dispatcher",
+          token: command,
+        });
       }
     }
   }
@@ -1475,6 +1556,59 @@ function collectRetiredApiKeyProviderFacadeSourceFailures() {
   return failures;
 }
 
+function collectRetiredMcpDesktopFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已迁到 App Server MCP current API 的旧 MCP 命令不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "已迁到 App Server MCP current API 的旧 MCP 命令不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/mcpMocks.ts",
+      message:
+        "已迁到 App Server MCP current API 的旧 MCP 命令不能继续保留 desktop-host mock fixture",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已迁到 App Server MCP current API 的旧 MCP 命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "已迁到 App Server MCP current API 的旧 MCP 命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message:
+        "mcp_cmd 已退为 cleanup-only residual，不能重新暴露为 legacy Tauri command module",
+      commands: ["mcp_cmd"],
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    const commands = source.commands ?? retiredMcpDesktopFacadeCommands;
+    for (const command of commands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
 function collectRetiredAgentAppPackageFacadeSourceFailures() {
   const failures = [];
   const restrictedSources = [
@@ -1504,9 +1638,10 @@ function collectRetiredAgentAppPackageFacadeSourceFailures() {
         "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能回到 Rust DevBridge dispatcher",
     },
     {
-      path: "lime-rs/src/commands/agent_app_cmd.rs",
+      path: "lime-rs/src/commands/mod.rs",
       message:
-        "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能回到 Tauri command wrapper；commands/** 只允许清理旧逻辑",
+        "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能重新暴露 legacy Tauri Agent App command module；commands/** 只允许清理旧逻辑",
+      commands: ["agent_app_cmd"],
     },
   ];
 
@@ -1555,15 +1690,50 @@ function collectCurrentAgentAppShellDesktopHostSourceFailures() {
         "agent_app_launch_shell 已迁到 Electron Desktop Host + App Server agentAppShell/prepare，不能回到 Rust DevBridge dispatcher",
     },
     {
-      path: "lime-rs/src/commands/agent_app_cmd.rs",
+      path: "lime-rs/src/commands/mod.rs",
       message:
-        "agent_app_launch_shell 已迁到 Electron Desktop Host + App Server agentAppShell/prepare，不能回到 Tauri command wrapper；commands/** 只允许清理旧逻辑",
+        "Agent App shell / picker 已迁到 Electron Desktop Host，不能重新暴露 legacy Tauri Agent App command module；commands/** 只允许清理旧逻辑",
+      commands: ["agent_app_cmd"],
     },
   ];
 
   for (const source of restrictedSources) {
     const sourceCode = readProductionSourceForGuard(source.path);
     for (const command of currentAgentAppShellDesktopHostCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectCurrentAgentAppRuntimeDesktopHostSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "agent_app_runtime_* 已迁到 Electron Desktop Host + App Server agentSession current，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message:
+        "agent_app_runtime_cmd 已退为 cleanup-only residual，不能重新暴露为 legacy Tauri command module",
+      commands: ["agent_app_runtime_cmd"],
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    const commands =
+      source.commands ?? currentAgentAppRuntimeDesktopHostCommands;
+    for (const command of commands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
         failures.push({
           file: source.path,
@@ -1693,10 +1863,14 @@ function main() {
     collectRetiredAutomationFacadeSourceFailures();
   const retiredApiKeyProviderFacadeSourceFailures =
     collectRetiredApiKeyProviderFacadeSourceFailures();
+  const retiredMcpDesktopFacadeSourceFailures =
+    collectRetiredMcpDesktopFacadeSourceFailures();
   const retiredAgentAppPackageFacadeSourceFailures =
     collectRetiredAgentAppPackageFacadeSourceFailures();
   const currentAgentAppShellDesktopHostSourceFailures =
     collectCurrentAgentAppShellDesktopHostSourceFailures();
+  const currentAgentAppRuntimeDesktopHostSourceFailures =
+    collectCurrentAgentAppRuntimeDesktopHostSourceFailures();
   const currentFileBrowserDesktopHostShellSourceFailures =
     collectCurrentFileBrowserDesktopHostShellSourceFailures();
   const retiredTauriGenerateHandlerFailures =
@@ -1755,6 +1929,16 @@ function main() {
   );
   const retiredApiKeyProviderFacadeLeaks = new Set(
     [...retiredApiKeyProviderFacadeCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredMcpDesktopFacadeLeaks = new Set(
+    [...retiredMcpDesktopFacadeCommands].filter(
       (command) =>
         registeredCommands.has(command) ||
         bridgeTruthCommands.has(command) ||
@@ -1910,6 +2094,22 @@ function main() {
     );
   }
 
+  if (retiredMcpDesktopFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server MCP current API 的旧 MCP Desktop facade 不能回到 Electron Host / DevBridge / mock / runtime catalog",
+      retiredMcpDesktopFacadeLeaks,
+    );
+  }
+
+  if (retiredMcpDesktopFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server MCP current API 的旧 MCP 命令不能回到旧客户端源码",
+      retiredMcpDesktopFacadeSourceFailures,
+    );
+  }
+
   if (retiredApiKeyProviderFacadeSourceFailures.length > 0) {
     hasError = true;
     printGuardFailures(
@@ -1939,6 +2139,14 @@ function main() {
     printGuardFailures(
       "已迁到 Electron Desktop Host + App Server agentAppShell/prepare 的 shell launch 命令不能回到旧客户端源码",
       currentAgentAppShellDesktopHostSourceFailures,
+    );
+  }
+
+  if (currentAgentAppRuntimeDesktopHostSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host + App Server agentSession 的 Agent App runtime task 命令不能回到旧客户端源码",
+      currentAgentAppRuntimeDesktopHostSourceFailures,
     );
   }
 

@@ -1,8 +1,9 @@
 {
   "agentApp.apps.action.confirmUninstall": "Confirm uninstall",
+  "agentApp.apps.action.deleteDataUnavailable": "Delete Data Unavailable",
   "agentApp.apps.action.disable": "Disable",
   "agentApp.apps.action.enable": "Enable",
-  "agentApp.apps.action.uninstallDeleteData": "Uninstall and Delete Data",
+  "agentApp.apps.action.uninstallDeleteData": "Preview Delete Data",
   "agentApp.apps.action.uninstallKeepData": "Uninstall, Keep Data",
   "agentApp.apps.center.action.activate": "Activate",
   "agentApp.apps.center.action.details": "Details",
@@ -158,6 +159,7 @@
   "agentApp.apps.uninstall.blocked": "Uninstall blocked: {{codes}}.",
   "agentApp.apps.uninstall.completed": "Uninstall complete: removed {{removed}} items, {{missing}} already missing.",
   "agentApp.apps.uninstallPreview.deleteDataGate.description": "This removes local data, cache, and records for this app. Type the full phrase below before continuing.",
+  "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly": "Delete-data is currently rehearsal-only and cannot run real deletion. Use Uninstall, Keep Data to uninstall this app.",
   "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel": "Enter the delete-data confirmation phrase",
   "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder": "Type the full confirmation phrase",
   "agentApp.apps.uninstallPreview.deleteDataGate.mismatch": "The phrase does not match. Delete is locked.",

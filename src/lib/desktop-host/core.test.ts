@@ -111,7 +111,14 @@ describe("desktop-host/core invoke", () => {
     );
   });
 
-  it("显式 mock 入口可返回默认 mock，不访问 bridge", async () => {
+  it("显式 mock 入口可返回测试注册的配置 mock，不访问 bridge", async () => {
+    mockCommand("get_config", () => ({
+      server: {
+        port: 8787,
+      },
+      default_provider: "openai",
+    }));
+
     await expect(invokeMockOnly("get_config")).resolves.toEqual(
       expect.objectContaining({
         server: expect.objectContaining({
@@ -124,6 +131,13 @@ describe("desktop-host/core invoke", () => {
   });
 
   it("显式 mock 入口不应再次探测 HTTP bridge", async () => {
+    mockCommand("get_config", () => ({
+      server: {
+        port: 8787,
+      },
+      default_provider: "openai",
+    }));
+
     await expect(invokeMockOnly("get_config")).resolves.toEqual(
       expect.objectContaining({
         server: expect.objectContaining({
@@ -140,15 +154,13 @@ describe("desktop-host/core invoke", () => {
     vi.stubEnv("VITEST", "");
 
     try {
-      await expect(invokeMockOnly("get_config")).rejects.toThrow(
+      await expect(invokeMockOnly("test_only_command")).rejects.toThrow(
         "invokeMockOnly 只能在测试环境使用",
       );
-      expect(() => mockCommand("get_config", vi.fn())).toThrow(
+      expect(() => mockCommand("test_only_command", vi.fn())).toThrow(
         "mockCommand 只能在测试环境使用",
       );
-      expect(() => clearMocks()).toThrow(
-        "clearMocks 只能在测试环境使用",
-      );
+      expect(() => clearMocks()).toThrow("clearMocks 只能在测试环境使用");
       expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllEnvs();
@@ -158,9 +170,7 @@ describe("desktop-host/core invoke", () => {
   it("默认项目 mock 已退场并 fail closed", async () => {
     await expect(
       invokeMockOnly("get_or_create_default_project"),
-    ).rejects.toThrow(
-      '未注册命令 "get_or_create_default_project"',
-    );
+    ).rejects.toThrow('未注册命令 "get_or_create_default_project"');
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
@@ -1065,9 +1075,7 @@ describe("desktop-host/core invoke", () => {
   });
 
   it("显式 mock 入口可返回默认工作区数据已退场", async () => {
-    await expect(
-      invokeMockOnly("workspace_get_projects_root"),
-    ).rejects.toThrow(
+    await expect(invokeMockOnly("workspace_get_projects_root")).rejects.toThrow(
       '未注册命令 "workspace_get_projects_root"',
     );
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();

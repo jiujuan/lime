@@ -1071,30 +1071,6 @@ pub fn run() {
             // API test commands (from app::commands)
             app_commands::get_available_models,
             app_commands::check_api_compatibility,
-            // MCP commands
-            commands::mcp_cmd::get_mcp_servers,
-            commands::mcp_cmd::add_mcp_server,
-            commands::mcp_cmd::update_mcp_server,
-            commands::mcp_cmd::delete_mcp_server,
-            commands::mcp_cmd::toggle_mcp_server,
-            commands::mcp_cmd::import_mcp_from_app,
-            commands::mcp_cmd::sync_all_mcp_to_live,
-            // MCP 生命周期管理命令
-            commands::mcp_cmd::mcp_list_servers_with_status,
-            commands::mcp_cmd::mcp_start_server,
-            commands::mcp_cmd::mcp_stop_server,
-            // MCP 工具管理命令
-            commands::mcp_cmd::mcp_list_tools,
-            commands::mcp_cmd::mcp_list_tools_for_context,
-            commands::mcp_cmd::mcp_search_tools,
-            commands::mcp_cmd::mcp_call_tool,
-            commands::mcp_cmd::mcp_call_tool_with_caller,
-            // MCP 提示词管理命令
-            commands::mcp_cmd::mcp_list_prompts,
-            commands::mcp_cmd::mcp_get_prompt,
-            // MCP 资源管理命令
-            commands::mcp_cmd::mcp_list_resources,
-            commands::mcp_cmd::mcp_read_resource,
             // Skill commands
             commands::skill_cmd::get_skills,
             commands::skill_cmd::get_skills_for_app,
@@ -1133,14 +1109,6 @@ pub fn run() {
             commands::capability_draft_cmd::capability_draft_submit_approval_session_inputs,
             commands::capability_draft_cmd::capability_draft_execute_controlled_get,
             // Agent App Desktop shell / runtime facade commands
-            commands::agent_app_cmd::agent_app_start_ui_runtime,
-            commands::agent_app_cmd::agent_app_get_ui_runtime_status,
-            commands::agent_app_cmd::agent_app_stop_ui_runtime,
-            commands::agent_app_cmd::agent_app_select_directory,
-            commands::agent_app_runtime_cmd::start_task::agent_app_runtime_start_task,
-            commands::agent_app_runtime_cmd::cancel_task::agent_app_runtime_cancel_task,
-            commands::agent_app_runtime_cmd::task_snapshot::agent_app_runtime_get_task,
-            commands::agent_app_runtime_cmd::host_response::agent_app_runtime_submit_host_response,
             // Skill Execution commands
             commands::skill_exec_cmd::execute_skill,
             // Execution run commands
@@ -1331,7 +1299,6 @@ pub fn run() {
             commands::workspace_cmd::workspace_get_projects_root,
             commands::workspace_cmd::workspace_resolve_project_path,
             commands::workspace_cmd::get_or_create_default_project,
-            commands::workspace_cmd::get_project_context,
             commands::workspace_cmd::build_project_system_prompt,
             // Persona commands
             // Material commands
@@ -1343,7 +1310,6 @@ pub fn run() {
             commands::material_cmd::delete_material,
             commands::material_cmd::get_material_content,
             commands::material_cmd::get_material_count,
-            commands::material_cmd::get_materials_content,
             // Video generation commands
             commands::video_generation_cmd::create_video_generation_task,
             commands::video_generation_cmd::get_video_generation_task,
@@ -1415,7 +1381,6 @@ pub fn run() {
             commands::memory_search_cmd::unified_memory_semantic_search,
             commands::memory_search_cmd::unified_memory_hybrid_search,
             commands::memory_feedback_cmd::unified_memory_feedback,
-            commands::memory_feedback_cmd::get_memory_feedback_stats,
             // File Upload commands
             // ASR commands
             commands::asr_cmd::get_asr_credentials,

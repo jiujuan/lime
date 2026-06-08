@@ -19,7 +19,13 @@ const DEFAULTS = {
   healthUrl: "http://127.0.0.1:3030/health",
   timeoutMs: 120_000,
   intervalMs: 1_000,
-  evidenceDir: path.join(process.cwd(), ".lime", "qc", "gui-evidence", "agent-apps"),
+  evidenceDir: path.join(
+    process.cwd(),
+    ".lime",
+    "qc",
+    "gui-evidence",
+    "agent-apps",
+  ),
   prefix: "agent-apps-smoke",
   includeContentFactoryActionE2e: false,
   includeContentFactoryCompletionE2e: false,
@@ -28,7 +34,8 @@ const DEFAULTS = {
   allowLiveProvider: liveProviderSmokeAllowed(),
 };
 
-const ACCOUNT_MENU_BUTTON_SELECTOR = '[data-testid="app-sidebar-account-button"]';
+const ACCOUNT_MENU_BUTTON_SELECTOR =
+  '[data-testid="app-sidebar-account-button"]';
 const AGENT_APPS_NAV_SELECTOR =
   'button[aria-label="Agent Apps"], button[title="Agent Apps"]';
 const AGENT_APP_LAB_NAV_SELECTOR =
@@ -57,7 +64,8 @@ const CONTENT_FACTORY_ACTIONS = {
     pageText: /场景整理|场景概览|优先场景/,
     label: "生成/更新场景包",
     expectedSkills: ["knowledge-builder", "content-reviewer"],
-    runningPattern: /正在准备场景|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+    runningPattern:
+      /正在准备场景|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
   },
   "run-production": {
     action: "run-production",
@@ -77,7 +85,8 @@ const CONTENT_FACTORY_ACTIONS = {
     seedSampleWorkspace: true,
     label: "只重写文案批次",
     expectedSkills: ["article-writer", "content-reviewer"],
-    runningPattern: /正在重写草稿|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+    runningPattern:
+      /正在重写草稿|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
   },
   "run-scripts": {
     action: "run-scripts",
@@ -87,7 +96,8 @@ const CONTENT_FACTORY_ACTIONS = {
     seedSampleWorkspace: true,
     label: "生成脚本批次",
     expectedSkills: ["article-writer", "content-reviewer"],
-    runningPattern: /正在生成脚本|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+    runningPattern:
+      /正在生成脚本|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
   },
   "run-strategy": {
     action: "run-strategy",
@@ -105,7 +115,8 @@ const CONTENT_FACTORY_ACTIONS = {
     pageText: /复盘出口|复盘决策室|生成下一轮判断/,
     label: "生成判断",
     expectedSkills: ["content-reviewer"],
-    runningPattern: /正在分析复盘|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+    runningPattern:
+      /正在分析复盘|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
   },
 };
 
@@ -233,7 +244,9 @@ function sanitizeDiagnosticJson(value, depth = 0) {
     return value ?? null;
   }
   if (Array.isArray(value)) {
-    return value.slice(0, 25).map((item) => sanitizeDiagnosticJson(item, depth + 1));
+    return value
+      .slice(0, 25)
+      .map((item) => sanitizeDiagnosticJson(item, depth + 1));
   }
   if (typeof value === "object") {
     return Object.fromEntries(
@@ -515,7 +528,9 @@ function shouldProbeUnixCwd(processInfo) {
 
 function processMatchReasons(processInfo) {
   const command = String(processInfo.command ?? "").toLowerCase();
-  const cwd = String(processInfo.cwd ?? "").replaceAll("\\", "/").toLowerCase();
+  const cwd = String(processInfo.cwd ?? "")
+    .replaceAll("\\", "/")
+    .toLowerCase();
   const shellWrapper = /^\/bin\/(?:ba|z|c|k)?sh\b.*\s-c\s/.test(command);
   const reasons = [];
 
@@ -534,7 +549,10 @@ function processMatchReasons(processInfo) {
   if (command.includes(" 1420") || command.includes(":1420")) {
     reasons.push("command:1420");
   }
-  if (cwd.endsWith("/content-factory-app") || cwd.includes("/content-factory-app/")) {
+  if (
+    cwd.endsWith("/content-factory-app") ||
+    cwd.includes("/content-factory-app/")
+  ) {
     reasons.push("cwd:content-factory-app");
   }
 
@@ -542,10 +560,14 @@ function processMatchReasons(processInfo) {
 }
 
 async function readUnixProcessCwd(pid) {
-  const result = await execFileText("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
-    maxBuffer: 64 * 1024,
-    timeoutMs: 1_000,
-  });
+  const result = await execFileText(
+    "lsof",
+    ["-a", "-p", String(pid), "-d", "cwd", "-Fn"],
+    {
+      maxBuffer: 64 * 1024,
+      timeoutMs: 1_000,
+    },
+  );
   if (!result.ok) {
     return null;
   }
@@ -555,10 +577,14 @@ async function readUnixProcessCwd(pid) {
 
 async function collectUnixProcessSnapshot() {
   const errors = [];
-  const result = await execFileText("ps", ["-axo", "pid,ppid,pgid,stat,etime,command"], {
-    maxBuffer: 4 * 1024 * 1024,
-    timeoutMs: 2_000,
-  });
+  const result = await execFileText(
+    "ps",
+    ["-axo", "pid,ppid,pgid,stat,etime,command"],
+    {
+      maxBuffer: 4 * 1024 * 1024,
+      timeoutMs: 2_000,
+    },
+  );
 
   if (!result.ok) {
     return {
@@ -606,7 +632,13 @@ async function collectUnixProcessSnapshot() {
     collectedAt: new Date().toISOString(),
     filters: {
       cwdBasename: "content-factory-app",
-      commandHints: ["content-factory-app", "agent-apps-smoke", "verify-gui-smoke", "3030", "1420"],
+      commandHints: [
+        "content-factory-app",
+        "agent-apps-smoke",
+        "verify-gui-smoke",
+        "3030",
+        "1420",
+      ],
     },
     processCount: processes.length,
     probedCwdCount: cwdCandidates.length,
@@ -667,7 +699,9 @@ async function collectWindowsProcessSnapshot() {
     .map((item) => ({
       pid: Number(item.ProcessId),
       ppid: Number(item.ParentProcessId),
-      command: sanitizeDiagnosticText(item.CommandLine ?? item.ExecutablePath ?? ""),
+      command: sanitizeDiagnosticText(
+        item.CommandLine ?? item.ExecutablePath ?? "",
+      ),
       cwd: null,
     }))
     .map((processInfo) => ({
@@ -682,7 +716,13 @@ async function collectWindowsProcessSnapshot() {
     collectedAt: new Date().toISOString(),
     filters: {
       cwdBasename: "content-factory-app",
-      commandHints: ["content-factory-app", "agent-apps-smoke", "verify-gui-smoke", "3030", "1420"],
+      commandHints: [
+        "content-factory-app",
+        "agent-apps-smoke",
+        "verify-gui-smoke",
+        "3030",
+        "1420",
+      ],
     },
     processCount: parsed.length,
     probedCwdCount: 0,
@@ -746,7 +786,8 @@ function isTransportFailure(response) {
 
 async function invokeDevBridgeCommand(options, cmd, args, timeoutMs) {
   const invokeUrl = resolveInvokeUrl(options.healthUrl);
-  const deadline = Date.now() + Math.min(options.timeoutMs, Math.max(timeoutMs, 30_000));
+  const deadline =
+    Date.now() + Math.min(options.timeoutMs, Math.max(timeoutMs, 30_000));
   let lastResponse = null;
 
   while (Date.now() < deadline) {
@@ -779,7 +820,9 @@ async function invokeDevBridgeCommand(options, cmd, args, timeoutMs) {
 
   throw new Error(
     `[smoke:agent-apps] DevBridge command unavailable after retry: ${cmd}: ${sanitizeDiagnosticText(
-      lastResponse?.error ?? lastResponse?.body?.error ?? "unknown transport failure",
+      lastResponse?.error ??
+        lastResponse?.body?.error ??
+        "unknown transport failure",
     )}`,
   );
 }
@@ -804,7 +847,9 @@ async function invokeAppServerJsonRpc(options, method, params, timeoutMs) {
   );
   const line = Array.isArray(response?.lines) ? response.lines[0] : null;
   if (!line) {
-    throw new Error(`[smoke:agent-apps] ${method} did not return JSON-RPC line`);
+    throw new Error(
+      `[smoke:agent-apps] ${method} did not return JSON-RPC line`,
+    );
   }
   const message = JSON.parse(line);
   if (message.error) {
@@ -906,7 +951,8 @@ function valueContainsPattern(value, pattern, depth = 0) {
     return false;
   }
   return Object.entries(value).some(
-    ([key, item]) => pattern.test(key) || valueContainsPattern(item, pattern, depth + 1),
+    ([key, item]) =>
+      pattern.test(key) || valueContainsPattern(item, pattern, depth + 1),
   );
 }
 
@@ -915,7 +961,9 @@ function hasContentFactoryWorkspacePatchValue(value, depth = 0) {
     return false;
   }
   if (Array.isArray(value)) {
-    return value.some((item) => hasContentFactoryWorkspacePatchValue(item, depth + 1));
+    return value.some((item) =>
+      hasContentFactoryWorkspacePatchValue(item, depth + 1),
+    );
   }
   if (!isObjectRecord(value)) {
     return false;
@@ -933,7 +981,11 @@ function hasContentFactoryWorkspacePatchValue(value, depth = 0) {
 }
 
 function hasTokenUsageValue(value) {
-  const usage = findObjectByKeys(value, ["usage", "tokenUsage", "token_usage"], 7);
+  const usage = findObjectByKeys(
+    value,
+    ["usage", "tokenUsage", "token_usage"],
+    7,
+  );
   if (!usage) {
     return false;
   }
@@ -946,7 +998,9 @@ function hasTokenUsageValue(value) {
     "total_tokens",
     "cachedInputTokens",
     "cached_input_tokens",
-  ].some((key) => Number.isFinite(Number(usage[key])) && Number(usage[key]) > 0);
+  ].some(
+    (key) => Number.isFinite(Number(usage[key])) && Number(usage[key]) > 0,
+  );
 }
 
 function hasCostValue(value) {
@@ -956,11 +1010,11 @@ function hasCostValue(value) {
   }
   return Boolean(
     cost.estimatedCostClass ||
-      cost.estimated_cost_class ||
-      Number.isFinite(Number(cost.estimatedTotalCost)) ||
-      Number.isFinite(Number(cost.estimated_total_cost)) ||
-      Number.isFinite(Number(cost.totalCost)) ||
-      Number.isFinite(Number(cost.total_cost)),
+    cost.estimated_cost_class ||
+    Number.isFinite(Number(cost.estimatedTotalCost)) ||
+    Number.isFinite(Number(cost.estimated_total_cost)) ||
+    Number.isFinite(Number(cost.totalCost)) ||
+    Number.isFinite(Number(cost.total_cost)),
   );
 }
 
@@ -983,12 +1037,18 @@ function isTerminalRuntimeStatus(value) {
     "cancelled",
     "canceled",
     "aborted",
-  ].includes(String(value ?? "").trim().toLowerCase());
+  ].includes(
+    String(value ?? "")
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 function isSuccessfulRuntimeStatus(value) {
   return ["completed", "complete", "success", "succeeded"].includes(
-    String(value ?? "").trim().toLowerCase(),
+    String(value ?? "")
+      .trim()
+      .toLowerCase(),
   );
 }
 
@@ -996,9 +1056,15 @@ function summarizeRuntimeSnapshotCompletion(snapshot) {
   if (!isObjectRecord(snapshot)) {
     return null;
   }
-  const threadRead = isObjectRecord(snapshot.threadRead) ? snapshot.threadRead : {};
-  const taskEvents = Array.isArray(snapshot.taskEvents) ? snapshot.taskEvents : [];
-  const artifacts = Array.isArray(threadRead.artifacts) ? threadRead.artifacts : [];
+  const threadRead = isObjectRecord(snapshot.threadRead)
+    ? snapshot.threadRead
+    : {};
+  const taskEvents = Array.isArray(snapshot.taskEvents)
+    ? snapshot.taskEvents
+    : [];
+  const artifacts = Array.isArray(threadRead.artifacts)
+    ? threadRead.artifacts
+    : [];
   const toolCalls = Array.isArray(threadRead.tool_calls)
     ? threadRead.tool_calls
     : Array.isArray(threadRead.toolCalls)
@@ -1006,8 +1072,16 @@ function summarizeRuntimeSnapshotCompletion(snapshot) {
       : [];
   const turns = Array.isArray(threadRead.turns) ? threadRead.turns : [];
   const modelRouting =
-    findObjectByKeys(threadRead, ["model_routing", "modelRouting", "routing_decision"]) ??
-    findObjectByKeys(snapshot, ["model_routing", "modelRouting", "routing_decision"]);
+    findObjectByKeys(threadRead, [
+      "model_routing",
+      "modelRouting",
+      "routing_decision",
+    ]) ??
+    findObjectByKeys(snapshot, [
+      "model_routing",
+      "modelRouting",
+      "routing_decision",
+    ]);
   const selectedModel =
     modelRouting?.selectedModel ??
     modelRouting?.selected_model ??
@@ -1019,20 +1093,30 @@ function summarizeRuntimeSnapshotCompletion(snapshot) {
     modelRouting?.selected_provider ??
     modelRouting?.provider ??
     "";
-  const terminal = isTerminalRuntimeStatus(snapshot.taskStatus) ||
+  const terminal =
+    isTerminalRuntimeStatus(snapshot.taskStatus) ||
     isTerminalRuntimeStatus(threadRead.profile_status) ||
     isTerminalRuntimeStatus(threadRead.status);
-  const successful = isSuccessfulRuntimeStatus(snapshot.taskStatus) ||
+  const successful =
+    isSuccessfulRuntimeStatus(snapshot.taskStatus) ||
     isSuccessfulRuntimeStatus(threadRead.profile_status) ||
     isSuccessfulRuntimeStatus(threadRead.status);
   const hasRuntimeOutput =
-    taskEvents.length > 0 || artifacts.length > 0 || toolCalls.length > 0 || turns.length > 0;
+    taskEvents.length > 0 ||
+    artifacts.length > 0 ||
+    toolCalls.length > 0 ||
+    turns.length > 0;
   const workspacePatchReady = hasContentFactoryWorkspacePatchValue(snapshot);
-  const evidenceRefs = findValueByKeys(threadRead, ["evidence_refs", "evidenceRefs"], 5);
+  const evidenceRefs = findValueByKeys(
+    threadRead,
+    ["evidence_refs", "evidenceRefs"],
+    5,
+  );
   const evidenceReady = Boolean(
     (Array.isArray(evidenceRefs) && evidenceRefs.length > 0) ||
-      valueContainsPattern(taskEvents, /evidence/i) ||
-      (workspacePatchReady && (artifacts.length > 0 || hasContentFactoryEvidenceValue(snapshot))),
+    valueContainsPattern(taskEvents, /evidence/i) ||
+    (workspacePatchReady &&
+      (artifacts.length > 0 || hasContentFactoryEvidenceValue(snapshot))),
   );
 
   return {
@@ -1041,8 +1125,13 @@ function summarizeRuntimeSnapshotCompletion(snapshot) {
     usageReady: hasTokenUsageValue(snapshot) || (terminal && hasRuntimeOutput),
     costReady: hasCostValue(snapshot),
     skillInvocationReady: Boolean(
-      toolCalls.some((call) => /Skill/i.test(String(call?.tool_name ?? call?.toolName ?? ""))) ||
-        valueContainsPattern(taskEvents, /skill|knowledge-builder|content-reviewer/i),
+      toolCalls.some((call) =>
+        /Skill/i.test(String(call?.tool_name ?? call?.toolName ?? "")),
+      ) ||
+      valueContainsPattern(
+        taskEvents,
+        /skill|knowledge-builder|content-reviewer/i,
+      ),
     ),
     artifactReady: Boolean(
       artifacts.length > 0 || valueContainsPattern(taskEvents, /artifact/i),
@@ -1093,7 +1182,8 @@ function mergeContentFactoryHostTaskRecords(base, next) {
     completion[key] = Boolean(base.completion?.[key] || next.completion?.[key]);
   }
   const directTerminalRecords = [base, next].filter(
-    (record) => record?.recordSources?.directGetTask && record?.directRuntimeSnapshot?.ok,
+    (record) =>
+      record?.recordSources?.directGetTask && record?.directRuntimeSnapshot?.ok,
   );
   if (directTerminalRecords.length > 0) {
     completion.terminalReady = directTerminalRecords.some(
@@ -1111,7 +1201,10 @@ function mergeContentFactoryHostTaskRecords(base, next) {
     taskStatus: next.taskStatus || base.taskStatus || "",
     hasRuntimeFacts: Boolean(base.hasRuntimeFacts || next.hasRuntimeFacts),
     runtimeFactKeys: Array.from(
-      new Set([...(base.runtimeFactKeys ?? []), ...(next.runtimeFactKeys ?? [])]),
+      new Set([
+        ...(base.runtimeFactKeys ?? []),
+        ...(next.runtimeFactKeys ?? []),
+      ]),
     ),
     recordSources: {
       ...(base.recordSources ?? {}),
@@ -1121,15 +1214,17 @@ function mergeContentFactoryHostTaskRecords(base, next) {
       scoreRuntimeProcessSummary(next.runtimeProcess) >
       scoreRuntimeProcessSummary(base.runtimeProcess)
         ? next.runtimeProcess
-        : base.runtimeProcess ?? next.runtimeProcess ?? null,
-    directRuntimeSnapshot: next.directRuntimeSnapshot ?? base.directRuntimeSnapshot,
+        : (base.runtimeProcess ?? next.runtimeProcess ?? null),
+    directRuntimeSnapshot:
+      next.directRuntimeSnapshot ?? base.directRuntimeSnapshot,
     completion,
   };
 }
 
 async function readContentFactoryDirectRuntimeRecord(options, hostTaskRecord) {
   const taskId = hostTaskRecord?.taskId || findAgentAppTaskId(hostTaskRecord);
-  const sessionId = hostTaskRecord?.sessionId || findAgentAppSessionId(hostTaskRecord);
+  const sessionId =
+    hostTaskRecord?.sessionId || findAgentAppSessionId(hostTaskRecord);
   if (!taskId || !sessionId) {
     return null;
   }
@@ -1161,14 +1256,25 @@ async function readContentFactoryDirectRuntimeRecord(options, hostTaskRecord) {
       directRuntimeSnapshot: {
         ok: false,
         status: response.status ?? null,
-        error: body?.error ?? response.error ?? "agent_app_runtime_get_task unavailable",
+        error:
+          body?.error ??
+          response.error ??
+          "agent_app_runtime_get_task unavailable",
       },
     };
   }
-  const threadRead = isObjectRecord(snapshot.threadRead) ? snapshot.threadRead : {};
-  const artifacts = Array.isArray(threadRead.artifacts) ? threadRead.artifacts : [];
-  const toolCalls = Array.isArray(threadRead.tool_calls) ? threadRead.tool_calls : [];
-  const taskEvents = Array.isArray(snapshot.taskEvents) ? snapshot.taskEvents : [];
+  const threadRead = isObjectRecord(snapshot.threadRead)
+    ? snapshot.threadRead
+    : {};
+  const artifacts = Array.isArray(threadRead.artifacts)
+    ? threadRead.artifacts
+    : [];
+  const toolCalls = Array.isArray(threadRead.tool_calls)
+    ? threadRead.tool_calls
+    : [];
+  const taskEvents = Array.isArray(snapshot.taskEvents)
+    ? snapshot.taskEvents
+    : [];
   return {
     taskId,
     sessionId,
@@ -1193,10 +1299,25 @@ async function readContentFactoryDirectRuntimeRecord(options, hostTaskRecord) {
   };
 }
 
-async function collectFailureDiagnostics(page, options, error, consoleErrors, failedRequests) {
-  const screenshotPath = path.join(options.evidenceDir, `${options.prefix}-failure.png`);
-  const summaryPath = path.join(options.evidenceDir, `${options.prefix}-failure.json`);
-  const bridgeTimeoutMs = Math.min(Math.max(options.intervalMs * 5, 5_000), 10_000);
+async function collectFailureDiagnostics(
+  page,
+  options,
+  error,
+  consoleErrors,
+  failedRequests,
+) {
+  const screenshotPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-failure.png`,
+  );
+  const summaryPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-failure.json`,
+  );
+  const bridgeTimeoutMs = Math.min(
+    Math.max(options.intervalMs * 5, 5_000),
+    10_000,
+  );
   const invokeUrl = resolveInvokeUrl(options.healthUrl);
 
   let pageState = null;
@@ -1247,19 +1368,29 @@ async function collectFailureDiagnostics(page, options, error, consoleErrors, fa
     const frame = frameHandle ? await frameHandle.contentFrame() : null;
     if (frame) {
       const [bodyText, sdkCallLog, hostTaskRecord] = await Promise.all([
-        frame.locator("body").innerText({ timeout: 2_000 }).catch((frameError) => ({
-          error: frameError instanceof Error ? frameError.message : String(frameError),
-        })),
-        frame.evaluate(() => window.limeAgentAppBridge?.getSdkCallLog?.() ?? []).catch(
-          (frameError) => ({
-            error: frameError instanceof Error ? frameError.message : String(frameError),
-          }),
-        ),
+        frame
+          .locator("body")
+          .innerText({ timeout: 2_000 })
+          .catch((frameError) => ({
+            error:
+              frameError instanceof Error
+                ? frameError.message
+                : String(frameError),
+          })),
+        frame
+          .evaluate(() => window.limeAgentAppBridge?.getSdkCallLog?.() ?? [])
+          .catch((frameError) => ({
+            error:
+              frameError instanceof Error
+                ? frameError.message
+                : String(frameError),
+          })),
         frame
           .evaluate(() => {
             const bridge = window.limeAgentAppBridge;
             const bridgeRecord =
-              bridge?.getHostTaskRunRecord?.("contentFactoryProduction") ?? null;
+              bridge?.getHostTaskRunRecord?.("contentFactoryProduction") ??
+              null;
             const callLog = bridge?.getSdkCallLog?.();
             const findTaskId = (value, depth = 0) => {
               if (depth > 6 || value == null) {
@@ -1269,32 +1400,43 @@ async function collectFailureDiagnostics(page, options, error, consoleErrors, fa
                 return value.match(/agent-app-task-[a-z0-9-]+/i)?.[0] ?? "";
               }
               if (Array.isArray(value)) {
-                return value.map((item) => findTaskId(item, depth + 1)).find(Boolean) ?? "";
+                return (
+                  value
+                    .map((item) => findTaskId(item, depth + 1))
+                    .find(Boolean) ?? ""
+                );
               }
               if (typeof value === "object") {
                 if (typeof value.taskId === "string" && value.taskId.trim()) {
                   return value.taskId.trim();
                 }
-                return Object.values(value)
-                  .map((item) => findTaskId(item, depth + 1))
-                  .find(Boolean) ?? "";
+                return (
+                  Object.values(value)
+                    .map((item) => findTaskId(item, depth + 1))
+                    .find(Boolean) ?? ""
+                );
               }
               return "";
             };
             const sdkTaskId = Array.isArray(callLog) ? findTaskId(callLog) : "";
             const taskRecord = sdkTaskId
-              ? bridge?.getHostTaskRunRecord?.(sdkTaskId) ?? null
+              ? (bridge?.getHostTaskRunRecord?.(sdkTaskId) ?? null)
               : null;
             return { bridgeRecord, taskRecord, sdkTaskId };
           })
           .catch((frameError) => ({
-            error: frameError instanceof Error ? frameError.message : String(frameError),
+            error:
+              frameError instanceof Error
+                ? frameError.message
+                : String(frameError),
           })),
       ]);
       runtimeFrameState = {
         url: frame.url(),
         bodyText:
-          typeof bodyText === "string" ? sanitizeDiagnosticText(bodyText) : bodyText,
+          typeof bodyText === "string"
+            ? sanitizeDiagnosticText(bodyText)
+            : bodyText,
         sdkCallLog: sanitizeDiagnosticJson(sdkCallLog),
         hostTaskRecord: sanitizeDiagnosticJson(hostTaskRecord),
       };
@@ -1382,23 +1524,32 @@ async function clickAgentAppsNav(page, timeoutMs) {
 }
 
 async function waitForMainAppStable(page, timeoutMs) {
-  await page.waitForLoadState("domcontentloaded", { timeout: timeoutMs }).catch(() => {});
+  await page
+    .waitForLoadState("domcontentloaded", { timeout: timeoutMs })
+    .catch(() => {});
   await page.waitForSelector('[data-testid="app-sidebar-main-nav"]', {
     timeout: timeoutMs,
   });
 }
 
 async function openContentFactoryDetails(page, timeoutMs) {
-  await page.click('[data-testid="agent-apps-open-detail-content-factory-app"]', {
-    timeout: timeoutMs,
-  });
+  await page.click(
+    '[data-testid="agent-apps-open-detail-content-factory-app"]',
+    {
+      timeout: timeoutMs,
+    },
+  );
   await page.waitForSelector('[data-testid="agent-apps-detail"]', {
     timeout: timeoutMs,
   });
 }
 
 async function expandContentFactoryMoreInfo(page, timeoutMs) {
-  if ((await page.locator('[data-testid="agent-apps-more-info-content"]').count()) > 0) {
+  if (
+    (await page
+      .locator('[data-testid="agent-apps-more-info-content"]')
+      .count()) > 0
+  ) {
     return;
   }
   await page.click('[data-testid="agent-apps-more-info"]', {
@@ -1410,9 +1561,12 @@ async function expandContentFactoryMoreInfo(page, timeoutMs) {
 }
 
 async function getContentFactoryRuntimeFrame(page, timeoutMs) {
-  const frameHandle = await page.waitForSelector('[data-testid="agent-app-runtime-frame"]', {
-    timeout: Math.min(timeoutMs, 30_000),
-  });
+  const frameHandle = await page.waitForSelector(
+    '[data-testid="agent-app-runtime-frame"]',
+    {
+      timeout: Math.min(timeoutMs, 30_000),
+    },
+  );
   const frame = await frameHandle.contentFrame();
   assert(frame, "Content Factory runtime frame should be attached");
   return frame;
@@ -1473,7 +1627,9 @@ async function readContentFactoryHostTaskRecord(frame) {
   try {
     return await frame.evaluate(() => {
       const bridge = window.limeAgentAppBridge;
-      const bridgeRecord = bridge?.getHostTaskRunRecord?.("contentFactoryProduction");
+      const bridgeRecord = bridge?.getHostTaskRunRecord?.(
+        "contentFactoryProduction",
+      );
       const callLog = bridge?.getSdkCallLog?.();
       const findTaskId = (value, depth = 0) => {
         if (depth > 6 || value == null) {
@@ -1523,7 +1679,12 @@ async function readContentFactoryHostTaskRecord(frame) {
           return "";
         }
         if (typeof value === "object") {
-          for (const key of ["sessionId", "session_id", "threadId", "thread_id"]) {
+          for (const key of [
+            "sessionId",
+            "session_id",
+            "threadId",
+            "thread_id",
+          ]) {
             const valueForKey = value[key];
             if (typeof valueForKey === "string" && valueForKey.trim()) {
               const sessionId = findSessionId(valueForKey, depth + 1);
@@ -1542,7 +1703,9 @@ async function readContentFactoryHostTaskRecord(frame) {
         return "";
       };
       const sdkTaskId = Array.isArray(callLog) ? findTaskId(callLog) : "";
-      const taskRecord = sdkTaskId ? bridge?.getHostTaskRunRecord?.(sdkTaskId) : null;
+      const taskRecord = sdkTaskId
+        ? bridge?.getHostTaskRunRecord?.(sdkTaskId)
+        : null;
       const records = [taskRecord, bridgeRecord].filter(
         (item) => item && typeof item === "object",
       );
@@ -1593,26 +1756,34 @@ async function readContentFactoryHostTaskRecord(frame) {
           process.usage ? 20 : 0,
           process.cost ? 10 : 0,
           modelLabel && !modelLabel.includes("等待") ? 10 : 0,
-          Array.isArray(process.invokedSkillNames) ? process.invokedSkillNames.length * 8 : 0,
+          Array.isArray(process.invokedSkillNames)
+            ? process.invokedSkillNames.length * 8
+            : 0,
         ].reduce((sum, value) => sum + Number(value || 0), 0);
       };
-      const runtimeProcess = records
-        .flatMap((record) => [
-          record?.runtimeProcess,
-          record?.process,
-          record?.task?.runtimeProcess,
-          record?.task?.process,
-          record?.snapshot?.runtimeProcess,
-          record?.snapshot?.process,
-        ])
-        .filter((item) => item && typeof item === "object")
-        .sort((left, right) => scoreProcess(right) - scoreProcess(left))[0] ?? null;
+      const runtimeProcess =
+        records
+          .flatMap((record) => [
+            record?.runtimeProcess,
+            record?.process,
+            record?.task?.runtimeProcess,
+            record?.task?.process,
+            record?.snapshot?.runtimeProcess,
+            record?.snapshot?.process,
+          ])
+          .filter((item) => item && typeof item === "object")
+          .sort((left, right) => scoreProcess(right) - scoreProcess(left))[0] ??
+        null;
       const task = firstRecordValue([["task"]]);
       const snapshot = firstRecordValue([["snapshot"], ["task"], ["result"]]);
-      const runtimeFacts = firstRecordValue([["runtimeFacts"], ["task", "runtimeFacts"]]);
+      const runtimeFacts = firstRecordValue([
+        ["runtimeFacts"],
+        ["task", "runtimeFacts"],
+      ]);
       const eventSurface = (event) =>
         `${event?.eventType ?? ""} ${event?.type ?? ""} ${event?.toolName ?? ""} ${event?.message ?? ""} ${event?.evidenceRef ?? ""} ${event?.artifactRef ?? ""}`;
-      const anyEvent = (pattern) => events.some((event) => pattern.test(eventSurface(event)));
+      const anyEvent = (pattern) =>
+        events.some((event) => pattern.test(eventSurface(event)));
       const hasWorkspacePatch = (value, depth = 0) => {
         if (depth > 6 || value == null) {
           return false;
@@ -1630,14 +1801,18 @@ async function readContentFactoryHostTaskRecord(frame) {
         ) {
           return true;
         }
-        return Object.values(value).some((item) => hasWorkspacePatch(item, depth + 1));
+        return Object.values(value).some((item) =>
+          hasWorkspacePatch(item, depth + 1),
+        );
       };
       const hasEvidenceValue = (value, depth = 0) => {
         if (depth > 6 || value == null) {
           return false;
         }
         if (typeof value === "string") {
-          return /skillEvidence|skill_evidence|evidenceRefs|evidence_refs/.test(value);
+          return /skillEvidence|skill_evidence|evidenceRefs|evidence_refs/.test(
+            value,
+          );
         }
         if (Array.isArray(value)) {
           return value.some((item) => hasEvidenceValue(item, depth + 1));
@@ -1647,8 +1822,9 @@ async function readContentFactoryHostTaskRecord(frame) {
         }
         return Object.entries(value).some(
           ([key, item]) =>
-            /skillEvidence|skill_evidence|evidenceRefs|evidence_refs/.test(key) ||
-            hasEvidenceValue(item, depth + 1),
+            /skillEvidence|skill_evidence|evidenceRefs|evidence_refs/.test(
+              key,
+            ) || hasEvidenceValue(item, depth + 1),
         );
       };
       const hostRecordTaskId =
@@ -1672,12 +1848,19 @@ async function readContentFactoryHostTaskRecord(frame) {
           findSessionId(taskRecord),
           findSessionId(bridgeRecord),
         ].find((value) => typeof value === "string" && value.trim()) ?? "";
-      const taskStatus = task?.status ?? snapshot?.taskStatus ?? snapshot?.status ?? "";
-      const terminalReady = /completed|complete|success|succeeded/i.test(String(taskStatus));
+      const taskStatus =
+        task?.status ?? snapshot?.taskStatus ?? snapshot?.status ?? "";
+      const terminalReady = /completed|complete|success|succeeded/i.test(
+        String(taskStatus),
+      );
       return {
         taskId,
         sessionId,
-        taskIdSource: hostRecordTaskId ? "hostTaskRunRecord" : sdkTaskId ? "sdkCallLog" : "",
+        taskIdSource: hostRecordTaskId
+          ? "hostTaskRunRecord"
+          : sdkTaskId
+            ? "sdkCallLog"
+            : "",
         hostRecordTaskId,
         sdkTaskId,
         recordSources: {
@@ -1687,54 +1870,57 @@ async function readContentFactoryHostTaskRecord(frame) {
         taskStatus,
         hasRuntimeFacts: Boolean(runtimeFacts),
         runtimeFactKeys:
-          runtimeFacts && typeof runtimeFacts === "object" ? Object.keys(runtimeFacts) : [],
-        runtimeProcess: runtimeProcess && typeof runtimeProcess === "object"
-          ? {
-              timelineCount: Array.isArray(runtimeProcess.timeline)
-                ? runtimeProcess.timeline.length
-                : 0,
-              routingCount: runtimeProcess.routingCount ?? 0,
-              executionCount: runtimeProcess.executionCount ?? 0,
-              artifactCount: runtimeProcess.artifactCount ?? 0,
-              hasUsage: Boolean(runtimeProcess.usage),
-              hasCost: Boolean(runtimeProcess.cost),
-              modelLabel: runtimeProcess.model?.label ?? "",
-              skillNames: Array.isArray(runtimeProcess.skillNames)
-                ? runtimeProcess.skillNames
-                : [],
-              invokedSkillNames: Array.isArray(runtimeProcess.invokedSkillNames)
-                ? runtimeProcess.invokedSkillNames
-                : [],
-              terminal: Boolean(runtimeProcess.terminal),
-            }
-          : null,
+          runtimeFacts && typeof runtimeFacts === "object"
+            ? Object.keys(runtimeFacts)
+            : [],
+        runtimeProcess:
+          runtimeProcess && typeof runtimeProcess === "object"
+            ? {
+                timelineCount: Array.isArray(runtimeProcess.timeline)
+                  ? runtimeProcess.timeline.length
+                  : 0,
+                routingCount: runtimeProcess.routingCount ?? 0,
+                executionCount: runtimeProcess.executionCount ?? 0,
+                artifactCount: runtimeProcess.artifactCount ?? 0,
+                hasUsage: Boolean(runtimeProcess.usage),
+                hasCost: Boolean(runtimeProcess.cost),
+                modelLabel: runtimeProcess.model?.label ?? "",
+                skillNames: Array.isArray(runtimeProcess.skillNames)
+                  ? runtimeProcess.skillNames
+                  : [],
+                invokedSkillNames: Array.isArray(
+                  runtimeProcess.invokedSkillNames,
+                )
+                  ? runtimeProcess.invokedSkillNames
+                  : [],
+                terminal: Boolean(runtimeProcess.terminal),
+              }
+            : null,
         completion: {
           terminalReady,
           modelReady: Boolean(
             runtimeProcess?.routingCount > 0 ||
-              (runtimeProcess?.model?.label &&
-                !String(runtimeProcess.model.label).includes("等待")) ||
-              runtimeFacts?.modelRouting?.model ||
-              runtimeFacts?.modelRouting?.routes?.length ||
-              runtimeFacts?.models?.models?.length,
+            (runtimeProcess?.model?.label &&
+              !String(runtimeProcess.model.label).includes("等待")) ||
+            runtimeFacts?.modelRouting?.model ||
+            runtimeFacts?.modelRouting?.routes?.length ||
+            runtimeFacts?.models?.models?.length,
           ),
           usageReady: Boolean(
             runtimeProcess?.usage ||
-              runtimeFacts?.tokenUsage?.totals ||
-              runtimeFacts?.tokenUsage?.tasks?.length,
+            runtimeFacts?.tokenUsage?.totals ||
+            runtimeFacts?.tokenUsage?.tasks?.length,
           ),
           costReady: Boolean(
             runtimeProcess?.cost ||
-              runtimeFacts?.costSummary?.cost ||
-              runtimeFacts?.costSummary?.tasks?.length,
+            runtimeFacts?.costSummary?.cost ||
+            runtimeFacts?.costSummary?.tasks?.length,
           ),
           skillInvocationReady: Boolean(
-            runtimeProcess?.invokedSkillNames?.length ||
-              anyEvent(/skill/i),
+            runtimeProcess?.invokedSkillNames?.length || anyEvent(/skill/i),
           ),
           artifactReady: Boolean(
-            runtimeProcess?.artifactCount > 0 ||
-              anyEvent(/artifact/i),
+            runtimeProcess?.artifactCount > 0 || anyEvent(/artifact/i),
           ),
           evidenceReady:
             anyEvent(/evidence/i) ||
@@ -1768,7 +1954,9 @@ async function waitForContentFactoryHostTaskRecord(frame, timeoutMs) {
 
 function summarizeCapabilityCalls(callLog) {
   return callLog
-    .map((call) => `${call?.capability ?? "unknown"}.${call?.method ?? "unknown"}`)
+    .map(
+      (call) => `${call?.capability ?? "unknown"}.${call?.method ?? "unknown"}`,
+    )
     .filter(Boolean);
 }
 
@@ -1813,9 +2001,18 @@ async function waitForContentFactoryCompletionE2e(frame, options, timeoutMs) {
   let latestReadiness = null;
   while (Date.now() - startedAt < timeoutMs) {
     const frameRecord = await readContentFactoryHostTaskRecord(frame);
-    latestRecord = mergeContentFactoryHostTaskRecords(latestRecord, frameRecord);
-    const directRecord = await readContentFactoryDirectRuntimeRecord(options, latestRecord);
-    latestRecord = mergeContentFactoryHostTaskRecords(latestRecord, directRecord);
+    latestRecord = mergeContentFactoryHostTaskRecords(
+      latestRecord,
+      frameRecord,
+    );
+    const directRecord = await readContentFactoryDirectRuntimeRecord(
+      options,
+      latestRecord,
+    );
+    latestRecord = mergeContentFactoryHostTaskRecords(
+      latestRecord,
+      directRecord,
+    );
     latestReadiness = summarizeContentFactoryCompletionReadiness(latestRecord);
     if (latestReadiness.ready) {
       return {
@@ -1851,15 +2048,17 @@ async function inspectContentFactoryRuntimeFrame(page, timeoutMs) {
     await produceNav.click({ timeout: boundedTimeoutMs }).catch(() => null);
   }
 
-  const bodyText = await frame.locator("body").innerText({ timeout: boundedTimeoutMs });
+  const bodyText = await frame
+    .locator("body")
+    .innerText({ timeout: boundedTimeoutMs });
   const bridgeState = await frame.locator("body").evaluate(() => {
     const bridge = window.limeAgentAppBridge;
-    const callLog = typeof bridge?.getSdkCallLog === "function"
-      ? bridge.getSdkCallLog()
-      : [];
+    const callLog =
+      typeof bridge?.getSdkCallLog === "function" ? bridge.getSdkCallLog() : [];
     return {
       hasBridge: Boolean(bridge?.protocol),
-      hasCapabilityRefresh: typeof bridge?.refreshHostCapabilityProfile === "function",
+      hasCapabilityRefresh:
+        typeof bridge?.refreshHostCapabilityProfile === "function",
       callCount: Array.isArray(callLog) ? callLog.length : 0,
     };
   });
@@ -1878,7 +2077,9 @@ async function inspectContentFactoryRuntimeFrame(page, timeoutMs) {
 }
 
 async function runContentFactoryActionE2e(page, options) {
-  const actionConfig = getContentFactoryActionConfig(options.contentFactoryAction);
+  const actionConfig = getContentFactoryActionConfig(
+    options.contentFactoryAction,
+  );
   const frame = await getContentFactoryRuntimeFrame(page, options.timeoutMs);
   const boundedTimeoutMs = Math.min(options.timeoutMs, 45_000);
   if (actionConfig.seedSampleWorkspace) {
@@ -1886,9 +2087,12 @@ async function runContentFactoryActionE2e(page, options) {
   }
   const beforeCallLog = await readContentFactorySdkCallLog(frame);
 
-  await frame.locator(`button[data-page="${actionConfig.page}"]`).first().click({
-    timeout: boundedTimeoutMs,
-  });
+  await frame
+    .locator(`button[data-page="${actionConfig.page}"]`)
+    .first()
+    .click({
+      timeout: boundedTimeoutMs,
+    });
   await frame.getByText(actionConfig.pageText).first().waitFor({
     timeout: boundedTimeoutMs,
   });
@@ -1915,13 +2119,18 @@ async function runContentFactoryActionE2e(page, options) {
     () =>
       window.limeAgentAppBridge
         ?.getSdkCallLog?.()
-        ?.some((call) => call.capability === "lime.agent" && call.method === "startTask"),
+        ?.some(
+          (call) =>
+            call.capability === "lime.agent" && call.method === "startTask",
+        ),
     undefined,
     { timeout: boundedTimeoutMs },
   );
   await frame.waitForFunction(
     () => {
-      const record = window.limeAgentAppBridge?.getHostTaskRunRecord?.("contentFactoryProduction");
+      const record = window.limeAgentAppBridge?.getHostTaskRunRecord?.(
+        "contentFactoryProduction",
+      );
       const callLog = window.limeAgentAppBridge?.getSdkCallLog?.();
       const findTaskId = (value, depth = 0) => {
         if (depth > 6 || value == null) {
@@ -1931,15 +2140,19 @@ async function runContentFactoryActionE2e(page, options) {
           return value.match(/agent-app-task-[a-z0-9-]+/i)?.[0] ?? "";
         }
         if (Array.isArray(value)) {
-          return value.map((item) => findTaskId(item, depth + 1)).find(Boolean) ?? "";
+          return (
+            value.map((item) => findTaskId(item, depth + 1)).find(Boolean) ?? ""
+          );
         }
         if (typeof value === "object") {
           if (typeof value.taskId === "string" && value.taskId.trim()) {
             return value.taskId.trim();
           }
-          return Object.values(value)
-            .map((item) => findTaskId(item, depth + 1))
-            .find(Boolean) ?? "";
+          return (
+            Object.values(value)
+              .map((item) => findTaskId(item, depth + 1))
+              .find(Boolean) ?? ""
+          );
         }
         return "";
       };
@@ -1956,13 +2169,22 @@ async function runContentFactoryActionE2e(page, options) {
       timeout: boundedTimeoutMs,
     });
 
-  const bodyText = await frame.locator("body").innerText({ timeout: boundedTimeoutMs });
+  const bodyText = await frame
+    .locator("body")
+    .innerText({ timeout: boundedTimeoutMs });
   const afterCallLog = await readContentFactorySdkCallLog(frame);
-  const hostTaskRecord = await waitForContentFactoryHostTaskRecord(frame, boundedTimeoutMs);
-  const newCalls = summarizeCapabilityCalls(afterCallLog.slice(beforeCallLog.length));
+  const hostTaskRecord = await waitForContentFactoryHostTaskRecord(
+    frame,
+    boundedTimeoutMs,
+  );
+  const newCalls = summarizeCapabilityCalls(
+    afterCallLog.slice(beforeCallLog.length),
+  );
   const runtimeFacts = summarizeContentFactoryRuntimeFacts(newCalls);
   const startTaskSeen = newCalls.includes("lime.agent.startTask");
-  const taskAccepted = Boolean(hostTaskRecord.taskId || hostTaskRecord.sdkTaskId);
+  const taskAccepted = Boolean(
+    hostTaskRecord.taskId || hostTaskRecord.sdkTaskId,
+  );
   const hostTaskRecordSeen = Boolean(
     hostTaskRecord.hostRecordTaskId || hostTaskRecord.sdkTaskId,
   );
@@ -2000,7 +2222,9 @@ async function runContentFactoryActionE2e(page, options) {
     `Content Factory ${actionConfig.action} E2E should expose Host runtime facts`,
   );
   assert(
-    runtimeFacts.modelsStarted && runtimeFacts.usageStarted && runtimeFacts.skillsStarted,
+    runtimeFacts.modelsStarted &&
+      runtimeFacts.usageStarted &&
+      runtimeFacts.skillsStarted,
     `Content Factory ${actionConfig.action} E2E should request Host runtime facts`,
   );
   assert(
@@ -2022,10 +2246,16 @@ async function runContentFactoryActionE2e(page, options) {
 
   const completionTimeoutMs = Math.min(
     options.timeoutMs,
-    Number.isFinite(options.completionTimeoutMs) ? options.completionTimeoutMs : 90_000,
+    Number.isFinite(options.completionTimeoutMs)
+      ? options.completionTimeoutMs
+      : 90_000,
   );
   const completionE2e = options.includeContentFactoryCompletionE2e
-    ? await waitForContentFactoryCompletionE2e(frame, options, completionTimeoutMs)
+    ? await waitForContentFactoryCompletionE2e(
+        frame,
+        options,
+        completionTimeoutMs,
+      )
     : null;
   const completionInvokedSkillNames = Array.isArray(
     completionE2e?.hostTaskRecord?.runtimeProcess?.invokedSkillNames,
@@ -2055,7 +2285,9 @@ async function runContentFactoryActionE2e(page, options) {
     hostTaskRecordSeen,
     runtimeFactsObserved,
     runtimeFactsStarted:
-      runtimeFacts.modelsStarted && runtimeFacts.usageStarted && runtimeFacts.skillsStarted,
+      runtimeFacts.modelsStarted &&
+      runtimeFacts.usageStarted &&
+      runtimeFacts.skillsStarted,
     streamOrGetTaskStarted: runtimeFacts.streamOrGetTaskStarted,
     requiredSkillsProjected,
     expectedSkillsInvoked,
@@ -2081,12 +2313,18 @@ async function seedContentFactorySampleWorkspace(frame, timeoutMs) {
     window.location.reload();
   });
   await frame.waitForLoadState("domcontentloaded", { timeout: timeoutMs });
-  await frame.locator('button[data-page="projects"]').first().click({ timeout: timeoutMs });
+  await frame
+    .locator('button[data-page="projects"]')
+    .first()
+    .click({ timeout: timeoutMs });
   await frame
     .locator(`button[data-open-project="${CONTENT_FACTORY_SAMPLE_PROJECT_ID}"]`)
     .first()
     .click({ timeout: timeoutMs });
-  await frame.getByText("春季新品内容项目").first().waitFor({ timeout: timeoutMs });
+  await frame
+    .getByText("春季新品内容项目")
+    .first()
+    .waitFor({ timeout: timeoutMs });
 }
 
 async function launchSmokeContext(userDataDir) {
@@ -2149,9 +2387,12 @@ function activeCloudBootstrapPayload() {
         registrationRequired: true,
         registrationState: "active",
         enabled: true,
-        packageUrl: "https://lime.local/agent-apps/content-factory-app/releases/0.3.0/package.zip",
-        packageHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        manifestHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        packageUrl:
+          "https://lime.local/agent-apps/content-factory-app/releases/0.3.0/package.zip",
+        packageHash:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        manifestHash:
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         capabilityRequirements: {},
         defaultEntries: ["dashboard", "content_scenario_planning"],
         policyDefaults: {},
@@ -2163,7 +2404,9 @@ function activeCloudBootstrapPayload() {
 
 async function runFlagOffRegression(options) {
   logStage("flag-off-regression");
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "lime-agent-apps-flag-off-"));
+  const userDataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lime-agent-apps-flag-off-"),
+  );
   const context = await launchSmokeContext(userDataDir);
   const page = await context.newPage();
   const consoleErrors = [];
@@ -2184,8 +2427,10 @@ async function runFlagOffRegression(options) {
     await openAccountMenuForAgentApps(page, options.timeoutMs);
 
     const assertions = {
-      agentAppsNavVisible: (await page.locator(AGENT_APPS_NAV_SELECTOR).count()) > 0,
-      labNavHidden: (await page.locator(AGENT_APP_LAB_NAV_SELECTOR).count()) === 0,
+      agentAppsNavVisible:
+        (await page.locator(AGENT_APPS_NAV_SELECTOR).count()) > 0,
+      labNavHidden:
+        (await page.locator(AGENT_APP_LAB_NAV_SELECTOR).count()) === 0,
       noConsoleErrors: consoleErrors.length === 0,
     };
 
@@ -2193,7 +2438,10 @@ async function runFlagOffRegression(options) {
       assert(Boolean(value), `Flag-off assertion failed: ${key}`);
     });
 
-    const screenshotPath = path.join(options.evidenceDir, `${options.prefix}-flag-off.png`);
+    const screenshotPath = path.join(
+      options.evidenceDir,
+      `${options.prefix}-flag-off.png`,
+    );
     await page.screenshot({ path: screenshotPath, fullPage: true });
     return {
       assertions,
@@ -2226,7 +2474,8 @@ function isExpectedContentFactorySmokeState(state, runtimeDir) {
     state?.installMode === "in_lime" &&
     state?.disabled === false &&
     state?.identity?.sourceKind === "local_folder" &&
-    path.resolve(String(state?.identity?.sourceUri ?? "")) === path.resolve(runtimeDir)
+    path.resolve(String(state?.identity?.sourceUri ?? "")) ===
+      path.resolve(runtimeDir)
   );
 }
 
@@ -2240,8 +2489,14 @@ async function listInstalledAgentAppsForSmoke(options) {
   return Array.isArray(list?.states) ? list.states : [];
 }
 
-async function ensureContentFactoryInstalled(page, options, reason, runtimeDir) {
-  const installedSelector = '[data-testid="agent-apps-installed-content-factory-app"]';
+async function ensureContentFactoryInstalled(
+  page,
+  options,
+  reason,
+  runtimeDir,
+) {
+  const installedSelector =
+    '[data-testid="agent-apps-installed-content-factory-app"]';
   const installedStates = await listInstalledAgentAppsForSmoke(options);
   const existingState = installedStates.find(
     (state) => state?.appId === CONTENT_FACTORY_APP_ID,
@@ -2270,18 +2525,14 @@ async function ensureContentFactoryInstalled(page, options, reason, runtimeDir) 
       );
     }
     const manifest = await fixtureResponse.json();
-    const identityModule = await import(
-      "/src/features/agent-app/install/packageIdentity.ts"
-    );
-    const previewModule = await import(
-      "/src/features/agent-app/install/installedAppPreview.ts"
-    );
-    const setupModule = await import(
-      "/src/features/agent-app/install/labInstallFlow.ts"
-    );
-    const stateModule = await import(
-      "/src/features/agent-app/install/installedAppState.ts"
-    );
+    const identityModule =
+      await import("/src/features/agent-app/install/packageIdentity.ts");
+    const previewModule =
+      await import("/src/features/agent-app/install/installedAppPreview.ts");
+    const setupModule =
+      await import("/src/features/agent-app/install/labInstallFlow.ts");
+    const stateModule =
+      await import("/src/features/agent-app/install/installedAppState.ts");
     const now = new Date().toISOString();
     const identity = identityModule.buildPackageIdentity({
       manifest,
@@ -2347,7 +2598,9 @@ async function main() {
   fs.mkdirSync(options.evidenceDir, { recursive: true });
   await waitForHealth(options);
 
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "lime-agent-apps-smoke-"));
+  const userDataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lime-agent-apps-smoke-"),
+  );
   const contentFactoryRuntimeDir = createContentFactoryRuntimeFixture(
     CONTENT_FACTORY_RUNTIME_FIXTURE_ROOT,
   );
@@ -2388,7 +2641,10 @@ async function main() {
 
   try {
     logStage("open-app");
-    await page.goto(options.appUrl, { waitUntil: "domcontentloaded", timeout: options.timeoutMs });
+    await page.goto(options.appUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: options.timeoutMs,
+    });
     await page.waitForSelector('[data-testid="app-sidebar-main-nav"]', {
       timeout: options.timeoutMs,
     });
@@ -2413,14 +2669,20 @@ async function main() {
       "initial_smoke_state",
       contentFactoryRuntimeDir,
     );
-    await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
-      timeout: options.timeoutMs,
-    });
+    await page.waitForSelector(
+      '[data-testid="agent-apps-installed-content-factory-app"]',
+      {
+        timeout: options.timeoutMs,
+      },
+    );
 
     logStage("verify-registration-required");
-    await page.waitForSelector('[data-testid="agent-apps-registration-content-factory-app"]', {
-      timeout: options.timeoutMs,
-    });
+    await page.waitForSelector(
+      '[data-testid="agent-apps-registration-content-factory-app"]',
+      {
+        timeout: options.timeoutMs,
+      },
+    );
     const registrationInstallButton = page.locator(
       '[data-testid="agent-apps-install-cloud-content-factory-app"]',
     );
@@ -2440,8 +2702,9 @@ async function main() {
     }, bootstrap);
     await page.click('[data-testid="agent-apps-refresh"]');
     if (
-      (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) ===
-      0
+      (await page
+        .locator('[data-testid="agent-apps-installed-content-factory-app"]')
+        .count()) === 0
     ) {
       await page.waitForFunction(
         () => {
@@ -2459,16 +2722,21 @@ async function main() {
     let cloudInstallReviewVisible = false;
     let cloudInstallAlreadySatisfied = false;
     const installedBeforeCloudAction =
-      (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) > 0;
+      (await page
+        .locator('[data-testid="agent-apps-installed-content-factory-app"]')
+        .count()) > 0;
     if (installedBeforeCloudAction) {
       cloudInstallAlreadySatisfied = true;
       console.log(
         "[smoke:agent-apps] install review skipped because content factory is already installed",
       );
     } else {
-      await page.click('[data-testid="agent-apps-install-cloud-content-factory-app"]', {
-        timeout: options.timeoutMs,
-      });
+      await page.click(
+        '[data-testid="agent-apps-install-cloud-content-factory-app"]',
+        {
+          timeout: options.timeoutMs,
+        },
+      );
       const reviewVisible = await page
         .waitForSelector('[data-testid="agent-apps-install-review"]', {
           timeout: Math.min(options.timeoutMs, 5_000),
@@ -2485,9 +2753,12 @@ async function main() {
         );
       }
     }
-    await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
-      timeout: options.timeoutMs,
-    });
+    await page.waitForSelector(
+      '[data-testid="agent-apps-installed-content-factory-app"]',
+      {
+        timeout: options.timeoutMs,
+      },
+    );
 
     logStage("disable-enable");
     await openContentFactoryDetails(page, options.timeoutMs);
@@ -2498,7 +2769,9 @@ async function main() {
         document
           .querySelector('[data-testid="agent-apps-launch-entry-dashboard"]')
           ?.hasAttribute("disabled") &&
-        !document.querySelector('[data-testid="agent-apps-enable"]')?.hasAttribute("disabled"),
+        !document
+          .querySelector('[data-testid="agent-apps-enable"]')
+          ?.hasAttribute("disabled"),
       undefined,
       { timeout: options.timeoutMs },
     );
@@ -2535,8 +2808,10 @@ async function main() {
     if (options.includeContentFactoryCompletionE2e) {
       const assertions = {
         runtimeSurfaceVisible: Boolean(runtimeFrameSrc),
-        runtimeFrameContentFactoryLoaded: runtimeFrameInspection.contentFactoryLoaded,
-        runtimeFrameHostProfileVisible: runtimeFrameInspection.hostProfileVisible,
+        runtimeFrameContentFactoryLoaded:
+          runtimeFrameInspection.contentFactoryLoaded,
+        runtimeFrameHostProfileVisible:
+          runtimeFrameInspection.hostProfileVisible,
         contentFactoryActionMatches:
           contentFactoryActionE2e?.actionName === options.contentFactoryAction,
         contentFactoryActionStarted: contentFactoryActionE2e?.startTaskSeen,
@@ -2551,17 +2826,26 @@ async function main() {
           contentFactoryActionE2e?.requiredSkillsProjected,
         contentFactoryActionExpectedSkillsInvoked:
           contentFactoryActionE2e?.expectedSkillsInvoked,
-        contentFactoryActionProcessVisible: contentFactoryActionE2e?.processPanelVisible,
-        contentFactoryActionNoHostFallback: !contentFactoryActionE2e?.hostFallbackVisible,
-        contentFactoryCompletionReady: contentFactoryActionE2e?.completionE2e?.ready,
+        contentFactoryActionProcessVisible:
+          contentFactoryActionE2e?.processPanelVisible,
+        contentFactoryActionNoHostFallback:
+          !contentFactoryActionE2e?.hostFallbackVisible,
+        contentFactoryCompletionReady:
+          contentFactoryActionE2e?.completionE2e?.ready,
       };
       Object.entries(assertions).forEach(([key, value]) => {
         assert(Boolean(value), `Assertion failed: ${key}`);
       });
 
       logStage("completion-focused-summary");
-      const screenshotPath = path.join(options.evidenceDir, `${options.prefix}.png`);
-      const summaryPath = path.join(options.evidenceDir, `${options.prefix}-summary.json`);
+      const screenshotPath = path.join(
+        options.evidenceDir,
+        `${options.prefix}.png`,
+      );
+      const summaryPath = path.join(
+        options.evidenceDir,
+        `${options.prefix}-summary.json`,
+      );
       let screenshot = screenshotPath;
       try {
         await page.screenshot({ path: screenshotPath, timeout: 30_000 });
@@ -2598,9 +2882,12 @@ async function main() {
     await page.waitForSelector('[data-testid="agent-apps-page"]', {
       timeout: options.timeoutMs,
     });
-    await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
-      timeout: options.timeoutMs,
-    });
+    await page.waitForSelector(
+      '[data-testid="agent-apps-installed-content-factory-app"]',
+      {
+        timeout: options.timeoutMs,
+      },
+    );
 
     logStage("uninstall-rehearsal");
     await openContentFactoryDetails(page, options.timeoutMs);
@@ -2609,9 +2896,12 @@ async function main() {
     await page.waitForSelector('[data-testid="agent-apps-uninstall-preview"]', {
       timeout: options.timeoutMs,
     });
-    await page.waitForSelector('[data-testid="agent-apps-cleanup-evidence-json"]', {
-      timeout: options.timeoutMs,
-    });
+    await page.waitForSelector(
+      '[data-testid="agent-apps-cleanup-evidence-json"]',
+      {
+        timeout: options.timeoutMs,
+      },
+    );
     await page.waitForSelector('[data-testid="agent-apps-residual-audit"]', {
       timeout: options.timeoutMs,
     });
@@ -2620,37 +2910,76 @@ async function main() {
     );
     const cleanupEvidence = JSON.parse(cleanupEvidenceText ?? "{}");
     const deleteDataConfirmationPhrase = (
-      await page.textContent('[data-testid="agent-apps-delete-data-confirmation-phrase"]')
+      await page.textContent(
+        '[data-testid="agent-apps-delete-data-confirmation-phrase"]',
+      )
     )?.trim();
     assert(
       deleteDataConfirmationPhrase,
       "delete-data confirmation phrase should be visible before destructive uninstall",
     );
-    await page.fill(
+    const deleteDataCurrentPhaseGateVisible =
+      (await page
+        .locator('[data-testid="agent-apps-delete-data-current-phase-gate"]')
+        .count()) > 0;
+    const deleteDataConfirmationInput = page.locator(
       '[data-testid="agent-apps-delete-data-confirmation-input"]',
-      deleteDataConfirmationPhrase,
     );
+    const deleteDataInputDisabled =
+      await deleteDataConfirmationInput.isDisabled();
     const uninstallConfirm = page.locator(
       '[data-testid="agent-apps-uninstall-confirm"]',
     );
-    const confirmDeadline = Date.now() + options.timeoutMs;
-    while (Date.now() < confirmDeadline && !(await uninstallConfirm.isEnabled())) {
+    const deleteDataConfirmDisabled = !(await uninstallConfirm.isEnabled());
+    const stillInstalledAfterDeleteDataRehearsal =
+      (await page
+        .locator('[data-testid="agent-apps-installed-content-factory-app"]')
+        .count()) > 0;
+
+    logStage("uninstall-keep-data");
+    await page.click('[data-testid="agent-apps-uninstall-keep-data"]');
+    await page.waitForSelector('[data-testid="agent-apps-uninstall-preview"]', {
+      timeout: options.timeoutMs,
+    });
+    await page
+      .locator('[data-testid="agent-apps-delete-data-confirmation"]')
+      .waitFor({ state: "detached", timeout: options.timeoutMs })
+      .catch(() => {});
+    const keepDataConfirm = page.locator(
+      '[data-testid="agent-apps-uninstall-confirm"]',
+    );
+    const keepDataDeadline = Date.now() + options.timeoutMs;
+    while (
+      Date.now() < keepDataDeadline &&
+      !(await keepDataConfirm.isEnabled())
+    ) {
       await sleep(100);
     }
     assert(
-      await uninstallConfirm.isEnabled(),
-      "delete-data uninstall confirmation should be enabled after exact phrase input",
+      await keepDataConfirm.isEnabled(),
+      "keep-data uninstall confirmation should be enabled",
     );
-    await uninstallConfirm.click();
+    await keepDataConfirm.click();
     await page.waitForSelector('[data-testid="agent-apps-launch-summary"]', {
       timeout: options.timeoutMs,
     });
-    const stillInstalledAfterDeleteData =
-      (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) > 0;
-    const postDeleteInstallSeed = await ensureContentFactoryInstalled(
+    const uninstallDeadline = Date.now() + options.timeoutMs;
+    while (
+      Date.now() < uninstallDeadline &&
+      (await page
+        .locator('[data-testid="agent-apps-installed-content-factory-app"]')
+        .count()) > 0
+    ) {
+      await sleep(100);
+    }
+    const keepDataRemovedInstalledState =
+      (await page
+        .locator('[data-testid="agent-apps-installed-content-factory-app"]')
+        .count()) === 0;
+    const postUninstallInstallSeed = await ensureContentFactoryInstalled(
       page,
       options,
-      "post_delete_data_restore",
+      "post_keep_data_restore",
       contentFactoryRuntimeDir,
     );
 
@@ -2660,31 +2989,44 @@ async function main() {
     await page.waitForSelector('[data-testid="agent-apps-page"]', {
       timeout: options.timeoutMs,
     });
-    await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
-      timeout: options.timeoutMs,
-    });
+    await page.waitForSelector(
+      '[data-testid="agent-apps-installed-content-factory-app"]',
+      {
+        timeout: options.timeoutMs,
+      },
+    );
 
     const assertions = {
       formalPageVisible:
         (await page.locator('[data-testid="agent-apps-page"]').count()) > 0,
-      deleteDataRemovedInstalledState: !stillInstalledAfterDeleteData,
-      postDeleteInstalledStateRestored:
-        (await page.locator('[data-testid="agent-apps-installed-content-factory-app"]').count()) >
-        0,
+      deleteDataDryRunRetainsInstalledState:
+        stillInstalledAfterDeleteDataRehearsal,
+      deleteDataCurrentPhaseGateVisible,
+      deleteDataConfirmationGateLocked:
+        Boolean(deleteDataConfirmationPhrase) &&
+        deleteDataInputDisabled &&
+        deleteDataConfirmDisabled,
+      keepDataRemovedInstalledState,
+      postUninstallInstalledStateRestored:
+        (await page
+          .locator('[data-testid="agent-apps-installed-content-factory-app"]')
+          .count()) > 0,
       registrationRequiredBlocked: registrationInstallBlocked,
       cloudInstallReviewVisible:
         cloudInstallReviewVisible || cloudInstallAlreadySatisfied,
       disabledLaunchBlocked,
       runtimeSurfaceVisible: Boolean(runtimeFrameSrc),
-      runtimeFrameContentFactoryLoaded: runtimeFrameInspection.contentFactoryLoaded,
+      runtimeFrameContentFactoryLoaded:
+        runtimeFrameInspection.contentFactoryLoaded,
       runtimeFrameHostProfileVisible: runtimeFrameInspection.hostProfileVisible,
-      deleteDataConfirmationGateAccepted: Boolean(deleteDataConfirmationPhrase),
       ...(contentFactoryActionE2e
         ? {
             contentFactoryActionStarted: contentFactoryActionE2e.startTaskSeen,
             contentFactoryActionMatches:
-              contentFactoryActionE2e.actionName === options.contentFactoryAction,
-            contentFactoryActionTaskAccepted: contentFactoryActionE2e.taskAccepted,
+              contentFactoryActionE2e.actionName ===
+              options.contentFactoryAction,
+            contentFactoryActionTaskAccepted:
+              contentFactoryActionE2e.taskAccepted,
             contentFactoryActionRuntimeFactsObserved:
               contentFactoryActionE2e.runtimeFactsObserved,
             contentFactoryActionRuntimeFactsStarted:
@@ -2699,11 +3041,14 @@ async function main() {
                     contentFactoryActionE2e.completionE2e.ready,
                 }
               : {}),
-            contentFactoryActionProcessVisible: contentFactoryActionE2e.processPanelVisible,
-            contentFactoryActionNoHostFallback: !contentFactoryActionE2e.hostFallbackVisible,
+            contentFactoryActionProcessVisible:
+              contentFactoryActionE2e.processPanelVisible,
+            contentFactoryActionNoHostFallback:
+              !contentFactoryActionE2e.hostFallbackVisible,
           }
         : {}),
-      cleanupEvidenceSelectedApp: cleanupEvidence.appId === "content-factory-app",
+      cleanupEvidenceSelectedApp:
+        cleanupEvidence.appId === "content-factory-app",
       cleanupEvidenceStrategy: cleanupEvidence.strategy === "delete-data",
       cleanupEvidenceDryRunOnly:
         Array.isArray(cleanupEvidence.warningCodes) &&
@@ -2718,8 +3063,14 @@ async function main() {
       assert(Boolean(value), `Assertion failed: ${key}`);
     });
 
-    const screenshotPath = path.join(options.evidenceDir, `${options.prefix}.png`);
-    const summaryPath = path.join(options.evidenceDir, `${options.prefix}-summary.json`);
+    const screenshotPath = path.join(
+      options.evidenceDir,
+      `${options.prefix}.png`,
+    );
+    const summaryPath = path.join(
+      options.evidenceDir,
+      `${options.prefix}-summary.json`,
+    );
     await page.screenshot({ path: screenshotPath, fullPage: true });
     fs.writeFileSync(
       summaryPath,
@@ -2733,7 +3084,7 @@ async function main() {
           contentFactoryActionE2e,
           cleanupEvidence,
           initialInstallSeed,
-          postDeleteInstallSeed,
+          postUninstallInstallSeed,
           flagOff,
           consoleErrors,
           failedRequests,

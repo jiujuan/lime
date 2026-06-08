@@ -2854,7 +2854,9 @@ impl RuntimeCore {
         &self,
         params: McpServerImportFromAppParams,
     ) -> Result<McpServerImportFromAppResponse, RuntimeCoreError> {
-        self.app_data_source.import_mcp_servers_from_app(params).await
+        self.app_data_source
+            .import_mcp_servers_from_app(params)
+            .await
     }
 
     pub async fn sync_all_mcp_servers_to_live(

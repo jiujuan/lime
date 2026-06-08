@@ -3,8 +3,7 @@
 use crate::database::DbConnection;
 use lime_core::database::lock_db;
 use lime_memory::feedback::{
-    calculate_approval_rate, current_timestamp, generate_feedback_id, get_recent_feedbacks,
-    record_feedback, FeedbackAction, UserFeedback,
+    current_timestamp, generate_feedback_id, record_feedback, FeedbackAction, UserFeedback,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -33,45 +32,4 @@ pub async fn unified_memory_feedback(
     record_feedback(&conn, &feedback)?;
 
     Ok(())
-}
-
-#[tauri::command]
-pub async fn get_memory_feedback_stats(
-    db: State<'_, DbConnection>,
-    session_id: String,
-) -> Result<FeedbackStats, String> {
-    let conn = lock_db(&db)?;
-    let feedbacks = get_recent_feedbacks(&conn, &session_id, 50)?;
-
-    let approval_rate = calculate_approval_rate(&feedbacks);
-    let total = feedbacks.len();
-
-    let mut approve_count = 0;
-    let mut reject_count = 0;
-    let mut modify_count = 0;
-
-    for feedback in &feedbacks {
-        match feedback.action {
-            FeedbackAction::Approve => approve_count += 1,
-            FeedbackAction::Reject => reject_count += 1,
-            FeedbackAction::Modify { .. } => modify_count += 1,
-        }
-    }
-
-    Ok(FeedbackStats {
-        total,
-        approve_count,
-        reject_count,
-        modify_count,
-        approval_rate,
-    })
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeedbackStats {
-    pub total: usize,
-    pub approve_count: usize,
-    pub reject_count: usize,
-    pub modify_count: usize,
-    pub approval_rate: f32,
 }

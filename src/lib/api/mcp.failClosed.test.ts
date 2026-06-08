@@ -39,7 +39,11 @@ describe("mcp App Server current API fail-closed", () => {
     const cases: Array<[string, unknown, () => Promise<unknown>]> = [
       ["mcpServer/create", { server }, () => mcpApi.addServer(server)],
       ["mcpServer/update", { server }, () => mcpApi.updateServer(server)],
-      ["mcpServer/delete", { id: "server-1" }, () => mcpApi.deleteServer("server-1")],
+      [
+        "mcpServer/delete",
+        { id: "server-1" },
+        () => mcpApi.deleteServer("server-1"),
+      ],
       [
         "mcpServer/enabled/set",
         { id: "server-1", appType: "codex", enabled: true },

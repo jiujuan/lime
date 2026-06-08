@@ -107,10 +107,16 @@ import {
   METHOD_MCP_PROMPT_LIST,
   METHOD_MCP_RESOURCE_LIST,
   METHOD_MCP_RESOURCE_READ,
+  METHOD_MCP_SERVER_CREATE,
+  METHOD_MCP_SERVER_DELETE,
+  METHOD_MCP_SERVER_ENABLED_SET,
+  METHOD_MCP_SERVER_IMPORT_FROM_APP,
   METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
   METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
   METHOD_MCP_SERVER_STOP,
+  METHOD_MCP_SERVER_UPDATE,
   METHOD_MCP_TOOL_CALL,
   METHOD_MCP_TOOL_CALL_WITH_CALLER,
   METHOD_MCP_TOOL_LIST,
@@ -460,6 +466,33 @@ test("builds app data surface requests with current methods", () => {
   });
   const mcpServers = client.listMcpServers();
   const mcpServerStatus = client.listMcpServersWithStatus();
+  const mcpServer = {
+    id: "server-1",
+    name: "filesystem",
+    server_config: { command: "node", args: ["server.js"] },
+    enabled_lime: true,
+    enabled_claude: false,
+    enabled_codex: true,
+    enabled_gemini: false,
+  };
+  const mcpServerCreate = client.createMcpServer({
+    server: mcpServer,
+  });
+  const mcpServerUpdate = client.updateMcpServer({
+    server: mcpServer,
+  });
+  const mcpServerDelete = client.deleteMcpServer({
+    id: "server-1",
+  });
+  const mcpServerEnabled = client.setMcpServerEnabled({
+    id: "server-1",
+    appType: "codex",
+    enabled: true,
+  });
+  const mcpServerImport = client.importMcpServersFromApp({
+    appType: "codex",
+  });
+  const mcpServerSync = client.syncAllMcpServersToLive();
   const mcpServerStart = client.startMcpServer({
     name: "filesystem",
   });
@@ -629,6 +662,30 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(mcpServers.params, {});
   assert.equal(mcpServerStatus.method, METHOD_MCP_SERVER_STATUS_LIST);
   assert.deepEqual(mcpServerStatus.params, {});
+  assert.equal(mcpServerCreate.method, METHOD_MCP_SERVER_CREATE);
+  assert.deepEqual(mcpServerCreate.params, {
+    server: mcpServer,
+  });
+  assert.equal(mcpServerUpdate.method, METHOD_MCP_SERVER_UPDATE);
+  assert.deepEqual(mcpServerUpdate.params, {
+    server: mcpServer,
+  });
+  assert.equal(mcpServerDelete.method, METHOD_MCP_SERVER_DELETE);
+  assert.deepEqual(mcpServerDelete.params, {
+    id: "server-1",
+  });
+  assert.equal(mcpServerEnabled.method, METHOD_MCP_SERVER_ENABLED_SET);
+  assert.deepEqual(mcpServerEnabled.params, {
+    id: "server-1",
+    appType: "codex",
+    enabled: true,
+  });
+  assert.equal(mcpServerImport.method, METHOD_MCP_SERVER_IMPORT_FROM_APP);
+  assert.deepEqual(mcpServerImport.params, {
+    appType: "codex",
+  });
+  assert.equal(mcpServerSync.method, METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE);
+  assert.deepEqual(mcpServerSync.params, {});
   assert.equal(mcpServerStart.method, METHOD_MCP_SERVER_START);
   assert.deepEqual(mcpServerStart.params, {
     name: "filesystem",
@@ -913,6 +970,12 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AUTOMATION_SCHEDULE_VALIDATE, kind: "request" },
     { method: METHOD_MCP_SERVER_LIST, kind: "request" },
     { method: METHOD_MCP_SERVER_STATUS_LIST, kind: "request" },
+    { method: METHOD_MCP_SERVER_CREATE, kind: "request" },
+    { method: METHOD_MCP_SERVER_UPDATE, kind: "request" },
+    { method: METHOD_MCP_SERVER_DELETE, kind: "request" },
+    { method: METHOD_MCP_SERVER_ENABLED_SET, kind: "request" },
+    { method: METHOD_MCP_SERVER_IMPORT_FROM_APP, kind: "request" },
+    { method: METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, kind: "request" },
     { method: METHOD_MCP_SERVER_START, kind: "request" },
     { method: METHOD_MCP_SERVER_STOP, kind: "request" },
     { method: METHOD_MCP_TOOL_LIST, kind: "request" },
@@ -1081,13 +1144,31 @@ test("exports app-server method catalog with request and notification kinds", ()
   );
   assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_STATUS_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_CREATE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_UPDATE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_DELETE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_ENABLED_SET), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_MCP_SERVER_IMPORT_FROM_APP),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_START), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_STOP), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_LIST), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_LIST_FOR_CONTEXT), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_MCP_TOOL_LIST_FOR_CONTEXT),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_SEARCH), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_CALL), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_CALL_WITH_CALLER), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_MCP_TOOL_CALL_WITH_CALLER),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_MCP_PROMPT_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_PROMPT_GET), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_LIST), true);

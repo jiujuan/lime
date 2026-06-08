@@ -12,7 +12,6 @@
 //! - `workspace_get_default` - 获取默认 workspace
 
 use crate::database::DbConnection;
-use crate::models::project_model::ProjectContext;
 use crate::services::workspace_health_service::{
     ensure_workspace_ready_with_auto_relocate, ensure_workspace_root_ready,
 };
@@ -376,26 +375,6 @@ pub async fn get_or_create_default_project(
 ) -> Result<WorkspaceListItem, String> {
     let manager = WorkspaceManager::new(db.inner().clone());
     Ok(load_or_create_default_project(&manager)?.into())
-}
-
-/// 获取项目上下文
-///
-/// 加载项目的完整上下文，包括人设、素材等配置。
-/// 用于在发送消息前构建 AI 的 System Prompt。
-///
-/// # 参数
-/// - `project_id`: 项目 ID
-///
-/// # 返回
-/// - 成功返回项目上下文
-/// - 失败返回错误信息
-#[tauri::command]
-pub async fn get_project_context(
-    db: State<'_, DbConnection>,
-    project_id: String,
-) -> Result<ProjectContext, String> {
-    let conn = lock_db(&db).map_err(|e| format!("数据库锁定失败: {e}"))?;
-    ProjectContextBuilder::build_context(&conn, &project_id).map_err(|e| e.to_string())
 }
 
 /// 构建项目 System Prompt

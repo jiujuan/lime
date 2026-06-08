@@ -5655,6 +5655,84 @@
       "title": "McpResourceReadResponse",
       "type": "object"
     },
+    "McpServerCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "server": true
+      },
+      "required": [
+        "server"
+      ],
+      "title": "McpServerCreateParams",
+      "type": "object"
+    },
+    "McpServerDeleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "McpServerDeleteParams",
+      "type": "object"
+    },
+    "McpServerEnabledSetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appType": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appType",
+        "enabled",
+        "id"
+      ],
+      "title": "McpServerEnabledSetParams",
+      "type": "object"
+    },
+    "McpServerImportFromAppParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appType"
+      ],
+      "title": "McpServerImportFromAppParams",
+      "type": "object"
+    },
+    "McpServerImportFromAppResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "importedCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "servers": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "importedCount"
+      ],
+      "title": "McpServerImportFromAppResponse",
+      "type": "object"
+    },
     "McpServerLifecycleResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "title": "McpServerLifecycleResponse",
@@ -5708,6 +5786,17 @@
         "name"
       ],
       "title": "McpServerStopParams",
+      "type": "object"
+    },
+    "McpServerUpdateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "server": true
+      },
+      "required": [
+        "server"
+      ],
+      "title": "McpServerUpdateParams",
       "type": "object"
     },
     "McpToolCallParams": {
@@ -7422,9 +7511,15 @@
               "mcpPrompt/list",
               "mcpResource/list",
               "mcpResource/read",
+              "mcpServer/create",
+              "mcpServer/delete",
+              "mcpServer/enabled/set",
+              "mcpServer/importFromApp",
               "mcpServer/list",
               "mcpServer/start",
               "mcpServer/stop",
+              "mcpServer/syncAllToLive",
+              "mcpServer/update",
               "mcpServerStatus/list",
               "mcpTool/call",
               "mcpTool/callWithCaller",

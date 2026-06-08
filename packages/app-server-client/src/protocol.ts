@@ -81,8 +81,7 @@ export const METHOD_MCP_SERVER_UPDATE = "mcpServer/update";
 export const METHOD_MCP_SERVER_DELETE = "mcpServer/delete";
 export const METHOD_MCP_SERVER_ENABLED_SET = "mcpServer/enabled/set";
 export const METHOD_MCP_SERVER_IMPORT_FROM_APP = "mcpServer/importFromApp";
-export const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE =
-  "mcpServer/syncAllToLive";
+export const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE = "mcpServer/syncAllToLive";
 export const METHOD_MCP_SERVER_START = "mcpServer/start";
 export const METHOD_MCP_SERVER_STOP = "mcpServer/stop";
 export const METHOD_MCP_TOOL_LIST = "mcpTool/list";

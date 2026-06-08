@@ -64,6 +64,18 @@ describe("configSystemMocks", () => {
     expect(configSystemMocks).not.toHaveProperty("report_frontend_crash");
   });
 
+  it("不应保留配置读写和默认 Provider 默认 mock", () => {
+    expect(configSystemMocks).not.toHaveProperty("get_config");
+    expect(configSystemMocks).not.toHaveProperty("save_config");
+    expect(configSystemMocks).not.toHaveProperty("get_default_provider");
+    expect(configSystemMocks).not.toHaveProperty("set_default_provider");
+  });
+
+  it("不应保留实验配置默认 mock", () => {
+    expect(configSystemMocks).not.toHaveProperty("get_experimental_config");
+    expect(configSystemMocks).not.toHaveProperty("save_experimental_config");
+  });
+
   it("不应保留已下线 Prompt 管理默认成功 mock", () => {
     const retiredPromptCommands = [
       "get_prompts",

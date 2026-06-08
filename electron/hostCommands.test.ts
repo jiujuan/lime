@@ -229,7 +229,9 @@ describe("ElectronHostCommands local file shell facade", () => {
       filePaths: [],
     });
 
-    await expect(host.invoke("agent_app_select_directory", {})).resolves.toEqual({
+    await expect(
+      host.invoke("agent_app_select_directory", {}),
+    ).resolves.toEqual({
       path: null,
       cancelled: true,
     });
@@ -333,9 +335,7 @@ describe("ElectronHostCommands local file shell facade", () => {
         height: 860,
       }),
     );
-    expect(loadUrlMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:4199/dashboard",
-    );
+    expect(loadUrlMock).toHaveBeenCalledWith("http://127.0.0.1:4199/dashboard");
     expect(showWindowMock).toHaveBeenCalled();
     expect(focusWindowMock).toHaveBeenCalled();
   });
@@ -553,9 +553,9 @@ describe("ElectronHostCommands local file shell facade", () => {
     const returnedPaths = (locations as Array<{ path: string }>).map(
       (location) => location.path,
     );
-    expect(returnedPaths.filter((nextPath) => nextPath === homeDir)).toHaveLength(
-      1,
-    );
+    expect(
+      returnedPaths.filter((nextPath) => nextPath === homeDir),
+    ).toHaveLength(1);
     expect(returnedPaths).not.toContain(missingDesktopDir);
   });
 });
@@ -604,70 +604,26 @@ describe("ElectronHostCommands experimental config", () => {
   });
 });
 
-describe("ElectronHostCommands MCP current source", () => {
+describe("ElectronHostCommands retired MCP legacy facade", () => {
   it.each([
-    [
-      "get_mcp_servers",
-      "mcpServer/list",
-      { servers: [{ id: "server-1", name: "docs" }] },
-      [{ id: "server-1", name: "docs" }],
-    ],
-    [
-      "mcp_list_servers_with_status",
-      "mcpServerStatus/list",
-      { servers: [{ id: "server-1", name: "docs", is_running: false }] },
-      [{ id: "server-1", name: "docs", is_running: false }],
-    ],
-    [
-      "mcp_list_tools",
-      "mcpTool/list",
-      { tools: [{ name: "mcp__docs__search_docs" }] },
-      [{ name: "mcp__docs__search_docs" }],
-    ],
-    [
-      "mcp_list_prompts",
-      "mcpPrompt/list",
-      { prompts: [{ name: "summarize", server_name: "docs" }] },
-      [{ name: "summarize", server_name: "docs" }],
-    ],
-    [
-      "mcp_list_resources",
-      "mcpResource/list",
-      { resources: [{ uri: "docs://readme", server_name: "docs" }] },
-      [{ uri: "docs://readme", server_name: "docs" }],
-    ],
-  ] as const)(
-    "%s 应经 App Server current method 返回 MCP 列表",
-    async (command, expectedMethod, response, expectedResult) => {
+    "get_mcp_servers",
+    "mcp_list_servers_with_status",
+    "mcp_list_tools",
+    "mcp_list_prompts",
+    "mcp_list_resources",
+  ])(
+    "%s 已从 Electron Host 退场，生产只能走 App Server MCP current API",
+    async (command) => {
       const userDataDir = await createTempUserDataDir();
-      const request = vi.fn(async (method: string, params?: unknown) => {
-        expect(params).toEqual({});
-        if (method === expectedMethod) {
-          return response;
-        }
-        throw new Error(`unexpected App Server method: ${method}`);
-      });
+      const request = vi.fn();
       const host = createHost(userDataDir, () => undefined, request);
 
-      await expect(host.invoke(command)).resolves.toEqual(expectedResult);
-      expect(request).toHaveBeenCalledWith(expectedMethod, {});
+      await expect(host.invoke(command)).rejects.toThrow(
+        `Electron host command is not implemented: ${command}`,
+      );
+      expect(request).not.toHaveBeenCalled();
     },
   );
-
-  it("MCP current 空态不应带 Electron diagnostic facade 元数据", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir, () => undefined, async (method) => {
-      if (method === "mcpTool/list") {
-        return { tools: [] };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-
-    const result = await host.invoke("mcp_list_tools");
-
-    expect(result).toEqual([]);
-    expect((result as { __diagnostic?: unknown }).__diagnostic).toBeUndefined();
-  });
 });
 
 describe("ElectronHostCommands retired Knowledge legacy facade", () => {
@@ -680,21 +636,24 @@ describe("ElectronHostCommands retired Knowledge legacy facade", () => {
     "knowledge_update_pack_status",
     "knowledge_resolve_context",
     "knowledge_validate_context_run",
-  ])("%s 已从 Electron Host 退场，生产只能走 App Server JSONL current", async (command) => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn();
-    const host = createHost(userDataDir, () => undefined, request);
+  ])(
+    "%s 已从 Electron Host 退场，生产只能走 App Server JSONL current",
+    async (command) => {
+      const userDataDir = await createTempUserDataDir();
+      const request = vi.fn();
+      const host = createHost(userDataDir, () => undefined, request);
 
-    await expect(
-      host.invoke(command, {
-        request: {
-          workingDir: "/workspace/project",
-          name: "sample-product",
-        },
-      }),
-    ).rejects.toThrow(`Electron host command is not implemented: ${command}`);
-    expect(request).not.toHaveBeenCalled();
-  });
+      await expect(
+        host.invoke(command, {
+          request: {
+            workingDir: "/workspace/project",
+            name: "sample-product",
+          },
+        }),
+      ).rejects.toThrow(`Electron host command is not implemented: ${command}`);
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("ElectronHostCommands model provider current source", () => {

@@ -117,6 +117,17 @@ function buildProfile(): HostCapabilityProfile {
   });
 }
 
+function isDeleteDataExecutionBlocked(params: {
+  descriptor: AgentAppLifecycleUninstallRehearsalDescriptor | null;
+  preview: AgentAppUninstallRehearsalResult | null;
+}): boolean {
+  return (
+    params.descriptor?.mode === "delete-data" &&
+    (params.descriptor.realDeleteAllowed === false ||
+      params.preview?.warnings.includes("DRY_RUN_ONLY") === true)
+  );
+}
+
 function buildPreviewFromInstalledState(
   state: InstalledAgentAppState,
 ): InstalledAppPreview {
@@ -235,9 +246,14 @@ export function AgentAppsPage({
     activeUninstallDescriptor?.mode === "delete-data"
       ? buildAgentAppDeleteDataConfirmationPhrase(activeUninstallDescriptor)
       : "";
+  const deleteDataExecutionBlocked = isDeleteDataExecutionBlocked({
+    descriptor: activeUninstallDescriptor,
+    preview: uninstallPreview,
+  });
   const deleteDataConfirmationMatches =
     activeUninstallDescriptor?.mode !== "delete-data" ||
-    deleteDataConfirmationInput.trim() === deleteDataConfirmationPhrase;
+    (!deleteDataExecutionBlocked &&
+      deleteDataConfirmationInput.trim() === deleteDataConfirmationPhrase);
 
   const appItems = useMemo(
     () =>
@@ -513,6 +529,18 @@ export function AgentAppsPage({
         ? uninstallDescriptor
         : null;
     if (!descriptor || descriptor.status !== "ready") {
+      return;
+    }
+    if (
+      isDeleteDataExecutionBlocked({
+        descriptor,
+        preview: uninstallPreview,
+      })
+    ) {
+      setLaunchSummary(
+        t("agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly"),
+      );
+      toast.error(t("agentApp.apps.toast.uninstallBlocked"));
       return;
     }
     const request =
@@ -1045,9 +1073,7 @@ export function AgentAppsPage({
             )}
           </section>
 
-          <section
-            className="space-y-4"
-          >
+          <section className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[color:var(--lime-text-muted)]">
               <div className="flex flex-wrap items-center gap-3">
                 <span>{t("agentApp.apps.center.source.label")}：</span>
@@ -1134,7 +1160,9 @@ export function AgentAppsPage({
                                 item.statusKind,
                               )}`}
                             >
-                              {t(`agentApp.apps.center.status.${item.statusKind}`)}
+                              {t(
+                                `agentApp.apps.center.status.${item.statusKind}`,
+                              )}
                             </span>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2">
@@ -1143,7 +1171,9 @@ export function AgentAppsPage({
                                 item.sourceKind,
                               )}`}
                             >
-                              {t(`agentApp.apps.center.source.${item.sourceKind}`)}
+                              {t(
+                                `agentApp.apps.center.source.${item.sourceKind}`,
+                              )}
                             </span>
                             {item.sourceState ? (
                               <>
@@ -1326,7 +1356,6 @@ export function AgentAppsPage({
                 </div>
               </div>
             </main>
-
           </section>
 
           {selectedItem ? (
@@ -1421,8 +1450,7 @@ export function AgentAppsPage({
                             ? isPrimaryActionDisabled(
                                 selectedItem,
                                 busyAction,
-                              ) ||
-                              !getDefaultEntry(selectedItem)
+                              ) || !getDefaultEntry(selectedItem)
                             : isCloudActionDisabled(selectedItem, busyAction)
                         }
                         onClick={() => {
@@ -1481,7 +1509,7 @@ export function AgentAppsPage({
                                   : undefined
                               }
                               data-testid={`agent-apps-launch-entry-${entry.key}`}
-                              >
+                            >
                               <span className="min-w-0">
                                 <span className="block truncate text-sm font-medium text-[color:var(--lime-text-strong)]">
                                   {entry.title}
@@ -1741,6 +1769,16 @@ export function AgentAppsPage({
                                       "agentApp.apps.uninstallPreview.deleteDataGate.description",
                                     )}
                                   </p>
+                                  {deleteDataExecutionBlocked ? (
+                                    <p
+                                      className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                                      data-testid="agent-apps-delete-data-current-phase-gate"
+                                    >
+                                      {t(
+                                        "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly",
+                                      )}
+                                    </p>
+                                  ) : null}
                                 </div>
                                 <div className="rounded-lg border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2">
                                   <span className="text-xs font-medium text-rose-700">
@@ -1769,23 +1807,30 @@ export function AgentAppsPage({
                                   aria-label={t(
                                     "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel",
                                   )}
+                                  disabled={deleteDataExecutionBlocked}
                                   data-testid="agent-apps-delete-data-confirmation-input"
                                 />
                                 <p
                                   className={`text-xs ${
-                                    deleteDataConfirmationMatches
-                                      ? "text-emerald-700"
-                                      : "text-rose-700"
+                                    deleteDataExecutionBlocked
+                                      ? "text-amber-700"
+                                      : deleteDataConfirmationMatches
+                                        ? "text-emerald-700"
+                                        : "text-rose-700"
                                   }`}
                                   data-testid="agent-apps-delete-data-confirmation-status"
                                 >
-                                  {deleteDataConfirmationMatches
+                                  {deleteDataExecutionBlocked
                                     ? t(
-                                        "agentApp.apps.uninstallPreview.deleteDataGate.ready",
+                                        "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly",
                                       )
-                                    : t(
-                                        "agentApp.apps.uninstallPreview.deleteDataGate.mismatch",
-                                      )}
+                                    : deleteDataConfirmationMatches
+                                      ? t(
+                                          "agentApp.apps.uninstallPreview.deleteDataGate.ready",
+                                        )
+                                      : t(
+                                          "agentApp.apps.uninstallPreview.deleteDataGate.mismatch",
+                                        )}
                                 </p>
                               </div>
                             ) : null}
@@ -1794,13 +1839,18 @@ export function AgentAppsPage({
                               className="mt-3 inline-flex items-center gap-2 rounded-full bg-rose-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={
                                 Boolean(busyAction) ||
+                                deleteDataExecutionBlocked ||
                                 !deleteDataConfirmationMatches
                               }
                               onClick={() => void handleConfirmUninstall()}
                               data-testid="agent-apps-uninstall-confirm"
                             >
                               <Archive size={16} />
-                              {t("agentApp.apps.action.confirmUninstall")}
+                              {deleteDataExecutionBlocked
+                                ? t(
+                                    "agentApp.apps.action.deleteDataUnavailable",
+                                  )
+                                : t("agentApp.apps.action.confirmUninstall")}
                             </button>
                           </div>
                         ) : null}

@@ -163,10 +163,10 @@ use app_server_protocol::METHOD_MCP_SERVER_DELETE;
 use app_server_protocol::METHOD_MCP_SERVER_ENABLED_SET;
 use app_server_protocol::METHOD_MCP_SERVER_IMPORT_FROM_APP;
 use app_server_protocol::METHOD_MCP_SERVER_LIST;
-use app_server_protocol::METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE;
 use app_server_protocol::METHOD_MCP_SERVER_START;
 use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
 use app_server_protocol::METHOD_MCP_SERVER_STOP;
+use app_server_protocol::METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE;
 use app_server_protocol::METHOD_MCP_SERVER_UPDATE;
 use app_server_protocol::METHOD_MCP_TOOL_CALL;
 use app_server_protocol::METHOD_MCP_TOOL_CALL_WITH_CALLER;
@@ -325,9 +325,7 @@ impl RequestProcessor {
             METHOD_AGENT_APP_INSTALLED_UNINSTALL => {
                 self.handle_agent_app_installed_uninstall(params).await
             }
-            METHOD_AGENT_APP_SHELL_PREPARE => {
-                self.handle_agent_app_shell_prepare(params).await
-            }
+            METHOD_AGENT_APP_SHELL_PREPARE => self.handle_agent_app_shell_prepare(params).await,
             METHOD_AGENT_APP_UI_RUNTIME_START => {
                 self.handle_agent_app_ui_runtime_start(params).await
             }
@@ -381,9 +379,7 @@ impl RequestProcessor {
             METHOD_MCP_SERVER_IMPORT_FROM_APP => {
                 self.handle_mcp_server_import_from_app(params).await
             }
-            METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => {
-                self.handle_mcp_server_sync_all_to_live().await
-            }
+            METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => self.handle_mcp_server_sync_all_to_live().await,
             METHOD_MCP_SERVER_START => self.handle_mcp_server_start(params).await,
             METHOD_MCP_SERVER_STOP => self.handle_mcp_server_stop(params).await,
             METHOD_MCP_TOOL_LIST => self.handle_mcp_tool_list().await,
@@ -2627,21 +2623,71 @@ mod tests {
         let cases = [
             (
                 RequestId::Integer(3),
+                METHOD_MCP_SERVER_CREATE,
+                json!({
+                    "server": {
+                        "id": "server-1",
+                        "name": "docs",
+                        "server_config": { "command": "node" },
+                        "enabled_lime": true,
+                        "enabled_claude": false,
+                        "enabled_codex": true,
+                        "enabled_gemini": false,
+                    }
+                }),
+            ),
+            (
+                RequestId::Integer(4),
+                METHOD_MCP_SERVER_UPDATE,
+                json!({
+                    "server": {
+                        "id": "server-1",
+                        "name": "docs",
+                        "server_config": { "command": "node" },
+                        "enabled_lime": true,
+                        "enabled_claude": false,
+                        "enabled_codex": true,
+                        "enabled_gemini": false,
+                    }
+                }),
+            ),
+            (
+                RequestId::Integer(5),
+                METHOD_MCP_SERVER_DELETE,
+                json!({ "id": "server-1" }),
+            ),
+            (
+                RequestId::Integer(6),
+                METHOD_MCP_SERVER_ENABLED_SET,
+                json!({ "id": "server-1", "appType": "codex", "enabled": true }),
+            ),
+            (
+                RequestId::Integer(7),
+                METHOD_MCP_SERVER_IMPORT_FROM_APP,
+                json!({ "appType": "codex" }),
+            ),
+            (
+                RequestId::Integer(8),
+                METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
+                json!({}),
+            ),
+            (
+                RequestId::Integer(9),
                 METHOD_MCP_SERVER_START,
                 json!({ "name": "docs" }),
             ),
             (
-                RequestId::Integer(4),
+                RequestId::Integer(10),
                 METHOD_MCP_SERVER_STOP,
                 json!({ "name": "docs" }),
             ),
             (
-                RequestId::Integer(5),
+                RequestId::Integer(11),
                 METHOD_MCP_TOOL_CALL,
                 json!({ "toolName": "mcp__docs__search", "arguments": {} }),
             ),
             (
-                RequestId::Integer(6),
+                RequestId::Integer(12),
                 METHOD_MCP_TOOL_CALL_WITH_CALLER,
                 json!({
                     "toolName": "mcp__docs__search",
@@ -2650,12 +2696,12 @@ mod tests {
                 }),
             ),
             (
-                RequestId::Integer(7),
+                RequestId::Integer(13),
                 METHOD_MCP_PROMPT_GET,
                 json!({ "name": "docs_prompt", "arguments": {} }),
             ),
             (
-                RequestId::Integer(8),
+                RequestId::Integer(14),
                 METHOD_MCP_RESOURCE_READ,
                 json!({ "uri": "docs://readme" }),
             ),

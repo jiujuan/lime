@@ -29,7 +29,7 @@
 |    29 | `lime-rs/src/commands/webview_cmd.rs`                             | Desktop Host / Browser Runtime               |
 |    28 | `lime-rs/src/commands/skill_cmd.rs`                               | Skills / marketplace / execution 分拆        |
 |    21 | `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | Agent Runtime 主链，最后处理                 |
-|    19 | `lime-rs/src/commands/mcp_cmd.rs`                                 | App Server MCP current                       |
+|    19 | `lime-rs/src/commands/mcp_cmd.rs`                                 | MCP 已 App Server current；待删除确认        |
 |    16 | `lime-rs/src/commands/config_cmd.rs`                              | Config / Desktop Host shell split            |
 |    16 | `lime-rs/src/commands/machine_id_cmd.rs`                          | Machine identity / diagnostics split         |
 |    15 | `lime-rs/src/commands/memory_management_cmd.rs`                   | Memory App Server current                    |
@@ -71,50 +71,50 @@
 
 ## 低引用候选
 
-这些命令当前在扫描范围内只出现在少量 Rust 文件，且没有命中前端直接调用、`src/lib/api` 命令 token 或 DevBridge dispatcher。它们适合作为后续 `TW-Q2-DEAD-NAMES` 子任务，但必须等共享写集释放后再删 runner / catalog。
+当前复核口径：这些命令最初被归为低引用候选；截至 2026-06-08，除 `get_material` 外，当前磁盘事实显示它们已不再出现在 `runner.rs` 或 `lime-rs/src/commands/**` 生产代码中，只应剩 `scripts/check-command-contracts.mjs` retired guard。后续并行 Agent 不应再认领这些已退役项。
 
-| Command                          | Occurrence files                                                                    | 下一步                                                   |
-| -------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `add_model_to_provider`          | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/models_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `add_provider`                   | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/models_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `check_codex_cli_status`         | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/external_tools_cmd.rs`         | 核对产品入口后拆独立删除任务                             |
-| `create_a2ui_form`               | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/a2ui_form_cmd.rs`              | 核对产品入口后拆独立删除任务                             |
-| `create_persona`                 | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/persona_cmd.rs`                | 核对产品入口后拆独立删除任务                             |
-| `create_webview_panel`           | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/webview_cmd.rs`                | 核对产品入口后拆独立删除任务                             |
-| `delete_a2ui_form`               | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/a2ui_form_cmd.rs`              | 核对产品入口后拆独立删除任务                             |
-| `delete_avatar`                  | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/file_upload_cmd.rs`            | 核对产品入口后拆独立删除任务                             |
-| `delete_persona`                 | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/persona_cmd.rs`                | 核对产品入口后拆独立删除任务                             |
-| `execute_ecommerce_review_reply` | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/ecommerce_review_reply_cmd.rs` | 核对产品入口后拆独立删除任务                             |
-| `export_bundle`                  | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/config_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `export_config`                  | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/config_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `export_config_yaml`             | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/config_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `fetch_provider_models_from_api` | `scripts/check-command-contracts.mjs`                                               | 2026-06-08 已删旧 Tauri helper；只保留 retired guard     |
-| `focus_webview_panel`            | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/webview_cmd.rs`                | 核对产品入口后拆独立删除任务                             |
-| `get_a2ui_form`                  | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/a2ui_form_cmd.rs`              | 核对产品入口后拆独立删除任务                             |
-| `get_a2ui_forms_by_message`      | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/a2ui_form_cmd.rs`              | 核对产品入口后拆独立删除任务                             |
-| `get_a2ui_forms_by_session`      | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/a2ui_form_cmd.rs`              | 核对产品入口后拆独立删除任务                             |
-| `get_all_provider_models`        | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/models_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `get_auto_launch_status`         | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/config_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `get_available_voices`           | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/voice_test_cmd.rs`             | 核对产品入口后拆独立删除任务                             |
-| `get_config_dir_path`            | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/config_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `get_config_paths`               | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/config_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `get_config_status`              | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/config_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `get_default_persona`            | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/persona_cmd.rs`                | 核对产品入口后拆独立删除任务                             |
-| `get_external_tools`             | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/external_tools_cmd.rs`         | 核对产品入口后拆独立删除任务                             |
-| `get_material`                   | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/material_cmd.rs`               | 核对产品入口后拆独立删除任务                             |
-| `get_materials_content`          | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/material_cmd.rs`               | 核对产品入口后拆独立删除任务                             |
-| `get_memory_feedback_stats`      | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/memory_feedback_cmd.rs`        | 核对产品入口后拆独立删除任务                             |
-| `get_models_config`              | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/models_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `get_persona`                    | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/persona_cmd.rs`                | 核对产品入口后拆独立删除任务                             |
-| `get_project_context`            | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/workspace_cmd.rs`              | 核对产品入口后拆独立删除任务                             |
-| `get_provider_models`            | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/models_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `get_relay_info`                 | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/connect_cmd.rs`                | 核对产品入口后拆独立删除任务                             |
-| `get_sysinfo`                    | `scripts/check-command-contracts.mjs`                                               | 2026-06-08 已删零入口 Tauri facade；只保留 retired guard |
-| `get_telegram_remote_status`     | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/telegram_remote_cmd.rs`        | 核对产品入口后拆独立删除任务                             |
-| `get_tool_versions`              | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/config_cmd.rs`                 | 核对产品入口后拆独立删除任务                             |
-| `get_websocket_connections`      | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/websocket_cmd.rs`              | 核对产品入口后拆独立删除任务                             |
-| `get_websocket_status`           | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/websocket_cmd.rs`              | 核对产品入口后拆独立删除任务                             |
-| `get_webview_panels`             | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/webview_cmd.rs`                | 核对产品入口后拆独立删除任务                             |
+| Command                          | Current occurrence files                                              | 下一步                                                         |
+| -------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `add_model_to_provider`          | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Models facade；只保留 retired guard          |
+| `add_provider`                   | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Models facade；只保留 retired guard          |
+| `check_codex_cli_status`         | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 External Tools facade；只保留 retired guard  |
+| `create_a2ui_form`               | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 A2UI form facade；只保留 retired guard       |
+| `create_persona`                 | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Persona facade；只保留 retired guard         |
+| `create_webview_panel`           | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 WebView Panel facade；只保留 retired guard   |
+| `delete_a2ui_form`               | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 A2UI form facade；只保留 retired guard       |
+| `delete_avatar`                  | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 avatar upload facade；只保留 retired guard   |
+| `delete_persona`                 | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Persona facade；只保留 retired guard         |
+| `execute_ecommerce_review_reply` | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Skill shortcut facade；只保留 retired guard  |
+| `export_bundle`                  | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Config facade；只保留 retired guard          |
+| `export_config`                  | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Config facade；只保留 retired guard          |
+| `export_config_yaml`             | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Config facade；只保留 retired guard          |
+| `fetch_provider_models_from_api` | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Tauri helper；只保留 retired guard           |
+| `focus_webview_panel`            | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 WebView Panel facade；只保留 retired guard   |
+| `get_a2ui_form`                  | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 A2UI form facade；只保留 retired guard       |
+| `get_a2ui_forms_by_message`      | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 A2UI form facade；只保留 retired guard       |
+| `get_a2ui_forms_by_session`      | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 A2UI form facade；只保留 retired guard       |
+| `get_all_provider_models`        | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Models facade；只保留 retired guard          |
+| `get_auto_launch_status`         | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Config facade；只保留 retired guard          |
+| `get_available_voices`           | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Voice test facade；只保留 retired guard      |
+| `get_config_dir_path`            | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Config facade；只保留 retired guard          |
+| `get_config_paths`               | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Config facade；只保留 retired guard          |
+| `get_config_status`              | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Config facade；只保留 retired guard          |
+| `get_default_persona`            | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Persona facade；只保留 retired guard         |
+| `get_external_tools`             | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 External Tools facade；只保留 retired guard  |
+| `get_material`                   | `lime-rs/src/app/runner.rs`<br>`lime-rs/src/commands/material_cmd.rs` | 仍有真实 legacy wrapper；确认前端入口后拆独立删除任务          |
+| `get_materials_content`          | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删零入口批量读取 facade；只保留 retired guard     |
+| `get_memory_feedback_stats`      | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删零入口统计 facade；只保留 retired guard         |
+| `get_models_config`              | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Models facade；只保留 retired guard          |
+| `get_persona`                    | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Persona facade；只保留 retired guard         |
+| `get_project_context`            | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删零入口项目上下文 facade；只保留 retired guard   |
+| `get_provider_models`            | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Models facade；只保留 retired guard          |
+| `get_relay_info`                 | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Connect facade；只保留 retired guard         |
+| `get_sysinfo`                    | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删零入口 Tauri facade；只保留 retired guard       |
+| `get_telegram_remote_status`     | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Telegram Remote facade；只保留 retired guard |
+| `get_tool_versions`              | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 Config facade；只保留 retired guard          |
+| `get_websocket_connections`      | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 WebSocket facade；只保留 retired guard       |
+| `get_websocket_status`           | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 WebSocket facade；只保留 retired guard       |
+| `get_webview_panels`             | `scripts/check-command-contracts.mjs`                                 | 2026-06-08 已删旧 WebView Panel facade；只保留 retired guard   |
 
 ## 需要优先解释的漂移
 

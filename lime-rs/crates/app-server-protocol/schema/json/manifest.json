@@ -248,6 +248,22 @@
     },
     {
       "kind": "request",
+      "method": "mcpServer/create"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServer/delete"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServer/enabled/set"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServer/importFromApp"
+    },
+    {
+      "kind": "request",
       "method": "mcpServer/list"
     },
     {
@@ -257,6 +273,14 @@
     {
       "kind": "request",
       "method": "mcpServer/stop"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServer/syncAllToLive"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServer/update"
     },
     {
       "kind": "request",
@@ -588,11 +612,17 @@
       "McpResourceListResponse",
       "McpResourceReadParams",
       "McpResourceReadResponse",
+      "McpServerCreateParams",
+      "McpServerDeleteParams",
+      "McpServerEnabledSetParams",
+      "McpServerImportFromAppParams",
+      "McpServerImportFromAppResponse",
       "McpServerLifecycleResponse",
       "McpServerListResponse",
       "McpServerStartParams",
       "McpServerStatusListResponse",
       "McpServerStopParams",
+      "McpServerUpdateParams",
       "McpToolCallParams",
       "McpToolCallResponse",
       "McpToolCallWithCallerParams",

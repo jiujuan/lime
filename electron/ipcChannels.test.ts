@@ -87,8 +87,11 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("voice_models_get_install_state")).toBe(true);
     expect(isElectronHostCommand("get_environment_preview")).toBe(true);
     expect(isElectronHostCommand("unified_memory_stats")).toBe(true);
-    expect(isElectronHostCommand("get_mcp_servers")).toBe(true);
-    expect(isElectronHostCommand("mcp_list_servers_with_status")).toBe(true);
+    expect(isElectronHostCommand("get_mcp_servers")).toBe(false);
+    expect(isElectronHostCommand("mcp_list_servers_with_status")).toBe(false);
+    expect(isElectronHostCommand("mcp_list_tools")).toBe(false);
+    expect(isElectronHostCommand("mcp_list_prompts")).toBe(false);
+    expect(isElectronHostCommand("mcp_list_resources")).toBe(false);
     for (const command of [
       "knowledge_list_packs",
       "knowledge_get_pack",
@@ -163,7 +166,6 @@ describe("electron/ipcChannels", () => {
       "get_all_alias_configs",
       "get_default_provider",
       "get_local_skills_for_app",
-      "get_mcp_servers",
       "get_model_preferences",
       "get_model_registry",
       "get_model_registry_provider_ids",
@@ -171,10 +173,6 @@ describe("electron/ipcChannels", () => {
       "get_models_by_tier",
       "get_models_for_provider",
       "get_provider_alias_config",
-      "mcp_list_prompts",
-      "mcp_list_resources",
-      "mcp_list_servers_with_status",
-      "mcp_list_tools",
       "project_memory_get",
       "workspace_ensure_default_ready",
       "workspace_ensure_ready",

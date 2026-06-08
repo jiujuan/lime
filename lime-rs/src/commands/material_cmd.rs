@@ -555,35 +555,6 @@ pub async fn get_material_count(
         .map_err(|e| e.to_string())
 }
 
-/// 批量获取素材内容
-///
-/// 获取项目下所有素材的内容，用于构建项目上下文。
-/// 返回素材名称和内容的列表。
-///
-/// # 参数
-/// - `db`: 数据库连接状态
-/// - `project_id`: 项目 ID
-///
-/// # 返回
-/// - 成功返回素材内容列表 [(name, content), ...]
-/// - 失败返回错误信息
-///
-/// # 示例（前端调用）
-/// ```typescript
-/// const contents = await invoke('get_materials_content', {
-///   projectId: 'project-1'
-/// });
-/// // contents: [['文档1', '内容1'], ['文档2', '内容2']]
-/// ```
-#[tauri::command]
-pub async fn get_materials_content(
-    db: State<'_, DbConnection>,
-    project_id: String,
-) -> Result<Vec<(String, String)>, String> {
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    MaterialService::get_materials_content(&conn, &project_id).map_err(|e| e.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,8 +1,9 @@
 {
   "agentApp.apps.action.confirmUninstall": "アンインストールを確定",
+  "agentApp.apps.action.deleteDataUnavailable": "データ削除は未開放",
   "agentApp.apps.action.disable": "停止",
   "agentApp.apps.action.enable": "有効化",
-  "agentApp.apps.action.uninstallDeleteData": "アンインストールしてデータを削除",
+  "agentApp.apps.action.uninstallDeleteData": "データ削除をプレビュー",
   "agentApp.apps.action.uninstallKeepData": "データを残してアンインストール",
   "agentApp.apps.center.action.activate": "有効化",
   "agentApp.apps.center.action.details": "詳細",
@@ -158,6 +159,7 @@
   "agentApp.apps.uninstall.blocked": "アンインストールはブロックされました: {{codes}}。",
   "agentApp.apps.uninstall.completed": "アンインストール完了: {{removed}} 件を削除し、{{missing}} 件は既に存在しません。",
   "agentApp.apps.uninstallPreview.deleteDataGate.description": "このアプリのローカルデータ、キャッシュ、記録を削除します。続行する前に下の語句を完全に入力してください。",
+  "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly": "データ削除は現在リハーサルのみで、実際の削除は実行できません。データを残してアンインストールしてください。",
   "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel": "データ削除の確認フレーズを入力",
   "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder": "確認フレーズを完全に入力",
   "agentApp.apps.uninstallPreview.deleteDataGate.mismatch": "確認フレーズが一致しません。削除はロックされています。",

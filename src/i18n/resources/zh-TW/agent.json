@@ -1,8 +1,9 @@
 {
   "agentApp.apps.action.confirmUninstall": "確認卸載",
+  "agentApp.apps.action.deleteDataUnavailable": "刪除資料暫未開放",
   "agentApp.apps.action.disable": "停用",
   "agentApp.apps.action.enable": "啟用",
-  "agentApp.apps.action.uninstallDeleteData": "解除安裝並刪除資料",
+  "agentApp.apps.action.uninstallDeleteData": "刪除資料演練",
   "agentApp.apps.action.uninstallKeepData": "解除安裝，保留資料",
   "agentApp.apps.center.action.activate": "啟用",
   "agentApp.apps.center.action.details": "詳情",
@@ -158,6 +159,7 @@
   "agentApp.apps.uninstall.blocked": "卸載已阻擋：{{codes}}。",
   "agentApp.apps.uninstall.completed": "卸載完成：已刪除 {{removed}} 項，已缺失 {{missing}} 項。",
   "agentApp.apps.uninstallPreview.deleteDataGate.description": "這會移除該應用的本機資料、快取和記錄。請完整輸入下方短語後再繼續。",
+  "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly": "刪除資料目前只開放演練，暫不能執行真實刪除。請使用「解除安裝，保留資料」完成卸載。",
   "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel": "輸入刪除資料確認短語",
   "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder": "輸入完整確認短語",
   "agentApp.apps.uninstallPreview.deleteDataGate.mismatch": "確認短語不相符，刪除按鈕已鎖定。",

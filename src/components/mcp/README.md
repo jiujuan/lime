@@ -21,8 +21,9 @@ MCP (Model Context Protocol) 服务器管理组件集合。
 ## 依赖关系
 
 - Hooks: `useMcp`（运行时状态）、`useMcpServers`（配置管理）
-- API: `src/lib/api/mcp.ts`（Desktop Host / App Server 网关封装）
-- 后端: `lime-rs/src/commands/mcp_cmd.rs`、`lime-rs/src/mcp/`
+- API: `src/lib/api/mcp.ts`（App Server JSON-RPC 网关封装）
+- 后端: `packages/app-server-client/src/protocol.ts`、`lime-rs/crates/app-server-protocol/src/protocol/v0.rs`、`lime-rs/crates/app-server/src/runtime.rs`、`lime-rs/crates/mcp/`
+- 旧 Tauri wrapper: `lime-rs/src/commands/mcp_cmd.rs` 已删除；MCP 后续能力只允许继续进入 App Server current 或 Electron Desktop Host 壳边界
 
 ## 更新提醒
 

@@ -23,15 +23,6 @@ const COMMAND_BOUNDARY_MARKER_PATTERNS = [
 ];
 
 const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
-  ["lime-rs/src/commands/agent_app_cmd.rs", 125],
-  ["lime-rs/src/commands/agent_app_runtime_cmd/cancel_task.rs", 4],
-  ["lime-rs/src/commands/agent_app_runtime_cmd/common.rs", 8],
-  ["lime-rs/src/commands/agent_app_runtime_cmd/events.rs", 2],
-  ["lime-rs/src/commands/agent_app_runtime_cmd/host_response.rs", 8],
-  ["lime-rs/src/commands/agent_app_runtime_cmd/model_preference.rs", 7],
-  ["lime-rs/src/commands/agent_app_runtime_cmd/start_task.rs", 13],
-  ["lime-rs/src/commands/agent_app_runtime_cmd/task_snapshot.rs", 13],
-  ["lime-rs/src/commands/agent_app_runtime_cmd/tests.rs", 2],
   ["lime-rs/src/commands/agent_cmd.rs", 23],
   ["lime-rs/src/commands/aster_agent_cmd/action_runtime.rs", 33],
   ["lime-rs/src/commands/aster_agent_cmd/app_server_host.rs", 17],
@@ -196,11 +187,10 @@ const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
   ["lime-rs/src/commands/gateway_tunnel_cmd.rs", 40],
   ["lime-rs/src/commands/layered_design_cmd.rs", 41],
   ["lime-rs/src/commands/machine_id_cmd.rs", 27],
-  ["lime-rs/src/commands/material_cmd.rs", 41],
-  ["lime-rs/src/commands/mcp_cmd.rs", 56],
+  ["lime-rs/src/commands/material_cmd.rs", 38],
   ["lime-rs/src/commands/media_task_cmd.rs", 103],
   ["lime-rs/src/commands/memory_cmd.rs", 42],
-  ["lime-rs/src/commands/memory_feedback_cmd.rs", 12],
+  ["lime-rs/src/commands/memory_feedback_cmd.rs", 8],
   ["lime-rs/src/commands/memory_management_cmd.rs", 48],
   ["lime-rs/src/commands/memory_search_cmd.rs", 35],
   ["lime-rs/src/commands/modality_runtime_contracts.rs", 2],
@@ -216,7 +206,7 @@ const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
   ["lime-rs/src/commands/webview_cmd.rs", 114],
   ["lime-rs/src/commands/wechat_channel_cmd.rs", 23],
   ["lime-rs/src/commands/windows_startup_cmd.rs", 20],
-  ["lime-rs/src/commands/workspace_cmd.rs", 49],
+  ["lime-rs/src/commands/workspace_cmd.rs", 45],
 ]);
 
 function readRepoFile(path: string): string {
@@ -286,14 +276,29 @@ describe("rust commands current boundary", () => {
     expect(hostSource).not.toContain("struct AppServerDrainEvents");
   });
 
-  it("Agent App runtime 只能调用内部 App Server helper，不能回到旧 Tauri command", () => {
-    const commonSource = readRepoFile(
-      "lime-rs/src/commands/agent_app_runtime_cmd/common.rs",
-    );
+  it("Agent App 旧 Tauri wrapper 文件不应恢复", () => {
+    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+    const deletedAgentAppWrappers = [
+      "lime-rs/src/commands/agent_app_cmd.rs",
+      "lime-rs/src/commands/agent_app_runtime_cmd.rs",
+      "lime-rs/src/commands/agent_app_runtime_cmd",
+    ];
 
-    expect(commonSource).toContain("handle_in_process_app_server_json_lines");
-    expect(commonSource).not.toContain("app_server_handle_json_lines");
-    expect(commonSource).not.toContain("app_server_drain_events");
+    expect(commandsModSource).not.toContain("agent_app_cmd");
+    expect(commandsModSource).not.toContain("agent_app_runtime_cmd");
+
+    for (const deletedPath of deletedAgentAppWrappers) {
+      expect(existsSync(join(REPO_ROOT, deletedPath))).toBe(false);
+    }
+  });
+
+  it("MCP 旧 Tauri wrapper 文件不应恢复", () => {
+    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+
+    expect(commandsModSource).not.toContain("mcp_cmd");
+    expect(existsSync(join(REPO_ROOT, "lime-rs/src/commands/mcp_cmd.rs"))).toBe(
+      false,
+    );
   });
 
   it("commands 目录不应继续新增 deprecated/fail-closed stub 文件", () => {
