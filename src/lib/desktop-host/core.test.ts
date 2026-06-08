@@ -740,17 +740,6 @@ describe("desktop-host/core invoke", () => {
         }),
       }),
     ]);
-    const registeredSkills = await invokeMockOnly<any>(
-      "capability_draft_list_registered_skills",
-      {
-        request: {
-          workspaceRoot: "/tmp/lime-p6-mock",
-        },
-      },
-    );
-    expect(registeredSkills[0].registration.approvalRequests).toEqual(
-      positiveRegistration.registration.approvalRequests,
-    );
     const approvalSubmission = await invokeMockOnly<any>(
       "capability_draft_submit_approval_session_inputs",
       {

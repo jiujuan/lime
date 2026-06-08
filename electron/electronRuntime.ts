@@ -1,0 +1,31 @@
+import { createRequire } from "node:module";
+import type * as Electron from "electron";
+
+const requireElectron = createRequire(import.meta.url);
+const electron = requireElectron("electron") as typeof Electron;
+
+export const {
+  app,
+  autoUpdater,
+  BrowserWindow,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeImage,
+  screen,
+  session,
+  shell,
+  Tray,
+} = electron;
+
+export type BrowserWindow = Electron.BrowserWindow;
+export type Menu = Electron.Menu;
+export type Tray = Electron.Tray;
+
+export type {
+  IpcMainInvokeEvent,
+  MenuItemConstructorOptions,
+  OpenDialogOptions,
+  SaveDialogOptions,
+} from "electron";

@@ -9,6 +9,7 @@ import {
   getModelsForProvider,
   getProviderAliasConfig,
   getModelSyncState,
+  fetchProviderModelsAuto,
   invalidateModelRegistryCache,
   refreshModelRegistry,
 } from "./modelRegistry";
@@ -206,6 +207,32 @@ describe("modelRegistry API", () => {
       provider: "custom-provider",
     });
     expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("Provider 实时模型抓取应通过 App Server current", async () => {
+    resolveAppServerRequest({
+      models: [{ id: "gpt-4.1", provider_id: "openai" }],
+      source: "Api",
+      error: null,
+      requestUrl: "https://api.openai.com/v1/models",
+      diagnosticHint: null,
+      errorKind: null,
+      shouldPromptError: false,
+      fromCache: true,
+    });
+
+    await expect(fetchProviderModelsAuto("openai")).resolves.toEqual(
+      expect.objectContaining({
+        source: "Api",
+        request_url: "https://api.openai.com/v1/models",
+        from_cache: true,
+      }),
+    );
+
+    expectAppServerRequest(1, "modelProvider/fetchModels", {
+      providerId: "openai",
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith("fetch_provider_models_auto");
   });
 
   it("App Server 模型读链缺少必需 result 时不应回退 legacy", async () => {

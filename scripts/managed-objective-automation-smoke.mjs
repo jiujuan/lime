@@ -42,6 +42,50 @@ const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_INTERVAL_MS = 1_000;
 const LOG_PREFIX = "[smoke:managed-objective-automation]";
+const APP_SERVER_EXECUTOR_GAP =
+  "automationJob/runNow 尚未迁移到 App Server 执行器";
+
+async function invokeAppServerJsonRpc(
+  options,
+  method,
+  params = {},
+  timeoutMs = options.timeoutMs,
+) {
+  const response = await invokeDevBridge(
+    options,
+    "app_server_handle_json_lines",
+    {
+      request: {
+        lines: [
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method,
+            params,
+          }),
+        ],
+      },
+    },
+    timeoutMs,
+  );
+  const lines = Array.isArray(response?.lines) ? response.lines : [];
+  for (const line of lines) {
+    const text = typeof line === "string" ? line.trim() : "";
+    if (!text) {
+      continue;
+    }
+    const message = JSON.parse(text);
+    if (message?.id !== 1) {
+      continue;
+    }
+    if (message.error) {
+      const detail = JSON.stringify(message.error);
+      throw new Error(`${method} App Server error: ${detail}`);
+    }
+    return message.result;
+  }
+  throw new Error(`${method} did not return App Server JSON-RPC response`);
+}
 
 function printHelp() {
   console.log(`
@@ -252,28 +296,52 @@ async function runSmoke(options) {
     );
 
     console.log(`${LOG_PREFIX} stage=create-automation-job`);
-    const job = await invokeDevBridge(options, "create_automation_job", {
-      request: buildAutomationJobRequest(
-        workspaceId,
-        skillBinding,
-        fixture.provider,
-      ),
-    });
-    assertSmoke(job?.id, "create_automation_job 未返回 job id");
+    const jobWrite = await invokeAppServerJsonRpc(
+      options,
+      "automationJob/create",
+      {
+        request: buildAutomationJobRequest(
+          workspaceId,
+          skillBinding,
+          fixture.provider,
+        ),
+      },
+    );
+    const job = jobWrite?.job || null;
+    assertSmoke(job?.id, "automationJob/create 未返回 job id");
 
     console.log(`${LOG_PREFIX} stage=run-automation-job job=${job.id}`);
-    const runResult = await invokeDevBridge(
-      options,
-      "run_automation_job_now",
-      { id: job.id },
-      options.timeoutMs,
-    );
+    let runResult;
+    try {
+      const runNowResponse = await invokeAppServerJsonRpc(
+        options,
+        "automationJob/runNow",
+        { id: job.id },
+        options.timeoutMs,
+      );
+      runResult = runNowResponse?.result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes(APP_SERVER_EXECUTOR_GAP)) {
+        throw new Error(
+          `${APP_SERVER_EXECUTOR_GAP}，本 smoke 不能回退退役的 Tauri 自动化命令。请先迁移 App Server 自动化执行器后再运行该 owner smoke。`,
+        );
+      }
+      throw error;
+    }
+    assertSmoke(runResult, "automationJob/runNow 未返回 result");
 
     console.log(`${LOG_PREFIX} stage=run-history`);
-    const runs = await invokeDevBridge(options, "get_automation_run_history", {
-      id: job.id,
-      limit: 5,
-    });
+    const runHistory = await invokeAppServerJsonRpc(
+      options,
+      "automationJob/runHistory",
+      {
+        id: job.id,
+        limit: 5,
+      },
+    );
+    const runs = Array.isArray(runHistory?.runs) ? runHistory.runs : [];
+
     const latestRun = Array.isArray(runs) ? runs[0] : null;
     const latestRunMetadata = metadataFromRun(latestRun);
     const runSessionId = sessionIdFromRun(latestRun);

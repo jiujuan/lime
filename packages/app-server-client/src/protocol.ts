@@ -33,7 +33,28 @@ export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start";
 export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status";
 export const METHOD_AGENT_APP_UI_RUNTIME_STOP = "agentAppUiRuntime/stop";
 export const METHOD_KNOWLEDGE_PACK_LIST = "knowledgePack/list";
+export const METHOD_AUTOMATION_SCHEDULER_CONFIG_READ =
+  "automationScheduler/config/read";
+export const METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE =
+  "automationScheduler/config/update";
+export const METHOD_AUTOMATION_SCHEDULER_STATUS = "automationScheduler/status";
 export const METHOD_AUTOMATION_JOB_LIST = "automationJob/list";
+export const METHOD_AUTOMATION_JOB_READ = "automationJob/read";
+export const METHOD_AUTOMATION_JOB_CREATE = "automationJob/create";
+export const METHOD_AUTOMATION_JOB_UPDATE = "automationJob/update";
+export const METHOD_AUTOMATION_JOB_DELETE = "automationJob/delete";
+export const METHOD_AUTOMATION_JOB_RUN_NOW = "automationJob/runNow";
+export const METHOD_AUTOMATION_JOB_HEALTH = "automationJob/health";
+export const METHOD_AUTOMATION_JOB_RUN_HISTORY = "automationJob/runHistory";
+export const METHOD_AUTOMATION_SCHEDULE_PREVIEW =
+  "automationSchedule/preview";
+export const METHOD_AUTOMATION_SCHEDULE_VALIDATE =
+  "automationSchedule/validate";
+export const METHOD_MCP_SERVER_LIST = "mcpServer/list";
+export const METHOD_MCP_SERVER_STATUS_LIST = "mcpServerStatus/list";
+export const METHOD_MCP_TOOL_LIST = "mcpTool/list";
+export const METHOD_MCP_PROMPT_LIST = "mcpPrompt/list";
+export const METHOD_MCP_RESOURCE_LIST = "mcpResource/list";
 export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
 export const METHOD_AGENT_SESSION_START = "agentSession/start";
 export const METHOD_AGENT_SESSION_READ = "agentSession/read";
@@ -47,6 +68,30 @@ export const METHOD_MODEL_PREFERENCES_LIST = "modelPreferences/list";
 export const METHOD_MODEL_SYNC_STATE_READ = "modelSyncState/read";
 export const METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
 export const METHOD_MODEL_PROVIDER_CATALOG_LIST = "modelProvider/catalog/list";
+export const METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
+export const METHOD_MODEL_PROVIDER_CREATE = "modelProvider/create";
+export const METHOD_MODEL_PROVIDER_UPDATE = "modelProvider/update";
+export const METHOD_MODEL_PROVIDER_DELETE = "modelProvider/delete";
+export const METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE =
+  "modelProvider/sortOrders/update";
+export const METHOD_MODEL_PROVIDER_CONFIG_EXPORT = "modelProviderConfig/export";
+export const METHOD_MODEL_PROVIDER_CONFIG_IMPORT = "modelProviderConfig/import";
+export const METHOD_MODEL_PROVIDER_TEST_CONNECTION =
+  "modelProvider/testConnection";
+export const METHOD_MODEL_PROVIDER_TEST_CHAT = "modelProvider/testChat";
+export const METHOD_MODEL_PROVIDER_FETCH_MODELS = "modelProvider/fetchModels";
+export const METHOD_MODEL_PROVIDER_KEY_CREATE = "modelProviderKey/create";
+export const METHOD_MODEL_PROVIDER_KEY_UPDATE = "modelProviderKey/update";
+export const METHOD_MODEL_PROVIDER_KEY_DELETE = "modelProviderKey/delete";
+export const METHOD_MODEL_PROVIDER_KEY_NEXT = "modelProviderKey/next";
+export const METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD =
+  "modelProviderKey/usage/record";
+export const METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD =
+  "modelProviderKey/error/record";
+export const METHOD_MODEL_PROVIDER_UI_STATE_READ =
+  "modelProviderUiState/read";
+export const METHOD_MODEL_PROVIDER_UI_STATE_WRITE =
+  "modelProviderUiState/write";
 export const METHOD_MODEL_PROVIDER_ALIAS_READ = "modelProviderAlias/read";
 export const METHOD_MODEL_PROVIDER_ALIAS_LIST = "modelProviderAlias/list";
 export const METHOD_CONNECT_DEEP_LINK_RESOLVE = "connectDeepLink/resolve";
@@ -89,13 +134,48 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
   { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
+  { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_READ, kind: "request" },
+  { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE, kind: "request" },
+  { method: METHOD_AUTOMATION_SCHEDULER_STATUS, kind: "request" },
   { method: METHOD_AUTOMATION_JOB_LIST, kind: "request" },
+  { method: METHOD_AUTOMATION_JOB_READ, kind: "request" },
+  { method: METHOD_AUTOMATION_JOB_CREATE, kind: "request" },
+  { method: METHOD_AUTOMATION_JOB_UPDATE, kind: "request" },
+  { method: METHOD_AUTOMATION_JOB_DELETE, kind: "request" },
+  { method: METHOD_AUTOMATION_JOB_RUN_NOW, kind: "request" },
+  { method: METHOD_AUTOMATION_JOB_HEALTH, kind: "request" },
+  { method: METHOD_AUTOMATION_JOB_RUN_HISTORY, kind: "request" },
+  { method: METHOD_AUTOMATION_SCHEDULE_PREVIEW, kind: "request" },
+  { method: METHOD_AUTOMATION_SCHEDULE_VALIDATE, kind: "request" },
+  { method: METHOD_MCP_SERVER_LIST, kind: "request" },
+  { method: METHOD_MCP_SERVER_STATUS_LIST, kind: "request" },
+  { method: METHOD_MCP_TOOL_LIST, kind: "request" },
+  { method: METHOD_MCP_PROMPT_LIST, kind: "request" },
+  { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
   { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
   { method: METHOD_MODEL_LIST, kind: "request" },
   { method: METHOD_MODEL_PREFERENCES_LIST, kind: "request" },
   { method: METHOD_MODEL_SYNC_STATE_READ, kind: "request" },
   { method: METHOD_MODEL_PROVIDER_LIST, kind: "request" },
   { method: METHOD_MODEL_PROVIDER_CATALOG_LIST, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_READ, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_CREATE, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_UPDATE, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_DELETE, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_CONFIG_EXPORT, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_CONFIG_IMPORT, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_TEST_CONNECTION, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_TEST_CHAT, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_FETCH_MODELS, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_KEY_CREATE, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_KEY_UPDATE, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_KEY_DELETE, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_KEY_NEXT, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_UI_STATE_READ, kind: "request" },
+  { method: METHOD_MODEL_PROVIDER_UI_STATE_WRITE, kind: "request" },
   { method: METHOD_MODEL_PROVIDER_ALIAS_READ, kind: "request" },
   { method: METHOD_MODEL_PROVIDER_ALIAS_LIST, kind: "request" },
   { method: METHOD_CONNECT_DEEP_LINK_RESOLVE, kind: "request" },
@@ -633,6 +713,101 @@ export type AutomationJobListResponse = {
   jobs: unknown[];
 };
 
+export type AutomationSchedulerConfigReadResponse = {
+  config: unknown;
+};
+
+export type AutomationSchedulerConfigUpdateParams = {
+  config: unknown;
+};
+
+export type AutomationSchedulerConfigUpdateResponse = {
+  config: unknown;
+};
+
+export type AutomationSchedulerStatusResponse = {
+  status: unknown;
+};
+
+export type AutomationJobIdParams = {
+  id: string;
+};
+
+export type AutomationJobReadResponse = {
+  job?: unknown;
+};
+
+export type AutomationJobCreateParams = {
+  request: unknown;
+};
+
+export type AutomationJobWriteResponse = {
+  job: unknown;
+};
+
+export type AutomationJobUpdateParams = {
+  id: string;
+  request: unknown;
+};
+
+export type AutomationJobDeleteResponse = {
+  deleted: boolean;
+};
+
+export type AutomationJobRunNowResponse = {
+  result: unknown;
+};
+
+export type AutomationJobHealthParams = {
+  query?: unknown;
+};
+
+export type AutomationJobHealthResponse = {
+  health: unknown;
+};
+
+export type AutomationJobRunHistoryParams = {
+  id: string;
+  limit?: number;
+};
+
+export type AutomationJobRunHistoryResponse = {
+  runs: unknown[];
+};
+
+export type AutomationScheduleParams = {
+  schedule: unknown;
+};
+
+export type AutomationSchedulePreviewResponse = {
+  nextRunAt?: string;
+};
+
+export type AutomationScheduleValidateResponse = {
+  valid: boolean;
+  error?: string;
+};
+
+export type McpServerListResponse = {
+  servers: unknown[];
+};
+
+export type McpServerStatusListResponse = {
+  servers: unknown[];
+};
+
+export type McpToolListResponse = {
+  tools: unknown[];
+};
+
+export type McpPromptListResponse = {
+  prompts: unknown[];
+};
+
+export type McpResourceListResponse = {
+  resources: unknown[];
+};
+
 export type ProjectMemoryReadParams = {
   projectId: string;
 };
@@ -686,6 +861,158 @@ export type ModelProviderListResponse = {
 
 export type ModelProviderCatalogListResponse = {
   providers: unknown[];
+};
+
+export type ModelProviderReadParams = {
+  providerId: string;
+};
+
+export type ModelProviderReadResponse = {
+  provider?: unknown;
+};
+
+export type ModelProviderCreateParams = {
+  provider: unknown;
+};
+
+export type ModelProviderWriteResponse = {
+  provider: unknown;
+};
+
+export type ModelProviderUpdateParams = {
+  providerId: string;
+  patch: unknown;
+};
+
+export type ModelProviderDeleteParams = {
+  providerId: string;
+};
+
+export type ModelProviderDeleteResponse = {
+  deleted: boolean;
+};
+
+export type ModelProviderSortOrderItem = {
+  providerId: string;
+  sortOrder: number;
+};
+
+export type ModelProviderSortOrdersUpdateParams = {
+  sortOrders: ModelProviderSortOrderItem[];
+};
+
+export type ModelProviderMutationResponse = Record<string, never>;
+
+export type ModelProviderConfigExportParams = {
+  includeKeys?: boolean;
+};
+
+export type ModelProviderConfigExportResponse = {
+  configJson: string;
+};
+
+export type ModelProviderConfigImportParams = {
+  configJson: string;
+};
+
+export type ModelProviderConfigImportResponse = {
+  success: boolean;
+  importedProviders: number;
+  importedApiKeys: number;
+  skippedProviders: number;
+  errors: string[];
+};
+
+export type ModelProviderTestConnectionParams = {
+  providerId: string;
+  modelName?: string;
+};
+
+export type ModelProviderTestConnectionResponse = {
+  success: boolean;
+  latencyMs?: number;
+  error?: string;
+  models?: string[];
+};
+
+export type ModelProviderTestChatParams = {
+  providerId: string;
+  modelName?: string;
+  prompt: string;
+};
+
+export type ModelProviderTestChatResponse = {
+  success: boolean;
+  latencyMs?: number;
+  error?: string;
+  content?: string;
+  raw?: string;
+};
+
+export type ModelProviderFetchModelsParams = {
+  providerId: string;
+};
+
+export type ModelProviderFetchModelsResponse = {
+  models: unknown[];
+  source: string;
+  error?: string | null;
+  requestUrl?: string | null;
+  diagnosticHint?: string | null;
+  errorKind?: string | null;
+  shouldPromptError?: boolean;
+  fromCache?: boolean;
+};
+
+export type ModelProviderKeyCreateParams = {
+  providerId: string;
+  apiKey: string;
+  alias?: string;
+  replaceExisting?: boolean;
+};
+
+export type ModelProviderKeyWriteResponse = {
+  key: unknown;
+};
+
+export type ModelProviderKeyUpdateParams = {
+  keyId: string;
+  enabled?: boolean;
+  alias?: string;
+};
+
+export type ModelProviderKeyDeleteParams = {
+  keyId: string;
+};
+
+export type ModelProviderKeyDeleteResponse = {
+  deleted: boolean;
+};
+
+export type ModelProviderKeyNextParams = {
+  providerId: string;
+};
+
+export type ModelProviderKeyNextResponse = {
+  apiKey?: string;
+  keyId?: string;
+};
+
+export type ModelProviderKeyEventParams = {
+  keyId: string;
+};
+
+export type ModelProviderUiStateReadParams = {
+  key: string;
+};
+
+export type ModelProviderUiStateReadResponse = {
+  value?: string;
+};
+
+export type ModelProviderUiStateWriteParams = {
+  key: string;
+  value: string;
 };
 
 export type ModelProviderAliasReadParams = {

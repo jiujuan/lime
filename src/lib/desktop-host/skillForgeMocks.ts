@@ -1598,8 +1598,6 @@ export const skillForgeMocks: Record<
     verifyMockCapabilityDraft(args),
   capability_draft_register: (args?: Record<string, unknown>) =>
     registerMockCapabilityDraft(args),
-  capability_draft_list_registered_skills: (args?: Record<string, unknown>) =>
-    listMockCapabilityRegisteredSkills(args),
   capability_draft_submit_approval_session_inputs: (
     args?: Record<string, unknown>,
   ) => submitMockApprovalSessionInputs(args),

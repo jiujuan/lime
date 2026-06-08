@@ -18,8 +18,10 @@ import {
   METHOD_MODEL_PREFERENCES_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_READ,
+  METHOD_MODEL_PROVIDER_FETCH_MODELS,
   METHOD_MODEL_SYNC_STATE_READ,
   type ModelListParams,
+  type ModelProviderFetchModelsResponse,
 } from "../../../packages/app-server-client/src/protocol";
 
 type ModelRegistryAppServerClient = Pick<AppServerClient, "request">;
@@ -269,7 +271,24 @@ export async function getModelsByTier(
 export async function fetchProviderModelsAuto(
   providerId: string,
 ): Promise<FetchProviderModelsResult> {
-  return safeInvoke("fetch_provider_models_auto", { providerId });
+  const response =
+    await requestModelRegistryAppServer<ModelProviderFetchModelsResponse>(
+      METHOD_MODEL_PROVIDER_FETCH_MODELS,
+      { providerId },
+    );
+  return {
+    models: Array.isArray(response.models)
+      ? (response.models as EnhancedModelMetadata[])
+      : [],
+    source: response.source === "Api" ? "Api" : "Error",
+    error: response.error ?? null,
+    request_url: response.requestUrl ?? null,
+    diagnostic_hint: response.diagnosticHint ?? null,
+    error_kind:
+      (response.errorKind as FetchProviderModelsResult["error_kind"]) ?? null,
+    should_prompt_error: Boolean(response.shouldPromptError),
+    from_cache: Boolean(response.fromCache),
+  };
 }
 
 /**

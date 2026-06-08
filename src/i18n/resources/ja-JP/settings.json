@@ -2350,6 +2350,8 @@
   "settings.providers.modelAdd.configure.title": "{{providerName}} を設定",
   "settings.providers.modelAdd.form.providerName.label": "プロバイダー名",
   "settings.providers.modelAdd.form.providerName.placeholder": "例：My API Provider",
+  "settings.providers.modelAdd.form.apiHost.label": "API Base URL",
+  "settings.providers.modelAdd.form.apiHost.placeholder": "https://api.example.com/v1",
   "settings.providers.modelAdd.form.apiFormat.label": "API 形式",
   "settings.providers.modelAdd.form.apiFormat.openai": "OpenAI 形式",
   "settings.providers.modelAdd.form.apiFormat.anthropic": "Anthropic 形式",

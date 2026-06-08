@@ -24,7 +24,6 @@ import {
   hasDesktopHostInvokeCapability,
   hasDesktopHostRuntimeMarkers,
 } from "@/lib/desktop-runtime";
-import { isElectronHostCommandAvailable } from "@/lib/electron-host";
 
 const LEGACY_MANAGED_LIME_HUB_KEY_ALIAS = "Lime 云端模型";
 const MANAGED_LIME_HUB_KEY_MODELS_STATE =
@@ -163,7 +162,7 @@ function canSyncLimeHubProvider(): boolean {
     return false;
   }
   if (hasDesktopHostRuntimeMarkers()) {
-    return isElectronHostCommandAvailable("update_api_key_provider");
+    return true;
   }
   return true;
 }

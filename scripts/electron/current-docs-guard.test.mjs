@@ -399,8 +399,15 @@ describe("Electron current testing docs guard", () => {
     expect(forgeConfig).toContain("LIME_WINDOWS_SIGNING_CERTIFICATE_FILE");
     expect(forgeConfig).toContain("LIME_WINDOWS_SQUIRREL_REMOTE_RELEASES_URL");
 
+    const electronRuntime = readFile("electron/electronRuntime.ts");
+    expect(electronRuntime).toContain('import type * as Electron from "electron"');
+    expect(electronRuntime).toContain('requireElectron("electron")');
+    expect(electronRuntime).toContain("autoUpdater,");
+
     const updateHost = readFile("electron/updateHost.ts");
-    expect(updateHost).toContain('import { app, autoUpdater } from "electron"');
+    expect(updateHost).toContain(
+      'import { app, autoUpdater } from "./electronRuntime"',
+    );
     expect(updateHost).toContain(
       'serverType: process.platform === "darwin" ? "json" : "default"',
     );

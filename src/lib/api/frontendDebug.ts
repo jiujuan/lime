@@ -10,9 +10,10 @@ export interface FrontendDebugLogReport {
 export async function reportFrontendDebugLog(
   report: FrontendDebugLogReport,
 ): Promise<void> {
-  // 浏览器 dev shell 仅保留本地 console 调试，不再占用 DevBridge 主链。
   if (isDevBridgeAvailable()) {
-    return;
+    throw new Error(
+      "report_frontend_debug_log 尚未接入浏览器 DevBridge current 通道，前端调试日志不能静默跳过真实上报。",
+    );
   }
   await safeInvoke("report_frontend_debug_log", { report });
 }

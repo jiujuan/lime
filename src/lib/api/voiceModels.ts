@@ -6,6 +6,7 @@
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
 import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
 import { getAsrCredentials, type AsrCredentialEntry } from "./asrProvider";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const VOICE_MODEL_DOWNLOAD_PROGRESS_EVENT =
   "voice-model-download-progress";
@@ -104,7 +105,7 @@ interface OemVoiceModelDownloadAsset {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object";
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeText(value: unknown): string | null {
@@ -196,15 +197,32 @@ export async function listVoiceModelCatalog(): Promise<
     return oemCatalog;
   }
 
-  return safeInvoke<VoiceModelCatalogEntry[]>("voice_models_list_catalog");
+  const result = await safeInvoke<VoiceModelCatalogEntry[]>(
+    "voice_models_list_catalog",
+  );
+  assertNotDiagnosticFacade(
+    "voice_models_list_catalog",
+    result,
+    "真实语音模型 current 通道",
+  );
+  return result;
 }
 
 export async function getVoiceModelInstallState(
   modelId: string,
 ): Promise<VoiceModelInstallState> {
-  return safeInvoke<VoiceModelInstallState>("voice_models_get_install_state", {
-    modelId,
-  });
+  const result = await safeInvoke<VoiceModelInstallState>(
+    "voice_models_get_install_state",
+    {
+      modelId,
+    },
+  );
+  assertNotDiagnosticFacade(
+    "voice_models_get_install_state",
+    result,
+    "真实语音模型 current 通道",
+  );
+  return result;
 }
 
 export async function getDefaultLocalVoiceModelReadiness(): Promise<DefaultLocalVoiceModelReadiness> {

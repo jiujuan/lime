@@ -170,6 +170,33 @@ describe("memory API", () => {
     });
   });
 
+  it("角色、世界观与大纲 CRUD 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(listCharacters("project-1")).rejects.toThrow(
+      "character_list 尚未接入真实 Memory CRUD current 通道",
+    );
+    await expect(getWorldBuilding("project-1")).rejects.toThrow(
+      "world_building_get 尚未接入真实 Memory CRUD current 通道",
+    );
+    await expect(
+      createOutlineNode({ project_id: "project-1", title: "第二章" }),
+    ).rejects.toThrow(
+      "outline_node_create 尚未接入真实 Memory CRUD current 通道",
+    );
+
+    expect(vi.mocked(safeInvoke).mock.calls.map(([cmd]) => cmd)).toEqual([
+      "character_list",
+      "world_building_get",
+      "outline_node_create",
+    ]);
+  });
+
   it("并发读取同一项目记忆时应复用同一个 projectMemory/read", async () => {
     const deferred = createDeferred<{
       result: {

@@ -23,7 +23,6 @@ function stripSkillPackageExtension(value: string): string {
 }
 
 export const skillManagementMocks: Record<string, (args?: any) => any> = {
-  get_all_skills: () => [],
   get_skills_for_app: () => [],
   get_local_skills_for_app: () => [],
   get_skill_repos: () => [],
@@ -170,6 +169,4 @@ export const skillManagementMocks: Record<string, (args?: any) => any> = {
       content: "# Mock Downloaded Skill",
     }),
   }),
-  enable_skill: () => ({ success: true }),
-  disable_skill: () => ({ success: true }),
 };

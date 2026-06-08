@@ -33,7 +33,25 @@ use crate::ArtifactContentStatus;
 use crate::ArtifactReadParams;
 use crate::ArtifactReadResponse;
 use crate::ArtifactSummary;
+use crate::AutomationJobCreateParams;
+use crate::AutomationJobDeleteResponse;
+use crate::AutomationJobHealthParams;
+use crate::AutomationJobHealthResponse;
+use crate::AutomationJobIdParams;
 use crate::AutomationJobListResponse;
+use crate::AutomationJobReadResponse;
+use crate::AutomationJobRunHistoryParams;
+use crate::AutomationJobRunHistoryResponse;
+use crate::AutomationJobRunNowResponse;
+use crate::AutomationJobUpdateParams;
+use crate::AutomationJobWriteResponse;
+use crate::AutomationScheduleParams;
+use crate::AutomationSchedulePreviewResponse;
+use crate::AutomationScheduleValidateResponse;
+use crate::AutomationSchedulerConfigReadResponse;
+use crate::AutomationSchedulerConfigUpdateParams;
+use crate::AutomationSchedulerConfigUpdateResponse;
+use crate::AutomationSchedulerStatusResponse;
 use crate::BusinessObjectRef;
 use crate::CapabilityDescriptor;
 use crate::CapabilityListParams;
@@ -69,6 +87,11 @@ use crate::JsonRpcRequest;
 use crate::JsonRpcResponse;
 use crate::KnowledgeListPacksParams;
 use crate::KnowledgeListPacksResponse;
+use crate::McpPromptListResponse;
+use crate::McpResourceListResponse;
+use crate::McpServerListResponse;
+use crate::McpServerStatusListResponse;
+use crate::McpToolListResponse;
 use crate::ModelListParams;
 use crate::ModelListResponse;
 use crate::ModelPreferencesListResponse;
@@ -76,7 +99,38 @@ use crate::ModelProviderAliasListResponse;
 use crate::ModelProviderAliasReadParams;
 use crate::ModelProviderAliasReadResponse;
 use crate::ModelProviderCatalogListResponse;
+use crate::ModelProviderConfigExportParams;
+use crate::ModelProviderConfigExportResponse;
+use crate::ModelProviderConfigImportParams;
+use crate::ModelProviderConfigImportResponse;
+use crate::ModelProviderCreateParams;
+use crate::ModelProviderDeleteParams;
+use crate::ModelProviderDeleteResponse;
+use crate::ModelProviderFetchModelsParams;
+use crate::ModelProviderFetchModelsResponse;
+use crate::ModelProviderKeyCreateParams;
+use crate::ModelProviderKeyDeleteParams;
+use crate::ModelProviderKeyDeleteResponse;
+use crate::ModelProviderKeyEventParams;
+use crate::ModelProviderKeyNextParams;
+use crate::ModelProviderKeyNextResponse;
+use crate::ModelProviderKeyUpdateParams;
+use crate::ModelProviderKeyWriteResponse;
 use crate::ModelProviderListResponse;
+use crate::ModelProviderMutationResponse;
+use crate::ModelProviderReadParams;
+use crate::ModelProviderReadResponse;
+use crate::ModelProviderSortOrderItem;
+use crate::ModelProviderSortOrdersUpdateParams;
+use crate::ModelProviderTestChatParams;
+use crate::ModelProviderTestChatResponse;
+use crate::ModelProviderTestConnectionParams;
+use crate::ModelProviderTestConnectionResponse;
+use crate::ModelProviderUiStateReadParams;
+use crate::ModelProviderUiStateReadResponse;
+use crate::ModelProviderUiStateWriteParams;
+use crate::ModelProviderUpdateParams;
+use crate::ModelProviderWriteResponse;
 use crate::ModelSyncStateReadResponse;
 use crate::OpenDeepLinkPayload;
 use crate::PlatformInfo;
@@ -284,7 +338,36 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentAppUiRuntimeStatusResponse>("AgentAppUiRuntimeStatusResponse"),
         typed_schema::<KnowledgeListPacksParams>("KnowledgeListPacksParams"),
         typed_schema::<KnowledgeListPacksResponse>("KnowledgeListPacksResponse"),
+        typed_schema::<AutomationSchedulerConfigReadResponse>(
+            "AutomationSchedulerConfigReadResponse",
+        ),
+        typed_schema::<AutomationSchedulerConfigUpdateParams>(
+            "AutomationSchedulerConfigUpdateParams",
+        ),
+        typed_schema::<AutomationSchedulerConfigUpdateResponse>(
+            "AutomationSchedulerConfigUpdateResponse",
+        ),
+        typed_schema::<AutomationSchedulerStatusResponse>("AutomationSchedulerStatusResponse"),
         typed_schema::<AutomationJobListResponse>("AutomationJobListResponse"),
+        typed_schema::<AutomationJobIdParams>("AutomationJobIdParams"),
+        typed_schema::<AutomationJobReadResponse>("AutomationJobReadResponse"),
+        typed_schema::<AutomationJobCreateParams>("AutomationJobCreateParams"),
+        typed_schema::<AutomationJobWriteResponse>("AutomationJobWriteResponse"),
+        typed_schema::<AutomationJobUpdateParams>("AutomationJobUpdateParams"),
+        typed_schema::<AutomationJobDeleteResponse>("AutomationJobDeleteResponse"),
+        typed_schema::<AutomationJobRunNowResponse>("AutomationJobRunNowResponse"),
+        typed_schema::<AutomationJobHealthParams>("AutomationJobHealthParams"),
+        typed_schema::<AutomationJobHealthResponse>("AutomationJobHealthResponse"),
+        typed_schema::<AutomationJobRunHistoryParams>("AutomationJobRunHistoryParams"),
+        typed_schema::<AutomationJobRunHistoryResponse>("AutomationJobRunHistoryResponse"),
+        typed_schema::<AutomationScheduleParams>("AutomationScheduleParams"),
+        typed_schema::<AutomationSchedulePreviewResponse>("AutomationSchedulePreviewResponse"),
+        typed_schema::<AutomationScheduleValidateResponse>("AutomationScheduleValidateResponse"),
+        typed_schema::<McpServerListResponse>("McpServerListResponse"),
+        typed_schema::<McpServerStatusListResponse>("McpServerStatusListResponse"),
+        typed_schema::<McpToolListResponse>("McpToolListResponse"),
+        typed_schema::<McpPromptListResponse>("McpPromptListResponse"),
+        typed_schema::<McpResourceListResponse>("McpResourceListResponse"),
         typed_schema::<ProjectMemoryReadParams>("ProjectMemoryReadParams"),
         typed_schema::<ProjectMemoryReadResponse>("ProjectMemoryReadResponse"),
         typed_schema::<ModelListParams>("ModelListParams"),
@@ -293,6 +376,37 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ModelSyncStateReadResponse>("ModelSyncStateReadResponse"),
         typed_schema::<ModelProviderListResponse>("ModelProviderListResponse"),
         typed_schema::<ModelProviderCatalogListResponse>("ModelProviderCatalogListResponse"),
+        typed_schema::<ModelProviderReadParams>("ModelProviderReadParams"),
+        typed_schema::<ModelProviderReadResponse>("ModelProviderReadResponse"),
+        typed_schema::<ModelProviderCreateParams>("ModelProviderCreateParams"),
+        typed_schema::<ModelProviderWriteResponse>("ModelProviderWriteResponse"),
+        typed_schema::<ModelProviderUpdateParams>("ModelProviderUpdateParams"),
+        typed_schema::<ModelProviderDeleteParams>("ModelProviderDeleteParams"),
+        typed_schema::<ModelProviderDeleteResponse>("ModelProviderDeleteResponse"),
+        typed_schema::<ModelProviderSortOrderItem>("ModelProviderSortOrderItem"),
+        typed_schema::<ModelProviderSortOrdersUpdateParams>("ModelProviderSortOrdersUpdateParams"),
+        typed_schema::<ModelProviderMutationResponse>("ModelProviderMutationResponse"),
+        typed_schema::<ModelProviderConfigExportParams>("ModelProviderConfigExportParams"),
+        typed_schema::<ModelProviderConfigExportResponse>("ModelProviderConfigExportResponse"),
+        typed_schema::<ModelProviderConfigImportParams>("ModelProviderConfigImportParams"),
+        typed_schema::<ModelProviderConfigImportResponse>("ModelProviderConfigImportResponse"),
+        typed_schema::<ModelProviderTestConnectionParams>("ModelProviderTestConnectionParams"),
+        typed_schema::<ModelProviderTestConnectionResponse>("ModelProviderTestConnectionResponse"),
+        typed_schema::<ModelProviderTestChatParams>("ModelProviderTestChatParams"),
+        typed_schema::<ModelProviderTestChatResponse>("ModelProviderTestChatResponse"),
+        typed_schema::<ModelProviderFetchModelsParams>("ModelProviderFetchModelsParams"),
+        typed_schema::<ModelProviderFetchModelsResponse>("ModelProviderFetchModelsResponse"),
+        typed_schema::<ModelProviderKeyCreateParams>("ModelProviderKeyCreateParams"),
+        typed_schema::<ModelProviderKeyWriteResponse>("ModelProviderKeyWriteResponse"),
+        typed_schema::<ModelProviderKeyUpdateParams>("ModelProviderKeyUpdateParams"),
+        typed_schema::<ModelProviderKeyDeleteParams>("ModelProviderKeyDeleteParams"),
+        typed_schema::<ModelProviderKeyDeleteResponse>("ModelProviderKeyDeleteResponse"),
+        typed_schema::<ModelProviderKeyNextParams>("ModelProviderKeyNextParams"),
+        typed_schema::<ModelProviderKeyNextResponse>("ModelProviderKeyNextResponse"),
+        typed_schema::<ModelProviderKeyEventParams>("ModelProviderKeyEventParams"),
+        typed_schema::<ModelProviderUiStateReadParams>("ModelProviderUiStateReadParams"),
+        typed_schema::<ModelProviderUiStateReadResponse>("ModelProviderUiStateReadResponse"),
+        typed_schema::<ModelProviderUiStateWriteParams>("ModelProviderUiStateWriteParams"),
         typed_schema::<ModelProviderAliasReadParams>("ModelProviderAliasReadParams"),
         typed_schema::<ModelProviderAliasReadResponse>("ModelProviderAliasReadResponse"),
         typed_schema::<ModelProviderAliasListResponse>("ModelProviderAliasListResponse"),

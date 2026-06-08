@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 // ============================================================================
 // 基础类型定义
@@ -96,6 +97,12 @@ export function getMcpInnerToolName(
   return parts.length >= 3 ? parts.slice(2).join("__") : toolName;
 }
 
+async function invokeMcpListCommand<T>(command: string): Promise<T[]> {
+  const result = await safeInvoke<T[]>(command);
+  assertNotDiagnosticFacade(command, result, "真实 MCP current 通道");
+  return result;
+}
+
 // ============================================================================
 // 提示词类型
 // ============================================================================
@@ -157,7 +164,8 @@ export const mcpApi = {
   // 配置管理 API
   // --------------------------------------------------------------------------
 
-  getServers: (): Promise<McpServer[]> => safeInvoke("get_mcp_servers"),
+  getServers: (): Promise<McpServer[]> =>
+    invokeMcpListCommand<McpServer>("get_mcp_servers"),
 
   addServer: (server: McpServer): Promise<void> =>
     safeInvoke("add_mcp_server", { server }),
@@ -187,7 +195,7 @@ export const mcpApi = {
 
   /** 获取所有服务器及其运行状态 */
   listServersWithStatus: (): Promise<McpServerInfo[]> =>
-    safeInvoke("mcp_list_servers_with_status"),
+    invokeMcpListCommand<McpServerInfo>("mcp_list_servers_with_status"),
 
   /** 启动 MCP 服务器 */
   startServer: (name: string): Promise<void> =>
@@ -202,7 +210,8 @@ export const mcpApi = {
   // --------------------------------------------------------------------------
 
   /** 获取所有可用工具，返回名格式为 `mcp__<server>__<tool>`。 */
-  listTools: (): Promise<McpToolDefinition[]> => safeInvoke("mcp_list_tools"),
+  listTools: (): Promise<McpToolDefinition[]> =>
+    invokeMcpListCommand<McpToolDefinition>("mcp_list_tools"),
 
   /** 按调用上下文获取可见工具（支持 deferred_loading） */
   listToolsForContext: (
@@ -244,7 +253,7 @@ export const mcpApi = {
 
   /** 获取所有可用提示词 */
   listPrompts: (): Promise<McpPromptDefinition[]> =>
-    safeInvoke("mcp_list_prompts"),
+    invokeMcpListCommand<McpPromptDefinition>("mcp_list_prompts"),
 
   /** 获取提示词内容 */
   getPrompt: (
@@ -259,7 +268,7 @@ export const mcpApi = {
 
   /** 获取所有可用资源 */
   listResources: (): Promise<McpResourceDefinition[]> =>
-    safeInvoke("mcp_list_resources"),
+    invokeMcpListCommand<McpResourceDefinition>("mcp_list_resources"),
 
   /** 读取资源内容 */
   readResource: (uri: string): Promise<McpResourceContent> =>

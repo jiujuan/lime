@@ -4,6 +4,7 @@ import {
   type Config,
   type EnvironmentPreview,
 } from "./appConfigTypes";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 const APP_CONFIG_CHANGE_STAMP_KEY = "lime.app-config.changed-at";
 const APP_CONFIG_CHANGED_EVENT = "lime:app-config-changed";
@@ -170,7 +171,13 @@ export async function saveConfig(config: Config): Promise<void> {
 }
 
 export async function getEnvironmentPreview(): Promise<EnvironmentPreview> {
-  return safeInvoke("get_environment_preview");
+  const result = await safeInvoke<EnvironmentPreview>("get_environment_preview");
+  assertNotDiagnosticFacade(
+    "get_environment_preview",
+    result,
+    "真实环境预览 current 通道",
+  );
+  return result;
 }
 
 export async function getDefaultProvider(): Promise<string> {

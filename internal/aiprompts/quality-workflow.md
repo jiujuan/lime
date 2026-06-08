@@ -359,7 +359,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 这类问题 **单靠** `lint`、`typecheck`、`vitest` 无法覆盖。
 
-默认 `npm run verify:local`、`npm test`、`cargo test --manifest-path "lime-rs/Cargo.toml"` 与 `npm run verify:gui-smoke` 不允许消耗真实模型 / 图片 Provider 额度。会调用 `agent_runtime_submit_turn`、`test_api_key_provider_chat`、图片生成、embedding、ASR 或 live AgentRuntime transcript 的测试 / smoke，必须显式 opt-in：
+默认 `npm run verify:local`、`npm test`、`cargo test --manifest-path "lime-rs/Cargo.toml"` 与 `npm run verify:gui-smoke` 不允许消耗真实模型 / 图片 Provider 额度。会调用 `agent_runtime_submit_turn`、App Server `modelProvider/testChat`、图片生成、embedding、ASR 或 live AgentRuntime transcript 的测试 / smoke，必须显式 opt-in：
 
 ```bash
 npm run verify:gui-smoke -- --include-live-provider-smokes
@@ -467,7 +467,7 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 修改首页 / 工作区进入 `Claw` 时的首条自动发送上下文，例如 `initialUserPrompt`、`initialAutoSendRequestMetadata`、`harness.service_skill_launch`
 - 修改 `site_*` 站点适配器命令族，例如 `site_recommend_adapters`、`site_get_adapter_launch_readiness`、`site_import_adapter_yaml_bundle`、`site_run_adapter`
 - 修改 `companion_get_pet_status`、`companion_launch_pet`、`companion_send_pet_command`，或调整 Lime 与独立桌宠之间的本地 companion 协议（例如 `pet.provider_overview`、`pet.open_provider_settings`、`pet.request_provider_overview_sync`、`pet.request_pet_cheer`、`pet.request_pet_next_step`、`pet.request_chat_reply`）
-- 修改自动化设置命令族，例如 `get_automation_jobs`、`create_automation_job`、`update_automation_job`、`get_automation_health` 或 `get_automation_run_history`，尤其是它们在浏览器模式 DevBridge 与 mock 间的分流
+- 修改自动化设置 App Server method 族，例如 `automationJob/list`、`automationJob/create`、`automationJob/update`、`automationJob/health` 或 `automationJob/runHistory`；旧 `get_automation_*` / `*_automation_job` 命令已退役，只能作为负向回归扫描对象
 - 修改浏览器资料 / 环境预设命令族，或调整它们在 `mockPriorityCommands` 里的优先级
 - 修改浏览器连接器命令族，例如安装目录、启用状态、系统连接器、浏览器动作配置、扩展安装状态、打开 Chrome 扩展 / 远程调试页，或主动断开扩展连接
 - 修改 `get_model_registry_provider_ids` 兼容空结果、Provider 实时模型读取或用户 `custom_models` 合并语义

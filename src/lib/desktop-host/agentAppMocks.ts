@@ -18,16 +18,6 @@ function now() {
   return "2026-05-15T00:00:00.000Z";
 }
 
-function mockTaskIds(args: any) {
-  const request = args?.request ?? {};
-  const appId = String(request.appId ?? "content-factory-app");
-  const taskKind = String(request.taskKind ?? "agent_app.task");
-  const taskId = String(request.taskId ?? "agent-app-task-mock");
-  const sessionId = String(request.sessionId ?? "agent-app-session-mock");
-  const turnId = String(request.turnId ?? "agent-app-turn-mock");
-  return { appId, taskKind, taskId, sessionId, turnId };
-}
-
 function buildFixtureState(): InstalledAgentAppState {
   const manifest = contentFactoryFixture as AppManifest;
     const identity = buildPackageIdentity({
@@ -260,17 +250,6 @@ export const agentAppMocks = {
       deleteEvidence: null,
     };
   },
-  agent_app_start_ui_runtime: async (args: any) => resolveMockRuntimeStatus(args),
-  agent_app_get_ui_runtime_status: async (args: any) =>
-    resolveMockRuntimeStatus(args),
-  agent_app_stop_ui_runtime: async (args: any) => {
-    const appId = String(args?.request?.appId ?? "content-factory-app");
-    return {
-      appId,
-      status: "stopped",
-      message: "Agent App UI runtime 已停止。",
-    };
-  },
   agent_app_select_directory: async () => ({
     path: null,
     cancelled: true,
@@ -354,69 +333,6 @@ export const agentAppMocks = {
       runtimeStatus,
       shellWindow,
       launchedAt: now(),
-    };
-  },
-  agent_app_runtime_start_task: async (args: any) => {
-    const { appId, taskKind, taskId, sessionId, turnId } = mockTaskIds(args);
-    const request = args?.request ?? {};
-    return {
-      appId,
-      entryKey: request.entryKey,
-      taskId,
-      traceId: "agent-app-trace-mock",
-      taskKind,
-      sessionId,
-      turnId,
-      eventName: String(
-        request.eventName ?? `agent_app_runtime:${appId}:${taskId}`,
-      ),
-      status: "accepted",
-      submittedAt: now(),
-    };
-  },
-  agent_app_runtime_cancel_task: async (args: any) => {
-    const { appId, taskId, sessionId } = mockTaskIds(args);
-    return {
-      appId,
-      taskId,
-      sessionId,
-      cancelled: true,
-      status: "cancelled",
-    };
-  },
-  agent_app_runtime_get_task: async (args: any) => {
-    const { appId, taskId, sessionId } = mockTaskIds(args);
-    return {
-      appId,
-      taskId,
-      sessionId,
-      status: "thread_read_available",
-      taskStatus: "running",
-      taskEvents: [
-        {
-          id: "task:progress:1",
-          eventType: "task:progress",
-          status: "running",
-          message: "任务正在执行",
-          occurredAt: now(),
-          payload: {
-            source: "agent_app_runtime_mock",
-          },
-        },
-      ],
-      threadRead: {
-        session_id: sessionId,
-        status: "running",
-        source: "agent_app_runtime_mock",
-      },
-    };
-  },
-  agent_app_runtime_submit_host_response: async (args: any) => {
-    const { appId, taskId } = mockTaskIds(args);
-    return {
-      appId,
-      taskId,
-      status: "submitted",
     };
   },
 };

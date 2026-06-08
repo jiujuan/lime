@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT =
   "oem-cloud-oauth-callback";
@@ -20,11 +21,22 @@ export interface OemCloudOAuthCallbackBridgePayload {
 export async function openExternalUrlWithSystemBrowser(
   url: string,
 ): Promise<void> {
-  await safeInvoke("open_external_url", { url });
+  const result = await safeInvoke("open_external_url", { url });
+  assertNotDiagnosticFacade(
+    "open_external_url",
+    result,
+    "真实外部链接 current 通道",
+  );
 }
 
 export async function startOemCloudOAuthCallbackBridge(): Promise<OemCloudOAuthCallbackBridgeStartResponse> {
-  return safeInvoke<OemCloudOAuthCallbackBridgeStartResponse>(
+  const result = await safeInvoke<OemCloudOAuthCallbackBridgeStartResponse>(
     "start_oem_cloud_oauth_callback_bridge",
   );
+  assertNotDiagnosticFacade(
+    "start_oem_cloud_oauth_callback_bridge",
+    result,
+    "真实 OAuth 本机回调桥 current 通道",
+  );
+  return result;
 }

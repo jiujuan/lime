@@ -63,17 +63,6 @@ const downloadingInstallSession = () => {
 };
 
 export const updateMocks: Record<string, (args?: any) => any> = {
-  check_update: () => ({
-    current_version: "1.26.0",
-    latest_version: getPreviewUpdateMode() === "none" ? null : "1.27.0",
-    has_update: getPreviewUpdateMode() !== "none",
-    download_url: "https://github.com/limecloud/lime/releases",
-    release_notes_url: "https://github.com/limecloud/lime/releases",
-    release_notes: null,
-    pub_date: null,
-    checked_at: Math.floor(Date.now() / 1000),
-    error: null,
-  }),
   check_for_updates: () => ({
     current: "1.26.0",
     latest: getPreviewUpdateMode() === "none" ? null : "1.27.0",

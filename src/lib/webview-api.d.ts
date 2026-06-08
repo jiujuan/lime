@@ -645,41 +645,14 @@ export interface LaunchBrowserSessionRequest {
     headless?: boolean;
     stream_mode?: BrowserStreamMode;
 }
-export interface LaunchBrowserProfileRuntimeAssistRequest {
-    id: string;
-    url?: string;
-    environment_preset_id?: string;
-    target_id?: string;
-    open_window?: boolean;
-    headless?: boolean;
-    stream_mode?: BrowserStreamMode;
-}
-export interface LaunchBrowserRuntimeAssistRequest {
-    profile_key: string;
-    url: string;
-    profile_id?: string;
-    environment?: BrowserEnvironmentLaunchConfig;
-    target_id?: string;
-    open_window?: boolean;
-    headless?: boolean;
-    stream_mode?: BrowserStreamMode;
-}
 export interface BrowserSessionLaunchResponse {
     profile: OpenChromeProfileResponse;
     session: CdpSessionState;
 }
-export type BrowserRuntimeAssistLaunchResponse = BrowserSessionLaunchResponse;
 export interface UpdateBrowserSessionControlRequest {
     session_id: string;
     human_reason?: string;
 }
-/**
- * 创建一个新的 webview 窗口来显示外部 URL
- *
- * @param request - 创建请求参数
- * @returns 创建结果
- */
-export declare function createWebviewPanel(request: CreateWebviewRequest): Promise<CreateWebviewResponse>;
 /**
  * 使用外部 Chrome + 独立 Profile 打开 URL
  */
@@ -765,8 +738,6 @@ export declare function openBrowserRuntimeDebuggerWindow(request?: {
 }): Promise<void>;
 export declare function closeBrowserRuntimeDebuggerWindow(): Promise<void>;
 export declare function launchBrowserSession(request: LaunchBrowserSessionRequest): Promise<BrowserSessionLaunchResponse>;
-export declare function launchBrowserProfileRuntimeAssist(request: LaunchBrowserProfileRuntimeAssistRequest): Promise<BrowserRuntimeAssistLaunchResponse>;
-export declare function launchBrowserRuntimeAssist(request: LaunchBrowserRuntimeAssistRequest): Promise<BrowserRuntimeAssistLaunchResponse>;
 export declare function browserExecuteAction(request: BrowserActionRequest): Promise<BrowserActionResult>;
 export declare function siteListAdapters(): Promise<SiteAdapterDefinition[]>;
 export declare function siteRecommendAdapters(limit?: number): Promise<SiteAdapterRecommendation[]>;
@@ -782,52 +753,3 @@ export declare function siteDebugRunAdapter(request: RunSiteAdapterRequest): Pro
 export declare function siteSaveAdapterResult(request: SaveSiteAdapterResultRequest): Promise<SavedSiteAdapterContent>;
 export declare function getBrowserRuntimeAuditLogs(limit?: number): Promise<BrowserRuntimeAuditRecord[]>;
 export declare function getBrowserActionAuditLogs(limit?: number): Promise<BrowserActionAuditRecord[]>;
-/**
- * 关闭 webview 面板
- *
- * 尝试多种方法关闭 webview：
- * 1. 使用 Desktop Host JavaScript API 直接关闭
- * 2. 使用后端命令关闭
- *
- * @param panelId - 面板 ID
- * @returns 是否成功
- */
-export declare function closeWebviewPanel(panelId: string): Promise<boolean>;
-/**
- * 导航到新 URL
- *
- * @param panelId - 面板 ID
- * @param url - 新 URL
- * @returns 是否成功
- */
-export declare function navigateWebviewPanel(panelId: string, url: string): Promise<boolean>;
-/**
- * 获取所有活跃的 webview 面板
- *
- * @returns 面板列表
- */
-export declare function getWebviewPanels(): Promise<WebviewPanelInfo[]>;
-/**
- * 聚焦指定的 webview 面板
- *
- * @param panelId - 面板 ID
- * @returns 是否成功
- */
-export declare function focusWebviewPanel(panelId: string): Promise<boolean>;
-/**
- * 调整 webview 面板大小和位置
- *
- * @param panelId - 面板 ID
- * @param x - 新的 X 坐标
- * @param y - 新的 Y 坐标
- * @param width - 新的宽度
- * @param height - 新的高度
- * @returns 是否成功
- */
-export declare function resizeWebviewPanel(panelId: string, x: number, y: number, width: number, height: number): Promise<boolean>;
-/**
- * 生成唯一的面板 ID
- *
- * @returns 唯一 ID
- */
-export declare function generatePanelId(): string;

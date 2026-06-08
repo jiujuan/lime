@@ -836,6 +836,48 @@ describe("capabilityDraftsApi", () => {
     expect(appServerMock.request).not.toHaveBeenCalled();
   });
 
+  it("Capability Draft 写链遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "capability_draft_verify",
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      capabilityDraftsApi.verify({
+        workspaceRoot: "/tmp/work",
+        draftId: "capdraft-verified",
+      }),
+    ).rejects.toThrow(
+      "capability_draft_verify 尚未接入真实 Capability Draft current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    expect(appServerMock.request).not.toHaveBeenCalled();
+  });
+
+  it("Capability Draft 列表遇到 Electron empty diagnostic list 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        command: "capability_draft_list",
+        source: "electron-empty-diagnostic",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(
+      capabilityDraftsApi.list({ workspaceRoot: "/tmp/work" }),
+    ).rejects.toThrow(
+      "capability_draft_list 尚未接入真实 Capability Draft current 通道，收到 electron-empty-diagnostic 诊断返回。",
+    );
+    expect(appServerMock.request).not.toHaveBeenCalled();
+  });
+
   it("提交 approval session 输入时只走校验命令并归一化安全边界", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       approval_id: "capreg-1:readonly-http-session",

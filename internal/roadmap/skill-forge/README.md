@@ -64,7 +64,7 @@
 24. `agent_runtime_export_evidence_pack` 返回值已透出 `completionAuditSummary`，前端 normalizer 和 Harness 面板会展示 evidence-based decision、owner / ToolCall / artifact 计数与 blocking reasons，让 completion audit 不再只停留在落盘文件。
 25. Agent envelope presentation contract 已能消费 `completionAuditSummary`：只有 `completed` 且 automation owner / Workspace Skill ToolCall / artifact-or-timeline evidence 三项齐全时才进入 `evidence_ready`，`verifying` 或缺证据不会误报为可固化。
 26. Workspace 已注册能力面板已预留 `completionAuditSummariesByDirectory` 注入边界：当某个 skill 的 audit summary 为 evidence-based `completed` 时，“转成 Agent 草案”入口会复用现有 Managed Job 草案创建链；未 completed 或缺证据时仍禁用。
-27. Workspace 已注册能力面板已补“审计最近运行”入口：对匹配 Managed Job 复用 `get_automation_run_history` 找到最近 automation run 的 session，再调用 `agent_runtime_export_evidence_pack` 获取 `completionAuditSummary` 并回填对应 skill，不新增查询命令或平行 evidence。
+27. Workspace 已注册能力面板已补“审计最近运行”入口：对匹配 Managed Job 复用 `getAutomationRunHistory()` 当前网关，经 App Server `automationJob/runHistory` 找到最近 automation run 的 session，再调用 evidence export 当前网关获取 `completionAuditSummary` 并回填对应 skill，不新增查询命令或平行 evidence。
 28. Agent envelope 草案摘要已补齐 `Memory / Widget / Permission / Schedule / Evidence / Runbook` 六块组成：Memory 引用 verification report 与运行修正，Widget 展示 Managed Job 状态、产物、审计结论和下一步动作。
 29. Agent card / sharing 已采用派生形态：`workspace-local/<skill-directory>` 由已注册 Skill、Managed Job 和 completion audit 派生；共享范围先限制在当前 workspace / team，不进入 public Marketplace，也不新增 Agent card 存储表。
 30. Workspace/team sharing discovery 边界已显式展示：同 workspace 成员通过 registered skill discovery 发现 `.agents/skills/<skill-directory>`，复用同一 Managed Job / evidence 事实源，不新增分享命令或 Marketplace。

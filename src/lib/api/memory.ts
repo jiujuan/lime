@@ -11,6 +11,7 @@ import {
   METHOD_PROJECT_MEMORY_READ,
   type ProjectMemoryReadResponse as AppServerProjectMemoryReadResponse,
 } from "../../../packages/app-server-client/src/protocol";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 const PROJECT_MEMORY_CACHE_TTL_MS = 30_000;
 const projectMemoryCache = new Map<
@@ -31,6 +32,17 @@ type ProjectMemoryReadResponse = Omit<
 function clearProjectMemoryCache(): void {
   projectMemoryCache.clear();
   projectMemoryInflight.clear();
+}
+
+async function invokeMemoryCrudCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke(command, args)
+    : await safeInvoke(command);
+  assertNotDiagnosticFacade(command, result, "真实 Memory CRUD current 通道");
+  return result as T;
 }
 
 // ==================== 类型定义 ====================
@@ -160,21 +172,24 @@ export interface ProjectMemory {
 
 /** 获取角色列表 */
 export async function listCharacters(projectId: string): Promise<Character[]> {
-  return safeInvoke<Character[]>("character_list", { projectId });
+  return invokeMemoryCrudCommand<Character[]>("character_list", { projectId });
 }
 
 /** 获取角色详情 */
 export async function getCharacter(id: string): Promise<Character | null> {
-  return safeInvoke<Character | null>("character_get", { id });
+  return invokeMemoryCrudCommand<Character | null>("character_get", { id });
 }
 
 /** 创建角色 */
 export async function createCharacter(
   request: CreateCharacterRequest,
 ): Promise<Character> {
-  const character = await safeInvoke<Character>("character_create", {
-    request,
-  });
+  const character = await invokeMemoryCrudCommand<Character>(
+    "character_create",
+    {
+      request,
+    },
+  );
   clearProjectMemoryCache();
   return character;
 }
@@ -184,17 +199,22 @@ export async function updateCharacter(
   id: string,
   request: UpdateCharacterRequest,
 ): Promise<Character> {
-  const character = await safeInvoke<Character>("character_update", {
-    id,
-    request,
-  });
+  const character = await invokeMemoryCrudCommand<Character>(
+    "character_update",
+    {
+      id,
+      request,
+    },
+  );
   clearProjectMemoryCache();
   return character;
 }
 
 /** 删除角色 */
 export async function deleteCharacter(id: string): Promise<boolean> {
-  const deleted = await safeInvoke<boolean>("character_delete", { id });
+  const deleted = await invokeMemoryCrudCommand<boolean>("character_delete", {
+    id,
+  });
   clearProjectMemoryCache();
   return deleted;
 }
@@ -205,7 +225,9 @@ export async function deleteCharacter(id: string): Promise<boolean> {
 export async function getWorldBuilding(
   projectId: string,
 ): Promise<WorldBuilding | null> {
-  return safeInvoke<WorldBuilding | null>("world_building_get", { projectId });
+  return invokeMemoryCrudCommand<WorldBuilding | null>("world_building_get", {
+    projectId,
+  });
 }
 
 /** 更新世界观 */
@@ -213,7 +235,7 @@ export async function updateWorldBuilding(
   projectId: string,
   request: UpdateWorldBuildingRequest,
 ): Promise<WorldBuilding> {
-  const worldBuilding = await safeInvoke<WorldBuilding>(
+  const worldBuilding = await invokeMemoryCrudCommand<WorldBuilding>(
     "world_building_update",
     {
       projectId,
@@ -230,21 +252,28 @@ export async function updateWorldBuilding(
 export async function listOutlineNodes(
   projectId: string,
 ): Promise<OutlineNode[]> {
-  return safeInvoke<OutlineNode[]>("outline_node_list", { projectId });
+  return invokeMemoryCrudCommand<OutlineNode[]>("outline_node_list", {
+    projectId,
+  });
 }
 
 /** 获取大纲节点详情 */
 export async function getOutlineNode(id: string): Promise<OutlineNode | null> {
-  return safeInvoke<OutlineNode | null>("outline_node_get", { id });
+  return invokeMemoryCrudCommand<OutlineNode | null>("outline_node_get", {
+    id,
+  });
 }
 
 /** 创建大纲节点 */
 export async function createOutlineNode(
   request: CreateOutlineNodeRequest,
 ): Promise<OutlineNode> {
-  const node = await safeInvoke<OutlineNode>("outline_node_create", {
-    request,
-  });
+  const node = await invokeMemoryCrudCommand<OutlineNode>(
+    "outline_node_create",
+    {
+      request,
+    },
+  );
   clearProjectMemoryCache();
   return node;
 }
@@ -254,17 +283,22 @@ export async function updateOutlineNode(
   id: string,
   request: UpdateOutlineNodeRequest,
 ): Promise<OutlineNode> {
-  const node = await safeInvoke<OutlineNode>("outline_node_update", {
-    id,
-    request,
-  });
+  const node = await invokeMemoryCrudCommand<OutlineNode>(
+    "outline_node_update",
+    {
+      id,
+      request,
+    },
+  );
   clearProjectMemoryCache();
   return node;
 }
 
 /** 删除大纲节点 */
 export async function deleteOutlineNode(id: string): Promise<boolean> {
-  const deleted = await safeInvoke<boolean>("outline_node_delete", { id });
+  const deleted = await invokeMemoryCrudCommand<boolean>("outline_node_delete", {
+    id,
+  });
   clearProjectMemoryCache();
   return deleted;
 }

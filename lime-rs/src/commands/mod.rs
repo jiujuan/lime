@@ -5,7 +5,6 @@ pub mod agent_cmd;
 pub mod api_key_provider_cmd;
 pub mod asr_cmd;
 pub mod aster_agent_cmd;
-pub mod automation_cmd;
 pub mod auxiliary_model_selection;
 pub mod browser_connector_cmd;
 pub mod browser_environment_cmd;

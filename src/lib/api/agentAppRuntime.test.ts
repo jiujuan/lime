@@ -140,4 +140,65 @@ describe("agentAppRuntime api", () => {
       }),
     ]);
   });
+
+  it("runtime task facade 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      startAgentAppRuntimeTask({
+        appId: "content-factory-app",
+        workspaceId: "workspace-1",
+        taskKind: "content_factory.copy.generate",
+      }),
+    ).rejects.toThrow(
+      "agent_app_runtime_start_task 尚未接入真实 Agent App runtime current 通道",
+    );
+
+    await expect(
+      cancelAgentAppRuntimeTask({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        sessionId: "session-1",
+      }),
+    ).rejects.toThrow(
+      "agent_app_runtime_cancel_task 尚未接入真实 Agent App runtime current 通道",
+    );
+
+    await expect(
+      getAgentAppRuntimeTask({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        sessionId: "session-1",
+      }),
+    ).rejects.toThrow(
+      "agent_app_runtime_get_task 尚未接入真实 Agent App runtime current 通道",
+    );
+
+    await expect(
+      submitAgentAppRuntimeHostResponse({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        runtimeRequest: {
+          session_id: "session-1",
+          request_id: "request-1",
+          action_type: "tool_confirmation",
+          confirmed: true,
+        },
+      }),
+    ).rejects.toThrow(
+      "agent_app_runtime_submit_host_response 尚未接入真实 Agent App runtime current 通道",
+    );
+
+    expect(vi.mocked(safeInvoke).mock.calls.map(([cmd]) => cmd)).toEqual([
+      AGENT_APP_RUNTIME_COMMANDS.startTask,
+      AGENT_APP_RUNTIME_COMMANDS.cancelTask,
+      AGENT_APP_RUNTIME_COMMANDS.getTask,
+      AGENT_APP_RUNTIME_COMMANDS.submitHostResponse,
+    ]);
+  });
 });

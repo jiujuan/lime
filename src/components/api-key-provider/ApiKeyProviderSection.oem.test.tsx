@@ -3,7 +3,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
-import { METHOD_MODEL_PROVIDER_LIST } from "../../../packages/app-server-client/src/protocol";
+import {
+  METHOD_MODEL_PROVIDER_LIST,
+  METHOD_MODEL_PROVIDER_UI_STATE_READ,
+  METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
+} from "../../../packages/app-server-client/src/protocol";
 
 const { mockSafeInvoke } = vi.hoisted(() => ({
   mockSafeInvoke: vi.fn(),
@@ -87,16 +91,13 @@ describe("ApiKeyProviderSection OEM 登录提示", () => {
         sort_order: 1,
       }),
     ];
+    const uiStateWrites: unknown[] = [];
 
     mockSafeInvoke.mockImplementation(
       async (command: string, payload?: Record<string, unknown>) => {
         switch (command) {
           case "app_server_handle_json_lines":
-            return handleAppServerJsonLines(payload, providers);
-          case "get_provider_ui_state":
-            return payload?.key === "selected_provider" ? "openai" : null;
-          case "set_provider_ui_state":
-            return undefined;
+            return handleAppServerJsonLines(payload, providers, uiStateWrites);
           default:
             throw new Error(`未处理的 safeInvoke 命令：${command}`);
         }
@@ -128,18 +129,32 @@ describe("ApiKeyProviderSection OEM 登录提示", () => {
     ).not.toBeNull();
     expect(container.textContent ?? "").toContain("登录后会自动同步 Lime Hub");
 
-    const persistedSelections = mockSafeInvoke.mock.calls
-      .filter(([command]) => command === "set_provider_ui_state")
-      .map(([, payload]) => (payload as { value?: string } | undefined)?.value);
+    const persistedSelections = collectAppServerUiStateWrites().map(
+      (params) => params.value,
+    );
 
     expect(persistedSelections).toContain("lime-hub");
     expect(persistedSelections).not.toContain("openai");
   });
 });
 
+function collectAppServerUiStateWrites(): Array<{ value?: string }> {
+  return mockSafeInvoke.mock.calls.flatMap(([, payload]) => {
+    const request = (payload as { request?: { lines?: string[] } } | undefined)
+      ?.request;
+    return (request?.lines ?? [])
+      .map((line) => JSON.parse(line))
+      .filter(
+        (message) => message.method === METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
+      )
+      .map((message) => message.params ?? {});
+  });
+}
+
 function handleAppServerJsonLines(
   payload: Record<string, unknown> | undefined,
   providers: ProviderWithKeysDisplay[],
+  uiStateWrites: unknown[],
 ): { lines: string[] } {
   const request = payload?.request as { lines?: string[] } | undefined;
   const messages = request?.lines?.map((line) => JSON.parse(line)) ?? [];
@@ -148,6 +163,21 @@ function handleAppServerJsonLines(
       return `${JSON.stringify({
         id: message.id,
         result: { providers },
+      })}\n`;
+    }
+    if (message.method === METHOD_MODEL_PROVIDER_UI_STATE_READ) {
+      return `${JSON.stringify({
+        id: message.id,
+        result: {
+          value: message.params?.key === "selected_provider" ? "openai" : null,
+        },
+      })}\n`;
+    }
+    if (message.method === METHOD_MODEL_PROVIDER_UI_STATE_WRITE) {
+      uiStateWrites.push(message.params);
+      return `${JSON.stringify({
+        id: message.id,
+        result: {},
       })}\n`;
     }
 

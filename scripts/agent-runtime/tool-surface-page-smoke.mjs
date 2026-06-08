@@ -1296,6 +1296,16 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
         return buildAppServerJsonRpcResult(message.id, {
           providers: [providerFixture],
         });
+      case "modelProviderUiState/read":
+        return buildAppServerJsonRpcResult(message.id, {
+          value: null,
+        });
+      case "modelProvider/fetchModels":
+        return buildAppServerJsonRpcResult(message.id, {
+          models: [modelFixture],
+          source: "Api",
+          error: null,
+        });
       case "model/list":
         return buildAppServerJsonRpcResult(message.id, {
           models: [modelFixture],
@@ -1544,22 +1554,6 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
       });
       return;
     }
-    if (command === "get_api_key_providers") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ result: [providerFixture] }),
-      });
-      return;
-    }
-    if (command === "get_provider_ui_state") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ result: null }),
-      });
-      return;
-    }
     if (command === "get_default_provider") {
       await route.fulfill({
         status: 200,
@@ -1594,20 +1588,6 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
             model_count: 1,
             is_syncing: false,
             last_error: null,
-          },
-        }),
-      });
-      return;
-    }
-    if (command === "fetch_provider_models_auto") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          result: {
-            models: [modelFixture],
-            source: "Api",
-            error: null,
           },
         }),
       });

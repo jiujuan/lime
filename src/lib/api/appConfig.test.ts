@@ -36,6 +36,33 @@ describe("appConfig API", () => {
     await expect(getDefaultProvider()).resolves.toBe("claude");
   });
 
+  it("环境预览遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      shellImport: {
+        enabled: false,
+        status: "disabled",
+        message: "Electron current 暂未接入 shell 环境导入预览。",
+        importedCount: 0,
+        durationMs: null,
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "get_environment_preview",
+          status: "degraded",
+        },
+      },
+      entries: [],
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "get_environment_preview",
+        status: "degraded",
+      },
+    });
+
+    await expect(getEnvironmentPreview()).rejects.toThrow(
+      "get_environment_preview 尚未接入真实环境预览 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
   it("应代理写配置命令", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce(undefined)

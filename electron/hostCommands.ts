@@ -1,4 +1,4 @@
-import { app, shell } from "electron";
+import { app, shell } from "./electronRuntime";
 import {
   AppServerRequestError,
   ERROR_CODES,
@@ -13,7 +13,6 @@ import {
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
-  METHOD_AUTOMATION_JOB_LIST,
   METHOD_CAPABILITY_LIST,
   METHOD_EVIDENCE_EXPORT,
   METHOD_KNOWLEDGE_PACK_LIST,
@@ -24,6 +23,11 @@ import {
   METHOD_MODEL_PROVIDER_CATALOG_LIST,
   METHOD_MODEL_PROVIDER_LIST,
   METHOD_MODEL_SYNC_STATE_READ,
+  METHOD_MCP_PROMPT_LIST,
+  METHOD_MCP_RESOURCE_LIST,
+  METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_STATUS_LIST,
+  METHOD_MCP_TOOL_LIST,
   METHOD_PROJECT_MEMORY_READ,
   METHOD_SKILL_LIST,
   METHOD_SKILL_READ,
@@ -51,7 +55,6 @@ import {
   type AgentAppUiRuntimeStatusResponse,
   type AgentAppUiRuntimeStopParams,
   type ArtifactSummary,
-  type AutomationJobListResponse,
   type CapabilityDescriptor,
   type CapabilityListResponse,
   type EvidenceExportResponse,
@@ -63,6 +66,11 @@ import {
   type ModelProviderCatalogListResponse,
   type ModelProviderListResponse,
   type ModelSyncStateReadResponse,
+  type McpPromptListResponse,
+  type McpResourceListResponse,
+  type McpServerListResponse,
+  type McpServerStatusListResponse,
+  type McpToolListResponse,
   type ProjectMemoryReadResponse,
   type SkillListResponse,
   type SkillReadResponse,
@@ -73,7 +81,7 @@ import {
   type WorkspaceReadResponse,
   type WorkspaceSkillBindingsListResponse,
 } from "app-server-client";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import type { ElectronAppServerHost } from "./appServerHost";
@@ -81,6 +89,16 @@ import type { ElectronAppServerHost } from "./appServerHost";
 type HostArgs = Record<string, unknown> | null | undefined;
 type AppServerParams = Record<string, unknown>;
 type HostEventEmitter = (event: string, payload?: unknown) => void;
+type FileManagerLocation = {
+  id: string;
+  label: string;
+  path: string;
+  kind: string;
+};
+type FileManagerLocationCandidate = Omit<FileManagerLocation, "path"> & {
+  path: string | null;
+};
+type ElectronKnownPathName = "home" | "desktop" | "documents" | "downloads";
 
 const CONFIG_FILE = "config.json";
 const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT = "oem-cloud-oauth-callback";
@@ -139,16 +157,22 @@ export class ElectronHostCommands {
         return await this.#saveExperimentalConfig(args);
       case "open_external_url":
         return await this.#openExternalUrl(args);
+      case "reveal_in_finder":
+        return this.#revealInFinder(args);
+      case "open_with_default_app":
+        return await this.#openWithDefaultApp(args);
+      case "get_home_dir":
+        return this.#getHomeDir();
+      case "get_file_manager_locations":
+        return await this.#getFileManagerLocations();
+      case "get_file_icon_data_url":
+        return await this.#getFileIconDataUrl(args);
       case "start_oem_cloud_oauth_callback_bridge":
         return await this.#startOemCloudOAuthCallbackBridge();
       case "aster_agent_init":
         return await this.#initAgentRuntime();
       case "get_default_provider":
         return await this.#getDefaultProvider();
-      case "get_provider_ui_state":
-        return await this.#getProviderUiState(args);
-      case "set_provider_ui_state":
-        return await this.#setProviderUiState(args);
       case "agent_runtime_list_sessions":
         return await this.#listAgentRuntimeSessions(args);
       case "agent_runtime_get_session":
@@ -171,10 +195,6 @@ export class ElectronHostCommands {
         return await this.#getAgentRuntimeToolInventory(args);
       case "agent_runtime_list_workspace_skill_bindings":
         return await this.#listWorkspaceSkillBindings(args);
-      case "get_api_key_providers":
-        return await this.#listModelProviders();
-      case "get_system_provider_catalog":
-        return await this.#listModelProviderCatalog();
       case "get_model_registry":
         return await this.#listModels();
       case "get_model_preferences":
@@ -187,8 +207,6 @@ export class ElectronHostCommands {
         return await this.#listModelsForProvider(args);
       case "get_models_by_tier":
         return await this.#listModelsByTier(args);
-      case "fetch_provider_models_auto":
-        return await this.#fetchProviderModelsAuto(args);
       case "get_provider_alias_config":
         return await this.#readProviderAliasConfig(args);
       case "get_all_alias_configs":
@@ -221,14 +239,6 @@ export class ElectronHostCommands {
         return await this.#listLocalSkillsForApp(args);
       case "get_skill_detail":
         return await this.#readSkillDetail(args);
-      case "get_automation_scheduler_config":
-        return await this.#getAutomationSchedulerConfig();
-      case "get_automation_status":
-        return this.#getAutomationStatus();
-      case "get_automation_health":
-        return await this.#getAutomationHealth();
-      case "get_automation_jobs":
-        return await this.#listAutomationJobs();
       case "get_usage_stats":
         return this.#getUsageStats();
       case "get_model_usage_ranking":
@@ -254,11 +264,15 @@ export class ElectronHostCommands {
       case "unified_memory_stats":
         return this.#getUnifiedMemoryStats();
       case "get_mcp_servers":
+        return await this.#listMcpServers();
       case "mcp_list_servers_with_status":
+        return await this.#listMcpServersWithStatus();
       case "mcp_list_tools":
+        return await this.#listMcpTools();
       case "mcp_list_prompts":
+        return await this.#listMcpPrompts();
       case "mcp_list_resources":
-        return this.#emptyDiagnosticList(command);
+        return await this.#listMcpResources();
       case "site_get_adapter_catalog_status":
         return this.#getSiteAdapterCatalogStatus();
       case "site_list_adapters":
@@ -325,6 +339,136 @@ export class ElectronHostCommands {
     const normalizedUrl = normalizeExternalUrl(url);
     await shell.openExternal(normalizedUrl);
     return {};
+  }
+
+  #revealInFinder(args: HostArgs): Record<string, never> {
+    const request = readRequest(args);
+    const targetPath = readRequiredString(request, "path");
+    shell.showItemInFolder(targetPath);
+    return {};
+  }
+
+  async #openWithDefaultApp(args: HostArgs): Promise<Record<string, never>> {
+    const request = readRequest(args);
+    const targetPath = readRequiredString(request, "path");
+    const errorMessage = await shell.openPath(targetPath);
+    if (errorMessage) {
+      throw new Error(errorMessage);
+    }
+    return {};
+  }
+
+  async #getFileIconDataUrl(args: HostArgs): Promise<string | null> {
+    const request = readRequest(args);
+    const targetPath = readRequiredString(request, "path");
+    try {
+      const icon = await app.getFileIcon(targetPath, { size: "normal" });
+      if (icon.isEmpty()) {
+        return null;
+      }
+      return icon.toDataURL() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  #getHomeDir(): string {
+    const homePath = readElectronPath("home");
+    if (!homePath) {
+      throw new Error("无法获取主目录");
+    }
+    return homePath;
+  }
+
+  async #getFileManagerLocations(): Promise<FileManagerLocation[]> {
+    const locations: FileManagerLocation[] = [];
+    const seenPaths = new Set<string>();
+    const homePath = readElectronPath("home");
+
+    await appendFileManagerLocation(locations, seenPaths, {
+      id: "home",
+      label: "个人",
+      kind: "home",
+      path: homePath,
+    });
+    await appendFileManagerLocation(locations, seenPaths, {
+      id: "desktop",
+      label: "桌面",
+      kind: "desktop",
+      path: readElectronPath("desktop"),
+    });
+    await appendFileManagerLocation(locations, seenPaths, {
+      id: "documents",
+      label: "文档",
+      kind: "documents",
+      path: readElectronPath("documents"),
+    });
+    await appendFileManagerLocation(locations, seenPaths, {
+      id: "downloads",
+      label: "下载",
+      kind: "downloads",
+      path: readElectronPath("downloads"),
+    });
+
+    if (process.platform === "darwin") {
+      await appendFileManagerLocation(locations, seenPaths, {
+        id: "applications",
+        label: "应用程序",
+        kind: "applications",
+        path: "/Applications",
+      });
+      await appendFileManagerLocation(locations, seenPaths, {
+        id: "user-applications",
+        label: "用户应用程序",
+        kind: "applications",
+        path: homePath ? path.join(homePath, "Applications") : null,
+      });
+    }
+
+    if (process.platform === "win32") {
+      await appendFileManagerLocation(locations, seenPaths, {
+        id: "start-menu-programs",
+        label: "应用程序",
+        kind: "applications",
+        path: process.env.APPDATA
+          ? path.join(
+              process.env.APPDATA,
+              "Microsoft",
+              "Windows",
+              "Start Menu",
+              "Programs",
+            )
+          : null,
+      });
+      await appendFileManagerLocation(locations, seenPaths, {
+        id: "common-start-menu-programs",
+        label: "公共应用程序",
+        kind: "applications",
+        path: process.env.PROGRAMDATA
+          ? path.join(
+              process.env.PROGRAMDATA,
+              "Microsoft",
+              "Windows",
+              "Start Menu",
+              "Programs",
+            )
+          : null,
+      });
+      await appendFileManagerLocation(locations, seenPaths, {
+        id: "program-files",
+        label: "Program Files",
+        kind: "applications",
+        path: process.env.ProgramFiles || null,
+      });
+      await appendFileManagerLocation(locations, seenPaths, {
+        id: "program-files-x86",
+        label: "Program Files (x86)",
+        kind: "applications",
+        path: process.env["ProgramFiles(x86)"] || null,
+      });
+    }
+
+    return locations;
   }
 
   async #startOemCloudOAuthCallbackBridge(): Promise<{
@@ -779,36 +923,6 @@ export class ElectronHostCommands {
     });
   }
 
-  async #getProviderUiState(args: HostArgs): Promise<string | null> {
-    const key = readString(args, "key") ?? readString(readRequest(args), "key");
-    if (!key) {
-      return null;
-    }
-    const state = toRecord((await this.#readConfig()).provider_ui_state);
-    const value = state?.[key];
-    return typeof value === "string" ? value : null;
-  }
-
-  async #setProviderUiState(args: HostArgs): Promise<void> {
-    const request = readRequest(args);
-    const key = readString(request, "key");
-    if (!key) {
-      throw new Error("set_provider_ui_state requires key");
-    }
-    const value = readString(request, "value") ?? "";
-    const config = await this.#readConfig();
-    const state = {
-      ...(toRecord(config.provider_ui_state) ?? {}),
-      [key]: value,
-    };
-    await this.#saveConfig({
-      config: {
-        ...config,
-        provider_ui_state: state,
-      },
-    });
-  }
-
   async #listAgentRuntimeSessions(args: HostArgs): Promise<unknown[]> {
     const request = readRequest(args);
     const params: AppServerParams = {
@@ -1137,6 +1251,41 @@ export class ElectronHostCommands {
     return response.syncState;
   }
 
+  async #listMcpServers(): Promise<unknown[]> {
+    const response = await this.#appServerRequest<McpServerListResponse>(
+      METHOD_MCP_SERVER_LIST,
+    );
+    return response.servers;
+  }
+
+  async #listMcpServersWithStatus(): Promise<unknown[]> {
+    const response = await this.#appServerRequest<McpServerStatusListResponse>(
+      METHOD_MCP_SERVER_STATUS_LIST,
+    );
+    return response.servers;
+  }
+
+  async #listMcpTools(): Promise<unknown[]> {
+    const response = await this.#appServerRequest<McpToolListResponse>(
+      METHOD_MCP_TOOL_LIST,
+    );
+    return response.tools;
+  }
+
+  async #listMcpPrompts(): Promise<unknown[]> {
+    const response = await this.#appServerRequest<McpPromptListResponse>(
+      METHOD_MCP_PROMPT_LIST,
+    );
+    return response.prompts;
+  }
+
+  async #listMcpResources(): Promise<unknown[]> {
+    const response = await this.#appServerRequest<McpResourceListResponse>(
+      METHOD_MCP_RESOURCE_LIST,
+    );
+    return response.resources;
+  }
+
   async #listModelRegistryProviderIds(): Promise<string[]> {
     await this.#appServerRequest<ModelProviderCatalogListResponse>(
       METHOD_MODEL_PROVIDER_CATALOG_LIST,
@@ -1161,28 +1310,6 @@ export class ElectronHostCommands {
       return [];
     }
     return await this.#listModels({ tier });
-  }
-
-  async #fetchProviderModelsAuto(
-    args: HostArgs,
-  ): Promise<Record<string, unknown>> {
-    const request = readRequest(args);
-    const providerId =
-      readString(request, "providerId") ?? readString(request, "provider_id");
-    if (!providerId) {
-      throw new Error("fetch_provider_models_auto requires providerId");
-    }
-    return {
-      models: [],
-      source: "Error",
-      error: "实时 Provider 模型接口尚未迁入 App Server。",
-      request_url: null,
-      diagnostic_hint:
-        "当前 Electron Desktop Host 不能把 App Server model/list 快照伪装成实时 /models 结果；请先手动添加模型 ID，后续应补 App Server Provider 实时探测方法。",
-      error_kind: "other",
-      should_prompt_error: true,
-      from_cache: false,
-    };
   }
 
   async #readProviderAliasConfig(args: HostArgs): Promise<unknown | null> {
@@ -1427,61 +1554,6 @@ export class ElectronHostCommands {
           false,
       },
     );
-  }
-
-  async #listAutomationJobs(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<AutomationJobListResponse>(
-      METHOD_AUTOMATION_JOB_LIST,
-    );
-    return response.jobs;
-  }
-
-  async #getAutomationSchedulerConfig(): Promise<Record<string, unknown>> {
-    const config = await this.#readConfig();
-    const automationConfig = toRecord(config.automation);
-    return {
-      enabled: readBoolean(automationConfig, "enabled") ?? false,
-      poll_interval_secs:
-        readNumber(automationConfig, "poll_interval_secs") ?? 30,
-      enable_history: readBoolean(automationConfig, "enable_history") ?? true,
-    };
-  }
-
-  #getAutomationStatus(): Record<string, unknown> {
-    return {
-      running: false,
-      last_polled_at: null,
-      next_poll_at: null,
-      last_job_count: 0,
-      total_executions: 0,
-      active_job_id: null,
-      active_job_name: null,
-    };
-  }
-
-  async #getAutomationHealth(): Promise<Record<string, unknown>> {
-    const jobs = await this.#listAutomationJobs();
-    return {
-      total_jobs: jobs.length,
-      enabled_jobs: jobs.filter((job) => readBoolean(job, "enabled") ?? false)
-        .length,
-      pending_jobs: 0,
-      running_jobs: jobs.filter(
-        (job) => readString(job, "last_status") === "running",
-      ).length,
-      failed_jobs: jobs.filter((job) =>
-        ["error", "timeout"].includes(readString(job, "last_status") ?? ""),
-      ).length,
-      cooldown_jobs: jobs.filter((job) =>
-        Boolean(readString(job, "auto_disabled_until")),
-      ).length,
-      stale_running_jobs: 0,
-      failed_last_24h: 0,
-      failure_trend_24h: [],
-      alerts: [],
-      risky_jobs: [],
-      generated_at: new Date().toISOString(),
-    };
   }
 
   #getUsageStats(): Record<string, unknown> {
@@ -1882,6 +1954,36 @@ function readRequiredString(value: unknown, key: string): string {
     throw new Error(`Missing required string field: ${key}`);
   }
   return next;
+}
+
+function readElectronPath(name: ElectronKnownPathName): string | null {
+  try {
+    const next = app.getPath(name);
+    return next.trim() ? next : null;
+  } catch {
+    return null;
+  }
+}
+
+async function appendFileManagerLocation(
+  locations: FileManagerLocation[],
+  seenPaths: Set<string>,
+  location: FileManagerLocationCandidate,
+): Promise<void> {
+  const normalizedPath = location.path?.trim() ?? "";
+  if (!normalizedPath || seenPaths.has(normalizedPath)) {
+    return;
+  }
+  try {
+    const metadata = await stat(normalizedPath);
+    if (!metadata.isDirectory()) {
+      return;
+    }
+  } catch {
+    return;
+  }
+  seenPaths.add(normalizedPath);
+  locations.push({ ...location, path: normalizedPath });
 }
 
 function readBoolean(value: unknown, key: string): boolean | null {

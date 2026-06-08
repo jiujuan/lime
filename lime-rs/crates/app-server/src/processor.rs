@@ -12,6 +12,13 @@ use app_server_protocol::AgentSessionEventParams;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionUpdateParams;
 use app_server_protocol::ArtifactReadParams;
+use app_server_protocol::AutomationJobCreateParams;
+use app_server_protocol::AutomationJobHealthParams;
+use app_server_protocol::AutomationJobIdParams;
+use app_server_protocol::AutomationJobRunHistoryParams;
+use app_server_protocol::AutomationJobUpdateParams;
+use app_server_protocol::AutomationScheduleParams;
+use app_server_protocol::AutomationSchedulerConfigUpdateParams;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::ClientInfo;
 use app_server_protocol::ConnectCallbackSendParams;
@@ -32,6 +39,23 @@ use app_server_protocol::JsonRpcResponse;
 use app_server_protocol::KnowledgeListPacksParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelProviderAliasReadParams;
+use app_server_protocol::ModelProviderConfigExportParams;
+use app_server_protocol::ModelProviderConfigImportParams;
+use app_server_protocol::ModelProviderCreateParams;
+use app_server_protocol::ModelProviderDeleteParams;
+use app_server_protocol::ModelProviderFetchModelsParams;
+use app_server_protocol::ModelProviderKeyCreateParams;
+use app_server_protocol::ModelProviderKeyDeleteParams;
+use app_server_protocol::ModelProviderKeyEventParams;
+use app_server_protocol::ModelProviderKeyNextParams;
+use app_server_protocol::ModelProviderKeyUpdateParams;
+use app_server_protocol::ModelProviderReadParams;
+use app_server_protocol::ModelProviderSortOrdersUpdateParams;
+use app_server_protocol::ModelProviderTestChatParams;
+use app_server_protocol::ModelProviderTestConnectionParams;
+use app_server_protocol::ModelProviderUiStateReadParams;
+use app_server_protocol::ModelProviderUiStateWriteParams;
+use app_server_protocol::ModelProviderUpdateParams;
 use app_server_protocol::PlatformInfo;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ServerCapabilities;
@@ -56,7 +80,19 @@ use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 use app_server_protocol::METHOD_AGENT_SESSION_UPDATE;
 use app_server_protocol::METHOD_ARTIFACT_READ;
+use app_server_protocol::METHOD_AUTOMATION_JOB_CREATE;
+use app_server_protocol::METHOD_AUTOMATION_JOB_DELETE;
+use app_server_protocol::METHOD_AUTOMATION_JOB_HEALTH;
 use app_server_protocol::METHOD_AUTOMATION_JOB_LIST;
+use app_server_protocol::METHOD_AUTOMATION_JOB_READ;
+use app_server_protocol::METHOD_AUTOMATION_JOB_RUN_HISTORY;
+use app_server_protocol::METHOD_AUTOMATION_JOB_RUN_NOW;
+use app_server_protocol::METHOD_AUTOMATION_JOB_UPDATE;
+use app_server_protocol::METHOD_AUTOMATION_SCHEDULER_CONFIG_READ;
+use app_server_protocol::METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE;
+use app_server_protocol::METHOD_AUTOMATION_SCHEDULER_STATUS;
+use app_server_protocol::METHOD_AUTOMATION_SCHEDULE_PREVIEW;
+use app_server_protocol::METHOD_AUTOMATION_SCHEDULE_VALIDATE;
 use app_server_protocol::METHOD_CAPABILITY_LIST;
 use app_server_protocol::METHOD_CONNECT_CALLBACK_SEND;
 use app_server_protocol::METHOD_CONNECT_DEEP_LINK_RESOLVE;
@@ -68,12 +104,35 @@ use app_server_protocol::METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
 use app_server_protocol::METHOD_INITIALIZE;
 use app_server_protocol::METHOD_INITIALIZED;
 use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
+use app_server_protocol::METHOD_MCP_PROMPT_LIST;
+use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
+use app_server_protocol::METHOD_MCP_SERVER_LIST;
+use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
+use app_server_protocol::METHOD_MCP_TOOL_LIST;
 use app_server_protocol::METHOD_MODEL_LIST;
 use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
 use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_READ;
 use app_server_protocol::METHOD_MODEL_PROVIDER_CATALOG_LIST;
+use app_server_protocol::METHOD_MODEL_PROVIDER_CONFIG_EXPORT;
+use app_server_protocol::METHOD_MODEL_PROVIDER_CONFIG_IMPORT;
+use app_server_protocol::METHOD_MODEL_PROVIDER_CREATE;
+use app_server_protocol::METHOD_MODEL_PROVIDER_DELETE;
+use app_server_protocol::METHOD_MODEL_PROVIDER_FETCH_MODELS;
+use app_server_protocol::METHOD_MODEL_PROVIDER_KEY_CREATE;
+use app_server_protocol::METHOD_MODEL_PROVIDER_KEY_DELETE;
+use app_server_protocol::METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD;
+use app_server_protocol::METHOD_MODEL_PROVIDER_KEY_NEXT;
+use app_server_protocol::METHOD_MODEL_PROVIDER_KEY_UPDATE;
+use app_server_protocol::METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD;
 use app_server_protocol::METHOD_MODEL_PROVIDER_LIST;
+use app_server_protocol::METHOD_MODEL_PROVIDER_READ;
+use app_server_protocol::METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE;
+use app_server_protocol::METHOD_MODEL_PROVIDER_TEST_CHAT;
+use app_server_protocol::METHOD_MODEL_PROVIDER_TEST_CONNECTION;
+use app_server_protocol::METHOD_MODEL_PROVIDER_UI_STATE_READ;
+use app_server_protocol::METHOD_MODEL_PROVIDER_UI_STATE_WRITE;
+use app_server_protocol::METHOD_MODEL_PROVIDER_UPDATE;
 use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
 use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 use app_server_protocol::METHOD_SKILL_LIST;
@@ -184,13 +243,76 @@ impl RequestProcessor {
             }
             METHOD_AGENT_APP_UI_RUNTIME_STOP => self.handle_agent_app_ui_runtime_stop(params).await,
             METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list(params).await,
+            METHOD_AUTOMATION_SCHEDULER_CONFIG_READ => {
+                self.handle_automation_scheduler_config_read().await
+            }
+            METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE => {
+                self.handle_automation_scheduler_config_update(params).await
+            }
+            METHOD_AUTOMATION_SCHEDULER_STATUS => self.handle_automation_scheduler_status().await,
             METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list().await,
+            METHOD_AUTOMATION_JOB_READ => self.handle_automation_job_read(params).await,
+            METHOD_AUTOMATION_JOB_CREATE => self.handle_automation_job_create(params).await,
+            METHOD_AUTOMATION_JOB_UPDATE => self.handle_automation_job_update(params).await,
+            METHOD_AUTOMATION_JOB_DELETE => self.handle_automation_job_delete(params).await,
+            METHOD_AUTOMATION_JOB_RUN_NOW => self.handle_automation_job_run_now(params).await,
+            METHOD_AUTOMATION_JOB_HEALTH => self.handle_automation_job_health(params).await,
+            METHOD_AUTOMATION_JOB_RUN_HISTORY => {
+                self.handle_automation_job_run_history(params).await
+            }
+            METHOD_AUTOMATION_SCHEDULE_PREVIEW => {
+                self.handle_automation_schedule_preview(params).await
+            }
+            METHOD_AUTOMATION_SCHEDULE_VALIDATE => {
+                self.handle_automation_schedule_validate(params).await
+            }
+            METHOD_MCP_SERVER_LIST => self.handle_mcp_server_list().await,
+            METHOD_MCP_SERVER_STATUS_LIST => self.handle_mcp_server_status_list().await,
+            METHOD_MCP_TOOL_LIST => self.handle_mcp_tool_list().await,
+            METHOD_MCP_PROMPT_LIST => self.handle_mcp_prompt_list().await,
+            METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list().await,
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
             METHOD_MODEL_LIST => self.handle_model_list(params).await,
             METHOD_MODEL_PREFERENCES_LIST => self.handle_model_preferences_list().await,
             METHOD_MODEL_SYNC_STATE_READ => self.handle_model_sync_state_read().await,
             METHOD_MODEL_PROVIDER_LIST => self.handle_model_provider_list().await,
             METHOD_MODEL_PROVIDER_CATALOG_LIST => self.handle_model_provider_catalog_list().await,
+            METHOD_MODEL_PROVIDER_READ => self.handle_model_provider_read(params).await,
+            METHOD_MODEL_PROVIDER_CREATE => self.handle_model_provider_create(params).await,
+            METHOD_MODEL_PROVIDER_UPDATE => self.handle_model_provider_update(params).await,
+            METHOD_MODEL_PROVIDER_DELETE => self.handle_model_provider_delete(params).await,
+            METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE => {
+                self.handle_model_provider_sort_orders_update(params).await
+            }
+            METHOD_MODEL_PROVIDER_CONFIG_EXPORT => {
+                self.handle_model_provider_config_export(params).await
+            }
+            METHOD_MODEL_PROVIDER_CONFIG_IMPORT => {
+                self.handle_model_provider_config_import(params).await
+            }
+            METHOD_MODEL_PROVIDER_TEST_CONNECTION => {
+                self.handle_model_provider_test_connection(params).await
+            }
+            METHOD_MODEL_PROVIDER_TEST_CHAT => self.handle_model_provider_test_chat(params).await,
+            METHOD_MODEL_PROVIDER_FETCH_MODELS => {
+                self.handle_model_provider_fetch_models(params).await
+            }
+            METHOD_MODEL_PROVIDER_KEY_CREATE => self.handle_model_provider_key_create(params).await,
+            METHOD_MODEL_PROVIDER_KEY_UPDATE => self.handle_model_provider_key_update(params).await,
+            METHOD_MODEL_PROVIDER_KEY_DELETE => self.handle_model_provider_key_delete(params).await,
+            METHOD_MODEL_PROVIDER_KEY_NEXT => self.handle_model_provider_key_next(params).await,
+            METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD => {
+                self.handle_model_provider_key_usage_record(params).await
+            }
+            METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD => {
+                self.handle_model_provider_key_error_record(params).await
+            }
+            METHOD_MODEL_PROVIDER_UI_STATE_READ => {
+                self.handle_model_provider_ui_state_read(params).await
+            }
+            METHOD_MODEL_PROVIDER_UI_STATE_WRITE => {
+                self.handle_model_provider_ui_state_write(params).await
+            }
             METHOD_MODEL_PROVIDER_ALIAS_READ => self.handle_model_provider_alias_read(params).await,
             METHOD_MODEL_PROVIDER_ALIAS_LIST => self.handle_model_provider_alias_list().await,
             METHOD_CONNECT_DEEP_LINK_RESOLVE => self.handle_connect_deep_link_resolve(params).await,
@@ -528,6 +650,166 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_automation_scheduler_config_read(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .read_automation_scheduler_config()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_scheduler_config_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationSchedulerConfigUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_automation_scheduler_config(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_scheduler_status(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .read_automation_scheduler_status()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_job_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationJobIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_automation_job(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_job_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationJobCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_automation_job(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_job_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationJobUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_automation_job(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_job_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationJobIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_automation_job(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_job_run_now(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationJobIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .run_automation_job_now(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_job_health(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationJobHealthParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_automation_health(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_job_run_history(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationJobRunHistoryParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_automation_run_history(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_schedule_preview(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationScheduleParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .preview_automation_schedule(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_automation_schedule_validate(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AutomationScheduleParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .validate_automation_schedule(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_project_memory_read(
         &self,
         params: Option<serde_json::Value>,
@@ -537,6 +819,56 @@ impl RequestProcessor {
         let response = self
             .runtime
             .read_project_memory(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_mcp_servers()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_status_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_mcp_servers_with_status()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_tool_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_mcp_tools()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_prompt_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_mcp_prompts()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_resource_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_mcp_resources()
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -591,6 +923,258 @@ impl RequestProcessor {
         let response = self
             .runtime
             .list_model_provider_catalog()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_model_provider(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_model_provider(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_model_provider(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderDeleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_model_provider(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_sort_orders_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderSortOrdersUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_model_provider_sort_orders(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_config_export(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderConfigExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_model_provider_config(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_config_import(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderConfigImportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .import_model_provider_config(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_test_connection(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderTestConnectionParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .test_model_provider_connection(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_test_chat(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderTestChatParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .test_model_provider_chat(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_fetch_models(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderFetchModelsParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .fetch_model_provider_models(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_key_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderKeyCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_model_provider_key(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_key_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderKeyUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_model_provider_key(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_key_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderKeyDeleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_model_provider_key(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_key_next(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderKeyNextParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_next_model_provider_key(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_key_usage_record(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderKeyEventParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .record_model_provider_key_usage(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_key_error_record(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderKeyEventParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .record_model_provider_key_error(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_ui_state_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderUiStateReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_model_provider_ui_state(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_model_provider_ui_state_write(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ModelProviderUiStateWriteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .write_model_provider_ui_state(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -1229,6 +1813,72 @@ mod tests {
                 assert_eq!(response.result["isBinary"], false);
             }
             other => panic!("expected response, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn mcp_list_methods_require_initialized_and_return_current_empty_state() {
+        let processor = RequestProcessor::new(RuntimeCore::default());
+        let blocked = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(1),
+                METHOD_MCP_TOOL_LIST,
+                Some(json!({})),
+            ))
+            .await
+            .expect("blocked response");
+        assert!(matches!(
+            &blocked[0],
+            JsonRpcMessage::Error(error) if error.error.code == error_codes::NOT_INITIALIZED
+        ));
+
+        processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(2),
+                METHOD_INITIALIZE,
+                Some(
+                    serde_json::to_value(InitializeParams {
+                        client_info: ClientInfo {
+                            name: "test-client".to_string(),
+                            title: None,
+                            version: None,
+                        },
+                        capabilities: ClientCapabilities::default(),
+                    })
+                    .expect("initialize params"),
+                ),
+            ))
+            .await
+            .expect("initialize");
+        processor.handle_notification(JsonRpcNotification::new(
+            METHOD_INITIALIZED,
+            Some(json!({})),
+        ));
+
+        let cases = [
+            (RequestId::Integer(3), METHOD_MCP_SERVER_LIST, "servers"),
+            (
+                RequestId::Integer(4),
+                METHOD_MCP_SERVER_STATUS_LIST,
+                "servers",
+            ),
+            (RequestId::Integer(5), METHOD_MCP_TOOL_LIST, "tools"),
+            (RequestId::Integer(6), METHOD_MCP_PROMPT_LIST, "prompts"),
+            (RequestId::Integer(7), METHOD_MCP_RESOURCE_LIST, "resources"),
+        ];
+
+        for (id, method, field) in cases {
+            let messages = processor
+                .handle_request(JsonRpcRequest::new(id, method, Some(json!({}))))
+                .await
+                .expect("mcp list response");
+
+            match &messages[0] {
+                JsonRpcMessage::Response(response) => {
+                    assert_eq!(response.result[field], json!([]));
+                }
+                other => panic!("expected response, got {other:?}"),
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 import { safeInvoke } from "@/lib/dev-bridge";
 import { AppServerClient } from "@/lib/api/appServer";
 import { METHOD_WORKSPACE_REGISTERED_SKILLS_LIST } from "../../../packages/app-server-client/src/protocol";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type CapabilityDraftStatus =
   | "unverified"
@@ -1895,13 +1896,26 @@ function normalizeDraft(raw: RawCapabilityDraftRecord): CapabilityDraftRecord {
   };
 }
 
+async function invokeCapabilityDraftCommand<T>(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> {
+  const result = await safeInvoke<T>(command, args);
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Capability Draft current 通道",
+  );
+  return result;
+}
+
 export const capabilityDraftsApi = {
   appServerClient: new AppServerClient() as CapabilityDraftsAppServerClient,
 
   async create(
     request: CreateCapabilityDraftRequest,
   ): Promise<CapabilityDraftRecord> {
-    const draft = await safeInvoke<RawCapabilityDraftRecord>(
+    const draft = await invokeCapabilityDraftCommand<RawCapabilityDraftRecord>(
       "capability_draft_create",
       { request },
     );
@@ -1911,10 +1925,11 @@ export const capabilityDraftsApi = {
   async list(
     request: CapabilityDraftListRequest,
   ): Promise<CapabilityDraftRecord[]> {
-    const drafts = await safeInvoke<RawCapabilityDraftRecord[]>(
-      "capability_draft_list",
-      { request },
-    );
+    const drafts =
+      await invokeCapabilityDraftCommand<RawCapabilityDraftRecord[]>(
+        "capability_draft_list",
+        { request },
+      );
     if (!Array.isArray(drafts)) {
       return [];
     }
@@ -1924,20 +1939,22 @@ export const capabilityDraftsApi = {
   async get(
     request: CapabilityDraftLookupRequest,
   ): Promise<CapabilityDraftRecord | null> {
-    const draft = await safeInvoke<RawCapabilityDraftRecord | null>(
-      "capability_draft_get",
-      { request },
-    );
+    const draft =
+      await invokeCapabilityDraftCommand<RawCapabilityDraftRecord | null>(
+        "capability_draft_get",
+        { request },
+      );
     return draft ? normalizeDraft(draft) : null;
   },
 
   async verify(
     request: VerifyCapabilityDraftRequest,
   ): Promise<VerifyCapabilityDraftResult> {
-    const result = await safeInvoke<RawVerifyCapabilityDraftResult>(
-      "capability_draft_verify",
-      { request },
-    );
+    const result =
+      await invokeCapabilityDraftCommand<RawVerifyCapabilityDraftResult>(
+        "capability_draft_verify",
+        { request },
+      );
     return {
       draft: normalizeDraft(result.draft ?? {}),
       report: normalizeVerificationReport(result.report ?? {}),
@@ -1947,10 +1964,11 @@ export const capabilityDraftsApi = {
   async register(
     request: RegisterCapabilityDraftRequest,
   ): Promise<RegisterCapabilityDraftResult> {
-    const result = await safeInvoke<RawRegisterCapabilityDraftResult>(
-      "capability_draft_register",
-      { request },
-    );
+    const result =
+      await invokeCapabilityDraftCommand<RawRegisterCapabilityDraftResult>(
+        "capability_draft_register",
+        { request },
+      );
     return {
       draft: normalizeDraft(result.draft ?? {}),
       registration: normalizeRegistrationSummary(result.registration) ?? {
@@ -1993,7 +2011,7 @@ export const capabilityDraftsApi = {
     request: SubmitCapabilityDraftApprovalSessionInputsRequest,
   ): Promise<SubmitCapabilityDraftApprovalSessionInputsResult> {
     const result =
-      await safeInvoke<RawSubmitCapabilityDraftApprovalSessionInputsResult>(
+      await invokeCapabilityDraftCommand<RawSubmitCapabilityDraftApprovalSessionInputsResult>(
         "capability_draft_submit_approval_session_inputs",
         { request },
       );
@@ -2004,7 +2022,7 @@ export const capabilityDraftsApi = {
     request: ExecuteCapabilityDraftControlledGetRequest,
   ): Promise<ExecuteCapabilityDraftControlledGetResult> {
     const result =
-      await safeInvoke<RawExecuteCapabilityDraftControlledGetResult>(
+      await invokeCapabilityDraftCommand<RawExecuteCapabilityDraftControlledGetResult>(
         "capability_draft_execute_controlled_get",
         { request },
       );

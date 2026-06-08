@@ -85,13 +85,37 @@ Connect deep link 已切到 Electron Desktop Host URL bridge 与 App Server JSON
 
 旧 `poster_material_*` 命名只允许停留在 schema 迁移与治理守卫中，不应重新出现在前端网关、Rust 命令模块或运行时代码里。
 
-模型 Provider 真相集同样遵循单一事实源。当前前端入口为 `src/lib/api/modelRegistry.ts` 中的：
+模型 Provider 真相集同样遵循单一事实源。当前前端入口为 `src/lib/api/modelRegistry.ts` 与 `src/lib/api/apiKeyProvider.ts` 中的 App Server JSON-RPC methods：
 
-- `get_model_registry_provider_ids`
+- `model/list`
+- `modelPreferences/list`
+- `modelSyncState/read`
+- `modelProvider/list`
+- `modelProvider/catalog/list`
+- `modelProvider/read`
+- `modelProvider/create`
+- `modelProvider/update`
+- `modelProvider/delete`
+- `modelProvider/sortOrders/update`
+- `modelProvider/fetchModels`
+- `modelProvider/testConnection`
+- `modelProvider/testChat`
+- `modelProviderConfig/export`
+- `modelProviderConfig/import`
+- `modelProviderKey/create`
+- `modelProviderKey/update`
+- `modelProviderKey/delete`
+- `modelProviderKey/next`
+- `modelProviderKey/usage/record`
+- `modelProviderKey/error/record`
+- `modelProviderUiState/read`
+- `modelProviderUiState/write`
+- `modelProviderAlias/read`
+- `modelProviderAlias/list`
 
-`lime-rs/resources/models` 本地模型 catalog 已下线；Provider 元信息以 `get_system_provider_catalog` 为事实源，模型列表以 Provider 实时 `/models` 接口和用户显式 `custom_models` 为事实源。Provider 实时 `/models` 的成功结果可以由 `ModelRegistryService` 持久化缓存 10 天，所有读取先查缓存再访问上游，但该缓存只保存真实接口结果，不得退化成本地 catalog 兜底。`get_model_registry_provider_ids` 仅作为兼容命令保留空结果，不应再读取本地资源、数据库或运行态缓存去“猜” provider 集合。
+`lime-rs/resources/models` 本地模型 catalog 已下线；Provider 元信息以 `modelProvider/catalog/list` 为事实源，Provider 配置 / API Key / UI state / 连接测试 / 模型实时拉取均以 `modelProvider*` / `modelProviderKey*` / `modelProviderUiState*` App Server method 为事实源。Provider 实时 `/models` 的成功结果可以由 `ModelRegistryService` 持久化缓存 10 天，所有读取先查缓存再访问上游，但该缓存只保存真实接口结果，不得退化成本地 catalog 兜底。`get_model_registry_provider_ids` 仅作为兼容命令保留空结果，不应再读取本地资源、数据库或运行态缓存去“猜” provider 集合。旧 Provider façade 命令族已判为 `dead`：`get_api_key_providers`、`get_system_provider_catalog`、`get_api_key_provider`、`read_api_key_provider_config`、`add_custom_api_key_provider`、`create_api_key_provider`、`update_api_key_provider`、`delete_custom_api_key_provider`、`delete_api_key_provider`、`update_provider_sort_orders`、`update_api_key_provider_sort_orders`、`export_api_key_providers`、`export_api_key_provider_config`、`import_api_key_providers`、`import_api_key_provider_config`、`test_api_key_provider_connection`、`test_api_key_provider_chat`、`fetch_provider_models_auto`、`add_api_key`、`create_api_key_provider_key`、`delete_api_key`、`delete_api_key_provider_key`、`toggle_api_key`、`update_api_key_alias`、`update_api_key_provider_key`、`get_next_api_key`、`next_api_key_provider_key`、`record_api_key_usage`、`record_api_key_provider_key_usage`、`record_api_key_error`、`record_api_key_provider_key_error`、`get_provider_ui_state`、`read_api_key_provider_ui_state`、`set_provider_ui_state`、`write_api_key_provider_ui_state`；不得重新接回前端网关、Electron Host、DevBridge truth、mock priority、runtime surface、Tauri runner 或 Rust dispatcher。
 同理，聊天运行时初始化的 `aster_agent_init` 在浏览器 DevBridge 模式下也不能再被放进 `mockPriorityCommands`。只要桥接在线，它就必须优先读取后端真实 `provider_name / model_name`，让聊天入口拿到当前运行时模型。
-进一步地，围绕运行时模型解析的真相命令：`aster_agent_init`、`get_default_provider`、`get_api_key_providers`、`get_model_registry`、`get_provider_alias_config`、`fetch_provider_models_auto`、`get_model_registry_provider_ids`，在浏览器 DevBridge 模式下如果桥接失败，必须直接抛错，不能再通过 `safeInvoke` 静默退回 mock；否则前端会把“后端未连上 / 命令失败”误显示成假的 Provider / 模型列表。旧 `get_provider_pool_overview` 属于凭证池命令面，已随凭证池退役，不得重新作为运行时模型解析事实源。
+进一步地，围绕运行时模型解析的真相入口：`aster_agent_init`、`get_default_provider`、`model/list`、`modelProvider/list`、`modelProvider/catalog/list`、`modelProvider/fetchModels`、`modelProviderAlias/read`、`modelProviderAlias/list`、`get_model_registry_provider_ids`，在浏览器 DevBridge 模式下如果桥接失败，必须直接抛错，不能再通过 `safeInvoke` 静默退回 mock；否则前端会把“后端未连上 / 命令失败”误显示成假的 Provider / 模型列表。旧 `get_provider_pool_overview` 属于凭证池命令面，已随凭证池退役，不得重新作为运行时模型解析事实源。
 同时要明确，`aster_agent_init` 只负责初始化 Agent，并不保证已经完成 Provider 配置；当它未返回 `provider_name / model_name` 时，前端不得把本地硬编码默认值当作真实模型，而应继续回退到 `get_default_provider` + 已配置 Provider/模型注册表解析链，拿到当前工作区真正可用的 `provider/model`。
 同一条约束也适用于 Prompt Cache 能力判断：运行时与前端都不得因为某个自定义 Provider “长得像 Anthropic 协议”就推断它支持官方 Anthropic Automatic Prompt Caching。当前事实源必须继续按 ProviderType 判断：`anthropic` 走自动缓存能力，`anthropic-compatible` 只保留显式 `cache_control` 语义；若上游没有实现 Automatic Prompt Cache，`cached_input_tokens` 为空不能直接归因到 Lime 没发字段。
 
@@ -186,7 +210,7 @@ Claw / Aster 原完整执行链是 Agent 对话 runtime 的 current 参考实现
 
 前端从本地存储恢复出的 Agent session id 在发送前必须先被 App Server `agentSession/read` 确认存在且归属当前 workspace。明确 `session not found` 或 workspace mismatch 时只能丢弃本地恢复快照并创建新的 App Server session；普通 bridge / network error 必须 fail closed，不得静默创建会话或继续轮询 stale session。Electron `safeInvoke` 返回的 App Server JSON-RPC result envelope 也必须在 `src/lib/api/appServer.ts` 网关层统一解包，业务页面不得各自猜测 `{ result: { lines } }` / `{ lines }` 形状。
 
-`agent_app_runtime_*` 是 Agent App 进入 App Server / AgentRuntime 主链的 Desktop facade：`agent_app_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> backend host`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。`startTask.turnConfig` 必须随 facade 透传，并写入 `RuntimeOptions.hostOptions.asterChatRequest`：扁平 `AsterChatRequest` 字段供 Desktop Aster host 恢复 Claw 原链，`turn_config` 镜像供外部 App Server backend 读取 provider_config / system_prompt / reasoning / sandbox 等配置。cancel / read / host response 在 App Server protocol 覆盖前可继续作为 Desktop compat 适配到既有 `agent_runtime_*` 读写命令，但不得复制 Claw `*_skill_launch.rs`、不得新增垂直 `content_factory_*` Agent 命令，也不得把 `LIME_GATEWAY_*` 直接模型调用宣称为完整 Agent 能力。
+`agent_app_runtime_*` 是 Agent App 进入 App Server / AgentRuntime 主链的 Desktop facade：`agent_app_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> backend host`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。`startTask.turnConfig` 必须随 facade 透传，并写入 `RuntimeOptions.hostOptions.asterChatRequest`：扁平 `AsterChatRequest` 字段供 Desktop Aster host 恢复 Claw 原链，`turn_config` 镜像供外部 App Server backend 读取 provider*config / system_prompt / reasoning / sandbox 等配置。cancel / read / host response 在 App Server protocol 覆盖前可继续作为 Desktop compat 适配到既有 `agent_runtime*_`读写命令，但不得复制 Claw`**skill_launch.rs`、不得新增垂直 `content_factory**`Agent 命令，也不得把`LIME*GATEWAY*_` 直接模型调用宣称为完整 Agent 能力。
 
 P17.3 之前禁止真实删除 Agent App 本地数据：`agent_app_uninstall_rehearsal` 只生成 keep-data / delete-data 演练，`agent_app_uninstall` 只能返回同一演练摘要和未删除的 installed list，不得执行 `remove_file` / `remove_dir_all` 或移除 installed state。真实 delete-data 必须等后续路线图单独打开并补齐 evidence / residual audit / confirmation gate。
 
@@ -416,7 +440,25 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 这些命令如果仍处在 legacy desktop facade 兼容期，也必须继续保持 DevBridge dispatcher 已桥接；current 新能力优先同步 Electron Desktop Host bridge / App Server JSON-RPC，避免浏览器模式、Electron smoke 或 Playwright 续测时回退成 unknown command。
 
-自动化设置链路同样遵循这条路径。当前主入口为 `src/lib/api/automation.ts`，统一承接：
+自动化设置链路同样遵循这条路径。当前主入口为 `src/lib/api/automation.ts`，统一经 `AppServerClient.request(...)` 承接：
+
+- `automationScheduler/config/read`
+- `automationScheduler/config/update`
+- `automationScheduler/status`
+- `automationJob/list`
+- `automationJob/read`
+- `automationJob/create`
+- `automationJob/update`
+- `automationJob/delete`
+- `automationJob/runNow`
+- `automationJob/health`
+- `automationJob/runHistory`
+- `automationSchedule/preview`
+- `automationSchedule/validate`
+
+这些 App Server JSON-RPC method 属于当前 `设置 -> 系统 -> 自动化` 主路径，缺少必需 result 时必须 fail closed，不得回退 DevBridge mock、renderer mock 或 legacy desktop facade。`automationJob/runNow` 已进入 current 协议，但 App Server 自动化执行器尚未迁完；当前实现必须 fail closed，不能回退旧 Tauri 执行器。
+
+旧自动化命令统一判为 `dead`，不得重新接回前端网关、Electron Desktop Host 白名单、Rust `generate_handler!`、DevBridge dispatcher、`mockPriorityCommands` 或默认 mock：
 
 - `get_automation_scheduler_config`
 - `update_automation_scheduler_config`
@@ -431,8 +473,6 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 - `get_automation_run_history`
 - `preview_automation_schedule`
 - `validate_automation_schedule`
-
-这些命令属于当前 `设置 -> 系统 -> 自动化` 主路径。浏览器模式下如已接通 DevBridge，应优先走真实后端；不要因为 dispatcher 漏接而长期依赖 mock 掩盖设置页报错。
 
 Companion 桌宠链路同样遵循这条路径。当前主入口为 `src/lib/api/companion.ts`，统一承接：
 
@@ -632,7 +672,7 @@ npm run verify:local
 
 ## 自动化 `agent_turn` 负载补充约定
 
-当 `create_automation_job` / `update_automation_job` 的 `payload.kind = "agent_turn"` 用于持续产出交付物时，允许并推荐透传以下字段：
+当 `automationJob/create` / `automationJob/update` 的 `payload.kind = "agent_turn"` 用于持续产出交付物时，允许并推荐透传以下字段：
 
 - `content_id`：绑定长期内容主线，供自动化版本持续沉淀到同一交付链
 - `request_metadata`：与运行时 turn 保持同合同，至少可包含 `artifact` 与 `harness` 两层

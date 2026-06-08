@@ -35,16 +35,18 @@ describe("electron/ipcChannels", () => {
     expect(
       isElectronHostCommand("agent_runtime_list_workspace_skill_bindings"),
     ).toBe(true);
-    expect(isElectronHostCommand("fetch_provider_models_auto")).toBe(true);
-    expect(isElectronHostCommand("get_provider_ui_state")).toBe(true);
+    expect(isElectronHostCommand("fetch_provider_models_auto")).toBe(false);
+    expect(isElectronHostCommand("get_provider_ui_state")).toBe(false);
     expect(isElectronHostCommand("get_local_skills_for_app")).toBe(true);
-    expect(isElectronHostCommand("get_automation_jobs")).toBe(true);
-    expect(isElectronHostCommand("get_automation_scheduler_config")).toBe(true);
-    expect(isElectronHostCommand("get_automation_status")).toBe(true);
-    expect(isElectronHostCommand("get_automation_health")).toBe(true);
+    expect(isElectronHostCommand("get_automation_jobs")).toBe(false);
+    expect(isElectronHostCommand("get_automation_scheduler_config")).toBe(
+      false,
+    );
+    expect(isElectronHostCommand("get_automation_status")).toBe(false);
+    expect(isElectronHostCommand("get_automation_health")).toBe(false);
     expect(isElectronHostCommand("project_memory_get")).toBe(true);
     expect(isElectronHostCommand("get_model_registry")).toBe(true);
-    expect(isElectronHostCommand("get_api_key_providers")).toBe(true);
+    expect(isElectronHostCommand("get_api_key_providers")).toBe(false);
     expect(isElectronHostCommand("list_dir")).toBe(false);
     expect(isElectronHostCommand("read_file_preview_cmd")).toBe(false);
     expect(isElectronHostCommand("list_executable_skills")).toBe(true);
@@ -53,6 +55,9 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_config")).toBe(true);
     expect(isElectronHostCommand("get_experimental_config")).toBe(true);
     expect(isElectronHostCommand("save_experimental_config")).toBe(true);
+    expect(isElectronHostCommand("get_file_icon_data_url")).toBe(true);
+    expect(isElectronHostCommand("get_file_manager_locations")).toBe(true);
+    expect(isElectronHostCommand("get_home_dir")).toBe(true);
     expect(isElectronHostCommand("agent_app_list_installed")).toBe(true);
     expect(isElectronHostCommand("agent_app_runtime_start_task")).toBe(true);
     expect(isElectronHostCommand("agent_app_runtime_cancel_task")).toBe(true);
@@ -84,6 +89,8 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("mcp_list_servers_with_status")).toBe(true);
     expect(isElectronHostCommand("site_get_adapter_catalog_status")).toBe(true);
     expect(isElectronHostCommand("open_external_url")).toBe(true);
+    expect(isElectronHostCommand("open_with_default_app")).toBe(true);
+    expect(isElectronHostCommand("reveal_in_finder")).toBe(true);
     expect(isElectronHostCommand("start_oem_cloud_oauth_callback_bridge")).toBe(
       true,
     );
@@ -140,15 +147,10 @@ describe("electron/ipcChannels", () => {
       "agent_runtime_submit_turn",
       "agent_runtime_update_session",
       "aster_agent_init",
-      "fetch_provider_models_auto",
       "get_all_alias_configs",
-      "get_api_key_providers",
-      "get_automation_health",
-      "get_automation_jobs",
-      "get_automation_scheduler_config",
-      "get_automation_status",
       "get_default_provider",
       "get_local_skills_for_app",
+      "get_mcp_servers",
       "get_model_preferences",
       "get_model_registry",
       "get_model_registry_provider_ids",
@@ -157,9 +159,12 @@ describe("electron/ipcChannels", () => {
       "get_models_for_provider",
       "get_provider_alias_config",
       "get_skill_detail",
-      "get_system_provider_catalog",
       "knowledge_list_packs",
       "list_executable_skills",
+      "mcp_list_prompts",
+      "mcp_list_resources",
+      "mcp_list_servers_with_status",
+      "mcp_list_tools",
       "project_memory_get",
       "workspace_ensure_default_ready",
       "workspace_ensure_ready",
@@ -183,6 +188,21 @@ describe("electron/ipcChannels", () => {
     expect(
       ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS.includes(
         "start_oem_cloud_oauth_callback_bridge" as never,
+      ),
+    ).toBe(false);
+    expect(
+      ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS.includes(
+        "get_file_icon_data_url" as never,
+      ),
+    ).toBe(false);
+    expect(
+      ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS.includes(
+        "get_file_manager_locations" as never,
+      ),
+    ).toBe(false);
+    expect(
+      ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS.includes(
+        "get_home_dir" as never,
       ),
     ).toBe(false);
   });

@@ -82,7 +82,7 @@ describe("http-client", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(electronHostHealthResponse())
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ result: ["provider-a"] }), {
+        new Response(JSON.stringify({ result: ["model-a"] }), {
           status: 200,
           headers: {
             "Content-Type": "application/json",
@@ -92,8 +92,8 @@ describe("http-client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(healthCheck()).resolves.toBe(true);
-    await expect(invokeViaHttp("get_api_key_providers")).resolves.toEqual([
-      "provider-a",
+    await expect(invokeViaHttp("get_model_registry")).resolves.toEqual([
+      "model-a",
     ]);
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -856,36 +856,6 @@ describe("http-client", () => {
       ok: false,
       error: expect.objectContaining({
         message: expect.stringContaining("timeout after 1800000ms"),
-      }),
-    });
-  });
-
-  it("Provider 模型探测命令应使用更长的请求超时窗口", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(electronHostHealthResponse())
-      .mockImplementationOnce(createAbortablePendingFetch());
-    vi.stubGlobal("fetch", fetchMock);
-
-    let settled = false;
-    const invokePromise = invokeViaHttp("fetch_provider_models_auto", {
-      providerId: "custom-minimax",
-    }).then(
-      () => ({ ok: true as const }),
-      (error) => ({ ok: false as const, error }),
-    );
-    invokePromise.finally(() => {
-      settled = true;
-    });
-
-    await vi.advanceTimersByTimeAsync(15000);
-    expect(settled).toBe(false);
-
-    await vi.advanceTimersByTimeAsync(15000);
-    await expect(invokePromise).resolves.toMatchObject({
-      ok: false,
-      error: expect.objectContaining({
-        message: expect.stringContaining("timeout after 30000ms"),
       }),
     });
   });

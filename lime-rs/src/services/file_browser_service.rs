@@ -4,27 +4,7 @@
 //! 本模块仅保留 Tauri 命令封装。
 
 pub use lime_services::file_browser_service::{list_directory, read_file_preview};
-pub use lime_services::file_browser_service::{
-    DirectoryListing, FileEntry, FileManagerLocation, FilePreview,
-};
-
-/// Tauri 命令：获取用户主目录
-#[tauri::command]
-pub async fn get_home_dir() -> Result<String, String> {
-    lime_services::file_browser_service::get_home_dir().await
-}
-
-/// Tauri 命令：获取文件管理器快捷入口
-#[tauri::command]
-pub async fn get_file_manager_locations() -> Result<Vec<FileManagerLocation>, String> {
-    lime_services::file_browser_service::get_file_manager_locations().await
-}
-
-/// Tauri 命令：获取文件图标
-#[tauri::command]
-pub async fn get_file_icon_data_url(path: String) -> Result<Option<String>, String> {
-    lime_services::file_browser_service::get_file_icon_data_url(path).await
-}
+pub use lime_services::file_browser_service::{DirectoryListing, FileEntry, FilePreview};
 
 /// Tauri 命令：创建新文件
 #[tauri::command]
@@ -54,16 +34,4 @@ pub async fn rename_file(old_path: String, new_path: String) -> Result<(), Strin
 #[tauri::command]
 pub async fn get_file_name(path: String) -> Result<String, String> {
     lime_services::file_browser_service::get_file_name(path).await
-}
-
-/// Tauri 命令：在 Finder 中显示文件
-#[tauri::command]
-pub async fn reveal_in_finder(path: String) -> Result<(), String> {
-    lime_services::file_browser_service::reveal_in_finder(path).await
-}
-
-/// Tauri 命令：使用默认应用打开文件
-#[tauri::command]
-pub async fn open_with_default_app(path: String) -> Result<(), String> {
-    lime_services::file_browser_service::open_with_default_app(path).await
 }

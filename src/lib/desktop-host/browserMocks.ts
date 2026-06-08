@@ -807,15 +807,6 @@ export const browserMocks: Record<string, (args?: any) => any> = {
   launch_browser_session: (args: any) => {
     return launchMockBrowserSession(args?.request);
   },
-  launch_browser_profile_runtime_assist_cmd: (args: any) =>
-    launchMockBrowserSession({
-      profile_id: args?.request?.id,
-      url: args?.request?.url,
-      environment_preset_id: args?.request?.environment_preset_id,
-      target_id: args?.request?.target_id,
-      open_window: args?.request?.open_window,
-      stream_mode: args?.request?.stream_mode,
-    }),
   get_chrome_profile_sessions: () =>
     mockBrowserProfiles
       .filter((profile) => profile.archived_at === null)
@@ -839,17 +830,6 @@ export const browserMocks: Record<string, (args?: any) => any> = {
   }),
   open_browser_runtime_debugger_window: () => ({ success: true }),
   close_browser_runtime_debugger_window: () => ({ success: true }),
-  launch_browser_runtime_assist: (args: any) =>
-    launchMockBrowserSession({
-      profile_id: args?.request?.profile_id,
-      profile_key: args?.request?.profile_key,
-      url: args?.request?.url,
-      environment_preset_id: args?.request?.environment?.preset_id,
-      environment: args?.request?.environment,
-      target_id: args?.request?.target_id,
-      open_window: args?.request?.open_window,
-      stream_mode: args?.request?.stream_mode,
-    }),
   site_list_adapters: () => getMockEffectiveSiteAdapters(),
   site_recommend_adapters: (args: any) => {
     const rawLimit = Number(

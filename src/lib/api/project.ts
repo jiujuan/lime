@@ -8,6 +8,7 @@ import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
 import { normalizeThemeType } from "@/lib/workspace/workbenchContract";
 import type { WorkspaceSettings } from "@/types/workspace";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import {
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
@@ -48,6 +49,19 @@ async function requestProjectAppServer<T>(
 ): Promise<T> {
   const response = await appServerClient.request<T>(method, params);
   return response.result;
+}
+
+async function invokeProjectCommand<T>(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> {
+  const result = await safeInvoke<T>(command, args);
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Workspace / Content / General Workbench current 通道",
+  );
+  return result;
 }
 
 // ==================== 类型定义 ====================
@@ -314,7 +328,9 @@ export interface ListContentQuery {
 export async function createProject(
   request: CreateProjectRequest,
 ): Promise<Project> {
-  const project = await safeInvoke<RawProject>("workspace_create", { request });
+  const project = await invokeProjectCommand<RawProject>("workspace_create", {
+    request,
+  });
   return normalizeProject(project);
 }
 
@@ -458,7 +474,7 @@ async function ensureDefaultProjectThroughAppServer(): Promise<Project> {
 
 /** 设置默认项目 */
 export async function setDefaultProject(id: string): Promise<void> {
-  await safeInvoke<void>("workspace_set_default", { id });
+  await invokeProjectCommand<void>("workspace_set_default", { id });
 }
 
 /** 获取或创建默认项目 */
@@ -576,7 +592,7 @@ export async function updateProject(
   request: UpdateProjectRequest,
 ): Promise<Project> {
   invalidateProjectDetailCache(id);
-  const project = await safeInvoke<RawProject>("workspace_update", {
+  const project = await invokeProjectCommand<RawProject>("workspace_update", {
     id,
     request,
   });
@@ -590,7 +606,7 @@ export async function deleteProject(
   deleteDirectory?: boolean,
 ): Promise<boolean> {
   invalidateProjectDetailCache(id);
-  const deleted = await safeInvoke<boolean>("workspace_delete", {
+  const deleted = await invokeProjectCommand<boolean>("workspace_delete", {
     id,
     deleteDirectory,
   });
@@ -604,19 +620,19 @@ export async function deleteProject(
 export async function createContent(
   request: CreateContentRequest,
 ): Promise<ContentDetail> {
-  return safeInvoke<ContentDetail>("content_create", { request });
+  return invokeProjectCommand<ContentDetail>("content_create", { request });
 }
 
 /** 获取内容详情 */
 export async function getContent(id: string): Promise<ContentDetail | null> {
-  return safeInvoke<ContentDetail | null>("content_get", { id });
+  return invokeProjectCommand<ContentDetail | null>("content_get", { id });
 }
 
 /** 获取工作区文稿版本状态（后端解析 content.metadata，并兼容旧协议元数据键） */
 export async function getGeneralWorkbenchDocumentState(
   id: string,
 ): Promise<GeneralWorkbenchDocumentState | null> {
-  return safeInvoke<GeneralWorkbenchDocumentState | null>(
+  return invokeProjectCommand<GeneralWorkbenchDocumentState | null>(
     "content_get_general_workbench_document_state",
     { id },
   );
@@ -627,7 +643,7 @@ export async function listContents(
   projectId: string,
   query?: ListContentQuery,
 ): Promise<ContentListItem[]> {
-  const contents = await safeInvoke<ContentListItem[]>("content_list", {
+  const contents = await invokeProjectCommand<ContentListItem[]>("content_list", {
     projectId,
     query,
   });
@@ -644,12 +660,12 @@ export async function updateContent(
   id: string,
   request: UpdateContentRequest,
 ): Promise<ContentDetail> {
-  return safeInvoke<ContentDetail>("content_update", { id, request });
+  return invokeProjectCommand<ContentDetail>("content_update", { id, request });
 }
 
 /** 删除内容 */
 export async function deleteContent(id: string): Promise<boolean> {
-  return safeInvoke<boolean>("content_delete", { id });
+  return invokeProjectCommand<boolean>("content_delete", { id });
 }
 
 /** 重新排序内容 */
@@ -657,14 +673,19 @@ export async function reorderContents(
   projectId: string,
   contentIds: string[],
 ): Promise<void> {
-  return safeInvoke<void>("content_reorder", { projectId, contentIds });
+  return invokeProjectCommand<void>("content_reorder", {
+    projectId,
+    contentIds,
+  });
 }
 
 /** 获取项目内容统计 */
 export async function getContentStats(
   projectId: string,
 ): Promise<[number, number, number]> {
-  return safeInvoke<[number, number, number]>("content_stats", { projectId });
+  return invokeProjectCommand<[number, number, number]>("content_stats", {
+    projectId,
+  });
 }
 
 // ==================== 辅助函数 ====================

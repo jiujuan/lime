@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type AgentRunSource = "chat" | "skill" | "automation";
 
@@ -77,22 +78,48 @@ export async function executionRunList(
   limit: number = 50,
   offset: number = 0,
 ): Promise<AgentRun[]> {
-  return await safeInvoke("execution_run_list", { limit, offset });
+  const result = await safeInvoke<AgentRun[]>("execution_run_list", {
+    limit,
+    offset,
+  });
+  assertNotDiagnosticFacade(
+    "execution_run_list",
+    result,
+    "真实 Execution run current 通道",
+  );
+  return result;
 }
 
 export async function executionRunGet(runId: string): Promise<AgentRun | null> {
-  return await safeInvoke("execution_run_get", { runId });
+  const result = await safeInvoke<AgentRun | null>("execution_run_get", {
+    runId,
+  });
+  assertNotDiagnosticFacade(
+    "execution_run_get",
+    result,
+    "真实 Execution run current 通道",
+  );
+  return result;
 }
 
 export async function executionRunGetGeneralWorkbenchState(
   sessionId: string,
   limit: number = 3,
 ): Promise<GeneralWorkbenchRunState> {
-  return await safeInvoke("execution_run_get_general_workbench_state", {
-    sessionId,
-    session_id: sessionId,
-    limit,
-  });
+  const result = await safeInvoke<GeneralWorkbenchRunState>(
+    "execution_run_get_general_workbench_state",
+    {
+      sessionId,
+      session_id: sessionId,
+      limit,
+    },
+  );
+  assertNotDiagnosticFacade(
+    "execution_run_get_general_workbench_state",
+    result,
+    "真实 Execution run current 通道",
+  );
+  return result;
 }
 
 export async function executionRunListGeneralWorkbenchHistory(
@@ -100,10 +127,19 @@ export async function executionRunListGeneralWorkbenchHistory(
   limit: number = 20,
   offset: number = 0,
 ): Promise<GeneralWorkbenchRunHistoryPage> {
-  return await safeInvoke("execution_run_list_general_workbench_history", {
-    sessionId,
-    session_id: sessionId,
-    limit,
-    offset,
-  });
+  const result = await safeInvoke<GeneralWorkbenchRunHistoryPage>(
+    "execution_run_list_general_workbench_history",
+    {
+      sessionId,
+      session_id: sessionId,
+      limit,
+      offset,
+    },
+  );
+  assertNotDiagnosticFacade(
+    "execution_run_list_general_workbench_history",
+    result,
+    "真实 Execution run current 通道",
+  );
+  return result;
 }

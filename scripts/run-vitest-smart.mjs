@@ -8,6 +8,7 @@ import {
   isLiveProviderTestPath,
   liveProviderSmokeAllowed,
 } from "./lib/live-provider-smoke-gate.mjs";
+import { isVitestRunnableTestFile } from "./lib/vitest-test-file-filter.mjs";
 
 const vitestEntrypoint = fileURLToPath(
   new URL("../node_modules/vitest/vitest.mjs", import.meta.url),
@@ -116,6 +117,7 @@ function collectTestFiles() {
   const files = parsed
     .map((entry) => (typeof entry === "string" ? entry : entry?.file))
     .filter((entry) => typeof entry === "string" && entry.length > 0)
+    .filter(isVitestRunnableTestFile)
     .filter((entry) => {
       if (!includeLiveProviderTests && isLiveProviderTestPath(entry)) {
         skippedLiveTestCount += 1;

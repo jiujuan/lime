@@ -5,7 +5,6 @@
 mod agent_apps;
 mod agent_sessions;
 mod app_runtime;
-mod automation;
 mod browser;
 mod capability_drafts;
 mod channels;
@@ -102,10 +101,6 @@ pub async fn handle_command(
     }
 
     if let Some(result) = channels::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = automation::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
@@ -864,23 +859,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fetch_provider_models_auto_is_bridged() {
-        let state = make_test_state();
-
-        let error = handle_command(
-            &state,
-            "fetch_provider_models_auto",
-            Some(serde_json::json!({
-                "providerId": "ollama"
-            })),
-        )
-        .await
-        .expect_err("missing provider should fail after bridge routing");
-
-        assert!(error.to_string().contains("Provider 不存在: ollama"));
-    }
-
-    #[tokio::test]
     async fn get_provider_alias_config_is_bridged() {
         let state = make_test_state();
 
@@ -898,123 +876,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn api_key_provider_write_flow_is_bridged() {
+    async fn retired_api_key_provider_commands_are_not_dev_bridge_facades() {
         let state = make_test_state();
 
-        let created = handle_command(
-            &state,
-            "add_custom_api_key_provider",
-            Some(serde_json::json!({
-                "request": {
-                    "name": "SenseNova E2E",
-                    "type": "openai",
-                    "api_host": "https://api.sensenova.cn/compatible-mode/v2"
-                }
-            })),
-        )
-        .await
-        .expect("custom provider should be created through bridge");
-        let provider_id = created["id"].as_str().unwrap().to_string();
-
-        handle_command(
-            &state,
-            "update_api_key_provider",
-            Some(serde_json::json!({
-                "id": provider_id,
-                "request": {
-                    "enabled": true,
-                    "custom_models": ["SenseChat-5"]
-                }
-            })),
-        )
-        .await
-        .expect("custom provider should be updated through bridge");
-
-        let key = handle_command(
-            &state,
-            "add_api_key",
-            Some(serde_json::json!({
-                "request": {
-                    "provider_id": provider_id,
-                    "api_key": "sk-bridge-test",
-                    "alias": "bridge"
-                }
-            })),
-        )
-        .await
-        .expect("api key should be added through bridge");
-
-        assert_eq!(key["provider_id"], created["id"]);
-        assert_ne!(key["api_key_masked"], "sk-bridge-test");
-
-        let provider = handle_command(
-            &state,
+        for command in [
             "get_api_key_provider",
-            Some(serde_json::json!({
-                "id": created["id"].as_str().unwrap()
-            })),
-        )
-        .await
-        .expect("custom provider should be readable through bridge");
-
-        assert_eq!(provider["id"], created["id"]);
-        assert_eq!(
-            provider["api_host"],
-            "https://api.sensenova.cn/compatible-mode/v2"
-        );
-        assert_eq!(provider["custom_models"][0], "SenseChat-5");
-        assert_eq!(provider["api_keys"].as_array().unwrap().len(), 1);
-
-        let deleted = handle_command(
-            &state,
+            "add_custom_api_key_provider",
+            "update_api_key_provider",
             "delete_custom_api_key_provider",
-            Some(serde_json::json!({
-                "id": created["id"].as_str().unwrap()
-            })),
-        )
-        .await
-        .expect("custom provider should be deleted through bridge");
-
-        assert_eq!(deleted, serde_json::json!(true));
-    }
-
-    #[tokio::test]
-    async fn test_api_key_provider_connection_is_bridged() {
-        let state = make_test_state();
-
-        let error = handle_command(
-            &state,
+            "add_api_key",
+            "delete_api_key",
+            "toggle_api_key",
+            "update_api_key_alias",
+            "get_next_api_key",
+            "record_api_key_usage",
+            "record_api_key_error",
+            "get_provider_ui_state",
+            "set_provider_ui_state",
+            "update_provider_sort_orders",
+            "export_api_key_providers",
+            "import_api_key_providers",
             "test_api_key_provider_connection",
-            Some(serde_json::json!({
-                "providerId": "missing-provider"
-            })),
-        )
-        .await
-        .expect_err("missing provider should fail after bridge routing");
-
-        assert!(error
-            .to_string()
-            .contains("Provider 不存在: missing-provider"));
-    }
-
-    #[tokio::test]
-    async fn test_api_key_provider_chat_is_bridged() {
-        let state = make_test_state();
-
-        let error = handle_command(
-            &state,
             "test_api_key_provider_chat",
-            Some(serde_json::json!({
-                "providerId": "missing-provider",
-                "prompt": "hello"
-            })),
-        )
-        .await
-        .expect_err("missing provider should fail after bridge routing");
+        ] {
+            let error = handle_command(&state, command, Some(serde_json::json!({})))
+                .await
+                .expect_err("retired API Key Provider command should be unknown");
 
-        assert!(error
-            .to_string()
-            .contains("Provider 不存在: missing-provider"));
+            assert!(error.to_string().contains("[DevBridge] 未知命令"));
+        }
     }
 
     #[tokio::test]

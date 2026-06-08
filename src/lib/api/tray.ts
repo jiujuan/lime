@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const TRAY_MODEL_SELECTED_EVENT = "tray-model-selected";
 
@@ -30,13 +31,18 @@ export interface SyncTrayModelShortcutsPayload {
 export async function syncTrayModelShortcuts(
   payload: SyncTrayModelShortcutsPayload,
 ): Promise<void> {
-  await safeInvoke("sync_tray_model_shortcuts", {
+  const result = await safeInvoke("sync_tray_model_shortcuts", {
     currentModelProviderType: payload.current_model_provider_type,
     currentModelProviderLabel: payload.current_model_provider_label,
     currentModel: payload.current_model,
     currentThemeLabel: payload.current_theme_label,
     quickModelGroups: payload.quick_model_groups,
   });
+  assertNotDiagnosticFacade(
+    "sync_tray_model_shortcuts",
+    result,
+    "真实托盘 current 通道",
+  );
 }
 
 export const trayApi = {

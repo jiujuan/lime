@@ -159,8 +159,9 @@ async function invokeDefaultMock<T = any>(
     return defaultMocks[cmd](args);
   }
 
-  console.warn(`[Mock] Unhandled command: ${cmd}`);
-  return undefined as T;
+  throw new Error(
+    `[Mock] 未注册命令 "${cmd}"。显式测试 mock 不能静默伪造成功结果；请为 test-only 场景注册 mock，或把生产命令迁移到 Electron Desktop Host / App Server current 主链。`,
+  );
 }
 
 /**

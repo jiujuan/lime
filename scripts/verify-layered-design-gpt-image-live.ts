@@ -19,6 +19,8 @@ const DEFAULT_OUTER_MODEL = "gpt-5.5";
 const DEFAULT_IMAGE_MODEL = "gpt-images-2";
 const DEFAULT_IMAGE_SIZE = "1024x1024";
 const DEFAULT_DEV_BRIDGE_INVOKE_URL = "http://127.0.0.1:3030/invoke";
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
 const TINY_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
@@ -664,11 +666,15 @@ function providerMatchesImageModel(
   });
 }
 
-async function invokeDevBridge(invokeUrl: string, cmd: string): Promise<unknown> {
+async function invokeDevBridge(
+  invokeUrl: string,
+  cmd: string,
+  args: Record<string, unknown> = {},
+): Promise<unknown> {
   const response = await fetch(invokeUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ cmd, args: {} }),
+    body: JSON.stringify({ cmd, args }),
   });
   const text = await response.text();
   let payload: unknown;
@@ -686,6 +692,48 @@ async function invokeDevBridge(invokeUrl: string, cmd: string): Promise<unknown>
   return record.result;
 }
 
+let appServerRequestId = 1;
+
+async function invokeAppServerMethod(
+  invokeUrl: string,
+  method: string,
+  params: Record<string, unknown> = {},
+): Promise<unknown> {
+  const id = `layered-design-provider-${appServerRequestId++}`;
+  const result = await invokeDevBridge(invokeUrl, APP_SERVER_HANDLE_JSON_LINES_COMMAND, {
+    request: { lines: [`${JSON.stringify({ id, method, params })}\n`] },
+  });
+  const lines =
+    typeof result === "object" &&
+    result !== null &&
+    Array.isArray((result as { lines?: unknown }).lines)
+      ? ((result as { lines: unknown[] }).lines)
+      : [];
+  const messages = lines
+    .map((line) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    const rpcError = error.error as { message?: unknown } | undefined;
+    throw new Error(
+      `${method} error: ${String(rpcError?.message || "App Server JSON-RPC error")}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method} missing App Server response`);
+  }
+  return response.result;
+}
+
 async function resolveAutoLocalImageProviderId(options: CliOptions): Promise<string> {
   const invokeUrl =
     options.devBridgeInvokeUrl?.trim() ||
@@ -693,10 +741,19 @@ async function resolveAutoLocalImageProviderId(options: CliOptions): Promise<str
     DEFAULT_DEV_BRIDGE_INVOKE_URL;
   let providersRaw: unknown;
   try {
-    providersRaw = await invokeDevBridge(invokeUrl, "get_api_key_providers");
+    const providerList = await invokeAppServerMethod(
+      invokeUrl,
+      APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
+    );
+    providersRaw =
+      typeof providerList === "object" &&
+      providerList !== null &&
+      Array.isArray((providerList as { providers?: unknown }).providers)
+        ? (providerList as { providers: unknown[] }).providers
+        : [];
   } catch (error) {
     throw new Error(
-      `无法通过 DevBridge 自动选择图片 provider，请传 --provider-id；${String(error)}`,
+      `无法通过 App Server 自动选择图片 provider，请传 --provider-id；${String(error)}`,
     );
   }
 

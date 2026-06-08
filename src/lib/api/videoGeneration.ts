@@ -5,6 +5,7 @@
  */
 
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type VideoTaskStatus =
   | "pending"
@@ -46,22 +47,33 @@ export interface VideoGenerationTask {
   finishedAt?: number;
 }
 
+async function invokeVideoGenerationCommand<T>(
+  command: string,
+  request: unknown,
+): Promise<T> {
+  const result = await safeInvoke<T>(command, { request });
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实视频生成 current 通道",
+  );
+  return result;
+}
+
 export const videoGenerationApi = {
   async createTask(
     request: CreateVideoGenerationRequest,
   ): Promise<VideoGenerationTask> {
-    return safeInvoke("create_video_generation_task", { request });
+    return invokeVideoGenerationCommand("create_video_generation_task", request);
   },
 
   async getTask(
     taskId: string,
     options?: { refreshStatus?: boolean },
   ): Promise<VideoGenerationTask | null> {
-    return safeInvoke("get_video_generation_task", {
-      request: {
-        taskId,
-        refreshStatus: options?.refreshStatus ?? true,
-      },
+    return invokeVideoGenerationCommand("get_video_generation_task", {
+      taskId,
+      refreshStatus: options?.refreshStatus ?? true,
     });
   },
 
@@ -69,19 +81,15 @@ export const videoGenerationApi = {
     projectId: string,
     options?: { limit?: number },
   ): Promise<VideoGenerationTask[]> {
-    return safeInvoke("list_video_generation_tasks", {
-      request: {
-        projectId,
-        limit: options?.limit ?? 50,
-      },
+    return invokeVideoGenerationCommand("list_video_generation_tasks", {
+      projectId,
+      limit: options?.limit ?? 50,
     });
   },
 
   async cancelTask(taskId: string): Promise<VideoGenerationTask | null> {
-    return safeInvoke("cancel_video_generation_task", {
-      request: {
-        taskId,
-      },
+    return invokeVideoGenerationCommand("cancel_video_generation_task", {
+      taskId,
     });
   },
 };

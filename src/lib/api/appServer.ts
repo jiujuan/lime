@@ -77,6 +77,7 @@ import {
   type RequestId,
   type RuntimeOptions,
 } from "../../../packages/app-server-client/src/protocol";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const APP_SERVER_JSONRPC_VERSION = JSONRPC_VERSION;
 export const APP_SERVER_PROTOCOL_VERSION = PROTOCOL_VERSION;
@@ -214,6 +215,7 @@ export async function handleAppServerJsonLines(
   request: AppServerHandleJsonLinesRequest,
 ): Promise<AppServerHandleJsonLinesResult> {
   return unwrapAppServerSafeInvokeResult(
+    "app_server_handle_json_lines",
     await safeInvoke<
       AppServerSafeInvokeEnvelope<AppServerHandleJsonLinesResult>
     >("app_server_handle_json_lines", { request }),
@@ -224,6 +226,7 @@ export async function drainAppServerEvents(
   request: AppServerDrainEventsRequest = {},
 ): Promise<AppServerDrainEventsResult> {
   return unwrapAppServerSafeInvokeResult(
+    "app_server_drain_events",
     await safeInvoke<AppServerSafeInvokeEnvelope<AppServerDrainEventsResult>>(
       "app_server_drain_events",
       { request },
@@ -232,15 +235,19 @@ export async function drainAppServerEvents(
 }
 
 function unwrapAppServerSafeInvokeResult<T>(
+  command: string,
   payload: AppServerSafeInvokeEnvelope<T>,
 ): T {
+  assertNotDiagnosticFacade(command, payload, "真实 App Server bridge");
   if (
     payload &&
     typeof payload === "object" &&
     !Array.isArray(payload) &&
     "result" in payload
   ) {
-    return (payload as { result?: T }).result as T;
+    const result = (payload as { result?: T }).result as T;
+    assertNotDiagnosticFacade(command, result, "真实 App Server bridge");
+    return result;
   }
   return payload as T;
 }

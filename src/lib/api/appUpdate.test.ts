@@ -69,6 +69,53 @@ describe("appUpdate API", () => {
     );
   });
 
+  it("检查更新遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "check_for_updates",
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(checkForUpdates()).rejects.toThrow(
+      "check_for_updates 尚未接入真实 updater current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("更新设置遇到 Electron empty diagnostic list 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        command: "get_update_check_settings",
+        source: "electron-empty-diagnostic",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(getUpdateCheckSettings()).rejects.toThrow(
+      "get_update_check_settings 尚未接入真实 updater current 通道，收到 electron-empty-diagnostic 诊断返回。",
+    );
+  });
+
+  it("更新窗口命令遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "open_update_window",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(openUpdateWindow()).rejects.toThrow(
+      "open_update_window 尚未接入真实 updater current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
   it("应代理更新提醒动作", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce(undefined)

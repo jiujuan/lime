@@ -24,7 +24,7 @@ describe("frontendDebug API", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("浏览器 dev shell 下应跳过远端调试日志上报", async () => {
+  it("浏览器 dev shell 下应 fail closed，不能静默跳过真实上报", async () => {
     vi.mocked(isDevBridgeAvailable).mockReturnValue(true);
 
     await expect(
@@ -32,7 +32,9 @@ describe("frontendDebug API", () => {
         message: "AgentChatPage.loadData.start",
         category: "agent",
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow(
+      "report_frontend_debug_log 尚未接入浏览器 DevBridge current 通道",
+    );
 
     expect(safeInvoke).not.toHaveBeenCalled();
   });

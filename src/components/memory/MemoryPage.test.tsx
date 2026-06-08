@@ -129,6 +129,7 @@ function updateInputValue(element: HTMLInputElement | null, value: string) {
 describe("MemoryPage", () => {
   beforeEach(() => {
     setReactActEnvironment();
+    delete window.electronAPI;
     vi.clearAllMocks();
     mockTranslate.mockImplementation(translateTestResource);
     mockGetConfig.mockResolvedValue({
@@ -248,6 +249,33 @@ describe("MemoryPage", () => {
     expect(detailText).not.toContain("Provider ID");
     expect(detailText).not.toContain("Runtime");
     expect(detailText).not.toContain("Agent");
+  });
+
+  it("安装版未支持记忆列表命令时不应显示 Electron Host 内部错误", async () => {
+    window.electronAPI = {
+      invoke: vi.fn(),
+      supportsCommand: (command: string) => command !== "unified_memory_list",
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
+    mockGetUnifiedMemoryStats.mockResolvedValueOnce({
+      total_entries: 0,
+      storage_used: 0,
+      memory_count: 0,
+      categories: [],
+    });
+
+    renderPage();
+    await flushPageEffects();
+
+    const bodyText = document.body.textContent ?? "";
+    expect(mockListUnifiedMemories).not.toHaveBeenCalled();
+    expect(mockGetUnifiedMemoryStats).toHaveBeenCalledTimes(1);
+    expect(mockGetConfig).toHaveBeenCalledTimes(1);
+    expect(bodyText).toContain("当前筛选下没有可展示的记忆。");
+    expect(bodyText).not.toContain("[Electron]");
+    expect(bodyText).not.toContain("Desktop Host");
+    expect(bodyText).not.toContain("unified_memory_list");
   });
 
   it("应把记忆与设置作为同一弹窗的两个 tab，并在设置页隐藏左侧列表", async () => {

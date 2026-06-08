@@ -334,6 +334,30 @@ describe("agentApps API", () => {
     expect(safeInvoke).toHaveBeenCalledTimes(1);
   });
 
+  it("Agent App package / install 命令遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "agent_app_inspect_local_package",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      reviewLocalAgentAppPackage({
+        appDir: LOCAL_APP_DIR,
+        profile: buildWorkflowRuntimeCapabilityProfile({
+          realAdapterEnabled: true,
+          uiRuntimeEnabled: true,
+          workerRuntimeEnabled: true,
+        }),
+      }),
+    ).rejects.toThrow(
+      "agent_app_inspect_local_package 尚未接入真实 Agent App current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    expect(safeInvoke).toHaveBeenCalledTimes(1);
+  });
+
   it("审查 Cloud release 时缺少 verified package source 应阻断", async () => {
     await expect(
       reviewCloudAgentAppRelease({

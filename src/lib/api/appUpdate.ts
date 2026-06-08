@@ -1,5 +1,6 @@
 import type { UnlistenFn } from "@/lib/desktop-host/event";
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const UPDATE_INSTALL_SESSION_EVENT = "app-update://session";
 
@@ -77,19 +78,23 @@ export interface UpdateNotificationAnchorRect {
 }
 
 export async function checkForUpdates(): Promise<VersionInfo> {
-  return safeInvoke<VersionInfo>("check_for_updates");
+  return invokeUpdateCommand<VersionInfo>("check_for_updates");
 }
 
 export async function downloadUpdate(): Promise<DownloadUpdateResult> {
-  return safeInvoke<DownloadUpdateResult>("download_update");
+  return invokeUpdateCommand<DownloadUpdateResult>("download_update");
 }
 
 export async function startUpdateInstallSession(): Promise<UpdateInstallSession> {
-  return safeInvoke<UpdateInstallSession>("start_update_install_session");
+  return invokeUpdateCommand<UpdateInstallSession>(
+    "start_update_install_session",
+  );
 }
 
 export async function getUpdateInstallSession(): Promise<UpdateInstallSession> {
-  return safeInvoke<UpdateInstallSession>("get_update_install_session");
+  return invokeUpdateCommand<UpdateInstallSession>(
+    "get_update_install_session",
+  );
 }
 
 export async function listenUpdateInstallSession(
@@ -117,23 +122,23 @@ export function isUpdateInstallSessionActive(
 }
 
 export async function getUpdateCheckSettings(): Promise<UpdateCheckConfig> {
-  return safeInvoke<UpdateCheckConfig>("get_update_check_settings");
+  return invokeUpdateCommand<UpdateCheckConfig>("get_update_check_settings");
 }
 
 export async function setUpdateCheckSettings(
   settings: UpdateCheckConfig,
 ): Promise<void> {
-  await safeInvoke("set_update_check_settings", { settings });
+  await invokeUpdateCommand("set_update_check_settings", { settings });
 }
 
 export async function getUpdateNotificationMetrics(): Promise<UpdateNotificationMetrics> {
-  return safeInvoke<UpdateNotificationMetrics>(
+  return invokeUpdateCommand<UpdateNotificationMetrics>(
     "get_update_notification_metrics",
   );
 }
 
 export async function testUpdateWindow(): Promise<void> {
-  await safeInvoke("test_update_window");
+  await invokeUpdateCommand("test_update_window");
 }
 
 export async function openUpdateWindow(
@@ -141,21 +146,21 @@ export async function openUpdateWindow(
 ): Promise<void> {
   const request = normalizeUpdateNotificationAnchorRect(anchorRect);
   if (!request) {
-    await safeInvoke("open_update_window");
+    await invokeUpdateCommand("open_update_window");
     return;
   }
 
-  await safeInvoke("open_update_window", { anchorRect: request });
+  await invokeUpdateCommand("open_update_window", { anchorRect: request });
 }
 
 export async function closeUpdateWindow(): Promise<void> {
-  await safeInvoke("close_update_window");
+  await invokeUpdateCommand("close_update_window");
 }
 
 export async function dismissUpdateNotification(
   version?: string | null,
 ): Promise<number> {
-  return safeInvoke<number>("dismiss_update_notification", {
+  return invokeUpdateCommand<number>("dismiss_update_notification", {
     version: version ?? null,
   });
 }
@@ -163,15 +168,27 @@ export async function dismissUpdateNotification(
 export async function recordUpdateNotificationAction(
   action: string,
 ): Promise<void> {
-  await safeInvoke("record_update_notification_action", { action });
+  await invokeUpdateCommand("record_update_notification_action", { action });
 }
 
 export async function remindUpdateLater(hours: number): Promise<number> {
-  return safeInvoke<number>("remind_update_later", { hours });
+  return invokeUpdateCommand<number>("remind_update_later", { hours });
 }
 
 export async function skipUpdateVersion(version: string): Promise<void> {
-  await safeInvoke("skip_update_version", { version });
+  await invokeUpdateCommand("skip_update_version", { version });
+}
+
+async function invokeUpdateCommand<T = void>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result =
+    args === undefined
+      ? await safeInvoke<T>(command)
+      : await safeInvoke<T>(command, args);
+  assertNotDiagnosticFacade(command, result, "真实 updater current 通道");
+  return result;
 }
 
 function normalizeUpdateNotificationAnchorRect(

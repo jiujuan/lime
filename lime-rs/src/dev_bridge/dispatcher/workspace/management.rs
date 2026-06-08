@@ -5,7 +5,6 @@ use super::{
     UpdateWorkspaceRequest, WorkspaceType, WorkspaceUpdate,
 };
 use crate::dev_bridge::DevBridgeState;
-use crate::workspace_support::get_or_create_default_project;
 use serde_json::Value as JsonValue;
 
 pub(super) fn try_handle(
@@ -73,10 +72,6 @@ pub(super) fn try_handle(
             let manager = workspace_manager(state)?;
             manager.set_default(&id)?;
             serde_json::json!(null)
-        }
-        "get_or_create_default_project" => {
-            let manager = workspace_manager(state)?;
-            to_workspace_list_item_json(get_or_create_default_project(&manager)?)?
         }
         _ => return Ok(None),
     };

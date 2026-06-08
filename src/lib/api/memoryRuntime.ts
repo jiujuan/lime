@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import type {
   AutoMemoryIndexResponse,
   CleanupMemoryResult,
@@ -18,6 +19,17 @@ import type {
   WorkingMemoryView,
   WorkspaceGitignoreEnsureResult,
 } from "./memoryRuntimeTypes";
+
+async function invokeMemoryRuntimeCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke(command, args)
+    : await safeInvoke(command);
+  assertNotDiagnosticFacade(command, result, "真实 Memory runtime current 通道");
+  return result as T;
+}
 
 export type {
   AutoMemoryIndexResponse,
@@ -65,45 +77,45 @@ export type {
 export async function getContextMemoryOverview(
   limit?: number,
 ): Promise<MemoryOverviewResponse> {
-  return safeInvoke("memory_runtime_get_overview", { limit });
+  return invokeMemoryRuntimeCommand("memory_runtime_get_overview", { limit });
 }
 
 export async function getContextMemoryStats(): Promise<MemoryStatsResponse> {
-  return safeInvoke("memory_runtime_get_stats");
+  return invokeMemoryRuntimeCommand("memory_runtime_get_stats");
 }
 
 export async function analyzeContextMemory(
   fromTimestamp?: number,
   toTimestamp?: number,
 ): Promise<MemoryAnalysisResult> {
-  return safeInvoke("memory_runtime_request_analysis", {
+  return invokeMemoryRuntimeCommand("memory_runtime_request_analysis", {
     fromTimestamp,
     toTimestamp,
   });
 }
 
 export async function cleanupContextMemory(): Promise<CleanupMemoryResult> {
-  return safeInvoke("memory_runtime_cleanup");
+  return invokeMemoryRuntimeCommand("memory_runtime_cleanup");
 }
 
 export async function getContextWorkingMemory(
   sessionId?: string,
   limit?: number,
 ): Promise<WorkingMemoryView> {
-  return safeInvoke("memory_runtime_get_working_memory", {
+  return invokeMemoryRuntimeCommand("memory_runtime_get_working_memory", {
     sessionId,
     limit,
   });
 }
 
 export async function getContextMemoryExtractionStatus(): Promise<MemoryExtractionStatusResponse> {
-  return safeInvoke("memory_runtime_get_extraction_status");
+  return invokeMemoryRuntimeCommand("memory_runtime_get_extraction_status");
 }
 
 export async function prefetchContextMemoryForTurn(
   request: TurnMemoryPrefetchRequest,
 ): Promise<TurnMemoryPrefetchResult> {
-  return safeInvoke("memory_runtime_prefetch_for_turn", {
+  return invokeMemoryRuntimeCommand("memory_runtime_prefetch_for_turn", {
     request,
   });
 }
@@ -112,7 +124,7 @@ export async function getContextMemoryEffectiveSources(
   workingDir?: string,
   activeRelativePath?: string,
 ): Promise<EffectiveMemorySourcesResponse> {
-  return safeInvoke("memory_get_effective_sources", {
+  return invokeMemoryRuntimeCommand("memory_get_effective_sources", {
     workingDir,
     activeRelativePath,
   });
@@ -121,13 +133,13 @@ export async function getContextMemoryEffectiveSources(
 export async function getContextMemoryAutoIndex(
   workingDir?: string,
 ): Promise<AutoMemoryIndexResponse> {
-  return safeInvoke("memory_get_auto_index", { workingDir });
+  return invokeMemoryRuntimeCommand("memory_get_auto_index", { workingDir });
 }
 
 export async function toggleContextMemoryAuto(
   enabled: boolean,
 ): Promise<MemoryAutoToggleResponse> {
-  return safeInvoke("memory_toggle_auto", { enabled });
+  return invokeMemoryRuntimeCommand("memory_toggle_auto", { enabled });
 }
 
 export async function updateContextMemoryAutoNote(
@@ -136,7 +148,7 @@ export async function updateContextMemoryAutoNote(
   workingDir?: string,
   memoryType?: MemdirMemoryType,
 ): Promise<AutoMemoryIndexResponse> {
-  return safeInvoke("memory_update_auto_note", {
+  return invokeMemoryRuntimeCommand("memory_update_auto_note", {
     note,
     topic,
     workingDir,
@@ -147,14 +159,17 @@ export async function updateContextMemoryAutoNote(
 export async function cleanupContextMemdir(
   workingDir?: string,
 ): Promise<MemdirCleanupResult> {
-  return safeInvoke("memory_cleanup_memdir", { workingDir });
+  return invokeMemoryRuntimeCommand("memory_cleanup_memdir", { workingDir });
 }
 
 export async function scaffoldContextMemdir(
   workingDir?: string,
   overwrite?: boolean,
 ): Promise<MemdirScaffoldResult> {
-  return safeInvoke("memory_scaffold_memdir", { workingDir, overwrite });
+  return invokeMemoryRuntimeCommand("memory_scaffold_memdir", {
+    workingDir,
+    overwrite,
+  });
 }
 
 export async function scaffoldRuntimeAgentsTemplate(
@@ -162,7 +177,7 @@ export async function scaffoldRuntimeAgentsTemplate(
   workingDir?: string,
   overwrite?: boolean,
 ): Promise<RuntimeAgentsTemplateScaffoldResult> {
-  return safeInvoke("memory_scaffold_runtime_agents_template", {
+  return invokeMemoryRuntimeCommand("memory_scaffold_runtime_agents_template", {
     target,
     workingDir,
     overwrite,
@@ -172,7 +187,10 @@ export async function scaffoldRuntimeAgentsTemplate(
 export async function ensureWorkspaceLocalAgentsGitignore(
   workingDir?: string,
 ): Promise<WorkspaceGitignoreEnsureResult> {
-  return safeInvoke("memory_ensure_workspace_local_agents_gitignore", {
-    workingDir,
-  });
+  return invokeMemoryRuntimeCommand(
+    "memory_ensure_workspace_local_agents_gitignore",
+    {
+      workingDir,
+    },
+  );
 }

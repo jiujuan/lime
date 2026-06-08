@@ -21,7 +21,7 @@ import {
   type RequestId,
   type SidecarLaunchConfig,
 } from "app-server-client";
-import { app } from "electron";
+import { app } from "./electronRuntime";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 

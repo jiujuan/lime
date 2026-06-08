@@ -105,7 +105,7 @@ const {
   };
 });
 
-vi.mock("electron", () => ({
+vi.mock("./electronRuntime", () => ({
   app: {
     getAppPath: () => process.cwd(),
     getVersion: () => "0.0.0-test",

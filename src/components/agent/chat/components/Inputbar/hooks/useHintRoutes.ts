@@ -5,14 +5,12 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from "react";
-import { safeInvoke } from "@/lib/dev-bridge";
-import { isOptionalLegacyUxCommandAvailable } from "@/lib/dev-bridge/commandPolicy";
+import {
+  listHintRoutes,
+  type HintRouteItem,
+} from "@/lib/api/hintRoutes";
 
-export interface HintRouteItem {
-  hint: string;
-  provider: string;
-  model: string;
-}
+export type { HintRouteItem } from "@/lib/api/hintRoutes";
 
 interface UseHintRoutesParams {
   setInput: (value: string) => void;
@@ -25,11 +23,7 @@ export function useHintRoutes({ setInput, textareaRef }: UseHintRoutesParams) {
   const [hintIndex, setHintIndex] = useState(0);
 
   useEffect(() => {
-    if (!isOptionalLegacyUxCommandAvailable("get_hint_routes")) {
-      return;
-    }
-
-    safeInvoke<HintRouteItem[]>("get_hint_routes")
+    listHintRoutes()
       .then((routes) => {
         if (routes?.length > 0) {
           setHintRoutes(routes);

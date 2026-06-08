@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "../diagnosticFacade";
 import type { AgentRuntimeCommandName } from "./commandManifest.generated";
 
 export type AgentRuntimeBridgeInvoke = <TResponse>(
@@ -26,11 +27,16 @@ export function createAgentRuntimeBridgeInvoke({
     command: string,
     payload?: Record<string, unknown>,
   ): Promise<TResponse> => {
-    if (typeof payload === "undefined") {
-      return await invoke<TResponse>(command);
-    }
-
-    return await invoke<TResponse>(command, payload);
+    const result =
+      typeof payload === "undefined"
+        ? await invoke<TResponse>(command)
+        : await invoke<TResponse>(command, payload);
+    assertNotDiagnosticFacade(
+      command,
+      result,
+      "真实 Agent Runtime current 通道",
+    );
+    return result;
   };
 }
 
@@ -47,11 +53,16 @@ export function createAgentRuntimeCommandInvoke({
     command: AgentRuntimeCommandName,
     payload?: Record<string, unknown>,
   ): Promise<TResponse> => {
-    if (typeof payload === "undefined") {
-      return await resolvedBridgeInvoke<TResponse>(command);
-    }
-
-    return await resolvedBridgeInvoke<TResponse>(command, payload);
+    const result =
+      typeof payload === "undefined"
+        ? await resolvedBridgeInvoke<TResponse>(command)
+        : await resolvedBridgeInvoke<TResponse>(command, payload);
+    assertNotDiagnosticFacade(
+      command,
+      result,
+      "真实 Agent Runtime current 通道",
+    );
+    return result;
   };
 }
 

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "alias": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "enabled": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "keyId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "keyId"
+  ],
+  "title": "ModelProviderKeyUpdateParams",
+  "type": "object"
+}

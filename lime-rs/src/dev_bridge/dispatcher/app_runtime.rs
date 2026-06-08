@@ -36,15 +36,6 @@ pub(super) async fn try_handle(
                     .await;
             serde_json::to_value(preview)?
         }
-        "get_default_provider" => {
-            let default_provider_ref = { state.server.read().await.default_provider_ref.clone() };
-            let provider = default_provider_ref.read().await.clone();
-            serde_json::json!(provider)
-        }
-        "get_endpoint_providers" => {
-            let providers = { state.server.read().await.config.endpoint_providers.clone() };
-            serde_json::to_value(providers)?
-        }
         "get_server_diagnostics" => {
             let (status, capability_routing, response_cache, request_dedup, idempotency) = {
                 let server = state.server.read().await;

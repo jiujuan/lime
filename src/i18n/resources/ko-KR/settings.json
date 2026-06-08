@@ -2350,6 +2350,8 @@
   "settings.providers.modelAdd.configure.title": "{{providerName}} 구성",
   "settings.providers.modelAdd.form.providerName.label": "공급자 이름",
   "settings.providers.modelAdd.form.providerName.placeholder": "예: My API Provider",
+  "settings.providers.modelAdd.form.apiHost.label": "API Base URL",
+  "settings.providers.modelAdd.form.apiHost.placeholder": "https://api.example.com/v1",
   "settings.providers.modelAdd.form.apiFormat.label": "API 형식",
   "settings.providers.modelAdd.form.apiFormat.openai": "OpenAI 형식",
   "settings.providers.modelAdd.form.apiFormat.anthropic": "Anthropic 형식",

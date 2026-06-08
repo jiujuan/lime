@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "errors": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "importedApiKeys": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "importedProviders": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "skippedProviders": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "importedApiKeys",
+    "importedProviders",
+    "skippedProviders",
+    "success"
+  ],
+  "title": "ModelProviderConfigImportResponse",
+  "type": "object"
+}

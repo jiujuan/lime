@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import type { LayeredDesignFlatImageStructuredAnalyzerResult } from "@/lib/layered-design/analyzer";
 
 export interface LayeredDesignTextBoundingBox {
@@ -49,17 +50,29 @@ export interface AnalyzeLayeredDesignFlatImageNativeOutput {
 export async function recognizeLayeredDesignText(
   request: RecognizeLayeredDesignTextRequest,
 ): Promise<RecognizeLayeredDesignTextOutput> {
-  return await safeInvoke<RecognizeLayeredDesignTextOutput>(
+  const result = await safeInvoke<RecognizeLayeredDesignTextOutput>(
     "recognize_layered_design_text",
     { request },
   );
+  assertNotDiagnosticFacade(
+    "recognize_layered_design_text",
+    result,
+    "真实 Layered Design extraction current 通道",
+  );
+  return result;
 }
 
 export async function analyzeLayeredDesignFlatImageNative(
   request: AnalyzeLayeredDesignFlatImageNativeRequest,
 ): Promise<AnalyzeLayeredDesignFlatImageNativeOutput> {
-  return await safeInvoke<AnalyzeLayeredDesignFlatImageNativeOutput>(
+  const result = await safeInvoke<AnalyzeLayeredDesignFlatImageNativeOutput>(
     "analyze_layered_design_flat_image",
     { request },
   );
+  assertNotDiagnosticFacade(
+    "analyze_layered_design_flat_image",
+    result,
+    "真实 Layered Design extraction current 通道",
+  );
+  return result;
 }

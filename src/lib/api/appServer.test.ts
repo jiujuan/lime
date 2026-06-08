@@ -199,6 +199,44 @@ describe("App Server API", () => {
     });
   });
 
+  it("request 收到 App Server bridge diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "app_server_handle_json_lines",
+        source: "electron-host",
+        status: "not-supported",
+      },
+      result: {
+        lines: [],
+      },
+    });
+
+    const client = new AppServerClient({ initialRequestId: 3 });
+
+    await expect(client.listCapabilities()).rejects.toThrow(
+      "app_server_handle_json_lines 尚未接入真实 App Server bridge",
+    );
+  });
+
+  it("request 收到 result 内层 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      result: {
+        diagnostic: {
+          command: "app_server_handle_json_lines",
+          source: "electron-host",
+          status: "degraded",
+        },
+        lines: [],
+      },
+    });
+
+    const client = new AppServerClient({ initialRequestId: 3 });
+
+    await expect(client.listCapabilities()).rejects.toThrow(
+      "app_server_handle_json_lines 尚未接入真实 App Server bridge",
+    );
+  });
+
   it("readArtifacts 应通过 App Server JSON-RPC 读取 artifact summary/content", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       lines: [
@@ -837,6 +875,23 @@ describe("App Server API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("app_server_drain_events", {
       request: { limit: 1 },
     });
+  });
+
+  it("drainEvents 收到 App Server bridge diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "app_server_drain_events",
+        source: "electron-host",
+        status: "not-supported",
+      },
+      lines: [],
+    });
+
+    const client = new AppServerClient();
+
+    await expect(client.drainEvents(1)).rejects.toThrow(
+      "app_server_drain_events 尚未接入真实 App Server bridge",
+    );
   });
 
   it("JSON-RPC 编解码与 response matcher 保持稳定", () => {

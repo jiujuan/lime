@@ -2350,6 +2350,8 @@
   "settings.providers.modelAdd.configure.title": "Configure {{providerName}}",
   "settings.providers.modelAdd.form.providerName.label": "Provider name",
   "settings.providers.modelAdd.form.providerName.placeholder": "Example: My API Provider",
+  "settings.providers.modelAdd.form.apiHost.label": "API Base URL",
+  "settings.providers.modelAdd.form.apiHost.placeholder": "https://api.example.com/v1",
   "settings.providers.modelAdd.form.apiFormat.label": "API format",
   "settings.providers.modelAdd.form.apiFormat.openai": "OpenAI format",
   "settings.providers.modelAdd.form.apiFormat.anthropic": "Anthropic format",

@@ -28,7 +28,19 @@ import {
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
   METHOD_ARTIFACT_READ,
+  METHOD_AUTOMATION_JOB_CREATE,
+  METHOD_AUTOMATION_JOB_DELETE,
+  METHOD_AUTOMATION_JOB_HEALTH,
   METHOD_AUTOMATION_JOB_LIST,
+  METHOD_AUTOMATION_JOB_READ,
+  METHOD_AUTOMATION_JOB_RUN_HISTORY,
+  METHOD_AUTOMATION_JOB_RUN_NOW,
+  METHOD_AUTOMATION_JOB_UPDATE,
+  METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
+  METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+  METHOD_AUTOMATION_SCHEDULER_STATUS,
+  METHOD_AUTOMATION_SCHEDULE_PREVIEW,
+  METHOD_AUTOMATION_SCHEDULE_VALIDATE,
   METHOD_CAPABILITY_LIST,
   METHOD_CONNECT_CALLBACK_SEND,
   METHOD_CONNECT_DEEP_LINK_RESOLVE,
@@ -45,8 +57,31 @@ import {
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_READ,
   METHOD_MODEL_PROVIDER_CATALOG_LIST,
+  METHOD_MODEL_PROVIDER_CONFIG_EXPORT,
+  METHOD_MODEL_PROVIDER_CONFIG_IMPORT,
+  METHOD_MODEL_PROVIDER_CREATE,
+  METHOD_MODEL_PROVIDER_DELETE,
+  METHOD_MODEL_PROVIDER_FETCH_MODELS,
+  METHOD_MODEL_PROVIDER_KEY_CREATE,
+  METHOD_MODEL_PROVIDER_KEY_DELETE,
+  METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
+  METHOD_MODEL_PROVIDER_KEY_NEXT,
+  METHOD_MODEL_PROVIDER_KEY_UPDATE,
+  METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
   METHOD_MODEL_PROVIDER_LIST,
+  METHOD_MODEL_PROVIDER_READ,
+  METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
+  METHOD_MODEL_PROVIDER_TEST_CHAT,
+  METHOD_MODEL_PROVIDER_TEST_CONNECTION,
+  METHOD_MODEL_PROVIDER_UI_STATE_READ,
+  METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
+  METHOD_MODEL_PROVIDER_UPDATE,
   METHOD_MODEL_SYNC_STATE_READ,
+  METHOD_MCP_PROMPT_LIST,
+  METHOD_MCP_RESOURCE_LIST,
+  METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_STATUS_LIST,
+  METHOD_MCP_TOOL_LIST,
   METHOD_PROJECT_MEMORY_READ,
   METHOD_SKILL_LIST,
   METHOD_SKILL_READ,
@@ -95,7 +130,25 @@ import {
   type ArtifactReadParams,
   type ArtifactReadResponse,
   type ArtifactSummary,
+  type AutomationJobCreateParams,
+  type AutomationJobDeleteResponse,
+  type AutomationJobHealthParams,
+  type AutomationJobHealthResponse,
+  type AutomationJobIdParams,
   type AutomationJobListResponse,
+  type AutomationJobReadResponse,
+  type AutomationJobRunHistoryParams,
+  type AutomationJobRunHistoryResponse,
+  type AutomationJobRunNowResponse,
+  type AutomationJobUpdateParams,
+  type AutomationJobWriteResponse,
+  type AutomationScheduleParams,
+  type AutomationSchedulePreviewResponse,
+  type AutomationScheduleValidateResponse,
+  type AutomationSchedulerConfigReadResponse,
+  type AutomationSchedulerConfigUpdateParams,
+  type AutomationSchedulerConfigUpdateResponse,
+  type AutomationSchedulerStatusResponse,
   type CapabilityListParams,
   type CapabilityListResponse,
   type ConnectCallbackSendParams,
@@ -128,8 +181,30 @@ import {
   type ModelProviderAliasReadParams,
   type ModelProviderAliasReadResponse,
   type ModelProviderCatalogListResponse,
+  type ModelProviderConfigExportParams,
+  type ModelProviderConfigImportParams,
+  type ModelProviderCreateParams,
+  type ModelProviderDeleteParams,
+  type ModelProviderFetchModelsParams,
+  type ModelProviderKeyCreateParams,
+  type ModelProviderKeyDeleteParams,
+  type ModelProviderKeyEventParams,
+  type ModelProviderKeyNextParams,
+  type ModelProviderKeyUpdateParams,
   type ModelProviderListResponse,
+  type ModelProviderReadParams,
+  type ModelProviderSortOrdersUpdateParams,
+  type ModelProviderTestChatParams,
+  type ModelProviderTestConnectionParams,
+  type ModelProviderUiStateReadParams,
+  type ModelProviderUiStateWriteParams,
+  type ModelProviderUpdateParams,
   type ModelSyncStateReadResponse,
+  type McpPromptListResponse,
+  type McpResourceListResponse,
+  type McpServerListResponse,
+  type McpServerStatusListResponse,
+  type McpToolListResponse,
   type ProtocolSchemaFile,
   type ProtocolSchemaGroup,
   type ProjectMemoryReadParams,
@@ -447,6 +522,78 @@ export class AppServerClient {
     return this.request(METHOD_AUTOMATION_JOB_LIST, {});
   }
 
+  readAutomationSchedulerConfig(): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_SCHEDULER_CONFIG_READ, {});
+  }
+
+  updateAutomationSchedulerConfig(
+    params: AutomationSchedulerConfigUpdateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE, params);
+  }
+
+  readAutomationSchedulerStatus(): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_SCHEDULER_STATUS, {});
+  }
+
+  readAutomationJob(params: AutomationJobIdParams): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_JOB_READ, params);
+  }
+
+  createAutomationJob(params: AutomationJobCreateParams): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_JOB_CREATE, params);
+  }
+
+  updateAutomationJob(params: AutomationJobUpdateParams): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_JOB_UPDATE, params);
+  }
+
+  deleteAutomationJob(params: AutomationJobIdParams): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_JOB_DELETE, params);
+  }
+
+  runAutomationJobNow(params: AutomationJobIdParams): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_JOB_RUN_NOW, params);
+  }
+
+  readAutomationHealth(params: AutomationJobHealthParams = {}): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_JOB_HEALTH, params);
+  }
+
+  readAutomationRunHistory(
+    params: AutomationJobRunHistoryParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_JOB_RUN_HISTORY, params);
+  }
+
+  previewAutomationSchedule(params: AutomationScheduleParams): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_SCHEDULE_PREVIEW, params);
+  }
+
+  validateAutomationSchedule(params: AutomationScheduleParams): JsonRpcRequest {
+    return this.request(METHOD_AUTOMATION_SCHEDULE_VALIDATE, params);
+  }
+
+  listMcpServers(): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_LIST, {});
+  }
+
+  listMcpServersWithStatus(): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_STATUS_LIST, {});
+  }
+
+  listMcpTools(): JsonRpcRequest {
+    return this.request(METHOD_MCP_TOOL_LIST, {});
+  }
+
+  listMcpPrompts(): JsonRpcRequest {
+    return this.request(METHOD_MCP_PROMPT_LIST, {});
+  }
+
+  listMcpResources(): JsonRpcRequest {
+    return this.request(METHOD_MCP_RESOURCE_LIST, {});
+  }
+
   readProjectMemory(params: ProjectMemoryReadParams): JsonRpcRequest {
     return this.request(METHOD_PROJECT_MEMORY_READ, params);
   }
@@ -493,6 +640,104 @@ export class AppServerClient {
 
   listModelProviderCatalog(): JsonRpcRequest {
     return this.request(METHOD_MODEL_PROVIDER_CATALOG_LIST, {});
+  }
+
+  readModelProvider(params: ModelProviderReadParams): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_READ, params);
+  }
+
+  createModelProvider(params: ModelProviderCreateParams): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_CREATE, params);
+  }
+
+  updateModelProvider(params: ModelProviderUpdateParams): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_UPDATE, params);
+  }
+
+  deleteModelProvider(params: ModelProviderDeleteParams): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_DELETE, params);
+  }
+
+  updateModelProviderSortOrders(
+    params: ModelProviderSortOrdersUpdateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE, params);
+  }
+
+  exportModelProviderConfig(
+    params: ModelProviderConfigExportParams = {},
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_CONFIG_EXPORT, params);
+  }
+
+  importModelProviderConfig(
+    params: ModelProviderConfigImportParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_CONFIG_IMPORT, params);
+  }
+
+  testModelProviderConnection(
+    params: ModelProviderTestConnectionParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_TEST_CONNECTION, params);
+  }
+
+  testModelProviderChat(params: ModelProviderTestChatParams): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_TEST_CHAT, params);
+  }
+
+  fetchModelProviderModels(
+    params: ModelProviderFetchModelsParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_FETCH_MODELS, params);
+  }
+
+  createModelProviderKey(
+    params: ModelProviderKeyCreateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_KEY_CREATE, params);
+  }
+
+  updateModelProviderKey(
+    params: ModelProviderKeyUpdateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_KEY_UPDATE, params);
+  }
+
+  deleteModelProviderKey(
+    params: ModelProviderKeyDeleteParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_KEY_DELETE, params);
+  }
+
+  readNextModelProviderKey(
+    params: ModelProviderKeyNextParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_KEY_NEXT, params);
+  }
+
+  recordModelProviderKeyUsage(
+    params: ModelProviderKeyEventParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD, params);
+  }
+
+  recordModelProviderKeyError(
+    params: ModelProviderKeyEventParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD, params);
+  }
+
+  readModelProviderUiState(
+    params: ModelProviderUiStateReadParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_UI_STATE_READ, params);
+  }
+
+  writeModelProviderUiState(
+    params: ModelProviderUiStateWriteParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MODEL_PROVIDER_UI_STATE_WRITE, params);
   }
 
   readModelProviderAlias(params: ModelProviderAliasReadParams): JsonRpcRequest {
@@ -795,6 +1040,186 @@ export class AppServerConnection {
     return await this.request<AutomationJobListResponse>(
       this.client.listAutomationJobs(),
       METHOD_AUTOMATION_JOB_LIST,
+      options,
+    );
+  }
+
+  async readAutomationSchedulerConfig(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationSchedulerConfigReadResponse>> {
+    return await this.request<AutomationSchedulerConfigReadResponse>(
+      this.client.readAutomationSchedulerConfig(),
+      METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
+      options,
+    );
+  }
+
+  async updateAutomationSchedulerConfig(
+    params: AutomationSchedulerConfigUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationSchedulerConfigUpdateResponse>> {
+    return await this.request<AutomationSchedulerConfigUpdateResponse>(
+      this.client.updateAutomationSchedulerConfig(params),
+      METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+      options,
+    );
+  }
+
+  async readAutomationSchedulerStatus(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationSchedulerStatusResponse>> {
+    return await this.request<AutomationSchedulerStatusResponse>(
+      this.client.readAutomationSchedulerStatus(),
+      METHOD_AUTOMATION_SCHEDULER_STATUS,
+      options,
+    );
+  }
+
+  async readAutomationJob(
+    params: AutomationJobIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationJobReadResponse>> {
+    return await this.request<AutomationJobReadResponse>(
+      this.client.readAutomationJob(params),
+      METHOD_AUTOMATION_JOB_READ,
+      options,
+    );
+  }
+
+  async createAutomationJob(
+    params: AutomationJobCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationJobWriteResponse>> {
+    return await this.request<AutomationJobWriteResponse>(
+      this.client.createAutomationJob(params),
+      METHOD_AUTOMATION_JOB_CREATE,
+      options,
+    );
+  }
+
+  async updateAutomationJob(
+    params: AutomationJobUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationJobWriteResponse>> {
+    return await this.request<AutomationJobWriteResponse>(
+      this.client.updateAutomationJob(params),
+      METHOD_AUTOMATION_JOB_UPDATE,
+      options,
+    );
+  }
+
+  async deleteAutomationJob(
+    params: AutomationJobIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationJobDeleteResponse>> {
+    return await this.request<AutomationJobDeleteResponse>(
+      this.client.deleteAutomationJob(params),
+      METHOD_AUTOMATION_JOB_DELETE,
+      options,
+    );
+  }
+
+  async runAutomationJobNow(
+    params: AutomationJobIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationJobRunNowResponse>> {
+    return await this.request<AutomationJobRunNowResponse>(
+      this.client.runAutomationJobNow(params),
+      METHOD_AUTOMATION_JOB_RUN_NOW,
+      options,
+    );
+  }
+
+  async readAutomationHealth(
+    params: AutomationJobHealthParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationJobHealthResponse>> {
+    return await this.request<AutomationJobHealthResponse>(
+      this.client.readAutomationHealth(params),
+      METHOD_AUTOMATION_JOB_HEALTH,
+      options,
+    );
+  }
+
+  async readAutomationRunHistory(
+    params: AutomationJobRunHistoryParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationJobRunHistoryResponse>> {
+    return await this.request<AutomationJobRunHistoryResponse>(
+      this.client.readAutomationRunHistory(params),
+      METHOD_AUTOMATION_JOB_RUN_HISTORY,
+      options,
+    );
+  }
+
+  async previewAutomationSchedule(
+    params: AutomationScheduleParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationSchedulePreviewResponse>> {
+    return await this.request<AutomationSchedulePreviewResponse>(
+      this.client.previewAutomationSchedule(params),
+      METHOD_AUTOMATION_SCHEDULE_PREVIEW,
+      options,
+    );
+  }
+
+  async validateAutomationSchedule(
+    params: AutomationScheduleParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AutomationScheduleValidateResponse>> {
+    return await this.request<AutomationScheduleValidateResponse>(
+      this.client.validateAutomationSchedule(params),
+      METHOD_AUTOMATION_SCHEDULE_VALIDATE,
+      options,
+    );
+  }
+
+  async listMcpServers(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerListResponse>> {
+    return await this.request<McpServerListResponse>(
+      this.client.listMcpServers(),
+      METHOD_MCP_SERVER_LIST,
+      options,
+    );
+  }
+
+  async listMcpServersWithStatus(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerStatusListResponse>> {
+    return await this.request<McpServerStatusListResponse>(
+      this.client.listMcpServersWithStatus(),
+      METHOD_MCP_SERVER_STATUS_LIST,
+      options,
+    );
+  }
+
+  async listMcpTools(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpToolListResponse>> {
+    return await this.request<McpToolListResponse>(
+      this.client.listMcpTools(),
+      METHOD_MCP_TOOL_LIST,
+      options,
+    );
+  }
+
+  async listMcpPrompts(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpPromptListResponse>> {
+    return await this.request<McpPromptListResponse>(
+      this.client.listMcpPrompts(),
+      METHOD_MCP_PROMPT_LIST,
+      options,
+    );
+  }
+
+  async listMcpResources(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpResourceListResponse>> {
+    return await this.request<McpResourceListResponse>(
+      this.client.listMcpResources(),
+      METHOD_MCP_RESOURCE_LIST,
       options,
     );
   }

@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export interface UsageStatsResponse {
   total_conversations: number;
@@ -26,20 +27,35 @@ export interface DailyUsage {
   tokens: number;
 }
 
+async function invokeUsageStatsCommand<T>(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> {
+  const result = await safeInvoke(command, args);
+  assertNotDiagnosticFacade(command, result, "真实 Usage Stats current 通道");
+  return result as T;
+}
+
 export async function getUsageStats(
   timeRange: string,
 ): Promise<UsageStatsResponse> {
-  return safeInvoke("get_usage_stats", { timeRange });
+  return invokeUsageStatsCommand<UsageStatsResponse>("get_usage_stats", {
+    timeRange,
+  });
 }
 
 export async function getModelUsageRanking(
   timeRange: string,
 ): Promise<ModelUsage[]> {
-  return safeInvoke("get_model_usage_ranking", { timeRange });
+  return invokeUsageStatsCommand<ModelUsage[]>("get_model_usage_ranking", {
+    timeRange,
+  });
 }
 
 export async function getDailyUsageTrends(
   timeRange: string,
 ): Promise<DailyUsage[]> {
-  return safeInvoke("get_daily_usage_trends", { timeRange });
+  return invokeUsageStatsCommand<DailyUsage[]>("get_daily_usage_trends", {
+    timeRange,
+  });
 }

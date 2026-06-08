@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import type {
   Material,
   MaterialFilter,
@@ -94,9 +95,13 @@ export async function listMaterials(
     filter: filter ?? null,
   });
 
+  assertNotDiagnosticFacade(
+    "list_materials",
+    materials,
+    "真实 Materials current 通道",
+  );
   if (!Array.isArray(materials)) {
-    console.warn("listMaterials 返回非数组值:", materials);
-    return [];
+    throw new Error("list_materials did not return a materials array");
   }
 
   return materials.map((material) => normalizeMaterial(material, projectId));

@@ -263,19 +263,6 @@ export const knowledgeMocks: Record<
       source: pack.sources[0],
     };
   },
-  knowledge_compile_pack: (args?: Record<string, unknown>) => {
-    const request = readMockKnowledgeRequest(args);
-    const workingDir = normalizeMockKnowledgeWorkingDir(request.workingDir);
-    const name = typeof request.name === "string" ? request.name : undefined;
-    const pack = findMockKnowledgePack(workingDir, name);
-    return {
-      pack,
-      selectedSourceCount: pack.sources.length,
-      compiledView: pack.compiled[0],
-      run: pack.runs[0],
-      warnings: [],
-    };
-  },
   knowledge_set_default_pack: (args?: Record<string, unknown>) => {
     const request = readMockKnowledgeRequest(args);
     const workingDir = normalizeMockKnowledgeWorkingDir(request.workingDir);

@@ -7,6 +7,7 @@ import {
   isAbsoluteLocalFilePath,
   openHtmlPreviewWindow,
   openPathWithDefaultApp,
+  getHomeDirectory,
   revealPathInFinder,
   resolveLocalFilePreviewUrl,
 } from "./fileSystem";
@@ -81,6 +82,13 @@ describe("fileSystem API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("open_with_default_app", {
       path: "/tmp/demo.txt",
     });
+  });
+
+  it("应代理 get_home_dir", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce("/Users/demo");
+
+    await expect(getHomeDirectory()).resolves.toBe("/Users/demo");
+    expect(safeInvoke).toHaveBeenCalledWith("get_home_dir");
   });
 
   it("应代理 convertFileSrc", () => {

@@ -1603,7 +1603,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               data-template-id={template.id}
             >
               <div className="flex items-start gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-slate-50">
+                <span
+                  className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-slate-50"
+                  aria-hidden="true"
+                >
                   {renderTemplateIcon(template, catalogCopy)}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -1681,7 +1684,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       <section className="rounded-[24px] border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-950/5">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-slate-50">
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-slate-50"
+              aria-hidden="true"
+            >
               {renderTemplateIcon(template, catalogCopy)}
             </span>
             <div className="min-w-0">
@@ -1758,7 +1764,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                   htmlFor="model-api-host"
                   className="text-sm text-slate-600"
                 >
-                  API Base URL
+                  {t(
+                    "settings.providers.modelAdd.form.apiHost.label",
+                    "API Base URL",
+                  )}
                 </Label>
                 <Input
                   id="model-api-host"
@@ -1775,7 +1784,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                       apiHost: normalizeKnownProviderApiHost(previous.apiHost),
                     }))
                   }
-                  placeholder="https://api.example.com/v1"
+                  placeholder={t(
+                    "settings.providers.modelAdd.form.apiHost.placeholder",
+                    "https://api.example.com/v1",
+                  )}
                   className="h-12 rounded-[18px] border-slate-200 bg-white px-4"
                   disabled={submitting}
                   data-testid="model-api-host-input"
@@ -1836,7 +1848,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                 <div className="rounded-[18px] border border-slate-200/80 bg-slate-50 px-4 py-3">
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     <Globe2 className="h-3.5 w-3.5" />
-                    API Base URL
+                    {t(
+                      "settings.providers.modelAdd.form.apiHost.label",
+                      "API Base URL",
+                    )}
                   </div>
                   <p className="mt-2 break-all text-sm font-medium text-slate-900">
                     {formState.apiHost}
@@ -1848,7 +1863,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                     htmlFor="template-api-host"
                     className="text-sm text-slate-600"
                   >
-                    API Base URL
+                    {t(
+                      "settings.providers.modelAdd.form.apiHost.label",
+                      "API Base URL",
+                    )}
                   </Label>
                   <Input
                     id="template-api-host"
@@ -1867,7 +1885,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                         ),
                       }))
                     }
-                    placeholder="https://api.example.com/v1"
+                    placeholder={t(
+                      "settings.providers.modelAdd.form.apiHost.placeholder",
+                      "https://api.example.com/v1",
+                    )}
                     className="h-12 rounded-[18px] border-slate-200 bg-white px-4"
                     disabled={submitting}
                     data-testid="template-api-host-input"

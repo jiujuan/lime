@@ -15,6 +15,7 @@ import {
   resetAppSidebarTest
 } from "./AppSidebar.testFixtures";
 import type { AgentPageParams } from "./AppSidebar.testFixtures";
+import { LIME_BRAND_LOGO_SRC } from "@/lib/branding";
 
 describe("AppSidebar navigation", () => {
   beforeEach(resetAppSidebarTest);
@@ -274,6 +275,9 @@ describe("AppSidebar navigation", () => {
     const homeButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="返回 Lime 首页"]',
     );
+    const homeLogo = homeButton?.querySelector<HTMLImageElement>(
+      'img[alt="Lime"]',
+    );
     const mainNav = container.querySelector(
       '[data-testid="app-sidebar-main-nav"]',
     );
@@ -281,6 +285,7 @@ describe("AppSidebar navigation", () => {
     expect(sidebar?.getAttribute("data-window-controls-reserved")).toBe("true");
     expect(header).not.toBeNull();
     expect(homeButton).not.toBeNull();
+    expect(homeLogo?.getAttribute("src")).toBe(LIME_BRAND_LOGO_SRC);
     expect(header?.contains(homeButton)).toBe(true);
     expect(
       Boolean(

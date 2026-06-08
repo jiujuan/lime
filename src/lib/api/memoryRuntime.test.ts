@@ -282,4 +282,37 @@ describe("memoryRuntime API", () => {
       workingDir: "/tmp/workspace",
     });
   });
+
+  it("记忆运行时命令遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "memory_runtime_get_stats",
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(getContextMemoryStats()).rejects.toThrow(
+      "memory_runtime_get_stats 尚未接入真实 Memory runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("记忆自动索引遇到 Electron empty diagnostic list 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        command: "memory_get_auto_index",
+        source: "electron-empty-diagnostic",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(getContextMemoryAutoIndex("/tmp/workspace")).rejects.toThrow(
+      "memory_get_auto_index 尚未接入真实 Memory runtime current 通道，收到 electron-empty-diagnostic 诊断返回。",
+    );
+  });
 });

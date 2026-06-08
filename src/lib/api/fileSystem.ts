@@ -10,6 +10,10 @@ export async function openPathWithDefaultApp(path: string): Promise<void> {
   await safeInvoke("open_with_default_app", { path });
 }
 
+export async function getHomeDirectory(): Promise<string> {
+  return safeInvoke<string>("get_home_dir");
+}
+
 export function convertLocalFileSrc(path: string): string {
   try {
     return typeof convertFileSrc === "function" ? convertFileSrc(path) : path;

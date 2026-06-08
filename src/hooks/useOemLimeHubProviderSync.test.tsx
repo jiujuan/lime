@@ -28,10 +28,6 @@ const desktopRuntimeMocks = vi.hoisted(() => ({
   hasDesktopHostRuntimeMarkers: vi.fn(() => false),
 }));
 
-const electronHostMocks = vi.hoisted(() => ({
-  isElectronHostCommandAvailable: vi.fn(() => true),
-}));
-
 vi.mock("@/lib/api/apiKeyProvider", () => ({
   apiKeyProviderApi: {
     addApiKey: apiKeyProviderMocks.addApiKey,
@@ -54,11 +50,6 @@ vi.mock("@/lib/desktop-runtime", () => ({
     desktopRuntimeMocks.hasDesktopHostInvokeCapability,
   hasDesktopHostRuntimeMarkers:
     desktopRuntimeMocks.hasDesktopHostRuntimeMarkers,
-}));
-
-vi.mock("@/lib/electron-host", () => ({
-  isElectronHostCommandAvailable:
-    electronHostMocks.isElectronHostCommandAvailable,
 }));
 
 import { useOemLimeHubProviderSync } from "./useOemLimeHubProviderSync";
@@ -125,7 +116,6 @@ describe("useOemLimeHubProviderSync", () => {
     apiKeyProviderMocks.updateProvider.mockResolvedValue(undefined);
     desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
     desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(false);
-    electronHostMocks.isElectronHostCommandAvailable.mockReturnValue(true);
     controlPlaneMocks.createClientAccessToken.mockResolvedValue({
       token: { id: "cloud-token-001" },
       apiKey: "sk-lime-desktop",
@@ -158,9 +148,9 @@ describe("useOemLimeHubProviderSync", () => {
     await changeLimeLocale("zh-CN");
   });
 
-  it("Electron Host 不支持 Provider 写命令时不应触发旧 update_api_key_provider", async () => {
+  it("Desktop Host 无 invoke 能力时不应触发 Provider 同步", async () => {
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(false);
     desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
-    electronHostMocks.isElectronHostCommandAvailable.mockReturnValue(false);
     setStoredOemCloudSessionState({
       token: "session-token-001",
       tenant: {

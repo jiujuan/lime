@@ -1,5 +1,4 @@
 import { AppServerClient } from "@/lib/api/appServer";
-import { safeInvoke } from "@/lib/dev-bridge";
 import type { AgentRun } from "@/lib/api/executionRun";
 import type { BrowserStreamMode } from "@/lib/webview-api";
 import type {
@@ -7,8 +6,31 @@ import type {
   AsterSandboxPolicy,
 } from "@/lib/api/agentRuntime";
 import {
+  METHOD_AUTOMATION_JOB_CREATE,
+  METHOD_AUTOMATION_JOB_DELETE,
+  METHOD_AUTOMATION_JOB_HEALTH,
   METHOD_AUTOMATION_JOB_LIST,
+  METHOD_AUTOMATION_JOB_READ,
+  METHOD_AUTOMATION_JOB_RUN_HISTORY,
+  METHOD_AUTOMATION_JOB_RUN_NOW,
+  METHOD_AUTOMATION_JOB_UPDATE,
+  METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
+  METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+  METHOD_AUTOMATION_SCHEDULER_STATUS,
+  METHOD_AUTOMATION_SCHEDULE_PREVIEW,
+  METHOD_AUTOMATION_SCHEDULE_VALIDATE,
+  type AutomationJobDeleteResponse as AppServerAutomationJobDeleteResponse,
+  type AutomationJobHealthResponse as AppServerAutomationJobHealthResponse,
   type AutomationJobListResponse as AppServerAutomationJobListResponse,
+  type AutomationJobReadResponse as AppServerAutomationJobReadResponse,
+  type AutomationJobRunHistoryResponse as AppServerAutomationJobRunHistoryResponse,
+  type AutomationJobRunNowResponse as AppServerAutomationJobRunNowResponse,
+  type AutomationJobWriteResponse as AppServerAutomationJobWriteResponse,
+  type AutomationSchedulePreviewResponse as AppServerAutomationSchedulePreviewResponse,
+  type AutomationScheduleValidateResponse as AppServerAutomationScheduleValidateResponse,
+  type AutomationSchedulerConfigReadResponse as AppServerAutomationSchedulerConfigReadResponse,
+  type AutomationSchedulerConfigUpdateResponse as AppServerAutomationSchedulerConfigUpdateResponse,
+  type AutomationSchedulerStatusResponse as AppServerAutomationSchedulerStatusResponse,
 } from "../../../packages/app-server-client/src/protocol";
 
 export type TaskSchedule =
@@ -151,6 +173,150 @@ function normalizeAutomationJobListResponse(
   return response.jobs as AutomationJobRecord[];
 }
 
+function normalizeAutomationSchedulerConfigResponse(
+  response:
+    | AppServerAutomationSchedulerConfigReadResponse
+    | AppServerAutomationSchedulerConfigUpdateResponse
+    | null
+    | undefined,
+  method: string,
+): AutomationSchedulerConfig {
+  if (!response || typeof response !== "object") {
+    throw new Error(`App Server ${method} did not return config`);
+  }
+
+  const config = (response as { config?: unknown }).config;
+  if (!config || typeof config !== "object") {
+    throw new Error(`App Server ${method} did not return config`);
+  }
+
+  return config as AutomationSchedulerConfig;
+}
+
+function normalizeAutomationStatusResponse(
+  response: AppServerAutomationSchedulerStatusResponse | null | undefined,
+): AutomationStatus {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server automationScheduler/status did not return status");
+  }
+
+  const status = response.status;
+  if (!status || typeof status !== "object") {
+    throw new Error("App Server automationScheduler/status did not return status");
+  }
+
+  return status as AutomationStatus;
+}
+
+function normalizeAutomationJobReadResponse(
+  response: AppServerAutomationJobReadResponse | null | undefined,
+): AutomationJobRecord | null {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server automationJob/read did not return job");
+  }
+
+  return (response.job ?? null) as AutomationJobRecord | null;
+}
+
+function normalizeAutomationJobWriteResponse(
+  response: AppServerAutomationJobWriteResponse | null | undefined,
+  method: string,
+): AutomationJobRecord {
+  if (!response || typeof response !== "object") {
+    throw new Error(automationJobWriteMissingJobMessage(method));
+  }
+
+  const job = response.job;
+  if (!job || typeof job !== "object") {
+    throw new Error(automationJobWriteMissingJobMessage(method));
+  }
+
+  return job as AutomationJobRecord;
+}
+
+function automationJobWriteMissingJobMessage(method: string): string {
+  if (method === METHOD_AUTOMATION_JOB_CREATE) {
+    return "App Server automationJob/create did not return job";
+  }
+  if (method === METHOD_AUTOMATION_JOB_UPDATE) {
+    return "App Server automationJob/update did not return job";
+  }
+  return `App Server ${method} did not return job`;
+}
+
+function normalizeAutomationJobDeleteResponse(
+  response: AppServerAutomationJobDeleteResponse | null | undefined,
+): boolean {
+  if (!response || typeof response.deleted !== "boolean") {
+    throw new Error("App Server automationJob/delete did not return deleted");
+  }
+
+  return response.deleted;
+}
+
+function normalizeAutomationJobRunNowResponse(
+  response: AppServerAutomationJobRunNowResponse | null | undefined,
+): AutomationCycleResult {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server automationJob/runNow did not return result");
+  }
+
+  const result = response.result;
+  if (!result || typeof result !== "object") {
+    throw new Error("App Server automationJob/runNow did not return result");
+  }
+
+  return result as AutomationCycleResult;
+}
+
+function normalizeAutomationHealthResponse(
+  response: AppServerAutomationJobHealthResponse | null | undefined,
+): AutomationHealthResult {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server automationJob/health did not return health");
+  }
+
+  const health = response.health;
+  if (!health || typeof health !== "object") {
+    throw new Error("App Server automationJob/health did not return health");
+  }
+
+  return health as AutomationHealthResult;
+}
+
+function normalizeAutomationRunHistoryResponse(
+  response: AppServerAutomationJobRunHistoryResponse | null | undefined,
+): AgentRun[] {
+  if (!response || !Array.isArray(response.runs)) {
+    throw new Error("App Server automationJob/runHistory did not return runs");
+  }
+
+  return response.runs as AgentRun[];
+}
+
+function normalizeAutomationSchedulePreviewResponse(
+  response: AppServerAutomationSchedulePreviewResponse | null | undefined,
+): string | null {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server automationSchedule/preview did not return nextRunAt");
+  }
+
+  return response.nextRunAt ?? null;
+}
+
+function normalizeAutomationScheduleValidateResponse(
+  response: AppServerAutomationScheduleValidateResponse | null | undefined,
+): ScheduleValidationResult {
+  if (!response || typeof response.valid !== "boolean") {
+    throw new Error("App Server automationSchedule/validate did not return valid");
+  }
+
+  return {
+    valid: response.valid,
+    error: response.error ?? null,
+  };
+}
+
 export interface AutomationJobRequest {
   name: string;
   description?: string | null;
@@ -240,17 +406,38 @@ export interface ScheduleValidationResult {
 }
 
 export async function getAutomationSchedulerConfig(): Promise<AutomationSchedulerConfig> {
-  return safeInvoke("get_automation_scheduler_config");
+  const response =
+    await requestAutomationAppServer<AppServerAutomationSchedulerConfigReadResponse>(
+      METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
+      {},
+    );
+  return normalizeAutomationSchedulerConfigResponse(
+    response,
+    METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
+  );
 }
 
 export async function updateAutomationSchedulerConfig(
   config: AutomationSchedulerConfig,
 ): Promise<void> {
-  return safeInvoke("update_automation_scheduler_config", { config });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationSchedulerConfigUpdateResponse>(
+      METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+      { config },
+    );
+  normalizeAutomationSchedulerConfigResponse(
+    response,
+    METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+  );
 }
 
 export async function getAutomationStatus(): Promise<AutomationStatus> {
-  return safeInvoke("get_automation_status");
+  const response =
+    await requestAutomationAppServer<AppServerAutomationSchedulerStatusResponse>(
+      METHOD_AUTOMATION_SCHEDULER_STATUS,
+      {},
+    );
+  return normalizeAutomationStatusResponse(response);
 }
 
 export async function getAutomationJobs(): Promise<AutomationJobRecord[]> {
@@ -265,53 +452,104 @@ export async function getAutomationJobs(): Promise<AutomationJobRecord[]> {
 export async function getAutomationJob(
   id: string,
 ): Promise<AutomationJobRecord | null> {
-  return safeInvoke("get_automation_job", { id });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationJobReadResponse>(
+      METHOD_AUTOMATION_JOB_READ,
+      { id },
+    );
+  return normalizeAutomationJobReadResponse(response);
 }
 
 export async function createAutomationJob(
   request: AutomationJobRequest,
 ): Promise<AutomationJobRecord> {
-  return safeInvoke("create_automation_job", { request });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationJobWriteResponse>(
+      METHOD_AUTOMATION_JOB_CREATE,
+      { request },
+    );
+  return normalizeAutomationJobWriteResponse(
+    response,
+    METHOD_AUTOMATION_JOB_CREATE,
+  );
 }
 
 export async function updateAutomationJob(
   id: string,
   request: UpdateAutomationJobRequest,
 ): Promise<AutomationJobRecord> {
-  return safeInvoke("update_automation_job", { id, request });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationJobWriteResponse>(
+      METHOD_AUTOMATION_JOB_UPDATE,
+      { id, request },
+    );
+  return normalizeAutomationJobWriteResponse(
+    response,
+    METHOD_AUTOMATION_JOB_UPDATE,
+  );
 }
 
 export async function deleteAutomationJob(id: string): Promise<boolean> {
-  return safeInvoke("delete_automation_job", { id });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationJobDeleteResponse>(
+      METHOD_AUTOMATION_JOB_DELETE,
+      { id },
+    );
+  return normalizeAutomationJobDeleteResponse(response);
 }
 
 export async function runAutomationJobNow(
   id: string,
 ): Promise<AutomationCycleResult> {
-  return safeInvoke("run_automation_job_now", { id });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationJobRunNowResponse>(
+      METHOD_AUTOMATION_JOB_RUN_NOW,
+      { id },
+    );
+  return normalizeAutomationJobRunNowResponse(response);
 }
 
 export async function getAutomationHealth(
   query?: AutomationHealthQuery,
 ): Promise<AutomationHealthResult> {
-  return safeInvoke("get_automation_health", { query: query ?? null });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationJobHealthResponse>(
+      METHOD_AUTOMATION_JOB_HEALTH,
+      { query: query ?? null },
+    );
+  return normalizeAutomationHealthResponse(response);
 }
 
 export async function getAutomationRunHistory(
   id: string,
   limit: number = 20,
 ): Promise<AgentRun[]> {
-  return safeInvoke("get_automation_run_history", { id, limit });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationJobRunHistoryResponse>(
+      METHOD_AUTOMATION_JOB_RUN_HISTORY,
+      { id, limit },
+    );
+  return normalizeAutomationRunHistoryResponse(response);
 }
 
 export async function previewAutomationSchedule(
   schedule: TaskSchedule,
 ): Promise<string | null> {
-  return safeInvoke("preview_automation_schedule", { schedule });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationSchedulePreviewResponse>(
+      METHOD_AUTOMATION_SCHEDULE_PREVIEW,
+      { schedule },
+    );
+  return normalizeAutomationSchedulePreviewResponse(response);
 }
 
 export async function validateAutomationSchedule(
   schedule: TaskSchedule,
 ): Promise<ScheduleValidationResult> {
-  return safeInvoke("validate_automation_schedule", { schedule });
+  const response =
+    await requestAutomationAppServer<AppServerAutomationScheduleValidateResponse>(
+      METHOD_AUTOMATION_SCHEDULE_VALIDATE,
+      { schedule },
+    );
+  return normalizeAutomationScheduleValidateResponse(response);
 }

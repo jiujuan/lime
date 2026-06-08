@@ -12,7 +12,25 @@ use app_server_protocol::AgentSessionUpdateParams;
 use app_server_protocol::AgentSessionUpdateResponse;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
+use app_server_protocol::AutomationJobCreateParams;
+use app_server_protocol::AutomationJobDeleteResponse;
+use app_server_protocol::AutomationJobHealthParams;
+use app_server_protocol::AutomationJobHealthResponse;
+use app_server_protocol::AutomationJobIdParams;
 use app_server_protocol::AutomationJobListResponse;
+use app_server_protocol::AutomationJobReadResponse;
+use app_server_protocol::AutomationJobRunHistoryParams;
+use app_server_protocol::AutomationJobRunHistoryResponse;
+use app_server_protocol::AutomationJobRunNowResponse;
+use app_server_protocol::AutomationJobUpdateParams;
+use app_server_protocol::AutomationJobWriteResponse;
+use app_server_protocol::AutomationScheduleParams;
+use app_server_protocol::AutomationSchedulePreviewResponse;
+use app_server_protocol::AutomationScheduleValidateResponse;
+use app_server_protocol::AutomationSchedulerConfigReadResponse;
+use app_server_protocol::AutomationSchedulerConfigUpdateParams;
+use app_server_protocol::AutomationSchedulerConfigUpdateResponse;
+use app_server_protocol::AutomationSchedulerStatusResponse;
 use app_server_protocol::BusinessObjectRef;
 use app_server_protocol::ConnectCallbackSendParams;
 use app_server_protocol::ConnectCallbackSendResponse;
@@ -26,6 +44,11 @@ use app_server_protocol::ConnectRelayApiKeySaveParams;
 use app_server_protocol::ConnectRelayApiKeySaveResponse;
 use app_server_protocol::KnowledgeListPacksParams;
 use app_server_protocol::KnowledgeListPacksResponse;
+use app_server_protocol::McpPromptListResponse;
+use app_server_protocol::McpResourceListResponse;
+use app_server_protocol::McpServerListResponse;
+use app_server_protocol::McpServerStatusListResponse;
+use app_server_protocol::McpToolListResponse;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -33,7 +56,37 @@ use app_server_protocol::ModelProviderAliasListResponse;
 use app_server_protocol::ModelProviderAliasReadParams;
 use app_server_protocol::ModelProviderAliasReadResponse;
 use app_server_protocol::ModelProviderCatalogListResponse;
+use app_server_protocol::ModelProviderConfigExportParams;
+use app_server_protocol::ModelProviderConfigExportResponse;
+use app_server_protocol::ModelProviderConfigImportParams;
+use app_server_protocol::ModelProviderConfigImportResponse;
+use app_server_protocol::ModelProviderCreateParams;
+use app_server_protocol::ModelProviderDeleteParams;
+use app_server_protocol::ModelProviderDeleteResponse;
+use app_server_protocol::ModelProviderFetchModelsParams;
+use app_server_protocol::ModelProviderFetchModelsResponse;
+use app_server_protocol::ModelProviderKeyCreateParams;
+use app_server_protocol::ModelProviderKeyDeleteParams;
+use app_server_protocol::ModelProviderKeyDeleteResponse;
+use app_server_protocol::ModelProviderKeyEventParams;
+use app_server_protocol::ModelProviderKeyNextParams;
+use app_server_protocol::ModelProviderKeyNextResponse;
+use app_server_protocol::ModelProviderKeyUpdateParams;
+use app_server_protocol::ModelProviderKeyWriteResponse;
 use app_server_protocol::ModelProviderListResponse;
+use app_server_protocol::ModelProviderMutationResponse;
+use app_server_protocol::ModelProviderReadParams;
+use app_server_protocol::ModelProviderReadResponse;
+use app_server_protocol::ModelProviderSortOrdersUpdateParams;
+use app_server_protocol::ModelProviderTestChatParams;
+use app_server_protocol::ModelProviderTestChatResponse;
+use app_server_protocol::ModelProviderTestConnectionParams;
+use app_server_protocol::ModelProviderTestConnectionResponse;
+use app_server_protocol::ModelProviderUiStateReadParams;
+use app_server_protocol::ModelProviderUiStateReadResponse;
+use app_server_protocol::ModelProviderUiStateWriteParams;
+use app_server_protocol::ModelProviderUpdateParams;
+use app_server_protocol::ModelProviderWriteResponse;
 use app_server_protocol::ModelSyncStateReadResponse;
 use app_server_protocol::OpenDeepLinkPayload;
 use app_server_protocol::ProjectMemoryReadParams;
@@ -56,23 +109,39 @@ use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::WorkspaceSkillBindingsListResponse;
 use async_trait::async_trait;
 use chrono::DateTime;
+use chrono::Duration;
+use chrono::Timelike;
 use chrono::Utc;
 use lime_core::app_paths;
+use lime_core::config::load_config;
+use lime_core::config::save_config;
+use lime_core::config::AutomationExecutionMode;
+use lime_core::config::AutomationSettings;
+use lime_core::config::DeliveryConfig;
+use lime_core::config::TaskSchedule;
 use lime_core::connect;
 use lime_core::database;
+use lime_core::database::dao::agent_run::AgentRun;
+use lime_core::database::dao::agent_run::AgentRunDao;
+use lime_core::database::dao::agent_run::AgentRunStatus;
 use lime_core::database::dao::agent_timeline::AgentThreadItem;
 use lime_core::database::dao::agent_timeline::AgentThreadTurn;
 use lime_core::database::dao::agent_timeline::AgentThreadTurnStatus;
 use lime_core::database::dao::agent_timeline::AgentTimelineDao;
 use lime_core::database::dao::api_key_provider::ApiKeyEntry;
+use lime_core::database::dao::api_key_provider::ApiKeyProvider;
+use lime_core::database::dao::api_key_provider::ApiProviderPromptCacheMode;
 use lime_core::database::dao::api_key_provider::ApiProviderType;
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
+use lime_core::database::dao::automation_job::AutomationJob;
 use lime_core::database::dao::automation_job::AutomationJobDao;
 use lime_core::database::system_providers::get_system_providers;
 use lime_core::database::system_providers::SystemProviderDef;
 use lime_core::database::DbConnection;
 use lime_core::models::model_registry::ModelTier;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
+use lime_services::mcp_service::McpService;
+use lime_services::model_registry_service::FetchModelsResult;
 use lime_services::model_registry_service::ModelRegistryService;
 use lime_skills::find_skill_by_name;
 use lime_skills::get_skill_roots;
@@ -82,12 +151,14 @@ use lime_skills::LoadedSkillDefinition;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use rusqlite::Row;
+use serde::Deserialize;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 use uuid::Uuid;
 
 const CURRENT_TIMELINE_LIST_MAX_LIMIT: usize = 1_000;
@@ -471,6 +542,301 @@ impl AppDataSource for LocalAppDataSource {
         })
     }
 
+    async fn list_mcp_servers(&self) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Ok(McpServerListResponse {
+            servers: values_from_serializable_vec(
+                McpService::get_all(&self.db).map_err(data_error)?,
+            )?,
+        })
+    }
+
+    async fn list_mcp_servers_with_status(
+        &self,
+    ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
+        let servers = McpService::get_all(&self.db).map_err(data_error)?;
+        Ok(McpServerStatusListResponse {
+            servers: servers
+                .into_iter()
+                .map(|server| {
+                    json!({
+                        "id": server.id,
+                        "name": server.name,
+                        "description": server.description,
+                        "config": server.parse_config(),
+                        "is_running": false,
+                        "server_info": null,
+                        "enabled_lime": server.enabled_lime,
+                        "enabled_claude": server.enabled_claude,
+                        "enabled_codex": server.enabled_codex,
+                        "enabled_gemini": server.enabled_gemini,
+                    })
+                })
+                .collect(),
+        })
+    }
+
+    async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Ok(McpToolListResponse::default())
+    }
+
+    async fn list_mcp_prompts(&self) -> Result<McpPromptListResponse, RuntimeCoreError> {
+        Ok(McpPromptListResponse::default())
+    }
+
+    async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
+        Ok(McpResourceListResponse::default())
+    }
+
+    async fn read_automation_scheduler_config(
+        &self,
+    ) -> Result<AutomationSchedulerConfigReadResponse, RuntimeCoreError> {
+        Ok(AutomationSchedulerConfigReadResponse {
+            config: automation_scheduler_config_value(
+                load_config().map_err(data_error)?.automation,
+            ),
+        })
+    }
+
+    async fn update_automation_scheduler_config(
+        &self,
+        params: AutomationSchedulerConfigUpdateParams,
+    ) -> Result<AutomationSchedulerConfigUpdateResponse, RuntimeCoreError> {
+        let input: AutomationSchedulerConfigRequest =
+            serde_json::from_value(params.config).map_err(data_error)?;
+        let mut config = load_config().map_err(data_error)?;
+        config.automation = AutomationSettings {
+            enabled: input.enabled,
+            poll_interval_secs: input.poll_interval_secs.max(5),
+            enable_history: input.enable_history,
+        };
+        save_config(&config).map_err(data_error)?;
+        Ok(AutomationSchedulerConfigUpdateResponse {
+            config: automation_scheduler_config_value(config.automation),
+        })
+    }
+
+    async fn read_automation_scheduler_status(
+        &self,
+    ) -> Result<AutomationSchedulerStatusResponse, RuntimeCoreError> {
+        Ok(AutomationSchedulerStatusResponse {
+            status: json!({
+                "running": false,
+                "last_polled_at": null,
+                "next_poll_at": null,
+                "last_job_count": 0,
+                "total_executions": 0,
+                "active_job_id": null,
+                "active_job_name": null,
+            }),
+        })
+    }
+
+    async fn read_automation_job(
+        &self,
+        params: AutomationJobIdParams,
+    ) -> Result<AutomationJobReadResponse, RuntimeCoreError> {
+        let id = normalize_automation_job_id(&params.id)?;
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let job = AutomationJobDao::get(&conn, &id).map_err(data_error)?;
+        Ok(AutomationJobReadResponse {
+            job: job
+                .map(serde_json::to_value)
+                .transpose()
+                .map_err(data_error)?,
+        })
+    }
+
+    async fn create_automation_job(
+        &self,
+        params: AutomationJobCreateParams,
+    ) -> Result<AutomationJobWriteResponse, RuntimeCoreError> {
+        let request: AutomationJobCreateRequest =
+            serde_json::from_value(params.request).map_err(data_error)?;
+        validate_automation_job_create_request(&request)?;
+        let now = Utc::now().to_rfc3339();
+        let next_run_at = if request.enabled.unwrap_or(true) {
+            preview_next_automation_run(&request.schedule).map_err(data_error)?
+        } else {
+            None
+        };
+        let job = AutomationJob {
+            id: Uuid::new_v4().to_string(),
+            name: request.name.trim().to_string(),
+            description: normalize_optional_string(request.description),
+            enabled: request.enabled.unwrap_or(true),
+            workspace_id: request.workspace_id.trim().to_string(),
+            execution_mode: request
+                .execution_mode
+                .unwrap_or(AutomationExecutionMode::Intelligent),
+            schedule: request.schedule,
+            payload: request.payload,
+            delivery: request.delivery.unwrap_or_default(),
+            timeout_secs: request.timeout_secs,
+            max_retries: request.max_retries.unwrap_or(3).max(1),
+            next_run_at,
+            last_status: None,
+            last_error: None,
+            last_run_at: None,
+            last_finished_at: None,
+            running_started_at: None,
+            consecutive_failures: 0,
+            last_retry_count: 0,
+            auto_disabled_until: None,
+            last_delivery: None,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        AutomationJobDao::create(&conn, &job).map_err(data_error)?;
+        Ok(AutomationJobWriteResponse {
+            job: serde_json::to_value(job).map_err(data_error)?,
+        })
+    }
+
+    async fn update_automation_job(
+        &self,
+        params: AutomationJobUpdateParams,
+    ) -> Result<AutomationJobWriteResponse, RuntimeCoreError> {
+        let id = normalize_automation_job_id(&params.id)?;
+        let request: AutomationJobUpdateRequest =
+            serde_json::from_value(params.request).map_err(data_error)?;
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let mut job = AutomationJobDao::get(&conn, &id)
+            .map_err(data_error)?
+            .ok_or_else(|| RuntimeCoreError::Backend(format!("自动化任务不存在: {id}")))?;
+
+        if let Some(name) = request.name {
+            if name.trim().is_empty() {
+                return Err(RuntimeCoreError::Backend("任务名称不能为空".to_string()));
+            }
+            job.name = name.trim().to_string();
+        }
+        if request.description.is_some() {
+            job.description = normalize_optional_string(request.description);
+        }
+        if let Some(enabled) = request.enabled {
+            job.enabled = enabled;
+        }
+        if let Some(workspace_id) = request.workspace_id {
+            if workspace_id.trim().is_empty() {
+                return Err(RuntimeCoreError::Backend("workspace_id 必填".to_string()));
+            }
+            job.workspace_id = workspace_id.trim().to_string();
+        }
+        if let Some(execution_mode) = request.execution_mode {
+            job.execution_mode = execution_mode;
+        }
+        if let Some(schedule) = request.schedule {
+            validate_automation_schedule_value(&schedule, Utc::now()).map_err(data_error)?;
+            job.schedule = schedule;
+        }
+        if let Some(payload) = request.payload {
+            validate_automation_payload(&payload)?;
+            job.payload = payload;
+        }
+        if let Some(delivery) = request.delivery {
+            job.delivery = delivery;
+        }
+        if request.clear_timeout_secs.unwrap_or(false) {
+            job.timeout_secs = None;
+        } else if request.timeout_secs.is_some() {
+            job.timeout_secs = request.timeout_secs;
+        }
+        if let Some(max_retries) = request.max_retries {
+            job.max_retries = max_retries.max(1);
+        }
+        job.next_run_at = if job.enabled && job.running_started_at.is_none() {
+            preview_next_automation_run(&job.schedule).map_err(data_error)?
+        } else {
+            None
+        };
+        job.updated_at = Utc::now().to_rfc3339();
+
+        validate_automation_job_record(&job)?;
+        AutomationJobDao::update(&conn, &job).map_err(data_error)?;
+        Ok(AutomationJobWriteResponse {
+            job: serde_json::to_value(job).map_err(data_error)?,
+        })
+    }
+
+    async fn delete_automation_job(
+        &self,
+        params: AutomationJobIdParams,
+    ) -> Result<AutomationJobDeleteResponse, RuntimeCoreError> {
+        let id = normalize_automation_job_id(&params.id)?;
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let deleted = AutomationJobDao::delete(&conn, &id).map_err(data_error)?;
+        Ok(AutomationJobDeleteResponse { deleted })
+    }
+
+    async fn run_automation_job_now(
+        &self,
+        _params: AutomationJobIdParams,
+    ) -> Result<AutomationJobRunNowResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationJob/runNow 尚未迁移到 App Server 执行器，已拒绝回退旧 Tauri 命令"
+                .to_string(),
+        ))
+    }
+
+    async fn read_automation_health(
+        &self,
+        params: AutomationJobHealthParams,
+    ) -> Result<AutomationJobHealthResponse, RuntimeCoreError> {
+        let query = params
+            .query
+            .map(serde_json::from_value::<AutomationHealthQuery>)
+            .transpose()
+            .map_err(data_error)?
+            .unwrap_or_default();
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let health = query_automation_health_value(&conn, query).map_err(data_error)?;
+        Ok(AutomationJobHealthResponse { health })
+    }
+
+    async fn read_automation_run_history(
+        &self,
+        params: AutomationJobRunHistoryParams,
+    ) -> Result<AutomationJobRunHistoryResponse, RuntimeCoreError> {
+        let id = normalize_automation_job_id(&params.id)?;
+        let limit = params.limit.unwrap_or(20).clamp(1, 200);
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let runs = AgentRunDao::list_runs_by_source_ref(&conn, "automation", &id, limit)
+            .map_err(data_error)?;
+        Ok(AutomationJobRunHistoryResponse {
+            runs: values_from_serializable_vec(runs)?,
+        })
+    }
+
+    async fn preview_automation_schedule(
+        &self,
+        params: AutomationScheduleParams,
+    ) -> Result<AutomationSchedulePreviewResponse, RuntimeCoreError> {
+        let schedule: TaskSchedule = serde_json::from_value(params.schedule).map_err(data_error)?;
+        Ok(AutomationSchedulePreviewResponse {
+            next_run_at: preview_next_automation_run(&schedule).map_err(data_error)?,
+        })
+    }
+
+    async fn validate_automation_schedule(
+        &self,
+        params: AutomationScheduleParams,
+    ) -> Result<AutomationScheduleValidateResponse, RuntimeCoreError> {
+        let schedule: TaskSchedule = serde_json::from_value(params.schedule).map_err(data_error)?;
+        Ok(
+            match validate_automation_schedule_value(&schedule, Utc::now()) {
+                Ok(()) => AutomationScheduleValidateResponse {
+                    valid: true,
+                    error: None,
+                },
+                Err(error) => AutomationScheduleValidateResponse {
+                    valid: false,
+                    error: Some(error),
+                },
+            },
+        )
+    }
+
     async fn read_project_memory(
         &self,
         params: ProjectMemoryReadParams,
@@ -541,6 +907,346 @@ impl AppDataSource for LocalAppDataSource {
                 .map(system_provider_to_value)
                 .collect(),
         })
+    }
+
+    async fn read_model_provider(
+        &self,
+        params: ModelProviderReadParams,
+    ) -> Result<ModelProviderReadResponse, RuntimeCoreError> {
+        let provider = self
+            .api_key_provider_service
+            .get_provider(&self.db, &params.provider_id)
+            .map_err(data_error)?
+            .map(|provider| provider_with_keys_to_value(&provider, &self.api_key_provider_service));
+        Ok(ModelProviderReadResponse { provider })
+    }
+
+    async fn create_model_provider(
+        &self,
+        params: ModelProviderCreateParams,
+    ) -> Result<ModelProviderWriteResponse, RuntimeCoreError> {
+        let provider = params.provider;
+        let provider_type = required_string_field(&provider, "type")?
+            .parse::<ApiProviderType>()
+            .map_err(data_error)?;
+        let provider = self
+            .api_key_provider_service
+            .add_custom_provider(
+                &self.db,
+                required_string_field(&provider, "name")?,
+                provider_type,
+                required_string_field(&provider, "api_host")?,
+                optional_string_field(&provider, "api_version"),
+                optional_string_field(&provider, "project"),
+                optional_string_field(&provider, "location"),
+                optional_string_field(&provider, "region"),
+                optional_prompt_cache_mode(&provider)?,
+            )
+            .map_err(data_error)?;
+        Ok(ModelProviderWriteResponse {
+            provider: provider_to_value(&provider, 0),
+        })
+    }
+
+    async fn update_model_provider(
+        &self,
+        params: ModelProviderUpdateParams,
+    ) -> Result<ModelProviderWriteResponse, RuntimeCoreError> {
+        let patch = params.patch;
+        let provider_type = optional_string_field(&patch, "type")
+            .map(|value| value.parse::<ApiProviderType>())
+            .transpose()
+            .map_err(data_error)?;
+        let provider = self
+            .api_key_provider_service
+            .update_provider(
+                &self.db,
+                &params.provider_id,
+                optional_string_field(&patch, "name"),
+                provider_type,
+                optional_string_field(&patch, "api_host"),
+                optional_bool_field(&patch, "enabled"),
+                optional_i32_field(&patch, "sort_order")?,
+                optional_string_field(&patch, "api_version"),
+                optional_string_field(&patch, "project"),
+                optional_string_field(&patch, "location"),
+                optional_string_field(&patch, "region"),
+                optional_prompt_cache_mode(&patch)?,
+                optional_string_vec_field(&patch, "custom_models")?,
+            )
+            .map_err(data_error)?;
+        let api_key_count = self
+            .api_key_provider_service
+            .get_provider(&self.db, &params.provider_id)
+            .map_err(data_error)?
+            .map(|provider| provider.api_keys.len())
+            .unwrap_or(0);
+        Ok(ModelProviderWriteResponse {
+            provider: provider_to_value(&provider, api_key_count),
+        })
+    }
+
+    async fn delete_model_provider(
+        &self,
+        params: ModelProviderDeleteParams,
+    ) -> Result<ModelProviderDeleteResponse, RuntimeCoreError> {
+        let deleted = self
+            .api_key_provider_service
+            .delete_custom_provider(&self.db, &params.provider_id)
+            .map_err(data_error)?;
+        Ok(ModelProviderDeleteResponse { deleted })
+    }
+
+    async fn update_model_provider_sort_orders(
+        &self,
+        params: ModelProviderSortOrdersUpdateParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        let sort_orders = params
+            .sort_orders
+            .into_iter()
+            .map(|item| (item.provider_id, item.sort_order))
+            .collect();
+        self.api_key_provider_service
+            .update_provider_sort_orders(&self.db, sort_orders)
+            .map_err(data_error)?;
+        Ok(ModelProviderMutationResponse::default())
+    }
+
+    async fn export_model_provider_config(
+        &self,
+        params: ModelProviderConfigExportParams,
+    ) -> Result<ModelProviderConfigExportResponse, RuntimeCoreError> {
+        let config = self
+            .api_key_provider_service
+            .export_config(&self.db, params.include_keys.unwrap_or(false))
+            .map_err(data_error)?;
+        let config_json = serde_json::to_string_pretty(&config).map_err(data_error)?;
+        Ok(ModelProviderConfigExportResponse { config_json })
+    }
+
+    async fn import_model_provider_config(
+        &self,
+        params: ModelProviderConfigImportParams,
+    ) -> Result<ModelProviderConfigImportResponse, RuntimeCoreError> {
+        let result = self
+            .api_key_provider_service
+            .import_config(&self.db, &params.config_json)
+            .map_err(data_error)?;
+        Ok(ModelProviderConfigImportResponse {
+            success: result.success,
+            imported_providers: result.imported_providers,
+            imported_api_keys: result.imported_api_keys,
+            skipped_providers: result.skipped_providers,
+            errors: result.errors,
+        })
+    }
+
+    async fn test_model_provider_connection(
+        &self,
+        params: ModelProviderTestConnectionParams,
+    ) -> Result<ModelProviderTestConnectionResponse, RuntimeCoreError> {
+        let result = self
+            .api_key_provider_service
+            .test_connection_with_fallback_models(
+                &self.db,
+                &params.provider_id,
+                params.model_name,
+                Vec::new(),
+            )
+            .await
+            .map_err(data_error)?;
+        Ok(ModelProviderTestConnectionResponse {
+            success: result.success,
+            latency_ms: result.latency_ms,
+            error: result.error,
+            models: result.models,
+        })
+    }
+
+    async fn test_model_provider_chat(
+        &self,
+        params: ModelProviderTestChatParams,
+    ) -> Result<ModelProviderTestChatResponse, RuntimeCoreError> {
+        let result = self
+            .api_key_provider_service
+            .test_chat_with_fallback_models(
+                &self.db,
+                &params.provider_id,
+                params.model_name,
+                params.prompt,
+                Vec::new(),
+            )
+            .await
+            .map_err(data_error)?;
+        Ok(ModelProviderTestChatResponse {
+            success: result.success,
+            latency_ms: result.latency_ms,
+            error: result.error,
+            content: result.content,
+            raw: result.raw,
+        })
+    }
+
+    async fn fetch_model_provider_models(
+        &self,
+        params: ModelProviderFetchModelsParams,
+    ) -> Result<ModelProviderFetchModelsResponse, RuntimeCoreError> {
+        let provider = self
+            .api_key_provider_service
+            .get_provider(&self.db, &params.provider_id)
+            .map_err(data_error)?
+            .ok_or_else(|| data_error(format!("Provider 不存在: {}", params.provider_id)))?;
+        let api_host = provider.provider.api_host.clone();
+        if api_host.trim().is_empty() {
+            return Err(data_error("Provider 没有配置 API Host"));
+        }
+        let provider_type = provider.provider.effective_provider_type();
+        let requires_api_key = ModelRegistryService::requires_api_key_for_model_fetch(
+            &params.provider_id,
+            &api_host,
+            provider_type,
+        );
+        let api_key = if requires_api_key {
+            self.api_key_provider_service
+                .get_next_api_key(&self.db, &params.provider_id)
+                .map_err(data_error)?
+                .ok_or_else(|| {
+                    data_error(format!(
+                        "Provider {} 没有可用的 API Key",
+                        params.provider_id
+                    ))
+                })?
+        } else {
+            self.api_key_provider_service
+                .get_next_api_key(&self.db, &params.provider_id)
+                .map_err(data_error)?
+                .unwrap_or_default()
+        };
+        let result = self
+            .model_registry_service
+            .fetch_models_from_api_with_hints(
+                &params.provider_id,
+                &api_host,
+                &api_key,
+                Some(provider_type),
+                &provider.provider.custom_models,
+            )
+            .await
+            .map_err(data_error)?;
+        fetch_models_result_to_response(result)
+    }
+
+    async fn create_model_provider_key(
+        &self,
+        params: ModelProviderKeyCreateParams,
+    ) -> Result<ModelProviderKeyWriteResponse, RuntimeCoreError> {
+        let key = self
+            .api_key_provider_service
+            .add_api_key(
+                &self.db,
+                &params.provider_id,
+                &params.api_key,
+                params.alias,
+                params.replace_existing.unwrap_or(false),
+            )
+            .map_err(data_error)?;
+        Ok(ModelProviderKeyWriteResponse {
+            key: api_key_to_value(&key, &self.api_key_provider_service),
+        })
+    }
+
+    async fn update_model_provider_key(
+        &self,
+        params: ModelProviderKeyUpdateParams,
+    ) -> Result<ModelProviderKeyWriteResponse, RuntimeCoreError> {
+        let key = if let Some(enabled) = params.enabled {
+            self.api_key_provider_service
+                .toggle_api_key(&self.db, &params.key_id, enabled)
+                .map_err(data_error)?
+        } else {
+            self.api_key_provider_service
+                .update_api_key_alias(&self.db, &params.key_id, params.alias.clone())
+                .map_err(data_error)?
+        };
+        let key = if params.enabled.is_some() && params.alias.is_some() {
+            self.api_key_provider_service
+                .update_api_key_alias(&self.db, &params.key_id, params.alias)
+                .map_err(data_error)?
+        } else {
+            key
+        };
+        Ok(ModelProviderKeyWriteResponse {
+            key: api_key_to_value(&key, &self.api_key_provider_service),
+        })
+    }
+
+    async fn delete_model_provider_key(
+        &self,
+        params: ModelProviderKeyDeleteParams,
+    ) -> Result<ModelProviderKeyDeleteResponse, RuntimeCoreError> {
+        let deleted = self
+            .api_key_provider_service
+            .delete_api_key(&self.db, &params.key_id)
+            .map_err(data_error)?;
+        Ok(ModelProviderKeyDeleteResponse { deleted })
+    }
+
+    async fn read_next_model_provider_key(
+        &self,
+        params: ModelProviderKeyNextParams,
+    ) -> Result<ModelProviderKeyNextResponse, RuntimeCoreError> {
+        let next = self
+            .api_key_provider_service
+            .get_next_api_key_entry(&self.db, &params.provider_id)
+            .map_err(data_error)?;
+        Ok(match next {
+            Some((key_id, api_key)) => ModelProviderKeyNextResponse {
+                api_key: Some(api_key),
+                key_id: Some(key_id),
+            },
+            None => ModelProviderKeyNextResponse::default(),
+        })
+    }
+
+    async fn record_model_provider_key_usage(
+        &self,
+        params: ModelProviderKeyEventParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        self.api_key_provider_service
+            .record_usage(&self.db, &params.key_id)
+            .map_err(data_error)?;
+        Ok(ModelProviderMutationResponse::default())
+    }
+
+    async fn record_model_provider_key_error(
+        &self,
+        params: ModelProviderKeyEventParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        self.api_key_provider_service
+            .record_error(&self.db, &params.key_id)
+            .map_err(data_error)?;
+        Ok(ModelProviderMutationResponse::default())
+    }
+
+    async fn read_model_provider_ui_state(
+        &self,
+        params: ModelProviderUiStateReadParams,
+    ) -> Result<ModelProviderUiStateReadResponse, RuntimeCoreError> {
+        let value = self
+            .api_key_provider_service
+            .get_ui_state(&self.db, &params.key)
+            .map_err(data_error)?;
+        Ok(ModelProviderUiStateReadResponse { value })
+    }
+
+    async fn write_model_provider_ui_state(
+        &self,
+        params: ModelProviderUiStateWriteParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        self.api_key_provider_service
+            .set_ui_state(&self.db, &params.key, &params.value)
+            .map_err(data_error)?;
+        Ok(ModelProviderMutationResponse::default())
     }
 
     async fn read_model_provider_alias(
@@ -2001,6 +2707,28 @@ fn provider_with_keys_to_value(
     })
 }
 
+fn provider_to_value(provider: &ApiKeyProvider, api_key_count: usize) -> Value {
+    json!({
+        "id": provider.id,
+        "name": provider.name,
+        "type": provider.effective_provider_type().to_string(),
+        "api_host": provider.api_host,
+        "is_system": provider.is_system,
+        "group": provider.group.to_string(),
+        "enabled": provider.enabled,
+        "sort_order": provider.sort_order,
+        "api_version": provider.api_version,
+        "project": provider.project,
+        "location": provider.location,
+        "region": provider.region,
+        "custom_models": provider.custom_models,
+        "prompt_cache_mode": provider.effective_prompt_cache_mode().map(|mode| mode.to_string()),
+        "api_key_count": api_key_count,
+        "created_at": provider.created_at.to_rfc3339(),
+        "updated_at": provider.updated_at.to_rfc3339(),
+    })
+}
+
 fn api_key_to_value(api_key: &ApiKeyEntry, service: &ApiKeyProviderService) -> Value {
     let api_key_masked = service
         .decrypt_api_key(&api_key.api_key_encrypted)
@@ -2017,6 +2745,111 @@ fn api_key_to_value(api_key: &ApiKeyEntry, service: &ApiKeyProviderService) -> V
         "last_used_at": api_key.last_used_at.map(|value| value.to_rfc3339()),
         "created_at": api_key.created_at.to_rfc3339(),
     })
+}
+
+fn fetch_models_result_to_response(
+    result: FetchModelsResult,
+) -> Result<ModelProviderFetchModelsResponse, RuntimeCoreError> {
+    Ok(ModelProviderFetchModelsResponse {
+        models: values_from_serializable_vec(result.models)?,
+        source: serde_json::to_value(result.source)
+            .map_err(data_error)?
+            .as_str()
+            .unwrap_or("Error")
+            .to_string(),
+        error: result.error,
+        request_url: result.request_url,
+        diagnostic_hint: result.diagnostic_hint,
+        error_kind: result
+            .error_kind
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(data_error)?
+            .and_then(|value| value.as_str().map(str::to_string)),
+        should_prompt_error: result.should_prompt_error,
+        from_cache: result.from_cache,
+    })
+}
+
+fn required_string_field(value: &Value, key: &str) -> Result<String, RuntimeCoreError> {
+    optional_string_field(value, key).ok_or_else(|| data_error(format!("{key} is required")))
+}
+
+fn optional_string_field(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .or_else(|| value.get(to_camel_case(key).as_str()))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn optional_bool_field(value: &Value, key: &str) -> Option<bool> {
+    value
+        .get(key)
+        .or_else(|| value.get(to_camel_case(key).as_str()))
+        .and_then(Value::as_bool)
+}
+
+fn optional_i32_field(value: &Value, key: &str) -> Result<Option<i32>, RuntimeCoreError> {
+    value
+        .get(key)
+        .or_else(|| value.get(to_camel_case(key).as_str()))
+        .map(|value| {
+            value
+                .as_i64()
+                .and_then(|number| i32::try_from(number).ok())
+                .ok_or_else(|| data_error(format!("{key} must be a 32-bit integer")))
+        })
+        .transpose()
+}
+
+fn optional_string_vec_field(
+    value: &Value,
+    key: &str,
+) -> Result<Option<Vec<String>>, RuntimeCoreError> {
+    value
+        .get(key)
+        .or_else(|| value.get(to_camel_case(key).as_str()))
+        .map(|value| {
+            value
+                .as_array()
+                .ok_or_else(|| data_error(format!("{key} must be an array")))?
+                .iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(str::to_string)
+                        .ok_or_else(|| data_error(format!("{key} must contain only strings")))
+                })
+                .collect()
+        })
+        .transpose()
+}
+
+fn optional_prompt_cache_mode(
+    value: &Value,
+) -> Result<Option<ApiProviderPromptCacheMode>, RuntimeCoreError> {
+    optional_string_field(value, "prompt_cache_mode")
+        .map(|mode| {
+            mode.parse::<ApiProviderPromptCacheMode>()
+                .map_err(data_error)
+        })
+        .transpose()
+}
+
+fn to_camel_case(key: &str) -> String {
+    let mut result = String::new();
+    let mut uppercase_next = false;
+    for ch in key.chars() {
+        if ch == '_' {
+            uppercase_next = true;
+        } else if uppercase_next {
+            result.extend(ch.to_uppercase());
+            uppercase_next = false;
+        } else {
+            result.push(ch);
+        }
+    }
+    result
 }
 
 fn mask_api_key(key: &str) -> String {
@@ -2072,6 +2905,608 @@ fn legacy_provider_ids(provider_id: &str) -> Vec<String> {
         "tencent-cloud-ti" => vec!["tencentcloud".to_string()],
         _ => vec![],
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct AutomationSchedulerConfigRequest {
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default = "default_automation_poll_interval_secs")]
+    poll_interval_secs: u64,
+    #[serde(default = "default_automation_enable_history")]
+    enable_history: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct AutomationJobCreateRequest {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    enabled: Option<bool>,
+    workspace_id: String,
+    #[serde(default)]
+    execution_mode: Option<AutomationExecutionMode>,
+    schedule: TaskSchedule,
+    payload: Value,
+    #[serde(default)]
+    delivery: Option<DeliveryConfig>,
+    #[serde(default)]
+    timeout_secs: Option<u64>,
+    #[serde(default)]
+    max_retries: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct AutomationJobUpdateRequest {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    enabled: Option<bool>,
+    #[serde(default)]
+    workspace_id: Option<String>,
+    #[serde(default)]
+    execution_mode: Option<AutomationExecutionMode>,
+    #[serde(default)]
+    schedule: Option<TaskSchedule>,
+    #[serde(default)]
+    payload: Option<Value>,
+    #[serde(default)]
+    delivery: Option<DeliveryConfig>,
+    #[serde(default)]
+    timeout_secs: Option<u64>,
+    #[serde(default)]
+    clear_timeout_secs: Option<bool>,
+    #[serde(default)]
+    max_retries: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct AutomationHealthQuery {
+    #[serde(default)]
+    running_timeout_minutes: Option<u64>,
+    #[serde(default)]
+    top_limit: Option<usize>,
+    #[serde(default)]
+    cooldown_alert_threshold: Option<usize>,
+    #[serde(default)]
+    stale_running_alert_threshold: Option<usize>,
+    #[serde(default)]
+    failed_24h_alert_threshold: Option<usize>,
+}
+
+fn default_automation_poll_interval_secs() -> u64 {
+    30
+}
+
+fn default_automation_enable_history() -> bool {
+    true
+}
+
+fn automation_scheduler_config_value(config: AutomationSettings) -> Value {
+    json!({
+        "enabled": config.enabled,
+        "poll_interval_secs": config.poll_interval_secs,
+        "enable_history": config.enable_history,
+    })
+}
+
+fn normalize_automation_job_id(id: &str) -> Result<String, RuntimeCoreError> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err(RuntimeCoreError::Backend(
+            "automation job id is required".to_string(),
+        ));
+    }
+    Ok(id.to_string())
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn validate_automation_job_create_request(
+    request: &AutomationJobCreateRequest,
+) -> Result<(), RuntimeCoreError> {
+    if request.name.trim().is_empty() {
+        return Err(RuntimeCoreError::Backend("任务名称不能为空".to_string()));
+    }
+    if request.workspace_id.trim().is_empty() {
+        return Err(RuntimeCoreError::Backend("workspace_id 必填".to_string()));
+    }
+    validate_automation_schedule_value(&request.schedule, Utc::now()).map_err(data_error)?;
+    validate_automation_payload(&request.payload)?;
+    Ok(())
+}
+
+fn validate_automation_job_record(job: &AutomationJob) -> Result<(), RuntimeCoreError> {
+    if job.name.trim().is_empty() {
+        return Err(RuntimeCoreError::Backend("任务名称不能为空".to_string()));
+    }
+    if job.workspace_id.trim().is_empty() {
+        return Err(RuntimeCoreError::Backend("workspace_id 必填".to_string()));
+    }
+    validate_automation_schedule_value(&job.schedule, Utc::now()).map_err(data_error)?;
+    validate_automation_payload(&job.payload)?;
+    Ok(())
+}
+
+fn validate_automation_payload(payload: &Value) -> Result<(), RuntimeCoreError> {
+    let Some(payload) = payload.as_object() else {
+        return Err(RuntimeCoreError::Backend(
+            "自动化任务 payload 必须为对象".to_string(),
+        ));
+    };
+    let kind = payload
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    match kind {
+        "agent_turn" => {
+            let prompt = payload
+                .get("prompt")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if prompt.trim().is_empty() {
+                return Err(RuntimeCoreError::Backend(
+                    "自动化任务内容不能为空".to_string(),
+                ));
+            }
+            if let Some(content_id) = payload
+                .get("content_id")
+                .or_else(|| payload.get("contentId"))
+            {
+                if content_id
+                    .as_str()
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .is_empty()
+                {
+                    return Err(RuntimeCoreError::Backend(
+                        "自动化任务 content_id 不能为空字符串".to_string(),
+                    ));
+                }
+            }
+            if let Some(metadata) = payload
+                .get("request_metadata")
+                .or_else(|| payload.get("requestMetadata"))
+            {
+                if !metadata.is_object() {
+                    return Err(RuntimeCoreError::Backend(
+                        "自动化任务 request_metadata 必须为对象".to_string(),
+                    ));
+                }
+                validate_automation_managed_objective_metadata(metadata)?;
+            }
+            Ok(())
+        }
+        "browser_session" => Err(RuntimeCoreError::Backend(
+            "浏览器自动化任务已下线，不再允许创建或执行".to_string(),
+        )),
+        _ => Err(RuntimeCoreError::Backend(format!(
+            "不支持的自动化任务 payload.kind: {kind}"
+        ))),
+    }
+}
+
+fn validate_automation_managed_objective_metadata(
+    metadata: &Value,
+) -> Result<(), RuntimeCoreError> {
+    let Some(harness) = metadata.get("harness").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    let Some(managed_objective) = harness
+        .get("managed_objective")
+        .or_else(|| harness.get("managedObjective"))
+        .and_then(Value::as_object)
+    else {
+        return Ok(());
+    };
+
+    let owner_type = managed_objective
+        .get("owner_type")
+        .or_else(|| managed_objective.get("ownerType"))
+        .or_else(|| managed_objective.get("owner_kind"))
+        .or_else(|| managed_objective.get("ownerKind"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(owner_type) = owner_type {
+        if owner_type != "automation_job" {
+            return Err(RuntimeCoreError::Backend(format!(
+                "自动化任务 managed_objective.owner_type 必须为 automation_job，当前为 {owner_type}"
+            )));
+        }
+    }
+
+    let objective_text = managed_objective
+        .get("objective_text")
+        .or_else(|| managed_objective.get("objectiveText"))
+        .or_else(|| managed_objective.get("objective"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if objective_text.is_none() {
+        return Err(RuntimeCoreError::Backend(
+            "自动化任务 managed_objective.objective 必填".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn preview_next_automation_run(schedule: &TaskSchedule) -> Result<Option<String>, String> {
+    Ok(next_run_for_automation_schedule(schedule, Utc::now())?.map(|value| value.to_rfc3339()))
+}
+
+fn next_run_for_automation_schedule(
+    schedule: &TaskSchedule,
+    from: DateTime<Utc>,
+) -> Result<Option<DateTime<Utc>>, String> {
+    match schedule {
+        TaskSchedule::Every { every_secs } => {
+            let secs = (*every_secs).max(60);
+            Ok(Some(from + Duration::seconds(secs as i64)))
+        }
+        TaskSchedule::Cron { expr, tz } => {
+            let normalized = normalize_cron_expression(expr);
+            let cron_schedule = cron::Schedule::from_str(&normalized)
+                .map_err(|error| format!("无效的 Cron 表达式: {error}"))?;
+            let next = if let Some(tz_str) = tz
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                let timezone: chrono_tz::Tz = tz_str
+                    .parse()
+                    .map_err(|_| format!("无效的时区: {tz_str}"))?;
+                cron_schedule
+                    .after(&from.with_timezone(&timezone))
+                    .next()
+                    .map(|value| value.with_timezone(&Utc))
+            } else {
+                cron_schedule.after(&from).next()
+            };
+            Ok(next)
+        }
+        TaskSchedule::At { at } => {
+            let target = DateTime::parse_from_rfc3339(at)
+                .map_err(|error| format!("无效的时间格式（需要 RFC3339）: {error}"))?
+                .with_timezone(&Utc);
+            if target > from {
+                Ok(Some(target))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
+fn validate_automation_schedule_value(
+    schedule: &TaskSchedule,
+    now: DateTime<Utc>,
+) -> Result<(), String> {
+    match schedule {
+        TaskSchedule::Every { every_secs } => {
+            if *every_secs < 60 {
+                return Err("间隔时间不能小于 60 秒".to_string());
+            }
+            Ok(())
+        }
+        TaskSchedule::Cron { expr, tz } => {
+            let normalized = normalize_cron_expression(expr);
+            cron::Schedule::from_str(&normalized)
+                .map_err(|error| format!("无效的 Cron 表达式: {error}"))?;
+            if let Some(tz_str) = tz
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                let _: chrono_tz::Tz = tz_str
+                    .parse()
+                    .map_err(|_| format!("无效的时区: {tz_str}"))?;
+            }
+            Ok(())
+        }
+        TaskSchedule::At { at } => {
+            let target = DateTime::parse_from_rfc3339(at)
+                .map_err(|error| format!("无效的时间格式: {error}"))?
+                .with_timezone(&Utc);
+            if target <= now {
+                return Err("指定时间已过期".to_string());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn normalize_cron_expression(expr: &str) -> String {
+    let parts = expr.split_whitespace().collect::<Vec<_>>();
+    if parts.len() == 5 {
+        format!("0 {}", expr.trim())
+    } else {
+        expr.trim().to_string()
+    }
+}
+
+fn query_automation_health_value(
+    conn: &rusqlite::Connection,
+    query: AutomationHealthQuery,
+) -> Result<Value, String> {
+    let running_timeout_minutes = query.running_timeout_minutes.unwrap_or(10);
+    let top_limit = query.top_limit.unwrap_or(5);
+    let cooldown_alert_threshold = query.cooldown_alert_threshold.unwrap_or(1);
+    let stale_running_alert_threshold = query.stale_running_alert_threshold.unwrap_or(1);
+    let failed_24h_alert_threshold = query.failed_24h_alert_threshold.unwrap_or(3);
+    let jobs =
+        AutomationJobDao::list(conn).map_err(|error| format!("查询自动化任务失败: {error}"))?;
+    let now = Utc::now();
+    let stale_deadline = now - Duration::minutes(running_timeout_minutes as i64);
+
+    let total_jobs = jobs.len();
+    let enabled_jobs = jobs.iter().filter(|job| job.enabled).count();
+    let pending_jobs = jobs
+        .iter()
+        .filter(|job| job.enabled)
+        .filter(|job| job.running_started_at.is_none())
+        .filter(|job| !automation_job_in_cooldown(job, now))
+        .filter(|job| {
+            job.next_run_at
+                .as_deref()
+                .and_then(parse_rfc3339_utc)
+                .map(|value| value <= now)
+                .unwrap_or(false)
+        })
+        .count();
+    let running_jobs = jobs
+        .iter()
+        .filter(|job| job.running_started_at.is_some())
+        .count();
+    let failed_jobs = jobs
+        .iter()
+        .filter(|job| matches!(job.last_status.as_deref(), Some("error" | "timeout")))
+        .count();
+    let cooldown_jobs = jobs
+        .iter()
+        .filter(|job| automation_job_in_cooldown(job, now))
+        .count();
+    let stale_running_jobs = jobs
+        .iter()
+        .filter(|job| {
+            job.running_started_at
+                .as_deref()
+                .and_then(parse_rfc3339_utc)
+                .map(|value| value < stale_deadline)
+                .unwrap_or(false)
+        })
+        .count();
+
+    let recent_runs_by_job = jobs
+        .iter()
+        .map(|job| {
+            let runs = AgentRunDao::list_runs_by_source_ref(conn, "automation", &job.id, 200)
+                .unwrap_or_default();
+            (job.id.clone(), runs)
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let recent_runs = recent_runs_by_job
+        .values()
+        .flat_map(|runs| runs.iter().cloned())
+        .collect::<Vec<_>>();
+    let failure_trend_24h = build_automation_failure_trend_24h(&recent_runs, now);
+    let failed_last_24h = failure_trend_24h
+        .iter()
+        .map(|item| {
+            item.get("error_count").and_then(Value::as_u64).unwrap_or(0)
+                + item
+                    .get("timeout_count")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+        })
+        .sum::<u64>() as usize;
+
+    let mut risky_jobs = jobs
+        .iter()
+        .filter(|job| {
+            job.consecutive_failures > 0
+                || automation_job_in_cooldown(job, now)
+                || matches!(
+                    job.last_status.as_deref(),
+                    Some("waiting_for_human" | "human_controlling" | "error" | "timeout")
+                )
+        })
+        .map(|job| {
+            json!({
+                "job_id": job.id,
+                "name": job.name,
+                "status": job.last_status.clone().unwrap_or_else(|| "idle".to_string()),
+                "consecutive_failures": job.consecutive_failures,
+                "retry_count": job.last_retry_count,
+                "detail_message": recent_runs_by_job
+                    .get(&job.id)
+                    .and_then(|runs| resolve_automation_risky_job_detail(job, runs)),
+                "auto_disabled_until": job.auto_disabled_until,
+                "updated_at": job.updated_at,
+            })
+        })
+        .collect::<Vec<_>>();
+    risky_jobs.sort_by(|left, right| {
+        let left_failures = left
+            .get("consecutive_failures")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let right_failures = right
+            .get("consecutive_failures")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let left_retries = left.get("retry_count").and_then(Value::as_u64).unwrap_or(0);
+        let right_retries = right
+            .get("retry_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        right_failures
+            .cmp(&left_failures)
+            .then_with(|| right_retries.cmp(&left_retries))
+    });
+    risky_jobs.truncate(top_limit);
+
+    Ok(json!({
+        "total_jobs": total_jobs,
+        "enabled_jobs": enabled_jobs,
+        "pending_jobs": pending_jobs,
+        "running_jobs": running_jobs,
+        "failed_jobs": failed_jobs,
+        "cooldown_jobs": cooldown_jobs,
+        "stale_running_jobs": stale_running_jobs,
+        "failed_last_24h": failed_last_24h,
+        "failure_trend_24h": failure_trend_24h,
+        "alerts": build_automation_alerts(
+            cooldown_jobs,
+            stale_running_jobs,
+            failed_last_24h,
+            cooldown_alert_threshold,
+            stale_running_alert_threshold,
+            failed_24h_alert_threshold,
+        ),
+        "risky_jobs": risky_jobs,
+        "generated_at": now.to_rfc3339(),
+    }))
+}
+
+fn resolve_automation_risky_job_detail(job: &AutomationJob, runs: &[AgentRun]) -> Option<String> {
+    runs.first()
+        .and_then(resolve_automation_run_detail_message)
+        .or_else(|| job.last_error.as_deref().and_then(normalize_non_empty_text))
+}
+
+fn resolve_automation_run_detail_message(run: &AgentRun) -> Option<String> {
+    let human_reason = run
+        .metadata
+        .as_deref()
+        .and_then(|metadata| extract_json_string(metadata, "human_reason"));
+    if let Some(reason) = human_reason {
+        if run.error_message.as_deref().map(str::trim) != Some(reason.as_str()) {
+            return Some(reason);
+        }
+    }
+    run.error_message
+        .as_deref()
+        .and_then(normalize_non_empty_text)
+}
+
+fn extract_json_string(metadata: &str, key: &str) -> Option<String> {
+    let parsed = serde_json::from_str::<Value>(metadata).ok()?;
+    parsed.get(key)?.as_str().and_then(normalize_non_empty_text)
+}
+
+fn normalize_non_empty_text(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn parse_rfc3339_utc(raw: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|value| value.with_timezone(&Utc))
+}
+
+fn automation_job_in_cooldown(job: &AutomationJob, now: DateTime<Utc>) -> bool {
+    job.auto_disabled_until
+        .as_deref()
+        .and_then(parse_rfc3339_utc)
+        .map(|value| value > now)
+        .unwrap_or(false)
+}
+
+fn build_automation_failure_trend_24h(runs: &[AgentRun], now: DateTime<Utc>) -> Vec<Value> {
+    let mut points = Vec::with_capacity(24);
+    let end_hour = floor_to_hour(now);
+    let start_hour = end_hour - Duration::hours(23);
+
+    for offset in 0..24 {
+        let bucket = start_hour + Duration::hours(offset as i64);
+        let bucket_end = bucket + Duration::hours(1);
+        let mut error_count = 0usize;
+        let mut timeout_count = 0usize;
+
+        for run in runs {
+            let Some(started_at) = parse_rfc3339_utc(run.started_at.as_str()) else {
+                continue;
+            };
+            if started_at < bucket || started_at >= bucket_end {
+                continue;
+            }
+            match run.status {
+                AgentRunStatus::Error => error_count += 1,
+                AgentRunStatus::Timeout => timeout_count += 1,
+                _ => {}
+            }
+        }
+
+        points.push(json!({
+            "bucket_start": bucket.to_rfc3339(),
+            "label": bucket.format("%H:%M").to_string(),
+            "error_count": error_count,
+            "timeout_count": timeout_count,
+        }));
+    }
+
+    points
+}
+
+fn floor_to_hour(now: DateTime<Utc>) -> DateTime<Utc> {
+    now.with_minute(0)
+        .and_then(|value| value.with_second(0))
+        .and_then(|value| value.with_nanosecond(0))
+        .unwrap_or(now)
+}
+
+fn build_automation_alerts(
+    cooldown_jobs: usize,
+    stale_running_jobs: usize,
+    failed_last_24h: usize,
+    cooldown_threshold: usize,
+    stale_threshold: usize,
+    failed_threshold: usize,
+) -> Vec<Value> {
+    let mut alerts = Vec::new();
+
+    if cooldown_jobs >= cooldown_threshold {
+        alerts.push(json!({
+            "code": "cooldown_jobs",
+            "severity": "warning",
+            "message": format!("当前有 {cooldown_jobs} 个任务处于冷却中"),
+            "current_value": cooldown_jobs,
+            "threshold": cooldown_threshold,
+        }));
+    }
+    if stale_running_jobs >= stale_threshold {
+        alerts.push(json!({
+            "code": "stale_running_jobs",
+            "severity": "critical",
+            "message": format!("检测到 {stale_running_jobs} 个悬挂中的运行任务"),
+            "current_value": stale_running_jobs,
+            "threshold": stale_threshold,
+        }));
+    }
+    if failed_last_24h >= failed_threshold {
+        alerts.push(json!({
+            "code": "failed_runs_24h",
+            "severity": "warning",
+            "message": format!("最近 24 小时失败或超时 {failed_last_24h} 次"),
+            "current_value": failed_last_24h,
+            "threshold": failed_threshold,
+        }));
+    }
+
+    alerts
 }
 
 fn data_error(error: impl std::fmt::Display) -> RuntimeCoreError {

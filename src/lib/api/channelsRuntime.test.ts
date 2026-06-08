@@ -3,9 +3,11 @@ import { safeInvoke } from "@/lib/dev-bridge";
 import {
   discordChannelProbe,
   gatewayChannelStart,
+  gatewayChannelStatus,
   gatewayTunnelCreate,
   gatewayTunnelStatus,
   telegramChannelProbe,
+  wechatChannelListAccounts,
 } from "./channelsRuntime";
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -47,6 +49,53 @@ describe("channelsRuntime API", () => {
     ).resolves.toEqual(expect.objectContaining({ result: expect.any(Object) }));
     await expect(gatewayTunnelStatus()).resolves.toEqual(
       expect.objectContaining({ running: true }),
+    );
+  });
+
+  it("渠道状态遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "gateway_channel_status",
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(gatewayChannelStatus({ channel: "wechat" })).rejects.toThrow(
+      "gateway_channel_status 尚未接入真实 Channels current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("微信账号列表遇到 Electron empty diagnostic list 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        command: "wechat_channel_list_accounts",
+        source: "electron-empty-diagnostic",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(wechatChannelListAccounts()).rejects.toThrow(
+      "wechat_channel_list_accounts 尚未接入真实 Channels current 通道，收到 electron-empty-diagnostic 诊断返回。",
+    );
+  });
+
+  it("隧道状态遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "gateway_tunnel_status",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(gatewayTunnelStatus()).rejects.toThrow(
+      "gateway_tunnel_status 尚未接入真实 Channels current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
 });

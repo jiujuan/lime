@@ -108,6 +108,21 @@ describe("fileBrowser API", () => {
     await expect(deletePath("/tmp/demo2.txt", false)).resolves.toBeUndefined();
   });
 
+  it("文件写命令遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "create_file",
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(createFileAtPath("/tmp/demo.txt")).rejects.toThrow(
+      "create_file 尚未接入真实文件管理 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
   it("创建目录时应原样传递 Windows 原生路径", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
     const windowsPath = String.raw`C:\Users\demo\workspace\new-folder`;
@@ -133,6 +148,24 @@ describe("fileBrowser API", () => {
       expect.objectContaining({ id: "downloads", label: "下载" }),
     ]);
     expect(safeInvoke).toHaveBeenCalledWith("get_file_manager_locations");
+  });
+
+  it("文件管理器快捷入口遇到 Electron empty diagnostic list 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        command: "get_file_manager_locations",
+        source: "electron-empty-diagnostic",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(getFileManagerLocations()).rejects.toThrow(
+      "get_file_manager_locations 尚未接入真实文件管理 current 通道，收到 electron-empty-diagnostic 诊断返回。",
+    );
   });
 
   it("应代理文件图标异步读取命令", async () => {

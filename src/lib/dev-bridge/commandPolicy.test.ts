@@ -27,7 +27,7 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("get_model_registry")).toBe(true);
     expect(isBridgeTruthCommand("agent_app_list_installed")).toBe(true);
     expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(true);
-    expect(isBridgeTruthCommand("get_automation_jobs")).toBe(true);
+    expect(isBridgeTruthCommand("get_automation_jobs")).toBe(false);
     expect(isBridgeTruthCommand("project_memory_get")).toBe(true);
     expect(isBridgeTruthCommand("agent_generate_title")).toBe(false);
     expect(isBridgeTruthCommand("get_hint_routes")).toBe(false);

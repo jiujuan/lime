@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "tools": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    }
+  },
+  "title": "McpToolListResponse",
+  "type": "object"
+}

@@ -20,6 +20,24 @@ describe("skillsApi", () => {
     });
   });
 
+  it("本地技能列表遇到 Electron empty diagnostic list 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        command: "get_local_skills_for_app",
+        source: "electron-empty-diagnostic",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(skillsApi.getLocal("lime")).rejects.toThrow(
+      "get_local_skills_for_app 尚未接入真实 Skill 管理 current 通道，收到 electron-empty-diagnostic 诊断返回。",
+    );
+  });
+
   it("远端技能列表应继续归一化标准检查字段", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce([
       {
@@ -230,6 +248,25 @@ describe("skillsApi", () => {
         directory: "article-typesetting-master",
         targetPath: "/Users/demo/article-typesetting-master.skills",
       },
+    );
+  });
+
+  it("本地 Skill 安装包命令遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "install_local_skill_package_for_app",
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      skillsApi.installLocalSkillPackage(
+        "/Users/demo/article-typesetting-master.skill",
+      ),
+    ).rejects.toThrow(
+      "install_local_skill_package_for_app 尚未接入真实 Skill 管理 current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
 });

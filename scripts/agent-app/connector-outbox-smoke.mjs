@@ -58,6 +58,9 @@ const PROVIDER_PICK_ORDER = [
   "gemini",
   "azure-openai",
 ];
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
+const APP_SERVER_METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
 
 function parseArgs(argv) {
   const options = { ...DEFAULTS };
@@ -371,6 +374,42 @@ async function invoke(options, cmd, args, timeoutMs = 30_000) {
   return response.body?.result;
 }
 
+let appServerRequestId = 1;
+
+async function invokeAppServerMethod(options, method, params, timeoutMs = 30_000) {
+  const id = `connector-outbox-${appServerRequestId++}`;
+  const request =
+    params === undefined ? { id, method } : { id, method, params };
+  const result = await invoke(
+    options,
+    APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+    { request: { lines: [`${JSON.stringify(request)}\n`] } },
+    timeoutMs,
+  );
+  const messages = (Array.isArray(result?.lines) ? result.lines : [])
+    .map((line) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    throw new Error(
+      `${method} error: ${error.error?.message || "App Server JSON-RPC error"}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method} missing App Server response`);
+  }
+  return response.result;
+}
+
 function uniqueStrings(values) {
   return [...new Set(values.filter((value) => typeof value === "string" && value))];
 }
@@ -601,7 +640,13 @@ async function resolveProviderPreference(options) {
     };
   }
 
-  const providers = await invoke(options, "get_api_key_providers", {}, 30_000);
+  const providerList = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
+    {},
+    30_000,
+  );
+  const providers = providerList?.providers;
   const selected = pickProvider(
     Array.isArray(providers) ? providers : [],
     explicitProvider,
@@ -615,7 +660,12 @@ async function resolveProviderPreference(options) {
   let providerDetail = selected;
   try {
     providerDetail =
-      (await invoke(options, "get_api_key_provider", { id: providerId }, 30_000)) ||
+      (await invokeAppServerMethod(
+        options,
+        APP_SERVER_METHOD_MODEL_PROVIDER_READ,
+        { providerId },
+        30_000,
+      ))?.provider ||
       selected;
   } catch (error) {
     console.warn(

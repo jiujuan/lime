@@ -1704,6 +1704,62 @@
       "title": "ArtifactSummary",
       "type": "object"
     },
+    "AutomationJobCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "request": true
+      },
+      "required": [
+        "request"
+      ],
+      "title": "AutomationJobCreateParams",
+      "type": "object"
+    },
+    "AutomationJobDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "AutomationJobDeleteResponse",
+      "type": "object"
+    },
+    "AutomationJobHealthParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "query": true
+      },
+      "title": "AutomationJobHealthParams",
+      "type": "object"
+    },
+    "AutomationJobHealthResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "health": true
+      },
+      "required": [
+        "health"
+      ],
+      "title": "AutomationJobHealthResponse",
+      "type": "object"
+    },
+    "AutomationJobIdParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "AutomationJobIdParams",
+      "type": "object"
+    },
     "AutomationJobListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -1714,6 +1770,171 @@
         }
       },
       "title": "AutomationJobListResponse",
+      "type": "object"
+    },
+    "AutomationJobReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "job": true
+      },
+      "title": "AutomationJobReadResponse",
+      "type": "object"
+    },
+    "AutomationJobRunHistoryParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "AutomationJobRunHistoryParams",
+      "type": "object"
+    },
+    "AutomationJobRunHistoryResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "runs": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "AutomationJobRunHistoryResponse",
+      "type": "object"
+    },
+    "AutomationJobRunNowResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "result": true
+      },
+      "required": [
+        "result"
+      ],
+      "title": "AutomationJobRunNowResponse",
+      "type": "object"
+    },
+    "AutomationJobUpdateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "request": true
+      },
+      "required": [
+        "id",
+        "request"
+      ],
+      "title": "AutomationJobUpdateParams",
+      "type": "object"
+    },
+    "AutomationJobWriteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "job": true
+      },
+      "required": [
+        "job"
+      ],
+      "title": "AutomationJobWriteResponse",
+      "type": "object"
+    },
+    "AutomationScheduleParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "schedule": true
+      },
+      "required": [
+        "schedule"
+      ],
+      "title": "AutomationScheduleParams",
+      "type": "object"
+    },
+    "AutomationSchedulePreviewResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "nextRunAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "AutomationSchedulePreviewResponse",
+      "type": "object"
+    },
+    "AutomationScheduleValidateResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "error": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "valid": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "valid"
+      ],
+      "title": "AutomationScheduleValidateResponse",
+      "type": "object"
+    },
+    "AutomationSchedulerConfigReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "config": true
+      },
+      "required": [
+        "config"
+      ],
+      "title": "AutomationSchedulerConfigReadResponse",
+      "type": "object"
+    },
+    "AutomationSchedulerConfigUpdateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "config": true
+      },
+      "required": [
+        "config"
+      ],
+      "title": "AutomationSchedulerConfigUpdateParams",
+      "type": "object"
+    },
+    "AutomationSchedulerConfigUpdateResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "config": true
+      },
+      "required": [
+        "config"
+      ],
+      "title": "AutomationSchedulerConfigUpdateResponse",
+      "type": "object"
+    },
+    "AutomationSchedulerStatusResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "status": true
+      },
+      "required": [
+        "status"
+      ],
+      "title": "AutomationSchedulerStatusResponse",
       "type": "object"
     },
     "BusinessObjectRef": {
@@ -3448,6 +3669,66 @@
       "title": "KnowledgeListPacksResponse",
       "type": "object"
     },
+    "McpPromptListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "prompts": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "McpPromptListResponse",
+      "type": "object"
+    },
+    "McpResourceListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "resources": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "McpResourceListResponse",
+      "type": "object"
+    },
+    "McpServerListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "servers": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "McpServerListResponse",
+      "type": "object"
+    },
+    "McpServerStatusListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "servers": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "McpServerStatusListResponse",
+      "type": "object"
+    },
+    "McpToolListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "tools": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "McpToolListResponse",
+      "type": "object"
+    },
     "ModelListParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3536,6 +3817,321 @@
       "title": "ModelProviderCatalogListResponse",
       "type": "object"
     },
+    "ModelProviderConfigExportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "includeKeys": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "title": "ModelProviderConfigExportParams",
+      "type": "object"
+    },
+    "ModelProviderConfigExportResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "configJson": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "configJson"
+      ],
+      "title": "ModelProviderConfigExportResponse",
+      "type": "object"
+    },
+    "ModelProviderConfigImportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "configJson": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "configJson"
+      ],
+      "title": "ModelProviderConfigImportParams",
+      "type": "object"
+    },
+    "ModelProviderConfigImportResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "errors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "importedApiKeys": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "importedProviders": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skippedProviders": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "success": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "importedApiKeys",
+        "importedProviders",
+        "skippedProviders",
+        "success"
+      ],
+      "title": "ModelProviderConfigImportResponse",
+      "type": "object"
+    },
+    "ModelProviderCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "provider": true
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "ModelProviderCreateParams",
+      "type": "object"
+    },
+    "ModelProviderDeleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId"
+      ],
+      "title": "ModelProviderDeleteParams",
+      "type": "object"
+    },
+    "ModelProviderDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "ModelProviderDeleteResponse",
+      "type": "object"
+    },
+    "ModelProviderFetchModelsParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId"
+      ],
+      "title": "ModelProviderFetchModelsParams",
+      "type": "object"
+    },
+    "ModelProviderFetchModelsResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "diagnosticHint": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "error": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "errorKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "fromCache": {
+          "type": "boolean"
+        },
+        "models": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "requestUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "shouldPromptError": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fromCache",
+        "shouldPromptError",
+        "source"
+      ],
+      "title": "ModelProviderFetchModelsResponse",
+      "type": "object"
+    },
+    "ModelProviderKeyCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "alias": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "apiKey": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "replaceExisting": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "apiKey",
+        "providerId"
+      ],
+      "title": "ModelProviderKeyCreateParams",
+      "type": "object"
+    },
+    "ModelProviderKeyDeleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "keyId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "keyId"
+      ],
+      "title": "ModelProviderKeyDeleteParams",
+      "type": "object"
+    },
+    "ModelProviderKeyDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "ModelProviderKeyDeleteResponse",
+      "type": "object"
+    },
+    "ModelProviderKeyEventParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "keyId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "keyId"
+      ],
+      "title": "ModelProviderKeyEventParams",
+      "type": "object"
+    },
+    "ModelProviderKeyNextParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId"
+      ],
+      "title": "ModelProviderKeyNextParams",
+      "type": "object"
+    },
+    "ModelProviderKeyNextResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "apiKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "keyId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "ModelProviderKeyNextResponse",
+      "type": "object"
+    },
+    "ModelProviderKeyUpdateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "alias": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "keyId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "keyId"
+      ],
+      "title": "ModelProviderKeyUpdateParams",
+      "type": "object"
+    },
+    "ModelProviderKeyWriteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "key": true
+      },
+      "required": [
+        "key"
+      ],
+      "title": "ModelProviderKeyWriteResponse",
+      "type": "object"
+    },
     "ModelProviderListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3546,6 +4142,268 @@
         }
       },
       "title": "ModelProviderListResponse",
+      "type": "object"
+    },
+    "ModelProviderMutationResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ModelProviderMutationResponse",
+      "type": "object"
+    },
+    "ModelProviderReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId"
+      ],
+      "title": "ModelProviderReadParams",
+      "type": "object"
+    },
+    "ModelProviderReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "provider": true
+      },
+      "title": "ModelProviderReadResponse",
+      "type": "object"
+    },
+    "ModelProviderSortOrderItem": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "sortOrder": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "providerId",
+        "sortOrder"
+      ],
+      "title": "ModelProviderSortOrderItem",
+      "type": "object"
+    },
+    "ModelProviderSortOrdersUpdateParams": {
+      "$defs": {
+        "ModelProviderSortOrderItem": {
+          "properties": {
+            "providerId": {
+              "type": "string"
+            },
+            "sortOrder": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "providerId",
+            "sortOrder"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sortOrders": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ModelProviderSortOrderItem"
+          },
+          "type": "array"
+        }
+      },
+      "title": "ModelProviderSortOrdersUpdateParams",
+      "type": "object"
+    },
+    "ModelProviderTestChatParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "modelName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "prompt",
+        "providerId"
+      ],
+      "title": "ModelProviderTestChatParams",
+      "type": "object"
+    },
+    "ModelProviderTestChatResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "error": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "latencyMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "raw": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "success": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "title": "ModelProviderTestChatResponse",
+      "type": "object"
+    },
+    "ModelProviderTestConnectionParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "modelName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId"
+      ],
+      "title": "ModelProviderTestConnectionParams",
+      "type": "object"
+    },
+    "ModelProviderTestConnectionResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "error": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "latencyMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "success": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "title": "ModelProviderTestConnectionResponse",
+      "type": "object"
+    },
+    "ModelProviderUiStateReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "ModelProviderUiStateReadParams",
+      "type": "object"
+    },
+    "ModelProviderUiStateReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "value": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "ModelProviderUiStateReadResponse",
+      "type": "object"
+    },
+    "ModelProviderUiStateWriteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "title": "ModelProviderUiStateWriteParams",
+      "type": "object"
+    },
+    "ModelProviderUpdateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "patch": true,
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "patch",
+        "providerId"
+      ],
+      "title": "ModelProviderUpdateParams",
+      "type": "object"
+    },
+    "ModelProviderWriteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "provider": true
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "ModelProviderWriteResponse",
       "type": "object"
     },
     "ModelSyncStateReadResponse": {
@@ -4056,7 +4914,19 @@
               "agentSession/turn/start",
               "agentSession/update",
               "artifact/read",
+              "automationJob/create",
+              "automationJob/delete",
+              "automationJob/health",
               "automationJob/list",
+              "automationJob/read",
+              "automationJob/runHistory",
+              "automationJob/runNow",
+              "automationJob/update",
+              "automationSchedule/preview",
+              "automationSchedule/validate",
+              "automationScheduler/config/read",
+              "automationScheduler/config/update",
+              "automationScheduler/status",
               "capability/list",
               "connectCallback/send",
               "connectDeepLink/resolve",
@@ -4067,12 +4937,35 @@
               "fileSystem/readFilePreview",
               "initialize",
               "knowledgePack/list",
+              "mcpPrompt/list",
+              "mcpResource/list",
+              "mcpServer/list",
+              "mcpServerStatus/list",
+              "mcpTool/list",
               "model/list",
               "modelPreferences/list",
               "modelProvider/catalog/list",
+              "modelProvider/create",
+              "modelProvider/delete",
+              "modelProvider/fetchModels",
               "modelProvider/list",
+              "modelProvider/read",
+              "modelProvider/sortOrders/update",
+              "modelProvider/testChat",
+              "modelProvider/testConnection",
+              "modelProvider/update",
               "modelProviderAlias/list",
               "modelProviderAlias/read",
+              "modelProviderConfig/export",
+              "modelProviderConfig/import",
+              "modelProviderKey/create",
+              "modelProviderKey/delete",
+              "modelProviderKey/error/record",
+              "modelProviderKey/next",
+              "modelProviderKey/update",
+              "modelProviderKey/usage/record",
+              "modelProviderUiState/read",
+              "modelProviderUiState/write",
               "modelSyncState/read",
               "projectMemory/read",
               "skill/list",

@@ -3,6 +3,7 @@ import type {
   SkillMarketplaceBundle,
   SkillMarketplaceInstallResult,
 } from "./officialSkillMarketplace";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type SkillSourceKind = "builtin" | "other";
 export type SkillCatalogSource = "project" | "user" | "remote";
@@ -134,6 +135,17 @@ export type AppType = "claude" | "codex" | "gemini" | "lime";
 
 export const SKILL_PACKAGE_OPEN_EVENT = "skill-package://open";
 
+async function invokeSkillsCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke(command, args)
+    : await safeInvoke(command);
+  assertNotDiagnosticFacade(command, result, "真实 Skill 管理 current 通道");
+  return result as T;
+}
+
 function normalizeStandardCompliance(
   compliance?: Partial<SkillStandardCompliance> | null,
 ): SkillStandardCompliance | undefined {
@@ -194,9 +206,12 @@ function normalizeStringList(value: string[] | null | undefined): string[] {
 
 export const skillsApi = {
   async getLocal(app: AppType = "lime"): Promise<Skill[]> {
-    const skills = await safeInvoke<Skill[]>("get_local_skills_for_app", {
-      app,
-    });
+    const skills = await invokeSkillsCommand<Skill[]>(
+      "get_local_skills_for_app",
+      {
+        app,
+      },
+    );
     return normalizeSkills(skills);
   },
 
@@ -204,7 +219,7 @@ export const skillsApi = {
     app: AppType = "lime",
     options?: { refreshRemote?: boolean },
   ): Promise<Skill[]> {
-    const skills = await safeInvoke<Skill[]>("get_skills_for_app", {
+    const skills = await invokeSkillsCommand<Skill[]>("get_skills_for_app", {
       app,
       refresh_remote: options?.refreshRemote ?? false,
     });
@@ -212,28 +227,28 @@ export const skillsApi = {
   },
 
   async install(directory: string, app: AppType = "lime"): Promise<boolean> {
-    return safeInvoke("install_skill_for_app", { app, directory });
+    return invokeSkillsCommand("install_skill_for_app", { app, directory });
   },
 
   async uninstall(directory: string, app: AppType = "lime"): Promise<boolean> {
-    return safeInvoke("uninstall_skill_for_app", { app, directory });
+    return invokeSkillsCommand("uninstall_skill_for_app", { app, directory });
   },
 
   async getRepos(): Promise<SkillRepo[]> {
-    const repos = await safeInvoke<SkillRepo[]>("get_skill_repos");
+    const repos = await invokeSkillsCommand<SkillRepo[]>("get_skill_repos");
     return normalizeSkillRepos(repos);
   },
 
   async addRepo(repo: SkillRepo): Promise<boolean> {
-    return safeInvoke("add_skill_repo", { repo });
+    return invokeSkillsCommand("add_skill_repo", { repo });
   },
 
   async removeRepo(owner: string, name: string): Promise<boolean> {
-    return safeInvoke("remove_skill_repo", { owner, name });
+    return invokeSkillsCommand("remove_skill_repo", { owner, name });
   },
 
   async refreshCache(): Promise<boolean> {
-    return safeInvoke("refresh_skill_cache");
+    return invokeSkillsCommand("refresh_skill_cache");
   },
 
   /**
@@ -245,7 +260,9 @@ export const skillsApi = {
    * @returns 已安装的 Skill 目录名列表
    */
   async getInstalledLimeSkills(): Promise<string[]> {
-    const directories = await safeInvoke<string[]>("get_installed_lime_skills");
+    const directories = await invokeSkillsCommand<string[]>(
+      "get_installed_lime_skills",
+    );
     return normalizeStringList(directories);
   },
 
@@ -260,7 +277,7 @@ export const skillsApi = {
     directory: string,
     app: AppType = "lime",
   ): Promise<SkillInspection> {
-    const inspection = await safeInvoke<SkillInspection>(
+    const inspection = await invokeSkillsCommand<SkillInspection>(
       "inspect_local_skill_for_app",
       { app, directory },
     );
@@ -271,7 +288,7 @@ export const skillsApi = {
     directory: string,
     app: AppType = "lime",
   ): Promise<LocalSkillDetailInspectionResult> {
-    const result = await safeInvoke<LocalSkillDetailInspectionResult>(
+    const result = await invokeSkillsCommand<LocalSkillDetailInspectionResult>(
       "inspect_local_skill_detail_for_app",
       { app, directory },
     );
@@ -286,7 +303,7 @@ export const skillsApi = {
     directory: string,
     app: AppType = "lime",
   ): Promise<boolean> {
-    return safeInvoke<boolean>("reveal_local_skill_for_app", {
+    return invokeSkillsCommand<boolean>("reveal_local_skill_for_app", {
       app,
       directory,
     });
@@ -297,11 +314,14 @@ export const skillsApi = {
     newDirectory: string,
     app: AppType = "lime",
   ): Promise<ImportedSkillResult> {
-    return safeInvoke<ImportedSkillResult>("rename_local_skill_for_app", {
-      app,
-      directory,
-      newDirectory,
-    });
+    return invokeSkillsCommand<ImportedSkillResult>(
+      "rename_local_skill_for_app",
+      {
+        app,
+        directory,
+        newDirectory,
+      },
+    );
   },
 
   async replaceLocalSkillPackage(
@@ -309,7 +329,7 @@ export const skillsApi = {
     sourcePath: string,
     app: AppType = "lime",
   ): Promise<SkillMarketplaceInstallResult> {
-    const result = await safeInvoke<SkillMarketplaceInstallResult>(
+    const result = await invokeSkillsCommand<SkillMarketplaceInstallResult>(
       "replace_local_skill_package_for_app",
       {
         app,
@@ -327,7 +347,7 @@ export const skillsApi = {
     request: CreateSkillScaffoldRequest,
     app: AppType = "lime",
   ): Promise<SkillInspection> {
-    const inspection = await safeInvoke<SkillInspection>(
+    const inspection = await invokeSkillsCommand<SkillInspection>(
       "create_skill_scaffold_for_app",
       {
         app,
@@ -341,17 +361,20 @@ export const skillsApi = {
     sourcePath: string,
     app: AppType = "lime",
   ): Promise<ImportedSkillResult> {
-    return safeInvoke<ImportedSkillResult>("import_local_skill_for_app", {
-      app,
-      sourcePath,
-    });
+    return invokeSkillsCommand<ImportedSkillResult>(
+      "import_local_skill_for_app",
+      {
+        app,
+        sourcePath,
+      },
+    );
   },
 
   async inspectLocalSkillPackage(
     sourcePath: string,
     app: AppType = "lime",
   ): Promise<LocalSkillPackageInspectionResult> {
-    const result = await safeInvoke<LocalSkillPackageInspectionResult>(
+    const result = await invokeSkillsCommand<LocalSkillPackageInspectionResult>(
       "inspect_local_skill_package_for_app",
       {
         app,
@@ -369,7 +392,7 @@ export const skillsApi = {
     sourcePath: string,
     app: AppType = "lime",
   ): Promise<SkillMarketplaceInstallResult> {
-    const result = await safeInvoke<SkillMarketplaceInstallResult>(
+    const result = await invokeSkillsCommand<SkillMarketplaceInstallResult>(
       "install_local_skill_package_for_app",
       {
         app,
@@ -383,20 +406,20 @@ export const skillsApi = {
   },
 
   async takePendingSkillPackageOpenRequests(): Promise<string[]> {
-    const paths = await safeInvoke<string[]>(
+    const paths = await invokeSkillsCommand<string[]>(
       "take_pending_skill_package_open_requests",
     );
     return normalizeStringList(paths);
   },
 
   async getSkillPackageFileAssociationStatus(): Promise<SkillPackageFileAssociationStatus> {
-    return safeInvoke<SkillPackageFileAssociationStatus>(
+    return invokeSkillsCommand<SkillPackageFileAssociationStatus>(
       "get_skill_package_file_association_status",
     );
   },
 
   async setSkillPackageFileAssociationDefault(): Promise<SkillPackageFileAssociationApplyResult> {
-    return safeInvoke<SkillPackageFileAssociationApplyResult>(
+    return invokeSkillsCommand<SkillPackageFileAssociationApplyResult>(
       "set_skill_package_file_association_default",
     );
   },
@@ -406,7 +429,7 @@ export const skillsApi = {
     targetPath: string,
     app: AppType = "lime",
   ): Promise<SkillPackageExportResult> {
-    return safeInvoke<SkillPackageExportResult>(
+    return invokeSkillsCommand<SkillPackageExportResult>(
       "export_local_skill_package_for_app",
       {
         app,
@@ -420,7 +443,7 @@ export const skillsApi = {
     bundle: SkillMarketplaceBundle,
     app: AppType = "lime",
   ): Promise<SkillMarketplaceInstallResult> {
-    return safeInvoke<SkillMarketplaceInstallResult>(
+    return invokeSkillsCommand<SkillMarketplaceInstallResult>(
       "install_marketplace_skill_for_app",
       {
         app,
@@ -433,7 +456,7 @@ export const skillsApi = {
     request: SkillDownloadInstallRequest,
     app: AppType = "lime",
   ): Promise<SkillMarketplaceInstallResult> {
-    return safeInvoke<SkillMarketplaceInstallResult>(
+    return invokeSkillsCommand<SkillMarketplaceInstallResult>(
       "install_skill_from_download_url_for_app",
       {
         app,
@@ -445,7 +468,7 @@ export const skillsApi = {
   async inspectRemoteSkill(
     locator: RemoteSkillLocator,
   ): Promise<SkillInspection> {
-    const inspection = await safeInvoke<SkillInspection>(
+    const inspection = await invokeSkillsCommand<SkillInspection>(
       "inspect_remote_skill",
       locator,
     );

@@ -44,11 +44,6 @@ pub(super) async fn try_handle(
             }
             serde_json::to_value(lime_knowledge::compile_knowledge_pack(request)?)?
         }
-        "knowledge_list_packs" => {
-            let request: lime_knowledge::KnowledgeListPacksRequest =
-                parse_nested_arg(&args, "request")?;
-            serde_json::to_value(lime_knowledge::list_knowledge_packs(request)?)?
-        }
         "knowledge_get_pack" => {
             let request: lime_knowledge::KnowledgeGetPackRequest =
                 parse_nested_arg(&args, "request")?;

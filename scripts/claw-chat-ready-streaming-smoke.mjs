@@ -69,6 +69,11 @@ const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
 const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
 const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
 const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event";
+const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
+const APP_SERVER_METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
+const APP_SERVER_METHOD_MODEL_PROVIDER_TEST_CHAT = "modelProvider/testChat";
+const APP_SERVER_METHOD_MODEL_PROVIDER_UI_STATE_READ =
+  "modelProviderUiState/read";
 
 let appServerSmokeRequestId = 1;
 
@@ -1015,13 +1020,13 @@ async function buildProviderCandidate(
 
   let providerDetail = provider;
   try {
-    providerDetail =
-      (await invoke(
-        options,
-        "get_api_key_provider",
-        { id: providerId },
-        30_000,
-      )) || provider;
+    const providerRead = await appServerRpc(
+      options,
+      APP_SERVER_METHOD_MODEL_PROVIDER_READ,
+      { providerId },
+      30_000,
+    );
+    providerDetail = providerRead.result?.provider || provider;
   } catch (error) {
     console.warn(
       `[smoke:claw-chat-ready-streaming] 读取 provider 详情失败，使用列表摘要继续: ${error.message}`,
@@ -1041,9 +1046,9 @@ async function buildProviderCandidate(
 }
 
 async function verifyProviderCandidate(options, candidate) {
-  const result = await invoke(
+  const response = await appServerRpc(
     options,
-    "test_api_key_provider_chat",
+    APP_SERVER_METHOD_MODEL_PROVIDER_TEST_CHAT,
     {
       providerId: candidate.providerPreference,
       modelName: candidate.modelPreference,
@@ -1051,7 +1056,7 @@ async function verifyProviderCandidate(options, candidate) {
     },
     60_000,
   );
-  return Boolean(result?.success);
+  return Boolean(response.result?.success);
 }
 
 function sanitizeProbeError(error) {
@@ -1621,18 +1626,30 @@ async function main() {
       init_fallback: true,
     };
   });
-  const providers = await invoke(
+  const providerListResponse = await appServerRpc(
     options,
-    "get_api_key_providers",
-    undefined,
+    APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
+    {},
     30_000,
-  ).catch(() => []);
-  const providerUiState = await invoke(
+  ).catch(() => ({ result: { providers: [] } }));
+  const providers = Array.isArray(providerListResponse.result?.providers)
+    ? providerListResponse.result.providers
+    : [];
+  const providerUiStateResponse = await appServerRpc(
     options,
-    "get_provider_ui_state",
-    undefined,
+    APP_SERVER_METHOD_MODEL_PROVIDER_UI_STATE_READ,
+    { key: "agent-runtime-provider-ui-state" },
     30_000,
-  ).catch(() => null);
+  ).catch(() => ({ result: { value: null } }));
+  const providerUiStateValue = providerUiStateResponse.result?.value;
+  let providerUiState = null;
+  if (typeof providerUiStateValue === "string") {
+    try {
+      providerUiState = JSON.parse(providerUiStateValue);
+    } catch {
+      providerUiState = null;
+    }
+  }
 
   const enabledProviders = Array.isArray(providers)
     ? providers.filter((provider) => providerEnabled(provider))

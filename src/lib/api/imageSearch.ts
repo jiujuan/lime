@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type AspectRatioFilter = "all" | "landscape" | "portrait" | "square";
 
@@ -72,14 +73,23 @@ export interface WebImageSearchResponse {
   }>;
 }
 
+async function invokeImageSearchCommand<T>(
+  command: string,
+  req: unknown,
+): Promise<T> {
+  const result = await safeInvoke<T>(command, { req });
+  assertNotDiagnosticFacade(command, result, "真实 Image Search current 通道");
+  return result;
+}
+
 export async function searchPixabayImages(
   req: PixabaySearchRequest,
 ): Promise<PixabaySearchResponse> {
-  return safeInvoke<PixabaySearchResponse>("search_pixabay_images", { req });
+  return invokeImageSearchCommand("search_pixabay_images", req);
 }
 
 export async function searchWebImages(
   req: WebImageSearchRequest,
 ): Promise<WebImageSearchResponse> {
-  return safeInvoke<WebImageSearchResponse>("search_web_images", { req });
+  return invokeImageSearchCommand("search_web_images", req);
 }

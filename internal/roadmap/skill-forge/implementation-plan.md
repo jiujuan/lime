@@ -52,7 +52,7 @@
 24. Evidence export 返回值、前端 API normalizer 与 Harness 面板已接入 `completionAuditSummary`：导出问题证据包后可直接在 UI 看到 evidence-based decision 与阻塞原因。
 25. Agent envelope presentation contract 已接入 completion audit gate：`completed` 且必要 evidence 齐全才进入 `evidence_ready`；非 completed audit 仍保持缺证据态，避免把 verifying 误报为可固化。
 26. Workspace 已注册能力面板已补 evidence-gated Agent envelope 入口边界：按 skill directory 注入 completion audit summary 后，只有 completed + 必要 evidence 齐全才启用“转成 Agent 草案”，并复用现有 Managed Job 草案创建链。
-27. Workspace 已注册能力面板已补最近运行审计入口：从匹配 Managed Job 调用既有 `get_automation_run_history` 与 `agent_runtime_export_evidence_pack`，把最近 automation run 的 evidence summary 回填到对应 skill 的 Agent envelope gate。
+27. Workspace 已注册能力面板已补最近运行审计入口：从匹配 Managed Job 调用 `getAutomationRunHistory()` 当前网关与 evidence export 当前网关，底层经 App Server `automationJob/runHistory` 和 `evidence/export` 把最近 automation run 的 evidence summary 回填到对应 skill 的 Agent envelope gate。
 28. Agent envelope 草案摘要已补完整组成：Runbook、Memory、Widget、Permission、Schedule、Evidence 均有 presentation 字段与 Workspace 展示，仍只作为产品组合面，不新增执行实体。
 29. Agent card 与 sharing 已收敛为派生展示：Agent card id 使用 `workspace-local/<skill-directory>`，事实源来自 registered skill、Managed Job 和 completion audit；sharing 先限定 workspace / team 范围，不做 public Marketplace。
 30. Workspace/team sharing discovery 已明确：团队成员通过同一 workspace root 的 registered skill discovery 发现 `.agents/skills/<skill-directory>`，并复用同一 Managed Job / evidence 事实源。

@@ -4,6 +4,7 @@
  */
 
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export interface VoiceShortcutRuntimeStatus {
   shortcut_registered: boolean;
@@ -19,9 +20,15 @@ export interface HotkeyRuntimeStatus {
 }
 
 export async function getVoiceShortcutRuntimeStatus(): Promise<VoiceShortcutRuntimeStatus> {
-  return safeInvoke<VoiceShortcutRuntimeStatus>(
+  const result = await safeInvoke<VoiceShortcutRuntimeStatus>(
     "get_voice_shortcut_runtime_status",
   );
+  assertNotDiagnosticFacade(
+    "get_voice_shortcut_runtime_status",
+    result,
+    "真实语音快捷键 current 通道",
+  );
+  return result;
 }
 
 export async function getHotkeyRuntimeStatus(): Promise<HotkeyRuntimeStatus> {

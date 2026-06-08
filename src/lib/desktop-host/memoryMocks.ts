@@ -1,9 +1,4 @@
 export const memoryMocks: Record<string, (args?: any) => any> = {
-  project_memory_get: () => ({
-    characters: [],
-    world_building: null,
-    outline: [],
-  }),
   memory_runtime_get_overview: () => ({
     stats: { total_entries: 0, storage_used: 0, memory_count: 0 },
     categories: [],

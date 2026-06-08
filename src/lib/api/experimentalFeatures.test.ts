@@ -31,5 +31,41 @@ describe("experimentalFeatures API", () => {
         webmcp: { enabled: true },
       }),
     ).resolves.toBeUndefined();
+    expect(safeInvoke).toHaveBeenNthCalledWith(1, "get_experimental_config");
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "save_experimental_config", {
+      experimentalConfig: {
+        webmcp: { enabled: true },
+      },
+    });
+  });
+
+  it("读取实验配置遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "get_experimental_config",
+        source: "electron",
+      },
+    });
+
+    await expect(getExperimentalConfig()).rejects.toThrow(
+      "get_experimental_config 尚未接入真实 Experimental config current 通道",
+    );
+  });
+
+  it("保存实验配置遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "save_experimental_config",
+        source: "electron",
+      },
+    });
+
+    await expect(
+      saveExperimentalConfig({
+        webmcp: { enabled: true },
+      }),
+    ).rejects.toThrow(
+      "save_experimental_config 尚未接入真实 Experimental config current 通道",
+    );
   });
 });

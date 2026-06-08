@@ -19,6 +19,7 @@ import {
   type SkillListResponse as AppServerSkillListResponse,
   type SkillReadResponse as AppServerSkillReadResponse,
 } from "../../../packages/app-server-client/src/protocol";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 type SkillExecutionAppServerClient = Pick<AppServerClient, "request">;
 
@@ -29,6 +30,19 @@ async function requestSkillExecutionAppServer<T>(
 ): Promise<T> {
   const response = await appServerClient.request<T>(method, params);
   return response.result;
+}
+
+async function invokeSkillExecutionCommand<T>(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> {
+  const result = await safeInvoke<T>(command, args);
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Skill execution current 通道",
+  );
+  return result;
 }
 
 // ============================================================================
@@ -285,7 +299,7 @@ export const skillExecutionApi = {
   async executeSkill(
     request: ExecuteSkillRequest,
   ): Promise<SkillExecutionResult> {
-    return safeInvoke(
+    return invokeSkillExecutionCommand(
       "execute_skill",
       request as unknown as Record<string, unknown>,
     );

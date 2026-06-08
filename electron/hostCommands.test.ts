@@ -7,23 +7,38 @@ import { AppServerRequestError } from "app-server-client";
 import { ElectronHostCommands } from "./hostCommands";
 import type { ElectronAppServerHost } from "./appServerHost";
 
-const { openExternalMock } = vi.hoisted(() => ({
-  openExternalMock: vi.fn(),
-}));
+const {
+  getFileIconMock,
+  getPathMock,
+  openExternalMock,
+  openPathMock,
+  showItemInFolderMock,
+} = vi.hoisted(() => {
+  return {
+    getFileIconMock: vi.fn(),
+    getPathMock: vi.fn((_name: string) => os.tmpdir()),
+    openExternalMock: vi.fn(),
+    openPathMock: vi.fn(),
+    showItemInFolderMock: vi.fn(),
+  };
+});
 const tempDirs: string[] = [];
 type AppServerRequestMock = (
   method: string,
   params?: unknown,
 ) => Promise<unknown>;
 
-vi.mock("electron", () => ({
+vi.mock("./electronRuntime", () => ({
   app: {
+    getFileIcon: getFileIconMock,
     getName: () => "Lime",
-    getPath: () => os.tmpdir(),
+    getPath: getPathMock,
     getVersion: () => "0.0.0-test",
   },
   shell: {
     openExternal: openExternalMock,
+    openPath: openPathMock,
+    showItemInFolder: showItemInFolderMock,
   },
 }));
 
@@ -63,6 +78,7 @@ function sessionAlreadyExistsError(sessionId: string) {
 
 afterEach(async () => {
   vi.clearAllMocks();
+  getPathMock.mockImplementation(() => os.tmpdir());
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) {
@@ -83,6 +99,194 @@ describe("ElectronHostCommands retired file browser facade", () => {
       ).rejects.toThrow(`Electron host command is not implemented: ${command}`);
     },
   );
+});
+
+describe("ElectronHostCommands retired automation facade", () => {
+  it.each([
+    "get_automation_scheduler_config",
+    "get_automation_status",
+    "get_automation_health",
+    "get_automation_jobs",
+  ])("%s 不再作为 Electron Host compat facade 暴露", async (command) => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(host.invoke(command, {})).rejects.toThrow(
+      `Electron host command is not implemented: ${command}`,
+    );
+  });
+});
+
+describe("ElectronHostCommands retired API Key Provider facade", () => {
+  it.each([
+    "get_api_key_providers",
+    "get_system_provider_catalog",
+    "get_provider_ui_state",
+    "set_provider_ui_state",
+    "fetch_provider_models_auto",
+  ])("%s 不再作为 Electron Host provider facade 暴露", async (command) => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(host.invoke(command, {})).rejects.toThrow(
+      `Electron host command is not implemented: ${command}`,
+    );
+  });
+});
+
+describe("ElectronHostCommands local file shell facade", () => {
+  it("reveal_in_finder 通过 Electron shell 定位本地路径", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("reveal_in_finder", { path: "/tmp/demo.txt" }),
+    ).resolves.toEqual({});
+
+    expect(showItemInFolderMock).toHaveBeenCalledWith("/tmp/demo.txt");
+  });
+
+  it("open_with_default_app 通过 Electron shell 打开本地路径", async () => {
+    openPathMock.mockResolvedValueOnce("");
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("open_with_default_app", { path: "/tmp/demo.txt" }),
+    ).resolves.toEqual({});
+
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/demo.txt");
+  });
+
+  it("open_with_default_app 应暴露 Electron openPath 失败", async () => {
+    openPathMock.mockResolvedValueOnce("Cannot open file");
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("open_with_default_app", { path: "/tmp/missing.txt" }),
+    ).rejects.toThrow("Cannot open file");
+  });
+
+  it("get_file_icon_data_url 应通过 Electron 读取系统文件图标", async () => {
+    getFileIconMock.mockResolvedValueOnce({
+      isEmpty: () => false,
+      toDataURL: () => "data:image/png;base64,abc",
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("get_file_icon_data_url", { path: "/Applications/Lime.app" }),
+    ).resolves.toBe("data:image/png;base64,abc");
+
+    expect(getFileIconMock).toHaveBeenCalledWith("/Applications/Lime.app", {
+      size: "normal",
+    });
+  });
+
+  it("get_file_icon_data_url 在系统图标不可用时返回 null", async () => {
+    getFileIconMock.mockResolvedValueOnce({
+      isEmpty: () => true,
+      toDataURL: () => "data:image/png;base64,unused",
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("get_file_icon_data_url", { path: "/tmp/missing.txt" }),
+    ).resolves.toBeNull();
+  });
+
+  it("get_file_icon_data_url 应隔离 Electron 图标读取失败", async () => {
+    getFileIconMock.mockRejectedValueOnce(new Error("icon unavailable"));
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("get_file_icon_data_url", { path: "/tmp/missing.txt" }),
+    ).resolves.toBeNull();
+  });
+
+  it("get_home_dir 应返回 Electron 系统主目录", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const homeDir = path.join(userDataDir, "home");
+    getPathMock.mockImplementation((name: string) => {
+      return name === "home" ? homeDir : os.tmpdir();
+    });
+    const host = createHost(userDataDir);
+
+    await expect(host.invoke("get_home_dir")).resolves.toBe(homeDir);
+  });
+
+  it("get_home_dir 在系统主目录不可用时应 fail closed", async () => {
+    const userDataDir = await createTempUserDataDir();
+    getPathMock.mockImplementation((name: string) => {
+      return name === "home" ? "" : os.tmpdir();
+    });
+    const host = createHost(userDataDir);
+
+    await expect(host.invoke("get_home_dir")).rejects.toThrow("无法获取主目录");
+  });
+
+  it("get_file_manager_locations 应返回存在的系统快捷入口并去重", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const homeDir = path.join(userDataDir, "home");
+    const missingDesktopDir = path.join(userDataDir, "missing-desktop");
+    const documentsDir = path.join(userDataDir, "Documents");
+    const downloadsDir = path.join(userDataDir, "Downloads");
+    await mkdir(homeDir, { recursive: true });
+    await mkdir(documentsDir, { recursive: true });
+    await mkdir(downloadsDir, { recursive: true });
+    getPathMock.mockImplementation((name: string) => {
+      if (name === "home") {
+        return homeDir;
+      }
+      if (name === "desktop") {
+        return missingDesktopDir;
+      }
+      if (name === "documents") {
+        return documentsDir;
+      }
+      if (name === "downloads") {
+        return downloadsDir;
+      }
+      return os.tmpdir();
+    });
+    const host = createHost(userDataDir);
+
+    const locations = await host.invoke("get_file_manager_locations");
+
+    expect(locations).toEqual(
+      expect.arrayContaining([
+        {
+          id: "home",
+          label: "个人",
+          path: homeDir,
+          kind: "home",
+        },
+        {
+          id: "documents",
+          label: "文档",
+          path: documentsDir,
+          kind: "documents",
+        },
+        {
+          id: "downloads",
+          label: "下载",
+          path: downloadsDir,
+          kind: "downloads",
+        },
+      ]),
+    );
+    const returnedPaths = (locations as Array<{ path: string }>).map(
+      (location) => location.path,
+    );
+    expect(returnedPaths.filter((nextPath) => nextPath === homeDir)).toHaveLength(
+      1,
+    );
+    expect(returnedPaths).not.toContain(missingDesktopDir);
+  });
 });
 
 describe("ElectronHostCommands experimental config", () => {
@@ -126,6 +330,72 @@ describe("ElectronHostCommands experimental config", () => {
       await readFile(path.join(userDataDir, "config.json"), "utf8"),
     ) as Record<string, unknown>;
     expect(savedConfig.default_provider).toBe("anthropic");
+  });
+});
+
+describe("ElectronHostCommands MCP current source", () => {
+  it.each([
+    [
+      "get_mcp_servers",
+      "mcpServer/list",
+      { servers: [{ id: "server-1", name: "docs" }] },
+      [{ id: "server-1", name: "docs" }],
+    ],
+    [
+      "mcp_list_servers_with_status",
+      "mcpServerStatus/list",
+      { servers: [{ id: "server-1", name: "docs", is_running: false }] },
+      [{ id: "server-1", name: "docs", is_running: false }],
+    ],
+    [
+      "mcp_list_tools",
+      "mcpTool/list",
+      { tools: [{ name: "mcp__docs__search_docs" }] },
+      [{ name: "mcp__docs__search_docs" }],
+    ],
+    [
+      "mcp_list_prompts",
+      "mcpPrompt/list",
+      { prompts: [{ name: "summarize", server_name: "docs" }] },
+      [{ name: "summarize", server_name: "docs" }],
+    ],
+    [
+      "mcp_list_resources",
+      "mcpResource/list",
+      { resources: [{ uri: "docs://readme", server_name: "docs" }] },
+      [{ uri: "docs://readme", server_name: "docs" }],
+    ],
+  ] as const)(
+    "%s 应经 App Server current method 返回 MCP 列表",
+    async (command, expectedMethod, response, expectedResult) => {
+      const userDataDir = await createTempUserDataDir();
+      const request = vi.fn(async (method: string, params?: unknown) => {
+        expect(params).toEqual({});
+        if (method === expectedMethod) {
+          return response;
+        }
+        throw new Error(`unexpected App Server method: ${method}`);
+      });
+      const host = createHost(userDataDir, () => undefined, request);
+
+      await expect(host.invoke(command)).resolves.toEqual(expectedResult);
+      expect(request).toHaveBeenCalledWith(expectedMethod, {});
+    },
+  );
+
+  it("MCP current 空态不应带 Electron diagnostic facade 元数据", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir, () => undefined, async (method) => {
+      if (method === "mcpTool/list") {
+        return { tools: [] };
+      }
+      throw new Error(`unexpected App Server method: ${method}`);
+    });
+
+    const result = await host.invoke("mcp_list_tools");
+
+    expect(result).toEqual([]);
+    expect((result as { __diagnostic?: unknown }).__diagnostic).toBeUndefined();
   });
 });
 

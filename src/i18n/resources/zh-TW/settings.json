@@ -2350,6 +2350,8 @@
   "settings.providers.modelAdd.configure.title": "配置 {{providerName}}",
   "settings.providers.modelAdd.form.providerName.label": "供應商名稱",
   "settings.providers.modelAdd.form.providerName.placeholder": "例如：My API Provider",
+  "settings.providers.modelAdd.form.apiHost.label": "API Base URL",
+  "settings.providers.modelAdd.form.apiHost.placeholder": "https://api.example.com/v1",
   "settings.providers.modelAdd.form.apiFormat.label": "API 格式",
   "settings.providers.modelAdd.form.apiFormat.openai": "OpenAI 格式",
   "settings.providers.modelAdd.form.apiFormat.anthropic": "Anthropic 格式",

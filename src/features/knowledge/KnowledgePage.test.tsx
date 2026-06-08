@@ -2,7 +2,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  compileKnowledgePack,
   getKnowledgePack,
   importKnowledgeSource,
   listKnowledgePacks,
@@ -366,6 +365,7 @@ describe("KnowledgePage", () => {
       });
       mounted.container.remove();
     }
+    window.electronAPI = undefined;
     window.localStorage.clear();
     vi.restoreAllMocks();
   });
@@ -485,15 +485,36 @@ describe("KnowledgePage", () => {
     });
   });
 
+  it("安装版未支持资料详情命令时不应触发旧详情读取", async () => {
+    window.electronAPI = {
+      invoke: vi.fn(),
+      supportsCommand: (command: string) => command !== "knowledge_get_pack",
+      listen: vi.fn(),
+      emit: vi.fn(),
+    };
+
+    renderPage({
+      workingDir: "/tmp/project",
+      selectedPackName: "founder-personal-ip",
+    });
+    await flushEffects();
+
+    expect(listKnowledgePacks).toHaveBeenCalledWith({
+      workingDir: "/tmp/project",
+    });
+    expect(getKnowledgePack).not.toHaveBeenCalled();
+  });
+
   it("整理新资料应覆盖用途、原始资料和确认前不生效提示", async () => {
-    const container = renderPage({ workingDir: "/tmp/project" });
+    const onNavigate = vi.fn();
+    const container = renderPage({ workingDir: "/tmp/project", onNavigate });
     await flushEffects();
 
     await clickButton(container, "整理新资料");
 
     expect(container.textContent).toContain("选择资料用途");
     expect(container.textContent).toContain("添加原始资料");
-    expect(container.textContent).toContain("Lime 开始整理");
+    expect(container.textContent).toContain("带到对话里整理");
     expect(container.textContent).toContain("当前先支持粘贴正文");
     expect(container.textContent).toContain("这里不再设置“默认使用”");
     expect(container.textContent).toContain("没有确认的资料不会自动用于创作");
@@ -512,21 +533,28 @@ describe("KnowledgePage", () => {
       updateFieldValue(sourceTextarea, "金花黑茶资料，功效表达必须待确认。");
     });
 
-    await clickButton(container, "Lime 开始整理");
+    await clickButton(container, "去对话里整理");
 
-    expect(importKnowledgeSource).toHaveBeenCalledWith(
+    expect(importKnowledgeSource).not.toHaveBeenCalled();
+    expect(mockCompileKnowledgePack).not.toHaveBeenCalled();
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
       expect.objectContaining({
-        workingDir: "/tmp/project",
-        packName: "founder-personal-ip",
-        packType: "personal-ip",
-        sourceText: "金花黑茶资料，功效表达必须待确认。",
+        agentEntry: "claw",
+        initialUserPrompt: expect.stringContaining(
+          "金花黑茶资料，功效表达必须待确认。",
+        ),
+        initialRequestMetadata: {
+          knowledge_builder: expect.objectContaining({
+            working_dir: "/tmp/project",
+            pack_name: "founder-personal-ip",
+            source: "knowledge-page",
+            pack_type: "personal-ip",
+          }),
+        },
+        autoRunInitialPromptOnMount: false,
       }),
     );
-    expect(compileKnowledgePack).toHaveBeenCalledWith(
-      "/tmp/project",
-      "jinhua-dark-tea",
-    );
-    expect(container.textContent).toContain("资料已整理，等待你确认");
   }, 10_000);
 
   it("确认资料页应展示完整文档、确认清单和确认可用动作", async () => {

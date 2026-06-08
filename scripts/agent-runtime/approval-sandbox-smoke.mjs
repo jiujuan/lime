@@ -39,6 +39,9 @@ const DEFAULT_MODEL_PREFERENCE =
 const APPROVAL_POLICY = "on-request";
 const SANDBOX_POLICY = "workspace-write";
 const PROVIDER_PICK_ORDER = ["deepseek", "doubao", "lime-hub"];
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
+const APP_SERVER_METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
 
 function printHelp() {
   console.log(`
@@ -253,6 +256,47 @@ async function invoke(options, cmd, args, timeoutMs = options.timeoutMs) {
   return payload?.result;
 }
 
+let appServerRequestId = 1;
+
+async function invokeAppServerMethod(
+  options,
+  method,
+  params,
+  timeoutMs = options.timeoutMs,
+) {
+  const id = `approval-sandbox-${appServerRequestId++}`;
+  const request =
+    params === undefined ? { id, method } : { id, method, params };
+  const result = await invoke(
+    options,
+    APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+    { request: { lines: [`${JSON.stringify(request)}\n`] } },
+    timeoutMs,
+  );
+  const messages = (Array.isArray(result?.lines) ? result.lines : [])
+    .map((line) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    throw new Error(
+      `${method} error: ${error.error?.message || "App Server JSON-RPC error"}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method} missing App Server response`);
+  }
+  return response.result;
+}
+
 function normalizeProviderId(provider) {
   return String(
     provider?.id || provider?.provider_id || provider?.providerId || "",
@@ -320,7 +364,13 @@ async function resolveProviderPreference(options) {
     };
   }
 
-  const providers = await invoke(options, "get_api_key_providers", {}, 30_000);
+  const providerList = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
+    {},
+    30_000,
+  );
+  const providers = providerList?.providers;
   const selected = pickProvider(
     Array.isArray(providers) ? providers : [],
     explicitProvider,
@@ -335,12 +385,12 @@ async function resolveProviderPreference(options) {
   let providerDetail = selected;
   try {
     providerDetail =
-      (await invoke(
+      (await invokeAppServerMethod(
         options,
-        "get_api_key_provider",
-        { id: providerId },
+        APP_SERVER_METHOD_MODEL_PROVIDER_READ,
+        { providerId },
         30_000,
-      )) || selected;
+      ))?.provider || selected;
   } catch (error) {
     console.warn(
       `[smoke:agent-runtime-approval-sandbox] 读取 provider 详情失败，使用列表摘要继续: ${error.message}`,

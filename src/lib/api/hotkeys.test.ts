@@ -35,6 +35,26 @@ describe("hotkeys API", () => {
     );
   });
 
+  it("应拒绝 Electron Host voice shortcut degraded 诊断返回", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      shortcut_registered: false,
+      registered_shortcut: null,
+      fn_supported: true,
+      fn_registered: false,
+      fn_fallback_shortcut: "CommandOrControl+Shift+V",
+      fn_note:
+        "Electron current 语音快捷键运行时尚未接入；当前使用普通语音快捷键回退。",
+      diagnostic: {
+        command: "get_voice_shortcut_runtime_status",
+        category: "electron-diagnostic-facade",
+      },
+    });
+
+    await expect(getVoiceShortcutRuntimeStatus()).rejects.toThrow(
+      "get_voice_shortcut_runtime_status 尚未接入真实语音快捷键 current 通道",
+    );
+  });
+
   it("应聚合整体快捷键运行时状态", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       shortcut_registered: true,

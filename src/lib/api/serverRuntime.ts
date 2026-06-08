@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export interface CapabilityRoutingMetricsSnapshot {
   filter_eval_total: number;
@@ -160,18 +161,76 @@ export interface WindowsStartupDiagnostics {
   summary_message?: string | null;
 }
 
+function isMockUrl(value: unknown): boolean {
+  return typeof value === "string" && value.startsWith("mock://");
+}
+
+function assertNotMockSupportBundle(value: SupportBundleExportResult): void {
+  if (
+    value.platform === "mock-web" ||
+    isMockUrl(value.bundle_path) ||
+    isMockUrl(value.output_directory)
+  ) {
+    throw new Error(
+      "export_support_bundle 尚未接入真实诊断 current 通道，收到 desktop-host mock 返回。",
+    );
+  }
+}
+
+function assertNotMockWindowsStartup(
+  value: WindowsStartupDiagnostics,
+): void {
+  if (value.platform === "mock-web") {
+    throw new Error(
+      "get_windows_startup_diagnostics 尚未接入真实诊断 current 通道，收到 desktop-host mock 返回。",
+    );
+  }
+}
+
 export async function getServerDiagnostics(): Promise<ServerDiagnostics> {
-  return safeInvoke("get_server_diagnostics");
+  const result = await safeInvoke<ServerDiagnostics>("get_server_diagnostics");
+  assertNotDiagnosticFacade(
+    "get_server_diagnostics",
+    result,
+    "真实诊断 current 通道",
+  );
+  return result;
 }
 
 export async function getLogStorageDiagnostics(): Promise<LogStorageDiagnostics> {
-  return safeInvoke("get_log_storage_diagnostics");
+  const result = await safeInvoke<LogStorageDiagnostics>(
+    "get_log_storage_diagnostics",
+  );
+  assertNotDiagnosticFacade(
+    "get_log_storage_diagnostics",
+    result,
+    "真实诊断 current 通道",
+  );
+  return result;
 }
 
 export async function exportSupportBundle(): Promise<SupportBundleExportResult> {
-  return safeInvoke("export_support_bundle");
+  const result = await safeInvoke<SupportBundleExportResult>(
+    "export_support_bundle",
+  );
+  assertNotDiagnosticFacade(
+    "export_support_bundle",
+    result,
+    "真实诊断 current 通道",
+  );
+  assertNotMockSupportBundle(result);
+  return result;
 }
 
 export async function getWindowsStartupDiagnostics(): Promise<WindowsStartupDiagnostics> {
-  return safeInvoke("get_windows_startup_diagnostics");
+  const result = await safeInvoke<WindowsStartupDiagnostics>(
+    "get_windows_startup_diagnostics",
+  );
+  assertNotDiagnosticFacade(
+    "get_windows_startup_diagnostics",
+    result,
+    "真实诊断 current 通道",
+  );
+  assertNotMockWindowsStartup(result);
+  return result;
 }

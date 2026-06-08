@@ -55,7 +55,30 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "AgentAppUiRuntimeStatusResponse",
     "KnowledgeListPacksParams",
     "KnowledgeListPacksResponse",
+    "AutomationSchedulerConfigReadResponse",
+    "AutomationSchedulerConfigUpdateParams",
+    "AutomationSchedulerConfigUpdateResponse",
+    "AutomationSchedulerStatusResponse",
     "AutomationJobListResponse",
+    "AutomationJobIdParams",
+    "AutomationJobReadResponse",
+    "AutomationJobCreateParams",
+    "AutomationJobWriteResponse",
+    "AutomationJobUpdateParams",
+    "AutomationJobDeleteResponse",
+    "AutomationJobRunNowResponse",
+    "AutomationJobHealthParams",
+    "AutomationJobHealthResponse",
+    "AutomationJobRunHistoryParams",
+    "AutomationJobRunHistoryResponse",
+    "AutomationScheduleParams",
+    "AutomationSchedulePreviewResponse",
+    "AutomationScheduleValidateResponse",
+    "McpServerListResponse",
+    "McpServerStatusListResponse",
+    "McpToolListResponse",
+    "McpPromptListResponse",
+    "McpResourceListResponse",
     "ProjectMemoryReadParams",
     "ProjectMemoryReadResponse",
     "ModelListParams",
@@ -64,6 +87,37 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "ModelSyncStateReadResponse",
     "ModelProviderListResponse",
     "ModelProviderCatalogListResponse",
+    "ModelProviderReadParams",
+    "ModelProviderReadResponse",
+    "ModelProviderCreateParams",
+    "ModelProviderWriteResponse",
+    "ModelProviderUpdateParams",
+    "ModelProviderDeleteParams",
+    "ModelProviderDeleteResponse",
+    "ModelProviderSortOrderItem",
+    "ModelProviderSortOrdersUpdateParams",
+    "ModelProviderMutationResponse",
+    "ModelProviderConfigExportParams",
+    "ModelProviderConfigExportResponse",
+    "ModelProviderConfigImportParams",
+    "ModelProviderConfigImportResponse",
+    "ModelProviderTestConnectionParams",
+    "ModelProviderTestConnectionResponse",
+    "ModelProviderTestChatParams",
+    "ModelProviderTestChatResponse",
+    "ModelProviderFetchModelsParams",
+    "ModelProviderFetchModelsResponse",
+    "ModelProviderKeyCreateParams",
+    "ModelProviderKeyWriteResponse",
+    "ModelProviderKeyUpdateParams",
+    "ModelProviderKeyDeleteParams",
+    "ModelProviderKeyDeleteResponse",
+    "ModelProviderKeyNextParams",
+    "ModelProviderKeyNextResponse",
+    "ModelProviderKeyEventParams",
+    "ModelProviderUiStateReadParams",
+    "ModelProviderUiStateReadResponse",
+    "ModelProviderUiStateWriteParams",
     "ModelProviderAliasReadParams",
     "ModelProviderAliasReadResponse",
     "ModelProviderAliasListResponse",
@@ -128,13 +182,48 @@ pub const METHOD_AGENT_APP_UI_RUNTIME_START: &str = "agentAppUiRuntime/start";
 pub const METHOD_AGENT_APP_UI_RUNTIME_STATUS: &str = "agentAppUiRuntime/status";
 pub const METHOD_AGENT_APP_UI_RUNTIME_STOP: &str = "agentAppUiRuntime/stop";
 pub const METHOD_KNOWLEDGE_PACK_LIST: &str = "knowledgePack/list";
+pub const METHOD_AUTOMATION_SCHEDULER_CONFIG_READ: &str = "automationScheduler/config/read";
+pub const METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE: &str = "automationScheduler/config/update";
+pub const METHOD_AUTOMATION_SCHEDULER_STATUS: &str = "automationScheduler/status";
 pub const METHOD_AUTOMATION_JOB_LIST: &str = "automationJob/list";
+pub const METHOD_AUTOMATION_JOB_READ: &str = "automationJob/read";
+pub const METHOD_AUTOMATION_JOB_CREATE: &str = "automationJob/create";
+pub const METHOD_AUTOMATION_JOB_UPDATE: &str = "automationJob/update";
+pub const METHOD_AUTOMATION_JOB_DELETE: &str = "automationJob/delete";
+pub const METHOD_AUTOMATION_JOB_RUN_NOW: &str = "automationJob/runNow";
+pub const METHOD_AUTOMATION_JOB_HEALTH: &str = "automationJob/health";
+pub const METHOD_AUTOMATION_JOB_RUN_HISTORY: &str = "automationJob/runHistory";
+pub const METHOD_AUTOMATION_SCHEDULE_PREVIEW: &str = "automationSchedule/preview";
+pub const METHOD_AUTOMATION_SCHEDULE_VALIDATE: &str = "automationSchedule/validate";
+pub const METHOD_MCP_SERVER_LIST: &str = "mcpServer/list";
+pub const METHOD_MCP_SERVER_STATUS_LIST: &str = "mcpServerStatus/list";
+pub const METHOD_MCP_TOOL_LIST: &str = "mcpTool/list";
+pub const METHOD_MCP_PROMPT_LIST: &str = "mcpPrompt/list";
+pub const METHOD_MCP_RESOURCE_LIST: &str = "mcpResource/list";
 pub const METHOD_PROJECT_MEMORY_READ: &str = "projectMemory/read";
 pub const METHOD_MODEL_LIST: &str = "model/list";
 pub const METHOD_MODEL_PREFERENCES_LIST: &str = "modelPreferences/list";
 pub const METHOD_MODEL_SYNC_STATE_READ: &str = "modelSyncState/read";
 pub const METHOD_MODEL_PROVIDER_LIST: &str = "modelProvider/list";
 pub const METHOD_MODEL_PROVIDER_CATALOG_LIST: &str = "modelProvider/catalog/list";
+pub const METHOD_MODEL_PROVIDER_READ: &str = "modelProvider/read";
+pub const METHOD_MODEL_PROVIDER_CREATE: &str = "modelProvider/create";
+pub const METHOD_MODEL_PROVIDER_UPDATE: &str = "modelProvider/update";
+pub const METHOD_MODEL_PROVIDER_DELETE: &str = "modelProvider/delete";
+pub const METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE: &str = "modelProvider/sortOrders/update";
+pub const METHOD_MODEL_PROVIDER_CONFIG_EXPORT: &str = "modelProviderConfig/export";
+pub const METHOD_MODEL_PROVIDER_CONFIG_IMPORT: &str = "modelProviderConfig/import";
+pub const METHOD_MODEL_PROVIDER_TEST_CONNECTION: &str = "modelProvider/testConnection";
+pub const METHOD_MODEL_PROVIDER_TEST_CHAT: &str = "modelProvider/testChat";
+pub const METHOD_MODEL_PROVIDER_FETCH_MODELS: &str = "modelProvider/fetchModels";
+pub const METHOD_MODEL_PROVIDER_KEY_CREATE: &str = "modelProviderKey/create";
+pub const METHOD_MODEL_PROVIDER_KEY_UPDATE: &str = "modelProviderKey/update";
+pub const METHOD_MODEL_PROVIDER_KEY_DELETE: &str = "modelProviderKey/delete";
+pub const METHOD_MODEL_PROVIDER_KEY_NEXT: &str = "modelProviderKey/next";
+pub const METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD: &str = "modelProviderKey/usage/record";
+pub const METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD: &str = "modelProviderKey/error/record";
+pub const METHOD_MODEL_PROVIDER_UI_STATE_READ: &str = "modelProviderUiState/read";
+pub const METHOD_MODEL_PROVIDER_UI_STATE_WRITE: &str = "modelProviderUiState/write";
 pub const METHOD_MODEL_PROVIDER_ALIAS_READ: &str = "modelProviderAlias/read";
 pub const METHOD_MODEL_PROVIDER_ALIAS_LIST: &str = "modelProviderAlias/list";
 pub const METHOD_CONNECT_DEEP_LINK_RESOLVE: &str = "connectDeepLink/resolve";
@@ -268,7 +357,75 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_SCHEDULER_STATUS,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_AUTOMATION_JOB_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_JOB_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_JOB_CREATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_JOB_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_JOB_DELETE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_JOB_RUN_NOW,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_JOB_HEALTH,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_JOB_RUN_HISTORY,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_SCHEDULE_PREVIEW,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AUTOMATION_SCHEDULE_VALIDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_STATUS_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_TOOL_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_PROMPT_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_RESOURCE_LIST,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -293,6 +450,78 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_MODEL_PROVIDER_CATALOG_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_CREATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_DELETE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_CONFIG_EXPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_CONFIG_IMPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_TEST_CONNECTION,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_TEST_CHAT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_FETCH_MODELS,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_KEY_CREATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_KEY_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_KEY_DELETE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_KEY_NEXT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_UI_STATE_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -639,6 +868,41 @@ pub struct EvidencePackArtifact {
     pub bytes: usize,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerListResponse {
+    #[serde(default)]
+    pub servers: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerStatusListResponse {
+    #[serde(default)]
+    pub servers: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolListResponse {
+    #[serde(default)]
+    pub tools: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptListResponse {
+    #[serde(default)]
+    pub prompts: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResourceListResponse {
+    #[serde(default)]
+    pub resources: Vec<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionListParams {
@@ -888,9 +1152,126 @@ pub struct KnowledgeListPacksResponse {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct AutomationSchedulerConfigReadResponse {
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationSchedulerConfigUpdateParams {
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationSchedulerConfigUpdateResponse {
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationSchedulerStatusResponse {
+    pub status: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct AutomationJobListResponse {
     #[serde(default)]
     pub jobs: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobIdParams {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobReadResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobCreateParams {
+    pub request: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobWriteResponse {
+    pub job: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobUpdateParams {
+    pub id: String,
+    pub request: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobDeleteResponse {
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobRunNowResponse {
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobHealthParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobHealthResponse {
+    pub health: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobRunHistoryParams {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationJobRunHistoryResponse {
+    #[serde(default)]
+    pub runs: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationScheduleParams {
+    pub schedule: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationSchedulePreviewResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_run_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomationScheduleValidateResponse {
+    pub valid: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -946,6 +1327,245 @@ pub struct ModelProviderListResponse {
 pub struct ModelProviderCatalogListResponse {
     #[serde(default)]
     pub providers: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderReadParams {
+    pub provider_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderReadResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderCreateParams {
+    pub provider: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderWriteResponse {
+    pub provider: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderUpdateParams {
+    pub provider_id: String,
+    pub patch: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderDeleteParams {
+    pub provider_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderDeleteResponse {
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderSortOrderItem {
+    pub provider_id: String,
+    pub sort_order: i32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderSortOrdersUpdateParams {
+    #[serde(default)]
+    pub sort_orders: Vec<ModelProviderSortOrderItem>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderMutationResponse {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderConfigExportParams {
+    #[serde(default)]
+    pub include_keys: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderConfigExportResponse {
+    pub config_json: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderConfigImportParams {
+    pub config_json: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderConfigImportResponse {
+    pub success: bool,
+    pub imported_providers: usize,
+    pub imported_api_keys: usize,
+    pub skipped_providers: usize,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderTestConnectionParams {
+    pub provider_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderTestConnectionResponse {
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderTestChatParams {
+    pub provider_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    pub prompt: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderTestChatResponse {
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderFetchModelsParams {
+    pub provider_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderFetchModelsResponse {
+    #[serde(default)]
+    pub models: Vec<serde_json::Value>,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_kind: Option<String>,
+    pub should_prompt_error: bool,
+    pub from_cache: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderKeyCreateParams {
+    pub provider_id: String,
+    pub api_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+    #[serde(default)]
+    pub replace_existing: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderKeyWriteResponse {
+    pub key: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderKeyUpdateParams {
+    pub key_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderKeyDeleteParams {
+    pub key_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderKeyDeleteResponse {
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderKeyNextParams {
+    pub provider_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderKeyNextResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderKeyEventParams {
+    pub key_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderUiStateReadParams {
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderUiStateReadResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProviderUiStateWriteParams {
+    pub key: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1994,13 +2614,48 @@ mod tests {
                 METHOD_AGENT_APP_UI_RUNTIME_STATUS,
                 METHOD_AGENT_APP_UI_RUNTIME_STOP,
                 METHOD_KNOWLEDGE_PACK_LIST,
+                METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
+                METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+                METHOD_AUTOMATION_SCHEDULER_STATUS,
                 METHOD_AUTOMATION_JOB_LIST,
+                METHOD_AUTOMATION_JOB_READ,
+                METHOD_AUTOMATION_JOB_CREATE,
+                METHOD_AUTOMATION_JOB_UPDATE,
+                METHOD_AUTOMATION_JOB_DELETE,
+                METHOD_AUTOMATION_JOB_RUN_NOW,
+                METHOD_AUTOMATION_JOB_HEALTH,
+                METHOD_AUTOMATION_JOB_RUN_HISTORY,
+                METHOD_AUTOMATION_SCHEDULE_PREVIEW,
+                METHOD_AUTOMATION_SCHEDULE_VALIDATE,
+                METHOD_MCP_SERVER_LIST,
+                METHOD_MCP_SERVER_STATUS_LIST,
+                METHOD_MCP_TOOL_LIST,
+                METHOD_MCP_PROMPT_LIST,
+                METHOD_MCP_RESOURCE_LIST,
                 METHOD_PROJECT_MEMORY_READ,
                 METHOD_MODEL_LIST,
                 METHOD_MODEL_PREFERENCES_LIST,
                 METHOD_MODEL_SYNC_STATE_READ,
                 METHOD_MODEL_PROVIDER_LIST,
                 METHOD_MODEL_PROVIDER_CATALOG_LIST,
+                METHOD_MODEL_PROVIDER_READ,
+                METHOD_MODEL_PROVIDER_CREATE,
+                METHOD_MODEL_PROVIDER_UPDATE,
+                METHOD_MODEL_PROVIDER_DELETE,
+                METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
+                METHOD_MODEL_PROVIDER_CONFIG_EXPORT,
+                METHOD_MODEL_PROVIDER_CONFIG_IMPORT,
+                METHOD_MODEL_PROVIDER_TEST_CONNECTION,
+                METHOD_MODEL_PROVIDER_TEST_CHAT,
+                METHOD_MODEL_PROVIDER_FETCH_MODELS,
+                METHOD_MODEL_PROVIDER_KEY_CREATE,
+                METHOD_MODEL_PROVIDER_KEY_UPDATE,
+                METHOD_MODEL_PROVIDER_KEY_DELETE,
+                METHOD_MODEL_PROVIDER_KEY_NEXT,
+                METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
+                METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
+                METHOD_MODEL_PROVIDER_UI_STATE_READ,
+                METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
                 METHOD_MODEL_PROVIDER_ALIAS_READ,
                 METHOD_MODEL_PROVIDER_ALIAS_LIST,
                 METHOD_CONNECT_DEEP_LINK_RESOLVE,

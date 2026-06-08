@@ -259,4 +259,67 @@ describe("knowledge API", () => {
     });
     expect(appServerRequestMock).not.toHaveBeenCalled();
   });
+
+  it("Knowledge 写链遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "knowledge_compile_pack",
+        source: "electron-host-diagnostic",
+      },
+    });
+
+    await expect(
+      compileKnowledgePack("/tmp/workspace", "sample-product"),
+    ).rejects.toThrow(
+      "knowledge_compile_pack 尚未接入真实 Knowledge current 通道",
+    );
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("Knowledge 写链遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "knowledge_import_source",
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      importKnowledgeSource({
+        workingDir: "/tmp/workspace",
+        packName: "sample-product",
+        sourceText: "示例产品事实",
+      }),
+    ).rejects.toThrow(
+      "knowledge_import_source 尚未接入真实 Knowledge current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("Knowledge 上下文解析遇到 Electron empty diagnostic list 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        command: "knowledge_resolve_context",
+        source: "electron-empty-diagnostic",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(
+      resolveKnowledgeContext({
+        workingDir: "/tmp/workspace",
+        name: "sample-product",
+        task: "写产品介绍",
+      }),
+    ).rejects.toThrow(
+      "knowledge_resolve_context 尚未接入真实 Knowledge current 通道，收到 electron-empty-diagnostic 诊断返回。",
+    );
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
 });

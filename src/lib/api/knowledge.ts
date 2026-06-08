@@ -4,6 +4,7 @@ import {
   METHOD_KNOWLEDGE_PACK_LIST,
   type KnowledgeListPacksResponse as AppServerKnowledgeListPacksResponse,
 } from "../../../packages/app-server-client/src/protocol";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type KnowledgeAppServerClient = Pick<AppServerClient, "request">;
 
@@ -18,6 +19,19 @@ async function requestKnowledgeAppServer<T>(
 ): Promise<T> {
   const response = await appServerClient.request<T>(method, params);
   return response.result;
+}
+
+async function invokeKnowledgeCommand<T>(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> {
+  const result = await safeInvoke<T>(command, args);
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Knowledge current 通道",
+  );
+  return result;
 }
 
 function requireAppServerString(value: unknown, message: string): string {
@@ -266,7 +280,7 @@ export function getKnowledgePack(
   workingDir: string,
   name: string,
 ): Promise<KnowledgePackDetail> {
-  return safeInvoke("knowledge_get_pack", {
+  return invokeKnowledgeCommand<KnowledgePackDetail>("knowledge_get_pack", {
     request: {
       workingDir,
       name,
@@ -277,7 +291,10 @@ export function getKnowledgePack(
 export function importKnowledgeSource(
   request: KnowledgeImportSourceRequest,
 ): Promise<KnowledgeImportSourceResponse> {
-  return safeInvoke("knowledge_import_source", { request });
+  return invokeKnowledgeCommand<KnowledgeImportSourceResponse>(
+    "knowledge_import_source",
+    { request },
+  );
 }
 
 export function compileKnowledgePack(
@@ -285,41 +302,56 @@ export function compileKnowledgePack(
   name: string,
   builderRuntime?: KnowledgeBuilderRuntimeOptions,
 ): Promise<KnowledgeCompilePackResponse> {
-  return safeInvoke("knowledge_compile_pack", {
-    request: {
-      workingDir,
-      name,
-      ...(builderRuntime ? { builderRuntime } : {}),
+  return invokeKnowledgeCommand<KnowledgeCompilePackResponse>(
+    "knowledge_compile_pack",
+    {
+      request: {
+        workingDir,
+        name,
+        ...(builderRuntime ? { builderRuntime } : {}),
+      },
     },
-  });
+  );
 }
 
 export function setDefaultKnowledgePack(
   workingDir: string,
   name: string,
 ): Promise<KnowledgeSetDefaultPackResponse> {
-  return safeInvoke("knowledge_set_default_pack", {
-    request: {
-      workingDir,
-      name,
+  return invokeKnowledgeCommand<KnowledgeSetDefaultPackResponse>(
+    "knowledge_set_default_pack",
+    {
+      request: {
+        workingDir,
+        name,
+      },
     },
-  });
+  );
 }
 
 export function updateKnowledgePackStatus(
   request: KnowledgeUpdatePackStatusRequest,
 ): Promise<KnowledgeUpdatePackStatusResponse> {
-  return safeInvoke("knowledge_update_pack_status", { request });
+  return invokeKnowledgeCommand<KnowledgeUpdatePackStatusResponse>(
+    "knowledge_update_pack_status",
+    { request },
+  );
 }
 
 export function resolveKnowledgeContext(
   request: KnowledgeResolveContextRequest,
 ): Promise<KnowledgeContextResolution> {
-  return safeInvoke("knowledge_resolve_context", { request });
+  return invokeKnowledgeCommand<KnowledgeContextResolution>(
+    "knowledge_resolve_context",
+    { request },
+  );
 }
 
 export function validateKnowledgeContextRun(
   request: KnowledgeValidateContextRunRequest,
 ): Promise<KnowledgeValidateContextRunResponse> {
-  return safeInvoke("knowledge_validate_context_run", { request });
+  return invokeKnowledgeCommand<KnowledgeValidateContextRunResponse>(
+    "knowledge_validate_context_run",
+    { request },
+  );
 }

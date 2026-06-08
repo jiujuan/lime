@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "config": true
+  },
+  "required": [
+    "config"
+  ],
+  "title": "AutomationSchedulerConfigUpdateParams",
+  "type": "object"
+}

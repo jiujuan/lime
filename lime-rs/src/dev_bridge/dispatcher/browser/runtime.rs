@@ -178,19 +178,6 @@ pub(super) async fn try_handle(
                 )?,
             )?
         }
-        "launch_browser_runtime_assist" => {
-            let app_handle = require_app_handle(state)?;
-            let request: crate::commands::browser_runtime_cmd::LaunchBrowserRuntimeAssistRequest =
-                parse_request(args)?;
-            serde_json::to_value(
-                crate::commands::browser_runtime_cmd::launch_browser_runtime_assist_global(
-                    app_handle,
-                    state.server.clone(),
-                    request,
-                )
-                .await?,
-            )?
-        }
         "start_browser_stream" => {
             let app_handle = require_app_handle(state)?;
             let request: crate::commands::webview_cmd::StartBrowserStreamRequest =

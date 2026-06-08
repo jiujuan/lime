@@ -67,4 +67,32 @@ describe("galleryMaterials API", () => {
       listGalleryMaterialsByMood("project-1", "warm"),
     ).resolves.toEqual([expect.objectContaining({ id: "color-1" })]);
   });
+
+  it("收到对象级 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-degraded-facade",
+      },
+    });
+
+    await expect(getGalleryMaterial("m-degraded")).rejects.toThrow(
+      "get_gallery_material 尚未接入真实图库材料 current 通道",
+    );
+  });
+
+  it("收到列表级 diagnostic facade 时应 fail closed", async () => {
+    const degradedList = [] as unknown[] & {
+      __diagnostic?: { category: string };
+    };
+    degradedList.__diagnostic = {
+      category: "app-server-unavailable",
+    };
+    vi.mocked(safeInvoke).mockResolvedValueOnce(degradedList);
+
+    await expect(
+      listGalleryMaterialsByImageCategory("project-degraded"),
+    ).rejects.toThrow(
+      "list_gallery_materials_by_image_category 尚未接入真实图库材料 current 通道",
+    );
+  });
 });

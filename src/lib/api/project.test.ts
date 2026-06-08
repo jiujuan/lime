@@ -669,6 +669,99 @@ describe("项目管理 API", () => {
         projectId: "project-1",
       });
     });
+
+    it("legacy workspace/content/general workbench 命令收到 diagnostic facade 时应 fail closed", async () => {
+      const diagnostic = (command: string) => ({
+        diagnostic: {
+          source: "desktop-host",
+          command,
+        },
+      });
+      const diagnosticList = Object.assign([], {
+        __diagnostic: {
+          source: "desktop-host",
+          command: "content_list",
+        },
+      });
+      const diagnosticStats = Object.assign([], {
+        __diagnostic: {
+          source: "desktop-host",
+          command: "content_stats",
+        },
+      });
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(
+        diagnostic("workspace_create"),
+      );
+      await expect(
+        createProject({ name: "诊断项目", rootPath: "/tmp/diagnostic" }),
+      ).rejects.toThrow("workspace_create 尚未接入");
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(
+        diagnostic("workspace_update"),
+      );
+      await expect(updateProject("project-1", { name: "诊断" })).rejects.toThrow(
+        "workspace_update 尚未接入",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(
+        diagnostic("workspace_delete"),
+      );
+      await expect(deleteProject("project-1", true)).rejects.toThrow(
+        "workspace_delete 尚未接入",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(
+        diagnostic("workspace_set_default"),
+      );
+      await expect(setDefaultProject("project-1")).rejects.toThrow(
+        "workspace_set_default 尚未接入",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_create"));
+      await expect(
+        createContent({ project_id: "project-1", title: "诊断内容" }),
+      ).rejects.toThrow("content_create 尚未接入");
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_get"));
+      await expect(getContent("content-1")).rejects.toThrow(
+        "content_get 尚未接入",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(
+        diagnostic("content_get_general_workbench_document_state"),
+      );
+      await expect(
+        getGeneralWorkbenchDocumentState("content-1"),
+      ).rejects.toThrow(
+        "content_get_general_workbench_document_state 尚未接入",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+      await expect(listContents("project-1")).rejects.toThrow(
+        "content_list 尚未接入",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_update"));
+      await expect(updateContent("content-1", { title: "诊断" })).rejects.toThrow(
+        "content_update 尚未接入",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_delete"));
+      await expect(deleteContent("content-1")).rejects.toThrow(
+        "content_delete 尚未接入",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_reorder"));
+      await expect(
+        reorderContents("project-1", ["content-1"]),
+      ).rejects.toThrow("content_reorder 尚未接入");
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticStats);
+      await expect(getContentStats("project-1")).rejects.toThrow(
+        "content_stats 尚未接入",
+      );
+    });
   });
 
   describe("isUserProjectType", () => {

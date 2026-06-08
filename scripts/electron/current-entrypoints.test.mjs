@@ -69,6 +69,14 @@ function expectNoRetiredHostRuntimeInput(content, label) {
   }
 }
 
+function expectNoElectronRuntimeEsmImport(content, label) {
+  const runtimeImportLines = content
+    .split("\n")
+    .filter((line) => /^\s*import\s+(?!type\b).*from "electron";/.test(line));
+
+  expect(runtimeImportLines, label).toEqual([]);
+}
+
 function listFiles(root, predicate = () => true) {
   const entries = fs.readdirSync(root, { withFileTypes: true });
   const files = [];
@@ -191,6 +199,26 @@ describe("Electron current package entrypoints", () => {
     for (const filePath of currentElectronEntrypointFiles()) {
       expectNoRetiredHostRuntimeInput(readFile(filePath), filePath);
     }
+  });
+
+  it("Electron main process avoids ESM runtime imports from electron", () => {
+    const mainProcessFiles = [
+      "electron/main.ts",
+      "electron/updateHost.ts",
+      "electron/appServerHost.ts",
+      "electron/hostCommands.ts",
+    ];
+    for (const filePath of mainProcessFiles) {
+      expectNoElectronRuntimeEsmImport(readFile(filePath), filePath);
+      expect(readFile(filePath), filePath).toContain(
+        'from "./electronRuntime"',
+      );
+    }
+
+    const runtime = readFile("electron/electronRuntime.ts");
+    expect(runtime).toContain('createRequire(import.meta.url)');
+    expect(runtime).toContain('requireElectron("electron")');
+    expectNoElectronRuntimeEsmImport(runtime, "electron/electronRuntime.ts");
   });
 
   it("legacy verify-gui-smoke script delegates to Electron smoke", () => {

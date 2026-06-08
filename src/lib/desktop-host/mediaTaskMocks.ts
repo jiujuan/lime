@@ -1133,29 +1133,6 @@ function listMockMediaTaskArtifacts(args: any) {
 }
 
 export const mediaTaskMocks: Record<string, (args: any) => any> = {
-  create_video_generation_task: (args: any) => {
-    const request = args?.request ?? {};
-    return {
-      id: "mock-video-task-id",
-      projectId: request.projectId ?? "mock-project-id",
-      providerId: request.providerId ?? "doubao",
-      model: request.model ?? "seedance-1-5-pro-251215",
-      prompt: request.prompt ?? "mock",
-      requestPayload: JSON.stringify(request),
-      providerTaskId: "mock-provider-task-id",
-      status: "processing",
-      progress: 0,
-      resultUrl: null,
-      errorMessage: null,
-      metadataJson: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      finishedAt: null,
-    };
-  },
-  get_video_generation_task: () => null,
-  list_video_generation_tasks: () => [],
-  cancel_video_generation_task: () => null,
   create_image_generation_task_artifact: (args: any) =>
     buildMockMediaTaskOutput(args),
   create_audio_generation_task_artifact: (args: any) =>
@@ -1171,18 +1148,4 @@ export const mediaTaskMocks: Record<string, (args: any) => any> = {
       status: "cancelled",
       normalized_status: "cancelled",
     }),
-  search_pixabay_images: () => ({
-    total: 0,
-    total_hits: 0,
-    hits: [],
-  }),
-  search_web_images: () => ({
-    total: 0,
-    provider: "pexels",
-    hits: [],
-  }),
-  import_material_from_url: () => ({
-    id: "mock-material-id",
-  }),
-  list_materials: () => [],
 };

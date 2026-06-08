@@ -28,7 +28,7 @@ pub async fn get_model_registry(
 
 /// 获取模型注册表中所有 provider_id（去重且有序）。
 ///
-/// 本地模型目录已下线，Provider 元信息改由 `get_system_provider_catalog`
+/// 本地模型目录已下线，Provider 元信息改由 App Server `modelProvider/catalog/list`
 /// 和用户配置提供；这里保留命令兼容并返回空集合。
 #[tauri::command]
 pub async fn get_model_registry_provider_ids(
@@ -215,86 +215,5 @@ pub async fn fetch_provider_models_from_api(
 
     service
         .fetch_models_from_api(&provider_id, &api_host, &api_key)
-        .await
-}
-
-/// 从 Provider API 获取模型列表（自动获取 API Key）
-///
-/// 自动从数据库获取 Provider 的 API Key，然后调用 /v1/models 端点
-///
-/// # 参数
-/// - `provider_id`: Provider ID（如 "siliconflow", "openai"）
-#[tauri::command]
-pub async fn fetch_provider_models_auto(
-    state: State<'_, ModelRegistryState>,
-    db: tauri::State<'_, crate::database::DbConnection>,
-    api_key_service: tauri::State<
-        '_,
-        crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState,
-    >,
-    provider_id: String,
-) -> Result<FetchModelsResult, String> {
-    // 获取 Provider 信息
-    let provider = api_key_service
-        .0
-        .get_provider(&db, &provider_id)?
-        .ok_or_else(|| format!("Provider 不存在: {provider_id}"))?;
-
-    // 获取 API Host
-    let api_host = provider.provider.api_host.clone();
-    if api_host.is_empty() {
-        return Err("Provider 没有配置 API Host".to_string());
-    }
-
-    let provider_type = provider.provider.effective_provider_type();
-
-    {
-        let guard = state.read().await;
-        let service = guard
-            .as_ref()
-            .ok_or_else(|| "模型注册服务未初始化".to_string())?;
-        match service.get_cached_provider_models(&provider_id, &api_host, Some(provider_type)) {
-            Ok(Some(cached)) => return Ok(cached),
-            Ok(None) => {}
-            Err(error) => {
-                tracing::warn!(
-                    "[ModelRegistry] 读取 Provider 模型缓存失败，继续获取 API Key: {error}"
-                );
-            }
-        }
-    }
-
-    let requires_api_key = ModelRegistryService::requires_api_key_for_model_fetch(
-        &provider_id,
-        &api_host,
-        provider_type,
-    );
-
-    // 获取 API Key（支持本地免 Key 渠道）
-    let api_key = if requires_api_key {
-        api_key_service
-            .0
-            .get_next_api_key(&db, &provider_id)?
-            .ok_or_else(|| format!("Provider {provider_id} 没有可用的 API Key"))?
-    } else {
-        api_key_service
-            .0
-            .get_next_api_key(&db, &provider_id)?
-            .unwrap_or_default()
-    };
-
-    let guard = state.read().await;
-    let service = guard
-        .as_ref()
-        .ok_or_else(|| "模型注册服务未初始化".to_string())?;
-
-    service
-        .fetch_models_from_api_with_hints(
-            &provider_id,
-            &api_host,
-            &api_key,
-            Some(provider_type),
-            &provider.provider.custom_models,
-        )
         .await
 }

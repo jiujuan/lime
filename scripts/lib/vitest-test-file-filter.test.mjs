@@ -13,4 +13,22 @@ describe("vitest-test-file-filter", () => {
     expect(isVitestRunnableTestFile("src/Foo.test-fixture.tsx")).toBe(false);
     expect(isVitestRunnableTestFile("src/Foo.test_fixtures.ts")).toBe(false);
   });
+
+  it("应排除 node:test 专用 package 自测文件", () => {
+    expect(
+      isVitestRunnableTestFile(
+        "packages/agent-runtime-ui/tests/ui.test.mjs",
+        'import test from "node:test";\n',
+      ),
+    ).toBe(false);
+  });
+
+  it("应保留同时支持 Vitest 的 package 测试文件", () => {
+    expect(
+      isVitestRunnableTestFile(
+        "packages/agent-app-runtime/tests/projection-export.test.mjs",
+        "const { test } = process.env.VITEST ? await import('vitest') : await import('node:test');\n",
+      ),
+    ).toBe(true);
+  });
 });

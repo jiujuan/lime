@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "job": true
+  },
+  "required": [
+    "job"
+  ],
+  "title": "AutomationJobWriteResponse",
+  "type": "object"
+}

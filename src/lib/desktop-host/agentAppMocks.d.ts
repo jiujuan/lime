@@ -72,31 +72,6 @@ export declare const agentAppMocks: {
             };
         } | null;
     }>;
-    agent_app_start_ui_runtime: (args: any) => Promise<{
-        appId: string;
-        status: string;
-        baseUrl: string;
-        entryUrl: string;
-        port: number;
-        pid: number;
-        entryKey: string;
-        route: string;
-    }>;
-    agent_app_get_ui_runtime_status: (args: any) => Promise<{
-        appId: string;
-        status: string;
-        baseUrl: string;
-        entryUrl: string;
-        port: number;
-        pid: number;
-        entryKey: string;
-        route: string;
-    }>;
-    agent_app_stop_ui_runtime: (args: any) => Promise<{
-        appId: string;
-        status: string;
-        message: string;
-    }>;
     agent_app_select_directory: () => Promise<{
         path: null;
         cancelled: boolean;
@@ -157,51 +132,5 @@ export declare const agentAppMocks: {
             };
         };
         launchedAt: string;
-    }>;
-    agent_app_runtime_start_task: (args: any) => Promise<{
-        appId: string;
-        entryKey: any;
-        taskId: string;
-        traceId: string;
-        taskKind: string;
-        sessionId: string;
-        turnId: string;
-        eventName: string;
-        status: string;
-        submittedAt: string;
-    }>;
-    agent_app_runtime_cancel_task: (args: any) => Promise<{
-        appId: string;
-        taskId: string;
-        sessionId: string;
-        cancelled: boolean;
-        status: string;
-    }>;
-    agent_app_runtime_get_task: (args: any) => Promise<{
-        appId: string;
-        taskId: string;
-        sessionId: string;
-        status: string;
-        taskStatus: string;
-        taskEvents: {
-            id: string;
-            eventType: string;
-            status: string;
-            message: string;
-            occurredAt: string;
-            payload: {
-                source: string;
-            };
-        }[];
-        threadRead: {
-            session_id: string;
-            status: string;
-            source: string;
-        };
-    }>;
-    agent_app_runtime_submit_host_response: (args: any) => Promise<{
-        appId: string;
-        taskId: string;
-        status: string;
     }>;
 };

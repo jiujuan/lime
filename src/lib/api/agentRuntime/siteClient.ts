@@ -11,6 +11,7 @@ import type {
   SiteAdapterRecommendation,
   SiteAdapterRunResult,
 } from "@/lib/webview-api";
+import { assertNotDiagnosticFacade } from "../diagnosticFacade";
 import {
   invokeAgentRuntimeBridge,
   type AgentRuntimeBridgeInvoke,
@@ -24,7 +25,14 @@ export function createSiteClient({
   bridgeInvoke = invokeAgentRuntimeBridge,
 }: AgentRuntimeSiteClientDeps = {}) {
   async function siteListAdapters(): Promise<SiteAdapterDefinition[]> {
-    return await bridgeInvoke("site_list_adapters");
+    const result =
+      await bridgeInvoke<SiteAdapterDefinition[]>("site_list_adapters");
+    assertNotDiagnosticFacade(
+      "site_list_adapters",
+      result,
+      "真实 Site Adapter current 通道",
+    );
+    return result;
   }
 
   async function siteRecommendAdapters(
@@ -60,7 +68,15 @@ export function createSiteClient({
   }
 
   async function siteGetAdapterCatalogStatus(): Promise<SiteAdapterCatalogStatus> {
-    return await bridgeInvoke("site_get_adapter_catalog_status");
+    const result = await bridgeInvoke<SiteAdapterCatalogStatus>(
+      "site_get_adapter_catalog_status",
+    );
+    assertNotDiagnosticFacade(
+      "site_get_adapter_catalog_status",
+      result,
+      "真实 Site Adapter current 通道",
+    );
+    return result;
   }
 
   async function siteApplyAdapterCatalogBootstrap(

@@ -14,4 +14,22 @@ describe("agentRuntimeMocks", () => {
       "agent_runtime_get_session 已迁移到 App Server JSON-RPC agentSession/read",
     );
   });
+
+  it("subagent 公开 compat facade 不再注册 desktop-host 默认 mock", () => {
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_spawn_subagent",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_send_subagent_input",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_wait_subagents",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_resume_subagent",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_close_subagent",
+    );
+  });
 });

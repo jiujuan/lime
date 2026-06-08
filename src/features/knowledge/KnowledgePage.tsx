@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { ProjectSelector } from "@/components/projects/ProjectSelector";
 import {
-  compileKnowledgePack,
   getKnowledgePack,
   importKnowledgeSource,
   listKnowledgePacks,
@@ -31,6 +30,7 @@ import {
   getProjectByRootPath,
 } from "@/lib/api/project";
 import type { KnowledgePageParams, Page, PageParams } from "@/types/page";
+import { getElectronHostBridge } from "@/lib/electron-host";
 import { cn } from "@/lib/utils";
 import {
   PACK_TYPES,
@@ -48,6 +48,10 @@ import {
   resolveKnowledgePackRuntimeMode,
   type KnowledgeRequestCompanionPack,
 } from "./agent/knowledgeMetadata";
+import {
+  buildKnowledgeOrganizePrompt,
+  normalizeKnowledgeDraftName,
+} from "./agent/knowledgePromptBuilder";
 import { StatusPill } from "./components/StatusPill";
 
 interface KnowledgePageProps {
@@ -119,6 +123,15 @@ function readLastProjectId(): string {
   } catch {
     return rawValue;
   }
+}
+
+function isKnowledgeDetailCommandAvailable(): boolean {
+  const bridge = getElectronHostBridge();
+  return (
+    !bridge ||
+    !bridge.supportsCommand ||
+    bridge.supportsCommand("knowledge_get_pack")
+  );
 }
 
 function resolveDraftPackNameInput(
@@ -383,6 +396,11 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
       setDetailStatus("idle");
       return;
     }
+    if (!isKnowledgeDetailCommandAvailable()) {
+      setSelectedPack(null);
+      setDetailStatus("idle");
+      return;
+    }
 
     let cancelled = false;
     setDetailStatus("loading");
@@ -512,61 +530,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     ],
   );
 
-  const compileByName = useCallback(
-    async (packName: string) => {
-      if (!workingDir || !packName) {
-        return null;
-      }
-
-      setActionStatus("compile");
-      setNotice(null);
-      try {
-        const response = await compileKnowledgePack(workingDir, packName);
-        setSelectedPack(response.pack);
-        setSelectedPackName(response.pack.metadata.name);
-        setNotice(
-          response.warnings.length > 0
-            ? "已整理，下一步请检查完整资料文档、缺口和风险边界"
-            : "资料已整理，等待你确认",
-        );
-        await refreshCatalog(workingDir);
-        return response.pack;
-      } catch (error) {
-        setNotice(getErrorMessage(error, "整理资料失败"));
-        return null;
-      } finally {
-        setActionStatus(null);
-      }
-    },
-    [refreshCatalog, workingDir],
-  );
-
-  const handleStartWizardCompile = useCallback(async () => {
-    let packName = selectedPackName || normalizePackNameInput(packNameInput);
-    if (sourceText.trim()) {
-      const imported = await runImportSource("compile-import");
-      if (!imported) {
-        return;
-      }
-      packName = imported.metadata.name;
-    }
-    if (!packName) {
-      setNotice("请先导入资料或选择已有资料");
-      return;
-    }
-    const compiled = await compileByName(packName);
-    if (compiled) {
-      setActiveView("detail");
-      setDetailTab("overview");
-    }
-  }, [
-    compileByName,
-    packNameInput,
-    runImportSource,
-    selectedPackName,
-    sourceText,
-  ]);
-
   const handleUpdateStatus = useCallback(
     async (status: KnowledgePackStatus) => {
       if (!workingDir || !selectedPackName) {
@@ -617,6 +580,41 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
       },
     });
   }, [onNavigate, selectedProjectId]);
+
+  const handleContinueKnowledgeOrganizeInAgent = useCallback(() => {
+    const normalizedWorkingDir = workingDir.trim();
+    if (!normalizedWorkingDir) {
+      setNotice("请先选择项目");
+      return;
+    }
+
+    const normalizedPackName = normalizeKnowledgeDraftName(
+      packNameInput || packDescription || DEFAULT_PACK_NAME,
+    );
+    const prompt = buildKnowledgeOrganizePrompt(sourceText);
+    onNavigate?.("agent", {
+      agentEntry: "claw",
+      projectId: selectedProjectId ?? undefined,
+      initialUserPrompt: prompt,
+      initialRequestMetadata: {
+        knowledge_builder: {
+          working_dir: normalizedWorkingDir,
+          pack_name: normalizedPackName,
+          source: "knowledge-page",
+          pack_type: packType.trim() || undefined,
+        },
+      },
+      autoRunInitialPromptOnMount: false,
+    });
+  }, [
+    onNavigate,
+    packDescription,
+    packNameInput,
+    packType,
+    selectedProjectId,
+    sourceText,
+    workingDir,
+  ]);
 
   const handleOpenKnowledgeComposer = useCallback(
     (packNameOverride?: string) => {
@@ -1126,7 +1124,8 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                             if (pack.metadata.status === "ready") {
                               handleOpenKnowledgeComposer(pack.metadata.name);
                             } else if (isFailedStatus(pack.metadata.status)) {
-                              void compileByName(pack.metadata.name);
+                              setPackNameInput(pack.metadata.name);
+                              setActiveView("import");
                             } else if (isProblemStatus(pack.metadata.status)) {
                               setPackNameInput(pack.metadata.name);
                               setActiveView("import");
@@ -1342,22 +1341,20 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                     </span>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-base font-semibold text-slate-950">
-                        Lime 开始整理
+                        带到对话里整理
                       </h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        点击后会保存原始资料，并生成一份待确认的完整资料文档。
+                        点击后会把资料带到当前对话，由 Lime 帮你整理成可确认草稿。
                       </p>
                       <div className="mt-4 grid gap-3 md:grid-cols-4">
                         {[
                           ["读取资料", sourceText.trim() ? "已完成" : "等待中"],
-                          ["提炼重点", actionBusy ? "进行中" : "等待中"],
+                          ["提炼重点", "到对话里完成"],
                           [
-                            "生成完整文档",
-                            selectedSummary?.compiledCount
-                              ? "已生成"
-                              : "等待中",
+                            "生成资料草稿",
+                            "到对话里完成",
                           ],
-                          ["检查缺口", selectedSummary ? "待处理" : "等待中"],
+                          ["检查缺口", "到对话里完成"],
                         ].map(([title, state], index) => (
                           <div
                             key={title}
@@ -1375,17 +1372,12 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                       </div>
                       <button
                         type="button"
-                        onClick={handleStartWizardCompile}
+                        onClick={handleContinueKnowledgeOrganizeInAgent}
                         disabled={actionBusy}
                         className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-full border border-emerald-700 bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800 disabled:opacity-60"
                       >
-                        {actionStatus === "compile" ||
-                        actionStatus === "compile-import" ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-4 w-4" />
-                        )}
-                        Lime 开始整理
+                        <Sparkles className="h-4 w-4" />
+                        去对话里整理
                       </button>
                     </div>
                   </div>

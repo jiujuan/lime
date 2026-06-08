@@ -10,7 +10,7 @@ const { appState, checkForUpdatesMock, quitAndInstallMock, setFeedURLMock } =
     setFeedURLMock: vi.fn(),
   }));
 
-  vi.mock("electron", () => ({
+vi.mock("./electronRuntime", () => ({
   app: {
     getVersion: () => "1.60.0",
     get isPackaged() {

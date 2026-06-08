@@ -323,10 +323,6 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
   restore_window_size: () => ({}),
   toggle_window_size: () => ({}),
   center_window: () => ({}),
-  close_webview_panel: () => true,
-  get_webview_panels: () => [],
-  focus_webview_panel: () => true,
-  navigate_webview_panel: () => true,
 
   // Machine ID 相关
   get_current_machine_id: () => ({ machine_id: "" }),

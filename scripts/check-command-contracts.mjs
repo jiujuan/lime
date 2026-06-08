@@ -31,6 +31,65 @@ const retiredFileBrowserFacadeCommands = new Set([
   "list_dir",
   "read_file_preview_cmd",
 ]);
+const retiredAutomationFacadeCommands = new Set([
+  "get_automation_scheduler_config",
+  "update_automation_scheduler_config",
+  "get_automation_status",
+  "get_automation_jobs",
+  "get_automation_job",
+  "create_automation_job",
+  "update_automation_job",
+  "delete_automation_job",
+  "run_automation_job_now",
+  "get_automation_health",
+  "get_automation_run_history",
+  "preview_automation_schedule",
+  "validate_automation_schedule",
+]);
+const retiredApiKeyProviderFacadeCommands = new Set([
+  "get_api_key_providers",
+  "get_system_provider_catalog",
+  "get_api_key_provider",
+  "read_api_key_provider_config",
+  "add_custom_api_key_provider",
+  "create_api_key_provider",
+  "update_api_key_provider",
+  "delete_custom_api_key_provider",
+  "delete_api_key_provider",
+  "add_api_key",
+  "create_api_key_provider_key",
+  "delete_api_key",
+  "delete_api_key_provider_key",
+  "toggle_api_key",
+  "update_api_key_alias",
+  "update_api_key_provider_key",
+  "get_next_api_key",
+  "next_api_key_provider_key",
+  "record_api_key_usage",
+  "record_api_key_provider_key_usage",
+  "record_api_key_error",
+  "record_api_key_provider_key_error",
+  "get_provider_ui_state",
+  "read_api_key_provider_ui_state",
+  "set_provider_ui_state",
+  "write_api_key_provider_ui_state",
+  "update_provider_sort_orders",
+  "update_api_key_provider_sort_orders",
+  "export_api_key_providers",
+  "export_api_key_provider_config",
+  "import_api_key_providers",
+  "import_api_key_provider_config",
+  "test_api_key_provider_connection",
+  "test_api_key_provider_chat",
+  "fetch_provider_models_auto",
+]);
+const currentFileBrowserDesktopHostShellCommands = new Set([
+  "get_home_dir",
+  "get_file_manager_locations",
+  "get_file_icon_data_url",
+  "reveal_in_finder",
+  "open_with_default_app",
+]);
 
 function addDeferredCommands(commands, reason) {
   for (const command of commands) {
@@ -57,9 +116,7 @@ const currentElectronHostRequiredCommands = new Set([
   "agent_app_get_ui_runtime_status",
   "agent_app_start_ui_runtime",
   "agent_app_stop_ui_runtime",
-  "get_api_key_providers",
   "get_all_alias_configs",
-  "get_automation_jobs",
   "get_default_provider",
   "get_experimental_config",
   "get_model_preferences",
@@ -69,7 +126,6 @@ const currentElectronHostRequiredCommands = new Set([
   "get_models_by_tier",
   "get_models_for_provider",
   "get_provider_alias_config",
-  "get_system_provider_catalog",
   "get_skill_detail",
   "knowledge_list_packs",
   "list_executable_skills",
@@ -95,7 +151,6 @@ const currentDevBridgeTruthRequiredCommands = new Set([
   "open_external_url",
   "start_oem_cloud_oauth_callback_bridge",
   "knowledge_list_packs",
-  "get_automation_jobs",
   "project_memory_get",
 ]);
 
@@ -110,16 +165,11 @@ const electronDiagnosticFacadeCommands = new Set([
   "get_chrome_profile_sessions",
   "get_daily_usage_trends",
   "get_environment_preview",
-  "get_mcp_servers",
   "get_model_usage_ranking",
   "get_usage_stats",
   "get_voice_input_config",
   "get_voice_shortcut_runtime_status",
   "list_audio_devices",
-  "mcp_list_prompts",
-  "mcp_list_resources",
-  "mcp_list_servers_with_status",
-  "mcp_list_tools",
   "site_get_adapter_catalog_status",
   "site_list_adapters",
   "unified_memory_stats",
@@ -596,6 +646,20 @@ function hasStandaloneIdentifier(sourceCode, identifier) {
   return pattern.test(sourceCode);
 }
 
+function stripRustTestModules(sourceCode) {
+  return sourceCode.replace(
+    /(?:^|\n)\s*#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*(?:pub\s+)?mod\s+\w+\s*(?:\{[\s\S]*$|;)/m,
+    "\n",
+  );
+}
+
+function readProductionSourceForGuard(relativePath) {
+  const sourceCode = readSource(relativePath);
+  return relativePath.endsWith(".rs")
+    ? stripRustTestModules(sourceCode)
+    : sourceCode;
+}
+
 function extractNamedFunctionBody(sourceCode, marker) {
   const markerIndex = sourceCode.indexOf(marker);
   if (markerIndex < 0) {
@@ -951,11 +1015,6 @@ function collectProductionBridgeGuardFailures() {
         token: command,
       });
     }
-    const usesSharedMcpDiagnostic =
-      (command === "get_mcp_servers" || command.startsWith("mcp_list_")) &&
-      electronHostCommandsSource.includes(
-        "return this.#emptyDiagnosticList(command);",
-      );
     const diagnosticMetaPattern = new RegExp(
       `#diagnosticMeta\\([\\s\\S]*?["'\`]${escapeRegExp(command)}["'\`][\\s\\S]*?\\)`,
     );
@@ -964,8 +1023,7 @@ function collectProductionBridgeGuardFailures() {
     );
     const hasDiagnosticProjection =
       diagnosticMetaPattern.test(electronHostCommandsSource) ||
-      emptyDiagnosticListPattern.test(electronHostCommandsSource) ||
-      usesSharedMcpDiagnostic;
+      emptyDiagnosticListPattern.test(electronHostCommandsSource);
     if (!hasDiagnosticProjection) {
       failures.push({
         file: electronHostCommandsPath,
@@ -1175,8 +1233,151 @@ function collectRetiredFileBrowserFacadeSourceFailures() {
   ];
 
   for (const source of restrictedSources) {
-    const sourceCode = readSource(source.path);
+    const sourceCode = readProductionSourceForGuard(source.path);
     for (const command of retiredFileBrowserFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredAutomationFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已迁到 App Server automation* 的旧自动化命令不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "已迁到 App Server automation* 的旧自动化命令不能继续作为 mock priority command",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已迁到 App Server automation* 的旧自动化命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message:
+        "已迁到 App Server automation* 的旧自动化命令不能回到 legacy Tauri command module",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "已迁到 App Server automation* 的旧自动化命令不能回到 Rust DevBridge dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredAutomationFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredApiKeyProviderFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已迁到 App Server modelProvider/* 的旧 Provider 命令不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "已迁到 App Server modelProvider/* 的旧 Provider 命令不能继续作为 mock priority command",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已迁到 App Server modelProvider/* 的旧 Provider 命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message:
+        "已迁到 App Server modelProvider/* 的旧 Provider 命令不能回到 legacy Tauri command module",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "已迁到 App Server modelProvider/* 的旧 Provider 命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/providers.rs",
+      message:
+        "已迁到 App Server modelProvider/* 的旧 Provider 命令不能回到 Rust DevBridge provider dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredApiKeyProviderFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectCurrentFileBrowserDesktopHostShellSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/desktop-host/fileSystemMocks.ts",
+      message:
+        "已迁到 Electron Desktop Host 的文件浏览壳命令不能继续保留 desktop-host mock fixture",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已迁到 Electron Desktop Host 的文件浏览壳命令不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已迁到 Electron Desktop Host 的文件浏览壳命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/files.rs",
+      message:
+        "已迁到 Electron Desktop Host 的文件浏览壳命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/services/file_browser_service.rs",
+      message:
+        "已迁到 Electron Desktop Host 的文件浏览壳命令不能回到 Tauri command wrapper",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of currentFileBrowserDesktopHostShellCommands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
         failures.push({
           file: source.path,
@@ -1214,6 +1415,12 @@ function main() {
   const productionBridgeGuardFailures = collectProductionBridgeGuardFailures();
   const retiredFileBrowserFacadeSourceFailures =
     collectRetiredFileBrowserFacadeSourceFailures();
+  const retiredAutomationFacadeSourceFailures =
+    collectRetiredAutomationFacadeSourceFailures();
+  const retiredApiKeyProviderFacadeSourceFailures =
+    collectRetiredApiKeyProviderFacadeSourceFailures();
+  const currentFileBrowserDesktopHostShellSourceFailures =
+    collectCurrentFileBrowserDesktopHostShellSourceFailures();
 
   const deprecatedCommands = new Set(
     Object.keys(agentCommandCatalog.deprecatedCommandReplacements ?? {}),
@@ -1249,6 +1456,34 @@ function main() {
     [...retiredFileBrowserFacadeCommands].filter(
       (command) =>
         registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredAutomationFacadeLeaks = new Set(
+    [...retiredAutomationFacadeCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredApiKeyProviderFacadeLeaks = new Set(
+    [...retiredApiKeyProviderFacadeCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const currentFileBrowserDesktopHostShellBridgeLeaks = new Set(
+    [...currentFileBrowserDesktopHostShellCommands].filter(
+      (command) =>
         bridgeTruthCommands.has(command) ||
         runtimeGatewayCommands.has(command) ||
         capabilityDraftCommands.has(command),
@@ -1356,6 +1591,54 @@ function main() {
     printGuardFailures(
       "已迁到 App Server fileSystem/* 的旧文件浏览命令不能回到旧客户端源码",
       retiredFileBrowserFacadeSourceFailures,
+    );
+  }
+
+  if (retiredAutomationFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server automation* 的旧自动化命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredAutomationFacadeLeaks,
+    );
+  }
+
+  if (retiredAutomationFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server automation* 的旧自动化命令不能回到旧客户端源码",
+      retiredAutomationFacadeSourceFailures,
+    );
+  }
+
+  if (retiredApiKeyProviderFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server modelProvider/* 的旧 Provider 命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredApiKeyProviderFacadeLeaks,
+    );
+  }
+
+  if (retiredApiKeyProviderFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server modelProvider/* 的旧 Provider 命令不能回到旧客户端源码",
+      retiredApiKeyProviderFacadeSourceFailures,
+    );
+  }
+
+  if (currentFileBrowserDesktopHostShellBridgeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 Electron Desktop Host 的文件浏览壳命令不能回到 DevBridge truth 或 runtime gateway surface",
+      currentFileBrowserDesktopHostShellBridgeLeaks,
+    );
+  }
+
+  if (currentFileBrowserDesktopHostShellSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host 的文件浏览壳命令不能回到旧客户端源码",
+      currentFileBrowserDesktopHostShellSourceFailures,
     );
   }
 

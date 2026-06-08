@@ -12,6 +12,7 @@ import {
   openPathWithDefaultApp,
   revealPathInFinder,
 } from "@/lib/api/fileSystem";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 // ============================================================================
 // 类型定义
@@ -77,6 +78,21 @@ export interface SessionDetail {
   files: SessionFile[];
 }
 
+async function invokeSessionFilesCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke<T>(command, args)
+    : await safeInvoke<T>(command);
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Session files current 通道",
+  );
+  return result;
+}
+
 // ============================================================================
 // 会话管理 API
 // ============================================================================
@@ -85,14 +101,18 @@ export interface SessionDetail {
  * 创建新会话
  */
 export async function createSession(sessionId: string): Promise<SessionMeta> {
-  return safeInvoke<SessionMeta>("session_files_create", { sessionId });
+  return invokeSessionFilesCommand<SessionMeta>("session_files_create", {
+    sessionId,
+  });
 }
 
 /**
  * 检查会话是否存在
  */
 export async function sessionExists(sessionId: string): Promise<boolean> {
-  return safeInvoke<boolean>("session_files_exists", { sessionId });
+  return invokeSessionFilesCommand<boolean>("session_files_exists", {
+    sessionId,
+  });
 }
 
 /**
@@ -101,21 +121,26 @@ export async function sessionExists(sessionId: string): Promise<boolean> {
 export async function getOrCreateSession(
   sessionId: string,
 ): Promise<SessionMeta> {
-  return safeInvoke<SessionMeta>("session_files_get_or_create", { sessionId });
+  return invokeSessionFilesCommand<SessionMeta>(
+    "session_files_get_or_create",
+    { sessionId },
+  );
 }
 
 /**
  * 删除会话
  */
 export async function deleteSession(sessionId: string): Promise<void> {
-  return safeInvoke("session_files_delete", { sessionId });
+  return invokeSessionFilesCommand<void>("session_files_delete", {
+    sessionId,
+  });
 }
 
 /**
  * 列出所有会话
  */
 export async function listSessions(): Promise<SessionSummary[]> {
-  return safeInvoke<SessionSummary[]>("session_files_list");
+  return invokeSessionFilesCommand<SessionSummary[]>("session_files_list");
 }
 
 /**
@@ -124,7 +149,10 @@ export async function listSessions(): Promise<SessionSummary[]> {
 export async function getSessionDetail(
   sessionId: string,
 ): Promise<SessionDetail> {
-  return safeInvoke<SessionDetail>("session_files_get_detail", { sessionId });
+  return invokeSessionFilesCommand<SessionDetail>(
+    "session_files_get_detail",
+    { sessionId },
+  );
 }
 
 /**
@@ -138,7 +166,7 @@ export async function updateSessionMeta(
     creationMode?: string;
   },
 ): Promise<SessionMeta> {
-  return safeInvoke<SessionMeta>("session_files_update_meta", {
+  return invokeSessionFilesCommand<SessionMeta>("session_files_update_meta", {
     sessionId,
     ...updates,
   });
@@ -157,7 +185,7 @@ export async function saveFile(
   content: string,
   metadata?: Record<string, unknown>,
 ): Promise<SessionFile> {
-  return safeInvoke<SessionFile>("session_files_save_file", {
+  return invokeSessionFilesCommand<SessionFile>("session_files_save_file", {
     sessionId,
     fileName,
     content,
@@ -172,7 +200,7 @@ export async function readFile(
   sessionId: string,
   fileName: string,
 ): Promise<string> {
-  return safeInvoke<string>("session_files_read_file", {
+  return invokeSessionFilesCommand<string>("session_files_read_file", {
     sessionId,
     fileName,
   });
@@ -185,10 +213,13 @@ export async function resolveFilePath(
   sessionId: string,
   fileName: string,
 ): Promise<string> {
-  return safeInvoke<string>("session_files_resolve_file_path", {
-    sessionId,
-    fileName,
-  });
+  return invokeSessionFilesCommand<string>(
+    "session_files_resolve_file_path",
+    {
+      sessionId,
+      fileName,
+    },
+  );
 }
 
 /**
@@ -220,7 +251,7 @@ export async function deleteFile(
   sessionId: string,
   fileName: string,
 ): Promise<void> {
-  return safeInvoke("session_files_delete_file", {
+  return invokeSessionFilesCommand<void>("session_files_delete_file", {
     sessionId,
     fileName,
   });
@@ -230,7 +261,9 @@ export async function deleteFile(
  * 列出会话中的文件
  */
 export async function listFiles(sessionId: string): Promise<SessionFile[]> {
-  return safeInvoke<SessionFile[]>("session_files_list_files", { sessionId });
+  return invokeSessionFilesCommand<SessionFile[]>("session_files_list_files", {
+    sessionId,
+  });
 }
 
 // ============================================================================
@@ -241,14 +274,16 @@ export async function listFiles(sessionId: string): Promise<SessionFile[]> {
  * 清理过期会话
  */
 export async function cleanupExpired(maxAgeDays?: number): Promise<number> {
-  return safeInvoke<number>("session_files_cleanup_expired", { maxAgeDays });
+  return invokeSessionFilesCommand<number>("session_files_cleanup_expired", {
+    maxAgeDays,
+  });
 }
 
 /**
  * 清理空会话
  */
 export async function cleanupEmpty(): Promise<number> {
-  return safeInvoke<number>("session_files_cleanup_empty");
+  return invokeSessionFilesCommand<number>("session_files_cleanup_empty");
 }
 
 // ============================================================================
@@ -265,7 +300,7 @@ export async function uploadImageToSession(
   sessionId: string,
   filePath: string,
 ): Promise<string> {
-  return safeInvoke<string>("upload_image_to_session", {
+  return invokeSessionFilesCommand<string>("upload_image_to_session", {
     sessionId,
     filePath,
   });
@@ -281,7 +316,7 @@ export async function readImageFromSession(
   sessionId: string,
   fileName: string,
 ): Promise<string> {
-  return safeInvoke<string>("read_image_from_session", {
+  return invokeSessionFilesCommand<string>("read_image_from_session", {
     sessionId,
     fileName,
   });
@@ -297,7 +332,7 @@ export async function readImageFromSession(
  * @returns 文档的文本内容
  */
 export async function importDocument(filePath: string): Promise<string> {
-  return safeInvoke<string>("import_document", { filePath });
+  return invokeSessionFilesCommand<string>("import_document", { filePath });
 }
 
 /**
@@ -310,8 +345,11 @@ export async function importDocumentToSession(
   sessionId: string,
   filePath: string,
 ): Promise<[string, string]> {
-  return safeInvoke<[string, string]>("import_document_to_session", {
-    sessionId,
-    filePath,
-  });
+  return invokeSessionFilesCommand<[string, string]>(
+    "import_document_to_session",
+    {
+      sessionId,
+      filePath,
+    },
+  );
 }

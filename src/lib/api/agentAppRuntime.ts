@@ -3,6 +3,7 @@ import type {
   AgentRuntimeRespondActionRequest,
   AgentTurnConfigSnapshot,
 } from "./agentRuntime/types";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const AGENT_APP_RUNTIME_COMMANDS = {
   startTask: "agent_app_runtime_start_task",
@@ -10,6 +11,19 @@ export const AGENT_APP_RUNTIME_COMMANDS = {
   getTask: "agent_app_runtime_get_task",
   submitHostResponse: "agent_app_runtime_submit_host_response",
 } as const;
+
+async function invokeAgentAppRuntimeCommand<T>(
+  command: string,
+  request: unknown,
+): Promise<T> {
+  const result = await safeInvoke(command, { request });
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Agent App runtime current 通道",
+  );
+  return result as T;
+}
 
 export interface AgentAppRuntimeStartTaskRequest {
   appId: string;
@@ -112,35 +126,35 @@ export interface AgentAppRuntimeSubmitHostResponseResult {
 export async function startAgentAppRuntimeTask(
   request: AgentAppRuntimeStartTaskRequest,
 ): Promise<AgentAppRuntimeStartTaskResult> {
-  return safeInvoke<AgentAppRuntimeStartTaskResult>(
+  return invokeAgentAppRuntimeCommand<AgentAppRuntimeStartTaskResult>(
     AGENT_APP_RUNTIME_COMMANDS.startTask,
-    { request },
+    request,
   );
 }
 
 export async function cancelAgentAppRuntimeTask(
   request: AgentAppRuntimeCancelTaskRequest,
 ): Promise<AgentAppRuntimeCancelTaskResult> {
-  return safeInvoke<AgentAppRuntimeCancelTaskResult>(
+  return invokeAgentAppRuntimeCommand<AgentAppRuntimeCancelTaskResult>(
     AGENT_APP_RUNTIME_COMMANDS.cancelTask,
-    { request },
+    request,
   );
 }
 
 export async function getAgentAppRuntimeTask(
   request: AgentAppRuntimeGetTaskRequest,
 ): Promise<AgentAppRuntimeTaskSnapshot> {
-  return safeInvoke<AgentAppRuntimeTaskSnapshot>(
+  return invokeAgentAppRuntimeCommand<AgentAppRuntimeTaskSnapshot>(
     AGENT_APP_RUNTIME_COMMANDS.getTask,
-    { request },
+    request,
   );
 }
 
 export async function submitAgentAppRuntimeHostResponse(
   request: AgentAppRuntimeSubmitHostResponseRequest,
 ): Promise<AgentAppRuntimeSubmitHostResponseResult> {
-  return safeInvoke<AgentAppRuntimeSubmitHostResponseResult>(
+  return invokeAgentAppRuntimeCommand<AgentAppRuntimeSubmitHostResponseResult>(
     AGENT_APP_RUNTIME_COMMANDS.submitHostResponse,
-    { request },
+    request,
   );
 }

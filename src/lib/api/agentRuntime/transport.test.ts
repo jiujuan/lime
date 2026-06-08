@@ -4,6 +4,16 @@ import {
   createAgentRuntimeCommandInvoke,
 } from "./transport";
 
+function withArrayDiagnostic<T extends unknown[]>(value: T): T {
+  Object.defineProperty(value, "__diagnostic", {
+    value: {
+      source: "electron-host-diagnostic",
+      status: "degraded",
+    },
+  });
+  return value;
+}
+
 describe("agentRuntime transport", () => {
   it("无 payload 时应直接透传命令名", async () => {
     const invoke = vi.fn().mockResolvedValueOnce({ ok: true });
@@ -47,5 +57,50 @@ describe("agentRuntime transport", () => {
     );
 
     expect(bridgeInvoke).toHaveBeenCalledWith("agent_runtime_list_sessions");
+  });
+
+  it("command invoker 遇到自定义 bridge diagnostic facade 时应 fail closed", async () => {
+    const bridgeInvoke = vi.fn().mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+    const invokeCommand = createAgentRuntimeCommandInvoke({ bridgeInvoke });
+
+    await expect(
+      invokeCommand("agent_runtime_spawn_subagent", {
+        request: { name: "worker" },
+      }),
+    ).rejects.toThrow(
+      "agent_runtime_spawn_subagent 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("bridge invoker 遇到 degraded diagnostic facade 时应 fail closed", async () => {
+    const invoke = vi.fn().mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+    const bridgeInvoke = createAgentRuntimeBridgeInvoke({ invoke });
+
+    await expect(
+      bridgeInvoke("agent_runtime_export_handoff_bundle", {
+        request: { session_id: "session-1" },
+      }),
+    ).rejects.toThrow(
+      "agent_runtime_export_handoff_bundle 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("bridge invoker 遇到数组 diagnostic facade 时应 fail closed", async () => {
+    const invoke = vi.fn().mockResolvedValueOnce(withArrayDiagnostic([]));
+    const bridgeInvoke = createAgentRuntimeBridgeInvoke({ invoke });
+
+    await expect(bridgeInvoke("agent_runtime_list_sessions")).rejects.toThrow(
+      "agent_runtime_list_sessions 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
   });
 });

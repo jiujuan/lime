@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "diagnosticHint": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "error": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "errorKind": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "fromCache": {
+      "type": "boolean"
+    },
+    "models": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    },
+    "requestUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "shouldPromptError": {
+      "type": "boolean"
+    },
+    "source": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fromCache",
+    "shouldPromptError",
+    "source"
+  ],
+  "title": "ModelProviderFetchModelsResponse",
+  "type": "object"
+}

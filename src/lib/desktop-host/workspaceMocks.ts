@@ -1,18 +1,4 @@
 export const workspaceMocks: Record<string, (args?: any) => any> = {
-  workspace_list: () => [
-    {
-      id: "workspace-default",
-      name: "默认工作区",
-      workspace_type: "general",
-      root_path: "/tmp/lime/workspaces/default",
-      is_default: true,
-      is_favorite: true,
-      is_archived: false,
-      created_at: Date.now(),
-      updated_at: Date.now(),
-      tags: [],
-    },
-  ],
   get_or_create_default_project: () => ({
     id: "workspace-default",
     name: "默认工作区",
@@ -25,49 +11,5 @@ export const workspaceMocks: Record<string, (args?: any) => any> = {
     updated_at: Date.now(),
     tags: [],
   }),
-  workspace_get: (args: any) => ({
-    id: args?.id ?? "mock-workspace",
-    name: args?.id ?? "Mock Workspace",
-    workspaceType: "general",
-    rootPath: `/mock/workspace/${args?.id ?? "mock-workspace"}`,
-    isDefault: false,
-    settings: {},
-    isFavorite: false,
-    isArchived: false,
-    tags: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  }),
-  workspace_get_default: () => null,
-  workspace_set_default: () => ({}),
-  workspace_get_by_path: () => null,
-  workspace_ensure_default_ready: () => null,
-  workspace_ensure_ready: (args: any) => ({
-    workspaceId: args?.id ?? "mock-workspace",
-    rootPath: "~/mock-workspace",
-    existed: true,
-    created: false,
-    repaired: false,
-    relocated: false,
-    previousRootPath: null,
-    warning: null,
-  }),
   workspace_get_projects_root: () => "/mock/workspace/projects",
-  workspace_resolve_project_path: (args: any) => {
-    const parentRootPath =
-      typeof args?.parentRootPath === "string" && args.parentRootPath.trim()
-        ? args.parentRootPath.trim()
-        : "/mock/workspace/projects";
-    return `${parentRootPath.replace(/[\\/]+$/, "")}/${args?.name ?? "untitled"}`;
-  },
-  workspace_create: (args: any) => ({
-    id: `mock-project-${Date.now()}`,
-    name: args?.request?.name ?? "Mock Project",
-    rootPath:
-      args?.request?.rootPath ?? "/mock/workspace/projects/mock-project",
-    workspaceType: args?.request?.workspaceType ?? "general",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    isArchived: false,
-  }),
 };

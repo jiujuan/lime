@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "alias": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "apiKey": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": "string"
+    },
+    "replaceExisting": {
+      "default": null,
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "apiKey",
+    "providerId"
+  ],
+  "title": "ModelProviderKeyCreateParams",
+  "type": "object"
+}

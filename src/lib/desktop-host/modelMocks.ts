@@ -3,7 +3,6 @@ export const modelMocks: Record<string, (args?: any) => any> = {
   get_model_registry_provider_ids: () => [],
   refresh_model_registry: () => ({ success: true }),
   search_models: () => [],
-  get_all_provider_models: () => ({}),
   get_model_preferences: () => [],
   toggle_model_favorite: () => ({ success: true }),
   hide_model: () => ({ success: true }),

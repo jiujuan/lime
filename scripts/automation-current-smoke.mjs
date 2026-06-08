@@ -25,7 +25,21 @@ const DEFAULTS = {
 
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const REQUIRED_APP_SERVER_METHODS = ["automationJob/list"];
-const LEGACY_AUTOMATION_COMMANDS = ["get_automation_jobs"];
+const LEGACY_AUTOMATION_COMMANDS = [
+  "get_automation_scheduler_config",
+  "update_automation_scheduler_config",
+  "get_automation_status",
+  "get_automation_jobs",
+  "get_automation_job",
+  "create_automation_job",
+  "update_automation_job",
+  "delete_automation_job",
+  "run_automation_job_now",
+  "get_automation_health",
+  "get_automation_run_history",
+  "preview_automation_schedule",
+  "validate_automation_schedule",
+];
 const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
 
 function printHelp() {
@@ -370,25 +384,28 @@ async function openAutomationPage(page, options) {
     .catch(() => null);
 
   const clickButtonByPattern = (scopeSelector, patternSource) =>
-    page.evaluate(({ selector, pattern }) => {
-      const scope = selector ? document.querySelector(selector) : document;
-      if (!scope) {
-        return false;
-      }
-      const matcher = new RegExp(pattern, "i");
-      const buttons = Array.from(scope.querySelectorAll("button"));
-      const target = buttons.find((button) => {
-        const text = button.textContent || "";
-        const aria = button.getAttribute("aria-label") || "";
-        const title = button.getAttribute("title") || "";
-        return matcher.test(`${text}\n${aria}\n${title}`);
-      });
-      if (!target) {
-        return false;
-      }
-      target.click();
-      return true;
-    }, { selector: scopeSelector, pattern: patternSource });
+    page.evaluate(
+      ({ selector, pattern }) => {
+        const scope = selector ? document.querySelector(selector) : document;
+        if (!scope) {
+          return false;
+        }
+        const matcher = new RegExp(pattern, "i");
+        const buttons = Array.from(scope.querySelectorAll("button"));
+        const target = buttons.find((button) => {
+          const text = button.textContent || "";
+          const aria = button.getAttribute("aria-label") || "";
+          const title = button.getAttribute("title") || "";
+          return matcher.test(`${text}\n${aria}\n${title}`);
+        });
+        if (!target) {
+          return false;
+        }
+        target.click();
+        return true;
+      },
+      { selector: scopeSelector, pattern: patternSource },
+    );
 
   let clicked = await clickButtonByPattern(
     '[data-testid="app-sidebar"]',
@@ -416,13 +433,11 @@ async function openAutomationPage(page, options) {
     );
     assert(settingsOpened, "未找到设置入口，无法打开持续流程页面");
     await page.waitForFunction(
-      () => /打开持续流程|Open Automation/i.test(document.body.textContent || ""),
+      () =>
+        /打开持续流程|Open Automation/i.test(document.body.textContent || ""),
       { timeout: Math.min(30_000, options.timeoutMs) },
     );
-    clicked = await clickButtonByPattern(
-      null,
-      "打开持续流程|Open Automation",
-    );
+    clicked = await clickButtonByPattern(null, "打开持续流程|Open Automation");
   }
 
   assert(clicked, "未找到持续流程入口");

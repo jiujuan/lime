@@ -6,6 +6,7 @@
  */
 
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 // ==================== 类型定义 ====================
 
@@ -350,7 +351,15 @@ export async function deleteUnifiedMemory(id: string): Promise<boolean> {
  */
 export async function getUnifiedMemoryStats(): Promise<UnifiedMemoryStatsResponse> {
   console.log("[记忆统计] 获取统一记忆统计");
-  return safeInvoke<UnifiedMemoryStatsResponse>("unified_memory_stats");
+  const result = await safeInvoke<UnifiedMemoryStatsResponse>(
+    "unified_memory_stats",
+  );
+  assertNotDiagnosticFacade(
+    "unified_memory_stats",
+    result,
+    "真实统一记忆统计 current 通道",
+  );
+  return result;
 }
 
 /**

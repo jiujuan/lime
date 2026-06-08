@@ -77,6 +77,40 @@ describe("asrProvider API", () => {
     );
   });
 
+  it("音频设备列表遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        source: "electron-host-diagnostic",
+        command: "list_audio_devices",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(listAudioDevices()).rejects.toThrow(
+      "list_audio_devices 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("ASR 凭证列表遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        source: "electron-host-diagnostic",
+        command: "get_asr_credentials",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(getAsrCredentials()).rejects.toThrow(
+      "get_asr_credentials 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
   it("应通过 app config 读写语音输入配置", async () => {
     const config = {
       enabled: true,

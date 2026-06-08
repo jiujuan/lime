@@ -1,5 +1,6 @@
 import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import {
   getClientAgentApps,
   submitClientAgentAppRegistrationCode,
@@ -295,6 +296,15 @@ function unwrapEnvelope<T>(payload: unknown): T {
 type AgentAppInstalledListAppServerClient = Pick<AppServerClient, "request">;
 type AgentAppUiRuntimeAppServerClient = Pick<AppServerClient, "request">;
 
+async function invokeAgentAppCommand<T>(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> {
+  const result = await safeInvoke<T>(command, args);
+  assertNotDiagnosticFacade(command, result, "真实 Agent App current 通道");
+  return result;
+}
+
 function normalizeInstalledAgentAppListResponse(
   response: AgentAppInstalledListResponse | null | undefined,
 ): InstalledAgentAppStateListResult {
@@ -473,7 +483,7 @@ function readBootstrapAgentAppCatalog(): CloudBootstrapPayload | null {
 export async function inspectLocalAgentAppPackage(
   appDir: string,
 ): Promise<AgentAppLocalPackageInspection> {
-  return safeInvoke<AgentAppLocalPackageInspection>(
+  return invokeAgentAppCommand<AgentAppLocalPackageInspection>(
     "agent_app_inspect_local_package",
     { appDir },
   );
@@ -493,15 +503,18 @@ export async function listInstalledAgentApps(): Promise<InstalledAgentAppStateLi
 export async function saveInstalledAgentAppState(
   request: AgentAppInstalledStateSaveRequest,
 ): Promise<InstalledAgentAppState> {
-  return safeInvoke<InstalledAgentAppState>("agent_app_save_installed_state", {
-    request,
-  });
+  return invokeAgentAppCommand<InstalledAgentAppState>(
+    "agent_app_save_installed_state",
+    {
+      request,
+    },
+  );
 }
 
 export async function fetchCloudAgentAppPackage(
   descriptor: CloudBootstrapReleaseDescriptor,
 ): Promise<AgentAppPackageCacheEntry> {
-  return safeInvoke<AgentAppPackageCacheEntry>(
+  return invokeAgentAppCommand<AgentAppPackageCacheEntry>(
     "agent_app_fetch_cloud_package",
     {
       request: {
@@ -787,7 +800,7 @@ export async function reviewCloudAgentAppRelease(params: {
 export async function setAgentAppDisabled(
   request: AgentAppDisabledRequest,
 ): Promise<InstalledAgentAppStateListResult> {
-  return safeInvoke<InstalledAgentAppStateListResult>(
+  return invokeAgentAppCommand<InstalledAgentAppStateListResult>(
     "agent_app_set_disabled",
     {
       request,
@@ -798,7 +811,7 @@ export async function setAgentAppDisabled(
 export async function previewAgentAppUninstall(
   request: AgentAppUninstallRehearsalRequest,
 ): Promise<AgentAppUninstallRehearsalResult> {
-  return safeInvoke<AgentAppUninstallRehearsalResult>(
+  return invokeAgentAppCommand<AgentAppUninstallRehearsalResult>(
     "agent_app_uninstall_rehearsal",
     { request },
   );
@@ -808,9 +821,12 @@ export async function uninstallAgentApp(
   request: AgentAppUninstallRequest,
 ): Promise<AgentAppUninstallResult> {
   // delete-data 只有在调用方传入精确 confirmationPhrase 时才会进入受控删除 adapter。
-  return safeInvoke<AgentAppUninstallResult>("agent_app_uninstall", {
-    request,
-  });
+  return invokeAgentAppCommand<AgentAppUninstallResult>(
+    "agent_app_uninstall",
+    {
+      request,
+    },
+  );
 }
 
 export async function startAgentAppUiRuntime(
@@ -841,7 +857,7 @@ export async function stopAgentAppUiRuntime(
 export async function selectAgentAppDirectory(
   request: AgentAppSelectDirectoryRequest = {},
 ): Promise<AgentAppSelectDirectoryResult> {
-  return safeInvoke<AgentAppSelectDirectoryResult>(
+  return invokeAgentAppCommand<AgentAppSelectDirectoryResult>(
     "agent_app_select_directory",
     {
       request,
@@ -852,9 +868,12 @@ export async function selectAgentAppDirectory(
 export async function launchAgentAppShell(
   request: AgentAppShellLaunchRequest,
 ): Promise<AgentAppShellLaunchResult> {
-  return safeInvoke<AgentAppShellLaunchResult>("agent_app_launch_shell", {
-    request,
-  });
+  return invokeAgentAppCommand<AgentAppShellLaunchResult>(
+    "agent_app_launch_shell",
+    {
+      request,
+    },
+  );
 }
 
 export { extractFrontmatter };

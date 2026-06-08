@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type LayeredDesignProjectExportFileEncoding = "utf8" | "base64";
 
@@ -56,17 +57,29 @@ export interface ReadLayeredDesignProjectExportOutput {
 export async function saveLayeredDesignProjectExport(
   request: SaveLayeredDesignProjectExportRequest,
 ): Promise<SaveLayeredDesignProjectExportOutput> {
-  return await safeInvoke<SaveLayeredDesignProjectExportOutput>(
+  const result = await safeInvoke<SaveLayeredDesignProjectExportOutput>(
     "save_layered_design_project_export",
     { request },
   );
+  assertNotDiagnosticFacade(
+    "save_layered_design_project_export",
+    result,
+    "真实 Layered Design project export current 通道",
+  );
+  return result;
 }
 
 export async function readLayeredDesignProjectExport(
   request: ReadLayeredDesignProjectExportRequest,
 ): Promise<ReadLayeredDesignProjectExportOutput> {
-  return await safeInvoke<ReadLayeredDesignProjectExportOutput>(
+  const result = await safeInvoke<ReadLayeredDesignProjectExportOutput>(
     "read_layered_design_project_export",
     { request },
   );
+  assertNotDiagnosticFacade(
+    "read_layered_design_project_export",
+    result,
+    "真实 Layered Design project export current 通道",
+  );
+  return result;
 }

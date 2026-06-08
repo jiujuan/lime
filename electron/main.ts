@@ -52,7 +52,7 @@ import {
   type SaveDialogOptions,
   Tray,
   type IpcMainInvokeEvent,
-} from "electron";
+} from "./electronRuntime";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";

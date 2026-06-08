@@ -7,6 +7,9 @@ const TERMINAL_THREAD_STATUSES = new Set([
   "waiting_request",
 ]);
 const RUNNING_THREAD_STATUSES = new Set(["running", "queued", "interrupting"]);
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
+const APP_SERVER_METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -142,6 +145,47 @@ export async function invokeDevBridge(options, cmd, args = {}, timeoutMs = optio
   return payload?.result;
 }
 
+let appServerRequestId = 1;
+
+export async function invokeAppServerMethod(
+  options,
+  method,
+  params,
+  timeoutMs = options.timeoutMs,
+) {
+  const id = `managed-objective-${appServerRequestId++}`;
+  const request =
+    params === undefined ? { id, method } : { id, method, params };
+  const result = await invokeDevBridge(
+    options,
+    APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+    { request: { lines: [`${JSON.stringify(request)}\n`] } },
+    timeoutMs,
+  );
+  const messages = (Array.isArray(result?.lines) ? result.lines : [])
+    .map((line) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    throw new Error(
+      `${method} error: ${error.error?.message || "App Server JSON-RPC error"}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method} missing App Server response`);
+  }
+  return response.result;
+}
+
 export async function resolveProviderPreference(options) {
   const explicitProvider = String(options.providerPreference || "").trim();
   const explicitModel = String(options.modelPreference || "").trim();
@@ -154,7 +198,13 @@ export async function resolveProviderPreference(options) {
     };
   }
 
-  const providers = await invokeDevBridge(options, "get_api_key_providers", {}, 30_000);
+  const providerList = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
+    {},
+    30_000,
+  );
+  const providers = providerList?.providers;
   const selected = pickProvider(Array.isArray(providers) ? providers : [], explicitProvider);
   const providerId = normalizeProviderId(selected);
   if (!providerId) {
@@ -166,7 +216,12 @@ export async function resolveProviderPreference(options) {
   let providerDetail = selected;
   try {
     providerDetail =
-      (await invokeDevBridge(options, "get_api_key_provider", { id: providerId }, 30_000)) ||
+      (await invokeAppServerMethod(
+        options,
+        APP_SERVER_METHOD_MODEL_PROVIDER_READ,
+        { providerId },
+        30_000,
+      ))?.provider ||
       selected;
   } catch (error) {
     console.warn(`${options.logPrefix} provider detail failed, using list item: ${error.message}`);

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AgentToolCallState } from "@/lib/api/agentProtocol";
 import type { SkillDetailInfo } from "@/lib/api/skill-execution";
 import type { Message } from "../types";
@@ -79,6 +80,14 @@ function toolCall(
 }
 
 describe("generalWorkbenchExecLogData", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
+  afterEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("应把消息、thinking、工具调用和响应投影成按时间排序的执行日志", () => {
     const entries = buildGeneralWorkbenchExecLogEntries({
       messages: [

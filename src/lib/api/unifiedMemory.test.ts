@@ -92,6 +92,30 @@ describe("unifiedMemory API", () => {
     });
   });
 
+  it("统一记忆统计遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      total_entries: 0,
+      storage_used: 0,
+      memory_count: 0,
+      categories: [
+        { category: "identity", count: 0 },
+        { category: "context", count: 0 },
+        { category: "preference", count: 0 },
+        { category: "experience", count: 0 },
+        { category: "activity", count: 0 },
+      ],
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "unified_memory_stats",
+        status: "degraded",
+      },
+    });
+
+    await expect(getUnifiedMemoryStats()).rejects.toThrow(
+      "unified_memory_stats 尚未接入真实统一记忆统计 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
   it("应代理语义搜索与混合搜索命令", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce([{ id: "m4" }])

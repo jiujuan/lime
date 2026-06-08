@@ -4,6 +4,7 @@ import {
   type AppServerFileSystemFilePreview,
 } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export interface FileEntry {
   name: string;
@@ -58,6 +59,17 @@ function createFileBrowserAppServerClient(): FileBrowserAppServerClient {
   return new AppServerClient();
 }
 
+async function invokeFileBrowserCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke(command, args)
+    : await safeInvoke(command);
+  assertNotDiagnosticFacade(command, result, "真实文件管理 current 通道");
+  return result as T;
+}
+
 function normalizeDirectoryListing(
   listing: AppServerFileSystemDirectoryListing,
 ): DirectoryListing {
@@ -86,11 +98,15 @@ export async function listDirectory(path: string): Promise<DirectoryListing> {
 export async function getFileManagerLocations(): Promise<
   FileManagerLocation[]
 > {
-  return safeInvoke<FileManagerLocation[]>("get_file_manager_locations");
+  return invokeFileBrowserCommand<FileManagerLocation[]>(
+    "get_file_manager_locations",
+  );
 }
 
 export async function getFileIconDataUrl(path: string): Promise<string | null> {
-  return safeInvoke<string | null>("get_file_icon_data_url", { path });
+  return invokeFileBrowserCommand<string | null>("get_file_icon_data_url", {
+    path,
+  });
 }
 
 export async function readFilePreview(
@@ -105,23 +121,23 @@ export async function readFilePreview(
 }
 
 export async function createFileAtPath(path: string): Promise<void> {
-  await safeInvoke("create_file", { path });
+  await invokeFileBrowserCommand("create_file", { path });
 }
 
 export async function createDirectoryAtPath(path: string): Promise<void> {
-  await safeInvoke("create_directory", { path });
+  await invokeFileBrowserCommand("create_directory", { path });
 }
 
 export async function renamePath(
   oldPath: string,
   newPath: string,
 ): Promise<void> {
-  await safeInvoke("rename_file", { oldPath, newPath });
+  await invokeFileBrowserCommand("rename_file", { oldPath, newPath });
 }
 
 export async function deletePath(
   path: string,
   recursive: boolean,
 ): Promise<void> {
-  await safeInvoke("delete_file", { path, recursive });
+  await invokeFileBrowserCommand("delete_file", { path, recursive });
 }

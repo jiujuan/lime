@@ -118,4 +118,26 @@ describe("skillExecutionApi", () => {
     });
     expect(appServerRequestMock).not.toHaveBeenCalled();
   });
+
+  it("Skill 执行收到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "execute_skill",
+        source: "electron-host",
+        status: "not-supported",
+      },
+      success: true,
+      output: "diagnostic fallback",
+      steps_completed: [],
+    });
+
+    await expect(
+      skillExecutionApi.executeSkill({
+        skillName: "writer",
+        userInput: "写一段介绍",
+      }),
+    ).rejects.toThrow("execute_skill 尚未接入真实 Skill execution current 通道");
+
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
 });

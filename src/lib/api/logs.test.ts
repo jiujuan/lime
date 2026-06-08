@@ -45,4 +45,34 @@ describe("logs API", () => {
 
     await expect(getPersistedLogsTail(200)).rejects.toThrow("boom");
   });
+
+  it("日志列表遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        command: "get_logs",
+        source: "electron-empty-diagnostic",
+      },
+      enumerable: false,
+    });
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(getLogs()).rejects.toThrow(
+      "get_logs 尚未接入真实日志诊断 current 通道",
+    );
+  });
+
+  it("日志清理遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "clear_logs",
+        category: "electron-diagnostic-facade",
+      },
+    });
+
+    await expect(clearLogs()).rejects.toThrow(
+      "clear_logs 尚未接入真实日志诊断 current 通道",
+    );
+  });
 });

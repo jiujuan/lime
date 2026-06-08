@@ -73,6 +73,29 @@ describe("materials API", () => {
     });
   });
 
+  it("listMaterials 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "list_materials",
+        reason: "not-supported",
+      },
+    });
+
+    await expect(listMaterials("project-1")).rejects.toThrow(
+      "list_materials 尚未接入真实 Materials current 通道",
+    );
+  });
+
+  it("listMaterials 遇到非数组返回时不应伪装成空列表", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      materials: [],
+    });
+
+    await expect(listMaterials("project-1")).rejects.toThrow(
+      "list_materials did not return a materials array",
+    );
+  });
+
   it("getMaterialCount 应调用统计命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce(3);
 

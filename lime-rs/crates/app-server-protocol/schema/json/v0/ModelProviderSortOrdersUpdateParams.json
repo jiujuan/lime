@@ -1,0 +1,32 @@
+{
+  "$defs": {
+    "ModelProviderSortOrderItem": {
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "sortOrder": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "providerId",
+        "sortOrder"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "sortOrders": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ModelProviderSortOrderItem"
+      },
+      "type": "array"
+    }
+  },
+  "title": "ModelProviderSortOrdersUpdateParams",
+  "type": "object"
+}

@@ -1,5 +1,6 @@
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
 import type { UnlistenFn } from "@/lib/desktop-host/event";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const COMPANION_PET_STATUS_EVENT = "companion-pet-status";
 export const COMPANION_OPEN_PROVIDER_SETTINGS_EVENT =
@@ -75,16 +76,30 @@ export interface CompanionPetLive2DActionPayload {
   motion_index?: number | null;
 }
 
+async function invokeCompanionCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke(command, args)
+    : await safeInvoke(command);
+  assertNotDiagnosticFacade(command, result, "真实 Companion current 通道");
+  return result as T;
+}
+
 export async function getCompanionPetStatus(): Promise<CompanionPetStatus> {
-  return safeInvoke<CompanionPetStatus>("companion_get_pet_status");
+  return invokeCompanionCommand<CompanionPetStatus>("companion_get_pet_status");
 }
 
 export async function launchCompanionPet(
   request: CompanionLaunchPetRequest = {},
 ): Promise<CompanionLaunchPetResult> {
-  return safeInvoke<CompanionLaunchPetResult>("companion_launch_pet", {
-    request,
-  });
+  return invokeCompanionCommand<CompanionLaunchPetResult>(
+    "companion_launch_pet",
+    {
+      request,
+    },
+  );
 }
 
 export async function sendCompanionPetCommand<
@@ -92,9 +107,12 @@ export async function sendCompanionPetCommand<
 >(
   request: CompanionPetCommandRequest<TPayload>,
 ): Promise<CompanionPetSendResult> {
-  return safeInvoke<CompanionPetSendResult>("companion_send_pet_command", {
-    request,
-  });
+  return invokeCompanionCommand<CompanionPetSendResult>(
+    "companion_send_pet_command",
+    {
+      request,
+    },
+  );
 }
 
 export async function listenCompanionPetStatus(

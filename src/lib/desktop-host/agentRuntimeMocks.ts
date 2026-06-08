@@ -645,27 +645,6 @@ export const agentRuntimeMocks: Record<string, (args?: any) => any> = {
       },
     ],
   }),
-  agent_runtime_spawn_subagent: () => ({
-    agent_id: "mock-subagent-session",
-    nickname: "Mock Subagent",
-  }),
-  agent_runtime_send_subagent_input: () => ({
-    submission_id: "mock-subagent-submit",
-  }),
-  agent_runtime_wait_subagents: () => ({
-    status: {},
-    timed_out: true,
-  }),
-  agent_runtime_resume_subagent: () => ({
-    status: { session_id: "mock-subagent-session", kind: "idle" },
-    cascade_session_ids: ["mock-subagent-session"],
-    changed_session_ids: ["mock-subagent-session"],
-  }),
-  agent_runtime_close_subagent: () => ({
-    previous_status: { session_id: "mock-subagent-session", kind: "idle" },
-    cascade_session_ids: ["mock-subagent-session"],
-    changed_session_ids: ["mock-subagent-session"],
-  }),
   agent_runtime_update_session: () => ({}),
   agent_runtime_delete_session: () => ({}),
 };

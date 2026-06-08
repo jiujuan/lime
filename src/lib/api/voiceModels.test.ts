@@ -136,6 +136,80 @@ describe("voiceModels API", () => {
     );
   });
 
+  it("语音模型目录遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    const diagnosticList: unknown[] = [];
+    Object.defineProperty(diagnosticList, "__diagnostic", {
+      value: {
+        source: "electron-host-diagnostic",
+        command: "voice_models_list_catalog",
+        status: "degraded",
+      },
+      enumerable: false,
+    });
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+
+    await expect(listVoiceModelCatalog()).rejects.toThrow(
+      "voice_models_list_catalog 尚未接入真实语音模型 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("语音模型安装状态遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      model_id: DEFAULT_SENSEVOICE_MODEL_ID,
+      installed: false,
+      installing: false,
+      install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+      installed_bytes: 0,
+      missing_files: ["model.int8.onnx"],
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "voice_models_get_install_state",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      getVoiceModelInstallState(DEFAULT_SENSEVOICE_MODEL_ID),
+    ).rejects.toThrow(
+      "voice_models_get_install_state 尚未接入真实语音模型 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("默认本地 SenseVoice readiness 遇到 degraded 安装状态时不应返回假未安装状态", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce([
+        {
+          id: "sensevoice-local-sensevoice-small-int8-2024-07-17",
+          provider: "sensevoice_local",
+          is_default: true,
+          disabled: false,
+          language: "auto",
+          sensevoice_config: {
+            model_id: DEFAULT_SENSEVOICE_MODEL_ID,
+            use_itn: true,
+            num_threads: 4,
+          },
+        },
+      ])
+      .mockResolvedValueOnce({
+        model_id: DEFAULT_SENSEVOICE_MODEL_ID,
+        installed: false,
+        installing: false,
+        install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+        installed_bytes: 0,
+        missing_files: ["model.int8.onnx"],
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "voice_models_get_install_state",
+          status: "degraded",
+        },
+      });
+
+    await expect(getDefaultLocalVoiceModelReadiness()).rejects.toThrow(
+      "voice_models_get_install_state 尚未接入真实语音模型 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
   it("默认 ASR 不是本地 SenseVoice 时不应阻塞录音入口", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce([
       {
@@ -229,6 +303,55 @@ describe("voiceModels API", () => {
         checksum_sha256: "abc123",
       }),
     });
+  });
+
+  it("列出语音模型目录时应优先使用 limecore 下发目录", async () => {
+    vi.mocked(resolveOemCloudRuntimeContext).mockReturnValue({
+      baseUrl: "https://cloud.example.com",
+      controlPlaneBaseUrl: "https://cloud.example.com/api",
+      sceneBaseUrl: "https://cloud.example.com/scene-api",
+      gatewayBaseUrl: "https://cloud.example.com/gateway-api",
+      tenantId: "tenant-0001",
+      sessionToken: null,
+      hubProviderName: null,
+      loginPath: "/login",
+      desktopClientId: "desktop-client",
+      desktopOauthRedirectUrl: "lime://oauth/callback",
+      desktopOauthNextPath: "/welcome",
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          items: [
+            {
+              id: "sensevoice-cloud",
+              name: "SenseVoice Cloud",
+              provider: "FunAudioLLM / sherpa-onnx",
+              languages: ["zh"],
+              sizeBytes: 42,
+              download: {
+                archive: {
+                  downloadUrl:
+                    "https://models.example.com/voice/sensevoice-cloud.tar.bz2",
+                },
+              },
+            },
+          ],
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listVoiceModelCatalog()).resolves.toEqual([
+      expect.objectContaining({
+        id: "sensevoice-cloud",
+        download_url:
+          "https://models.example.com/voice/sensevoice-cloud.tar.bz2",
+      }),
+    ]);
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("应通过 API 网关监听语音模型下载进度事件", async () => {

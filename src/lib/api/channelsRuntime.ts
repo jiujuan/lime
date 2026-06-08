@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import type {
   CloudflaredInstallResult,
   CloudflaredInstallStatus,
@@ -15,6 +16,17 @@ import type {
   WechatLoginWaitResult,
   WechatProbeResult,
 } from "./channelsRuntimeTypes";
+
+async function invokeChannelsCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke(command, args)
+    : await safeInvoke(command);
+  assertNotDiagnosticFacade(command, result, "真实 Channels current 通道");
+  return result as T;
+}
 
 export type {
   ChannelsConfig,
@@ -71,7 +83,7 @@ export async function gatewayChannelStart(params?: {
   accountId?: string;
   pollTimeoutSecs?: number;
 }): Promise<GatewayChannelStatusResponse> {
-  return safeInvoke("gateway_channel_start", {
+  return invokeChannelsCommand("gateway_channel_start", {
     request: {
       channel: params?.channel ?? "telegram",
       account_id: params?.accountId?.trim() || undefined,
@@ -84,7 +96,7 @@ export async function gatewayChannelStop(params?: {
   channel?: "telegram" | "feishu" | "discord" | "wechat";
   accountId?: string;
 }): Promise<GatewayChannelStatusResponse> {
-  return safeInvoke("gateway_channel_stop", {
+  return invokeChannelsCommand("gateway_channel_stop", {
     request: {
       channel: params?.channel ?? "telegram",
       account_id: params?.accountId?.trim() || undefined,
@@ -95,7 +107,7 @@ export async function gatewayChannelStop(params?: {
 export async function gatewayChannelStatus(params?: {
   channel?: "telegram" | "feishu" | "discord" | "wechat";
 }): Promise<GatewayChannelStatusResponse> {
-  return safeInvoke("gateway_channel_status", {
+  return invokeChannelsCommand("gateway_channel_status", {
     request: {
       channel: params?.channel ?? "telegram",
     },
@@ -105,7 +117,7 @@ export async function gatewayChannelStatus(params?: {
 export async function telegramChannelProbe(params?: {
   accountId?: string;
 }): Promise<TelegramProbeResult> {
-  return safeInvoke("telegram_channel_probe", {
+  return invokeChannelsCommand("telegram_channel_probe", {
     request: {
       account_id: params?.accountId?.trim() || undefined,
     },
@@ -115,7 +127,7 @@ export async function telegramChannelProbe(params?: {
 export async function feishuChannelProbe(params?: {
   accountId?: string;
 }): Promise<FeishuProbeResult> {
-  return safeInvoke("feishu_channel_probe", {
+  return invokeChannelsCommand("feishu_channel_probe", {
     request: {
       account_id: params?.accountId?.trim() || undefined,
     },
@@ -125,7 +137,7 @@ export async function feishuChannelProbe(params?: {
 export async function discordChannelProbe(params?: {
   accountId?: string;
 }): Promise<DiscordProbeResult> {
-  return safeInvoke("discord_channel_probe", {
+  return invokeChannelsCommand("discord_channel_probe", {
     request: {
       account_id: params?.accountId?.trim() || undefined,
     },
@@ -135,7 +147,7 @@ export async function discordChannelProbe(params?: {
 export async function wechatChannelProbe(params?: {
   accountId?: string;
 }): Promise<WechatProbeResult> {
-  return safeInvoke("wechat_channel_probe", {
+  return invokeChannelsCommand("wechat_channel_probe", {
     request: {
       account_id: params?.accountId?.trim() || undefined,
     },
@@ -147,7 +159,7 @@ export async function wechatChannelLoginStart(params?: {
   botType?: string;
   sessionKey?: string;
 }): Promise<WechatLoginStartResult> {
-  return safeInvoke("wechat_channel_login_start", {
+  return invokeChannelsCommand("wechat_channel_login_start", {
     request: {
       base_url: params?.baseUrl?.trim() || undefined,
       bot_type: params?.botType?.trim() || undefined,
@@ -163,7 +175,7 @@ export async function wechatChannelLoginWait(params: {
   timeoutMs?: number;
   accountName?: string;
 }): Promise<WechatLoginWaitResult> {
-  return safeInvoke("wechat_channel_login_wait", {
+  return invokeChannelsCommand("wechat_channel_login_wait", {
     request: {
       session_key: params.sessionKey,
       base_url: params.baseUrl?.trim() || undefined,
@@ -177,14 +189,14 @@ export async function wechatChannelLoginWait(params: {
 export async function wechatChannelListAccounts(): Promise<
   WechatConfiguredAccount[]
 > {
-  return safeInvoke("wechat_channel_list_accounts");
+  return invokeChannelsCommand("wechat_channel_list_accounts");
 }
 
 export async function wechatChannelRemoveAccount(params: {
   accountId: string;
   purgeData?: boolean;
 }): Promise<void> {
-  return safeInvoke("wechat_channel_remove_account", {
+  return invokeChannelsCommand("wechat_channel_remove_account", {
     request: {
       account_id: params.accountId,
       purge_data: params.purgeData ?? false,
@@ -196,7 +208,7 @@ export async function wechatChannelSetRuntimeModel(params: {
   providerId: string;
   modelId: string;
 }): Promise<string> {
-  return safeInvoke("wechat_channel_set_runtime_model", {
+  return invokeChannelsCommand("wechat_channel_set_runtime_model", {
     request: {
       provider_id: params.providerId.trim(),
       model_id: params.modelId.trim(),
@@ -205,17 +217,17 @@ export async function wechatChannelSetRuntimeModel(params: {
 }
 
 export async function gatewayTunnelProbe(): Promise<GatewayTunnelProbeResult> {
-  return safeInvoke("gateway_tunnel_probe");
+  return invokeChannelsCommand("gateway_tunnel_probe");
 }
 
 export async function gatewayTunnelDetectCloudflared(): Promise<CloudflaredInstallStatus> {
-  return safeInvoke("gateway_tunnel_detect_cloudflared");
+  return invokeChannelsCommand("gateway_tunnel_detect_cloudflared");
 }
 
 export async function gatewayTunnelInstallCloudflared(params?: {
   confirm?: boolean;
 }): Promise<CloudflaredInstallResult> {
-  return safeInvoke("gateway_tunnel_install_cloudflared", {
+  return invokeChannelsCommand("gateway_tunnel_install_cloudflared", {
     request: {
       confirm: params?.confirm ?? false,
     },
@@ -227,7 +239,7 @@ export async function gatewayTunnelCreate(params?: {
   dnsName?: string;
   persist?: boolean;
 }): Promise<GatewayTunnelCreateResponse> {
-  return safeInvoke("gateway_tunnel_create", {
+  return invokeChannelsCommand("gateway_tunnel_create", {
     request: {
       tunnel_name: params?.tunnelName?.trim() || undefined,
       dns_name: params?.dnsName?.trim() || undefined,
@@ -237,19 +249,19 @@ export async function gatewayTunnelCreate(params?: {
 }
 
 export async function gatewayTunnelStart(): Promise<GatewayTunnelStatus> {
-  return safeInvoke("gateway_tunnel_start");
+  return invokeChannelsCommand("gateway_tunnel_start");
 }
 
 export async function gatewayTunnelStop(): Promise<GatewayTunnelStatus> {
-  return safeInvoke("gateway_tunnel_stop");
+  return invokeChannelsCommand("gateway_tunnel_stop");
 }
 
 export async function gatewayTunnelRestart(): Promise<GatewayTunnelStatus> {
-  return safeInvoke("gateway_tunnel_restart");
+  return invokeChannelsCommand("gateway_tunnel_restart");
 }
 
 export async function gatewayTunnelStatus(): Promise<GatewayTunnelStatus> {
-  return safeInvoke("gateway_tunnel_status");
+  return invokeChannelsCommand("gateway_tunnel_status");
 }
 
 export async function gatewayTunnelSyncWebhookUrl(params: {
@@ -258,7 +270,7 @@ export async function gatewayTunnelSyncWebhookUrl(params: {
   webhookPath?: string;
   persist?: boolean;
 }): Promise<GatewayTunnelSyncWebhookResponse> {
-  return safeInvoke("gateway_tunnel_sync_webhook_url", {
+  return invokeChannelsCommand("gateway_tunnel_sync_webhook_url", {
     request: {
       channel: params.channel,
       account_id: params.accountId?.trim() || undefined,

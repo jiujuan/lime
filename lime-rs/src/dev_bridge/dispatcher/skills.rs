@@ -339,21 +339,6 @@ pub(super) async fn try_handle(
                 .map_err(|e| format!("检查远程 Skill 失败: {e}"))?;
             serde_json::to_value(inspection)?
         }
-        "list_executable_skills" => serde_json::to_value(
-            crate::commands::skill_exec_cmd::list_executable_skills()
-                .await
-                .map_err(|e| format!("获取可执行 Skill 列表失败: {e}"))?,
-        )?,
-        "get_skill_detail" => {
-            let args = args_or_default(args);
-            let skill_name = get_string_arg(&args, "skillName", "skill_name")
-                .or_else(|_| get_string_arg(&args, "skill_name", "skillName"))?;
-            serde_json::to_value(
-                crate::commands::skill_exec_cmd::get_skill_detail(skill_name)
-                    .await
-                    .map_err(|e| format!("获取 Skill 详情失败: {e}"))?,
-            )?
-        }
         "execute_skill" => {
             let app_handle = require_app_handle(state)?;
             let args = args_or_default(args);

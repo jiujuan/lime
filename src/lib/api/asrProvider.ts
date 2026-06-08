@@ -6,6 +6,7 @@
 
 import { safeInvoke } from "@/lib/dev-bridge";
 import { getConfig, saveConfig, type Config } from "./appConfig";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 // ============ ASR Provider 类型 ============
 
@@ -230,12 +231,24 @@ export interface AudioDeviceInfo {
 
 /** 获取所有可用的麦克风设备 */
 export async function listAudioDevices(): Promise<AudioDeviceInfo[]> {
-  return safeInvoke<AudioDeviceInfo[]>("list_audio_devices");
+  const result = await safeInvoke<AudioDeviceInfo[]>("list_audio_devices");
+  assertNotDiagnosticFacade(
+    "list_audio_devices",
+    result,
+    "真实语音输入 current 通道",
+  );
+  return result;
 }
 
 /** 获取 ASR 凭证列表 */
 export async function getAsrCredentials(): Promise<AsrCredentialEntry[]> {
-  return safeInvoke<AsrCredentialEntry[]>("get_asr_credentials");
+  const result = await safeInvoke<AsrCredentialEntry[]>("get_asr_credentials");
+  assertNotDiagnosticFacade(
+    "get_asr_credentials",
+    result,
+    "真实语音输入 current 通道",
+  );
+  return result;
 }
 
 /** 添加 ASR 凭证 */

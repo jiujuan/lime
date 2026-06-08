@@ -8,13 +8,40 @@
  */
 
 import { AppServerClient } from "@/lib/api/appServer";
-import { safeInvoke } from "@/lib/dev-bridge";
 import type { ProviderDeclaredPromptCacheMode } from "@/lib/types/provider";
 import {
   METHOD_MODEL_PROVIDER_CATALOG_LIST,
+  METHOD_MODEL_PROVIDER_CONFIG_EXPORT,
+  METHOD_MODEL_PROVIDER_CONFIG_IMPORT,
+  METHOD_MODEL_PROVIDER_CREATE,
+  METHOD_MODEL_PROVIDER_DELETE,
+  METHOD_MODEL_PROVIDER_KEY_CREATE,
+  METHOD_MODEL_PROVIDER_KEY_DELETE,
+  METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
+  METHOD_MODEL_PROVIDER_KEY_NEXT,
+  METHOD_MODEL_PROVIDER_KEY_UPDATE,
+  METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
   METHOD_MODEL_PROVIDER_LIST,
+  METHOD_MODEL_PROVIDER_READ,
+  METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
+  METHOD_MODEL_PROVIDER_TEST_CHAT,
+  METHOD_MODEL_PROVIDER_TEST_CONNECTION,
+  METHOD_MODEL_PROVIDER_UI_STATE_READ,
+  METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
+  METHOD_MODEL_PROVIDER_UPDATE,
   type ModelProviderCatalogListResponse as AppServerModelProviderCatalogListResponse,
+  type ModelProviderConfigExportResponse as AppServerModelProviderConfigExportResponse,
+  type ModelProviderConfigImportResponse as AppServerModelProviderConfigImportResponse,
+  type ModelProviderDeleteResponse as AppServerModelProviderDeleteResponse,
+  type ModelProviderKeyDeleteResponse as AppServerModelProviderKeyDeleteResponse,
+  type ModelProviderKeyNextResponse as AppServerModelProviderKeyNextResponse,
+  type ModelProviderKeyWriteResponse as AppServerModelProviderKeyWriteResponse,
   type ModelProviderListResponse as AppServerModelProviderListResponse,
+  type ModelProviderReadResponse as AppServerModelProviderReadResponse,
+  type ModelProviderTestChatResponse as AppServerModelProviderTestChatResponse,
+  type ModelProviderTestConnectionResponse as AppServerModelProviderTestConnectionResponse,
+  type ModelProviderUiStateReadResponse as AppServerModelProviderUiStateReadResponse,
+  type ModelProviderWriteResponse as AppServerModelProviderWriteResponse,
 } from "../../../packages/app-server-client/src/protocol";
 
 type ApiKeyProviderAppServerClient = Pick<AppServerClient, "request">;
@@ -81,6 +108,128 @@ function normalizeModelProviderCatalogListResponse(
   }
 
   return response.providers as SystemProviderCatalogItem[];
+}
+
+function normalizeProviderReadResponse(
+  response: AppServerModelProviderReadResponse | null | undefined,
+): ProviderWithKeysDisplay | null {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server modelProvider/read did not return provider");
+  }
+  return (response.provider ?? null) as ProviderWithKeysDisplay | null;
+}
+
+function normalizeProviderWriteResponse(
+  response: AppServerModelProviderWriteResponse | null | undefined,
+): ProviderDisplay {
+  if (!response || typeof response !== "object" || !response.provider) {
+    throw new Error("App Server modelProvider write did not return provider");
+  }
+  return response.provider as ProviderDisplay;
+}
+
+function normalizeProviderDeleteResponse(
+  response: AppServerModelProviderDeleteResponse | null | undefined,
+): boolean {
+  if (!response || typeof response.deleted !== "boolean") {
+    throw new Error("App Server modelProvider/delete did not return deleted");
+  }
+  return response.deleted;
+}
+
+function normalizeProviderKeyWriteResponse(
+  response: AppServerModelProviderKeyWriteResponse | null | undefined,
+): ApiKeyDisplay {
+  if (!response || typeof response !== "object" || !response.key) {
+    throw new Error("App Server modelProviderKey write did not return key");
+  }
+  return response.key as ApiKeyDisplay;
+}
+
+function normalizeProviderKeyDeleteResponse(
+  response: AppServerModelProviderKeyDeleteResponse | null | undefined,
+): boolean {
+  if (!response || typeof response.deleted !== "boolean") {
+    throw new Error("App Server modelProviderKey/delete did not return deleted");
+  }
+  return response.deleted;
+}
+
+function normalizeNextProviderKeyResponse(
+  response: AppServerModelProviderKeyNextResponse | null | undefined,
+): string | null {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server modelProviderKey/next did not return key");
+  }
+  return response.apiKey ?? null;
+}
+
+function normalizeUiStateReadResponse(
+  response: AppServerModelProviderUiStateReadResponse | null | undefined,
+): string | null {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server modelProviderUiState/read did not return value");
+  }
+  return response.value ?? null;
+}
+
+function normalizeConfigExportResponse(
+  response: AppServerModelProviderConfigExportResponse | null | undefined,
+): string {
+  if (!response || typeof response.configJson !== "string") {
+    throw new Error(
+      "App Server modelProviderConfig/export did not return configJson",
+    );
+  }
+  return response.configJson;
+}
+
+function normalizeConfigImportResponse(
+  response: AppServerModelProviderConfigImportResponse | null | undefined,
+): ImportResult {
+  if (!response || typeof response !== "object") {
+    throw new Error(
+      "App Server modelProviderConfig/import did not return result",
+    );
+  }
+  return {
+    success: Boolean(response.success),
+    imported_providers: response.importedProviders ?? 0,
+    imported_api_keys: response.importedApiKeys ?? 0,
+    skipped_providers: response.skippedProviders ?? 0,
+    errors: Array.isArray(response.errors) ? response.errors : [],
+  };
+}
+
+function normalizeConnectionTestResponse(
+  response: AppServerModelProviderTestConnectionResponse | null | undefined,
+): ConnectionTestResult {
+  if (!response || typeof response !== "object") {
+    throw new Error(
+      "App Server modelProvider/testConnection did not return result",
+    );
+  }
+  return {
+    success: Boolean(response.success),
+    latency_ms: response.latencyMs,
+    error: response.error,
+    models: response.models,
+  };
+}
+
+function normalizeChatTestResponse(
+  response: AppServerModelProviderTestChatResponse | null | undefined,
+): ChatTestResult {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server modelProvider/testChat did not return result");
+  }
+  return {
+    success: Boolean(response.success),
+    latency_ms: response.latencyMs,
+    error: response.error,
+    content: response.content,
+    raw: response.raw,
+  };
 }
 
 export function invalidateApiKeyProviderCache(): void {
@@ -293,7 +442,12 @@ export const apiKeyProviderApi = {
    * 获取单个 API Key Provider（包含 API Keys）
    */
   async getProvider(id: string): Promise<ProviderWithKeysDisplay | null> {
-    return safeInvoke("get_api_key_provider", { id });
+    const response =
+      await requestApiKeyProviderAppServer<AppServerModelProviderReadResponse>(
+        METHOD_MODEL_PROVIDER_READ,
+        { providerId: id },
+      );
+    return normalizeProviderReadResponse(response);
   },
 
   /**
@@ -303,7 +457,10 @@ export const apiKeyProviderApi = {
     request: AddCustomProviderRequest,
   ): Promise<ProviderDisplay> {
     return invalidateAfterMutation(
-      safeInvoke("add_custom_api_key_provider", { request }),
+      requestApiKeyProviderAppServer<AppServerModelProviderWriteResponse>(
+        METHOD_MODEL_PROVIDER_CREATE,
+        { provider: request },
+      ).then(normalizeProviderWriteResponse),
     );
   },
 
@@ -315,7 +472,10 @@ export const apiKeyProviderApi = {
     request: UpdateProviderRequest,
   ): Promise<ProviderDisplay> {
     return invalidateAfterMutation(
-      safeInvoke("update_api_key_provider", { id, request }),
+      requestApiKeyProviderAppServer<AppServerModelProviderWriteResponse>(
+        METHOD_MODEL_PROVIDER_UPDATE,
+        { providerId: id, patch: request },
+      ).then(normalizeProviderWriteResponse),
     );
   },
 
@@ -324,7 +484,10 @@ export const apiKeyProviderApi = {
    */
   async deleteCustomProvider(id: string): Promise<boolean> {
     return invalidateAfterMutation(
-      safeInvoke("delete_custom_api_key_provider", { id }),
+      requestApiKeyProviderAppServer<AppServerModelProviderDeleteResponse>(
+        METHOD_MODEL_PROVIDER_DELETE,
+        { providerId: id },
+      ).then(normalizeProviderDeleteResponse),
     );
   },
 
@@ -332,14 +495,29 @@ export const apiKeyProviderApi = {
    * 添加 API Key
    */
   async addApiKey(request: AddApiKeyRequest): Promise<ApiKeyDisplay> {
-    return invalidateAfterMutation(safeInvoke("add_api_key", { request }));
+    return invalidateAfterMutation(
+      requestApiKeyProviderAppServer<AppServerModelProviderKeyWriteResponse>(
+        METHOD_MODEL_PROVIDER_KEY_CREATE,
+        {
+          providerId: request.provider_id,
+          apiKey: request.api_key,
+          alias: request.alias,
+          replaceExisting: request.replace_existing,
+        },
+      ).then(normalizeProviderKeyWriteResponse),
+    );
   },
 
   /**
    * 删除 API Key
    */
   async deleteApiKey(keyId: string): Promise<boolean> {
-    return invalidateAfterMutation(safeInvoke("delete_api_key", { keyId }));
+    return invalidateAfterMutation(
+      requestApiKeyProviderAppServer<AppServerModelProviderKeyDeleteResponse>(
+        METHOD_MODEL_PROVIDER_KEY_DELETE,
+        { keyId },
+      ).then(normalizeProviderKeyDeleteResponse),
+    );
   },
 
   /**
@@ -347,7 +525,10 @@ export const apiKeyProviderApi = {
    */
   async toggleApiKey(keyId: string, enabled: boolean): Promise<ApiKeyDisplay> {
     return invalidateAfterMutation(
-      safeInvoke("toggle_api_key", { keyId, enabled }),
+      requestApiKeyProviderAppServer<AppServerModelProviderKeyWriteResponse>(
+        METHOD_MODEL_PROVIDER_KEY_UPDATE,
+        { keyId, enabled },
+      ).then(normalizeProviderKeyWriteResponse),
     );
   },
 
@@ -359,7 +540,10 @@ export const apiKeyProviderApi = {
     alias?: string,
   ): Promise<ApiKeyDisplay> {
     return invalidateAfterMutation(
-      safeInvoke("update_api_key_alias", { keyId, alias }),
+      requestApiKeyProviderAppServer<AppServerModelProviderKeyWriteResponse>(
+        METHOD_MODEL_PROVIDER_KEY_UPDATE,
+        { keyId, alias },
+      ).then(normalizeProviderKeyWriteResponse),
     );
   },
 
@@ -367,35 +551,54 @@ export const apiKeyProviderApi = {
    * 获取下一个可用的 API Key（用于 API 调用）
    */
   async getNextApiKey(providerId: string): Promise<string | null> {
-    return safeInvoke("get_next_api_key", { providerId });
+    const response =
+      await requestApiKeyProviderAppServer<AppServerModelProviderKeyNextResponse>(
+        METHOD_MODEL_PROVIDER_KEY_NEXT,
+        { providerId },
+      );
+    return normalizeNextProviderKeyResponse(response);
   },
 
   /**
    * 记录 API Key 使用
    */
   async recordUsage(keyId: string): Promise<void> {
-    return safeInvoke("record_api_key_usage", { keyId });
+    await requestApiKeyProviderAppServer(
+      METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
+      { keyId },
+    );
   },
 
   /**
    * 记录 API Key 错误
    */
   async recordError(keyId: string): Promise<void> {
-    return safeInvoke("record_api_key_error", { keyId });
+    await requestApiKeyProviderAppServer(
+      METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
+      { keyId },
+    );
   },
 
   /**
    * 获取 UI 状态
    */
   async getUiState(key: string): Promise<string | null> {
-    return safeInvoke("get_provider_ui_state", { key });
+    const response =
+      await requestApiKeyProviderAppServer<AppServerModelProviderUiStateReadResponse>(
+        METHOD_MODEL_PROVIDER_UI_STATE_READ,
+        { key },
+      );
+    return normalizeUiStateReadResponse(response);
   },
 
   /**
    * 设置 UI 状态
    */
   async setUiState(key: string, value: string): Promise<void> {
-    return safeInvoke("set_provider_ui_state", { key, value });
+    await requestApiKeyProviderAppServer(
+      METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
+      { key, value },
+    );
   },
 
   /**
@@ -404,7 +607,15 @@ export const apiKeyProviderApi = {
    */
   async updateSortOrders(sortOrders: [string, number][]): Promise<void> {
     return invalidateAfterMutation(
-      safeInvoke("update_provider_sort_orders", { sortOrders }),
+      requestApiKeyProviderAppServer(
+        METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
+        {
+          sortOrders: sortOrders.map(([providerId, sortOrder]) => ({
+            providerId,
+            sortOrder,
+          })),
+        },
+      ).then(() => undefined),
     );
   },
 
@@ -412,7 +623,12 @@ export const apiKeyProviderApi = {
    * 导出 Provider 配置
    */
   async exportConfig(includeKeys: boolean): Promise<string> {
-    return safeInvoke("export_api_key_providers", { includeKeys });
+    const response =
+      await requestApiKeyProviderAppServer<AppServerModelProviderConfigExportResponse>(
+        METHOD_MODEL_PROVIDER_CONFIG_EXPORT,
+        { includeKeys },
+      );
+    return normalizeConfigExportResponse(response);
   },
 
   /**
@@ -420,7 +636,10 @@ export const apiKeyProviderApi = {
    */
   async importConfig(configJson: string): Promise<ImportResult> {
     return invalidateAfterMutation(
-      safeInvoke("import_api_key_providers", { configJson }),
+      requestApiKeyProviderAppServer<AppServerModelProviderConfigImportResponse>(
+        METHOD_MODEL_PROVIDER_CONFIG_IMPORT,
+        { configJson },
+      ).then(normalizeConfigImportResponse),
     );
   },
 
@@ -442,12 +661,12 @@ export const apiKeyProviderApi = {
     providerId: string,
     modelName?: string,
   ): Promise<ConnectionTestResult> {
-    return safeInvoke("test_api_key_provider_connection", {
-      providerId,
-      provider_id: providerId,
-      modelName,
-      model_name: modelName,
-    });
+    const response =
+      await requestApiKeyProviderAppServer<AppServerModelProviderTestConnectionResponse>(
+        METHOD_MODEL_PROVIDER_TEST_CONNECTION,
+        { providerId, modelName },
+      );
+    return normalizeConnectionTestResponse(response);
   },
 
   async testChat(
@@ -455,13 +674,12 @@ export const apiKeyProviderApi = {
     modelName: string | undefined,
     prompt: string,
   ): Promise<ChatTestResult> {
-    return safeInvoke("test_api_key_provider_chat", {
-      providerId,
-      provider_id: providerId,
-      modelName,
-      model_name: modelName,
-      prompt,
-    });
+    const response =
+      await requestApiKeyProviderAppServer<AppServerModelProviderTestChatResponse>(
+        METHOD_MODEL_PROVIDER_TEST_CHAT,
+        { providerId, modelName, prompt },
+      );
+    return normalizeChatTestResponse(response);
   },
 };
 

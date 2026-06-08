@@ -35,5 +35,4 @@ export const sessionFileMocks: Record<string, (args?: any) => any> = {
   session_files_resolve_file_path: (args: any) =>
     `/mock/sessions/${args?.sessionId ?? "mock-session"}/${args?.fileName ?? "mock.txt"}`,
   session_files_delete_file: () => undefined,
-  save_exported_document: () => undefined,
 };

@@ -12,10 +12,26 @@ describe("frontendCrash API", () => {
   });
 
   it("应代理前端崩溃上报命令", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
+    const report = { message: "boom" };
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
 
-    await expect(
-      reportFrontendCrash({ message: "boom" }),
-    ).resolves.toBeUndefined();
+    await expect(reportFrontendCrash(report)).resolves.toBeUndefined();
+
+    expect(safeInvoke).toHaveBeenCalledWith("report_frontend_crash", {
+      report,
+    });
+  });
+
+  it("遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+      },
+    });
+
+    await expect(reportFrontendCrash({ message: "boom" })).rejects.toThrow(
+      "report_frontend_crash 尚未接入真实前端崩溃诊断 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
   });
 });

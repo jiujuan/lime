@@ -323,7 +323,7 @@ describe("live-provider-smoke-gate", () => {
 
   it("提交真实 AgentRuntime / Provider 的脚本必须默认接入 live gate", () => {
     const riskyCommandPattern =
-      /"agent_runtime_submit_turn"|"test_api_key_provider_chat"/;
+      /"agent_runtime_submit_turn"|"test_api_key_provider_chat"|"modelProvider\/testChat"/;
     const violations = listSmokeScripts()
       .filter(({ content }) => riskyCommandPattern.test(content))
       .filter(({ content }) => {

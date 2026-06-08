@@ -58,6 +58,36 @@ describe("companion API", () => {
     ).resolves.toEqual({ delivered: true, connected: true });
   });
 
+  it("桌宠命令遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(getCompanionPetStatus()).rejects.toThrow(
+      "companion_get_pet_status 尚未接入真实 Companion current 通道",
+    );
+    await expect(launchCompanionPet()).rejects.toThrow(
+      "companion_launch_pet 尚未接入真实 Companion current 通道",
+    );
+    await expect(
+      sendCompanionPetCommand({
+        event: "pet.show_bubble",
+        payload: { text: "你好" },
+      }),
+    ).rejects.toThrow(
+      "companion_send_pet_command 尚未接入真实 Companion current 通道",
+    );
+
+    expect(vi.mocked(safeInvoke).mock.calls.map(([cmd]) => cmd)).toEqual([
+      "companion_get_pet_status",
+      "companion_launch_pet",
+      "companion_send_pet_command",
+    ]);
+  });
+
   it("应代理桌宠状态监听", async () => {
     vi.mocked(safeListen).mockImplementationOnce(async (_event, handler) => {
       handler({

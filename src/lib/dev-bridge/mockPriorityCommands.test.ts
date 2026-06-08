@@ -24,7 +24,6 @@ describe("mockPriorityCommands", () => {
       "agent_app_start_ui_runtime",
       "get_model_registry",
       "knowledge_list_packs",
-      "get_automation_jobs",
       "project_memory_get",
       "session_files_save_file",
     ];
@@ -87,7 +86,7 @@ describe("mockPriorityCommands", () => {
       shouldDisallowMockFallbackInBrowser("knowledge_list_packs"),
     ).toBe(true);
     expect(shouldDisallowMockFallbackInBrowser("get_automation_jobs")).toBe(
-      true,
+      false,
     );
     expect(shouldDisallowMockFallbackInBrowser("project_memory_get")).toBe(
       true,
@@ -148,22 +147,6 @@ describe("mockPriorityCommands", () => {
     expect(
       shouldDisallowMockFallbackInBrowser("get_model_registry_provider_ids"),
     ).toBe(true);
-    expect(shouldDisallowMockFallbackInBrowser("get_provider_ui_state")).toBe(
-      true,
-    );
-    expect(shouldDisallowMockFallbackInBrowser("get_api_key_provider")).toBe(
-      true,
-    );
-    expect(
-      shouldDisallowMockFallbackInBrowser("add_custom_api_key_provider"),
-    ).toBe(true);
-    expect(shouldDisallowMockFallbackInBrowser("update_api_key_provider")).toBe(
-      true,
-    );
-    expect(
-      shouldDisallowMockFallbackInBrowser("delete_custom_api_key_provider"),
-    ).toBe(true);
-    expect(shouldDisallowMockFallbackInBrowser("add_api_key")).toBe(true);
     expect(shouldPreferMockInBrowser("session_files_save_file")).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("session_files_save_file")).toBe(
       true,
@@ -177,9 +160,15 @@ describe("mockPriorityCommands", () => {
     expect(shouldDisallowMockFallbackInBrowser("list_dir")).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("get_file_manager_locations"),
-    ).toBe(true);
+    ).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("get_file_icon_data_url")).toBe(
-      true,
+      false,
+    );
+    expect(shouldDisallowMockFallbackInBrowser("reveal_in_finder")).toBe(
+      false,
+    );
+    expect(shouldDisallowMockFallbackInBrowser("open_with_default_app")).toBe(
+      false,
     );
     expect(shouldDisallowMockFallbackInBrowser("upload_material")).toBe(true);
     expect(

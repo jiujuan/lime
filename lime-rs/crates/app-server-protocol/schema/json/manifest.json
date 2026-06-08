@@ -64,7 +64,55 @@
     },
     {
       "kind": "request",
+      "method": "automationJob/create"
+    },
+    {
+      "kind": "request",
+      "method": "automationJob/delete"
+    },
+    {
+      "kind": "request",
+      "method": "automationJob/health"
+    },
+    {
+      "kind": "request",
       "method": "automationJob/list"
+    },
+    {
+      "kind": "request",
+      "method": "automationJob/read"
+    },
+    {
+      "kind": "request",
+      "method": "automationJob/runHistory"
+    },
+    {
+      "kind": "request",
+      "method": "automationJob/runNow"
+    },
+    {
+      "kind": "request",
+      "method": "automationJob/update"
+    },
+    {
+      "kind": "request",
+      "method": "automationSchedule/preview"
+    },
+    {
+      "kind": "request",
+      "method": "automationSchedule/validate"
+    },
+    {
+      "kind": "request",
+      "method": "automationScheduler/config/read"
+    },
+    {
+      "kind": "request",
+      "method": "automationScheduler/config/update"
+    },
+    {
+      "kind": "request",
+      "method": "automationScheduler/status"
     },
     {
       "kind": "request",
@@ -112,6 +160,26 @@
     },
     {
       "kind": "request",
+      "method": "mcpPrompt/list"
+    },
+    {
+      "kind": "request",
+      "method": "mcpResource/list"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServer/list"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServerStatus/list"
+    },
+    {
+      "kind": "request",
+      "method": "mcpTool/list"
+    },
+    {
+      "kind": "request",
       "method": "model/list"
     },
     {
@@ -124,7 +192,39 @@
     },
     {
       "kind": "request",
+      "method": "modelProvider/create"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/delete"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/fetchModels"
+    },
+    {
+      "kind": "request",
       "method": "modelProvider/list"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/read"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/sortOrders/update"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/testChat"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/testConnection"
+    },
+    {
+      "kind": "request",
+      "method": "modelProvider/update"
     },
     {
       "kind": "request",
@@ -133,6 +233,46 @@
     {
       "kind": "request",
       "method": "modelProviderAlias/read"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderConfig/export"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderConfig/import"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderKey/create"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderKey/delete"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderKey/error/record"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderKey/next"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderKey/update"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderKey/usage/record"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderUiState/read"
+    },
+    {
+      "kind": "request",
+      "method": "modelProviderUiState/write"
     },
     {
       "kind": "request",
@@ -237,7 +377,25 @@
       "ArtifactReadParams",
       "ArtifactReadResponse",
       "ArtifactSummary",
+      "AutomationJobCreateParams",
+      "AutomationJobDeleteResponse",
+      "AutomationJobHealthParams",
+      "AutomationJobHealthResponse",
+      "AutomationJobIdParams",
       "AutomationJobListResponse",
+      "AutomationJobReadResponse",
+      "AutomationJobRunHistoryParams",
+      "AutomationJobRunHistoryResponse",
+      "AutomationJobRunNowResponse",
+      "AutomationJobUpdateParams",
+      "AutomationJobWriteResponse",
+      "AutomationScheduleParams",
+      "AutomationSchedulePreviewResponse",
+      "AutomationScheduleValidateResponse",
+      "AutomationSchedulerConfigReadResponse",
+      "AutomationSchedulerConfigUpdateParams",
+      "AutomationSchedulerConfigUpdateResponse",
+      "AutomationSchedulerStatusResponse",
       "BusinessObjectRef",
       "CapabilityDescriptor",
       "CapabilityListParams",
@@ -267,6 +425,11 @@
       "InitializeResponse",
       "KnowledgeListPacksParams",
       "KnowledgeListPacksResponse",
+      "McpPromptListResponse",
+      "McpResourceListResponse",
+      "McpServerListResponse",
+      "McpServerStatusListResponse",
+      "McpToolListResponse",
       "ModelListParams",
       "ModelListResponse",
       "ModelPreferencesListResponse",
@@ -274,7 +437,38 @@
       "ModelProviderAliasReadParams",
       "ModelProviderAliasReadResponse",
       "ModelProviderCatalogListResponse",
+      "ModelProviderConfigExportParams",
+      "ModelProviderConfigExportResponse",
+      "ModelProviderConfigImportParams",
+      "ModelProviderConfigImportResponse",
+      "ModelProviderCreateParams",
+      "ModelProviderDeleteParams",
+      "ModelProviderDeleteResponse",
+      "ModelProviderFetchModelsParams",
+      "ModelProviderFetchModelsResponse",
+      "ModelProviderKeyCreateParams",
+      "ModelProviderKeyDeleteParams",
+      "ModelProviderKeyDeleteResponse",
+      "ModelProviderKeyEventParams",
+      "ModelProviderKeyNextParams",
+      "ModelProviderKeyNextResponse",
+      "ModelProviderKeyUpdateParams",
+      "ModelProviderKeyWriteResponse",
       "ModelProviderListResponse",
+      "ModelProviderMutationResponse",
+      "ModelProviderReadParams",
+      "ModelProviderReadResponse",
+      "ModelProviderSortOrderItem",
+      "ModelProviderSortOrdersUpdateParams",
+      "ModelProviderTestChatParams",
+      "ModelProviderTestChatResponse",
+      "ModelProviderTestConnectionParams",
+      "ModelProviderTestConnectionResponse",
+      "ModelProviderUiStateReadParams",
+      "ModelProviderUiStateReadResponse",
+      "ModelProviderUiStateWriteParams",
+      "ModelProviderUpdateParams",
+      "ModelProviderWriteResponse",
       "ModelSyncStateReadResponse",
       "OpenDeepLinkPayload",
       "PlatformInfo",

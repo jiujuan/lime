@@ -1,4 +1,4 @@
-import { app, autoUpdater } from "electron";
+import { app, autoUpdater } from "./electronRuntime";
 
 type UpdateInstallStage =
   | "idle"

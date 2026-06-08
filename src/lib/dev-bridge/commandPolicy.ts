@@ -12,7 +12,6 @@ export type DevBridgeCommandTimeoutProfile =
   | "agent-app-ui-runtime-start"
   | "agent-app-package"
   | "skill-execution"
-  | "provider-probe"
   | "knowledge-compile"
   | "voice-model-download"
   | "layered-design-project"
@@ -82,13 +81,6 @@ const bridgeTruthCommands = new Set<string>([
   "gateway_channel_status",
   "wechat_channel_list_accounts",
   "get_default_provider",
-  "get_provider_ui_state",
-  "get_api_key_providers",
-  "get_api_key_provider",
-  "add_custom_api_key_provider",
-  "update_api_key_provider",
-  "delete_custom_api_key_provider",
-  "add_api_key",
   "get_model_registry",
   "get_model_registry_provider_ids",
   "get_models_for_provider",
@@ -96,7 +88,6 @@ const bridgeTruthCommands = new Set<string>([
   "get_provider_alias_config",
   "get_all_alias_configs",
   "refresh_model_registry",
-  "fetch_provider_models_auto",
   "create_image_generation_task_artifact",
   "create_audio_generation_task_artifact",
   "complete_audio_generation_task_artifact",
@@ -155,18 +146,12 @@ const bridgeTruthCommands = new Set<string>([
   "knowledge_update_pack_status",
   "knowledge_resolve_context",
   "knowledge_validate_context_run",
-  "get_automation_jobs",
   "project_memory_get",
-  "get_home_dir",
-  "get_file_manager_locations",
-  "get_file_icon_data_url",
   "create_file",
   "create_directory",
   "delete_file",
   "rename_file",
   "get_file_name",
-  "reveal_in_finder",
-  "open_with_default_app",
   "session_files_save_file",
   "session_files_resolve_file_path",
   "upload_material",
@@ -180,12 +165,6 @@ const optionalLegacyUxCommands = new Set<string>([
   "get_hint_routes",
   "session_files_get_or_create",
   "session_files_list_files",
-]);
-
-const devBridgeProviderProbeCommands = new Set([
-  "fetch_provider_models_auto",
-  "test_api_key_provider_connection",
-  "test_api_key_provider_chat",
 ]);
 
 const devBridgeAgentAppUiRuntimeStartCommands = new Set([
@@ -366,9 +345,6 @@ export function resolveDevBridgeCommandTimeoutProfile(
   }
   if (devBridgeSkillExecutionCommands.has(command)) {
     return "skill-execution";
-  }
-  if (devBridgeProviderProbeCommands.has(command)) {
-    return "provider-probe";
   }
   if (command === "knowledge_compile_pack") {
     return "knowledge-compile";

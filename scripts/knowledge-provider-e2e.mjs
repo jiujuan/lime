@@ -14,6 +14,8 @@ const DEFAULTS = {
   packName: "provider-e2e-persona",
   output: null,
 };
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
 
 const DEFAULT_SOURCE_TEXT = [
   "# 访谈摘录：林澈",
@@ -110,6 +112,37 @@ async function invoke(invokeUrl, cmd, args = {}) {
     throw new Error(payload.error);
   }
   return payload.result;
+}
+
+let appServerRequestId = 1;
+
+async function invokeAppServerMethod(invokeUrl, method, params = {}) {
+  const id = `knowledge-provider-${appServerRequestId++}`;
+  const result = await invoke(invokeUrl, APP_SERVER_HANDLE_JSON_LINES_COMMAND, {
+    request: { lines: [`${JSON.stringify({ id, method, params })}\n`] },
+  });
+  const messages = (Array.isArray(result?.lines) ? result.lines : [])
+    .map((line) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    throw new Error(
+      `${method} error: ${error.error?.message || "App Server JSON-RPC error"}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method} missing App Server response`);
+  }
+  return response.result;
 }
 
 function sanitizeProviders(providers) {
@@ -271,7 +304,11 @@ async function main() {
   }
 
   if (options.listProviders) {
-    const providers = await invoke(options.invokeUrl, "get_api_key_providers");
+    const providerList = await invokeAppServerMethod(
+      options.invokeUrl,
+      APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
+    );
+    const providers = providerList?.providers;
     console.log(JSON.stringify(sanitizeProviders(providers), null, 2));
     return;
   }

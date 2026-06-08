@@ -435,7 +435,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 1. 进入 `设置 -> 系统 -> 自动化`
 2. 确认调度状态、任务列表、健康面板能正常加载
-3. 打开控制台，确认浏览器模式接通 DevBridge 时不再出现 `get_automation_jobs`、`get_automation_health` 或 `get_automation_run_history` 的 unknown command 报错
+3. 打开控制台 / 网络证据，确认自动化读取经 `app_server_handle_json_lines` 观察到 `automationJob/list`、`automationJob/health` 或 `automationJob/runHistory` 等 App Server method，且没有旧 automation 命令族调用
 4. 如当前环境允许创建或编辑任务，再确认提交后列表能刷新，而不是只靠 web mock 静态回显
 
 ### 话题模型恢复验证

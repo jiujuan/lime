@@ -35,7 +35,25 @@ use app_server_protocol::ArtifactContentStatus;
 use app_server_protocol::ArtifactReadParams;
 use app_server_protocol::ArtifactReadResponse;
 use app_server_protocol::ArtifactSummary;
+use app_server_protocol::AutomationJobCreateParams;
+use app_server_protocol::AutomationJobDeleteResponse;
+use app_server_protocol::AutomationJobHealthParams;
+use app_server_protocol::AutomationJobHealthResponse;
+use app_server_protocol::AutomationJobIdParams;
 use app_server_protocol::AutomationJobListResponse;
+use app_server_protocol::AutomationJobReadResponse;
+use app_server_protocol::AutomationJobRunHistoryParams;
+use app_server_protocol::AutomationJobRunHistoryResponse;
+use app_server_protocol::AutomationJobRunNowResponse;
+use app_server_protocol::AutomationJobUpdateParams;
+use app_server_protocol::AutomationJobWriteResponse;
+use app_server_protocol::AutomationScheduleParams;
+use app_server_protocol::AutomationSchedulePreviewResponse;
+use app_server_protocol::AutomationScheduleValidateResponse;
+use app_server_protocol::AutomationSchedulerConfigReadResponse;
+use app_server_protocol::AutomationSchedulerConfigUpdateParams;
+use app_server_protocol::AutomationSchedulerConfigUpdateResponse;
+use app_server_protocol::AutomationSchedulerStatusResponse;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::CapabilityListResponse;
 use app_server_protocol::ClientInfo;
@@ -58,6 +76,11 @@ use app_server_protocol::FileSystemReadFilePreviewParams;
 use app_server_protocol::JsonRpcError;
 use app_server_protocol::KnowledgeListPacksParams;
 use app_server_protocol::KnowledgeListPacksResponse;
+use app_server_protocol::McpPromptListResponse;
+use app_server_protocol::McpResourceListResponse;
+use app_server_protocol::McpServerListResponse;
+use app_server_protocol::McpServerStatusListResponse;
+use app_server_protocol::McpToolListResponse;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -65,7 +88,37 @@ use app_server_protocol::ModelProviderAliasListResponse;
 use app_server_protocol::ModelProviderAliasReadParams;
 use app_server_protocol::ModelProviderAliasReadResponse;
 use app_server_protocol::ModelProviderCatalogListResponse;
+use app_server_protocol::ModelProviderConfigExportParams;
+use app_server_protocol::ModelProviderConfigExportResponse;
+use app_server_protocol::ModelProviderConfigImportParams;
+use app_server_protocol::ModelProviderConfigImportResponse;
+use app_server_protocol::ModelProviderCreateParams;
+use app_server_protocol::ModelProviderDeleteParams;
+use app_server_protocol::ModelProviderDeleteResponse;
+use app_server_protocol::ModelProviderFetchModelsParams;
+use app_server_protocol::ModelProviderFetchModelsResponse;
+use app_server_protocol::ModelProviderKeyCreateParams;
+use app_server_protocol::ModelProviderKeyDeleteParams;
+use app_server_protocol::ModelProviderKeyDeleteResponse;
+use app_server_protocol::ModelProviderKeyEventParams;
+use app_server_protocol::ModelProviderKeyNextParams;
+use app_server_protocol::ModelProviderKeyNextResponse;
+use app_server_protocol::ModelProviderKeyUpdateParams;
+use app_server_protocol::ModelProviderKeyWriteResponse;
 use app_server_protocol::ModelProviderListResponse;
+use app_server_protocol::ModelProviderMutationResponse;
+use app_server_protocol::ModelProviderReadParams;
+use app_server_protocol::ModelProviderReadResponse;
+use app_server_protocol::ModelProviderSortOrdersUpdateParams;
+use app_server_protocol::ModelProviderTestChatParams;
+use app_server_protocol::ModelProviderTestChatResponse;
+use app_server_protocol::ModelProviderTestConnectionParams;
+use app_server_protocol::ModelProviderTestConnectionResponse;
+use app_server_protocol::ModelProviderUiStateReadParams;
+use app_server_protocol::ModelProviderUiStateReadResponse;
+use app_server_protocol::ModelProviderUiStateWriteParams;
+use app_server_protocol::ModelProviderUpdateParams;
+use app_server_protocol::ModelProviderWriteResponse;
 use app_server_protocol::ModelSyncStateReadResponse;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ProjectMemoryReadResponse;
@@ -290,6 +343,146 @@ pub trait AppDataSource: Send + Sync {
 
     async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError>;
 
+    async fn list_mcp_servers(&self) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_mcp_servers_with_status(
+        &self,
+    ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServerStatus/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpTool/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_mcp_prompts(&self) -> Result<McpPromptListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpPrompt/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpResource/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_automation_scheduler_config(
+        &self,
+    ) -> Result<AutomationSchedulerConfigReadResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationScheduler/config/read is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn update_automation_scheduler_config(
+        &self,
+        _params: AutomationSchedulerConfigUpdateParams,
+    ) -> Result<AutomationSchedulerConfigUpdateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationScheduler/config/update is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn read_automation_scheduler_status(
+        &self,
+    ) -> Result<AutomationSchedulerStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationScheduler/status is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_automation_job(
+        &self,
+        _params: AutomationJobIdParams,
+    ) -> Result<AutomationJobReadResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationJob/read is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_automation_job(
+        &self,
+        _params: AutomationJobCreateParams,
+    ) -> Result<AutomationJobWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationJob/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_automation_job(
+        &self,
+        _params: AutomationJobUpdateParams,
+    ) -> Result<AutomationJobWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationJob/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_automation_job(
+        &self,
+        _params: AutomationJobIdParams,
+    ) -> Result<AutomationJobDeleteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationJob/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn run_automation_job_now(
+        &self,
+        _params: AutomationJobIdParams,
+    ) -> Result<AutomationJobRunNowResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationJob/runNow requires the App Server automation executor".to_string(),
+        ))
+    }
+
+    async fn read_automation_health(
+        &self,
+        _params: AutomationJobHealthParams,
+    ) -> Result<AutomationJobHealthResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationJob/health is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_automation_run_history(
+        &self,
+        _params: AutomationJobRunHistoryParams,
+    ) -> Result<AutomationJobRunHistoryResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationJob/runHistory is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn preview_automation_schedule(
+        &self,
+        _params: AutomationScheduleParams,
+    ) -> Result<AutomationSchedulePreviewResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationSchedule/preview is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn validate_automation_schedule(
+        &self,
+        _params: AutomationScheduleParams,
+    ) -> Result<AutomationScheduleValidateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "automationSchedule/validate is not available without an app data source".to_string(),
+        ))
+    }
+
     async fn read_project_memory(
         &self,
         params: ProjectMemoryReadParams,
@@ -311,6 +504,169 @@ pub trait AppDataSource: Send + Sync {
     async fn list_model_provider_catalog(
         &self,
     ) -> Result<ModelProviderCatalogListResponse, RuntimeCoreError>;
+
+    async fn read_model_provider(
+        &self,
+        _params: ModelProviderReadParams,
+    ) -> Result<ModelProviderReadResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProvider/read is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_model_provider(
+        &self,
+        _params: ModelProviderCreateParams,
+    ) -> Result<ModelProviderWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProvider/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_model_provider(
+        &self,
+        _params: ModelProviderUpdateParams,
+    ) -> Result<ModelProviderWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProvider/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_model_provider(
+        &self,
+        _params: ModelProviderDeleteParams,
+    ) -> Result<ModelProviderDeleteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProvider/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_model_provider_sort_orders(
+        &self,
+        _params: ModelProviderSortOrdersUpdateParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProvider/sortOrders/update is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn export_model_provider_config(
+        &self,
+        _params: ModelProviderConfigExportParams,
+    ) -> Result<ModelProviderConfigExportResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderConfig/export is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn import_model_provider_config(
+        &self,
+        _params: ModelProviderConfigImportParams,
+    ) -> Result<ModelProviderConfigImportResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderConfig/import is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn test_model_provider_connection(
+        &self,
+        _params: ModelProviderTestConnectionParams,
+    ) -> Result<ModelProviderTestConnectionResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProvider/testConnection is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn test_model_provider_chat(
+        &self,
+        _params: ModelProviderTestChatParams,
+    ) -> Result<ModelProviderTestChatResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProvider/testChat is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn fetch_model_provider_models(
+        &self,
+        _params: ModelProviderFetchModelsParams,
+    ) -> Result<ModelProviderFetchModelsResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProvider/fetchModels is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_model_provider_key(
+        &self,
+        _params: ModelProviderKeyCreateParams,
+    ) -> Result<ModelProviderKeyWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderKey/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_model_provider_key(
+        &self,
+        _params: ModelProviderKeyUpdateParams,
+    ) -> Result<ModelProviderKeyWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderKey/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_model_provider_key(
+        &self,
+        _params: ModelProviderKeyDeleteParams,
+    ) -> Result<ModelProviderKeyDeleteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderKey/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_next_model_provider_key(
+        &self,
+        _params: ModelProviderKeyNextParams,
+    ) -> Result<ModelProviderKeyNextResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderKey/next is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn record_model_provider_key_usage(
+        &self,
+        _params: ModelProviderKeyEventParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderKey/usage/record is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn record_model_provider_key_error(
+        &self,
+        _params: ModelProviderKeyEventParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderKey/error/record is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_model_provider_ui_state(
+        &self,
+        _params: ModelProviderUiStateReadParams,
+    ) -> Result<ModelProviderUiStateReadResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderUiState/read is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn write_model_provider_ui_state(
+        &self,
+        _params: ModelProviderUiStateWriteParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "modelProviderUiState/write is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn read_model_provider_alias(
         &self,
@@ -558,6 +914,28 @@ impl AppDataSource for NoopAppDataSource {
 
     async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError> {
         Ok(AutomationJobListResponse::default())
+    }
+
+    async fn list_mcp_servers(&self) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Ok(McpServerListResponse::default())
+    }
+
+    async fn list_mcp_servers_with_status(
+        &self,
+    ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
+        Ok(McpServerStatusListResponse::default())
+    }
+
+    async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Ok(McpToolListResponse::default())
+    }
+
+    async fn list_mcp_prompts(&self) -> Result<McpPromptListResponse, RuntimeCoreError> {
+        Ok(McpPromptListResponse::default())
+    }
+
+    async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
+        Ok(McpResourceListResponse::default())
     }
 
     async fn read_project_memory(
@@ -1571,6 +1949,122 @@ impl RuntimeCore {
         self.app_data_source.list_automation_jobs().await
     }
 
+    pub async fn list_mcp_servers(&self) -> Result<McpServerListResponse, RuntimeCoreError> {
+        self.app_data_source.list_mcp_servers().await
+    }
+
+    pub async fn list_mcp_servers_with_status(
+        &self,
+    ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
+        self.app_data_source.list_mcp_servers_with_status().await
+    }
+
+    pub async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
+        self.app_data_source.list_mcp_tools().await
+    }
+
+    pub async fn list_mcp_prompts(&self) -> Result<McpPromptListResponse, RuntimeCoreError> {
+        self.app_data_source.list_mcp_prompts().await
+    }
+
+    pub async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
+        self.app_data_source.list_mcp_resources().await
+    }
+
+    pub async fn read_automation_scheduler_config(
+        &self,
+    ) -> Result<AutomationSchedulerConfigReadResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_automation_scheduler_config()
+            .await
+    }
+
+    pub async fn update_automation_scheduler_config(
+        &self,
+        params: AutomationSchedulerConfigUpdateParams,
+    ) -> Result<AutomationSchedulerConfigUpdateResponse, RuntimeCoreError> {
+        self.app_data_source
+            .update_automation_scheduler_config(params)
+            .await
+    }
+
+    pub async fn read_automation_scheduler_status(
+        &self,
+    ) -> Result<AutomationSchedulerStatusResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_automation_scheduler_status()
+            .await
+    }
+
+    pub async fn read_automation_job(
+        &self,
+        params: AutomationJobIdParams,
+    ) -> Result<AutomationJobReadResponse, RuntimeCoreError> {
+        self.app_data_source.read_automation_job(params).await
+    }
+
+    pub async fn create_automation_job(
+        &self,
+        params: AutomationJobCreateParams,
+    ) -> Result<AutomationJobWriteResponse, RuntimeCoreError> {
+        self.app_data_source.create_automation_job(params).await
+    }
+
+    pub async fn update_automation_job(
+        &self,
+        params: AutomationJobUpdateParams,
+    ) -> Result<AutomationJobWriteResponse, RuntimeCoreError> {
+        self.app_data_source.update_automation_job(params).await
+    }
+
+    pub async fn delete_automation_job(
+        &self,
+        params: AutomationJobIdParams,
+    ) -> Result<AutomationJobDeleteResponse, RuntimeCoreError> {
+        self.app_data_source.delete_automation_job(params).await
+    }
+
+    pub async fn run_automation_job_now(
+        &self,
+        params: AutomationJobIdParams,
+    ) -> Result<AutomationJobRunNowResponse, RuntimeCoreError> {
+        self.app_data_source.run_automation_job_now(params).await
+    }
+
+    pub async fn read_automation_health(
+        &self,
+        params: AutomationJobHealthParams,
+    ) -> Result<AutomationJobHealthResponse, RuntimeCoreError> {
+        self.app_data_source.read_automation_health(params).await
+    }
+
+    pub async fn read_automation_run_history(
+        &self,
+        params: AutomationJobRunHistoryParams,
+    ) -> Result<AutomationJobRunHistoryResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_automation_run_history(params)
+            .await
+    }
+
+    pub async fn preview_automation_schedule(
+        &self,
+        params: AutomationScheduleParams,
+    ) -> Result<AutomationSchedulePreviewResponse, RuntimeCoreError> {
+        self.app_data_source
+            .preview_automation_schedule(params)
+            .await
+    }
+
+    pub async fn validate_automation_schedule(
+        &self,
+        params: AutomationScheduleParams,
+    ) -> Result<AutomationScheduleValidateResponse, RuntimeCoreError> {
+        self.app_data_source
+            .validate_automation_schedule(params)
+            .await
+    }
+
     pub async fn read_project_memory(
         &self,
         params: ProjectMemoryReadParams,
@@ -1607,6 +2101,152 @@ impl RuntimeCore {
         &self,
     ) -> Result<ModelProviderCatalogListResponse, RuntimeCoreError> {
         self.app_data_source.list_model_provider_catalog().await
+    }
+
+    pub async fn read_model_provider(
+        &self,
+        params: ModelProviderReadParams,
+    ) -> Result<ModelProviderReadResponse, RuntimeCoreError> {
+        self.app_data_source.read_model_provider(params).await
+    }
+
+    pub async fn create_model_provider(
+        &self,
+        params: ModelProviderCreateParams,
+    ) -> Result<ModelProviderWriteResponse, RuntimeCoreError> {
+        self.app_data_source.create_model_provider(params).await
+    }
+
+    pub async fn update_model_provider(
+        &self,
+        params: ModelProviderUpdateParams,
+    ) -> Result<ModelProviderWriteResponse, RuntimeCoreError> {
+        self.app_data_source.update_model_provider(params).await
+    }
+
+    pub async fn delete_model_provider(
+        &self,
+        params: ModelProviderDeleteParams,
+    ) -> Result<ModelProviderDeleteResponse, RuntimeCoreError> {
+        self.app_data_source.delete_model_provider(params).await
+    }
+
+    pub async fn update_model_provider_sort_orders(
+        &self,
+        params: ModelProviderSortOrdersUpdateParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        self.app_data_source
+            .update_model_provider_sort_orders(params)
+            .await
+    }
+
+    pub async fn export_model_provider_config(
+        &self,
+        params: ModelProviderConfigExportParams,
+    ) -> Result<ModelProviderConfigExportResponse, RuntimeCoreError> {
+        self.app_data_source
+            .export_model_provider_config(params)
+            .await
+    }
+
+    pub async fn import_model_provider_config(
+        &self,
+        params: ModelProviderConfigImportParams,
+    ) -> Result<ModelProviderConfigImportResponse, RuntimeCoreError> {
+        self.app_data_source
+            .import_model_provider_config(params)
+            .await
+    }
+
+    pub async fn test_model_provider_connection(
+        &self,
+        params: ModelProviderTestConnectionParams,
+    ) -> Result<ModelProviderTestConnectionResponse, RuntimeCoreError> {
+        self.app_data_source
+            .test_model_provider_connection(params)
+            .await
+    }
+
+    pub async fn test_model_provider_chat(
+        &self,
+        params: ModelProviderTestChatParams,
+    ) -> Result<ModelProviderTestChatResponse, RuntimeCoreError> {
+        self.app_data_source.test_model_provider_chat(params).await
+    }
+
+    pub async fn fetch_model_provider_models(
+        &self,
+        params: ModelProviderFetchModelsParams,
+    ) -> Result<ModelProviderFetchModelsResponse, RuntimeCoreError> {
+        self.app_data_source
+            .fetch_model_provider_models(params)
+            .await
+    }
+
+    pub async fn create_model_provider_key(
+        &self,
+        params: ModelProviderKeyCreateParams,
+    ) -> Result<ModelProviderKeyWriteResponse, RuntimeCoreError> {
+        self.app_data_source.create_model_provider_key(params).await
+    }
+
+    pub async fn update_model_provider_key(
+        &self,
+        params: ModelProviderKeyUpdateParams,
+    ) -> Result<ModelProviderKeyWriteResponse, RuntimeCoreError> {
+        self.app_data_source.update_model_provider_key(params).await
+    }
+
+    pub async fn delete_model_provider_key(
+        &self,
+        params: ModelProviderKeyDeleteParams,
+    ) -> Result<ModelProviderKeyDeleteResponse, RuntimeCoreError> {
+        self.app_data_source.delete_model_provider_key(params).await
+    }
+
+    pub async fn read_next_model_provider_key(
+        &self,
+        params: ModelProviderKeyNextParams,
+    ) -> Result<ModelProviderKeyNextResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_next_model_provider_key(params)
+            .await
+    }
+
+    pub async fn record_model_provider_key_usage(
+        &self,
+        params: ModelProviderKeyEventParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        self.app_data_source
+            .record_model_provider_key_usage(params)
+            .await
+    }
+
+    pub async fn record_model_provider_key_error(
+        &self,
+        params: ModelProviderKeyEventParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        self.app_data_source
+            .record_model_provider_key_error(params)
+            .await
+    }
+
+    pub async fn read_model_provider_ui_state(
+        &self,
+        params: ModelProviderUiStateReadParams,
+    ) -> Result<ModelProviderUiStateReadResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_model_provider_ui_state(params)
+            .await
+    }
+
+    pub async fn write_model_provider_ui_state(
+        &self,
+        params: ModelProviderUiStateWriteParams,
+    ) -> Result<ModelProviderMutationResponse, RuntimeCoreError> {
+        self.app_data_source
+            .write_model_provider_ui_state(params)
+            .await
     }
 
     pub async fn read_model_provider_alias(

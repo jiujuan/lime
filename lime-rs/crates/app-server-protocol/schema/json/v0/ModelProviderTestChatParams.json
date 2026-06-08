@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "modelName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "prompt",
+    "providerId"
+  ],
+  "title": "ModelProviderTestChatParams",
+  "type": "object"
+}

@@ -97,10 +97,14 @@ describe("apiKeyProvider API", () => {
     expect(safeInvoke).not.toHaveBeenCalledWith("get_system_provider_catalog");
   });
 
-  it("应代理现役 provider side-effect 命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ id: "key-1" })
-      .mockResolvedValueOnce({ success: true });
+  it("应通过 App Server current 执行 provider side-effect 命令", async () => {
+    resolveAppServerRequest({
+      key: { id: "key-1", provider_id: "openai", enabled: true },
+    });
+    resolveAppServerRequest({
+      success: true,
+      latencyMs: 12,
+    });
 
     await expect(
       apiKeyProviderApi.addApiKey({
@@ -111,14 +115,20 @@ describe("apiKeyProvider API", () => {
     ).resolves.toEqual(expect.objectContaining({ id: "key-1" }));
     await expect(
       apiKeyProviderApi.testConnection("openai", "gpt-4.1"),
-    ).resolves.toEqual(expect.objectContaining({ success: true }));
-    expect(vi.mocked(safeInvoke)).toHaveBeenNthCalledWith(1, "add_api_key", {
-      request: {
-        provider_id: "openai",
-        api_key: "sk-test",
-        replace_existing: true,
-      },
+    ).resolves.toEqual(
+      expect.objectContaining({ success: true, latency_ms: 12 }),
+    );
+    expectAppServerRequest(1, "modelProviderKey/create", {
+      providerId: "openai",
+      apiKey: "sk-test",
+      alias: undefined,
+      replaceExisting: true,
     });
+    expectAppServerRequest(2, "modelProvider/testConnection", {
+      providerId: "openai",
+      modelName: "gpt-4.1",
+    });
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("不应继续暴露旧 API Key 迁移 API", () => {
@@ -238,7 +248,9 @@ describe("apiKeyProvider API", () => {
         },
       ],
     });
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ id: "key-2" });
+    resolveAppServerRequest({
+      key: { id: "key-2", provider_id: "openai", enabled: true },
+    });
     resolveAppServerRequest({
       providers: [
         {
@@ -261,15 +273,15 @@ describe("apiKeyProvider API", () => {
       expect.objectContaining({ api_key_count: 2 }),
     ]);
 
-    expect(appServerRequestMock).toHaveBeenCalledTimes(2);
+    expect(appServerRequestMock).toHaveBeenCalledTimes(3);
     expectAppServerRequest(1, "modelProvider/list", {});
-    expectAppServerRequest(2, "modelProvider/list", {});
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith("add_api_key", {
-      request: {
-        provider_id: "openai",
-        api_key: "sk-test",
-      },
+    expectAppServerRequest(2, "modelProviderKey/create", {
+      providerId: "openai",
+      apiKey: "sk-test",
+      alias: undefined,
+      replaceExisting: undefined,
     });
+    expectAppServerRequest(3, "modelProvider/list", {});
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 });

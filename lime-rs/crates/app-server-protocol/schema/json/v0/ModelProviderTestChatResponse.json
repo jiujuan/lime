@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "error": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "latencyMs": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "raw": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "title": "ModelProviderTestChatResponse",
+  "type": "object"
+}

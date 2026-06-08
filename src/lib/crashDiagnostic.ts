@@ -37,7 +37,7 @@ import {
   type InvokeErrorBufferEntry,
   type InvokeTraceBufferEntry,
 } from "@/lib/dev-bridge";
-import { revealPathInFinder } from "@/lib/api/fileSystem";
+import { getHomeDirectory, revealPathInFinder } from "@/lib/api/fileSystem";
 import {
   clearWorkspaceRepairHistory,
   getWorkspaceRepairHistory,
@@ -411,7 +411,7 @@ export async function collectRuntimeSnapshotForDiagnostic(
     collectionNotes.push(
       buildCollectionFailureNote(
         "runtime_snapshot.api_key_provider_summary",
-        "get_api_key_providers",
+        "modelProvider/list",
         apiKeyProviderResult.reason,
       ),
     );
@@ -1243,7 +1243,7 @@ export async function openCrashDiagnosticDownloadDirectory(): Promise<OpenDownlo
   }
 
   const platform = detectDesktopPlatform();
-  const homeDir = await safeInvoke<string>("get_home_dir").catch(() => "");
+  const homeDir = await getHomeDirectory().catch(() => "");
   const candidates = buildDownloadDirectoryCandidates(platform, homeDir);
 
   for (const path of candidates) {

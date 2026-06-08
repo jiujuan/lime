@@ -223,6 +223,20 @@ async function submitCustomProviderDraft({
   await clickByTestId("model-activate-button", 3);
 }
 
+function collectReadableText(node: Node): string {
+  if (node instanceof Element && node.getAttribute("aria-hidden") === "true") {
+    return "";
+  }
+
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? "";
+  }
+
+  return Array.from(node.childNodes)
+    .map((childNode) => collectReadableText(childNode))
+    .join("");
+}
+
 beforeEach(() => {
   (
     globalThis as typeof globalThis & {
@@ -590,7 +604,12 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(text).toContain("Alibaba Coding Plan（海外）");
     expect(text).not.toContain("GLM Coding Plan（国内）");
     expect(maybeTemplateCard(container, "kimi-code-subscription")).not.toBeNull();
-    expect(maybeTemplateCard(container, "zai-coding-plan")).not.toBeNull();
+    const zaiTemplateCard = maybeTemplateCard(container, "zai-coding-plan");
+    expect(zaiTemplateCard).not.toBeNull();
+    const zaiReadableText = collectReadableText(zaiTemplateCard!);
+    expect(zaiReadableText).toContain("Z.AI Coding Plan（海外）");
+    expect(zaiReadableText).not.toContain(".bg { fill");
+    expect(zaiReadableText).not.toContain(".fg { fill");
     expect(
       maybeTemplateCard(container, "minimax-coding-plan-global"),
     ).not.toBeNull();

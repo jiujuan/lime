@@ -1,14 +1,12 @@
 use super::{args_or_default, get_db, get_string_arg, parse_nested_arg};
 use crate::commands::workspace_cmd::{
-    CreateWorkspaceRequest, UpdateWorkspaceRequest, WorkspaceEnsureResult, WorkspaceListItem,
+    CreateWorkspaceRequest, UpdateWorkspaceRequest, WorkspaceListItem,
 };
 use crate::dev_bridge::DevBridgeState;
-use crate::services::workspace_health_service::{
-    ensure_workspace_ready_with_auto_relocate, ensure_workspace_root_ready,
-};
+use crate::services::workspace_health_service::ensure_workspace_root_ready;
 use crate::workspace::{WorkspaceManager, WorkspaceType, WorkspaceUpdate};
 use serde_json::Value as JsonValue;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 mod management;
 mod queries;
@@ -26,37 +24,11 @@ fn get_optional_bool_arg(args: &JsonValue, primary: &str, secondary: &str) -> Op
         .and_then(|value| value.as_bool())
 }
 
-fn get_optional_string_arg(args: &JsonValue, primary: &str, secondary: &str) -> Option<String> {
-    args.get(primary)
-        .or_else(|| args.get(secondary))
-        .and_then(|value| value.as_str())
-        .map(ToOwned::to_owned)
-}
-
 fn to_workspace_list_item_json<T>(workspace: T) -> Result<JsonValue, DynError>
 where
     WorkspaceListItem: From<T>,
 {
     Ok(serde_json::to_value(WorkspaceListItem::from(workspace))?)
-}
-
-fn build_ensure_result(
-    workspace_id: String,
-    ensured: crate::services::workspace_health_service::WorkspaceReadyResult,
-) -> WorkspaceEnsureResult {
-    WorkspaceEnsureResult {
-        workspace_id,
-        root_path: ensured.root_path.to_string_lossy().to_string(),
-        existed: ensured.existed,
-        created: ensured.created,
-        repaired: ensured.repaired,
-        relocated: ensured.relocated,
-        previous_root_path: ensured
-            .previous_root_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().to_string()),
-        warning: ensured.warning,
-    }
 }
 
 fn remove_workspace_directory_if_requested(
@@ -96,7 +68,7 @@ fn ensure_update_root_path(root_path: Option<String>) -> Result<Option<PathBuf>,
     }
 }
 
-fn ensure_valid_workspace_root(path: &Path) -> Result<(), DynError> {
+fn ensure_valid_workspace_root(path: &std::path::Path) -> Result<(), DynError> {
     ensure_workspace_root_ready(path)?;
     Ok(())
 }

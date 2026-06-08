@@ -1,4 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import type { ExperimentalFeatures } from "./experimentalFeatureTypes";
 
 export type {
@@ -9,13 +10,25 @@ export type {
 export { DEFAULT_EXPERIMENTAL_FEATURES } from "./experimentalFeatureTypes";
 
 export async function getExperimentalConfig(): Promise<ExperimentalFeatures> {
-  return safeInvoke("get_experimental_config");
+  const result =
+    await safeInvoke<ExperimentalFeatures>("get_experimental_config");
+  assertNotDiagnosticFacade(
+    "get_experimental_config",
+    result,
+    "真实 Experimental config current 通道",
+  );
+  return result;
 }
 
 export async function saveExperimentalConfig(
   config: ExperimentalFeatures,
 ): Promise<void> {
-  return safeInvoke("save_experimental_config", {
+  const result = await safeInvoke("save_experimental_config", {
     experimentalConfig: config,
   });
+  assertNotDiagnosticFacade(
+    "save_experimental_config",
+    result,
+    "真实 Experimental config current 通道",
+  );
 }

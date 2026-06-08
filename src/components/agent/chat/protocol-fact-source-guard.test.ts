@@ -63,6 +63,14 @@ const FORBIDDEN_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
     pattern:
       /readString\(\s*(?:args|metadata)\s*,\s*\["output_file",\s*"offload_file"\]\s*\)/,
   },
+  {
+    label: "Agent Chat 旧 provider model Tauri 命令",
+    pattern: /"get_(?:all_)?provider_models"/,
+  },
+  {
+    label: "Agent Chat 硬编码 Provider 模型配置",
+    pattern: /\bPROVIDER_CONFIG\b/,
+  },
 ];
 
 describe("agent chat protocol fact source guard", () => {

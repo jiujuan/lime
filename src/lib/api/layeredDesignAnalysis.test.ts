@@ -57,6 +57,47 @@ describe("layeredDesignAnalysis API", () => {
     });
   });
 
+  it("recognizeLayeredDesignText 应保留合法 unsupported fallback", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      supported: false,
+      engine: "vision_unsupported",
+      blocks: [],
+      message: "当前平台不支持 native OCR",
+    });
+
+    await expect(
+      recognizeLayeredDesignText({
+        imageSrc: "data:image/png;base64,ZmFrZQ==",
+        width: 640,
+        height: 180,
+      }),
+    ).resolves.toEqual({
+      supported: false,
+      engine: "vision_unsupported",
+      blocks: [],
+      message: "当前平台不支持 native OCR",
+    });
+  });
+
+  it("recognizeLayeredDesignText 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "recognize_layered_design_text",
+        source: "electron-host-diagnostic",
+      },
+    });
+
+    await expect(
+      recognizeLayeredDesignText({
+        imageSrc: "data:image/png;base64,ZmFrZQ==",
+        width: 640,
+        height: 180,
+      }),
+    ).rejects.toThrow(
+      "recognize_layered_design_text 尚未接入真实 Layered Design extraction current 通道",
+    );
+  });
+
   it("应通过 current Desktop Host 命令代理扁平图 structured analyzer", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       supported: true,
@@ -109,6 +150,51 @@ describe("layeredDesignAnalysis API", () => {
           createdAt: "2026-05-07T00:00:00.000Z",
         },
       },
+    );
+  });
+
+  it("analyzeLayeredDesignFlatImageNative 应保留合法 unsupported fallback", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      supported: false,
+      engine: "native_heuristic_analyzer",
+      message: "当前来源不支持 native structured analyzer",
+    });
+
+    await expect(
+      analyzeLayeredDesignFlatImageNative({
+        image: {
+          src: "https://example.com/remote.png",
+          width: 900,
+          height: 1400,
+          mimeType: "image/png",
+        },
+      }),
+    ).resolves.toEqual({
+      supported: false,
+      engine: "native_heuristic_analyzer",
+      message: "当前来源不支持 native structured analyzer",
+    });
+  });
+
+  it("analyzeLayeredDesignFlatImageNative 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "analyze_layered_design_flat_image",
+        source: "electron-host-diagnostic",
+      },
+    });
+
+    await expect(
+      analyzeLayeredDesignFlatImageNative({
+        image: {
+          src: "data:image/png;base64,ZmFrZQ==",
+          width: 900,
+          height: 1400,
+          mimeType: "image/png",
+        },
+      }),
+    ).rejects.toThrow(
+      "analyze_layered_design_flat_image 尚未接入真实 Layered Design extraction current 通道",
     );
   });
 });

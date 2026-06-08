@@ -2946,4 +2946,88 @@ describe("legacySurfaceCatalog", () => {
       ]),
     );
   });
+
+  it("应记录 API Key Provider current App Server 方法目录", () => {
+    expect(agentCommandCatalog.appServerModelProviderMethods).toEqual([
+      "modelProvider/list",
+      "modelProvider/catalog/list",
+      "modelProvider/read",
+      "modelProvider/create",
+      "modelProvider/update",
+      "modelProvider/delete",
+      "modelProvider/sortOrders/update",
+      "modelProviderConfig/export",
+      "modelProviderConfig/import",
+      "modelProvider/testConnection",
+      "modelProvider/testChat",
+      "modelProvider/fetchModels",
+      "modelProviderKey/create",
+      "modelProviderKey/update",
+      "modelProviderKey/delete",
+      "modelProviderKey/next",
+      "modelProviderKey/usage/record",
+      "modelProviderKey/error/record",
+      "modelProviderUiState/read",
+      "modelProviderUiState/write",
+    ]);
+  });
+
+  it("应记录旧 API Key Provider 命令到 current 方法的替换关系", () => {
+    expect(agentCommandCatalog.deprecatedCommandReplacements).toMatchObject({
+      get_api_key_providers: "modelProvider/list",
+      get_system_provider_catalog: "modelProvider/catalog/list",
+      get_api_key_provider: "modelProvider/read",
+      create_api_key_provider: "modelProvider/create",
+      update_api_key_provider: "modelProvider/update",
+      delete_api_key_provider: "modelProvider/delete",
+      update_api_key_provider_sort_orders: "modelProvider/sortOrders/update",
+      export_api_key_provider_config: "modelProviderConfig/export",
+      import_api_key_provider_config: "modelProviderConfig/import",
+      test_api_key_provider_connection: "modelProvider/testConnection",
+      test_api_key_provider_chat: "modelProvider/testChat",
+      fetch_provider_models_auto: "modelProvider/fetchModels",
+      create_api_key_provider_key: "modelProviderKey/create",
+      update_api_key_provider_key: "modelProviderKey/update",
+      delete_api_key_provider_key: "modelProviderKey/delete",
+      next_api_key_provider_key: "modelProviderKey/next",
+      record_api_key_provider_key_usage: "modelProviderKey/usage/record",
+      record_api_key_provider_key_error: "modelProviderKey/error/record",
+      get_provider_ui_state: "modelProviderUiState/read",
+      set_provider_ui_state: "modelProviderUiState/write",
+    });
+  });
+
+  it("应将旧 API Key Provider command surface 标记为 dead", () => {
+    const monitor = legacySurfaceCatalogJson.commands.find(
+      (entry) => entry.id === "api-key-provider-legacy-command-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.commands).toEqual(
+      expect.arrayContaining([
+        "get_api_key_providers",
+        "get_system_provider_catalog",
+        "get_api_key_provider",
+        "create_api_key_provider",
+        "update_api_key_provider",
+        "delete_api_key_provider",
+        "update_api_key_provider_sort_orders",
+        "export_api_key_provider_config",
+        "import_api_key_provider_config",
+        "test_api_key_provider_connection",
+        "test_api_key_provider_chat",
+        "fetch_provider_models_auto",
+        "create_api_key_provider_key",
+        "update_api_key_provider_key",
+        "delete_api_key_provider_key",
+        "next_api_key_provider_key",
+        "record_api_key_provider_key_usage",
+        "record_api_key_provider_key_error",
+        "get_provider_ui_state",
+        "set_provider_ui_state",
+      ]),
+    );
+  });
 });

@@ -36,7 +36,19 @@ import {
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
   METHOD_ARTIFACT_READ,
+  METHOD_AUTOMATION_JOB_CREATE,
+  METHOD_AUTOMATION_JOB_DELETE,
+  METHOD_AUTOMATION_JOB_HEALTH,
   METHOD_AUTOMATION_JOB_LIST,
+  METHOD_AUTOMATION_JOB_READ,
+  METHOD_AUTOMATION_JOB_RUN_HISTORY,
+  METHOD_AUTOMATION_JOB_RUN_NOW,
+  METHOD_AUTOMATION_JOB_UPDATE,
+  METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
+  METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+  METHOD_AUTOMATION_SCHEDULER_STATUS,
+  METHOD_AUTOMATION_SCHEDULE_PREVIEW,
+  METHOD_AUTOMATION_SCHEDULE_VALIDATE,
   METHOD_CAPABILITY_LIST,
   METHOD_CONNECT_CALLBACK_SEND,
   METHOD_CONNECT_DEEP_LINK_RESOLVE,
@@ -53,8 +65,31 @@ import {
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_READ,
   METHOD_MODEL_PROVIDER_CATALOG_LIST,
+  METHOD_MODEL_PROVIDER_CONFIG_EXPORT,
+  METHOD_MODEL_PROVIDER_CONFIG_IMPORT,
+  METHOD_MODEL_PROVIDER_CREATE,
+  METHOD_MODEL_PROVIDER_DELETE,
+  METHOD_MODEL_PROVIDER_FETCH_MODELS,
+  METHOD_MODEL_PROVIDER_KEY_CREATE,
+  METHOD_MODEL_PROVIDER_KEY_DELETE,
+  METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD,
+  METHOD_MODEL_PROVIDER_KEY_NEXT,
+  METHOD_MODEL_PROVIDER_KEY_UPDATE,
+  METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD,
   METHOD_MODEL_PROVIDER_LIST,
+  METHOD_MODEL_PROVIDER_READ,
+  METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE,
+  METHOD_MODEL_PROVIDER_TEST_CHAT,
+  METHOD_MODEL_PROVIDER_TEST_CONNECTION,
+  METHOD_MODEL_PROVIDER_UI_STATE_READ,
+  METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
+  METHOD_MODEL_PROVIDER_UPDATE,
   METHOD_MODEL_SYNC_STATE_READ,
+  METHOD_MCP_PROMPT_LIST,
+  METHOD_MCP_RESOURCE_LIST,
+  METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_STATUS_LIST,
+  METHOD_MCP_TOOL_LIST,
   METHOD_PROJECT_MEMORY_READ,
   PROTOCOL_VERSION,
   METHOD_SKILL_LIST,
@@ -313,7 +348,53 @@ test("builds app data surface requests with current methods", () => {
     workingDir: "/workspace/project",
     includeArchived: true,
   });
+  const schedulerConfig = client.readAutomationSchedulerConfig();
+  const schedulerConfigUpdate = client.updateAutomationSchedulerConfig({
+    config: {
+      enabled: true,
+      poll_interval_secs: 60,
+      enable_history: true,
+    },
+  });
+  const schedulerStatus = client.readAutomationSchedulerStatus();
   const jobs = client.listAutomationJobs();
+  const job = client.readAutomationJob({ id: "job-1" });
+  const createdJob = client.createAutomationJob({
+    request: {
+      name: "每日简报",
+      workspace_id: "workspace-main",
+      schedule: { kind: "every", every_secs: 3600 },
+      payload: {
+        kind: "agent_turn",
+        prompt: "总结今天重点",
+        web_search: false,
+      },
+    },
+  });
+  const updatedJob = client.updateAutomationJob({
+    id: "job-1",
+    request: { enabled: false },
+  });
+  const deletedJob = client.deleteAutomationJob({ id: "job-1" });
+  const runNow = client.runAutomationJobNow({ id: "job-1" });
+  const health = client.readAutomationHealth({
+    query: { top_limit: 3 },
+  });
+  const history = client.readAutomationRunHistory({
+    id: "job-1",
+    limit: 10,
+  });
+  const preview = client.previewAutomationSchedule({
+    schedule: { kind: "every", every_secs: 3600 },
+  });
+  const validate = client.validateAutomationSchedule({
+    schedule: { kind: "every", every_secs: 3600 },
+  });
+  const mcpServers = client.listMcpServers();
+  const mcpServerStatus = client.listMcpServersWithStatus();
+  const mcpTools = client.listMcpTools();
+  const mcpPrompts = client.listMcpPrompts();
+  const mcpResources = client.listMcpResources();
   const memory = client.readProjectMemory({
     projectId: "workspace-main",
   });
@@ -338,12 +419,92 @@ test("builds app data surface requests with current methods", () => {
     workingDir: "/workspace/project",
     includeArchived: true,
   });
+  assert.equal(schedulerConfig.method, METHOD_AUTOMATION_SCHEDULER_CONFIG_READ);
+  assert.deepEqual(schedulerConfig.params, {});
+  assert.equal(
+    schedulerConfigUpdate.method,
+    METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
+  );
+  assert.deepEqual(schedulerConfigUpdate.params, {
+    config: {
+      enabled: true,
+      poll_interval_secs: 60,
+      enable_history: true,
+    },
+  });
+  assert.equal(schedulerStatus.method, METHOD_AUTOMATION_SCHEDULER_STATUS);
+  assert.deepEqual(schedulerStatus.params, {});
   assert.equal(jobs.method, METHOD_AUTOMATION_JOB_LIST);
   assert.deepEqual(jobs.params, {});
+  assert.equal(job.method, METHOD_AUTOMATION_JOB_READ);
+  assert.deepEqual(job.params, { id: "job-1" });
+  assert.equal(createdJob.method, METHOD_AUTOMATION_JOB_CREATE);
+  assert.deepEqual(createdJob.params, {
+    request: {
+      name: "每日简报",
+      workspace_id: "workspace-main",
+      schedule: { kind: "every", every_secs: 3600 },
+      payload: {
+        kind: "agent_turn",
+        prompt: "总结今天重点",
+        web_search: false,
+      },
+    },
+  });
+  assert.equal(updatedJob.method, METHOD_AUTOMATION_JOB_UPDATE);
+  assert.deepEqual(updatedJob.params, {
+    id: "job-1",
+    request: { enabled: false },
+  });
+  assert.equal(deletedJob.method, METHOD_AUTOMATION_JOB_DELETE);
+  assert.deepEqual(deletedJob.params, { id: "job-1" });
+  assert.equal(runNow.method, METHOD_AUTOMATION_JOB_RUN_NOW);
+  assert.equal(health.method, METHOD_AUTOMATION_JOB_HEALTH);
+  assert.deepEqual(health.params, {
+    query: { top_limit: 3 },
+  });
+  assert.equal(history.method, METHOD_AUTOMATION_JOB_RUN_HISTORY);
+  assert.deepEqual(history.params, {
+    id: "job-1",
+    limit: 10,
+  });
+  assert.equal(preview.method, METHOD_AUTOMATION_SCHEDULE_PREVIEW);
+  assert.deepEqual(preview.params, {
+    schedule: { kind: "every", every_secs: 3600 },
+  });
+  assert.equal(validate.method, METHOD_AUTOMATION_SCHEDULE_VALIDATE);
+  assert.equal(mcpServers.method, METHOD_MCP_SERVER_LIST);
+  assert.deepEqual(mcpServers.params, {});
+  assert.equal(mcpServerStatus.method, METHOD_MCP_SERVER_STATUS_LIST);
+  assert.deepEqual(mcpServerStatus.params, {});
+  assert.equal(mcpTools.method, METHOD_MCP_TOOL_LIST);
+  assert.deepEqual(mcpTools.params, {});
+  assert.equal(mcpPrompts.method, METHOD_MCP_PROMPT_LIST);
+  assert.deepEqual(mcpPrompts.params, {});
+  assert.equal(mcpResources.method, METHOD_MCP_RESOURCE_LIST);
+  assert.deepEqual(mcpResources.params, {});
   assert.equal(memory.method, METHOD_PROJECT_MEMORY_READ);
   assert.deepEqual(memory.params, {
     projectId: "workspace-main",
   });
+  for (const legacyMethod of [
+    "get_automation_scheduler_config",
+    "get_automation_status",
+    "get_automation_job",
+    "create_automation_job",
+    "update_automation_job",
+    "delete_automation_job",
+    "run_automation_job_now",
+    "get_automation_health",
+    "get_automation_run_history",
+    "preview_automation_schedule",
+    "validate_automation_schedule",
+  ]) {
+    assert.equal(
+      APP_SERVER_METHODS.some(({ method }) => method === legacyMethod),
+      false,
+    );
+  }
 });
 
 test("builds artifact read requests with optional content lookup", () => {
@@ -492,13 +653,48 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
     { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
     { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
+    { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_READ, kind: "request" },
+    { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE, kind: "request" },
+    { method: METHOD_AUTOMATION_SCHEDULER_STATUS, kind: "request" },
     { method: METHOD_AUTOMATION_JOB_LIST, kind: "request" },
+    { method: METHOD_AUTOMATION_JOB_READ, kind: "request" },
+    { method: METHOD_AUTOMATION_JOB_CREATE, kind: "request" },
+    { method: METHOD_AUTOMATION_JOB_UPDATE, kind: "request" },
+    { method: METHOD_AUTOMATION_JOB_DELETE, kind: "request" },
+    { method: METHOD_AUTOMATION_JOB_RUN_NOW, kind: "request" },
+    { method: METHOD_AUTOMATION_JOB_HEALTH, kind: "request" },
+    { method: METHOD_AUTOMATION_JOB_RUN_HISTORY, kind: "request" },
+    { method: METHOD_AUTOMATION_SCHEDULE_PREVIEW, kind: "request" },
+    { method: METHOD_AUTOMATION_SCHEDULE_VALIDATE, kind: "request" },
+    { method: METHOD_MCP_SERVER_LIST, kind: "request" },
+    { method: METHOD_MCP_SERVER_STATUS_LIST, kind: "request" },
+    { method: METHOD_MCP_TOOL_LIST, kind: "request" },
+    { method: METHOD_MCP_PROMPT_LIST, kind: "request" },
+    { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
     { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
     { method: METHOD_MODEL_LIST, kind: "request" },
     { method: METHOD_MODEL_PREFERENCES_LIST, kind: "request" },
     { method: METHOD_MODEL_SYNC_STATE_READ, kind: "request" },
     { method: METHOD_MODEL_PROVIDER_LIST, kind: "request" },
     { method: METHOD_MODEL_PROVIDER_CATALOG_LIST, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_READ, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_CREATE, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_UPDATE, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_DELETE, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_CONFIG_EXPORT, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_CONFIG_IMPORT, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_TEST_CONNECTION, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_TEST_CHAT, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_FETCH_MODELS, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_KEY_CREATE, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_KEY_UPDATE, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_KEY_DELETE, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_KEY_NEXT, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_UI_STATE_READ, kind: "request" },
+    { method: METHOD_MODEL_PROVIDER_UI_STATE_WRITE, kind: "request" },
     { method: METHOD_MODEL_PROVIDER_ALIAS_READ, kind: "request" },
     { method: METHOD_MODEL_PROVIDER_ALIAS_LIST, kind: "request" },
     { method: METHOD_CONNECT_DEEP_LINK_RESOLVE, kind: "request" },
@@ -548,7 +744,42 @@ test("exports app-server method catalog with request and notification kinds", ()
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_LIST), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULER_CONFIG_READ),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULER_STATUS),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_READ), true);
+  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_CREATE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_UPDATE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_DELETE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_RUN_NOW), true);
+  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_HEALTH), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AUTOMATION_JOB_RUN_HISTORY),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULE_PREVIEW),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULE_VALIDATE),
+    true,
+  );
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_STATUS_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_PROMPT_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_PROJECT_MEMORY_READ), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_CONNECT_DEEP_LINK_RESOLVE),
