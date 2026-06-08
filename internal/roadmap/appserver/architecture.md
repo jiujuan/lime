@@ -109,7 +109,7 @@ flowchart TB
 | ExecutionBackend | Aster / 未来执行引擎的 runtime 下游适配 | 公共 facts、App 生命周期、Desktop Host bridge |
 | Runtime Services | Tool、Skill、Workspace、Memory、Policy、Artifact、Evidence | App UI 投影 |
 
-Rust 实现落点必须跟随这张分层表。`lime-rs/src/commands/**` 是旧 Tauri command wrapper 清理区，不属于 RuntimeCore、ExecutionBackend 或 Runtime Services 的新实现目录；它只允许删除旧 wrapper、迁出逻辑、或把迁移期 legacy desktop facade 收窄成带退出条件的薄委托。新增后端能力进入 App Server crates / RuntimeCore / services；桌面壳能力进入 Electron Desktop Host。
+Rust 实现落点必须跟随这张分层表。`lime-rs/src/commands/**` 是旧 Tauri command wrapper 清理区，不属于 RuntimeCore、ExecutionBackend 或 Runtime Services 的新实现目录；它只允许迁出核心逻辑、撤 runner / dispatcher / catalog / mock 注册和删除旧 wrapper。删不动时登记 blocker，不在该目录保留 stub、compat wrapper 或退场 tombstone。新增后端能力进入 App Server crates / RuntimeCore / services；桌面壳能力进入 Electron Desktop Host。
 
 ## 4. 事实流
 

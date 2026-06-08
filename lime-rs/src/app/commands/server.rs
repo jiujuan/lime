@@ -2,8 +2,8 @@
 //!
 //! 保留仅供开发者与运行时诊断使用的只读查询。
 
+use crate::app::telemetry_state::TelemetryState;
 use crate::app::types::AppState;
-use crate::commands::telemetry_cmd::TelemetryState;
 use lime_server as server;
 
 /// 获取服务器诊断信息（对标 /stats 与 /cache 端点）

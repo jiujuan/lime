@@ -213,23 +213,25 @@ describe("agentApps API", () => {
       displayName: "本地测试 App",
     } satisfies AppManifest;
     const inspectedAt = "2026-05-15T00:00:00.000Z";
-    vi.mocked(safeInvoke).mockImplementation(async (command, args) => {
-      if (command === "agent_app_inspect_local_package") {
+    appServerRequestMock.mockImplementation(async (method, args) => {
+      if (method === "agentAppLocalPackage/inspect") {
         return {
-          sourceKind: "local_folder",
-          sourceUri: LOCAL_APP_DIR,
-          appDir: LOCAL_APP_DIR,
-          appMarkdown: "",
-          manifest,
-          manifestHash: "manifest-local-1",
-          packageHash: "package-local-1",
-          inspectedAt,
+          result: {
+            sourceKind: "local_folder",
+            sourceUri: LOCAL_APP_DIR,
+            appDir: LOCAL_APP_DIR,
+            appMarkdown: "",
+            manifest,
+            manifestHash: "manifest-local-1",
+            packageHash: "package-local-1",
+            inspectedAt,
+          },
         };
       }
-      if (command === "agent_app_save_installed_state") {
-        return (args as { request: { state: unknown } }).request.state;
+      if (method === "agentAppInstalled/save") {
+        return { result: (args as { state: unknown }).state };
       }
-      throw new Error(`unexpected command ${command}`);
+      throw new Error(`unexpected method ${method}`);
     });
 
     const state = await installLocalAgentAppPackage({
@@ -270,47 +272,55 @@ describe("agentApps API", () => {
     expect(
       state.readiness.warnings.some((issue) => issue.required === true),
     ).toBe(false);
-    expect(safeInvoke).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       1,
-      "agent_app_inspect_local_package",
+      "agentAppLocalPackage/inspect",
       {
         appDir: LOCAL_APP_DIR,
       },
     );
-    expect(safeInvoke).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       2,
-      "agent_app_save_installed_state",
+      "agentAppInstalled/save",
       {
-        request: {
-          state: expect.objectContaining({
-            appId: "local-test-app",
-            readiness: expect.objectContaining({
-              status: "degraded",
-              blockers: [],
-            }),
+        state: expect.objectContaining({
+          appId: "local-test-app",
+          readiness: expect.objectContaining({
+            status: "degraded",
+            blockers: [],
           }),
-        },
+        }),
       },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_inspect_local_package",
+      expect.anything(),
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_save_installed_state",
+      expect.anything(),
     );
   });
 
   it("本地安装 content-factory-app 时未激活注册码应阻断 sideload", async () => {
     const manifest = contentFactoryFixture as AppManifest;
     const inspectedAt = "2026-05-15T00:00:00.000Z";
-    vi.mocked(safeInvoke).mockImplementation(async (command) => {
-      if (command === "agent_app_inspect_local_package") {
+    appServerRequestMock.mockImplementation(async (method) => {
+      if (method === "agentAppLocalPackage/inspect") {
         return {
-          sourceKind: "local_folder",
-          sourceUri: LOCAL_APP_DIR,
-          appDir: LOCAL_APP_DIR,
-          appMarkdown: "",
-          manifest,
-          manifestHash: "manifest-local-1",
-          packageHash: "package-local-1",
-          inspectedAt,
+          result: {
+            sourceKind: "local_folder",
+            sourceUri: LOCAL_APP_DIR,
+            appDir: LOCAL_APP_DIR,
+            appMarkdown: "",
+            manifest,
+            manifestHash: "manifest-local-1",
+            packageHash: "package-local-1",
+            inspectedAt,
+          },
         };
       }
-      throw new Error(`unexpected command ${command}`);
+      throw new Error(`unexpected method ${method}`);
     });
 
     await expect(
@@ -325,7 +335,11 @@ describe("agentApps API", () => {
     ).rejects.toMatchObject({
       name: "AgentAppRegistrationRequiredError",
     });
-    expect(safeInvoke).toHaveBeenCalledTimes(1);
+    expect(appServerRequestMock).toHaveBeenCalledTimes(1);
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_inspect_local_package",
+      expect.anything(),
+    );
   });
 
   it("审查本地非企业定制 Agent App 时不应写入 installed state", async () => {
@@ -335,20 +349,22 @@ describe("agentApps API", () => {
       displayName: "本地审查 App",
     } satisfies AppManifest;
     const inspectedAt = "2026-05-15T00:00:00.000Z";
-    vi.mocked(safeInvoke).mockImplementation(async (command) => {
-      if (command === "agent_app_inspect_local_package") {
+    appServerRequestMock.mockImplementation(async (method) => {
+      if (method === "agentAppLocalPackage/inspect") {
         return {
-          sourceKind: "local_folder",
-          sourceUri: LOCAL_APP_DIR,
-          appDir: LOCAL_APP_DIR,
-          appMarkdown: "",
-          manifest,
-          manifestHash: "manifest-local-review",
-          packageHash: "package-local-review",
-          inspectedAt,
+          result: {
+            sourceKind: "local_folder",
+            sourceUri: LOCAL_APP_DIR,
+            appDir: LOCAL_APP_DIR,
+            appMarkdown: "",
+            manifest,
+            manifestHash: "manifest-local-review",
+            packageHash: "package-local-review",
+            inspectedAt,
+          },
         };
       }
-      throw new Error(`unexpected command ${command}`);
+      throw new Error(`unexpected method ${method}`);
     });
 
     const result = await reviewLocalAgentAppPackage({
@@ -378,14 +394,18 @@ describe("agentApps API", () => {
         manifestHash: "manifest-local-review",
       },
     });
-    expect(safeInvoke).toHaveBeenCalledTimes(1);
+    expect(appServerRequestMock).toHaveBeenCalledTimes(1);
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_inspect_local_package",
+      expect.anything(),
+    );
   });
 
   it("Agent App package / install 命令遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
+    appServerRequestMock.mockResolvedValueOnce({
       diagnostic: {
         source: "electron-host-diagnostic",
-        command: "agent_app_inspect_local_package",
+        command: "agentAppLocalPackage/inspect",
         status: "degraded",
       },
     });
@@ -399,14 +419,16 @@ describe("agentApps API", () => {
           workerRuntimeEnabled: true,
         }),
       }),
-    ).rejects.toThrow(
-      "agent_app_inspect_local_package 尚未接入真实 Agent App current 通道，收到 electron-host-diagnostic 诊断返回。",
+    ).rejects.toThrow("agentAppLocalPackage/inspect did not return appDir");
+    expect(appServerRequestMock).toHaveBeenCalledTimes(1);
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_inspect_local_package",
+      expect.anything(),
     );
-    expect(safeInvoke).toHaveBeenCalledTimes(1);
   });
 
   it("审查本地 Agent App 时 inspect 返回非 package inspection 应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+    appServerRequestMock.mockResolvedValueOnce({ result: { success: true } });
 
     await expect(
       reviewLocalAgentAppPackage({
@@ -417,8 +439,12 @@ describe("agentApps API", () => {
           workerRuntimeEnabled: true,
         }),
       }),
-    ).rejects.toThrow("agent_app_inspect_local_package did not return appDir");
-    expect(safeInvoke).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow("agentAppLocalPackage/inspect did not return appDir");
+    expect(appServerRequestMock).toHaveBeenCalledTimes(1);
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_inspect_local_package",
+      expect.anything(),
+    );
   });
 
   it("安装本地 Agent App 时 save installed state 返回非 state 应 fail closed", async () => {
@@ -428,14 +454,18 @@ describe("agentApps API", () => {
         packageManifest: contentFactoryFixture,
       })
     ).state;
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+    appServerRequestMock.mockResolvedValueOnce({ result: { success: true } });
 
     await expect(saveInstalledAgentAppState({ state })).rejects.toThrow(
-      "agent_app_save_installed_state did not return appId",
+      "agentAppInstalled/save did not return appId",
     );
-    expect(safeInvoke).toHaveBeenCalledWith("agent_app_save_installed_state", {
-      request: { state },
+    expect(appServerRequestMock).toHaveBeenCalledWith("agentAppInstalled/save", {
+      state,
     });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_save_installed_state",
+      expect.anything(),
+    );
   });
 
   it("审查 Cloud release 时缺少 verified package source 应阻断", async () => {
@@ -454,7 +484,7 @@ describe("agentApps API", () => {
   });
 
   it("审查 Cloud release 时 fetch package 返回非 cache entry 应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+    appServerRequestMock.mockResolvedValueOnce({ result: { success: true } });
 
     await expect(
       reviewCloudAgentAppRelease({
@@ -465,26 +495,28 @@ describe("agentApps API", () => {
           workerRuntimeEnabled: true,
         }),
       }),
-    ).rejects.toThrow("agent_app_fetch_cloud_package did not return appId");
+    ).rejects.toThrow("agentAppPackage/fetchCloud did not return appId");
   });
 
   it("审查 Cloud release 时应通过集中命令 fetch package 并生成 review", async () => {
-    vi.mocked(safeInvoke).mockImplementation(async (command, args) => {
-      if (command === "agent_app_fetch_cloud_package") {
+    appServerRequestMock.mockImplementation(async (method, args) => {
+      if (method === "agentAppPackage/fetchCloud") {
         const descriptor = (
           args as {
-            request: { descriptor: CloudBootstrapReleaseDescriptor };
+            descriptor: CloudBootstrapReleaseDescriptor;
           }
-        ).request.descriptor;
-        return buildAgentAppPackageCacheEntry({
-          identity: descriptor.identity,
-          manifestSnapshot: contentFactoryFixture,
-          actualPackageHash: PACKAGE_HASH,
-          actualManifestHash: MANIFEST_HASH,
-          cachedAt: descriptor.loadedAt,
-        });
+        ).descriptor;
+        return {
+          result: buildAgentAppPackageCacheEntry({
+            identity: descriptor.identity,
+            manifestSnapshot: contentFactoryFixture,
+            actualPackageHash: PACKAGE_HASH,
+            actualManifestHash: MANIFEST_HASH,
+            cachedAt: descriptor.loadedAt,
+          }),
+        };
       }
-      throw new Error(`unexpected command ${command}`);
+      throw new Error(`unexpected method ${method}`);
     });
 
     const result = await reviewCloudAgentAppRelease({
@@ -506,17 +538,19 @@ describe("agentApps API", () => {
         canReview: true,
       },
     });
-    expect(safeInvoke).toHaveBeenCalledWith("agent_app_fetch_cloud_package", {
-      request: {
-        descriptor: expect.objectContaining({
-          appId: "content-factory-app",
-          packageUrl:
-            "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
-          packageHash: PACKAGE_HASH,
-          manifestHash: MANIFEST_HASH,
-        }),
-      },
+    expect(appServerRequestMock).toHaveBeenCalledWith("agentAppPackage/fetchCloud", {
+      descriptor: expect.objectContaining({
+        appId: "content-factory-app",
+        packageUrl:
+          "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+        packageHash: PACKAGE_HASH,
+        manifestHash: MANIFEST_HASH,
+      }),
     });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_fetch_cloud_package",
+      expect.anything(),
+    );
   });
 
   it("审查 Cloud release 时可从 verified package cache 生成 review", async () => {
@@ -904,14 +938,16 @@ describe("agentApps API", () => {
   });
 
   it("Agent App set disabled 返回无效 installed list 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      states: [
-        {
-          appId: "content-factory-app",
-          disabled: true,
-        },
-      ],
-      issues: [],
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        states: [
+          {
+            appId: "content-factory-app",
+            disabled: true,
+          },
+        ],
+        issues: [],
+      },
     });
 
     await expect(
@@ -919,41 +955,69 @@ describe("agentApps API", () => {
         appId: "content-factory-app",
         disabled: true,
       }),
-    ).rejects.toThrow("agent_app_set_disabled.states[0] did not return installMode");
+    ).rejects.toThrow(
+      "agentAppInstalled/disabled/set.states[0] did not return installMode",
+    );
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/disabled/set",
+      {
+        appId: "content-factory-app",
+        disabled: true,
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_set_disabled",
+      expect.anything(),
+    );
   });
 
   it("Agent App uninstall rehearsal 返回非演练结果时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+    appServerRequestMock.mockResolvedValueOnce({ result: { success: true } });
 
     await expect(
       previewAgentAppUninstall({
         appId: "content-factory-app",
         mode: "keep-data",
       }),
-    ).rejects.toThrow("agent_app_uninstall_rehearsal did not return appId");
+    ).rejects.toThrow(
+      "agentAppInstalled/uninstall/rehearsal did not return appId",
+    );
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/uninstall/rehearsal",
+      {
+        appId: "content-factory-app",
+        mode: "keep-data",
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_uninstall_rehearsal",
+      expect.anything(),
+    );
   });
 
   it("Agent App uninstall 返回无效 installed list 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      status: "deleted",
-      rehearsal: {
-        appId: "content-factory-app",
-        packageHash: PACKAGE_HASH,
-        mode: "keep-data",
-        generatedAt: "2026-05-15T00:03:00.000Z",
-        deletedTargetCount: 0,
-        retainedTargetCount: 0,
-        targets: [],
-        warnings: [],
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        status: "deleted",
+        rehearsal: {
+          appId: "content-factory-app",
+          packageHash: PACKAGE_HASH,
+          mode: "keep-data",
+          generatedAt: "2026-05-15T00:03:00.000Z",
+          deletedTargetCount: 0,
+          retainedTargetCount: 0,
+          targets: [],
+          warnings: [],
+        },
+        list: {
+          states: [{ success: true }],
+          issues: [],
+        },
+        removedTargetCount: 0,
+        missingTargetCount: 0,
+        blockerCodes: [],
+        deleteEvidence: null,
       },
-      list: {
-        states: [{ success: true }],
-        issues: [],
-      },
-      removedTargetCount: 0,
-      missingTargetCount: 0,
-      blockerCodes: [],
-      deleteEvidence: null,
     });
 
     await expect(
@@ -961,7 +1025,20 @@ describe("agentApps API", () => {
         appId: "content-factory-app",
         mode: "keep-data",
       }),
-    ).rejects.toThrow("agent_app_uninstall.states[0] did not return appId");
+    ).rejects.toThrow(
+      "agentAppInstalled/uninstall.states[0] did not return appId",
+    );
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/uninstall",
+      {
+        appId: "content-factory-app",
+        mode: "keep-data",
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_uninstall",
+      expect.anything(),
+    );
   });
 
   it("Agent App 宿主目录选择网关应走 current Desktop Host 命令", async () => {

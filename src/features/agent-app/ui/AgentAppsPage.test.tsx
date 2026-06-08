@@ -714,7 +714,7 @@ describe("AgentAppsPage", () => {
     expect(apiMocks.reviewCloudAgentAppRelease).not.toHaveBeenCalled();
   });
 
-  it("已安装 App 应支持启动 UI entry、禁用/启用和卸载演练", async () => {
+  it("已安装 App 应支持启动 UI entry、禁用/启用、delete-data 阻断和 keep-data 卸载", async () => {
     installedStates.push(
       buildReadyState({
         profile: buildWorkflowRuntimeCapabilityProfile({
@@ -855,6 +855,49 @@ describe("AgentAppsPage", () => {
       appId: "content-factory-app",
       mode: "delete-data",
       confirmationPhrase: phrase,
+    });
+    expect(
+      container.querySelector('[data-testid="agent-apps-launch-summary"]')
+        ?.textContent,
+    ).toContain("blocked:DELETE_DATA_NOT_ENABLED_IN_CURRENT_PHASE");
+    const appRowAfterDeleteDataBlocked = container.querySelector(
+      '[data-testid="agent-apps-list-row-content-factory-app"]',
+    );
+    expect(appRowAfterDeleteDataBlocked?.textContent).toContain(
+      "agentApp.apps.center.status.installed",
+    );
+
+    const keepDataButton = container.querySelector(
+      '[data-testid="agent-apps-uninstall-keep-data"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      keepDataButton?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.previewAgentAppUninstall).toHaveBeenLastCalledWith({
+      appId: "content-factory-app",
+      mode: "keep-data",
+    });
+    expect(
+      container.querySelector('[data-testid="agent-apps-uninstall-preview"]')
+        ?.textContent,
+    ).toContain("delete:1 retain:2");
+
+    const keepDataConfirmButton = container.querySelector(
+      '[data-testid="agent-apps-uninstall-confirm"]',
+    ) as HTMLButtonElement | null;
+    expect(keepDataConfirmButton?.disabled).toBe(false);
+    await act(async () => {
+      keepDataConfirmButton?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.uninstallAgentApp).toHaveBeenLastCalledWith({
+      appId: "content-factory-app",
+      mode: "keep-data",
     });
     const appRowAfterUninstall = container.querySelector(
       '[data-testid="agent-apps-list-row-content-factory-app"]',

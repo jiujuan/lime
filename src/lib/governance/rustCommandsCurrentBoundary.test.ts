@@ -8,29 +8,225 @@ const RUST_COMMANDS_ROOT = "lime-rs/src/commands";
 
 // 删除下列任一旧 stub 文件时，必须同步从这个集合移除，保持该集合只收缩不扩张。
 const ALLOWED_DEPRECATED_COMMAND_STUB_FILES = new Set([
-  "lime-rs/src/commands/a2ui_form_cmd.rs",
   "lime-rs/src/commands/companion_cmd.rs",
-  "lime-rs/src/commands/config_cmd.rs",
   "lime-rs/src/commands/connect_cmd.rs",
-  "lime-rs/src/commands/document_import_cmd.rs",
-  "lime-rs/src/commands/ecommerce_review_reply_cmd.rs",
-  "lime-rs/src/commands/experimental_cmd.rs",
-  "lime-rs/src/commands/external_tools_cmd.rs",
-  "lime-rs/src/commands/image_search_cmd.rs",
-  "lime-rs/src/commands/image_upload_cmd.rs",
-  "lime-rs/src/commands/injection_cmd.rs",
-  "lime-rs/src/commands/models_cmd.rs",
-  "lime-rs/src/commands/prompt_cmd.rs",
-  "lime-rs/src/commands/telemetry_cmd.rs",
   "lime-rs/src/commands/tray_cmd.rs",
-  "lime-rs/src/commands/voice_test_cmd.rs",
-  "lime-rs/src/commands/websocket_cmd.rs",
   "lime-rs/src/commands/webview_cmd.rs",
-  "lime-rs/src/commands/window_cmd.rs",
 ]);
 
 const DEPRECATED_COMMAND_STUB_PATTERN =
   /DEPRECATED_[A-Z0-9_]*COMMAND|deprecated_[a-z0-9_]*command|fail-closed 退场面|旧 Tauri .*已退场|legacy Tauri command/iu;
+
+const COMMAND_BOUNDARY_MARKER_PATTERNS = [
+  /#\[\s*tauri::command\s*\]/gu,
+  /\b(?:State|tauri::State)\s*</gu,
+  /\b(?:AppHandle|Window|WebviewUrl|WebviewWindowBuilder)\b/gu,
+  /\b(?:DbConnection|rusqlite|lock_db|crate::database|lime_core::database|database::dao)\b/gu,
+  /\b(?:std::fs|tokio::fs|fs::(?:create_dir_all|write|read|read_to_string|remove_dir_all|remove_file|copy|read_dir|metadata)|File::)\b/gu,
+  /\b(?:reqwest|TcpListener|tokio::net|std::process::Command|Command::new|open::that)\b|https?:\/\//gu,
+  /\b(?:tokio::spawn|spawn\(|remove_dir_all|remove_file|create_dir_all|Command::new)\b/gu,
+];
+
+const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
+  ["lime-rs/src/commands/agent_app_cmd.rs", 125],
+  ["lime-rs/src/commands/agent_app_runtime_cmd/cancel_task.rs", 4],
+  ["lime-rs/src/commands/agent_app_runtime_cmd/common.rs", 8],
+  ["lime-rs/src/commands/agent_app_runtime_cmd/events.rs", 2],
+  ["lime-rs/src/commands/agent_app_runtime_cmd/host_response.rs", 8],
+  ["lime-rs/src/commands/agent_app_runtime_cmd/model_preference.rs", 7],
+  ["lime-rs/src/commands/agent_app_runtime_cmd/start_task.rs", 13],
+  ["lime-rs/src/commands/agent_app_runtime_cmd/task_snapshot.rs", 13],
+  ["lime-rs/src/commands/agent_app_runtime_cmd/tests.rs", 2],
+  ["lime-rs/src/commands/agent_cmd.rs", 23],
+  ["lime-rs/src/commands/aster_agent_cmd/action_runtime.rs", 33],
+  ["lime-rs/src/commands/aster_agent_cmd/app_server_host.rs", 17],
+  ["lime-rs/src/commands/aster_agent_cmd/command_api.rs", 18],
+  ["lime-rs/src/commands/aster_agent_cmd/command_api/objective_api.rs", 30],
+  ["lime-rs/src/commands/aster_agent_cmd/command_api/objective_audit.rs", 18],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/command_api/objective_continuation.rs",
+    10,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/command_api/objective_continuation_guard_audit.rs",
+    3,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/command_api/objective_continuation_tests.rs",
+    3,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/command_api/objective_support.rs", 8],
+  ["lime-rs/src/commands/aster_agent_cmd/command_api/provider_api.rs", 15],
+  ["lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs", 186],
+  ["lime-rs/src/commands/aster_agent_cmd/command_api/session_api.rs", 13],
+  ["lime-rs/src/commands/aster_agent_cmd/command_api/subagent_api.rs", 50],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/command_api/thread_read_projection.rs",
+    9,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/dto.rs", 66],
+  ["lime-rs/src/commands/aster_agent_cmd/image_skill_launch.rs", 4],
+  ["lime-rs/src/commands/aster_agent_cmd/mcp_bridge.rs", 1],
+  ["lime-rs/src/commands/aster_agent_cmd/mod.rs", 13],
+  ["lime-rs/src/commands/aster_agent_cmd/provider_runtime_bootstrap.rs", 10],
+  ["lime-rs/src/commands/aster_agent_cmd/provider_runtime_strategy.rs", 8],
+  ["lime-rs/src/commands/aster_agent_cmd/reply_runtime.rs", 6],
+  ["lime-rs/src/commands/aster_agent_cmd/request_model_resolution.rs", 10],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/request_model_resolution/responsive_chat.rs",
+    13,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/request_model_resolution/tests.rs", 8],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_plugin_agents.rs", 15],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_project_hooks.rs", 100],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs", 5],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/artifact_materialization/contract_artifact.rs",
+    1,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/artifact_materialization/document_autopersist.rs",
+    3,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/artifact_materialization/workspace_patch.rs",
+    3,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/bootstrap.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/compaction.rs", 12],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/compaction/auto.rs", 2],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/compaction/trigger.rs",
+    1,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/compaction/usage.rs", 5],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/event_projection.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/flow/build.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/flow/execution.rs", 3],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/flow/ingress.rs", 4],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/flow/preparation.rs", 5],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/flow/prompt.rs", 1],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/memory.rs", 6],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/prompt_composition.rs",
+    2,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/provider_config.rs", 1],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/request_metadata.rs", 1],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/request_resolution.rs",
+    2,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/request_resolution_permission.rs",
+    10,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/request_resolution_user_lock.rs",
+    5,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/request_resolution_user_lock/recovery.rs",
+    5,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/skill_launch.rs", 10],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/status.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/stream.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/stream/attempt.rs", 8],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/stream/events.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/stream/finalize.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/stream/strategy.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/tests.rs", 13],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/tests/compaction_metrics.rs",
+    1,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/runtime_turn/tests/image_policy.rs",
+    4,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/tests/prompt.rs", 7],
+  ["lime-rs/src/commands/aster_agent_cmd/runtime_turn/tests/routing.rs", 2],
+  ["lime-rs/src/commands/aster_agent_cmd/service_skill_launch.rs", 1],
+  ["lime-rs/src/commands/aster_agent_cmd/session_runtime.rs", 22],
+  ["lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs", 25],
+  ["lime-rs/src/commands/aster_agent_cmd/tests.rs", 58],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime.rs", 6],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime/browser_tools.rs", 9],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/connector_tools/cloud_overlay_outbox.rs",
+    6,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/connector_tools/fixture_adapter.rs",
+    3,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/connector_tools/readiness.rs",
+    3,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/connector_tools/tests.rs",
+    18,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime/creation_tools.rs", 32],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime/lime_cli_runtime.rs", 9],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/mcp_resource_tools.rs",
+    4,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime/media_cli_bridge.rs", 2],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/resource_search_tools.rs",
+    3,
+  ],
+  [
+    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/service_skill_tools.rs",
+    4,
+  ],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime/site_tools.rs", 14],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime/social_tools.rs", 9],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs", 6],
+  ["lime-rs/src/commands/aster_agent_cmd/tool_runtime/workspace_tools.rs", 10],
+  ["lime-rs/src/commands/auxiliary_model_selection.rs", 4],
+  ["lime-rs/src/commands/browser_connector_cmd.rs", 24],
+  ["lime-rs/src/commands/browser_environment_cmd.rs", 23],
+  ["lime-rs/src/commands/browser_profile_cmd.rs", 26],
+  ["lime-rs/src/commands/browser_runtime_cmd.rs", 48],
+  ["lime-rs/src/commands/capability_draft_cmd.rs", 7],
+  ["lime-rs/src/commands/companion_cmd.rs", 8],
+  ["lime-rs/src/commands/connect_cmd.rs", 7],
+  ["lime-rs/src/commands/content_cmd.rs", 26],
+  ["lime-rs/src/commands/execution_run_cmd.rs", 16],
+  ["lime-rs/src/commands/gallery_material_cmd.rs", 27],
+  ["lime-rs/src/commands/gateway_channel_cmd.rs", 30],
+  ["lime-rs/src/commands/gateway_tunnel_cmd.rs", 40],
+  ["lime-rs/src/commands/layered_design_cmd.rs", 41],
+  ["lime-rs/src/commands/machine_id_cmd.rs", 27],
+  ["lime-rs/src/commands/material_cmd.rs", 41],
+  ["lime-rs/src/commands/mcp_cmd.rs", 56],
+  ["lime-rs/src/commands/media_task_cmd.rs", 103],
+  ["lime-rs/src/commands/memory_cmd.rs", 42],
+  ["lime-rs/src/commands/memory_feedback_cmd.rs", 12],
+  ["lime-rs/src/commands/memory_management_cmd.rs", 48],
+  ["lime-rs/src/commands/memory_search_cmd.rs", 35],
+  ["lime-rs/src/commands/modality_runtime_contracts.rs", 2],
+  ["lime-rs/src/commands/model_registry_cmd.rs", 28],
+  ["lime-rs/src/commands/security_perf_cmd.rs", 2],
+  ["lime-rs/src/commands/session_files_cmd.rs", 28],
+  ["lime-rs/src/commands/site_capability_cmd.rs", 24],
+  ["lime-rs/src/commands/skill_cmd.rs", 228],
+  ["lime-rs/src/commands/skill_exec_cmd.rs", 10],
+  ["lime-rs/src/commands/telegram_remote_cmd.rs", 18],
+  ["lime-rs/src/commands/tray_cmd.rs", 2],
+  ["lime-rs/src/commands/unified_memory_cmd.rs", 50],
+  ["lime-rs/src/commands/video_generation_cmd.rs", 18],
+  ["lime-rs/src/commands/voice_model_cmd.rs", 44],
+  ["lime-rs/src/commands/webview_cmd.rs", 131],
+  ["lime-rs/src/commands/wechat_channel_cmd.rs", 23],
+  ["lime-rs/src/commands/windows_startup_cmd.rs", 20],
+  ["lime-rs/src/commands/workspace_cmd.rs", 49],
+]);
 
 function readRepoFile(path: string): string {
   return readFileSync(join(REPO_ROOT, path), "utf8");
@@ -59,6 +255,13 @@ function collectRustCommandFiles(dir: string): string[] {
   }
 
   return result.sort();
+}
+
+function countCommandBoundaryMarkers(source: string): number {
+  return COMMAND_BOUNDARY_MARKER_PATTERNS.reduce((total, pattern) => {
+    const matches = source.match(pattern);
+    return total + (matches?.length ?? 0);
+  }, 0);
 }
 
 describe("rust commands current boundary", () => {
@@ -111,5 +314,28 @@ describe("rust commands current boundary", () => {
     );
 
     expect(unexpectedStubFiles).toEqual([]);
+  });
+
+  it("commands 目录业务副作用标记只能减少，不能新增或搬家", () => {
+    const filesWithBoundaryMarkers = collectRustCommandFiles(RUST_COMMANDS_ROOT)
+      .map((path) => ({
+        count: countCommandBoundaryMarkers(readRepoFile(path)),
+        path,
+      }))
+      .filter(({ count }) => count > 0);
+
+    const unexpectedFiles = filesWithBoundaryMarkers.filter(
+      ({ path }) => !COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE.has(path),
+    );
+    const exceededBudgets = filesWithBoundaryMarkers
+      .map(({ count, path }) => ({
+        budget: COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE.get(path) ?? 0,
+        count,
+        path,
+      }))
+      .filter(({ budget, count }) => count > budget);
+
+    expect(unexpectedFiles).toEqual([]);
+    expect(exceededBudgets).toEqual([]);
   });
 });

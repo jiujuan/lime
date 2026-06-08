@@ -36,6 +36,7 @@ const IGNORED_RETIRED_FILE_DIRS = new Set([
   "release-assets",
   "release-electron",
   "release-github-assets",
+  "target",
 ]);
 
 function readWorkflow(workflowPath = DEFAULT_WORKFLOW_PATH) {
@@ -424,7 +425,15 @@ function listRepositoryFiles(root) {
   while (directories.length > 0) {
     const currentRelativePath = directories.pop();
     const absoluteDir = path.join(root, currentRelativePath);
-    const entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
+    let entries;
+    try {
+      entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
 
     for (const entry of entries) {
       const relativePath = currentRelativePath

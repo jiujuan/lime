@@ -291,7 +291,6 @@ pub fn run() {
         .manage(recording_service)
         .manage(mcp_manager_state)
         .manage(automation_service_state)
-        .manage(commands::websocket_cmd::WsServiceState::default())
         .manage(crate::services::companion_service::CompanionServiceState::default())
         .manage(lime_gateway::telegram::TelegramGatewayState::default())
         .manage(lime_gateway::discord::DiscordGatewayState::default())
@@ -688,7 +687,7 @@ pub fn run() {
                                         continue;
                                     }
                                     if url.starts_with("lime://connect") {
-                                        // 调用 handle_deep_link 命令
+                                        // 直接走 current connect 解析链路。
                                         if let Some(state) = app_handle_clone
                                             .try_state::<crate::commands::connect_cmd::ConnectStateWrapper>()
                                         {
@@ -1073,26 +1072,6 @@ pub fn run() {
             // API test commands (from app::commands)
             app_commands::get_available_models,
             app_commands::check_api_compatibility,
-            // Config commands
-            commands::config_cmd::get_config_status,
-            commands::config_cmd::get_config_dir_path,
-            commands::config_cmd::open_config_folder,
-            commands::config_cmd::get_tool_versions,
-            commands::config_cmd::get_auto_launch_status,
-            commands::config_cmd::set_auto_launch,
-            // Config import/export commands
-            commands::config_cmd::export_config,
-            commands::config_cmd::validate_config_yaml,
-            commands::config_cmd::import_config,
-            commands::config_cmd::get_config_paths,
-            // Enhanced export/import commands (using ExportService/ImportService)
-            commands::config_cmd::export_bundle,
-            commands::config_cmd::export_config_yaml,
-            commands::config_cmd::validate_import,
-            commands::config_cmd::import_bundle,
-            // Path utility commands
-            commands::config_cmd::expand_path,
-            commands::config_cmd::open_auth_dir,
             // Companion commands
             commands::companion_cmd::companion_get_pet_status,
             commands::companion_cmd::companion_launch_pet,
@@ -1121,16 +1100,6 @@ pub fn run() {
             // MCP 资源管理命令
             commands::mcp_cmd::mcp_list_resources,
             commands::mcp_cmd::mcp_read_resource,
-            // Prompt commands
-            commands::prompt_cmd::get_prompts,
-            commands::prompt_cmd::upsert_prompt,
-            commands::prompt_cmd::add_prompt,
-            commands::prompt_cmd::update_prompt,
-            commands::prompt_cmd::delete_prompt,
-            commands::prompt_cmd::enable_prompt,
-            commands::prompt_cmd::import_prompt_from_file,
-            commands::prompt_cmd::get_current_prompt_file_content,
-            commands::prompt_cmd::auto_import_prompt,
             // Skill commands
             commands::skill_cmd::get_skills,
             commands::skill_cmd::get_skills_for_app,
@@ -1168,14 +1137,7 @@ pub fn run() {
             commands::capability_draft_cmd::capability_draft_register,
             commands::capability_draft_cmd::capability_draft_submit_approval_session_inputs,
             commands::capability_draft_cmd::capability_draft_execute_controlled_get,
-            // Agent App commands
-            commands::agent_app_cmd::agent_app_inspect_local_package,
-            commands::agent_app_cmd::agent_app_fetch_cloud_package,
-            commands::agent_app_cmd::agent_app_save_installed_state,
-            commands::agent_app_cmd::agent_app_list_installed,
-            commands::agent_app_cmd::agent_app_set_disabled,
-            commands::agent_app_cmd::agent_app_uninstall_rehearsal,
-            commands::agent_app_cmd::agent_app_uninstall,
+            // Agent App Desktop shell / runtime facade commands
             commands::agent_app_cmd::agent_app_start_ui_runtime,
             commands::agent_app_cmd::agent_app_get_ui_runtime_status,
             commands::agent_app_cmd::agent_app_stop_ui_runtime,
@@ -1192,8 +1154,6 @@ pub fn run() {
             commands::execution_run_cmd::execution_run_get,
             commands::execution_run_cmd::execution_run_get_general_workbench_state,
             commands::execution_run_cmd::execution_run_list_general_workbench_history,
-            // Ecommerce Review Reply commands
-            commands::ecommerce_review_reply_cmd::execute_ecommerce_review_reply,
             commands::browser_runtime_cmd::open_browser_runtime_debugger_window,
             commands::browser_runtime_cmd::close_browser_runtime_debugger_window,
             commands::browser_runtime_cmd::launch_browser_session,
@@ -1210,34 +1170,10 @@ pub fn run() {
             commands::site_capability_cmd::site_run_adapter,
             commands::site_capability_cmd::site_debug_run_adapter,
             commands::site_capability_cmd::site_save_adapter_result,
-            // Telemetry commands
-            commands::telemetry_cmd::get_request_logs,
-            commands::telemetry_cmd::get_request_log_detail,
-            commands::telemetry_cmd::clear_request_logs,
-            commands::telemetry_cmd::get_stats_summary,
-            commands::telemetry_cmd::get_stats_by_provider,
-            commands::telemetry_cmd::get_stats_by_model,
-            commands::telemetry_cmd::get_token_summary,
-            commands::telemetry_cmd::get_token_stats_by_provider,
-            commands::telemetry_cmd::get_token_stats_by_model,
-            commands::telemetry_cmd::get_token_stats_by_day,
-            // Injection commands
-            commands::injection_cmd::get_injection_config,
-            commands::injection_cmd::set_injection_enabled,
-            commands::injection_cmd::get_injection_rules,
-            commands::injection_cmd::add_injection_rule,
-            commands::injection_cmd::remove_injection_rule,
-            commands::injection_cmd::update_injection_rule,
             // Hint route commands
             commands::security_perf_cmd::get_hint_routes,
             // Tray commands
             commands::tray_cmd::sync_tray_model_shortcuts,
-            // Window control commands
-            commands::window_cmd::get_window_size,
-            commands::window_cmd::set_window_size,
-            commands::window_cmd::center_window,
-            commands::window_cmd::toggle_fullscreen,
-            commands::window_cmd::is_fullscreen,
             // Machine ID commands
             commands::machine_id_cmd::get_current_machine_id,
             commands::machine_id_cmd::set_machine_id,
@@ -1304,25 +1240,6 @@ pub fn run() {
             commands::aster_agent_cmd::action_runtime::agent_runtime_delete_session,
             commands::aster_agent_cmd::action_runtime::agent_runtime_respond_action,
             commands::aster_agent_cmd::tool_runtime::social_tools::social_generate_cover_image_cmd,
-            // Models config commands
-            commands::models_cmd::get_models_config,
-            commands::models_cmd::save_models_config,
-            commands::models_cmd::get_provider_models,
-            commands::models_cmd::get_all_provider_models,
-            commands::models_cmd::add_model_to_provider,
-            commands::models_cmd::remove_model_from_provider,
-            commands::models_cmd::toggle_model_enabled,
-            commands::models_cmd::add_provider,
-            commands::models_cmd::remove_provider,
-            // Connect commands
-            // _Requirements: 1.4, 2.3, 4.1, 5.3_
-            commands::connect_cmd::handle_deep_link,
-            commands::connect_cmd::handle_open_deep_link,
-            commands::connect_cmd::get_relay_info,
-            commands::connect_cmd::save_relay_api_key,
-            commands::connect_cmd::refresh_relay_registry,
-            commands::connect_cmd::list_relay_providers,
-            commands::connect_cmd::send_connect_callback,
             // Model Registry commands
             commands::model_registry_cmd::get_model_registry,
             commands::model_registry_cmd::get_model_registry_provider_ids,
@@ -1338,10 +1255,6 @@ pub fn run() {
             commands::model_registry_cmd::get_provider_alias_config,
             commands::model_registry_cmd::get_all_alias_configs,
             commands::model_registry_cmd::fetch_provider_models_from_api,
-            // WebSocket commands
-            commands::websocket_cmd::get_websocket_status,
-            commands::websocket_cmd::get_websocket_connections,
-            commands::websocket_cmd::set_websocket_enabled,
             // Browser environment preset commands
             commands::browser_environment_cmd::list_browser_environment_presets_cmd,
             commands::browser_environment_cmd::save_browser_environment_preset_cmd,
@@ -1400,9 +1313,6 @@ pub fn run() {
             commands::webview_cmd::get_browser_event_buffer,
             commands::webview_cmd::browser_execute_action,
             commands::webview_cmd::get_browser_action_audit_logs,
-            // Experimental settings commands
-            commands::experimental_cmd::get_experimental_config,
-            commands::experimental_cmd::save_experimental_config,
             commands::hotkey_cmd::validate_shortcut,
             // Session Files commands
             commands::session_files_cmd::session_files_create,
@@ -1419,13 +1329,6 @@ pub fn run() {
             commands::session_files_cmd::session_files_list_files,
             commands::session_files_cmd::session_files_cleanup_expired,
             commands::session_files_cmd::session_files_cleanup_empty,
-            // Image Upload commands
-            commands::image_upload_cmd::upload_image_to_session,
-            commands::image_upload_cmd::read_image_from_session,
-            // Document Import commands
-            commands::document_import_cmd::import_document,
-            commands::document_import_cmd::import_document_to_session,
-            commands::document_import_cmd::save_exported_document,
             commands::layered_design_cmd::analyze_layered_design_flat_image,
             commands::layered_design_cmd::read_layered_design_project_export,
             commands::layered_design_cmd::recognize_layered_design_text,
@@ -1457,9 +1360,6 @@ pub fn run() {
             commands::material_cmd::get_material_content,
             commands::material_cmd::get_material_count,
             commands::material_cmd::get_materials_content,
-            // Image search commands
-            commands::image_search_cmd::search_pixabay_images,
-            commands::image_search_cmd::search_web_images,
             // Video generation commands
             commands::video_generation_cmd::create_video_generation_task,
             commands::video_generation_cmd::get_video_generation_task,
@@ -1480,14 +1380,6 @@ pub fn run() {
             commands::gallery_material_cmd::list_gallery_materials_by_mood,
             commands::gallery_material_cmd::update_gallery_material_metadata,
             commands::gallery_material_cmd::delete_gallery_material_metadata,
-            // A2UI Form commands
-            commands::a2ui_form_cmd::create_a2ui_form,
-            commands::a2ui_form_cmd::get_a2ui_form,
-            commands::a2ui_form_cmd::get_a2ui_forms_by_message,
-            commands::a2ui_form_cmd::get_a2ui_forms_by_session,
-            commands::a2ui_form_cmd::save_a2ui_form_data,
-            commands::a2ui_form_cmd::submit_a2ui_form,
-            commands::a2ui_form_cmd::delete_a2ui_form,
             // Content commands
             commands::content_cmd::content_create,
             commands::content_cmd::content_get,
@@ -1540,9 +1432,6 @@ pub fn run() {
             commands::memory_search_cmd::unified_memory_hybrid_search,
             commands::memory_feedback_cmd::unified_memory_feedback,
             commands::memory_feedback_cmd::get_memory_feedback_stats,
-            // Voice Test commands
-            commands::voice_test_cmd::test_tts,
-            commands::voice_test_cmd::get_available_voices,
             // File Upload commands
             // ASR commands
             commands::asr_cmd::get_asr_credentials,
@@ -1557,13 +1446,6 @@ pub fn run() {
             commands::voice_model_cmd::voice_models_delete,
             commands::voice_model_cmd::voice_models_set_default,
             commands::voice_model_cmd::voice_models_test_transcribe_file,
-            // External Tools commands (Codex CLI 等外部工具)
-            commands::external_tools_cmd::check_codex_cli_status,
-            commands::external_tools_cmd::open_codex_cli_login,
-            commands::external_tools_cmd::open_codex_cli_logout,
-            commands::external_tools_cmd::open_external_url,
-            commands::external_tools_cmd::start_oem_cloud_oauth_callback_bridge,
-            commands::external_tools_cmd::get_external_tools,
             // Voice Input commands
             crate::voice::commands::get_voice_input_config,
             crate::voice::commands::get_voice_shortcut_runtime_status,

@@ -12,6 +12,7 @@ const {
   getPathMock,
   openExternalMock,
   openPathMock,
+  showOpenDialogMock,
   showItemInFolderMock,
 } = vi.hoisted(() => {
   return {
@@ -19,6 +20,7 @@ const {
     getPathMock: vi.fn((_name: string) => os.tmpdir()),
     openExternalMock: vi.fn(),
     openPathMock: vi.fn(),
+    showOpenDialogMock: vi.fn(),
     showItemInFolderMock: vi.fn(),
   };
 });
@@ -34,6 +36,9 @@ vi.mock("./electronRuntime", () => ({
     getName: () => "Lime",
     getPath: getPathMock,
     getVersion: () => "0.0.0-test",
+  },
+  dialog: {
+    showOpenDialog: showOpenDialogMock,
   },
   shell: {
     openExternal: openExternalMock,
@@ -79,6 +84,7 @@ function sessionAlreadyExistsError(sessionId: string) {
 afterEach(async () => {
   vi.clearAllMocks();
   getPathMock.mockImplementation(() => os.tmpdir());
+  showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) {
@@ -135,6 +141,43 @@ describe("ElectronHostCommands retired API Key Provider facade", () => {
 });
 
 describe("ElectronHostCommands local file shell facade", () => {
+  it("agent_app_select_directory 通过 Electron dialog 选择目录", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    showOpenDialogMock.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ["/tmp/agent-app"],
+    });
+
+    await expect(
+      host.invoke("agent_app_select_directory", {
+        request: { title: "选择应用目录" },
+      }),
+    ).resolves.toEqual({
+      path: "/tmp/agent-app",
+      cancelled: false,
+    });
+
+    expect(showOpenDialogMock).toHaveBeenCalledWith({
+      title: "选择应用目录",
+      properties: ["openDirectory"],
+    });
+  });
+
+  it("agent_app_select_directory 取消时返回空路径", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    showOpenDialogMock.mockResolvedValueOnce({
+      canceled: true,
+      filePaths: [],
+    });
+
+    await expect(host.invoke("agent_app_select_directory", {})).resolves.toEqual({
+      path: null,
+      cancelled: true,
+    });
+  });
+
   it("reveal_in_finder 通过 Electron shell 定位本地路径", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);

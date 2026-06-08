@@ -73,7 +73,7 @@ describe("agent app ui runtime Electron fixture smoke guard", () => {
     expect(content).toContain("legacyAgentAppCommandsSeen.length === 0");
     expect(content).toContain("missingRequiredAppServerMethods");
     expect(content).toContain("LEGACY_AGENT_APP_COMMANDS");
-    expect(content).toContain('"agent_app_save_installed_state"');
+    expect(content).not.toContain('"agent_app_save_installed_state"');
     expect(content).toContain('"agent_app_start_ui_runtime"');
     expect(content).toContain('"agent_app_get_ui_runtime_status"');
     expect(content).toContain('"agent_app_stop_ui_runtime"');

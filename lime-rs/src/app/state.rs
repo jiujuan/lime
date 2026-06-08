@@ -16,6 +16,7 @@ use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::context_memory_service::{ContextMemoryConfig, ContextMemoryService};
 use lime_services::skill_service::SkillService;
 
+use super::telemetry_state::TelemetryState;
 use super::types::{AppState, LogState};
 use crate::logger;
 use lime_server as server;
@@ -99,7 +100,7 @@ pub struct TelemetryStates {
     pub stats: Arc<parking_lot::RwLock<telemetry::StatsAggregator>>,
     pub tokens: Arc<parking_lot::RwLock<telemetry::TokenTracker>>,
     pub logger: Arc<telemetry::RequestLogger>,
-    pub telemetry_state: crate::commands::telemetry_cmd::TelemetryState,
+    pub telemetry_state: TelemetryState,
 }
 
 /// 初始化遥测状态
@@ -120,7 +121,7 @@ pub fn init_telemetry_states(config: &Config) -> TelemetryStates {
         telemetry::RequestLogger::new(log_rotation).expect("Failed to create RequestLogger"),
     );
 
-    let telemetry_state = crate::commands::telemetry_cmd::TelemetryState::with_shared(
+    let telemetry_state = TelemetryState::with_shared(
         shared_stats.clone(),
         shared_tokens.clone(),
         Some(shared_logger.clone()),

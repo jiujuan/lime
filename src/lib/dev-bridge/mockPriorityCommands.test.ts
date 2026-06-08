@@ -75,16 +75,16 @@ describe("mockPriorityCommands", () => {
     ).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_inspect_local_package"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_save_installed_state"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_list_installed"),
     ).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser("knowledge_list_packs"),
-    ).toBe(true);
+    ).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("get_automation_jobs")).toBe(
       false,
     );

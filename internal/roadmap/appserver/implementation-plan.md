@@ -29,7 +29,7 @@
 | P8 | 多 App 复用 | capability discovery、client isolation、本地 socket 评估 | 第二个独立 App 不新增 runtime 实现即可接入。 |
 | P9 | 退场审计 | legacy desktop glue 分类、守卫、删除计划 | 旧 runtime glue 有退出条件和扫描守卫。 |
 
-阶段推进时不得把 `lime-rs/src/commands/**` 当成新阶段产物目录。P3 / P4 / P7 的后端能力进入 App Server crates、RuntimeCore、ExecutionBackend 和 services；P5 的桌面壳能力进入 Electron Desktop Host bridge。legacy desktop command 只允许作为迁移期委托，且每条保留项必须有退出条件。
+阶段推进时不得把 `lime-rs/src/commands/**` 当成新阶段产物目录。P3 / P4 / P7 的后端能力进入 App Server crates、RuntimeCore、ExecutionBackend 和 services；P5 的桌面壳能力进入 Electron Desktop Host bridge。legacy desktop facade 只允许在迁移期做参数投影和事件转发；如果该 facade 位于 `lime-rs/src/commands/**`，迁出后必须撤注册并删除，删不动只登记 blocker 和退出条件。
 
 ## 3. P0：文档和协议冻结
 
@@ -228,7 +228,7 @@
 2. 新 App 只通过 App Server Client。
 3. App Server 协议成为新增 Agent 能力的默认入口。
 4. 治理报告能发现回流。
-5. `lime-rs/src/commands/**` 只剩明确带退出条件的薄委托，或已经按领域迁出 / 删除。
+5. `lime-rs/src/commands/**` 中的旧 wrapper 已按领域迁出核心逻辑、撤注册并删除；暂时删不动的对象必须登记 blocker、阻塞文件和退出条件，不能保留薄委托、stub 或退场 tombstone 当完成态。
 
 ## 11. 验证计划
 

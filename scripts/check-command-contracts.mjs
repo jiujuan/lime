@@ -87,12 +87,126 @@ const retiredApiKeyProviderFacadeCommands = new Set([
   "test_api_key_provider_chat",
   "fetch_provider_models_auto",
 ]);
+const retiredAgentAppPackageFacadeCommands = new Set([
+  "agent_app_fetch_cloud_package",
+  "agent_app_inspect_local_package",
+  "agent_app_list_installed",
+  "agent_app_save_installed_state",
+  "agent_app_set_disabled",
+  "agent_app_uninstall",
+  "agent_app_uninstall_rehearsal",
+]);
 const currentFileBrowserDesktopHostShellCommands = new Set([
   "get_home_dir",
   "get_file_manager_locations",
   "get_file_icon_data_url",
   "reveal_in_finder",
   "open_with_default_app",
+]);
+const retiredTauriGenerateHandlerCommands = new Set([
+  "add_model_to_provider",
+  "add_prompt",
+  "add_provider",
+  "create_a2ui_form",
+  "auto_import_prompt",
+  "clear_request_logs",
+  "delete_prompt",
+  "enable_prompt",
+  "execute_ecommerce_review_reply",
+  "expand_path",
+  "export_bundle",
+  "export_config",
+  "export_config_yaml",
+  "get_all_provider_models",
+  "get_a2ui_form",
+  "get_a2ui_forms_by_message",
+  "get_a2ui_forms_by_session",
+  "get_auto_launch_status",
+  "get_config_dir_path",
+  "get_config_paths",
+  "get_config_status",
+  "get_current_prompt_file_content",
+  "get_daily_usage_trends",
+  "get_experimental_config",
+  "get_injection_config",
+  "get_injection_rules",
+  "get_model_usage_ranking",
+  "get_models_config",
+  "get_provider_models",
+  "get_prompts",
+  "get_relay_info",
+  "get_request_log_detail",
+  "get_request_logs",
+  "get_stats_by_model",
+  "get_stats_by_provider",
+  "get_stats_summary",
+  "get_token_stats_by_day",
+  "get_token_stats_by_model",
+  "get_token_stats_by_provider",
+  "get_token_summary",
+  "get_tool_versions",
+  "get_usage_stats",
+  "get_available_voices",
+  "get_websocket_connections",
+  "get_websocket_status",
+  "handle_deep_link",
+  "handle_open_deep_link",
+  "import_bundle",
+  "import_config",
+  "import_document",
+  "import_document_to_session",
+  "import_prompt_from_file",
+  "list_relay_providers",
+  "open_auth_dir",
+  "open_codex_cli_login",
+  "open_codex_cli_logout",
+  "open_config_folder",
+  "open_external_url",
+  "read_image_from_session",
+  "refresh_relay_registry",
+  "remove_model_from_provider",
+  "remove_provider",
+  "save_exported_document",
+  "save_experimental_config",
+  "save_models_config",
+  "save_relay_api_key",
+  "save_a2ui_form_data",
+  "search_pixabay_images",
+  "search_web_images",
+  "send_connect_callback",
+  "set_auto_launch",
+  "set_injection_enabled",
+  "set_websocket_enabled",
+  "start_oem_cloud_oauth_callback_bridge",
+  "submit_a2ui_form",
+  "test_tts",
+  "toggle_model_enabled",
+  "add_injection_rule",
+  "remove_injection_rule",
+  "update_prompt",
+  "update_injection_rule",
+  "upload_image_to_session",
+  "upsert_prompt",
+  "validate_config_yaml",
+  "validate_import",
+]);
+const retiredTauriCommandModules = new Set([
+  "a2ui_form_cmd",
+  "config_cmd",
+  "document_import_cmd",
+  "ecommerce_review_reply_cmd",
+  "experimental_cmd",
+  "external_tools_cmd",
+  "image_search_cmd",
+  "image_upload_cmd",
+  "injection_cmd",
+  "knowledge_cmd",
+  "models_cmd",
+  "prompt_cmd",
+  "telemetry_cmd",
+  "theme_context_cmd",
+  "voice_test_cmd",
+  "websocket_cmd",
 ]);
 
 function addDeferredCommands(commands, reason) {
@@ -116,7 +230,6 @@ const currentElectronHostRequiredCommands = new Set([
   "agent_runtime_list_sessions",
   "agent_runtime_get_session",
   "agent_runtime_list_workspace_skill_bindings",
-  "agent_app_list_installed",
   "agent_app_get_ui_runtime_status",
   "agent_app_start_ui_runtime",
   "agent_app_stop_ui_runtime",
@@ -148,7 +261,6 @@ const currentElectronHostRequiredCommands = new Set([
 ]);
 
 const currentDevBridgeTruthRequiredCommands = new Set([
-  "agent_app_list_installed",
   "agent_app_get_ui_runtime_status",
   "agent_app_start_ui_runtime",
   "agent_app_stop_ui_runtime",
@@ -217,12 +329,6 @@ addDeferredCommands(
 
 addDeferredCommands(
   [
-    "agent_app_inspect_local_package",
-    "agent_app_fetch_cloud_package",
-    "agent_app_save_installed_state",
-    "agent_app_set_disabled",
-    "agent_app_uninstall_rehearsal",
-    "agent_app_uninstall",
     "agent_app_select_directory",
     "agent_app_launch_shell",
     "agent_app_runtime_start_task",
@@ -635,6 +741,13 @@ function escapeRegExp(value) {
 function hasStandaloneIdentifier(sourceCode, identifier) {
   const pattern = new RegExp(
     `(^|[^A-Za-z0-9_])${escapeRegExp(identifier)}([^A-Za-z0-9_]|$)`,
+  );
+  return pattern.test(sourceCode);
+}
+
+function hasTauriCommandRegistration(sourceCode, command) {
+  const pattern = new RegExp(
+    String.raw`\bcommands::[A-Za-z0-9_]+::${escapeRegExp(command)}\b`,
   );
   return pattern.test(sourceCode);
 }
@@ -1386,6 +1499,48 @@ function collectCurrentFileBrowserDesktopHostShellSourceFailures() {
   return failures;
 }
 
+function collectRetiredTauriGenerateHandlerFailures() {
+  const failures = [];
+  const source = {
+    path: "lime-rs/src/app/runner.rs",
+    message:
+      "已撤注册的 legacy Tauri command 不能回到 generate_handler；业务能力必须走 App Server current，桌面壳能力必须走 Electron Desktop Host current",
+  };
+  const sourceCode = readProductionSourceForGuard(source.path);
+  for (const command of retiredTauriGenerateHandlerCommands) {
+    if (hasTauriCommandRegistration(sourceCode, command)) {
+      failures.push({
+        file: source.path,
+        message: source.message,
+        token: command,
+      });
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredTauriCommandModuleFailures() {
+  const failures = [];
+  const source = {
+    path: "lime-rs/src/commands/mod.rs",
+    message:
+      "已撤注册的 legacy Tauri command module 不能回到 commands/mod.rs；旧 wrapper 文件只能等待确认后物理删除或登记 blocker",
+  };
+  const sourceCode = readProductionSourceForGuard(source.path);
+  for (const moduleName of retiredTauriCommandModules) {
+    if (hasStandaloneIdentifier(sourceCode, moduleName)) {
+      failures.push({
+        file: source.path,
+        message: source.message,
+        token: moduleName,
+      });
+    }
+  }
+
+  return failures;
+}
+
 function printGuardFailures(title, failures) {
   console.error(`\n## ${title}`);
   for (const failure of failures) {
@@ -1416,12 +1571,18 @@ function main() {
     collectRetiredApiKeyProviderFacadeSourceFailures();
   const currentFileBrowserDesktopHostShellSourceFailures =
     collectCurrentFileBrowserDesktopHostShellSourceFailures();
+  const retiredTauriGenerateHandlerFailures =
+    collectRetiredTauriGenerateHandlerFailures();
+  const retiredTauriCommandModuleFailures =
+    collectRetiredTauriCommandModuleFailures();
 
   const deprecatedCommands = new Set(
     Object.keys(agentCommandCatalog.deprecatedCommandReplacements ?? {}),
   );
   const runtimeGatewayCommands = new Set(
-    agentCommandCatalog.runtimeGatewayCommands ?? [],
+    (agentCommandCatalog.runtimeGatewayCommands ?? []).filter(
+      (command) => !retiredAgentAppPackageFacadeCommands.has(command),
+    ),
   );
   const capabilityDraftCommands = new Set(
     agentCommandCatalog.capabilityDraftCommands ?? [],
@@ -1634,6 +1795,22 @@ function main() {
     printGuardFailures(
       "已迁到 Electron Desktop Host 的文件浏览壳命令不能回到旧客户端源码",
       currentFileBrowserDesktopHostShellSourceFailures,
+    );
+  }
+
+  if (retiredTauriGenerateHandlerFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已撤注册的 legacy Tauri command 不能回到 runner generate_handler",
+      retiredTauriGenerateHandlerFailures,
+    );
+  }
+
+  if (retiredTauriCommandModuleFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已撤注册的 legacy Tauri command module 不能回到 commands/mod.rs",
+      retiredTauriCommandModuleFailures,
     );
   }
 

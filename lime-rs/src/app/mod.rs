@@ -15,6 +15,7 @@ pub mod commands;
 pub mod runner;
 pub mod scheduler_service;
 mod state;
+pub mod telemetry_state;
 mod types;
 mod utils;
 pub(crate) mod window_chrome;

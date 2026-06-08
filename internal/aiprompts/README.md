@@ -80,6 +80,7 @@
 - **改 FileArtifact / artifact sidecar / versions / file checkpoint / evidence 中的文件快照**：先读 `persistence-map.md`
 - **改 session detail / thread read / requestTelemetry / evidence / history-record**：先读 `state-history-telemetry.md`
 - **改 Electron IPC / App Server / Bridge / mock / legacy desktop facade**：先读 `commands.md`，再看 `quality-workflow.md`
+- **碰到 `lime-rs/src/commands/**`**：默认只做旧 Tauri wrapper 删除清理、撤注册后的机械编译修复或 blocker 登记；不要在该目录新增实现。先读 `commands.md`、`governance.md`、`../exec-plans/tauri-wrapper-quick-cleanup-queue.md` 和 `../exec-plans/tauri-wrapper-command-inventory.md`
 - **改 `@` / `/` / 轻卡 / viewer / ServiceSkill 场景**：先读 `command-runtime.md`
 - **改 Claw 技能 / Service Skill / 统一 Skills 标准**：先读 `skill-standard.md`
 - **改站点适配器 / 导入外部 adapter**：先读 `site-adapter-standard.md`，再看 `web-browser-scene-skill.md` 与 `quality-workflow.md`

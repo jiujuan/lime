@@ -969,7 +969,9 @@ const checks = [
       "self.app_data_source.list_knowledge_packs(params).await",
       "self.app_data_source.read_knowledge_pack(params).await",
       "self.app_data_source.import_knowledge_source(params).await",
-      "self.app_data_source.compile_knowledge_pack(params).await",
+      "lime_knowledge::plan_knowledge_builder_runtime(&request)",
+      "self.knowledge_builder_runtime_executor",
+      "self.app_data_source.compile_knowledge_pack(request).await",
       ".set_default_knowledge_pack(params)",
       ".update_knowledge_pack_status(params)",
       "self.app_data_source.resolve_knowledge_context(params).await",
@@ -980,7 +982,7 @@ const checks = [
       "lime_knowledge::list_knowledge_packs(lime_knowledge::KnowledgeListPacksRequest",
       "lime_knowledge::get_knowledge_pack(lime_knowledge::KnowledgeGetPackRequest",
       "lime_knowledge::import_knowledge_source(lime_knowledge::KnowledgeImportSourceRequest",
-      "lime_knowledge::compile_knowledge_pack(lime_knowledge::KnowledgeCompilePackRequest",
+      "lime_knowledge::compile_knowledge_pack(request)",
       "lime_knowledge::set_default_knowledge_pack(",
       "lime_knowledge::update_knowledge_pack_status(",
       "lime_knowledge::resolve_knowledge_context(",
@@ -1604,39 +1606,68 @@ const checks = [
     ],
   },
   {
-    name: "Renderer Agent App installed list uses App Server agentAppInstalled/list",
+    name: "Renderer Agent App lifecycle uses App Server current methods",
     file: "src/lib/api/agentApps.ts",
     snippets: [
       'import { AppServerClient } from "@/lib/api/appServer"',
+      "METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT",
+      "METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD",
+      "METHOD_AGENT_APP_INSTALLED_SAVE",
       "METHOD_AGENT_APP_INSTALLED_LIST",
+      "METHOD_AGENT_APP_INSTALLED_DISABLED_SET",
+      "METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL",
+      "METHOD_AGENT_APP_INSTALLED_UNINSTALL",
       "METHOD_AGENT_APP_UI_RUNTIME_START",
       "METHOD_AGENT_APP_UI_RUNTIME_STATUS",
       "METHOD_AGENT_APP_UI_RUNTIME_STOP",
       'from "../../../packages/app-server-client/src/protocol"',
       'type AgentAppInstalledListAppServerClient = Pick<AppServerClient, "request">',
       'type AgentAppUiRuntimeAppServerClient = Pick<AppServerClient, "request">',
+      'type AgentAppLifecycleAppServerClient = Pick<AppServerClient, "request">',
       "function normalizeInstalledAgentAppListResponse(",
       "function normalizeAgentAppUiRuntimeStatusResponse(",
       "async function requestAgentAppInstalledListAppServer(",
+      "async function requestAgentAppAppServer<T>",
       "async function requestAgentAppUiRuntimeAppServer(",
       "appServerClient.request<AgentAppInstalledListResponse>",
       "appServerClient.request<AgentAppUiRuntimeStatusResponse>",
+      "METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT",
+      "METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD",
+      "METHOD_AGENT_APP_INSTALLED_SAVE",
       "METHOD_AGENT_APP_INSTALLED_LIST",
+      "METHOD_AGENT_APP_INSTALLED_DISABLED_SET",
+      "METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL",
+      "METHOD_AGENT_APP_INSTALLED_UNINSTALL",
       "METHOD_AGENT_APP_UI_RUNTIME_START",
       "METHOD_AGENT_APP_UI_RUNTIME_STATUS",
       "METHOD_AGENT_APP_UI_RUNTIME_STOP",
+      "assertAgentAppLocalPackageInspectionResult(",
+      "assertAgentAppPackageCacheEntryResult(",
+      "assertInstalledAgentAppStateResult(",
+      "assertInstalledAgentAppStateListResult(",
+      "assertAgentAppUninstallRehearsalResult(",
+      "assertAgentAppUninstallResult(",
       "App Server agentAppInstalled/list did not return states",
       "App Server agentAppInstalled/list did not return issues",
       "App Server Agent App UI runtime did not return status",
+      "requestAgentAppAppServer<AgentAppLocalPackageInspectResponse>",
+      "requestAgentAppAppServer<AppServerAgentAppPackageCacheEntry>",
+      "requestAgentAppAppServer<AgentAppInstalledListResponse>",
+      "requestAgentAppAppServer<AgentAppUninstallRehearsalResponse>",
+      "requestAgentAppAppServer<AgentAppUninstallResponse>",
       "return requestAgentAppInstalledListAppServer()",
       "requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_START",
       "requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_STATUS",
       "requestAgentAppUiRuntimeAppServer(METHOD_AGENT_APP_UI_RUNTIME_STOP",
-      '"agent_app_save_installed_state"',
-      '"agent_app_uninstall"',
     ],
     absentSnippets: [
       'safeInvoke<InstalledAgentAppStateListResult>("agent_app_list_installed"',
+      'safeInvoke("agent_app_inspect_local_package"',
+      'safeInvoke("agent_app_fetch_cloud_package"',
+      'safeInvoke("agent_app_save_installed_state"',
+      'safeInvoke("agent_app_set_disabled"',
+      'safeInvoke("agent_app_uninstall_rehearsal"',
+      'safeInvoke("agent_app_uninstall"',
       'safeInvoke("agent_app_list_installed"',
       'safeInvoke<AgentAppUiRuntimeStatus>("agent_app_start_ui_runtime"',
       'safeInvoke<AgentAppUiRuntimeStatus>("agent_app_get_ui_runtime_status"',
@@ -1653,18 +1684,32 @@ const checks = [
       "已安装 Agent App 列表应通过 App Server agentAppInstalled/list 读取",
       "已安装 Agent App 列表缺少必需 result 时不应回退 legacy",
       "Agent App UI runtime 网关应直连 App Server current 命令",
+      '"agentAppLocalPackage/inspect"',
+      '"agentAppPackage/fetchCloud"',
+      '"agentAppInstalled/save"',
       '"agentAppInstalled/list"',
+      '"agentAppInstalled/disabled/set"',
+      '"agentAppInstalled/uninstall/rehearsal"',
+      '"agentAppInstalled/uninstall"',
       '"agentAppUiRuntime/start"',
       '"agentAppUiRuntime/status"',
       '"agentAppUiRuntime/stop"',
       "App Server agentAppInstalled/list did not return states",
       "App Server agentAppInstalled/list did not return issues",
+      "agentAppLocalPackage/inspect did not return appDir",
+      "agentAppPackage/fetchCloud did not return appId",
+      "agentAppInstalled/save did not return appId",
       "expect(safeInvoke).not.toHaveBeenCalledWith(",
+      '"agent_app_inspect_local_package"',
+      '"agent_app_fetch_cloud_package"',
+      '"agent_app_save_installed_state"',
       '"agent_app_list_installed"',
+      '"agent_app_set_disabled"',
+      '"agent_app_uninstall_rehearsal"',
+      '"agent_app_uninstall"',
       '"agent_app_start_ui_runtime"',
       '"agent_app_get_ui_runtime_status"',
       '"agent_app_stop_ui_runtime"',
-      '"agent_app_save_installed_state"',
     ],
   },
   {
@@ -1762,13 +1807,10 @@ const checks = [
     name: "Electron Desktop Host implementation keeps Knowledge legacy facade retired",
     files: ["electron/hostCommands.ts", "electron/ipcChannels.ts"],
     snippets: [
-      "METHOD_AGENT_APP_INSTALLED_LIST",
       "METHOD_AGENT_APP_UI_RUNTIME_START",
       "METHOD_AGENT_APP_UI_RUNTIME_STATUS",
       "METHOD_AGENT_APP_UI_RUNTIME_STOP",
       "METHOD_PROJECT_MEMORY_READ",
-      'case "agent_app_list_installed":',
-      "return await this.#listAgentAppInstalled()",
       'case "agent_app_start_ui_runtime":',
       "return await this.#startAgentAppUiRuntime(args)",
       'case "agent_app_get_ui_runtime_status":',
@@ -1777,13 +1819,11 @@ const checks = [
       "return await this.#stopAgentAppUiRuntime(args)",
       'case "project_memory_get":',
       "return await this.#readProjectMemory(args)",
-      "async #listAgentAppInstalled()",
       "async #startAgentAppUiRuntime(",
       "async #getAgentAppUiRuntimeStatus(",
       "async #stopAgentAppUiRuntime(",
       "async #readProjectMemory(args: HostArgs)",
       "ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS",
-      '"agent_app_list_installed"',
       '"agent_app_start_ui_runtime"',
       '"agent_app_get_ui_runtime_status"',
       '"agent_app_stop_ui_runtime"',
@@ -1798,6 +1838,11 @@ const checks = [
       "METHOD_KNOWLEDGE_PACK_STATUS_UPDATE",
       "METHOD_KNOWLEDGE_CONTEXT_RESOLVE",
       "METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE",
+      "METHOD_AGENT_APP_INSTALLED_LIST",
+      'case "agent_app_list_installed":',
+      "return await this.#listAgentAppInstalled()",
+      "async #listAgentAppInstalled()",
+      '"agent_app_list_installed"',
       'case "knowledge_list_packs":',
       'case "knowledge_get_pack":',
       'case "knowledge_import_source":',
@@ -5603,6 +5648,7 @@ for (const check of checks) {
 checkLegacySessionCompatContracts();
 checkAgentRuntimeThinGatewayContracts();
 checkAgentAppUiRuntimeLifecycleContracts();
+checkKnowledgeBuilderRuntimeCurrentContracts();
 checkRetiredAppServerAgentBackendCrate();
 
 if (failures.length > 0) {
@@ -5613,7 +5659,33 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[app-server-client-contract] ok (${checks.length + 3} checks)`);
+console.log(`[app-server-client-contract] ok (${checks.length + 4} checks)`);
+
+function checkKnowledgeBuilderRuntimeCurrentContracts() {
+  const currentFiles = [
+    "lime-rs/crates/app-server/src/runtime.rs",
+    "lime-rs/crates/app-server/src/local_data_source.rs",
+    "lime-rs/crates/app-server/src/knowledge_builder_runtime.rs",
+  ];
+  const content = currentFiles
+    .map((file) => fs.readFileSync(path.join(repoRoot, file), "utf8"))
+    .join("\n");
+  const forbidden = [
+    "builderRuntime is not available in App Server current path",
+    "builder_runtime_requested(",
+    "knowledge_cmd",
+    "execute_knowledge_builder_skill",
+  ];
+  for (const snippet of forbidden) {
+    if (content.includes(snippet)) {
+      failures.push(
+        `Knowledge builderRuntime current contract: forbidden ${JSON.stringify(
+          snippet,
+        )} in ${currentFiles.join(", ")}`,
+      );
+    }
+  }
+}
 
 function checkRetiredAppServerAgentBackendCrate() {
   const retiredCratePath = "lime-rs/crates/app-server-agent-backend";

@@ -18,6 +18,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
+use crate::app::telemetry_state::TelemetryState;
 use crate::app::{AppState, LogState};
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::aster_agent_cmd::tool_runtime::media_cli_bridge;
@@ -54,7 +55,6 @@ use crate::commands::modality_runtime_contracts::{
     VOICE_GENERATION_ROUTING_SLOT, WEB_RESEARCH_CONTRACT_KEY, WEB_RESEARCH_LIMECORE_POLICY_REFS,
 };
 use crate::commands::model_registry_cmd::ModelRegistryState;
-use crate::commands::telemetry_cmd::TelemetryState;
 use crate::config::GlobalConfigManagerState;
 use crate::database::DbConnection;
 use lime_core::models::runtime_provider_model::{RuntimeCredentialData, RuntimeProviderCredential};

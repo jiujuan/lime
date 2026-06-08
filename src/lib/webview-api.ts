@@ -762,15 +762,30 @@ export interface UpdateBrowserSessionControlRequest {
   human_reason?: string;
 }
 
+const BROWSER_CONNECTOR_CURRENT_SURFACE =
+  "真实 Browser connector current 通道";
+const BROWSER_RUNTIME_CURRENT_SURFACE = "真实 Browser runtime current 通道";
+
+function rejectMissingBrowserConnectorCurrent<T>(command: string): Promise<T> {
+  return Promise.reject(
+    new Error(`${command} 尚未接入${BROWSER_CONNECTOR_CURRENT_SURFACE}`),
+  );
+}
+
+function rejectMissingBrowserRuntimeCurrent<T>(command: string): Promise<T> {
+  return Promise.reject(
+    new Error(`${command} 尚未接入${BROWSER_RUNTIME_CURRENT_SURFACE}`),
+  );
+}
+
 /**
  * 使用外部 Chrome + 独立 Profile 打开 URL
  */
 export async function openChromeProfileWindow(
   request: OpenChromeProfileRequest,
 ): Promise<OpenChromeProfileResponse> {
-  return safeInvoke<OpenChromeProfileResponse>("open_chrome_profile_window", {
-    request,
-  });
+  void request;
+  return rejectMissingBrowserRuntimeCurrent("open_chrome_profile_window");
 }
 
 /**
@@ -791,79 +806,68 @@ export async function getChromeProfileSessions(): Promise<
 export async function closeChromeProfileSession(
   profileKey: string,
 ): Promise<boolean> {
-  return safeInvoke<boolean>("close_chrome_profile_session", {
-    profileKey,
-  });
+  void profileKey;
+  return rejectMissingBrowserRuntimeCurrent("close_chrome_profile_session");
 }
 
 export async function listBrowserProfiles(params?: {
   include_archived?: boolean;
 }): Promise<BrowserProfileRecord[]> {
-  return safeInvoke<BrowserProfileRecord[]>("list_browser_profiles_cmd", {
-    request: {
-      include_archived: params?.include_archived ?? false,
-    },
-  });
+  void params;
+  return rejectMissingBrowserRuntimeCurrent("list_browser_profiles_cmd");
 }
 
 export async function saveBrowserProfile(
   request: SaveBrowserProfileRequest,
 ): Promise<BrowserProfileRecord> {
-  return safeInvoke<BrowserProfileRecord>("save_browser_profile_cmd", {
-    request,
-  });
+  void request;
+  return rejectMissingBrowserRuntimeCurrent("save_browser_profile_cmd");
 }
 
 export async function listBrowserEnvironmentPresets(params?: {
   include_archived?: boolean;
 }): Promise<BrowserEnvironmentPresetRecord[]> {
-  return safeInvoke<BrowserEnvironmentPresetRecord[]>(
+  void params;
+  return rejectMissingBrowserRuntimeCurrent(
     "list_browser_environment_presets_cmd",
-    {
-      request: {
-        include_archived: params?.include_archived ?? false,
-      },
-    },
   );
 }
 
 export async function saveBrowserEnvironmentPreset(
   request: SaveBrowserEnvironmentPresetRequest,
 ): Promise<BrowserEnvironmentPresetRecord> {
-  return safeInvoke<BrowserEnvironmentPresetRecord>(
+  void request;
+  return rejectMissingBrowserRuntimeCurrent(
     "save_browser_environment_preset_cmd",
-    {
-      request,
-    },
   );
 }
 
 export async function archiveBrowserEnvironmentPreset(
   id: string,
 ): Promise<boolean> {
-  return safeInvoke<boolean>("archive_browser_environment_preset_cmd", {
-    request: { id },
-  });
+  void id;
+  return rejectMissingBrowserRuntimeCurrent(
+    "archive_browser_environment_preset_cmd",
+  );
 }
 
 export async function restoreBrowserEnvironmentPreset(
   id: string,
 ): Promise<boolean> {
-  return safeInvoke<boolean>("restore_browser_environment_preset_cmd", {
-    request: { id },
-  });
+  void id;
+  return rejectMissingBrowserRuntimeCurrent(
+    "restore_browser_environment_preset_cmd",
+  );
 }
 
 export async function archiveBrowserProfile(id: string): Promise<boolean> {
-  return safeInvoke<boolean>("archive_browser_profile_cmd", {
-    request: { id },
-  });
+  void id;
+  return rejectMissingBrowserRuntimeCurrent("archive_browser_profile_cmd");
 }
 
 export async function restoreBrowserProfile(id: string): Promise<boolean> {
-  return safeInvoke<boolean>("restore_browser_profile_cmd", {
-    request: { id },
-  });
+  void id;
+  return rejectMissingBrowserRuntimeCurrent("restore_browser_profile_cmd");
 }
 
 /**
@@ -889,39 +893,34 @@ export async function getChromeBridgeStatus(): Promise<ChromeBridgeStatusSnapsho
 export async function disconnectBrowserConnectorSession(params?: {
   profile_key?: string;
 }): Promise<ChromeBridgeDisconnectResult> {
-  return safeInvoke<ChromeBridgeDisconnectResult>(
+  void params;
+  return rejectMissingBrowserRuntimeCurrent(
     "disconnect_browser_connector_session",
-    params,
   );
 }
 
 export async function getBrowserConnectorSettings(): Promise<BrowserConnectorSettingsSnapshot> {
-  return safeInvoke<BrowserConnectorSettingsSnapshot>(
-    "get_browser_connector_settings_cmd",
-  );
+  const command = "get_browser_connector_settings_cmd";
+  const result = await safeInvoke<BrowserConnectorSettingsSnapshot>(command);
+  assertNotDiagnosticFacade(command, result, BROWSER_CONNECTOR_CURRENT_SURFACE);
+  return result;
 }
 
 export async function setBrowserConnectorInstallRoot(
   installRootDir: string,
 ): Promise<BrowserConnectorSettingsSnapshot> {
-  return safeInvoke<BrowserConnectorSettingsSnapshot>(
+  void installRootDir;
+  return rejectMissingBrowserConnectorCurrent(
     "set_browser_connector_install_root_cmd",
-    {
-      request: {
-        install_root_dir: installRootDir,
-      },
-    },
   );
 }
 
 export async function setBrowserConnectorEnabled(
   enabled: boolean,
 ): Promise<BrowserConnectorSettingsSnapshot> {
-  return safeInvoke<BrowserConnectorSettingsSnapshot>(
+  void enabled;
+  return rejectMissingBrowserConnectorCurrent(
     "set_browser_connector_enabled_cmd",
-    {
-      enabled,
-    },
   );
 }
 
@@ -929,11 +928,9 @@ export async function setSystemConnectorEnabled(request: {
   id: string;
   enabled: boolean;
 }): Promise<BrowserConnectorSettingsSnapshot> {
-  return safeInvoke<BrowserConnectorSettingsSnapshot>(
+  void request;
+  return rejectMissingBrowserConnectorCurrent(
     "set_system_connector_enabled_cmd",
-    {
-      request,
-    },
   );
 }
 
@@ -941,45 +938,45 @@ export async function setBrowserActionCapabilityEnabled(request: {
   key: string;
   enabled: boolean;
 }): Promise<BrowserConnectorSettingsSnapshot> {
-  return safeInvoke<BrowserConnectorSettingsSnapshot>(
+  void request;
+  return rejectMissingBrowserConnectorCurrent(
     "set_browser_action_capability_enabled_cmd",
-    {
-      request,
-    },
   );
 }
 
 export async function getBrowserConnectorInstallStatus(): Promise<BrowserConnectorInstallStatus> {
-  return safeInvoke<BrowserConnectorInstallStatus>(
-    "get_browser_connector_install_status_cmd",
-  );
+  const command = "get_browser_connector_install_status_cmd";
+  const result = await safeInvoke<BrowserConnectorInstallStatus>(command);
+  assertNotDiagnosticFacade(command, result, BROWSER_CONNECTOR_CURRENT_SURFACE);
+  return result;
 }
 
 export async function installBrowserConnectorExtension(
   request: BrowserConnectorInstallRequest,
 ): Promise<BrowserConnectorInstallResult> {
-  return safeInvoke<BrowserConnectorInstallResult>(
+  void request;
+  return rejectMissingBrowserConnectorCurrent(
     "install_browser_connector_extension_cmd",
-    {
-      request,
-    },
   );
 }
 
 export async function openBrowserExtensionsPage(): Promise<boolean> {
-  return safeInvoke<boolean>("open_browser_extensions_page_cmd");
+  return rejectMissingBrowserConnectorCurrent("open_browser_extensions_page_cmd");
 }
 
 export async function openBrowserRemoteDebuggingPage(): Promise<boolean> {
-  return safeInvoke<boolean>("open_browser_remote_debugging_page_cmd");
+  return rejectMissingBrowserConnectorCurrent(
+    "open_browser_remote_debugging_page_cmd",
+  );
 }
 
 export async function openBrowserConnectorGuideWindow(request: {
   mode: BrowserConnectorGuideMode;
 }): Promise<void> {
-  return safeInvoke<void>("open_browser_connector_guide_window", {
-    request,
-  });
+  void request;
+  return rejectMissingBrowserConnectorCurrent(
+    "open_browser_connector_guide_window",
+  );
 }
 
 /**
@@ -988,12 +985,8 @@ export async function openBrowserConnectorGuideWindow(request: {
 export async function chromeBridgeExecuteCommand(
   request: ChromeBridgeCommandRequest,
 ): Promise<ChromeBridgeCommandResult> {
-  return safeInvoke<ChromeBridgeCommandResult>(
-    "chrome_bridge_execute_command",
-    {
-      request,
-    },
-  );
+  void request;
+  return rejectMissingBrowserRuntimeCurrent("chrome_bridge_execute_command");
 }
 
 export async function getBrowserBackendPolicy(): Promise<BrowserBackendPolicy> {
@@ -1006,9 +999,8 @@ export async function getBrowserBackendPolicy(): Promise<BrowserBackendPolicy> {
 export async function setBrowserBackendPolicy(
   policy: BrowserBackendPolicy,
 ): Promise<BrowserBackendPolicy> {
-  return safeInvoke<BrowserBackendPolicy>("set_browser_backend_policy", {
-    policy,
-  });
+  void policy;
+  return rejectMissingBrowserRuntimeCurrent("set_browser_backend_policy");
 }
 
 export async function getBrowserBackendsStatus(): Promise<BrowserBackendsStatusSnapshot> {
@@ -1021,117 +1013,102 @@ export async function getBrowserBackendsStatus(): Promise<BrowserBackendsStatusS
 export async function listCdpTargets(
   profileKey?: string,
 ): Promise<CdpTargetInfo[]> {
-  return safeInvoke<CdpTargetInfo[]>("list_cdp_targets", {
-    request: {
-      profile_key: profileKey,
-    },
-  });
+  void profileKey;
+  return rejectMissingBrowserRuntimeCurrent("list_cdp_targets");
 }
 
 export async function openCdpSession(params: {
   profile_key: string;
   target_id?: string;
 }): Promise<CdpSessionState> {
-  return safeInvoke<CdpSessionState>("open_cdp_session", {
-    request: params,
-  });
+  void params;
+  return rejectMissingBrowserRuntimeCurrent("open_cdp_session");
 }
 
 export async function closeCdpSession(sessionId: string): Promise<boolean> {
-  return safeInvoke<boolean>("close_cdp_session", {
-    request: {
-      session_id: sessionId,
-    },
-  });
+  void sessionId;
+  return rejectMissingBrowserRuntimeCurrent("close_cdp_session");
 }
 
 export async function startBrowserStream(params: {
   session_id: string;
   mode: BrowserStreamMode;
 }): Promise<CdpSessionState> {
-  return safeInvoke<CdpSessionState>("start_browser_stream", {
-    request: params,
-  });
+  void params;
+  return rejectMissingBrowserRuntimeCurrent("start_browser_stream");
 }
 
 export async function stopBrowserStream(
   sessionId: string,
 ): Promise<CdpSessionState> {
-  return safeInvoke<CdpSessionState>("stop_browser_stream", {
-    request: {
-      session_id: sessionId,
-    },
-  });
+  void sessionId;
+  return rejectMissingBrowserRuntimeCurrent("stop_browser_stream");
 }
 
 export async function getBrowserSessionState(
   sessionId: string,
 ): Promise<CdpSessionState> {
-  return safeInvoke<CdpSessionState>("get_browser_session_state", {
-    request: {
-      session_id: sessionId,
-    },
-  });
+  void sessionId;
+  return rejectMissingBrowserRuntimeCurrent("get_browser_session_state");
 }
 
 export async function takeOverBrowserSession(
   request: UpdateBrowserSessionControlRequest,
 ): Promise<CdpSessionState> {
-  return safeInvoke<CdpSessionState>("take_over_browser_session", {
-    request,
-  });
+  void request;
+  return rejectMissingBrowserRuntimeCurrent("take_over_browser_session");
 }
 
 export async function releaseBrowserSession(
   request: UpdateBrowserSessionControlRequest,
 ): Promise<CdpSessionState> {
-  return safeInvoke<CdpSessionState>("release_browser_session", {
-    request,
-  });
+  void request;
+  return rejectMissingBrowserRuntimeCurrent("release_browser_session");
 }
 
 export async function resumeBrowserSession(
   request: UpdateBrowserSessionControlRequest,
 ): Promise<CdpSessionState> {
-  return safeInvoke<CdpSessionState>("resume_browser_session", {
-    request,
-  });
+  void request;
+  return rejectMissingBrowserRuntimeCurrent("resume_browser_session");
 }
 
 export async function getBrowserEventBuffer(params: {
   session_id: string;
   cursor?: number;
 }): Promise<BrowserEventBufferSnapshot> {
-  return safeInvoke<BrowserEventBufferSnapshot>("get_browser_event_buffer", {
-    request: params,
-  });
+  void params;
+  return rejectMissingBrowserRuntimeCurrent("get_browser_event_buffer");
 }
 
 export async function openBrowserRuntimeDebuggerWindow(request?: {
   session_id?: string;
   profile_key?: string;
 }): Promise<void> {
-  return safeInvoke<void>("open_browser_runtime_debugger_window", {
-    request,
-  });
+  void request;
+  return rejectMissingBrowserRuntimeCurrent(
+    "open_browser_runtime_debugger_window",
+  );
 }
 
 export async function closeBrowserRuntimeDebuggerWindow(): Promise<void> {
-  return safeInvoke<void>("close_browser_runtime_debugger_window");
+  return rejectMissingBrowserRuntimeCurrent(
+    "close_browser_runtime_debugger_window",
+  );
 }
 
 export async function launchBrowserSession(
   request: LaunchBrowserSessionRequest,
 ): Promise<BrowserSessionLaunchResponse> {
-  return safeInvoke<BrowserSessionLaunchResponse>("launch_browser_session", {
-    request,
-  });
+  void request;
+  return rejectMissingBrowserRuntimeCurrent("launch_browser_session");
 }
 
 export async function browserExecuteAction(
   request: BrowserActionRequest,
 ): Promise<BrowserActionResult> {
-  return safeInvoke<BrowserActionResult>("browser_execute_action", { request });
+  void request;
+  return rejectMissingBrowserRuntimeCurrent("browser_execute_action");
 }
 
 export async function siteListAdapters(): Promise<SiteAdapterDefinition[]> {
@@ -1203,12 +1180,8 @@ export async function siteSaveAdapterResult(
 export async function getBrowserRuntimeAuditLogs(
   limit?: number,
 ): Promise<BrowserRuntimeAuditRecord[]> {
-  return safeInvoke<BrowserRuntimeAuditRecord[]>(
-    "get_browser_action_audit_logs",
-    {
-      limit,
-    },
-  );
+  void limit;
+  return rejectMissingBrowserRuntimeCurrent("get_browser_action_audit_logs");
 }
 
 export async function getBrowserActionAuditLogs(

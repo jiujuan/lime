@@ -262,6 +262,54 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
         NoopAppDataSource.list_agent_app_installed().await
     }
 
+    async fn inspect_agent_app_local_package(
+        &self,
+        params: AgentAppLocalPackageInspectParams,
+    ) -> Result<AgentAppLocalPackageInspectResponse, RuntimeCoreError> {
+        NoopAppDataSource
+            .inspect_agent_app_local_package(params)
+            .await
+    }
+
+    async fn fetch_agent_app_cloud_package(
+        &self,
+        params: AgentAppFetchCloudPackageParams,
+    ) -> Result<AgentAppPackageCacheEntry, RuntimeCoreError> {
+        NoopAppDataSource
+            .fetch_agent_app_cloud_package(params)
+            .await
+    }
+
+    async fn save_agent_app_installed(
+        &self,
+        params: AgentAppInstalledSaveParams,
+    ) -> Result<Value, RuntimeCoreError> {
+        NoopAppDataSource.save_agent_app_installed(params).await
+    }
+
+    async fn set_agent_app_installed_disabled(
+        &self,
+        params: AgentAppInstalledDisabledSetParams,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        NoopAppDataSource
+            .set_agent_app_installed_disabled(params)
+            .await
+    }
+
+    async fn preview_agent_app_uninstall(
+        &self,
+        params: AgentAppUninstallRehearsalParams,
+    ) -> Result<AgentAppUninstallRehearsalResponse, RuntimeCoreError> {
+        NoopAppDataSource.preview_agent_app_uninstall(params).await
+    }
+
+    async fn uninstall_agent_app(
+        &self,
+        params: AgentAppUninstallParams,
+    ) -> Result<AgentAppUninstallResponse, RuntimeCoreError> {
+        NoopAppDataSource.uninstall_agent_app(params).await
+    }
+
     async fn list_knowledge_packs(
         &self,
         params: KnowledgeListPacksParams,

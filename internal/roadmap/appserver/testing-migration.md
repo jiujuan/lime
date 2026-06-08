@@ -80,7 +80,7 @@ npm run test:contracts
 
 旧 `agent_runtime_*` 测试只证明 Desktop compat adapter 委托，不再作为新增业务逻辑的主要证据。
 
-`lime-rs/src/commands/**` 相关测试只允许作为 cleanup guard：证明旧 wrapper 已删除、已迁出、只做薄委托或没有回流。新增 Agent / runtime / workspace / artifact / evidence / Knowledge / MCP 能力的正向测试必须覆盖 App Server protocol / RuntimeCore / client / Electron Host current 链路；新增桌面壳能力的正向测试必须覆盖 Electron main / preload / desktop-host API。不能把 legacy Rust command 注册测试当作 GUI current 可交付证据。
+`lime-rs/src/commands/**` 相关测试只允许作为 cleanup guard：证明旧 wrapper 已删除、已迁出、已撤注册或没有回流。新增 Agent / runtime / workspace / artifact / evidence / Knowledge / MCP 能力的正向测试必须覆盖 App Server protocol / RuntimeCore / client / Electron Host current 链路；新增桌面壳能力的正向测试必须覆盖 Electron main / preload / desktop-host API。不能把 legacy Rust command 注册测试当作 GUI current 可交付证据，也不能用 stub / compat wrapper 测试替代 current 交付证据。
 
 ## 4. 下一批迁移
 

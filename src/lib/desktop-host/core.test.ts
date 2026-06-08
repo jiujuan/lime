@@ -112,8 +112,12 @@ describe("desktop-host/core invoke", () => {
   });
 
   it("显式 mock 入口可返回默认 mock，不访问 bridge", async () => {
-    await expect(invokeMockOnly("companion_get_pet_status")).resolves.toEqual(
-      expect.objectContaining({ connected: false }),
+    await expect(invokeMockOnly("get_config")).resolves.toEqual(
+      expect.objectContaining({
+        server: expect.objectContaining({
+          port: 8787,
+        }),
+      }),
     );
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
@@ -161,111 +165,12 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("Agent App uninstall mock 没有精确确认短语时不移除 installed state", async () => {
-    const before = await invokeMockOnly<{
-      states: Array<{ appId: string }>;
-    }>("agent_app_list_installed");
-    const appId = before.states[0]?.appId ?? "content-factory-app";
-
-    const result = await invokeMockOnly<{
-      status: string;
-      blockerCodes: string[];
-      removedTargetCount: number;
-      missingTargetCount: number;
-      list: { states: Array<{ appId: string }> };
-    }>("agent_app_uninstall", {
-      request: {
-        appId,
-        mode: "delete-data",
-      },
-    });
-
-    expect(result.status).toBe("blocked");
-    expect(result.blockerCodes).toContain("CONFIRMATION_MISMATCH");
-    expect(result.removedTargetCount).toBe(0);
-    expect(result.missingTargetCount).toBe(0);
-    expect(result.list.states.some((state) => state.appId === appId)).toBe(
-      true,
-    );
-
-    const after = await invokeMockOnly<{
-      states: Array<{ appId: string }>;
-    }>("agent_app_list_installed");
-    expect(after.states.some((state) => state.appId === appId)).toBe(true);
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("Agent App uninstall mock 带精确确认短语时移除 installed state", async () => {
-    const before = await invokeMockOnly<{
-      states: Array<{ appId: string; identity: { packageHash: string } }>;
-    }>("agent_app_list_installed");
-    const state = before.states[0];
-    const appId = state?.appId ?? "content-factory-app";
-    const packageHash = state?.identity.packageHash ?? "package-fnv1a-mock";
-
-    const result = await invokeMockOnly<{
-      status: string;
-      removedTargetCount: number;
-      deleteEvidence: { status: string; removedTargets: unknown[] } | null;
-      list: { states: Array<{ appId: string }> };
-    }>("agent_app_uninstall", {
-      request: {
-        appId,
-        mode: "delete-data",
-        confirmationPhrase: `DELETE_AGENT_APP_DATA ${appId} ${packageHash}`,
-      },
-    });
-
-    expect(result.status).toBe("deleted");
-    expect(result.removedTargetCount).toBeGreaterThan(0);
-    expect(result.deleteEvidence?.status).toBe("deleted");
-    expect(result.deleteEvidence?.removedTargets.length).toBeGreaterThan(0);
-    expect(result.list.states.some((item) => item.appId === appId)).toBe(false);
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("Agent App shell launch mock 应返回 dev shell 启动结果", async () => {
-    await expect(
-      invokeMockOnly("agent_app_launch_shell", {
-        request: {
-          descriptor: {
-            descriptorVersion: 1,
-            appId: "content-factory-app",
-            packageHash: "package-fnv1a-mock",
-            manifestHash: "manifest-fnv1a-mock",
-            installMode: "standalone",
-            runtimeProfile: {
-              shellKind: "app_shell",
-              installMode: "standalone",
-            },
-            entry: {
-              entryKey: "dashboard",
-            },
-          },
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        appId: "content-factory-app",
-        status: "launched",
-        devShell: true,
-        blockerCodes: [],
-        runtimeStatus: expect.objectContaining({
-          status: "running",
-        }),
-        shellWindow: expect.objectContaining({
-          label: "agent-app-shell-content-factory-app-standalone",
-          url: "http://127.0.0.1:4199/dashboard",
-          chrome: expect.objectContaining({
-            deepLinkScheme: "lime-agent-content-factory-app",
-            openEntryKey: "dashboard",
-            trayEnabled: true,
-            multiAppManagement: false,
-            runtimeBypass: false,
-          }),
-        }),
-      }),
-    );
+  it("Agent App uninstall / shell 默认 mock 已退场并 fail closed", async () => {
+    for (const command of ["agent_app_uninstall", "agent_app_launch_shell"]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });

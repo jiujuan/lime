@@ -8,9 +8,8 @@ use crate::services::capability_draft_service::{
     submit_capability_draft_approval_session_inputs, verify_capability_draft,
     CapabilityDraftRecord, CreateCapabilityDraftRequest,
     ExecuteCapabilityDraftControlledGetRequest, ExecuteCapabilityDraftControlledGetResult,
-    GetCapabilityDraftRequest, ListCapabilityDraftsRequest,
-    RegisterCapabilityDraftRequest, RegisterCapabilityDraftResult,
-    SubmitCapabilityDraftApprovalSessionInputsRequest,
+    GetCapabilityDraftRequest, ListCapabilityDraftsRequest, RegisterCapabilityDraftRequest,
+    RegisterCapabilityDraftResult, SubmitCapabilityDraftApprovalSessionInputsRequest,
     SubmitCapabilityDraftApprovalSessionInputsResult, VerifyCapabilityDraftRequest,
     VerifyCapabilityDraftResult,
 };

@@ -42,7 +42,7 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 | `current target`    | `ExecutionBackend`                                                         | Aster 和未来更多执行后端的适配接口。                                                      |
 | `current reference` | `lime-rs/crates/agent`                                                     | 当前最接近 runtime core 的 crate，后续继续拆公共模型与服务。                              |
 | `current client`    | Lime Desktop / content-studio / 更多独立 App 的 app-server client          | 独立 App 只通过协议消费 runtime，不直接 import Lime 内部实现。                            |
-| `compat cleanup`    | `lime-rs/src/commands/**`                                                  | 旧 Tauri command wrapper 清理区；只能删除、迁出或收窄为带退出条件的薄委托，不再承接新实现。 |
+| `compat cleanup`    | `lime-rs/src/commands/**`                                                  | 旧 Tauri command wrapper 清理区；只能迁出核心逻辑、撤注册、删除；删不动登记 blocker，不再保留 stub / compat wrapper。 |
 | `compat`            | legacy desktop facade                                                      | 迁移期继续服务 Lime Desktop，但只能委托 App Server / Electron Desktop Host current 主链，不继续拥有独立 runtime 事实。 |
 | `deprecated`        | 壳层内直接拼接 runtime 业务逻辑                                            | 只允许迁移和下线，不允许新增能力。                                                        |
 | `dead`              | 新独立 App 自建完整 Agent runtime                                          | 不再作为 Lime 生态扩展方向。                                                              |

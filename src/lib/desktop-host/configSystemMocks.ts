@@ -160,17 +160,11 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
   get_current_prompt_file_content: () => ({ content: "" }),
   auto_import_prompt: () => ({ success: true }),
 
-  // Window 相关
-  get_window_size: () => ({ width: 1280, height: 800 }),
-  set_window_size: () => ({}),
   get_window_size_options: () => ({ options: [] }),
   set_window_size_by_option: () => ({}),
-  toggle_fullscreen: () => ({}),
-  is_fullscreen: () => ({ fullscreen: false }),
   resize_for_flow_monitor: () => ({}),
   restore_window_size: () => ({}),
   toggle_window_size: () => ({}),
-  center_window: () => ({}),
 
   // Machine ID 相关
   get_current_machine_id: () => ({ machine_id: "" }),
@@ -190,11 +184,4 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
   paste_machine_id_from_clipboard: () => ({ machine_id: "" }),
   get_system_info: () => ({ info: {} }),
 
-  // Injection 相关
-  get_injection_config: () => ({ config: {} }),
-  set_injection_enabled: () => ({ success: true }),
-  add_injection_rule: () => ({ success: true }),
-  remove_injection_rule: () => ({ success: true }),
-  update_injection_rule: () => ({ success: true }),
-  get_injection_rules: () => ({ rules: [] }),
 };

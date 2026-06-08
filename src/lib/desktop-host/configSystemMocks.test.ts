@@ -38,4 +38,21 @@ describe("configSystemMocks", () => {
     expect(configSystemMocks).not.toHaveProperty("get_token_stats_by_model");
     expect(configSystemMocks).not.toHaveProperty("get_token_stats_by_day");
   });
+
+  it("不应保留已无前端生产入口的 window legacy 默认 mock", () => {
+    expect(configSystemMocks).not.toHaveProperty("get_window_size");
+    expect(configSystemMocks).not.toHaveProperty("set_window_size");
+    expect(configSystemMocks).not.toHaveProperty("center_window");
+    expect(configSystemMocks).not.toHaveProperty("toggle_fullscreen");
+    expect(configSystemMocks).not.toHaveProperty("is_fullscreen");
+  });
+
+  it("不应保留已无前端生产入口的 injection legacy 默认 mock", () => {
+    expect(configSystemMocks).not.toHaveProperty("get_injection_config");
+    expect(configSystemMocks).not.toHaveProperty("set_injection_enabled");
+    expect(configSystemMocks).not.toHaveProperty("get_injection_rules");
+    expect(configSystemMocks).not.toHaveProperty("add_injection_rule");
+    expect(configSystemMocks).not.toHaveProperty("remove_injection_rule");
+    expect(configSystemMocks).not.toHaveProperty("update_injection_rule");
+  });
 });

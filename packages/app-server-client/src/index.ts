@@ -15,7 +15,13 @@ import {
 import {
   APP_SERVER_METHODS,
   JSONRPC_VERSION,
+  METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
   METHOD_AGENT_APP_INSTALLED_LIST,
+  METHOD_AGENT_APP_INSTALLED_SAVE,
+  METHOD_AGENT_APP_INSTALLED_UNINSTALL,
+  METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+  METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+  METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
@@ -134,7 +140,17 @@ import {
   type AgentSessionTurnStartResponse,
   type AgentSessionUpdateParams,
   type AgentSessionUpdateResponse,
+  type AgentAppFetchCloudPackageParams,
+  type AgentAppInstalledDisabledSetParams,
   type AgentAppInstalledListResponse,
+  type AgentAppInstalledSaveParams,
+  type AgentAppLocalPackageInspectParams,
+  type AgentAppLocalPackageInspectResponse,
+  type AgentAppPackageCacheEntry,
+  type AgentAppUninstallParams,
+  type AgentAppUninstallRehearsalParams,
+  type AgentAppUninstallRehearsalResponse,
+  type AgentAppUninstallResponse,
   type AgentAppUiRuntimeStartParams,
   type AgentAppUiRuntimeStatusParams,
   type AgentAppUiRuntimeStatusResponse,
@@ -533,8 +549,40 @@ export class AppServerClient {
     return this.request(METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, params);
   }
 
+  inspectAgentAppLocalPackage(
+    params: AgentAppLocalPackageInspectParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, params);
+  }
+
+  fetchAgentAppCloudPackage(
+    params: AgentAppFetchCloudPackageParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, params);
+  }
+
+  saveAgentAppInstalled(params: AgentAppInstalledSaveParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_INSTALLED_SAVE, params);
+  }
+
   listAgentAppInstalled(): JsonRpcRequest {
     return this.request(METHOD_AGENT_APP_INSTALLED_LIST, {});
+  }
+
+  setAgentAppInstalledDisabled(
+    params: AgentAppInstalledDisabledSetParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_INSTALLED_DISABLED_SET, params);
+  }
+
+  previewAgentAppUninstall(
+    params: AgentAppUninstallRehearsalParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL, params);
+  }
+
+  uninstallAgentApp(params: AgentAppUninstallParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_INSTALLED_UNINSTALL, params);
   }
 
   startAgentAppUiRuntime(params: AgentAppUiRuntimeStartParams): JsonRpcRequest {
@@ -1069,12 +1117,78 @@ export class AppServerConnection {
     );
   }
 
+  async inspectAgentAppLocalPackage(
+    params: AgentAppLocalPackageInspectParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppLocalPackageInspectResponse>> {
+    return await this.request<AgentAppLocalPackageInspectResponse>(
+      this.client.inspectAgentAppLocalPackage(params),
+      METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+      options,
+    );
+  }
+
+  async fetchAgentAppCloudPackage(
+    params: AgentAppFetchCloudPackageParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppPackageCacheEntry>> {
+    return await this.request<AgentAppPackageCacheEntry>(
+      this.client.fetchAgentAppCloudPackage(params),
+      METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
+      options,
+    );
+  }
+
+  async saveAgentAppInstalled(
+    params: AgentAppInstalledSaveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<unknown>> {
+    return await this.request<unknown>(
+      this.client.saveAgentAppInstalled(params),
+      METHOD_AGENT_APP_INSTALLED_SAVE,
+      options,
+    );
+  }
+
   async listAgentAppInstalled(
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<AgentAppInstalledListResponse>> {
     return await this.request<AgentAppInstalledListResponse>(
       this.client.listAgentAppInstalled(),
       METHOD_AGENT_APP_INSTALLED_LIST,
+      options,
+    );
+  }
+
+  async setAgentAppInstalledDisabled(
+    params: AgentAppInstalledDisabledSetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppInstalledListResponse>> {
+    return await this.request<AgentAppInstalledListResponse>(
+      this.client.setAgentAppInstalledDisabled(params),
+      METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
+      options,
+    );
+  }
+
+  async previewAgentAppUninstall(
+    params: AgentAppUninstallRehearsalParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppUninstallRehearsalResponse>> {
+    return await this.request<AgentAppUninstallRehearsalResponse>(
+      this.client.previewAgentAppUninstall(params),
+      METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+      options,
+    );
+  }
+
+  async uninstallAgentApp(
+    params: AgentAppUninstallParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppUninstallResponse>> {
+    return await this.request<AgentAppUninstallResponse>(
+      this.client.uninstallAgentApp(params),
+      METHOD_AGENT_APP_INSTALLED_UNINSTALL,
       options,
     );
   }

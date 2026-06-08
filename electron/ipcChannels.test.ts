@@ -58,7 +58,8 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_file_icon_data_url")).toBe(true);
     expect(isElectronHostCommand("get_file_manager_locations")).toBe(true);
     expect(isElectronHostCommand("get_home_dir")).toBe(true);
-    expect(isElectronHostCommand("agent_app_list_installed")).toBe(true);
+    expect(isElectronHostCommand("agent_app_list_installed")).toBe(false);
+    expect(isElectronHostCommand("agent_app_select_directory")).toBe(true);
     expect(isElectronHostCommand("agent_app_runtime_start_task")).toBe(true);
     expect(isElectronHostCommand("agent_app_runtime_cancel_task")).toBe(true);
     expect(isElectronHostCommand("agent_app_runtime_get_task")).toBe(true);
@@ -140,7 +141,6 @@ describe("electron/ipcChannels", () => {
   it("App Server truth bridge 命令由 Desktop Host 投影，不走原始 JSONL 通道", () => {
     expect([...ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS].sort()).toEqual([
       "agent_app_get_ui_runtime_status",
-      "agent_app_list_installed",
       "agent_app_runtime_cancel_task",
       "agent_app_runtime_get_task",
       "agent_app_runtime_start_task",

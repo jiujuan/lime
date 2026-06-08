@@ -32,6 +32,7 @@ use lime_services::context_memory_service::{ContextMemoryConfig, ContextMemorySe
 use lime_services::skill_service::SkillService;
 use lime_services::update_check_service::UpdateCheckServiceState;
 
+use super::telemetry_state::TelemetryState;
 use super::types::{AppState, LogState};
 
 pub use lime_core::app_bootstrap::{load_and_validate_config, ConfigError};
@@ -44,7 +45,7 @@ pub struct AppStates {
     pub skill_service: SkillServiceState,
     pub api_key_provider_service: ApiKeyProviderServiceState,
     pub machine_id_service: MachineIdState,
-    pub telemetry: crate::commands::telemetry_cmd::TelemetryState,
+    pub telemetry: TelemetryState,
     pub aster_agent: AsterAgentState,
     pub connect_state: ConnectStateWrapper,
     pub model_registry: ModelRegistryState,
@@ -64,7 +65,7 @@ pub struct AppStates {
 }
 
 type TelemetryInit = (
-    crate::commands::telemetry_cmd::TelemetryState,
+    TelemetryState,
     Arc<parking_lot::RwLock<telemetry::StatsAggregator>>,
     Arc<parking_lot::RwLock<telemetry::TokenTracker>>,
     Arc<telemetry::RequestLogger>,
@@ -296,7 +297,7 @@ fn init_telemetry(config: &Config) -> Result<TelemetryInit, String> {
             .map_err(|e| format!("RequestLogger 初始化失败: {e}"))?,
     );
 
-    let telemetry_state = crate::commands::telemetry_cmd::TelemetryState::with_shared(
+    let telemetry_state = TelemetryState::with_shared(
         shared_stats.clone(),
         shared_tokens.clone(),
         Some(shared_logger.clone()),

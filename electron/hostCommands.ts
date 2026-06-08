@@ -1,9 +1,8 @@
 /* global Buffer, process */
-import { app, shell } from "./electronRuntime";
+import { app, dialog, shell } from "./electronRuntime";
 import {
   AppServerRequestError,
   ERROR_CODES,
-  METHOD_AGENT_APP_INSTALLED_LIST,
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
@@ -300,8 +299,8 @@ export class ElectronHostCommands {
         return this.#getBrowserBackendsStatus();
       case "project_memory_get":
         return await this.#readProjectMemory(args);
-      case "agent_app_list_installed":
-        return await this.#listAgentAppInstalled();
+      case "agent_app_select_directory":
+        return await this.#selectAgentAppDirectory(args);
       case "agent_app_start_ui_runtime":
         return await this.#startAgentAppUiRuntime(args);
       case "agent_app_get_ui_runtime_status":
@@ -566,6 +565,22 @@ export class ElectronHostCommands {
       enumerable: false,
     });
     return result;
+  }
+
+  async #selectAgentAppDirectory(
+    args: HostArgs,
+  ): Promise<{ path: string | null; cancelled: boolean }> {
+    const request = readRequest(args);
+    const title = readString(request, "title") || "选择 Agent App 目录";
+    const selected = await dialog.showOpenDialog({
+      title,
+      properties: ["openDirectory"],
+    });
+    const path = selected.canceled ? null : selected.filePaths[0] ?? null;
+    return {
+      path,
+      cancelled: path === null,
+    };
   }
 
   async #startAgentAppUiRuntime(
@@ -1496,12 +1511,6 @@ export class ElectronHostCommands {
         },
       );
     return response.bindings;
-  }
-
-  async #listAgentAppInstalled(): Promise<unknown> {
-    return await this.#appServerRequest<AgentAppInstalledListResponse>(
-      METHOD_AGENT_APP_INSTALLED_LIST,
-    );
   }
 
   async #getUsageStats(args: HostArgs): Promise<Record<string, unknown>> {

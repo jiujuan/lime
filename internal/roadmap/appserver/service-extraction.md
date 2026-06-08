@@ -9,7 +9,7 @@
 1. 先抽公共 RuntimeCore，不先改产品入口。
 2. 先定义 backend-neutral 合同，再迁 Aster 主链。
 3. Aster 只是第一个 `ExecutionBackend`，不能把 Aster DTO 直接抬成公共 DTO。
-4. legacy desktop command 只保留参数适配、事件转发和错误映射。
+4. legacy desktop facade 只允许在迁移期保留参数适配、事件转发和错误映射；不得落回 `lime-rs/src/commands/**` 扩写。
 5. App Server 和 legacy desktop facade 必须调用同一个 RuntimeCore。
 6. 服务层不能依赖 retired desktop host app handle、event emitter 或 state container。
 7. 事件 sink、路径、凭证、workspace、policy 都通过 trait / context 注入。
@@ -25,8 +25,8 @@
 | `lime-rs/crates/agent` | `current reference` | 当前最接近 core 的 crate，后续继续拆公共模型与服务。 |
 | `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | `compat cleanup reference` | Aster backend 历史实现参考，只能用于迁出逻辑；不再作为公共 core 或新 runtime 落点。 |
 | `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | `compat cleanup reference` | Aster tool execution 历史参考，事件需迁到公共 tool facts；不再新增 tool 业务逻辑。 |
-| `lime-rs/src/commands/aster_agent_cmd/command_api/*` | `compat cleanup` | legacy desktop command DTO / facade；只允许委托 service 并逐步删除。 |
-| `lime-rs/src/commands/**` | `compat cleanup` | 旧 Tauri wrapper 清理区；新增后端能力进入 App Server crates / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host。 |
+| `lime-rs/src/commands/aster_agent_cmd/command_api/*` | `compat cleanup reference` | legacy desktop command DTO / facade 历史参考；迁出到 RuntimeCore / App Server 后撤注册并删除，不在该目录继续保留委托 facade。 |
+| `lime-rs/src/commands/**` | `compat cleanup` | 旧 Tauri wrapper 清理区；只允许迁出核心逻辑、撤注册和删除；删不动登记 blocker。新增后端能力进入 App Server crates / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host。 |
 | 前端 `safeInvoke` / `invoke` agent runtime API | `compat client` | Lime Desktop 迁移期继续保留，但可改为 app-server client。 |
 | `app-server-protocol` | `current target` | 定义 wire DTO 和 schema。 |
 | `app-server` crate 家族 | `current target` | 参考 codex-rs 分层命名，提供 protocol / transport / server / client / daemon / test-client。 |
@@ -126,7 +126,7 @@ RuntimeEventSink
 
 | 能力 | 现状 | 目标服务 | 迁移策略 |
 | --- | --- | --- | --- |
-| submit turn | legacy desktop command 调 runtime_turn | `TurnExecutionService::start_turn` | 先包 service，再让 command 委托。 |
+| submit turn | legacy desktop command 调 runtime_turn | `TurnExecutionService::start_turn` | 先迁出 service，再让 App Server / Electron current 入口调用；旧 command 随后撤注册并删除。 |
 | read thread | command_api / session store projection | `SessionService::read_session` | read model 下沉为 service 输出。 |
 | cancel turn | command / queue glue | `TurnExecutionService::cancel_turn` | 统一 active turn 状态和取消事件。 |
 | respond action | scattered approval bridge | `ActionService::respond_action` | action id 成为协议事实。 |

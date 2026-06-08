@@ -784,6 +784,39 @@ async function invokeDevBridgeCommand(options, cmd, args, timeoutMs) {
   );
 }
 
+async function invokeAppServerJsonRpc(options, method, params, timeoutMs) {
+  const response = await invokeDevBridgeCommand(
+    options,
+    "app_server_handle_json_lines",
+    {
+      request: {
+        lines: [
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: `${method}-${Date.now()}`,
+            method,
+            params,
+          }),
+        ],
+      },
+    },
+    timeoutMs,
+  );
+  const line = Array.isArray(response?.lines) ? response.lines[0] : null;
+  if (!line) {
+    throw new Error(`[smoke:agent-apps] ${method} did not return JSON-RPC line`);
+  }
+  const message = JSON.parse(line);
+  if (message.error) {
+    throw new Error(
+      `[smoke:agent-apps] ${method} failed: ${sanitizeDiagnosticText(
+        message.error.message ?? JSON.stringify(message.error),
+      )}`,
+    );
+  }
+  return message.result;
+}
+
 function isObjectRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -2198,9 +2231,9 @@ function isExpectedContentFactorySmokeState(state, runtimeDir) {
 }
 
 async function listInstalledAgentAppsForSmoke(options) {
-  const list = await invokeDevBridgeCommand(
+  const list = await invokeAppServerJsonRpc(
     options,
-    "agent_app_list_installed",
+    "agentAppInstalled/list",
     {},
     30_000,
   );
@@ -2281,10 +2314,10 @@ async function ensureContentFactoryInstalled(page, options, reason, runtimeDir) 
       updatedAt: now,
     });
   }, runtimeDir);
-  await invokeDevBridgeCommand(
+  await invokeAppServerJsonRpc(
     options,
-    "agent_app_save_installed_state",
-    { request: { state } },
+    "agentAppInstalled/save",
+    { state },
     30_000,
   );
 

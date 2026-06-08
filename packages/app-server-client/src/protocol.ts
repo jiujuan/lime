@@ -32,7 +32,17 @@ export const METHOD_WORKSPACE_SKILL_BINDINGS_LIST =
   "workspaceSkillBindings/list";
 export const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST =
   "workspaceRegisteredSkills/list";
+export const METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT =
+  "agentAppLocalPackage/inspect";
+export const METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD = "agentAppPackage/fetchCloud";
+export const METHOD_AGENT_APP_INSTALLED_SAVE = "agentAppInstalled/save";
 export const METHOD_AGENT_APP_INSTALLED_LIST = "agentAppInstalled/list";
+export const METHOD_AGENT_APP_INSTALLED_DISABLED_SET =
+  "agentAppInstalled/disabled/set";
+export const METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL =
+  "agentAppInstalled/uninstall/rehearsal";
+export const METHOD_AGENT_APP_INSTALLED_UNINSTALL =
+  "agentAppInstalled/uninstall";
 export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start";
 export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status";
 export const METHOD_AGENT_APP_UI_RUNTIME_STOP = "agentAppUiRuntime/stop";
@@ -149,7 +159,16 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_SKILL_READ, kind: "request" },
   { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
+  { method: METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, kind: "request" },
+  { method: METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, kind: "request" },
+  { method: METHOD_AGENT_APP_INSTALLED_SAVE, kind: "request" },
   { method: METHOD_AGENT_APP_INSTALLED_LIST, kind: "request" },
+  { method: METHOD_AGENT_APP_INSTALLED_DISABLED_SET, kind: "request" },
+  {
+    method: METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+    kind: "request",
+  },
+  { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_START, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
@@ -718,9 +737,148 @@ export type WorkspaceRegisteredSkillsListResponse = {
   skills: unknown[];
 };
 
+export type AgentAppLocalPackageInspectParams = {
+  appDir: string;
+};
+
+export type AgentAppLocalPackageInspectResponse = {
+  sourceKind: "local_folder" | string;
+  sourceUri: string;
+  appDir: string;
+  appMarkdown: string;
+  manifest: unknown;
+  manifestHash: string;
+  packageHash: string;
+  inspectedAt: string;
+};
+
+export type AgentAppCloudReleaseDescriptor = {
+  sourceUri: string;
+  appId: string;
+  version: string;
+  releaseId?: string;
+  tenantId?: string;
+  tenantEnablementRef?: string;
+  channel?: string;
+  packageUrl: string;
+  packageHash: string;
+  manifestHash: string;
+  signatureRef?: string;
+  loadedAt: string;
+};
+
+export type AgentAppFetchCloudPackageParams = {
+  descriptor: AgentAppCloudReleaseDescriptor;
+};
+
+export type AgentAppPackageIdentity = {
+  sourceKind: string;
+  sourceUri: string;
+  appId: string;
+  appVersion: string;
+  packageHash: string;
+  manifestHash: string;
+  loadedAt: string;
+  releaseId?: string;
+  tenantId?: string;
+  tenantEnablementRef?: string;
+  channel?: string;
+  signatureRef?: string;
+};
+
+export type AgentAppPackageCacheEntry = {
+  appId: string;
+  identity: AgentAppPackageIdentity;
+  manifestSnapshot: unknown;
+  packageHash: string;
+  manifestHash: string;
+  cachePath: string;
+  cachedAt: string;
+};
+
+export type AgentAppInstalledSaveParams = {
+  state: unknown;
+};
+
+export type AgentAppInstalledDisabledSetParams = {
+  appId: string;
+  disabled: boolean;
+  updatedAt?: string;
+};
+
 export type AgentAppInstalledListResponse = {
   states: unknown[];
   issues: unknown[];
+};
+
+export type AgentAppUninstallRehearsalParams = {
+  appId: string;
+  mode: "keep-data" | "delete-data" | string;
+};
+
+export type AgentAppUninstallRehearsalTarget = {
+  kind: string;
+  value: string;
+  safeToDelete: boolean;
+  action: "delete" | "retain" | "blocked" | string;
+  reason: string;
+};
+
+export type AgentAppUninstallRehearsalResponse = {
+  appId: string;
+  packageHash?: string;
+  mode: "keep-data" | "delete-data" | string;
+  generatedAt: string;
+  deletedTargetCount: number;
+  retainedTargetCount: number;
+  targets: AgentAppUninstallRehearsalTarget[];
+  warnings: string[];
+};
+
+export type AgentAppUninstallParams = {
+  appId: string;
+  mode: "keep-data" | "delete-data" | string;
+  confirmationPhrase?: string;
+};
+
+export type AgentAppDeleteDataTargetEvidence = {
+  kind: string;
+  value: string;
+  action: string;
+  reason: string;
+  status: string;
+  blockerCodes: string[];
+  error?: string | null;
+};
+
+export type AgentAppDeleteDataExecutionEvidence = {
+  status: string;
+  generatedAt: string;
+  dataRoot: string;
+  removedTargets: AgentAppDeleteDataTargetEvidence[];
+  missingTargets: AgentAppDeleteDataTargetEvidence[];
+  retainedTargets: AgentAppDeleteDataTargetEvidence[];
+  blockedTargets: AgentAppDeleteDataTargetEvidence[];
+  failedTarget?: AgentAppDeleteDataTargetEvidence | null;
+  blockerCodes: string[];
+  postDeleteResidualAudit?: {
+    status: string;
+    checkedAt: string;
+    checkedTargetCount: number;
+    remainingTargetCount: number;
+    remainingTargets: AgentAppDeleteDataTargetEvidence[];
+    failedTarget?: AgentAppDeleteDataTargetEvidence | null;
+  };
+};
+
+export type AgentAppUninstallResponse = {
+  status: string;
+  rehearsal: AgentAppUninstallRehearsalResponse;
+  list: AgentAppInstalledListResponse;
+  removedTargetCount: number;
+  missingTargetCount: number;
+  blockerCodes: string[];
+  deleteEvidence?: AgentAppDeleteDataExecutionEvidence | null;
 };
 
 export type AgentAppUiRuntimeStartParams = {

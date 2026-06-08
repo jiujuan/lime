@@ -5,7 +5,7 @@
 关联计划：
 
 - `internal/exec-plans/production-command-current-migration-plan.md`
-- `internal/exec-plans/rust-commands-current-migration-cleanup-plan.md`
+- `internal/exec-plans/tauri-wrapper-command-inventory.md`
 - `internal/roadmap/appserver/frontend-electron-migration.md`
 
 ## 目标
@@ -78,29 +78,29 @@ git diff --cached --name-only
 
 ## 快速分配表
 
-| Task ID | 优先级 | 可并行性 | 难度 | 重要性 | 推荐写集 | 避让写集 | 目标 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| TW-Q0-INVENTORY | 1 | 可单独并行 | 低 | 低 | 新增 inventory 报告或治理测试 | `runner.rs`、App Server protocol 热区 | 输出机械 command 对照，给后续进程减少重复扫描 |
-| TW-Q1-DOCS-SMOKE | 2 | 可并行 | 低 | 低 | `internal/**`、`scripts/electron/current-docs-guard.test.mjs`、相关 smoke fixture | App Server protocol、Rust commands | 清 current 文档 / smoke 里的旧 Tauri 证据 |
-| TW-Q2-DEAD-NAMES | 3 | 可并行调研，写入需拆子任务 | 低到中 | 低 | 旧命令所在前端 / mock / runner / dispatcher 精确文件 | 当前已脏共享文件 | 清零引用或已下线旧命令族 |
-| TW-Q3A-DEVBRIDGE-MODELS | 4 | 可并行 | 中 | 低 | `lime-rs/src/dev_bridge/dispatcher/models.rs`、必要 guard | `commandPolicy.ts` 若已被占用 | 清 models dispatcher 已 current 分支 |
-| TW-Q3B-DEVBRIDGE-PROJECT-RESOURCES | 4 | 可并行 | 中 | 低 | `lime-rs/src/dev_bridge/dispatcher/project_resources.rs`、必要 guard | `commandPolicy.ts` 若已被占用 | 清 materials / project resources dispatcher 已 current 分支 |
-| TW-Q3C-DEVBRIDGE-APP-RUNTIME | 4 | 可并行 | 中 | 低到中 | `lime-rs/src/dev_bridge/dispatcher/app_runtime.rs`、必要 guard | config / logs 共享写集 | 清 config / diagnostics 旧 dispatcher 分支 |
-| TW-Q4A-WINDOW-SHELL | 5 | 需避开 Electron host 热区 | 中 | 低到中 | `window_cmd.rs`、Electron window API / tests | `electron/hostCommands.ts` 若已被占用 | 把窗口壳能力收回 Electron Host |
-| TW-Q4B-EXTERNAL-TOOLS-SHELL | 5 | 可并行 | 中 | 低到中 | `external_tools_cmd.rs`、`src/lib/api/externalUrl.ts`、Electron shell tests | App Server protocol | 清外部打开 / CLI login shell wrapper |
-| TW-Q5A-KNOWLEDGE-READ | 6 | 当前易冲突 | 中 | 中 | `knowledge_cmd.rs`、knowledge API / tests / mocks | `local_data_source.rs`、protocol 热区若未释放 | 清已 current 的 knowledge 读链旧入口 |
-| TW-Q5B-MODEL-READ | 6 | 可并行 | 中 | 中 | `model_registry_cmd.rs`、models API / mocks / dispatcher | `commandPolicy.ts` 若已被占用 | 清 model registry 读链旧入口 |
-| TW-Q5C-AGENT-APP-READ | 6 | 当前易冲突 | 中 | 中 | `agent_app_cmd.rs`、Agent Apps API / UI tests | Agent Apps 页面热区若未释放 | 清 Agent App installed / UI runtime 读链残留 |
-| TW-Q6-SESSION-FILES | 7 | 可并行但需 App Server 判断 | 中 | 中 | `session_files_cmd.rs`、session files API / mocks | App Server protocol 热区 | 清 session file 读写残留 |
-| TW-Q7-CONFIG-LOGS-DIAG | 8 | 可并行拆分 | 中 | 中 | config / logs / diagnostics API 与 Rust wrapper | `app/commands/config.rs` 若被占用 | 拆分配置、日志、诊断 current owner |
-| TW-Q8-BROWSER-WEBVIEW | 9 | 建议单进程 | 中到高 | 中 | `webview_cmd.rs`、browser dispatcher、`src/lib/webview-api.ts` | Electron host 热区 | 清 Browser / Webview / CDP / Profile wrapper |
-| TW-Q9-VOICE-ASR | 10 | 可并行 | 中到高 | 中到高 | voice / ASR API、dispatcher voice、desktop-host voice mocks | 录音设备 / Electron host 热区 | 拆分录音设备与 ASR service current owner |
-| TW-Q10-SKILLS | 11 | 建议单进程 | 高 | 中到高 | `skill_cmd.rs`、`dispatcher/skills.rs`、skills API / mocks | Agent Runtime tool runtime | 清 Skill catalog / package / marketplace wrapper |
-| TW-Q11-MCP | 12 | 当前易冲突 | 高 | 高 | `mcp_cmd.rs`、MCP API / App Server protocol / tests | App Server protocol 热区 | 完成 MCP current 化并撤旧 wrapper |
-| TW-Q12-KNOWLEDGE-WORKSPACE-CONTENT-WRITE | 13 | 建议单进程 | 高 | 高 | knowledge / workspace / content API、Rust wrappers、App Server protocol | App Server protocol 热区 | 迁写链并清旧入口 |
-| TW-Q13-MEMORY | 14 | 建议单进程 | 高 | 高 | memory / unifiedMemory / memoryRuntime API 与 Rust wrappers | RuntimeCore / workspace 文件系统热区 | 迁 Memory / Unified Memory / Project Memory |
-| TW-Q14-AGENT-APP-RUNTIME | 15 | 当前易冲突 | 高 | 高 | agent app runtime API、Rust wrappers、Agent Apps UI | Agent Apps 页面热区 | 迁 Agent App task / UI runtime 旧 facade |
-| TW-Q15-AGENT-RUNTIME | 16 | 不建议作为快速清理并行项 | 最高 | 最高 | App Server runtime、agentRuntime clients、Aster runtime core | `runtime_turn/**`、tool runtime、protocol 热区 | 逐条迁 Agent Runtime residual |
+| Task ID                                  | 优先级 | 可并行性                   | 难度   | 重要性 | 推荐写集                                                                          | 避让写集                                       | 目标                                                        |
+| ---------------------------------------- | ------ | -------------------------- | ------ | ------ | --------------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
+| TW-Q0-INVENTORY                          | 1      | 可单独并行                 | 低     | 低     | 新增 inventory 报告或治理测试                                                     | `runner.rs`、App Server protocol 热区          | 输出机械 command 对照，给后续进程减少重复扫描               |
+| TW-Q1-DOCS-SMOKE                         | 2      | 可并行                     | 低     | 低     | `internal/**`、`scripts/electron/current-docs-guard.test.mjs`、相关 smoke fixture | App Server protocol、Rust commands             | 清 current 文档 / smoke 里的旧 Tauri 证据                   |
+| TW-Q2-DEAD-NAMES                         | 3      | 可并行调研，写入需拆子任务 | 低到中 | 低     | 旧命令所在前端 / mock / runner / dispatcher 精确文件                              | 当前已脏共享文件                               | 清零引用或已下线旧命令族                                    |
+| TW-Q3A-DEVBRIDGE-MODELS                  | 4      | 可并行                     | 中     | 低     | `lime-rs/src/dev_bridge/dispatcher/models.rs`、必要 guard                         | `commandPolicy.ts` 若已被占用                  | 清 models dispatcher 已 current 分支                        |
+| TW-Q3B-DEVBRIDGE-PROJECT-RESOURCES       | 4      | 可并行                     | 中     | 低     | `lime-rs/src/dev_bridge/dispatcher/project_resources.rs`、必要 guard              | `commandPolicy.ts` 若已被占用                  | 清 materials / project resources dispatcher 已 current 分支 |
+| TW-Q3C-DEVBRIDGE-APP-RUNTIME             | 4      | 可并行                     | 中     | 低到中 | `lime-rs/src/dev_bridge/dispatcher/app_runtime.rs`、必要 guard                    | config / logs 共享写集                         | 清 config / diagnostics 旧 dispatcher 分支                  |
+| TW-Q4A-WINDOW-SHELL                      | 5      | 需避开 Electron host 热区  | 中     | 低到中 | `window_cmd.rs`、Electron window API / tests                                      | `electron/hostCommands.ts` 若已被占用          | 把窗口壳能力收回 Electron Host                              |
+| TW-Q4B-EXTERNAL-TOOLS-SHELL              | 5      | 可并行                     | 中     | 低到中 | `external_tools_cmd.rs`、`src/lib/api/externalUrl.ts`、Electron shell tests       | App Server protocol                            | 清外部打开 / CLI login shell wrapper                        |
+| TW-Q5A-KNOWLEDGE-READ                    | 6      | 当前易冲突                 | 中     | 中     | `knowledge_cmd.rs`、knowledge API / tests / mocks                                 | `local_data_source.rs`、protocol 热区若未释放  | 清已 current 的 knowledge 读链旧入口                        |
+| TW-Q5B-MODEL-READ                        | 6      | 可并行                     | 中     | 中     | `model_registry_cmd.rs`、models API / mocks / dispatcher                          | `commandPolicy.ts` 若已被占用                  | 清 model registry 读链旧入口                                |
+| TW-Q5C-AGENT-APP-READ                    | 6      | 当前易冲突                 | 中     | 中     | `agent_app_cmd.rs`、Agent Apps API / UI tests                                     | Agent Apps 页面热区若未释放                    | 清 Agent App installed / UI runtime 读链残留                |
+| TW-Q6-SESSION-FILES                      | 7      | 可并行但需 App Server 判断 | 中     | 中     | `session_files_cmd.rs`、session files API / mocks                                 | App Server protocol 热区                       | 清 session file 读写残留                                    |
+| TW-Q7-CONFIG-LOGS-DIAG                   | 8      | 可并行拆分                 | 中     | 中     | config / logs / diagnostics API 与 Rust wrapper                                   | `app/commands/config.rs` 若被占用              | 拆分配置、日志、诊断 current owner                          |
+| TW-Q8-BROWSER-WEBVIEW                    | 9      | 建议单进程                 | 中到高 | 中     | `webview_cmd.rs`、browser dispatcher、`src/lib/webview-api.ts`                    | Electron host 热区                             | 清 Browser / Webview / CDP / Profile wrapper                |
+| TW-Q9-VOICE-ASR                          | 10     | 可并行                     | 中到高 | 中到高 | voice / ASR API、dispatcher voice、desktop-host voice mocks                       | 录音设备 / Electron host 热区                  | 拆分录音设备与 ASR service current owner                    |
+| TW-Q10-SKILLS                            | 11     | 建议单进程                 | 高     | 中到高 | `skill_cmd.rs`、`dispatcher/skills.rs`、skills API / mocks                        | Agent Runtime tool runtime                     | 清 Skill catalog / package / marketplace wrapper            |
+| TW-Q11-MCP                               | 12     | 当前易冲突                 | 高     | 高     | `mcp_cmd.rs`、MCP API / App Server protocol / tests                               | App Server protocol 热区                       | 完成 MCP current 化并撤旧 wrapper                           |
+| TW-Q12-KNOWLEDGE-WORKSPACE-CONTENT-WRITE | 13     | 建议单进程                 | 高     | 高     | knowledge / workspace / content API、Rust wrappers、App Server protocol           | App Server protocol 热区                       | 迁写链并清旧入口                                            |
+| TW-Q13-MEMORY                            | 14     | 建议单进程                 | 高     | 高     | memory / unifiedMemory / memoryRuntime API 与 Rust wrappers                       | RuntimeCore / workspace 文件系统热区           | 迁 Memory / Unified Memory / Project Memory                 |
+| TW-Q14-AGENT-APP-RUNTIME                 | 15     | 当前易冲突                 | 高     | 高     | agent app runtime API、Rust wrappers、Agent Apps UI                               | Agent Apps 页面热区                            | 迁 Agent App task / UI runtime 旧 facade                    |
+| TW-Q15-AGENT-RUNTIME                     | 16     | 不建议作为快速清理并行项   | 最高   | 最高   | App Server runtime、agentRuntime clients、Aster runtime core                      | `runtime_turn/**`、tool runtime、protocol 热区 | 逐条迁 Agent Runtime residual                               |
 
 推荐并行启动方式：
 
@@ -826,13 +826,88 @@ npm run smoke:agent-session-history-electron-fixture -- --timeout-ms 180000
   - 目标：删除已由 App Server `usageStats/*` current 主链覆盖的旧 Tauri 使用统计 wrapper，减少 `lime-rs/src/commands/**` 清理区存量。
   - 验证：`rg` 引用搜索、`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/mod.rs"`、`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent`、`npx vitest run "src/lib/api/usageStats.test.ts"`、`node scripts/check-command-contracts.mjs`
   - 启动基线：`usage_stats_cmd.rs` 已是 fail-closed 退场占位；前端 `usageStats.ts` 已通过 App Server client 调用 `usageStats/read`、`usageStats/modelRanking/list`、`usageStats/dailyTrends/list`；`runner.rs` / `mod.rs` 为共享脏文件，本轮只删除 usage stats 注册和模块声明。
-  - 状态：in_progress
+  - 状态：done
+
+- 2026-06-08 Codex TW-Q2-VOICE-TEST-WRAPPER 认领
+  - 写集：`lime-rs/src/app/runner.rs`、`lime-rs/src/commands/mod.rs`、`lime-rs/src/commands/voice_test_cmd.rs`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 只读参考：`src/lib/api/voiceModels.ts`、`lime-rs/src/commands/voice_model_cmd.rs`、`lime-rs/src/voice/commands.rs`
+  - 避让：Knowledge 写集、Electron host / ipc 共享热区、App Server protocol、`commandPolicy.ts`、`agentCommandCatalog.json`
+  - 目标：删除已无前端 / Electron / packages / scripts 调用的旧 Tauri TTS 测试 wrapper，减少 `lime-rs/src/commands/**` 清理区存量。
+  - 验证：`rg` 引用搜索、`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/mod.rs"`、`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent`、`node scripts/check-command-contracts.mjs`
+  - 启动基线：`rg` 显示 `test_tts` / `get_available_voices` / `voice_test_cmd` 只剩 Rust module、`runner.rs` 注册和 `commands/mod.rs` 声明；生产语音能力由 Voice / ASR / voice model current 链路承接。
+  - 状态：done
+
+- 2026-06-08 Codex TW-Q2-USAGE-STATS-WRAPPER 完成
+  - 清理结果：`deleted`；`lime-rs/src/commands/usage_stats_cmd.rs` 已删除，3 条 `commands::usage_stats_cmd::*` runner 注册已撤掉，`commands/mod.rs` 已移除模块声明。
+  - 旧入口搜索：`rg -n "usage_stats_cmd|commands::usage_stats_cmd|pub mod usage_stats_cmd|\\b(get_usage_stats|get_model_usage_ranking|get_daily_usage_trends)\\b" "lime-rs/src" "src" "electron" "packages" "scripts" --glob "!lime-rs/target/**"` 只剩 Electron Host / IPC current 命令名、前端错误文案和 contract 延期登记，不再有 Rust Tauri wrapper。
+  - 验证结果：`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/mod.rs"` 通过；`npx vitest run "src/lib/api/usageStats.test.ts"` 通过；`node scripts/check-command-contracts.mjs` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；定向 `git diff --check` 通过。
+  - 剩余阻塞：Electron Host 仍保留 `get_usage_stats` / `get_model_usage_ranking` / `get_daily_usage_trends` 作为 current bridge 命令名，前端网关真实调用 App Server `usageStats/*` client；这不是旧 Tauri wrapper 残留。
+
+- 2026-06-08 Codex TW-Q2-VOICE-TEST-WRAPPER 完成
+  - 清理结果：`deleted`；`lime-rs/src/commands/voice_test_cmd.rs` 已删除，2 条 `commands::voice_test_cmd::*` runner 注册已撤掉，`commands/mod.rs` 已移除模块声明。
+  - 旧入口搜索：`rg -n "\\b(test_tts|get_available_voices|voice_test_cmd|VoiceOption|TtsTestResult)\\b" "src" "electron" "packages" "scripts" "lime-rs/src" --glob "!lime-rs/target/**"` 只剩 `scripts/check-command-contracts.mjs` 的 retired Tauri generate_handler guard 命令名，不再有 Rust Tauri wrapper、runner 注册或前端调用。
+  - 验证结果：`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/mod.rs"` 通过；`node scripts/check-command-contracts.mjs` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；定向 `git diff --check` 通过。
+  - 剩余阻塞：无；生产语音能力继续由 Voice / ASR / voice model current 链路承接。
+
+- 2026-06-08 Codex TW-Q4A-WINDOW-WRAPPER 认领
+  - 写集：`lime-rs/src/app/runner.rs`、`lime-rs/src/commands/mod.rs`、`lime-rs/src/commands/window_cmd.rs`、`src/lib/desktop-host/configSystemMocks.ts`、`src/lib/desktop-host/configSystemMocks.test.ts`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 只读参考：`electron/hostCommands.ts`、`electron/ipcChannels.ts`、`src/lib/desktop-host/core.test.ts`
+  - 避让：Knowledge 写集、Electron host / ipc 共享热区、App Server protocol、`commandPolicy.ts`、`agentCommandCatalog.json`、`scripts/check-command-contracts.mjs`
+  - 目标：删除已无前端生产入口的旧 Tauri window control wrapper，并同步撤掉默认 mock 残留。
+  - 验证：`rg` 引用搜索、`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/mod.rs"`、`npx vitest run "src/lib/desktop-host/configSystemMocks.test.ts"`、`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent`、`node scripts/check-command-contracts.mjs`
+  - 启动基线：`get_window_size` / `set_window_size` / `center_window` / `toggle_fullscreen` / `is_fullscreen` 只剩 Rust fail-closed wrapper、runner 注册和 `configSystemMocks.ts` 默认 mock；未发现前端 / Electron / packages 生产调用。
+  - 状态：done
+
+- 2026-06-08 Codex TW-Q4A-WINDOW-WRAPPER 完成
+  - 清理结果：`deleted`；`lime-rs/src/commands/window_cmd.rs` 已删除，5 条 `commands::window_cmd::*` runner 注册已撤掉，`commands/mod.rs` 已移除模块声明；`configSystemMocks.ts` 已移除同名默认 mock，并在 `configSystemMocks.test.ts` 增加不应保留 window legacy mock 的断言。
+  - 旧入口搜索：`rg -n "window_cmd|commands::window_cmd|pub mod window_cmd|get_window_size|set_window_size|center_window|toggle_fullscreen|is_fullscreen" "lime-rs/src" "src" "electron" "packages" "scripts" --glob "!lime-rs/target/**"` 只剩 current window-size option mock 和测试断言，不再有旧 Tauri wrapper、runner 注册或前端生产调用。
+  - 验证结果：`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/mod.rs"` 通过；`npx vitest run "src/lib/desktop-host/configSystemMocks.test.ts"` 通过；`node scripts/check-command-contracts.mjs` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；定向 `git diff --check` 通过。
+  - 剩余阻塞：`get_window_size_options` / `set_window_size_by_option` 等 current window-size option mock 仍在 `configSystemMocks.ts`，不属于本轮删除的旧 Tauri window control wrapper。
+
+- 2026-06-08 Codex TW-Q2-INJECTION-WRAPPER 完成
+  - 写集：`lime-rs/src/app/runner.rs`、`lime-rs/src/commands/mod.rs`、`lime-rs/src/commands/injection_cmd.rs`、`src/lib/desktop-host/configSystemMocks.ts`、`src/lib/desktop-host/configSystemMocks.test.ts`、`src/lib/governance/rustCommandsCurrentBoundary.test.ts`、`scripts/check-command-contracts.mjs`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 避让：Knowledge 写集、Electron host / ipc 共享热区、App Server protocol、`commandPolicy.ts`、`agentCommandCatalog.json`
+  - 清理结果：`deleted`；`lime-rs/src/commands/injection_cmd.rs` 已删除，6 条 `commands::injection_cmd::*` runner 注册已撤掉，`commands/mod.rs` 已移除模块声明；`configSystemMocks.ts` 已移除同名默认 mock，并在 `configSystemMocks.test.ts` 增加不应保留 injection legacy mock 的断言。
+  - 旧入口搜索：`rg -n "injection_cmd|get_injection_config|set_injection_enabled|get_injection_rules|add_injection_rule|remove_injection_rule|update_injection_rule" "lime-rs/src" "src" "electron" "packages" "scripts" --glob "!lime-rs/target/**"` 只剩 `scripts/check-command-contracts.mjs` 的 retired Tauri guard 命令名和 `configSystemMocks.test.ts` 负向断言，不再有 Rust Tauri wrapper、runner 注册或默认 mock。
+  - 验证结果：`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/mod.rs"` 通过；`npx vitest run "src/lib/desktop-host/configSystemMocks.test.ts" "src/lib/governance/rustCommandsCurrentBoundary.test.ts" --silent=passed-only --disableConsoleIntercept` 通过，2 files / 11 tests；`node scripts/check-command-contracts.mjs` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；定向 `git diff --check` 通过。
+  - 剩余阻塞：无；生产运行时注入继续只允许走 Agent / Skill current 主链，不在 `lime-rs/src/commands/**` 恢复退场 stub。
+
+- 2026-06-08 Codex TW-Q2-ECOMMERCE-REVIEW-REPLY-WRAPPER 完成
+  - 写集：`lime-rs/src/app/runner.rs`、`lime-rs/src/commands/mod.rs`、`lime-rs/src/commands/ecommerce_review_reply_cmd.rs`、`src/lib/governance/rustCommandsCurrentBoundary.test.ts`、`scripts/check-command-contracts.mjs`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 避让：Knowledge 写集、Electron host / ipc 共享热区、App Server protocol、`commandPolicy.ts`、`agentCommandCatalog.json`
+  - 清理结果：`deleted`；`lime-rs/src/commands/ecommerce_review_reply_cmd.rs` 已删除，`commands::ecommerce_review_reply_cmd::execute_ecommerce_review_reply` runner 注册已撤掉，`commands/mod.rs` 已移除模块声明；`rustCommandsCurrentBoundary.test.ts` 已移除该 stub 白名单和副作用预算，`scripts/check-command-contracts.mjs` 已登记 command / module retired guard。
+  - 旧入口搜索：`rg -n "ecommerce_review_reply_cmd|execute_ecommerce_review_reply|ecommerce_review|review_reply" "lime-rs/src" "src" "electron" "packages" "scripts" --glob "!lime-rs/target/**"` 只剩 `scripts/check-command-contracts.mjs` 的 retired Tauri guard 命令名，不再有 Rust Tauri wrapper、runner 注册、前端调用或默认 mock。
+  - 验证结果：待重跑 `rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/mod.rs"`、`npx vitest run "src/lib/governance/rustCommandsCurrentBoundary.test.ts"`、`node scripts/check-command-contracts.mjs`、`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 与定向 `git diff --check`。
+  - 剩余阻塞：无；电商差评回复若未来恢复，必须经 Agent / Skill current 主链，不在 `lime-rs/src/commands/**` 恢复快捷 Tauri wrapper。
+
+- 2026-06-08 Codex TW-Q2-ORPHAN-STUB-FILES 完成
+  - 写集：`lime-rs/src/commands/config_cmd.rs`、`lime-rs/src/commands/document_import_cmd.rs`、`lime-rs/src/commands/experimental_cmd.rs`、`lime-rs/src/commands/external_tools_cmd.rs`、`lime-rs/src/commands/image_search_cmd.rs`、`lime-rs/src/commands/image_upload_cmd.rs`、`lime-rs/src/commands/models_cmd.rs`、`lime-rs/src/commands/prompt_cmd.rs`、`lime-rs/src/commands/theme_context_cmd.rs`、`scripts/check-command-contracts.mjs`、`src/lib/governance/rustCommandsCurrentBoundary.test.ts`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 清理结果：`deleted`；上述 9 个已从 `commands/mod.rs` 撤声明、且在 `lime-rs/src` 无正向引用的 orphan 旧 Tauri stub / 退场说明文件已物理删除；`rustCommandsCurrentBoundary.test.ts` 已从 deprecated stub 白名单和副作用预算表移除对应文件，`scripts/check-command-contracts.mjs` 将 `theme_context_cmd` 加入 retired module 回流守卫。
+  - 旧入口搜索：`rg -n "config_cmd|document_import_cmd|experimental_cmd|external_tools_cmd|image_search_cmd|image_upload_cmd|models_cmd|prompt_cmd|window_cmd|voice_test_cmd" "lime-rs/src" -g "*.rs"` 无命中；`rg -n "theme_context_cmd|aster_agent_theme_context_search" "lime-rs/src" "scripts/check-command-contracts.mjs" "internal/aiprompts/query-loop.md" -g "!*target*"` 只剩文档历史锚点和 contract 守卫。
+  - 验证结果：`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；`npx vitest run "src/lib/governance/rustCommandsCurrentBoundary.test.ts" --silent=passed-only --disableConsoleIntercept` 通过；`npx eslint --max-warnings 0 "src/lib/governance/rustCommandsCurrentBoundary.test.ts"` 通过；`node scripts/check-command-contracts.mjs` 通过；`git diff --check` 通过。
+  - 剩余阻塞：`websocket_cmd.rs` 仍在 `runner.rs` / `commands/mod.rs` 注册入口中；`runner.rs` / `commands/mod.rs` 当前是并行共享写集，释放后可继续删除注册、`WsServiceState` manage、模块声明和文件。`document-export`、`session-files`、`imageSearch` 的前端旧命令名虽已不再有 Rust Tauri wrapper，但仍需要单独迁到真实 current 通道或下线前端入口，不能把 retired guard 当作生产可用证据。
+
+- 2026-06-08 Codex TW-Q5A-KNOWLEDGE-DEAD-FILES 完成
+  - 写集：`lime-rs/src/commands/knowledge_cmd.rs`、`lime-rs/src/dev_bridge/dispatcher/knowledge.rs`、`scripts/check-command-contracts.mjs`、`src/lib/governance/rustCommandsCurrentBoundary.test.ts`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 清理结果：`deleted`；`knowledge_cmd.rs` 与 Rust DevBridge `dispatcher/knowledge.rs` 已物理删除。两者此前已不在 `commands/mod.rs` / 主 DevBridge dispatcher 注册入口里，只剩 dead file candidate；Knowledge current 主链继续由 App Server `knowledgePack/*` / `knowledgeContext*` 承接。
+  - 旧入口搜索：`rg -n "mod knowledge|knowledge::try_handle|crate::commands::knowledge_cmd|pub mod knowledge_cmd|commands::knowledge_cmd|execute_knowledge_builder_skill|dispatcher/knowledge" "lime-rs/src" "scripts" "src/lib/governance" "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md" -g "!*target*"` 只剩 `scripts/check-app-server-client-contract.mjs` 的 forbidden snippet 和执行计划记录，不再有 Rust 编译路径引用。
+  - 守卫结果：`scripts/check-command-contracts.mjs` 将 `knowledge_cmd` 加入 retired module 回流守卫；`rustCommandsCurrentBoundary.test.ts` 已移除 `knowledge_cmd.rs` 副作用预算，防止旧 Tauri wrapper 重新落回 `lime-rs/src/commands/**`。
+  - 验证结果：`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；`node scripts/check-command-contracts.mjs` 通过；`npx vitest run "src/lib/governance/rustCommandsCurrentBoundary.test.ts" --silent=passed-only --disableConsoleIntercept` 通过。
+  - 剩余阻塞：live Builder Skill runtime binding 已迁入 App Server current 侧的工作仍由 App Server / Knowledge 主线跟踪；本刀只删除不再接线的旧 Tauri wrapper / DevBridge 文件，不在 `lime-rs/src/commands/**` 承接新逻辑。
 
 - 2026-06-08 Codex TW-Q0-COMMANDS-DIR-DOCS-BROADCAST 完成
-  - 写集：`docs/README.md`、`internal/aiprompts/governance.md`、`internal/aiprompts/quality-workflow.md`、`scripts/electron/current-rules-guard.test.mjs`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 写集：`docs/README.md`、`internal/README.md`、`internal/aiprompts/README.md`、`internal/aiprompts/governance.md`、`internal/aiprompts/quality-workflow.md`、`scripts/electron/current-rules-guard.test.mjs`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
   - 只读参考：`AGENTS.md`、`internal/aiprompts/README.md`、`internal/aiprompts/commands.md`、`internal/roadmap/appserver/**`
   - 避让：Knowledge 写集、`lime-rs/src/commands/**`、`lime-rs/src/app/runner.rs`、App Server protocol、Electron host、`commandPolicy.ts`、`agentCommandCatalog.json`
-  - 清理结果：`guard-hardened`；`docs/README.md`、治理文档、质量文档和 `current-rules-guard.test.mjs` 已同步知道 `lime-rs/src/commands/**` 是旧 Tauri wrapper 删除清理区，不再承接业务逻辑、API adapter、runtime 分支、领域 service、compat wrapper 或退场 stub。
-  - 旧入口搜索：`rg -n "lime-rs/src/commands/\\*\\*" "docs/README.md" "internal/aiprompts/governance.md" "internal/aiprompts/quality-workflow.md" "scripts/electron/current-rules-guard.test.mjs"` 命中 4 处。
-  - 验证结果：`node --check "scripts/electron/current-rules-guard.test.mjs"` 通过；`npm test -- "scripts/electron/current-rules-guard.test.mjs"` 通过；`npm run docs:boundary` 通过；`npm run test:contracts` 通过；定向 `git diff --check` 通过。
-  - 剩余阻塞：`.codex/skills/.../references` 是本地忽略文件，已同步当前工作流参考，但不作为版本化事实源；后续长期规则仍以 `AGENTS.md`、`internal/aiprompts/*`、`internal/roadmap/appserver/*`、`docs/README.md` 和守卫测试为准。
+  - 清理结果：`guard-hardened`；`docs/README.md`、`internal/README.md`、`internal/aiprompts/README.md`、治理文档、质量文档和 `current-rules-guard.test.mjs` 已同步知道 `lime-rs/src/commands/**` 是旧 Tauri wrapper 删除清理区，不再承接业务逻辑、API adapter、runtime 分支、领域 service、compat wrapper 或退场 stub；入口链接只指向已版本化的 `tauri-wrapper-quick-cleanup-queue.md` 与 `tauri-wrapper-command-inventory.md`，不再把被 `.gitignore` 忽略的本地计划当事实源。
+  - 旧入口搜索：`rg -n "lime-rs/src/commands/\\*\\*" "docs/README.md" "internal/README.md" "internal/aiprompts/README.md" "internal/aiprompts/governance.md" "internal/aiprompts/quality-workflow.md" "scripts/electron/current-rules-guard.test.mjs"` 命中 6 处。
+  - 验证结果：`node --check "scripts/electron/current-rules-guard.test.mjs"` 通过；`npm test -- "scripts/electron/current-rules-guard.test.mjs"` 通过；`npm run docs:boundary` 通过；`npm run test:contracts` 通过；定向 `git diff --check` 通过；2026-06-08 19:57 CST 追加入口后已重跑 `npm run docs:boundary`、`node scripts/check-command-contracts.mjs` 与定向 `git diff --check`，均通过。
+  - 剩余阻塞：`.codex/skills/.../references` 与 `internal/exec-plans/rust-commands-current-migration-cleanup-plan.md` 是本地忽略文件，不作为版本化事实源；后续长期规则以 `AGENTS.md`、`internal/README.md`、`internal/aiprompts/*`、`internal/roadmap/appserver/*`、`docs/README.md`、已版本化执行计划和守卫测试为准。
+
+- 2026-06-08 Codex TW-Q2-TELEMETRY-WRAPPER 完成
+  - 写集：`lime-rs/src/app/telemetry_state.rs`、`lime-rs/src/app/mod.rs`、`lime-rs/src/app/state.rs`、`lime-rs/src/app/bootstrap.rs`、`lime-rs/src/app/commands/server.rs`、`lime-rs/src/commands/media_task_cmd.rs`、`lime-rs/src/commands/mod.rs`、`lime-rs/src/commands/telemetry_cmd.rs`、`scripts/check-command-contracts.mjs`、`src/lib/governance/rustCommandsCurrentBoundary.test.ts`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 清理结果：`deleted` / `state-moved-out-of-commands`；`TelemetryState` 共享运行期状态已迁到 `lime-rs/src/app/telemetry_state.rs`，server diagnostics、bootstrap、state 初始化与 media task current 链路改读 `crate::app::telemetry_state::TelemetryState`；旧 `lime-rs/src/commands/telemetry_cmd.rs` Tauri fail-closed wrapper 已物理删除，`commands/mod.rs` 已移除 `telemetry_cmd` 声明。
+  - 旧入口搜索：`rg -n "telemetry_cmd|commands::telemetry_cmd|get_request_logs|get_request_log_detail|clear_request_logs|get_stats_summary|get_stats_by_provider|get_stats_by_model|get_token_summary|get_token_stats_by_provider|get_token_stats_by_model|get_token_stats_by_day" "lime-rs/src" "src" "electron" "packages" "scripts" -g "*.rs" -g "*.ts" -g "*.tsx" -g "*.mjs" -g "*.json"` 只剩 `scripts/check-command-contracts.mjs` retired guard 和 `configSystemMocks.test.ts` 负向断言，不再有 Rust Tauri wrapper、runner 注册或生产调用。
+  - 守卫结果：`rustCommandsCurrentBoundary.test.ts` 已从 deprecated stub 白名单与 commands 副作用预算表移除 `telemetry_cmd.rs`；`scripts/check-command-contracts.mjs` 已将 `telemetry_cmd` 纳入 retired module 回流守卫。
+  - 验证结果：`rustfmt --edition 2021 ...` 已格式化目标 Rust 文件；`node scripts/check-command-contracts.mjs` 通过；`npx vitest run "src/lib/governance/rustCommandsCurrentBoundary.test.ts" --silent=passed-only --disableConsoleIntercept` 通过；`npx eslint --max-warnings 0 "scripts/check-command-contracts.mjs" "src/lib/governance/rustCommandsCurrentBoundary.test.ts"` 通过；`npx prettier --check "src/lib/governance/rustCommandsCurrentBoundary.test.ts" "scripts/check-command-contracts.mjs"` 通过。
+  - 剩余阻塞：旧 request log / stats / token stats 产品面未在本刀恢复；如果后续需要用户可见统计，只能补 App Server current method / Electron Host current bridge 或下线入口，不能在 `lime-rs/src/commands/**` 恢复 telemetry wrapper / stub。

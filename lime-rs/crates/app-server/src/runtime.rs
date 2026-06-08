@@ -12,14 +12,14 @@ use app_server_protocol::AgentAppInstalledSaveParams;
 use app_server_protocol::AgentAppLocalPackageInspectParams;
 use app_server_protocol::AgentAppLocalPackageInspectResponse;
 use app_server_protocol::AgentAppPackageCacheEntry;
-use app_server_protocol::AgentAppUninstallParams;
-use app_server_protocol::AgentAppUninstallRehearsalParams;
-use app_server_protocol::AgentAppUninstallRehearsalResponse;
-use app_server_protocol::AgentAppUninstallResponse;
 use app_server_protocol::AgentAppUiRuntimeStartParams;
 use app_server_protocol::AgentAppUiRuntimeStatusParams;
 use app_server_protocol::AgentAppUiRuntimeStatusResponse;
 use app_server_protocol::AgentAppUiRuntimeStopParams;
+use app_server_protocol::AgentAppUninstallParams;
+use app_server_protocol::AgentAppUninstallRehearsalParams;
+use app_server_protocol::AgentAppUninstallRehearsalResponse;
+use app_server_protocol::AgentAppUninstallResponse;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
@@ -373,33 +373,59 @@ pub trait AppDataSource: Send + Sync {
 
     async fn inspect_agent_app_local_package(
         &self,
-        params: AgentAppLocalPackageInspectParams,
-    ) -> Result<AgentAppLocalPackageInspectResponse, RuntimeCoreError>;
+        _params: AgentAppLocalPackageInspectParams,
+    ) -> Result<AgentAppLocalPackageInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppLocalPackage/inspect is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn fetch_agent_app_cloud_package(
         &self,
-        params: AgentAppFetchCloudPackageParams,
-    ) -> Result<AgentAppPackageCacheEntry, RuntimeCoreError>;
+        _params: AgentAppFetchCloudPackageParams,
+    ) -> Result<AgentAppPackageCacheEntry, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppPackage/fetchCloud is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn save_agent_app_installed(
         &self,
-        params: AgentAppInstalledSaveParams,
-    ) -> Result<serde_json::Value, RuntimeCoreError>;
+        _params: AgentAppInstalledSaveParams,
+    ) -> Result<serde_json::Value, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppInstalled/save is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn set_agent_app_installed_disabled(
         &self,
-        params: AgentAppInstalledDisabledSetParams,
-    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError>;
+        _params: AgentAppInstalledDisabledSetParams,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppInstalled/disabled/set is not available without an app data source"
+                .to_string(),
+        ))
+    }
 
     async fn preview_agent_app_uninstall(
         &self,
-        params: AgentAppUninstallRehearsalParams,
-    ) -> Result<AgentAppUninstallRehearsalResponse, RuntimeCoreError>;
+        _params: AgentAppUninstallRehearsalParams,
+    ) -> Result<AgentAppUninstallRehearsalResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppInstalled/uninstall/rehearsal is not available without an app data source"
+                .to_string(),
+        ))
+    }
 
     async fn uninstall_agent_app(
         &self,
-        params: AgentAppUninstallParams,
-    ) -> Result<AgentAppUninstallResponse, RuntimeCoreError>;
+        _params: AgentAppUninstallParams,
+    ) -> Result<AgentAppUninstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppInstalled/uninstall is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn list_knowledge_packs(
         &self,
@@ -1762,7 +1788,9 @@ impl RuntimeCore {
             capability_source,
             artifact_content_provider,
             evidence_export_provider,
-            knowledge_builder_runtime_executor: Arc::new(NativeKnowledgeBuilderRuntimeExecutor::new()),
+            knowledge_builder_runtime_executor: Arc::new(
+                NativeKnowledgeBuilderRuntimeExecutor::new(),
+            ),
             app_data_source: Arc::new(NoopAppDataSource),
         }
     }
@@ -4908,6 +4936,7 @@ mod tests {
     struct TestCurrentTimelineDataSource {
         persisted: Option<AgentSessionReadResponse>,
         read_requests: Mutex<Vec<AgentSessionReadParams>>,
+        knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
     }
 
     impl TestCurrentTimelineDataSource {
@@ -4915,6 +4944,7 @@ mod tests {
             Self {
                 persisted: Some(persisted),
                 read_requests: Mutex::new(Vec::new()),
+                knowledge_compile_requests: Mutex::new(Vec::new()),
             }
         }
 
@@ -4923,6 +4953,88 @@ mod tests {
                 .lock()
                 .expect("test current timeline read requests mutex poisoned")
                 .clone()
+        }
+
+        fn knowledge_compile_requests(&self) -> Vec<lime_knowledge::KnowledgeCompilePackRequest> {
+            self.knowledge_compile_requests
+                .lock()
+                .expect("test knowledge compile requests mutex poisoned")
+                .clone()
+        }
+    }
+
+    fn empty_agent_session_read_response(session_id: &str) -> AgentSessionReadResponse {
+        AgentSessionReadResponse {
+            session: AgentSession {
+                session_id: session_id.to_string(),
+                thread_id: session_id.to_string(),
+                app_id: "agent-runtime".to_string(),
+                workspace_id: None,
+                business_object_ref: None,
+                status: AgentSessionStatus::Idle,
+                created_at: timestamp(),
+                updated_at: timestamp(),
+            },
+            turns: Vec::new(),
+            detail: None,
+        }
+    }
+
+    struct TestKnowledgeBuilderRuntimeExecutor {
+        calls: Mutex<Vec<lime_knowledge::KnowledgeBuilderRuntimePlan>>,
+    }
+
+    impl TestKnowledgeBuilderRuntimeExecutor {
+        fn new() -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> Vec<lime_knowledge::KnowledgeBuilderRuntimePlan> {
+            self.calls
+                .lock()
+                .expect("test knowledge builder calls mutex poisoned")
+                .clone()
+        }
+    }
+
+    #[async_trait]
+    impl KnowledgeBuilderRuntimeExecutor for TestKnowledgeBuilderRuntimeExecutor {
+        async fn execute(
+            &self,
+            plan: lime_knowledge::KnowledgeBuilderRuntimePlan,
+        ) -> Result<lime_knowledge::KnowledgeBuilderRuntimeExecution, RuntimeCoreError> {
+            self.calls
+                .lock()
+                .expect("test knowledge builder calls mutex poisoned")
+                .push(plan.clone());
+            Ok(lime_knowledge::KnowledgeBuilderRuntimeExecution {
+                skill_name: plan.skill_name,
+                execution_id: plan.execution_id,
+                session_id: Some(plan.session_id),
+                status: "succeeded".to_string(),
+                provider: plan.provider_override,
+                model: plan.model_override,
+                output: Some(
+                    json!({
+                        "primaryDocument": {
+                            "path": "documents/runtime-founder.md",
+                            "content": "# Runtime 创始人\n\n## 智能体应用指南\n\n- 只引用长期主义与不夸大收入。"
+                        },
+                        "status": "needs-review",
+                        "missingFacts": ["代表案例待补充"],
+                        "warnings": ["收入数据未确认"],
+                        "provenance": {
+                            "kind": "agent-skill",
+                            "name": "personal-ip-knowledge-builder",
+                            "version": "1.0.0"
+                        }
+                    })
+                    .to_string(),
+                ),
+                error: None,
+            })
         }
     }
 
@@ -5046,6 +5158,54 @@ mod tests {
             NoopAppDataSource.list_agent_app_installed().await
         }
 
+        async fn inspect_agent_app_local_package(
+            &self,
+            params: AgentAppLocalPackageInspectParams,
+        ) -> Result<AgentAppLocalPackageInspectResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .inspect_agent_app_local_package(params)
+                .await
+        }
+
+        async fn fetch_agent_app_cloud_package(
+            &self,
+            params: AgentAppFetchCloudPackageParams,
+        ) -> Result<AgentAppPackageCacheEntry, RuntimeCoreError> {
+            NoopAppDataSource
+                .fetch_agent_app_cloud_package(params)
+                .await
+        }
+
+        async fn save_agent_app_installed(
+            &self,
+            params: AgentAppInstalledSaveParams,
+        ) -> Result<serde_json::Value, RuntimeCoreError> {
+            NoopAppDataSource.save_agent_app_installed(params).await
+        }
+
+        async fn set_agent_app_installed_disabled(
+            &self,
+            params: AgentAppInstalledDisabledSetParams,
+        ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .set_agent_app_installed_disabled(params)
+                .await
+        }
+
+        async fn preview_agent_app_uninstall(
+            &self,
+            params: AgentAppUninstallRehearsalParams,
+        ) -> Result<AgentAppUninstallRehearsalResponse, RuntimeCoreError> {
+            NoopAppDataSource.preview_agent_app_uninstall(params).await
+        }
+
+        async fn uninstall_agent_app(
+            &self,
+            params: AgentAppUninstallParams,
+        ) -> Result<AgentAppUninstallResponse, RuntimeCoreError> {
+            NoopAppDataSource.uninstall_agent_app(params).await
+        }
+
         async fn list_knowledge_packs(
             &self,
             params: KnowledgeListPacksParams,
@@ -5071,7 +5231,22 @@ mod tests {
             &self,
             request: lime_knowledge::KnowledgeCompilePackRequest,
         ) -> Result<KnowledgeCompilePackResponse, RuntimeCoreError> {
-            NoopAppDataSource.compile_knowledge_pack(request).await
+            self.knowledge_compile_requests
+                .lock()
+                .expect("test knowledge compile requests mutex poisoned")
+                .push(request.clone());
+            let response = lime_knowledge::compile_knowledge_pack(request)
+                .map_err(RuntimeCoreError::Backend)?;
+            Ok(KnowledgeCompilePackResponse {
+                pack: serde_json::to_value(response.pack)
+                    .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?,
+                selected_source_count: response.selected_source_count,
+                compiled_view: serde_json::to_value(response.compiled_view)
+                    .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?,
+                run: serde_json::to_value(response.run)
+                    .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?,
+                warnings: response.warnings,
+            })
         }
 
         async fn set_default_knowledge_pack(
@@ -5185,6 +5360,78 @@ mod tests {
         ) -> Result<ModelProviderAliasListResponse, RuntimeCoreError> {
             NoopAppDataSource.list_model_provider_aliases().await
         }
+    }
+
+    #[tokio::test]
+    async fn knowledge_compile_pack_runs_builder_runtime_executor_on_current_path() {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let working_dir = temp.path().to_string_lossy().to_string();
+        lime_knowledge::import_knowledge_source(lime_knowledge::KnowledgeImportSourceRequest {
+            working_dir: working_dir.clone(),
+            pack_name: "runtime-founder".to_string(),
+            description: Some("Runtime 创始人".to_string()),
+            pack_type: Some("personal-ip".to_string()),
+            language: Some("zh-CN".to_string()),
+            source_file_name: Some("interview.md".to_string()),
+            source_text: Some("她强调长期主义，也提醒不要夸大收入。".to_string()),
+        })
+        .expect("import source");
+
+        let app_data_source = Arc::new(TestCurrentTimelineDataSource::new(
+            empty_agent_session_read_response("knowledge-builder-session"),
+        ));
+        let executor = Arc::new(TestKnowledgeBuilderRuntimeExecutor::new());
+        let core = RuntimeCore::with_backend(Arc::new(MockBackend))
+            .with_app_data_source(app_data_source.clone())
+            .with_knowledge_builder_runtime_executor(executor.clone());
+
+        let response = core
+            .compile_knowledge_pack(KnowledgeCompilePackParams {
+                working_dir: working_dir.clone(),
+                name: "runtime-founder".to_string(),
+                builder_runtime: Some(json!({
+                    "enabled": true,
+                    "providerOverride": "openai",
+                    "modelOverride": "gpt-4o",
+                    "sessionId": "builder-session-1"
+                })),
+            })
+            .await
+            .expect("compile knowledge pack");
+
+        let calls = executor.calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].skill_name, "personal-ip-knowledge-builder");
+        assert_eq!(calls[0].session_id, "builder-session-1");
+        assert_eq!(calls[0].provider_override.as_deref(), Some("openai"));
+        assert_eq!(calls[0].model_override.as_deref(), Some("gpt-4o"));
+
+        let requests = app_data_source.knowledge_compile_requests();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].builder_execution.is_some());
+        assert!(response
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("代表案例待补充")));
+        let produced_by = response
+            .pack
+            .pointer("/metadata/metadata/producedBy")
+            .expect("producedBy metadata");
+        assert_eq!(
+            produced_by
+                .pointer("/runtimeBinding/executed")
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            produced_by
+                .pointer("/runtimeBinding/executionId")
+                .and_then(serde_json::Value::as_str),
+            requests[0]
+                .builder_execution
+                .as_ref()
+                .map(|execution| execution.execution_id.as_str())
+        );
     }
 
     #[derive(Default)]
@@ -5811,6 +6058,7 @@ mod tests {
         let app_data_source = Arc::new(TestCurrentTimelineDataSource {
             persisted: None,
             read_requests: Mutex::new(Vec::new()),
+            knowledge_compile_requests: Mutex::new(Vec::new()),
         });
         let backend = Arc::new(RecordingBackend::default());
         let core = RuntimeCore::with_backend(backend.clone())

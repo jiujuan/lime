@@ -1,6 +1,4 @@
-use crate::commands::aster_agent_cmd::{
-    AgentRuntimeRespondActionRequest, AgentTurnConfigSnapshot,
-};
+use crate::commands::aster_agent_cmd::{AgentRuntimeRespondActionRequest, AgentTurnConfigSnapshot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

@@ -196,7 +196,13 @@ async fn configure_builder_provider(
                 continue;
             }
             match agent_state
-                .configure_provider_from_pool(db, fallback_provider, fallback_model, session_id, None)
+                .configure_provider_from_pool(
+                    db,
+                    fallback_provider,
+                    fallback_model,
+                    session_id,
+                    None,
+                )
                 .await
             {
                 Ok(config) => {

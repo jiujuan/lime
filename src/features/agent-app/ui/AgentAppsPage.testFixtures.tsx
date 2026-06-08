@@ -78,6 +78,9 @@ vi.mock("react-i18next", () => ({
       if (key === "agentApp.apps.launch.shellBlocked") {
         return `blocked:${String(params?.codes)}`;
       }
+      if (key === "agentApp.apps.uninstall.blocked") {
+        return `blocked:${String(params?.codes)}`;
+      }
       if (key === "agentApp.apps.uninstallPreview.summary") {
         return `delete:${String(params?.deleted)} retain:${String(
           params?.retained,
@@ -446,31 +449,33 @@ function setupDefaultApiMocks() {
       return { states: nextStates, issues: [] };
     },
   );
-  apiMocks.previewAgentAppUninstall.mockResolvedValue({
-    appId: "content-factory-app",
-    packageHash: "package-fnv1a-test",
-    mode: "delete-data",
-    generatedAt: "2026-05-15T00:02:00.000Z",
-    deletedTargetCount: 2,
-    retainedTargetCount: 1,
-    targets: [
-      {
-        kind: "path",
-        value: "<LimeAppData>/agent-apps/installed/content-factory-app.json",
-        safeToDelete: true,
-        action: "delete",
-        reason: "Installed state.",
-      },
-      {
-        kind: "namespace",
-        value: "<LimeAppData>/agent-apps/storage/content-factory-app",
-        safeToDelete: true,
-        action: "retain",
-        reason: "App data.",
-      },
-    ],
-    warnings: ["DRY_RUN_ONLY"],
-  });
+  apiMocks.previewAgentAppUninstall.mockImplementation(
+    async (request: { appId: string; mode: "keep-data" | "delete-data" }) => ({
+      appId: request.appId,
+      packageHash: "package-fnv1a-test",
+      mode: request.mode,
+      generatedAt: "2026-05-15T00:02:00.000Z",
+      deletedTargetCount: request.mode === "delete-data" ? 2 : 1,
+      retainedTargetCount: request.mode === "delete-data" ? 1 : 2,
+      targets: [
+        {
+          kind: "path",
+          value: `<LimeAppData>/agent-apps/installed/${request.appId}.json`,
+          safeToDelete: true,
+          action: "delete",
+          reason: "Installed state.",
+        },
+        {
+          kind: "namespace",
+          value: `<LimeAppData>/agent-apps/storage/${request.appId}`,
+          safeToDelete: true,
+          action: "retain",
+          reason: "App data.",
+        },
+      ],
+      warnings: ["DRY_RUN_ONLY"],
+    }),
+  );
   apiMocks.uninstallAgentApp.mockImplementation(
     async (request: {
       appId: string;
@@ -483,18 +488,20 @@ function setupDefaultApiMocks() {
       const expectedPhrase = state
         ? `DELETE_AGENT_APP_DATA ${request.appId} ${state.identity.packageHash}`
         : "";
-      const confirmed =
-        request.mode !== "delete-data" ||
+      const deleteDataConfirmed =
+        request.mode === "delete-data" &&
         request.confirmationPhrase === expectedPhrase;
-      if (confirmed) {
+      const keepDataUninstalled = request.mode === "keep-data";
+      if (keepDataUninstalled) {
         installedStates.splice(
           0,
           installedStates.length,
           ...installedStates.filter((item) => item.appId !== request.appId),
         );
       }
+      const blocked = request.mode === "delete-data";
       return {
-        status: confirmed ? "deleted" : "blocked",
+        status: blocked ? "blocked" : "uninstalled",
         rehearsal: {
           appId: request.appId,
           packageHash: state?.identity.packageHash ?? "package-fnv1a-test",
@@ -509,9 +516,15 @@ function setupDefaultApiMocks() {
           states: installedStates.map((state) => structuredClone(state)),
           issues: [],
         },
-        removedTargetCount: confirmed ? 2 : 0,
-        missingTargetCount: 0,
-        blockerCodes: confirmed ? [] : ["CONFIRMATION_MISMATCH"],
+        removedTargetCount: keepDataUninstalled ? 2 : 0,
+        missingTargetCount: keepDataUninstalled ? 0 : 0,
+        blockerCodes: blocked
+          ? [
+              deleteDataConfirmed
+                ? "DELETE_DATA_NOT_ENABLED_IN_CURRENT_PHASE"
+                : "CONFIRMATION_MISMATCH",
+            ]
+          : [],
         deleteEvidence: null,
       };
     },

@@ -42,11 +42,26 @@ import type {
   PackageSourceKind,
 } from "@/features/agent-app/types";
 import {
+  METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
   METHOD_AGENT_APP_INSTALLED_LIST,
+  METHOD_AGENT_APP_INSTALLED_SAVE,
+  METHOD_AGENT_APP_INSTALLED_UNINSTALL,
+  METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+  METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+  METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
+  type AgentAppFetchCloudPackageParams,
   type AgentAppInstalledListResponse,
+  type AgentAppInstalledSaveParams,
+  type AgentAppLocalPackageInspectParams,
+  type AgentAppLocalPackageInspectResponse,
+  type AgentAppPackageCacheEntry as AppServerAgentAppPackageCacheEntry,
+  type AgentAppUninstallParams,
+  type AgentAppUninstallRehearsalParams,
+  type AgentAppUninstallRehearsalResponse,
+  type AgentAppUninstallResponse,
   type AgentAppUiRuntimeStartParams,
   type AgentAppUiRuntimeStatusParams,
   type AgentAppUiRuntimeStatusResponse,
@@ -260,10 +275,6 @@ export interface AgentAppShellLaunchResult {
   launchedAt?: string;
 }
 
-export interface AgentAppFetchCloudPackageRequest {
-  descriptor: CloudBootstrapReleaseDescriptor;
-}
-
 export interface AgentAppCloudCatalogResult {
   payload: CloudBootstrapPayload;
   source: "remote" | "bootstrap" | "seeded";
@@ -295,6 +306,7 @@ function unwrapEnvelope<T>(payload: unknown): T {
 
 type AgentAppInstalledListAppServerClient = Pick<AppServerClient, "request">;
 type AgentAppUiRuntimeAppServerClient = Pick<AppServerClient, "request">;
+type AgentAppLifecycleAppServerClient = Pick<AppServerClient, "request">;
 
 async function invokeAgentAppCommand<T>(
   command: string,
@@ -524,6 +536,18 @@ async function requestAgentAppInstalledListAppServer(
   return normalizeInstalledAgentAppListResponse(response.result);
 }
 
+async function requestAgentAppAppServer<T>(
+  method: string,
+  params: unknown,
+  appServerClient: AgentAppLifecycleAppServerClient = new AppServerClient(),
+): Promise<T> {
+  const response = await appServerClient.request<T>(method, params);
+  if (isRecord(response) && "result" in response) {
+    return response.result as T;
+  }
+  return response as T;
+}
+
 function normalizeAgentAppUiRuntimeStatusResponse(
   response: AgentAppUiRuntimeStatusResponse | null | undefined,
 ): AgentAppUiRuntimeStatus {
@@ -673,15 +697,15 @@ function readBootstrapAgentAppCatalog(): CloudBootstrapPayload | null {
 export async function inspectLocalAgentAppPackage(
   appDir: string,
 ): Promise<AgentAppLocalPackageInspection> {
-  const result = await invokeAgentAppCommand<unknown>(
-    "agent_app_inspect_local_package",
-    { appDir },
+  const result = await requestAgentAppAppServer<AgentAppLocalPackageInspectResponse>(
+    METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+    { appDir } satisfies AgentAppLocalPackageInspectParams,
   );
   assertAgentAppLocalPackageInspectionResult(
-    "agent_app_inspect_local_package",
+    METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
     result,
   );
-  return result;
+  return result as AgentAppLocalPackageInspection;
 }
 
 export async function selectLocalAgentAppDirectory(
@@ -698,29 +722,28 @@ export async function listInstalledAgentApps(): Promise<InstalledAgentAppStateLi
 export async function saveInstalledAgentAppState(
   request: AgentAppInstalledStateSaveRequest,
 ): Promise<InstalledAgentAppState> {
-  const result = await invokeAgentAppCommand<unknown>(
-    "agent_app_save_installed_state",
+  // 旧 facade 已退役：不得回退 "agent_app_save_installed_state" 或 "agent_app_uninstall"。
+  const result = await requestAgentAppAppServer<unknown>(
+    METHOD_AGENT_APP_INSTALLED_SAVE,
     {
-      request,
-    },
+      state: request.state,
+    } satisfies AgentAppInstalledSaveParams,
   );
-  assertInstalledAgentAppStateResult("agent_app_save_installed_state", result);
+  assertInstalledAgentAppStateResult(METHOD_AGENT_APP_INSTALLED_SAVE, result);
   return result;
 }
 
 export async function fetchCloudAgentAppPackage(
   descriptor: CloudBootstrapReleaseDescriptor,
 ): Promise<AgentAppPackageCacheEntry> {
-  const result = await invokeAgentAppCommand<unknown>(
-    "agent_app_fetch_cloud_package",
+  const result = await requestAgentAppAppServer<AppServerAgentAppPackageCacheEntry>(
+    METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
     {
-      request: {
-        descriptor,
-      } satisfies AgentAppFetchCloudPackageRequest,
-    },
+      descriptor,
+    } satisfies AgentAppFetchCloudPackageParams,
   );
-  assertAgentAppPackageCacheEntryResult("agent_app_fetch_cloud_package", result);
-  return result;
+  assertAgentAppPackageCacheEntryResult(METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, result);
+  return result as AgentAppPackageCacheEntry;
 }
 
 export async function reviewLocalAgentAppPackage(params: {
@@ -999,42 +1022,40 @@ export async function reviewCloudAgentAppRelease(params: {
 export async function setAgentAppDisabled(
   request: AgentAppDisabledRequest,
 ): Promise<InstalledAgentAppStateListResult> {
-  const result = await invokeAgentAppCommand<unknown>(
-    "agent_app_set_disabled",
-    {
-      request,
-    },
+  const result = await requestAgentAppAppServer<AgentAppInstalledListResponse>(
+    METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
+    request,
   );
-  assertInstalledAgentAppStateListResult("agent_app_set_disabled", result);
+  assertInstalledAgentAppStateListResult(
+    METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
+    result,
+  );
   return result;
 }
 
 export async function previewAgentAppUninstall(
   request: AgentAppUninstallRehearsalRequest,
 ): Promise<AgentAppUninstallRehearsalResult> {
-  const result = await invokeAgentAppCommand<unknown>(
-    "agent_app_uninstall_rehearsal",
-    { request },
+  const result = await requestAgentAppAppServer<AgentAppUninstallRehearsalResponse>(
+    METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+    request satisfies AgentAppUninstallRehearsalParams,
   );
   assertAgentAppUninstallRehearsalResult(
-    "agent_app_uninstall_rehearsal",
+    METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
     result,
   );
-  return result;
+  return result as AgentAppUninstallRehearsalResult;
 }
 
 export async function uninstallAgentApp(
   request: AgentAppUninstallRequest,
 ): Promise<AgentAppUninstallResult> {
-  // delete-data 只有在调用方传入精确 confirmationPhrase 时才会进入受控删除 adapter。
-  const result = await invokeAgentAppCommand<unknown>(
-    "agent_app_uninstall",
-    {
-      request,
-    },
+  const result = await requestAgentAppAppServer<AgentAppUninstallResponse>(
+    METHOD_AGENT_APP_INSTALLED_UNINSTALL,
+    request satisfies AgentAppUninstallParams,
   );
-  assertAgentAppUninstallResult("agent_app_uninstall", result);
-  return result;
+  assertAgentAppUninstallResult(METHOD_AGENT_APP_INSTALLED_UNINSTALL, result);
+  return result as AgentAppUninstallResult;
 }
 
 export async function startAgentAppUiRuntime(

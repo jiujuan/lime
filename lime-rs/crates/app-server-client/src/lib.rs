@@ -1,6 +1,12 @@
 pub use app_server_protocol::is_app_server_notification_method;
 pub use app_server_protocol::is_app_server_request_method;
+pub use app_server_protocol::AgentAppFetchCloudPackageParams;
+pub use app_server_protocol::AgentAppInstalledDisabledSetParams;
 pub use app_server_protocol::AgentAppInstalledListResponse;
+pub use app_server_protocol::AgentAppInstalledSaveParams;
+pub use app_server_protocol::AgentAppLocalPackageInspectParams;
+pub use app_server_protocol::AgentAppUninstallParams;
+pub use app_server_protocol::AgentAppUninstallRehearsalParams;
 pub use app_server_protocol::AgentAppUiRuntimeStartParams;
 pub use app_server_protocol::AgentAppUiRuntimeStatusParams;
 pub use app_server_protocol::AgentAppUiRuntimeStatusResponse;
@@ -345,8 +351,50 @@ impl AppServerClient {
         self.typed_request(typed::list_workspace_skill_bindings(params))
     }
 
+    pub fn inspect_agent_app_local_package(
+        &mut self,
+        params: AgentAppLocalPackageInspectParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::inspect_agent_app_local_package(params))
+    }
+
+    pub fn fetch_agent_app_cloud_package(
+        &mut self,
+        params: AgentAppFetchCloudPackageParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::fetch_agent_app_cloud_package(params))
+    }
+
+    pub fn save_agent_app_installed(
+        &mut self,
+        params: AgentAppInstalledSaveParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::save_agent_app_installed(params))
+    }
+
     pub fn list_agent_app_installed(&mut self) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_agent_app_installed())
+    }
+
+    pub fn set_agent_app_installed_disabled(
+        &mut self,
+        params: AgentAppInstalledDisabledSetParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::set_agent_app_installed_disabled(params))
+    }
+
+    pub fn preview_agent_app_uninstall(
+        &mut self,
+        params: AgentAppUninstallRehearsalParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::preview_agent_app_uninstall(params))
+    }
+
+    pub fn uninstall_agent_app(
+        &mut self,
+        params: AgentAppUninstallParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::uninstall_agent_app(params))
     }
 
     pub fn start_agent_app_ui_runtime(
@@ -779,8 +827,44 @@ pub mod typed {
         TypedRequest::new(METHOD_WORKSPACE_SKILL_BINDINGS_LIST, params)
     }
 
+    pub fn inspect_agent_app_local_package(
+        params: AgentAppLocalPackageInspectParams,
+    ) -> TypedRequest<AgentAppLocalPackageInspectParams> {
+        TypedRequest::new(METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, params)
+    }
+
+    pub fn fetch_agent_app_cloud_package(
+        params: AgentAppFetchCloudPackageParams,
+    ) -> TypedRequest<AgentAppFetchCloudPackageParams> {
+        TypedRequest::new(METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, params)
+    }
+
+    pub fn save_agent_app_installed(
+        params: AgentAppInstalledSaveParams,
+    ) -> TypedRequest<AgentAppInstalledSaveParams> {
+        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_SAVE, params)
+    }
+
     pub fn list_agent_app_installed() -> TypedRequest<serde_json::Value> {
         TypedRequest::new(METHOD_AGENT_APP_INSTALLED_LIST, serde_json::json!({}))
+    }
+
+    pub fn set_agent_app_installed_disabled(
+        params: AgentAppInstalledDisabledSetParams,
+    ) -> TypedRequest<AgentAppInstalledDisabledSetParams> {
+        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_DISABLED_SET, params)
+    }
+
+    pub fn preview_agent_app_uninstall(
+        params: AgentAppUninstallRehearsalParams,
+    ) -> TypedRequest<AgentAppUninstallRehearsalParams> {
+        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL, params)
+    }
+
+    pub fn uninstall_agent_app(
+        params: AgentAppUninstallParams,
+    ) -> TypedRequest<AgentAppUninstallParams> {
+        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_UNINSTALL, params)
     }
 
     pub fn start_agent_app_ui_runtime(

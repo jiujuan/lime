@@ -21,6 +21,12 @@
 - `iteration-notes/`：迭代备忘、实现进度和后续建议
 - `bussniss/`、`oem/`、`gongzonghao/`：私有商务、品牌、运营和内容材料
 
+## 当前迁移边界
+
+- `lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。
+- 新增 Rust 后端能力必须进入 App Server crates / RuntimeCore / services；窗口、托盘、Dock、updater、shell、deep link 等桌面壳能力进入 Electron Desktop Host。
+- 相关规则入口：`aiprompts/commands.md`、`aiprompts/governance.md`、`aiprompts/quality-workflow.md`、`roadmap/appserver/README.md`、`exec-plans/tauri-wrapper-quick-cleanup-queue.md`、`exec-plans/tauri-wrapper-command-inventory.md`。
+
 ## 阅读顺序
 
 1. 先看根目录 `../AGENTS.md`，确认仓库级硬规则。

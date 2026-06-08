@@ -44,11 +44,9 @@ const OPTIONAL_APP_SERVER_METHODS = [
   "agentAppUiRuntime/stop",
 ];
 const LEGACY_AGENT_APP_COMMANDS = [
-  "agent_app_list_installed",
   "agent_app_start_ui_runtime",
   "agent_app_get_ui_runtime_status",
   "agent_app_stop_ui_runtime",
-  "agent_app_save_installed_state",
 ];
 
 function printHelp() {

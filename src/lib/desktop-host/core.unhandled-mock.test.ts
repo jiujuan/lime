@@ -41,6 +41,16 @@ describe("desktop-host/core 未注册 mock command", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
+  it("Agent App uninstall / shell 默认 mock 被清理后不再伪造成功", async () => {
+    for (const command of ["agent_app_uninstall", "agent_app_launch_shell"]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
   it("测试显式注册的 mock command 仍可使用", async () => {
     mockCommand("test_only_current_fixture", () => ({ ok: true }));
 
