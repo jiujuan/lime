@@ -166,11 +166,13 @@ function assertModelProviderIds(
   return Array.from(
     new Set(
       response.providers
-        .map((provider) =>
-          typeof (provider as ModelProviderIdRecord)?.id === "string"
-            ? (provider as ModelProviderIdRecord).id.trim()
-            : "",
-        )
+        .map((provider) => {
+          if (!provider || typeof provider !== "object") {
+            return "";
+          }
+          const { id } = provider as ModelProviderIdRecord;
+          return typeof id === "string" ? id.trim() : "";
+        })
         .filter((providerId) => providerId.length > 0),
     ),
   );
