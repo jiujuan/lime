@@ -97,6 +97,9 @@ const retiredAgentAppPackageFacadeCommands = new Set([
   "agent_app_uninstall",
   "agent_app_uninstall_rehearsal",
 ]);
+const currentAgentAppShellDesktopHostCommands = new Set([
+  "agent_app_launch_shell",
+]);
 const currentFileBrowserDesktopHostShellCommands = new Set([
   "get_home_dir",
   "get_file_manager_locations",
@@ -1472,6 +1475,108 @@ function collectRetiredApiKeyProviderFacadeSourceFailures() {
   return failures;
 }
 
+function collectRetiredAgentAppPackageFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/agentAppMocks.ts",
+      message:
+        "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能继续保留 desktop-host mock fixture",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/agent_apps.rs",
+      message:
+        "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/commands/agent_app_cmd.rs",
+      message:
+        "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能回到 Tauri command wrapper；commands/** 只允许清理旧逻辑",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredAgentAppPackageFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectCurrentAgentAppShellDesktopHostSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "agent_app_launch_shell 已迁到 Electron Desktop Host + App Server agentAppShell/prepare，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "agent_app_launch_shell 已迁到 Electron Desktop Host + App Server agentAppShell/prepare，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/agentAppMocks.ts",
+      message:
+        "agent_app_launch_shell 已迁到 Electron Desktop Host + App Server agentAppShell/prepare，不能继续保留 desktop-host mock fixture",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "agent_app_launch_shell 已迁到 Electron Desktop Host + App Server agentAppShell/prepare，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/agent_apps.rs",
+      message:
+        "agent_app_launch_shell 已迁到 Electron Desktop Host + App Server agentAppShell/prepare，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/commands/agent_app_cmd.rs",
+      message:
+        "agent_app_launch_shell 已迁到 Electron Desktop Host + App Server agentAppShell/prepare，不能回到 Tauri command wrapper；commands/** 只允许清理旧逻辑",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of currentAgentAppShellDesktopHostCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
 function collectCurrentFileBrowserDesktopHostShellSourceFailures() {
   const failures = [];
   const restrictedSources = [
@@ -1588,6 +1693,10 @@ function main() {
     collectRetiredAutomationFacadeSourceFailures();
   const retiredApiKeyProviderFacadeSourceFailures =
     collectRetiredApiKeyProviderFacadeSourceFailures();
+  const retiredAgentAppPackageFacadeSourceFailures =
+    collectRetiredAgentAppPackageFacadeSourceFailures();
+  const currentAgentAppShellDesktopHostSourceFailures =
+    collectCurrentAgentAppShellDesktopHostSourceFailures();
   const currentFileBrowserDesktopHostShellSourceFailures =
     collectCurrentFileBrowserDesktopHostShellSourceFailures();
   const retiredTauriGenerateHandlerFailures =
@@ -1814,6 +1923,22 @@ function main() {
     printCommandGroup(
       "已迁到 App Server agentApp* 的旧 Agent App lifecycle 命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
       retiredAgentAppPackageFacadeLeaks,
+    );
+  }
+
+  if (retiredAgentAppPackageFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server agentApp* 的旧 Agent App package/install 命令不能回到旧客户端源码",
+      retiredAgentAppPackageFacadeSourceFailures,
+    );
+  }
+
+  if (currentAgentAppShellDesktopHostSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host + App Server agentAppShell/prepare 的 shell launch 命令不能回到旧客户端源码",
+      currentAgentAppShellDesktopHostSourceFailures,
     );
   }
 

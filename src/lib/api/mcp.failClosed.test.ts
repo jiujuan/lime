@@ -28,31 +28,37 @@ const server: McpServer = {
   enabled_gemini: false,
 };
 
-describe("mcp non-list API fail-closed", () => {
+describe("mcp App Server current API fail-closed", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     appServerRequestMock.mockReset();
   });
 
-  it("MCP CRUD current 尚未落地时应 fail closed 且不回退 legacy", async () => {
-    const cases: Array<[string, () => Promise<unknown>]> = [
-      ["add_mcp_server", () => mcpApi.addServer(server)],
-      ["update_mcp_server", () => mcpApi.updateServer(server)],
-      ["delete_mcp_server", () => mcpApi.deleteServer("server-1")],
+  it("MCP CRUD / import / sync 在 App Server 失败时应 fail closed 且不回退 legacy", async () => {
+    const appServerError = new Error("App Server unavailable");
+    const cases: Array<[string, unknown, () => Promise<unknown>]> = [
+      ["mcpServer/create", { server }, () => mcpApi.addServer(server)],
+      ["mcpServer/update", { server }, () => mcpApi.updateServer(server)],
+      ["mcpServer/delete", { id: "server-1" }, () => mcpApi.deleteServer("server-1")],
       [
-        "toggle_mcp_server",
+        "mcpServer/enabled/set",
+        { id: "server-1", appType: "codex", enabled: true },
         () => mcpApi.toggleServer("server-1", "codex", true),
       ],
-      ["import_mcp_from_app", () => mcpApi.importFromApp("codex")],
-      ["sync_all_mcp_to_live", () => mcpApi.syncAllToLive()],
+      [
+        "mcpServer/importFromApp",
+        { appType: "codex" },
+        () => mcpApi.importFromApp("codex"),
+      ],
+      ["mcpServer/syncAllToLive", {}, () => mcpApi.syncAllToLive()],
     ];
 
-    for (const [command, action] of cases) {
-      await expect(action()).rejects.toThrow(
-        `${command} 尚未接入 App Server MCP current 通道`,
-      );
+    for (const [method, params, action] of cases) {
+      appServerRequestMock.mockRejectedValueOnce(appServerError);
+
+      await expect(action()).rejects.toThrow("App Server unavailable");
+      expect(appServerRequestMock).toHaveBeenLastCalledWith(method, params);
     }
-    expect(appServerRequestMock).not.toHaveBeenCalled();
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 

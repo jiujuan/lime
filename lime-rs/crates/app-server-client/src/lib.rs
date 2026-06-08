@@ -81,11 +81,17 @@ pub use app_server_protocol::McpPromptListResponse;
 pub use app_server_protocol::McpResourceListResponse;
 pub use app_server_protocol::McpResourceReadParams;
 pub use app_server_protocol::McpResourceReadResponse;
+pub use app_server_protocol::McpServerCreateParams;
+pub use app_server_protocol::McpServerDeleteParams;
+pub use app_server_protocol::McpServerEnabledSetParams;
+pub use app_server_protocol::McpServerImportFromAppParams;
+pub use app_server_protocol::McpServerImportFromAppResponse;
 pub use app_server_protocol::McpServerListResponse;
 pub use app_server_protocol::McpServerLifecycleResponse;
 pub use app_server_protocol::McpServerStartParams;
 pub use app_server_protocol::McpServerStatusListResponse;
 pub use app_server_protocol::McpServerStopParams;
+pub use app_server_protocol::McpServerUpdateParams;
 pub use app_server_protocol::McpToolCallParams;
 pub use app_server_protocol::McpToolCallResponse;
 pub use app_server_protocol::McpToolCallWithCallerParams;
@@ -173,10 +179,16 @@ pub use app_server_protocol::METHOD_MCP_PROMPT_GET;
 pub use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 pub use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
 pub use app_server_protocol::METHOD_MCP_RESOURCE_READ;
+pub use app_server_protocol::METHOD_MCP_SERVER_CREATE;
+pub use app_server_protocol::METHOD_MCP_SERVER_DELETE;
+pub use app_server_protocol::METHOD_MCP_SERVER_ENABLED_SET;
+pub use app_server_protocol::METHOD_MCP_SERVER_IMPORT_FROM_APP;
 pub use app_server_protocol::METHOD_MCP_SERVER_LIST;
+pub use app_server_protocol::METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE;
 pub use app_server_protocol::METHOD_MCP_SERVER_START;
 pub use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
 pub use app_server_protocol::METHOD_MCP_SERVER_STOP;
+pub use app_server_protocol::METHOD_MCP_SERVER_UPDATE;
 pub use app_server_protocol::METHOD_MCP_TOOL_CALL;
 pub use app_server_protocol::METHOD_MCP_TOOL_CALL_WITH_CALLER;
 pub use app_server_protocol::METHOD_MCP_TOOL_LIST;
@@ -598,6 +610,45 @@ impl AppServerClient {
 
     pub fn list_mcp_servers_with_status(&mut self) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_mcp_servers_with_status())
+    }
+
+    pub fn create_mcp_server(
+        &mut self,
+        params: McpServerCreateParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::create_mcp_server(params))
+    }
+
+    pub fn update_mcp_server(
+        &mut self,
+        params: McpServerUpdateParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::update_mcp_server(params))
+    }
+
+    pub fn delete_mcp_server(
+        &mut self,
+        params: McpServerDeleteParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::delete_mcp_server(params))
+    }
+
+    pub fn set_mcp_server_enabled(
+        &mut self,
+        params: McpServerEnabledSetParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::set_mcp_server_enabled(params))
+    }
+
+    pub fn import_mcp_servers_from_app(
+        &mut self,
+        params: McpServerImportFromAppParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::import_mcp_servers_from_app(params))
+    }
+
+    pub fn sync_all_mcp_servers_to_live(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::sync_all_mcp_servers_to_live())
     }
 
     pub fn start_mcp_server(
@@ -1112,6 +1163,40 @@ pub mod typed {
 
     pub fn list_mcp_servers_with_status() -> TypedRequest<serde_json::Value> {
         TypedRequest::new(METHOD_MCP_SERVER_STATUS_LIST, serde_json::json!({}))
+    }
+
+    pub fn create_mcp_server(
+        params: McpServerCreateParams,
+    ) -> TypedRequest<McpServerCreateParams> {
+        TypedRequest::new(METHOD_MCP_SERVER_CREATE, params)
+    }
+
+    pub fn update_mcp_server(
+        params: McpServerUpdateParams,
+    ) -> TypedRequest<McpServerUpdateParams> {
+        TypedRequest::new(METHOD_MCP_SERVER_UPDATE, params)
+    }
+
+    pub fn delete_mcp_server(
+        params: McpServerDeleteParams,
+    ) -> TypedRequest<McpServerDeleteParams> {
+        TypedRequest::new(METHOD_MCP_SERVER_DELETE, params)
+    }
+
+    pub fn set_mcp_server_enabled(
+        params: McpServerEnabledSetParams,
+    ) -> TypedRequest<McpServerEnabledSetParams> {
+        TypedRequest::new(METHOD_MCP_SERVER_ENABLED_SET, params)
+    }
+
+    pub fn import_mcp_servers_from_app(
+        params: McpServerImportFromAppParams,
+    ) -> TypedRequest<McpServerImportFromAppParams> {
+        TypedRequest::new(METHOD_MCP_SERVER_IMPORT_FROM_APP, params)
+    }
+
+    pub fn sync_all_mcp_servers_to_live() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, serde_json::json!({}))
     }
 
     pub fn start_mcp_server(params: McpServerStartParams) -> TypedRequest<McpServerStartParams> {

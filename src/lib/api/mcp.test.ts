@@ -173,4 +173,67 @@ describe("mcp", () => {
     });
     expect(safeInvoke).not.toHaveBeenCalled();
   });
+
+  it("MCP CRUD / import / sync 应通过 App Server current method 传递参数", async () => {
+    const server = {
+      id: "server-1",
+      name: "docs",
+      server_config: {
+        command: "node",
+        args: ["server.js"],
+      },
+      enabled_lime: true,
+      enabled_claude: false,
+      enabled_codex: true,
+      enabled_gemini: false,
+    };
+    mockAppServerResult({ servers: [server] });
+    mockAppServerResult({ servers: [server] });
+    mockAppServerResult({ servers: [] });
+    mockAppServerResult({ servers: [server] });
+    mockAppServerResult({ importedCount: 2, servers: [server] });
+    mockAppServerResult({ servers: [server] });
+
+    await expect(mcpApi.addServer(server)).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpServer/create", {
+      server,
+    });
+
+    await expect(mcpApi.updateServer(server)).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpServer/update", {
+      server,
+    });
+
+    await expect(mcpApi.deleteServer("server-1")).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpServer/delete", {
+      id: "server-1",
+    });
+
+    await expect(
+      mcpApi.toggleServer("server-1", "codex", true),
+    ).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpServer/enabled/set",
+      {
+        id: "server-1",
+        appType: "codex",
+        enabled: true,
+      },
+    );
+
+    await expect(mcpApi.importFromApp("codex")).resolves.toBe(2);
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpServer/importFromApp",
+      {
+        appType: "codex",
+      },
+    );
+
+    await expect(mcpApi.syncAllToLive()).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpServer/syncAllToLive",
+      {},
+    );
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
 });

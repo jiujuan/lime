@@ -4,10 +4,16 @@ import {
   METHOD_MCP_PROMPT_LIST,
   METHOD_MCP_RESOURCE_LIST,
   METHOD_MCP_RESOURCE_READ,
+  METHOD_MCP_SERVER_CREATE,
+  METHOD_MCP_SERVER_DELETE,
+  METHOD_MCP_SERVER_ENABLED_SET,
+  METHOD_MCP_SERVER_IMPORT_FROM_APP,
   METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
   METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
   METHOD_MCP_SERVER_STOP,
+  METHOD_MCP_SERVER_UPDATE,
   METHOD_MCP_TOOL_CALL,
   METHOD_MCP_TOOL_CALL_WITH_CALLER,
   METHOD_MCP_TOOL_LIST,
@@ -17,6 +23,7 @@ import {
   type McpPromptListResponse as AppServerMcpPromptListResponse,
   type McpResourceListResponse as AppServerMcpResourceListResponse,
   type McpResourceReadResponse as AppServerMcpResourceReadResponse,
+  type McpServerImportFromAppResponse as AppServerMcpServerImportFromAppResponse,
   type McpServerListResponse as AppServerMcpServerListResponse,
   type McpServerStatusListResponse as AppServerMcpServerStatusListResponse,
   type McpToolCallResponse as AppServerMcpToolCallResponse,
@@ -130,10 +137,6 @@ async function requestMcpAppServer<T>(
   return response.result;
 }
 
-function failClosedMcpCurrentGap(command: string): never {
-  throw new Error(`${command} 尚未接入 App Server MCP current 通道`);
-}
-
 function assertArrayField<T>(
   method: string,
   response: unknown,
@@ -218,47 +221,54 @@ export const mcpApi = {
     ),
 
   addServer: (server: McpServer): Promise<void> =>
-    Promise.resolve().then(() => {
-      void server;
-      failClosedMcpCurrentGap("add_mcp_server");
-    }),
+    requestMcpAppServer<AppServerMcpServerListResponse>(
+      METHOD_MCP_SERVER_CREATE,
+      { server },
+    ).then(() => undefined),
 
   updateServer: (server: McpServer): Promise<void> =>
-    Promise.resolve().then(() => {
-      void server;
-      failClosedMcpCurrentGap("update_mcp_server");
-    }),
+    requestMcpAppServer<AppServerMcpServerListResponse>(
+      METHOD_MCP_SERVER_UPDATE,
+      { server },
+    ).then(() => undefined),
 
   deleteServer: (id: string): Promise<void> =>
-    Promise.resolve().then(() => {
-      void id;
-      failClosedMcpCurrentGap("delete_mcp_server");
-    }),
+    requestMcpAppServer<AppServerMcpServerListResponse>(
+      METHOD_MCP_SERVER_DELETE,
+      { id },
+    ).then(() => undefined),
 
   toggleServer: (
     id: string,
     appType: string,
     enabled: boolean,
   ): Promise<void> =>
-    Promise.resolve().then(() => {
-      void id;
-      void appType;
-      void enabled;
-      failClosedMcpCurrentGap("toggle_mcp_server");
-    }),
+    requestMcpAppServer<AppServerMcpServerListResponse>(
+      METHOD_MCP_SERVER_ENABLED_SET,
+      {
+        id,
+        appType,
+        enabled,
+      },
+    ).then(() => undefined),
 
   /** 从外部应用导入 MCP 配置 */
   importFromApp: (appType: string): Promise<number> =>
-    Promise.resolve().then(() => {
-      void appType;
-      failClosedMcpCurrentGap("import_mcp_from_app");
+    requestMcpAppServer<AppServerMcpServerImportFromAppResponse>(
+      METHOD_MCP_SERVER_IMPORT_FROM_APP,
+      { appType },
+    ).then((response) => {
+      if (typeof response.importedCount !== "number") {
+        throw new Error(`${METHOD_MCP_SERVER_IMPORT_FROM_APP} did not return importedCount`);
+      }
+      return response.importedCount;
     }),
 
   /** 同步所有 MCP 配置到实际配置文件 */
   syncAllToLive: (): Promise<void> =>
-    Promise.resolve().then(() =>
-      failClosedMcpCurrentGap("sync_all_mcp_to_live"),
-    ),
+    requestMcpAppServer<AppServerMcpServerListResponse>(
+      METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
+    ).then(() => undefined),
 
   // --------------------------------------------------------------------------
   // 生命周期管理 API
