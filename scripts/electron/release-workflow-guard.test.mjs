@@ -129,6 +129,17 @@ describe("Electron release workflow guard", () => {
     );
   });
 
+  it("rejects missing macOS DMG detach retry guard in Forge make step", () => {
+    const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
+    const workflowPath = tempWorkflowPath(
+      current.replaceAll("hdiutil detach /Volumes/Lime", "hdiutil detach"),
+    );
+
+    expect(() => validateReleaseWorkflow({ workflowPath })).toThrow(
+      /Electron Forge make step must include hdiutil detach \/Volumes\/Lime/,
+    );
+  });
+
   it("rejects missing Forge make asset scan", () => {
     const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
     const workflowPath = tempWorkflowPath(

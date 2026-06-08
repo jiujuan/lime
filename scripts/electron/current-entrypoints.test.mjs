@@ -262,6 +262,8 @@ describe("Electron current package entrypoints", () => {
     expect(smokeBuildRenderer).toContain("NODE_OPTIONS");
     expect(viteConfig).toContain("base:");
     expect(viteConfig).toContain('isElectronRenderer ? "./" : undefined');
+    expect(viteConfig).toContain('find: "app-server-client"');
+    expect(viteConfig).toContain("./packages/app-server-client/src/index.ts");
   });
 
   it("build monitor observes Electron package output instead of retired host bundles", () => {

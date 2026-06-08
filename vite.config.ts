@@ -56,6 +56,13 @@ export default defineConfig(({ command, mode }) => {
           find: "@",
           replacement: path.resolve(__dirname, "./src"),
         },
+        {
+          find: "app-server-client",
+          replacement: path.resolve(
+            __dirname,
+            "./packages/app-server-client/src/index.ts",
+          ),
+        },
       ],
     },
     optimizeDeps: {
