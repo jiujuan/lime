@@ -27,6 +27,7 @@ export const ELECTRON_HOST_COMMANDS = [
   "agent_runtime_get_session",
   "agent_runtime_list_workspace_skill_bindings",
   "agent_app_select_directory",
+  "agent_app_launch_shell",
   "agent_app_get_ui_runtime_status",
   "agent_app_start_ui_runtime",
   "agent_app_stop_ui_runtime",

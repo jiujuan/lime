@@ -12,6 +12,9 @@ use app_server_protocol::AgentAppInstalledSaveParams;
 use app_server_protocol::AgentAppLocalPackageInspectParams;
 use app_server_protocol::AgentAppLocalPackageInspectResponse;
 use app_server_protocol::AgentAppPackageCacheEntry;
+use app_server_protocol::AgentAppShellPackageMount;
+use app_server_protocol::AgentAppShellPrepareParams;
+use app_server_protocol::AgentAppShellPrepareResponse;
 use app_server_protocol::AgentAppUiRuntimeStartParams;
 use app_server_protocol::AgentAppUiRuntimeStatusParams;
 use app_server_protocol::AgentAppUiRuntimeStatusResponse;
@@ -107,11 +110,23 @@ use app_server_protocol::KnowledgeUpdatePackStatusParams;
 use app_server_protocol::KnowledgeUpdatePackStatusResponse;
 use app_server_protocol::KnowledgeValidateContextRunParams;
 use app_server_protocol::KnowledgeValidateContextRunResponse;
+use app_server_protocol::McpPromptGetParams;
+use app_server_protocol::McpPromptGetResponse;
 use app_server_protocol::McpPromptListResponse;
 use app_server_protocol::McpResourceListResponse;
+use app_server_protocol::McpResourceReadParams;
+use app_server_protocol::McpResourceReadResponse;
+use app_server_protocol::McpServerLifecycleResponse;
 use app_server_protocol::McpServerListResponse;
+use app_server_protocol::McpServerStartParams;
 use app_server_protocol::McpServerStatusListResponse;
+use app_server_protocol::McpServerStopParams;
+use app_server_protocol::McpToolCallParams;
+use app_server_protocol::McpToolCallResponse;
+use app_server_protocol::McpToolCallWithCallerParams;
+use app_server_protocol::McpToolListForContextParams;
 use app_server_protocol::McpToolListResponse;
+use app_server_protocol::McpToolSearchParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -483,9 +498,63 @@ pub trait AppDataSource: Send + Sync {
         ))
     }
 
+    async fn start_mcp_server(
+        &self,
+        _params: McpServerStartParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/start is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn stop_mcp_server(
+        &self,
+        _params: McpServerStopParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/stop is not available without an app data source".to_string(),
+        ))
+    }
+
     async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
         Err(RuntimeCoreError::Backend(
             "mcpTool/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_mcp_tools_for_context(
+        &self,
+        _params: McpToolListForContextParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpTool/listForContext is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn search_mcp_tools(
+        &self,
+        _params: McpToolSearchParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpTool/search is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn call_mcp_tool(
+        &self,
+        _params: McpToolCallParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpTool/call is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn call_mcp_tool_with_caller(
+        &self,
+        _params: McpToolCallWithCallerParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpTool/callWithCaller is not available without an app data source".to_string(),
         ))
     }
 
@@ -495,9 +564,27 @@ pub trait AppDataSource: Send + Sync {
         ))
     }
 
+    async fn get_mcp_prompt(
+        &self,
+        _params: McpPromptGetParams,
+    ) -> Result<McpPromptGetResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpPrompt/get is not available without an app data source".to_string(),
+        ))
+    }
+
     async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
         Err(RuntimeCoreError::Backend(
             "mcpResource/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_mcp_resource(
+        &self,
+        _params: McpResourceReadParams,
+    ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpResource/read is not available without an app data source".to_string(),
         ))
     }
 
@@ -1186,16 +1273,84 @@ impl AppDataSource for NoopAppDataSource {
         Ok(McpServerStatusListResponse::default())
     }
 
+    async fn start_mcp_server(
+        &self,
+        _params: McpServerStartParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/start requires a current app data source".to_string(),
+        ))
+    }
+
+    async fn stop_mcp_server(
+        &self,
+        _params: McpServerStopParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/stop requires a current app data source".to_string(),
+        ))
+    }
+
     async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
         Ok(McpToolListResponse::default())
+    }
+
+    async fn list_mcp_tools_for_context(
+        &self,
+        _params: McpToolListForContextParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Ok(McpToolListResponse::default())
+    }
+
+    async fn search_mcp_tools(
+        &self,
+        _params: McpToolSearchParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Ok(McpToolListResponse::default())
+    }
+
+    async fn call_mcp_tool(
+        &self,
+        _params: McpToolCallParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpTool/call requires a current MCP manager".to_string(),
+        ))
+    }
+
+    async fn call_mcp_tool_with_caller(
+        &self,
+        _params: McpToolCallWithCallerParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpTool/callWithCaller requires a current MCP manager".to_string(),
+        ))
     }
 
     async fn list_mcp_prompts(&self) -> Result<McpPromptListResponse, RuntimeCoreError> {
         Ok(McpPromptListResponse::default())
     }
 
+    async fn get_mcp_prompt(
+        &self,
+        _params: McpPromptGetParams,
+    ) -> Result<McpPromptGetResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpPrompt/get requires a current MCP manager".to_string(),
+        ))
+    }
+
     async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
         Ok(McpResourceListResponse::default())
+    }
+
+    async fn read_mcp_resource(
+        &self,
+        _params: McpResourceReadParams,
+    ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpResource/read requires a current MCP manager".to_string(),
+        ))
     }
 
     async fn read_project_memory(
@@ -1473,6 +1628,18 @@ struct AgentAppUiRuntimeProcess {
 struct AgentAppUiRuntimeEntry {
     entry_key: String,
     route: String,
+}
+
+#[derive(Debug, Clone)]
+struct AgentAppShellDescriptorFields {
+    descriptor_version: u64,
+    app_id: String,
+    install_mode: String,
+    shell_kind: String,
+    package_hash: String,
+    manifest_hash: String,
+    entry_key: String,
+    window_title: String,
 }
 
 fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
@@ -2259,6 +2426,84 @@ impl RuntimeCore {
         self.app_data_source.uninstall_agent_app(params).await
     }
 
+    pub async fn prepare_agent_app_shell(
+        &self,
+        params: AgentAppShellPrepareParams,
+    ) -> Result<AgentAppShellPrepareResponse, RuntimeCoreError> {
+        let prepared_at = timestamp();
+        let fields = match parse_agent_app_shell_descriptor(&params.descriptor) {
+            Ok(fields) => fields,
+            Err(blocker_codes) => {
+                return Ok(build_agent_app_shell_prepare_response(
+                    None,
+                    "blocked",
+                    blocker_codes,
+                    Some("Agent App shell descriptor 未通过启动前校验。".to_string()),
+                    None,
+                    prepared_at,
+                ));
+            }
+        };
+
+        let installed_state = match self.find_agent_app_installed_state(&fields.app_id).await {
+            Ok(state) => state,
+            Err(error) => {
+                return Ok(build_agent_app_shell_prepare_response(
+                    Some(&fields),
+                    "blocked",
+                    vec!["INSTALLED_STATE_MISSING".to_string()],
+                    Some(error.to_string()),
+                    None,
+                    prepared_at,
+                ));
+            }
+        };
+
+        let state_blockers =
+            validate_agent_app_shell_against_installed_state(&fields, &installed_state);
+        if !state_blockers.is_empty() {
+            return Ok(build_agent_app_shell_prepare_response(
+                Some(&fields),
+                "blocked",
+                state_blockers,
+                Some("Agent App shell descriptor 与 installed state 不一致。".to_string()),
+                None,
+                prepared_at,
+            ));
+        }
+
+        let app_dir = match resolve_agent_app_runtime_dir(&installed_state) {
+            Ok(app_dir) => app_dir,
+            Err(error) => {
+                return Ok(build_agent_app_shell_prepare_response(
+                    Some(&fields),
+                    "blocked",
+                    vec!["PACKAGE_MOUNT_UNAVAILABLE".to_string()],
+                    Some(error.to_string()),
+                    None,
+                    prepared_at,
+                ));
+            }
+        };
+
+        let package_mount = AgentAppShellPackageMount {
+            kind: "local_dir".to_string(),
+            path: app_dir.to_string_lossy().to_string(),
+            read_only: true,
+            package_hash: fields.package_hash.clone(),
+            manifest_hash: fields.manifest_hash.clone(),
+        };
+
+        Ok(build_agent_app_shell_prepare_response(
+            Some(&fields),
+            "ready",
+            Vec::new(),
+            Some("Agent App shell 已通过 App Server current 启动前校验。".to_string()),
+            Some(package_mount),
+            prepared_at,
+        ))
+    }
+
     pub async fn start_agent_app_ui_runtime(
         &self,
         params: AgentAppUiRuntimeStartParams,
@@ -2465,16 +2710,74 @@ impl RuntimeCore {
         self.app_data_source.list_mcp_servers_with_status().await
     }
 
+    pub async fn start_mcp_server(
+        &self,
+        params: McpServerStartParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        self.app_data_source.start_mcp_server(params).await
+    }
+
+    pub async fn stop_mcp_server(
+        &self,
+        params: McpServerStopParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        self.app_data_source.stop_mcp_server(params).await
+    }
+
     pub async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
         self.app_data_source.list_mcp_tools().await
+    }
+
+    pub async fn list_mcp_tools_for_context(
+        &self,
+        params: McpToolListForContextParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_mcp_tools_for_context(params)
+            .await
+    }
+
+    pub async fn search_mcp_tools(
+        &self,
+        params: McpToolSearchParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        self.app_data_source.search_mcp_tools(params).await
+    }
+
+    pub async fn call_mcp_tool(
+        &self,
+        params: McpToolCallParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        self.app_data_source.call_mcp_tool(params).await
+    }
+
+    pub async fn call_mcp_tool_with_caller(
+        &self,
+        params: McpToolCallWithCallerParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        self.app_data_source.call_mcp_tool_with_caller(params).await
     }
 
     pub async fn list_mcp_prompts(&self) -> Result<McpPromptListResponse, RuntimeCoreError> {
         self.app_data_source.list_mcp_prompts().await
     }
 
+    pub async fn get_mcp_prompt(
+        &self,
+        params: McpPromptGetParams,
+    ) -> Result<McpPromptGetResponse, RuntimeCoreError> {
+        self.app_data_source.get_mcp_prompt(params).await
+    }
+
     pub async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
         self.app_data_source.list_mcp_resources().await
+    }
+
+    pub async fn read_mcp_resource(
+        &self,
+        params: McpResourceReadParams,
+    ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
+        self.app_data_source.read_mcp_resource(params).await
     }
 
     pub async fn read_automation_scheduler_config(
@@ -4431,6 +4734,143 @@ fn is_agent_app_ui_entry(entry: &serde_json::Value) -> bool {
         json_string(entry, &["kind"]).as_deref(),
         Some("page" | "panel" | "settings")
     )
+}
+
+fn parse_agent_app_shell_descriptor(
+    descriptor: &serde_json::Value,
+) -> Result<AgentAppShellDescriptorFields, Vec<String>> {
+    let mut blocker_codes = Vec::new();
+    let descriptor_version = descriptor
+        .get("descriptorVersion")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    if descriptor_version != 1 {
+        blocker_codes.push("SHELL_DESCRIPTOR_VERSION_UNSUPPORTED".to_string());
+    }
+
+    let app_id = json_string(descriptor, &["appId"]).unwrap_or_default();
+    if validate_agent_app_id(&app_id).is_err() {
+        blocker_codes.push("APP_ID_INVALID".to_string());
+    }
+
+    let install_mode = json_string(descriptor, &["installMode"]).unwrap_or_default();
+    if install_mode != "standalone" && install_mode != "runtime_backed" {
+        blocker_codes.push("SHELL_INSTALL_MODE_UNSUPPORTED".to_string());
+    }
+
+    let shell_kind = json_string(descriptor, &["runtimeProfile", "shellKind"]).unwrap_or_default();
+    if !agent_app_shell_kind_matches_install_mode(&shell_kind, &install_mode) {
+        blocker_codes.push("SHELL_KIND_MISMATCH".to_string());
+    }
+    if json_string(descriptor, &["runtimeProfile", "installMode"]).as_deref()
+        != Some(install_mode.as_str())
+    {
+        blocker_codes.push("RUNTIME_PROFILE_MISMATCH".to_string());
+    }
+
+    let package_hash = json_string(descriptor, &["packageHash"]).unwrap_or_default();
+    let manifest_hash = json_string(descriptor, &["manifestHash"]).unwrap_or_default();
+    if package_hash.is_empty() || manifest_hash.is_empty() {
+        blocker_codes.push("PACKAGE_IDENTITY_MISSING".to_string());
+    }
+
+    if json_string(descriptor, &["isolation", "packageMount"]).as_deref() != Some("read-only")
+        || json_string(descriptor, &["isolation", "secrets"]).as_deref() != Some("refs-only")
+        || json_string(descriptor, &["isolation", "sideEffects"]).as_deref()
+            != Some("runtime-broker")
+        || json_string(descriptor, &["isolation", "evidence"]).as_deref()
+            != Some("runtime-provenance")
+    {
+        blocker_codes.push("ISOLATION_POLICY_INVALID".to_string());
+    }
+
+    let entry_key = json_string(descriptor, &["entry", "entryKey"]).unwrap_or_default();
+    if entry_key.is_empty() {
+        blocker_codes.push("ENTRY_KEY_MISSING".to_string());
+    }
+
+    if !blocker_codes.is_empty() {
+        blocker_codes.sort();
+        blocker_codes.dedup();
+        return Err(blocker_codes);
+    }
+
+    let window_title = json_string(descriptor, &["branding", "windowTitle"])
+        .or_else(|| json_string(descriptor, &["branding", "name"]))
+        .unwrap_or_else(|| app_id.clone());
+
+    Ok(AgentAppShellDescriptorFields {
+        descriptor_version,
+        app_id,
+        install_mode,
+        shell_kind,
+        package_hash,
+        manifest_hash,
+        entry_key,
+        window_title,
+    })
+}
+
+fn agent_app_shell_kind_matches_install_mode(shell_kind: &str, install_mode: &str) -> bool {
+    (install_mode == "standalone" && shell_kind == "app_shell")
+        || (install_mode == "runtime_backed" && shell_kind == "runtime_backed")
+}
+
+fn validate_agent_app_shell_against_installed_state(
+    fields: &AgentAppShellDescriptorFields,
+    state: &serde_json::Value,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if json_string(state, &["installMode"]).as_deref() != Some(fields.install_mode.as_str()) {
+        blockers.push("INSTALL_MODE_MISMATCH".to_string());
+    }
+    if json_string(state, &["runtimeProfileSummary", "shellKind"]).as_deref()
+        != Some(fields.shell_kind.as_str())
+    {
+        blockers.push("RUNTIME_PROFILE_MISMATCH".to_string());
+    }
+    if json_string(state, &["identity", "packageHash"]).as_deref()
+        != Some(fields.package_hash.as_str())
+    {
+        blockers.push("PACKAGE_HASH_MISMATCH".to_string());
+    }
+    if json_string(state, &["identity", "manifestHash"]).as_deref()
+        != Some(fields.manifest_hash.as_str())
+    {
+        blockers.push("MANIFEST_HASH_MISMATCH".to_string());
+    }
+    if state
+        .get("disabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        blockers.push("APP_DISABLED".to_string());
+    }
+    blockers
+}
+
+fn build_agent_app_shell_prepare_response(
+    fields: Option<&AgentAppShellDescriptorFields>,
+    status: &str,
+    blocker_codes: Vec<String>,
+    message: Option<String>,
+    package_mount: Option<AgentAppShellPackageMount>,
+    prepared_at: String,
+) -> AgentAppShellPrepareResponse {
+    AgentAppShellPrepareResponse {
+        app_id: fields.map(|fields| fields.app_id.clone()),
+        status: status.to_string(),
+        install_mode: fields.map(|fields| fields.install_mode.clone()),
+        shell_kind: fields.map(|fields| fields.shell_kind.clone()),
+        descriptor_version: fields.map(|fields| fields.descriptor_version),
+        dev_shell: true,
+        blocker_codes,
+        message,
+        package_mount,
+        entry_key: fields.map(|fields| fields.entry_key.clone()),
+        window_title: fields.map(|fields| fields.window_title.clone()),
+        prepared_at,
+    }
 }
 
 fn resolve_agent_app_runtime_dir(state: &serde_json::Value) -> Result<PathBuf, RuntimeCoreError> {

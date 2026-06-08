@@ -55,4 +55,30 @@ describe("configSystemMocks", () => {
     expect(configSystemMocks).not.toHaveProperty("remove_injection_rule");
     expect(configSystemMocks).not.toHaveProperty("update_injection_rule");
   });
+
+  it("不应保留快捷键校验默认成功 mock", () => {
+    expect(configSystemMocks).not.toHaveProperty("validate_shortcut");
+  });
+
+  it("不应保留前端崩溃上报默认成功 mock", () => {
+    expect(configSystemMocks).not.toHaveProperty("report_frontend_crash");
+  });
+
+  it("不应保留已下线 Prompt 管理默认成功 mock", () => {
+    const retiredPromptCommands = [
+      "get_prompts",
+      "upsert_prompt",
+      "add_prompt",
+      "update_prompt",
+      "delete_prompt",
+      "enable_prompt",
+      "import_prompt_from_file",
+      "get_current_prompt_file_content",
+      "auto_import_prompt",
+    ];
+
+    for (const command of retiredPromptCommands) {
+      expect(configSystemMocks).not.toHaveProperty(command);
+    }
+  });
 });

@@ -298,7 +298,6 @@ pub fn run() {
         .manage(lime_gateway::wechat::WechatGatewayState::default())
         .manage(lime_gateway::wechat::WechatLoginState::default())
         .manage(gateway_tunnel_state)
-        .manage(commands::telegram_remote_cmd::TelegramRemoteState::default())
         .on_window_event(move |window, event| {
             // 处理窗口关闭事件
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -595,12 +594,12 @@ pub fn run() {
                     let app_data_dir = lime_core::app_paths::best_effort_data_dir();
 
                     // 初始化 Connect 状态
-                    match crate::commands::connect_cmd::init_connect_state(app_data_dir).await {
+                    match crate::app::connect_state::init_connect_state(app_data_dir).await {
                         Ok(connect_state_inner) => {
                             tracing::info!("[启动] Connect 模块初始化成功");
                             // 更新状态
                             if let Some(state) = app_handle
-                                .try_state::<crate::commands::connect_cmd::ConnectStateWrapper>()
+                                .try_state::<crate::app::connect_state::ConnectStateWrapper>()
                             {
                                 let mut guard = state.0.write().await;
                                 *guard = Some(connect_state_inner);
@@ -689,7 +688,7 @@ pub fn run() {
                                     if url.starts_with("lime://connect") {
                                         // 直接走 current connect 解析链路。
                                         if let Some(state) = app_handle_clone
-                                            .try_state::<crate::commands::connect_cmd::ConnectStateWrapper>()
+                                            .try_state::<crate::app::connect_state::ConnectStateWrapper>()
                                         {
                                             match crate::connect::parse_deep_link(&url) {
                                                 Ok(payload) => {
@@ -705,7 +704,7 @@ pub fn run() {
                                                         }
                                                     };
 
-                                                    let result = crate::commands::connect_cmd::DeepLinkResult {
+                                                    let result = crate::app::connect_state::DeepLinkResult {
                                                         payload,
                                                         relay_info,
                                                         is_verified,
@@ -748,7 +747,7 @@ pub fn run() {
                             } else if urls.starts_with("lime://connect") {
                                 // 直接处理单个 URL
                                 if let Some(state) = app_handle_clone
-                                    .try_state::<crate::commands::connect_cmd::ConnectStateWrapper>()
+                                    .try_state::<crate::app::connect_state::ConnectStateWrapper>()
                                 {
                                     match crate::connect::parse_deep_link(&urls) {
                                         Ok(payload) => {
@@ -763,7 +762,7 @@ pub fn run() {
                                                 }
                                             };
 
-                                            let result = crate::commands::connect_cmd::DeepLinkResult {
+                                            let result = crate::app::connect_state::DeepLinkResult {
                                                 payload,
                                                 relay_info,
                                                 is_verified,
@@ -1072,10 +1071,6 @@ pub fn run() {
             // API test commands (from app::commands)
             app_commands::get_available_models,
             app_commands::check_api_compatibility,
-            // Companion commands
-            commands::companion_cmd::companion_get_pet_status,
-            commands::companion_cmd::companion_launch_pet,
-            commands::companion_cmd::companion_send_pet_command,
             // MCP commands
             commands::mcp_cmd::get_mcp_servers,
             commands::mcp_cmd::add_mcp_server,
@@ -1142,7 +1137,6 @@ pub fn run() {
             commands::agent_app_cmd::agent_app_get_ui_runtime_status,
             commands::agent_app_cmd::agent_app_stop_ui_runtime,
             commands::agent_app_cmd::agent_app_select_directory,
-            commands::agent_app_cmd::agent_app_launch_shell,
             commands::agent_app_runtime_cmd::start_task::agent_app_runtime_start_task,
             commands::agent_app_runtime_cmd::cancel_task::agent_app_runtime_cancel_task,
             commands::agent_app_runtime_cmd::task_snapshot::agent_app_runtime_get_task,
@@ -1172,8 +1166,6 @@ pub fn run() {
             commands::site_capability_cmd::site_save_adapter_result,
             // Hint route commands
             commands::security_perf_cmd::get_hint_routes,
-            // Tray commands
-            commands::tray_cmd::sync_tray_model_shortcuts,
             // Machine ID commands
             commands::machine_id_cmd::get_current_machine_id,
             commands::machine_id_cmd::set_machine_id,
@@ -1254,7 +1246,6 @@ pub fn run() {
             commands::model_registry_cmd::get_models_by_tier,
             commands::model_registry_cmd::get_provider_alias_config,
             commands::model_registry_cmd::get_all_alias_configs,
-            commands::model_registry_cmd::fetch_provider_models_from_api,
             // Browser environment preset commands
             commands::browser_environment_cmd::list_browser_environment_presets_cmd,
             commands::browser_environment_cmd::save_browser_environment_preset_cmd,
@@ -1284,12 +1275,6 @@ pub fn run() {
             // File browser commands
             crate::services::file_browser_service::get_file_name,
             // Webview commands
-            commands::webview_cmd::create_webview_panel,
-            commands::webview_cmd::close_webview_panel,
-            commands::webview_cmd::navigate_webview_panel,
-            commands::webview_cmd::resize_webview_panel,
-            commands::webview_cmd::get_webview_panels,
-            commands::webview_cmd::focus_webview_panel,
             commands::webview_cmd::open_chrome_profile_window,
             commands::webview_cmd::get_chrome_profile_sessions,
             commands::webview_cmd::close_chrome_profile_session,
@@ -1486,9 +1471,6 @@ pub fn run() {
             commands::gateway_tunnel_cmd::gateway_tunnel_restart,
             commands::gateway_tunnel_cmd::gateway_tunnel_status,
             commands::gateway_tunnel_cmd::gateway_tunnel_sync_webhook_url,
-            commands::telegram_remote_cmd::start_telegram_remote,
-            commands::telegram_remote_cmd::stop_telegram_remote,
-            commands::telegram_remote_cmd::get_telegram_remote_status,
         ])
         .build(tauri::generate_context!())
         .map(|app| {

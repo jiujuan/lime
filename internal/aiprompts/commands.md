@@ -23,7 +23,7 @@
 
 这条路径是 current 事实源。Electron 只负责 Desktop Host bridge：preload / IPC 白名单、窗口、托盘、Dock、菜单、updater、签名发布、sidecar 生命周期和少量 renderer-safe projection。Electron 不是第二套后端，也不要把它命名成后端适配层；App Server JSON-RPC 才是 backend 事实入口。
 
-Updater 是明确的 Desktop Host 壳能力，不进入 App Server，也不得回流 Rust Tauri command facade。旧 updater command 面已删除：`lime-rs/src/commands/update_cmd.rs` 不再存在，`lime-rs/src/commands/mod.rs` 不再声明 `update_cmd`，`runner.rs` 不再注册旧 updater handler 或后台检查任务。后续若调整更新体验，只能改 Electron Desktop Host updater current 链路、前端 `src/lib/api/appUpdate.ts` 网关和 release / Forge 文档，不得在 `lime-rs/src/commands/` 新增 updater stub、compat wrapper 或业务实现。
+Updater 是明确的 Desktop Host 壳能力，不进入 App Server，也不得回流 Rust Tauri command facade。旧 updater command 面已删除：旧 `update_cmd` 文件不再存在，`lime-rs/src/commands/mod.rs` 不再声明 `update_cmd`，`runner.rs` 不再注册旧 updater handler 或后台检查任务。后续若调整更新体验，只能改 Electron Desktop Host updater current 链路、前端 `src/lib/api/appUpdate.ts` 网关和 release / Forge 文档，不得在 `lime-rs/src/commands/` 新增 updater stub、compat wrapper 或业务实现。
 
 生产路径不能 mock。`safeInvoke` / `invoke`、Electron Host、App Server sidecar、GUI smoke 和业务 E2E 必须进入真实 Electron Desktop Host IPC / App Server JSON-RPC；无真实通道时 fail-closed。`mockPriorityCommands`、`defaultMocks`、`invokeMockOnly`、`explicitMockFallback`、内存事件 / 窗口 / 快捷键夹具和 mock backend 只允许测试文件或显式测试夹具使用，不能作为产品降级、浏览器模式兜底或交付证据。
 
@@ -186,29 +186,30 @@ AI 图层化设计扁平图 OCR 分析同样继续走 current `LayeredDesignDocu
 - 历史 `sceneapp_execution_summary` 只允许作为 Agent Chat / Automation 的只读结果摘要与灵感沉淀上下文保留，不能再触发新的 SceneApp 运行前规划、自动化创建、runs/scorecard 轮询或治理 artifact 动态准备
 - 若后续需要应用级目录、安装、运行、复盘或治理摘要，应扩展 Agent App current 协议，而不是复活 `sceneapp_*` 命令族
 
-Agent App current 安装 / package / runtime 主链不得在页面或 feature island 里直接 `safeInvoke` / `invoke`。安装、package、UI runtime 生命周期统一经由 `src/lib/api/agentApps.ts`；完整 Agent task facade 统一经由 `src/lib/api/agentAppRuntime.ts`：
+Agent App current 安装 / package / UI runtime 主链不得在页面或 feature island 里直接 `safeInvoke` / `invoke`。应用中心的 package、installed lifecycle、uninstall 与 UI runtime 生命周期统一经由 `src/lib/api/agentApps.ts -> AppServerClient.request(...)` 进入 App Server JSON-RPC：
 
-- `agent_app_inspect_local_package`
-- `agent_app_fetch_cloud_package`
-- `agent_app_save_installed_state`
-- `agent_app_list_installed`
-- `agent_app_set_disabled`
-- `agent_app_uninstall_rehearsal`
-- `agent_app_uninstall`
-- `agent_app_start_ui_runtime`
-- `agent_app_get_ui_runtime_status`
-- `agent_app_stop_ui_runtime`
-- `agent_app_launch_shell`
-- `agent_app_runtime_start_task`
-- `agent_app_runtime_cancel_task`
-- `agent_app_runtime_get_task`
-- `agent_app_runtime_submit_host_response`
+- `agentAppLocalPackage/inspect`
+- `agentAppPackage/fetchCloud`
+- `agentAppInstalled/save`
+- `agentAppInstalled/list`
+- `agentAppInstalled/disabled/set`
+- `agentAppInstalled/uninstall/rehearsal`
+- `agentAppInstalled/uninstall`
+- `agentAppShell/prepare`
+- `agentAppUiRuntime/start`
+- `agentAppUiRuntime/status`
+- `agentAppUiRuntime/stop`
 
-`agent_app_launch_shell` 是 Agent App v2 App Shell dev bridge 的 current 命令入口：前端只能经由 `src/lib/api/agentApps.ts -> launchAgentAppShell` 提交 `ShellDescriptor`；Rust 侧必须先校验 installed state、package / manifest hash、install mode、runtime profile shell kind 与只读隔离策略，再复用 current UI runtime 启动 dev shell，并通过 `agent_app_shell_window` 打开独立 desktop WebviewWindow。浏览器 DevBridge smoke 也必须桥接到同一个 Rust application service，不得落回 mock 或平行 shell launcher。它不是第二套 Runtime，也不得让 Standalone App 绕过 `@lime/app-sdk`、Host Bridge、policy 或 evidence 主链。
+旧 Tauri lifecycle facade 已退役，以下命令不得重新接回前端网关、Electron Host、Rust `generate_handler!`、DevBridge truth、mock priority 或 runtime surface：`agent_app_inspect_local_package`、`agent_app_fetch_cloud_package`、`agent_app_save_installed_state`、`agent_app_list_installed`、`agent_app_set_disabled`、`agent_app_uninstall_rehearsal`、`agent_app_uninstall`。它们只允许作为 `agentCommandCatalog.deprecatedCommandReplacements`、contract forbidden snippet 或历史测试负向断言存在。
 
-`agent_app_fetch_cloud_package` 只负责 `packageUrl -> staging/cache -> APP.md manifest extraction -> sha256 package / manifest verification`，不生成 projection、不写 installed state、不绕过 P17.2 install review；Cloud / LimeCore 仍只提供 release metadata。
+Agent App 仍有两类 Desktop Host 壳能力保留 legacy command name，但事实源不是旧 Tauri wrapper：
 
-`agent_app_start_ui_runtime` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Agent App scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
+- `agent_app_select_directory`：Electron Desktop Host directory picker current 能力，前端只能经由 `src/lib/api/agentApps.ts -> selectAgentAppDirectory(...)` 使用。
+- `agent_app_launch_shell`：Electron Desktop Host App Shell window current 能力，前端只能经由 `src/lib/api/agentApps.ts -> launchAgentAppShell(...)` 提交 `ShellDescriptor`；Electron Host 必须通过 App Server `agentAppShell/prepare` 校验 descriptor、installed state、package / manifest hash、install mode、runtime profile shell kind 与只读隔离策略，再通过 `agentAppUiRuntime/start` 启动 UI runtime 并打开独立 BrowserWindow。它不是第二套 Runtime，也不得让 Standalone App 绕过 `@lime/app-sdk`、Host Bridge、policy 或 evidence 主链。
+
+`agentAppPackage/fetchCloud` 只负责 `packageUrl -> staging/cache -> APP.md manifest extraction -> sha256 package / manifest verification`，不生成 projection、不绕过 P17.2 install review；installed state 写入只走 `agentAppInstalled/save`。Cloud / LimeCore 仍只提供 release metadata。
+
+`agentAppUiRuntime/start` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Agent App scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
 
 Claw / Aster 原完整执行链是 Agent 对话 runtime 的 current 参考实现，不应被前端 `agentRuntime` 模块或 Agent App UI runtime 替代。迁移方向是把 Claw 原链整体直迁到 App Server `RuntimeCore -> AsterBackend -> backend host`，让 Claw 与 Agent App 后续对话 turn 共用 `agentSession/start + agentSession/turn/start + agentSession/event + agentSession/read`。`src/lib/api/agentRuntime/*` 只允许作为前端 thin client gateway / compat projection，负责把旧 UI 形状投影到 App Server current method；它不是第二套业务 runtime，不得在其中补模型执行、事件合成、read model 拼装或 mock fallback。`agentAppUiRuntime/*` 只负责 Agent App UI 子进程 `start/status/stop/entryUrl` 生命周期，不承接对话 turn、tool runtime、evidence 或 Claw/Aster 私有请求合同。
 
@@ -261,7 +262,7 @@ Skill Forge P3D Query Loop metadata 第一刀继续走 `agent_runtime_submit_tur
 
 - 当前 metadata contract 为 `request_metadata.harness.workspace_skill_bindings`，兼容读取 `workspaceSkillBindings`
 - 前端裁剪入口为 `src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts`；它只输出 snake_case metadata fragment，不写入 `allow_model_skills`
-- Rust prompt 投影入口为 `lime-rs/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs`，在 full runtime prompt 的 `WorkspaceSkillBindings` stage 中执行
+- 现存 Rust prompt 投影锚点为 `lime-rs/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs`，在 full runtime prompt 的 `WorkspaceSkillBindings` stage 中执行；该文件只作为迁移来源 / cleanup reference，不是新增 prompt 投影落点
 - 该投影最多展示 5 个 binding，只用于说明候选能力、`binding_status`、`next_gate`、权限摘要和来源；不得把它当作 Query Loop 已启用工具清单
 - 当 `query_loop_visible=false`、`tool_runtime_visible=false` 或 `launch_enabled=false` 时，模型不得声称已运行、不得调用未授权 Skill、不得创建 automation / scheduler / job
 - P3D 不注入 `SkillTool` registry，不改变 `agent_runtime_submit_turn` 的默认 tool surface；真正执行仍必须等后续 `tool_runtime` 授权裁剪和 session 显式 enable

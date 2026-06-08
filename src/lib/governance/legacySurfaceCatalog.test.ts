@@ -2972,6 +2972,45 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应记录 Agent App 应用中心 current App Server 方法目录", () => {
+    expect(agentCommandCatalog.appServerAgentAppMethods).toEqual([
+      "agentAppLocalPackage/inspect",
+      "agentAppPackage/fetchCloud",
+      "agentAppInstalled/save",
+      "agentAppInstalled/list",
+      "agentAppInstalled/disabled/set",
+      "agentAppInstalled/uninstall/rehearsal",
+      "agentAppInstalled/uninstall",
+      "agentAppShell/prepare",
+      "agentAppUiRuntime/start",
+      "agentAppUiRuntime/status",
+      "agentAppUiRuntime/stop",
+    ]);
+  });
+
+  it("旧 Agent App lifecycle Tauri 命令不应继续作为 runtime gateway current surface", () => {
+    expect(agentCommandCatalog.runtimeGatewayCommands).not.toEqual(
+      expect.arrayContaining([
+        "agent_app_inspect_local_package",
+        "agent_app_fetch_cloud_package",
+        "agent_app_save_installed_state",
+        "agent_app_list_installed",
+        "agent_app_set_disabled",
+        "agent_app_uninstall_rehearsal",
+        "agent_app_uninstall",
+      ]),
+    );
+    expect(agentCommandCatalog.deprecatedCommandReplacements).toMatchObject({
+      agent_app_inspect_local_package: "agentAppLocalPackage/inspect",
+      agent_app_fetch_cloud_package: "agentAppPackage/fetchCloud",
+      agent_app_save_installed_state: "agentAppInstalled/save",
+      agent_app_list_installed: "agentAppInstalled/list",
+      agent_app_set_disabled: "agentAppInstalled/disabled/set",
+      agent_app_uninstall_rehearsal: "agentAppInstalled/uninstall/rehearsal",
+      agent_app_uninstall: "agentAppInstalled/uninstall",
+    });
+  });
+
   it("应记录旧 API Key Provider 命令到 current 方法的替换关系", () => {
     expect(agentCommandCatalog.deprecatedCommandReplacements).toMatchObject({
       get_api_key_providers: "modelProvider/list",

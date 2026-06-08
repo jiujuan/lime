@@ -9,7 +9,7 @@
 1. App Server 成为跨 App 的 Agent runtime 服务边界。
 2. RuntimeCore 成为公共事实源，壳层只做 client / bridge。
 3. Aster 只是第一个 ExecutionBackend，不再等同于公共 runtime。
-4. legacy desktop facade 逐步退回 thin facade，不继续拥有业务执行逻辑。
+4. legacy desktop facade 逐步迁出或下线；确需临时兼容时只做 current 边界投影，不继续拥有业务执行逻辑，也不在 `lime-rs/src/commands/**` 保留 thin facade。
 5. 独立 App 通过 JSON-RPC client 复用 Agent 能力。
 6. Tool / action / artifact / evidence / workspace / skill capability 不在 App 侧复制。
 

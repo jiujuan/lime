@@ -331,12 +331,14 @@ P1 候选：
 
 ## 6. 命令与合同
 
-若新增 Tauri command，必须同步四侧：
+新增语音模型 / ASR 后端能力不得再落到 Tauri command wrapper。后端能力进入 App Server JSON-RPC / RuntimeCore / voice services；打开系统设置、文件选择、麦克风权限等桌面壳能力进入 Electron Desktop Host bridge。若仍发现旧 Tauri 语音命令名，只能作为迁移来源或删除队列处理，不能补 stub、compat wrapper 或 `lime-rs/src/commands/**` 新实现。
 
-1. 前端 `safeInvoke(...)`
-2. Rust `tauri::generate_handler!`
+新增 current 能力时至少同步：
+
+1. 前端 `src/lib/api/*` 网关
+2. Electron Desktop Host bridge 或 App Server JSON-RPC protocol / client
 3. `agentCommandCatalog`
-4. `mockPriorityCommands` / `defaultMocks`
+4. `mockPriorityCommands` / `defaultMocks`，且 mock 只服务测试夹具
 
 建议命令：
 

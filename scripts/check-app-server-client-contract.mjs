@@ -838,6 +838,7 @@ const checks = [
     files: rustProtocolFiles,
     snippets: [
       'pub const METHOD_AGENT_APP_INSTALLED_LIST: &str = "agentAppInstalled/list"',
+      'pub const METHOD_AGENT_APP_SHELL_PREPARE: &str = "agentAppShell/prepare"',
       'pub const METHOD_AGENT_APP_UI_RUNTIME_START: &str = "agentAppUiRuntime/start"',
       'pub const METHOD_AGENT_APP_UI_RUNTIME_STATUS: &str = "agentAppUiRuntime/status"',
       'pub const METHOD_AGENT_APP_UI_RUNTIME_STOP: &str = "agentAppUiRuntime/stop"',
@@ -854,6 +855,9 @@ const checks = [
       "pub struct AgentAppInstalledListResponse",
       "pub states: Vec<serde_json::Value>",
       "pub issues: Vec<serde_json::Value>",
+      "pub struct AgentAppShellPrepareParams",
+      "pub struct AgentAppShellPrepareResponse",
+      "pub package_mount: Option<AgentAppShellPackageMount>",
       "pub struct AgentAppUiRuntimeStartParams",
       "pub app_id: String",
       "pub entry_key: Option<String>",
@@ -964,6 +968,10 @@ const checks = [
       "params: ProjectMemoryReadParams",
       "Result<ProjectMemoryReadResponse, RuntimeCoreError>",
       "self.app_data_source.list_agent_app_installed().await",
+      "pub async fn prepare_agent_app_shell(",
+      "params: AgentAppShellPrepareParams",
+      "parse_agent_app_shell_descriptor(&params.descriptor)",
+      "validate_agent_app_shell_against_installed_state(",
       "resolve_agent_app_runtime_dir(&state)",
       "spawn_agent_app_ui_process(&app_dir, port)",
       "self.app_data_source.list_knowledge_packs(params).await",
@@ -996,6 +1004,7 @@ const checks = [
     file: "lime-rs/crates/app-server/src/processor.rs",
     snippets: [
       "METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list().await",
+      "METHOD_AGENT_APP_SHELL_PREPARE =>",
       "METHOD_AGENT_APP_UI_RUNTIME_START =>",
       "METHOD_AGENT_APP_UI_RUNTIME_STATUS =>",
       "METHOD_AGENT_APP_UI_RUNTIME_STOP =>",
@@ -1010,6 +1019,7 @@ const checks = [
       "METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list().await",
       "METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await",
       "async fn handle_agent_app_installed_list(&self)",
+      "async fn handle_agent_app_shell_prepare(",
       "async fn handle_agent_app_ui_runtime_start(",
       "async fn handle_agent_app_ui_runtime_status(",
       "async fn handle_agent_app_ui_runtime_stop(",
@@ -1045,6 +1055,8 @@ const checks = [
     file: "lime-rs/crates/app-server-client/src/lib.rs",
     snippets: [
       "pub use app_server_protocol::AgentAppInstalledListResponse",
+      "pub use app_server_protocol::AgentAppShellPrepareParams",
+      "pub use app_server_protocol::AgentAppShellPrepareResponse",
       "pub use app_server_protocol::AgentAppUiRuntimeStartParams",
       "pub use app_server_protocol::AgentAppUiRuntimeStatusParams",
       "pub use app_server_protocol::AgentAppUiRuntimeStatusResponse",
@@ -1069,6 +1081,7 @@ const checks = [
       "pub use app_server_protocol::ProjectMemoryReadParams",
       "pub use app_server_protocol::ProjectMemoryReadResponse",
       "pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST",
+      "pub use app_server_protocol::METHOD_AGENT_APP_SHELL_PREPARE",
       "pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START",
       "pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS",
       "pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP",
@@ -1077,6 +1090,7 @@ const checks = [
       "pub use app_server_protocol::METHOD_AUTOMATION_JOB_LIST",
       "pub use app_server_protocol::METHOD_PROJECT_MEMORY_READ",
       "pub fn list_agent_app_installed(&mut self) -> Result<JsonRpcRequest, ClientError>",
+      "pub fn prepare_agent_app_shell(",
       "pub fn start_agent_app_ui_runtime(",
       "pub fn agent_app_ui_runtime_status(",
       "pub fn stop_agent_app_ui_runtime(",
@@ -1086,6 +1100,7 @@ const checks = [
       "pub fn read_project_memory(",
       "pub fn list_agent_app_installed() -> TypedRequest<serde_json::Value>",
       "TypedRequest::new(METHOD_AGENT_APP_INSTALLED_LIST, serde_json::json!({}))",
+      "TypedRequest::new(METHOD_AGENT_APP_SHELL_PREPARE, params)",
       "TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_START, params)",
       "TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_STATUS, params)",
       "TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_STOP, params)",
@@ -1111,6 +1126,7 @@ const checks = [
     ],
     snippets: [
       'export const METHOD_AGENT_APP_INSTALLED_LIST = "agentAppInstalled/list"',
+      'export const METHOD_AGENT_APP_SHELL_PREPARE = "agentAppShell/prepare"',
       'export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start"',
       'export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status"',
       'export const METHOD_AGENT_APP_UI_RUNTIME_STOP = "agentAppUiRuntime/stop"',
@@ -1119,12 +1135,14 @@ const checks = [
       'export const METHOD_KNOWLEDGE_SOURCE_IMPORT = "knowledgePack/source/import"',
       'export const METHOD_KNOWLEDGE_PACK_COMPILE = "knowledgePack/compile"',
       'export const METHOD_KNOWLEDGE_PACK_DEFAULT_SET = "knowledgePack/default/set"',
-      'export const METHOD_KNOWLEDGE_PACK_STATUS_UPDATE =',
+      "export const METHOD_KNOWLEDGE_PACK_STATUS_UPDATE =",
       'export const METHOD_KNOWLEDGE_CONTEXT_RESOLVE = "knowledgeContext/resolve"',
-      'export const METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE =',
+      "export const METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE =",
       'export const METHOD_AUTOMATION_JOB_LIST = "automationJob/list"',
       'export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read"',
       "export type AgentAppInstalledListResponse",
+      "export type AgentAppShellPrepareParams",
+      "export type AgentAppShellPrepareResponse",
       "export type AgentAppUiRuntimeStartParams",
       "export type AgentAppUiRuntimeStatusParams",
       "export type AgentAppUiRuntimeStopParams",
@@ -1691,6 +1709,7 @@ const checks = [
       '"agentAppInstalled/disabled/set"',
       '"agentAppInstalled/uninstall/rehearsal"',
       '"agentAppInstalled/uninstall"',
+      '"agentAppShell/prepare"',
       '"agentAppUiRuntime/start"',
       '"agentAppUiRuntime/status"',
       '"agentAppUiRuntime/stop"',
@@ -1838,7 +1857,6 @@ const checks = [
       "METHOD_KNOWLEDGE_PACK_STATUS_UPDATE",
       "METHOD_KNOWLEDGE_CONTEXT_RESOLVE",
       "METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE",
-      "METHOD_AGENT_APP_INSTALLED_LIST",
       'case "agent_app_list_installed":',
       "return await this.#listAgentAppInstalled()",
       "async #listAgentAppInstalled()",
@@ -1875,7 +1893,7 @@ const checks = [
     snippets: [
       "ElectronHostCommands retired Knowledge legacy facade",
       "已从 Electron Host 退场，生产只能走 App Server JSONL current",
-      'expect(isElectronHostCommand(command)).toBe(false)',
+      "expect(isElectronHostCommand(command)).toBe(false)",
       '"knowledge_list_packs"',
       '"knowledge_get_pack"',
       '"knowledge_import_source"',
@@ -5648,6 +5666,7 @@ for (const check of checks) {
 checkLegacySessionCompatContracts();
 checkAgentRuntimeThinGatewayContracts();
 checkAgentAppUiRuntimeLifecycleContracts();
+checkMcpRuntimeCurrentContracts();
 checkKnowledgeBuilderRuntimeCurrentContracts();
 checkRetiredAppServerAgentBackendCrate();
 
@@ -5659,7 +5678,176 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[app-server-client-contract] ok (${checks.length + 4} checks)`);
+console.log(`[app-server-client-contract] ok (${checks.length + 5} checks)`);
+
+function checkMcpRuntimeCurrentContracts() {
+  const requiredByFile = new Map([
+    [
+      "lime-rs/crates/app-server-protocol/src/protocol/v0.rs",
+      [
+        'pub const METHOD_MCP_SERVER_START: &str = "mcpServer/start"',
+        'pub const METHOD_MCP_SERVER_STOP: &str = "mcpServer/stop"',
+        'pub const METHOD_MCP_TOOL_LIST_FOR_CONTEXT: &str = "mcpTool/listForContext"',
+        'pub const METHOD_MCP_TOOL_SEARCH: &str = "mcpTool/search"',
+        'pub const METHOD_MCP_TOOL_CALL: &str = "mcpTool/call"',
+        'pub const METHOD_MCP_TOOL_CALL_WITH_CALLER: &str = "mcpTool/callWithCaller"',
+        'pub const METHOD_MCP_PROMPT_GET: &str = "mcpPrompt/get"',
+        'pub const METHOD_MCP_RESOURCE_READ: &str = "mcpResource/read"',
+        "pub struct McpToolCallParams",
+        "pub struct McpToolCallResponse",
+        "pub struct McpPromptGetParams",
+        "pub struct McpResourceReadParams",
+      ],
+    ],
+    [
+      "lime-rs/crates/app-server/src/runtime.rs",
+      [
+        "pub async fn call_mcp_tool(",
+        "pub async fn call_mcp_tool_with_caller(",
+        "pub async fn get_mcp_prompt(",
+        "pub async fn read_mcp_resource(",
+        "self.app_data_source.call_mcp_tool(params).await",
+        "self.app_data_source.call_mcp_tool_with_caller(params).await",
+        "self.app_data_source.get_mcp_prompt(params).await",
+        "self.app_data_source.read_mcp_resource(params).await",
+      ],
+    ],
+    [
+      "lime-rs/crates/app-server/src/local_data_source.rs",
+      [
+        "mcp_manager: McpManagerState",
+        "McpClientManager::new(None)",
+        "async fn call_mcp_tool(",
+        "async fn call_mcp_tool_with_caller(",
+        ".call_tool(&params.tool_name, params.arguments)",
+        ".call_tool_with_caller(",
+        ".get_prompt(&params.name, params.arguments)",
+        ".read_resource(&params.uri)",
+      ],
+    ],
+    [
+      "lime-rs/crates/app-server/src/processor.rs",
+      [
+        "METHOD_MCP_TOOL_CALL => self.handle_mcp_tool_call(params).await",
+        "METHOD_MCP_TOOL_CALL_WITH_CALLER =>",
+        "METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get(params).await",
+        "METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read(params).await",
+        "let params: McpToolCallParams = parse_params(params)?",
+        "let params: McpPromptGetParams = parse_params(params)?",
+        "let params: McpResourceReadParams = parse_params(params)?",
+      ],
+    ],
+    [
+      "packages/app-server-client/src/protocol.ts",
+      [
+        'export const METHOD_MCP_TOOL_CALL = "mcpTool/call"',
+        'export const METHOD_MCP_TOOL_CALL_WITH_CALLER = "mcpTool/callWithCaller"',
+        'export const METHOD_MCP_PROMPT_GET = "mcpPrompt/get"',
+        'export const METHOD_MCP_RESOURCE_READ = "mcpResource/read"',
+        "export type McpToolCallParams",
+        "export type McpToolCallResponse",
+        "export type McpPromptGetParams",
+        "export type McpResourceReadParams",
+      ],
+    ],
+    [
+      "packages/app-server-client/src/index.ts",
+      [
+        "callMcpTool(params: McpToolCallParams): JsonRpcRequest",
+        "callMcpToolWithCaller(",
+        "getMcpPrompt(params: McpPromptGetParams): JsonRpcRequest",
+        "readMcpResource(params: McpResourceReadParams): JsonRpcRequest",
+      ],
+    ],
+    [
+      "src/lib/api/mcp.ts",
+      [
+        'import { AppServerClient } from "@/lib/api/appServer"',
+        "METHOD_MCP_TOOL_CALL",
+        "METHOD_MCP_TOOL_CALL_WITH_CALLER",
+        "METHOD_MCP_PROMPT_GET",
+        "METHOD_MCP_RESOURCE_READ",
+        "requestMcpAppServer",
+      ],
+    ],
+    [
+      "src/lib/api/mcp.test.ts",
+      [
+        "appServerRequestMock",
+        '"mcpTool/call"',
+        '"mcpTool/callWithCaller"',
+        '"mcpPrompt/get"',
+        '"mcpResource/read"',
+        "expect(safeInvoke).not.toHaveBeenCalled()",
+      ],
+    ],
+    [
+      "src/lib/api/mcp.failClosed.test.ts",
+      [
+        "App Server unavailable",
+        '"mcpTool/call"',
+        '"mcpPrompt/get"',
+        '"mcpResource/read"',
+        "expect(safeInvoke).not.toHaveBeenCalled()",
+      ],
+    ],
+  ]);
+
+  for (const [relativePath, snippets] of requiredByFile.entries()) {
+    const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+    for (const snippet of snippets) {
+      if (!content.includes(snippet)) {
+        failures.push(
+          `MCP runtime current contract: missing ${JSON.stringify(
+            snippet,
+          )} in ${relativePath}`,
+        );
+      }
+    }
+  }
+
+  const rendererGateway = fs.readFileSync(
+    path.join(repoRoot, "src/lib/api/mcp.ts"),
+    "utf8",
+  );
+  const forbiddenRendererSnippets = [
+    "safeInvoke",
+    '"mcp_call_tool"',
+    '"mcp_call_tool_with_caller"',
+    '"mcp_get_prompt"',
+    '"mcp_read_resource"',
+    '"mcp_list_tools_for_context"',
+    '"mcp_search_tools"',
+    '"mcp_start_server"',
+    '"mcp_stop_server"',
+  ];
+  for (const snippet of forbiddenRendererSnippets) {
+    if (rendererGateway.includes(snippet)) {
+      failures.push(
+        `MCP runtime renderer gateway must not use legacy command path: forbidden ${JSON.stringify(
+          snippet,
+        )}`,
+      );
+    }
+  }
+
+  const appServerCurrentContent = [
+    "lime-rs/crates/app-server/src/runtime.rs",
+    "lime-rs/crates/app-server/src/local_data_source.rs",
+    "lime-rs/crates/app-server/src/processor.rs",
+  ]
+    .map((file) => fs.readFileSync(path.join(repoRoot, file), "utf8"))
+    .join("\n");
+  for (const snippet of ["mcp_cmd", "lime-rs/src/commands"]) {
+    if (appServerCurrentContent.includes(snippet)) {
+      failures.push(
+        `MCP runtime App Server current path must not reference legacy command cleanup area: forbidden ${JSON.stringify(
+          snippet,
+        )}`,
+      );
+    }
+  }
+}
 
 function checkKnowledgeBuilderRuntimeCurrentContracts() {
   const currentFiles = [

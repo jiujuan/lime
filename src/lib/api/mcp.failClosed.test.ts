@@ -3,19 +3,17 @@ import { safeInvoke } from "@/lib/dev-bridge";
 
 import { mcpApi, type McpServer } from "./mcp";
 
+const appServerRequestMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api/appServer", () => ({
+  AppServerClient: vi.fn().mockImplementation(() => ({
+    request: appServerRequestMock,
+  })),
+}));
+
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
-
-function createDiagnosticResult(command: string): unknown {
-  return {
-    diagnostic: {
-      source: "electron-host-diagnostic",
-      command,
-      status: "degraded",
-    },
-  };
-}
 
 const server: McpServer = {
   id: "server-1",
@@ -33,9 +31,10 @@ const server: McpServer = {
 describe("mcp non-list API fail-closed", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    appServerRequestMock.mockReset();
   });
 
-  it("MCP CRUD 与生命周期命令遇到 diagnostic facade 时应 fail closed", async () => {
+  it("MCP CRUD current 尚未落地时应 fail closed 且不回退 legacy", async () => {
     const cases: Array<[string, () => Promise<unknown>]> = [
       ["add_mcp_server", () => mcpApi.addServer(server)],
       ["update_mcp_server", () => mcpApi.updateServer(server)],
@@ -46,31 +45,30 @@ describe("mcp non-list API fail-closed", () => {
       ],
       ["import_mcp_from_app", () => mcpApi.importFromApp("codex")],
       ["sync_all_mcp_to_live", () => mcpApi.syncAllToLive()],
-      ["mcp_start_server", () => mcpApi.startServer("docs")],
-      ["mcp_stop_server", () => mcpApi.stopServer("docs")],
     ];
 
     for (const [command, action] of cases) {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        createDiagnosticResult(command),
-      );
-
       await expect(action()).rejects.toThrow(
-        `${command} 尚未接入真实 MCP current 通道，收到 electron-host-diagnostic 诊断返回。`,
+        `${command} 尚未接入 App Server MCP current 通道`,
       );
     }
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("MCP 使用命令遇到 diagnostic facade 时应 fail closed", async () => {
+  it("MCP lifecycle 与 runtime 在 App Server 失败时应 fail closed 且不回退 legacy", async () => {
+    const appServerError = new Error("App Server unavailable");
     const cases: Array<[string, () => Promise<unknown>]> = [
+      ["mcpServer/start", () => mcpApi.startServer("docs")],
+      ["mcpServer/stop", () => mcpApi.stopServer("docs")],
       [
-        "mcp_list_tools_for_context",
+        "mcpTool/listForContext",
         () => mcpApi.listToolsForContext("assistant", true),
       ],
-      ["mcp_search_tools", () => mcpApi.searchTools("docs", "tool_search", 5)],
-      ["mcp_call_tool", () => mcpApi.callTool("mcp__docs__search", {})],
+      ["mcpTool/search", () => mcpApi.searchTools("docs", "tool_search", 5)],
+      ["mcpTool/call", () => mcpApi.callTool("mcp__docs__search", {})],
       [
-        "mcp_call_tool_with_caller",
+        "mcpTool/callWithCaller",
         () =>
           mcpApi.callToolWithCaller(
             "mcp__docs__search",
@@ -78,18 +76,19 @@ describe("mcp non-list API fail-closed", () => {
             "assistant",
           ),
       ],
-      ["mcp_get_prompt", () => mcpApi.getPrompt("summarize", {})],
-      ["mcp_read_resource", () => mcpApi.readResource("docs://readme")],
+      ["mcpPrompt/get", () => mcpApi.getPrompt("summarize", {})],
+      ["mcpResource/read", () => mcpApi.readResource("docs://readme")],
     ];
 
-    for (const [command, action] of cases) {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        createDiagnosticResult(command),
-      );
+    for (const [method, action] of cases) {
+      appServerRequestMock.mockRejectedValueOnce(appServerError);
 
-      await expect(action()).rejects.toThrow(
-        `${command} 尚未接入真实 MCP current 通道，收到 electron-host-diagnostic 诊断返回。`,
+      await expect(action()).rejects.toThrow("App Server unavailable");
+      expect(appServerRequestMock).toHaveBeenLastCalledWith(
+        method,
+        expect.any(Object),
       );
     }
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 });

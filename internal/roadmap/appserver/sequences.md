@@ -1,7 +1,7 @@
 # App Server 时序图
 
 > 状态：current planning source
-> 更新时间：2026-06-06
+> 更新时间：2026-06-08
 > 作用：固定 App Server 初始化、会话执行、工具审批、Desktop Host bridge 替换和独立 App 复用的关键时序。
 
 ## 1. 独立 App 启动 App Server
@@ -152,6 +152,8 @@ sequenceDiagram
 
 目标：Electron Desktop Host bridge 全面接管 GUI current 路径；legacy desktop facade 如仍存在，只能作为 compat 委托 App Server / RuntimeCore，不能成为新增业务事实源。
 
+执行口径：迁移期时序里的 legacy facade 不是继续扩写 `lime-rs/src/commands/**` 的许可。旧 Tauri wrapper 迁出后必须撤 runner / dispatcher / catalog / mock 注册并删除；删不动时只登记 blocker 和退出条件，不保留 stub、compat wrapper 或退场 tombstone。
+
 ## 7. content-studio 复用时序
 
 ```mermaid
@@ -204,6 +206,8 @@ sequenceDiagram
 ```
 
 要求：事件订阅、session 可见性、capability 权限必须按 client / app 隔离。
+
+多 App 共享 server 时，任一 App 都不能把 Lime 旧 `lime-rs/src/commands/**` 当作本地 runtime API；只允许通过 App Server client 或自己的 Desktop Host bridge 访问 current 能力。
 
 ## 9. Evidence 导出
 

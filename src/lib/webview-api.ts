@@ -1,8 +1,7 @@
 /**
- * Webview 管理 API
+ * Browser Runtime 管理 API
  *
- * 提供与 Desktop Host / legacy webview adapter 命令交互的 TypeScript 接口。
- * current 主路径应收敛到 Electron Desktop Host，旧 webview 命令仅作兼容适配。
+ * 提供 Chrome Profile、Browser Runtime 与 Site adapter current 命令网关。
  *
  * @module lib/webview-api
  */
@@ -23,62 +22,6 @@ import {
 } from "@/lib/api/agentRuntime";
 import { assertNotDiagnosticFacade } from "@/lib/api/diagnosticFacade";
 import { safeInvoke } from "@/lib/dev-bridge";
-
-/**
- * Webview 面板信息
- */
-export interface WebviewPanelInfo {
-  /** 面板 ID */
-  id: string;
-  /** 当前 URL */
-  url: string;
-  /** 面板标题 */
-  title: string;
-  /** X 坐标 */
-  x: number;
-  /** Y 坐标 */
-  y: number;
-  /** 宽度 */
-  width: number;
-  /** 高度 */
-  height: number;
-}
-
-/**
- * 创建 webview 面板的请求参数
- */
-export interface CreateWebviewRequest {
-  /** 面板 ID（唯一标识） */
-  panel_id: string;
-  /** 要加载的 URL */
-  url: string;
-  /** 面板标题（可选） */
-  title?: string;
-  /** X 坐标（相对于主窗口） */
-  x: number;
-  /** Y 坐标（相对于主窗口） */
-  y: number;
-  /** 宽度 */
-  width: number;
-  /** 高度 */
-  height: number;
-  /** Profile 隔离键（可选） */
-  profile_key?: string;
-  /** 是否启用持久化 profile（可选） */
-  persistent_profile?: boolean;
-}
-
-/**
- * 创建 webview 面板的响应
- */
-export interface CreateWebviewResponse {
-  /** 是否成功 */
-  success: boolean;
-  /** 面板 ID */
-  panel_id: string;
-  /** 错误信息（如果有） */
-  error?: string;
-}
 
 /**
  * 启动外部 Chrome Profile 的请求参数
@@ -762,8 +705,7 @@ export interface UpdateBrowserSessionControlRequest {
   human_reason?: string;
 }
 
-const BROWSER_CONNECTOR_CURRENT_SURFACE =
-  "真实 Browser connector current 通道";
+const BROWSER_CONNECTOR_CURRENT_SURFACE = "真实 Browser connector current 通道";
 const BROWSER_RUNTIME_CURRENT_SURFACE = "真实 Browser runtime current 通道";
 
 function rejectMissingBrowserConnectorCurrent<T>(command: string): Promise<T> {
@@ -796,7 +738,11 @@ export async function getChromeProfileSessions(): Promise<
 > {
   const command = "get_chrome_profile_sessions";
   const result = await safeInvoke<ChromeProfileSessionInfo[]>(command);
-  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Browser bridge current 通道",
+  );
   return result;
 }
 
@@ -876,7 +822,11 @@ export async function restoreBrowserProfile(id: string): Promise<boolean> {
 export async function getChromeBridgeEndpointInfo(): Promise<ChromeBridgeEndpointInfo> {
   const command = "get_chrome_bridge_endpoint_info";
   const result = await safeInvoke<ChromeBridgeEndpointInfo>(command);
-  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Browser bridge current 通道",
+  );
   return result;
 }
 
@@ -886,7 +836,11 @@ export async function getChromeBridgeEndpointInfo(): Promise<ChromeBridgeEndpoin
 export async function getChromeBridgeStatus(): Promise<ChromeBridgeStatusSnapshot> {
   const command = "get_chrome_bridge_status";
   const result = await safeInvoke<ChromeBridgeStatusSnapshot>(command);
-  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Browser bridge current 通道",
+  );
   return result;
 }
 
@@ -961,7 +915,9 @@ export async function installBrowserConnectorExtension(
 }
 
 export async function openBrowserExtensionsPage(): Promise<boolean> {
-  return rejectMissingBrowserConnectorCurrent("open_browser_extensions_page_cmd");
+  return rejectMissingBrowserConnectorCurrent(
+    "open_browser_extensions_page_cmd",
+  );
 }
 
 export async function openBrowserRemoteDebuggingPage(): Promise<boolean> {
@@ -992,7 +948,11 @@ export async function chromeBridgeExecuteCommand(
 export async function getBrowserBackendPolicy(): Promise<BrowserBackendPolicy> {
   const command = "get_browser_backend_policy";
   const result = await safeInvoke<BrowserBackendPolicy>(command);
-  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Browser bridge current 通道",
+  );
   return result;
 }
 
@@ -1006,7 +966,11 @@ export async function setBrowserBackendPolicy(
 export async function getBrowserBackendsStatus(): Promise<BrowserBackendsStatusSnapshot> {
   const command = "get_browser_backends_status";
   const result = await safeInvoke<BrowserBackendsStatusSnapshot>(command);
-  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Browser bridge current 通道",
+  );
   return result;
 }
 

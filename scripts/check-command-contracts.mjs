@@ -86,6 +86,7 @@ const retiredApiKeyProviderFacadeCommands = new Set([
   "test_api_key_provider_connection",
   "test_api_key_provider_chat",
   "fetch_provider_models_auto",
+  "fetch_provider_models_from_api",
 ]);
 const retiredAgentAppPackageFacadeCommands = new Set([
   "agent_app_fetch_cloud_package",
@@ -110,6 +111,11 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "create_a2ui_form",
   "auto_import_prompt",
   "clear_request_logs",
+  "companion_get_pet_status",
+  "companion_launch_pet",
+  "companion_send_pet_command",
+  "close_webview_panel",
+  "create_webview_panel",
   "delete_prompt",
   "enable_prompt",
   "execute_ecommerce_review_reply",
@@ -147,6 +153,7 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "get_tool_versions",
   "get_usage_stats",
   "get_available_voices",
+  "get_webview_panels",
   "get_websocket_connections",
   "get_websocket_status",
   "handle_deep_link",
@@ -156,7 +163,9 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "import_document",
   "import_document_to_session",
   "import_prompt_from_file",
+  "get_telegram_remote_status",
   "list_relay_providers",
+  "navigate_webview_panel",
   "open_auth_dir",
   "open_codex_cli_login",
   "open_codex_cli_logout",
@@ -164,6 +173,7 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "open_external_url",
   "read_image_from_session",
   "refresh_relay_registry",
+  "resize_webview_panel",
   "remove_model_from_provider",
   "remove_provider",
   "save_exported_document",
@@ -177,10 +187,14 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "set_auto_launch",
   "set_injection_enabled",
   "set_websocket_enabled",
+  "start_telegram_remote",
   "start_oem_cloud_oauth_callback_bridge",
+  "stop_telegram_remote",
   "submit_a2ui_form",
+  "sync_tray_model_shortcuts",
   "test_tts",
   "toggle_model_enabled",
+  "focus_webview_panel",
   "add_injection_rule",
   "remove_injection_rule",
   "update_prompt",
@@ -193,6 +207,8 @@ const retiredTauriGenerateHandlerCommands = new Set([
 const retiredTauriCommandModules = new Set([
   "a2ui_form_cmd",
   "config_cmd",
+  "companion_cmd",
+  "connect_cmd",
   "document_import_cmd",
   "ecommerce_review_reply_cmd",
   "experimental_cmd",
@@ -204,7 +220,9 @@ const retiredTauriCommandModules = new Set([
   "models_cmd",
   "prompt_cmd",
   "telemetry_cmd",
+  "telegram_remote_cmd",
   "theme_context_cmd",
+  "tray_cmd",
   "voice_test_cmd",
   "websocket_cmd",
 ]);
@@ -230,6 +248,7 @@ const currentElectronHostRequiredCommands = new Set([
   "agent_runtime_list_sessions",
   "agent_runtime_get_session",
   "agent_runtime_list_workspace_skill_bindings",
+  "agent_app_launch_shell",
   "agent_app_get_ui_runtime_status",
   "agent_app_start_ui_runtime",
   "agent_app_stop_ui_runtime",
@@ -330,7 +349,6 @@ addDeferredCommands(
 addDeferredCommands(
   [
     "agent_app_select_directory",
-    "agent_app_launch_shell",
     "agent_app_runtime_start_task",
     "agent_app_runtime_cancel_task",
     "agent_app_runtime_get_task",
@@ -1580,9 +1598,7 @@ function main() {
     Object.keys(agentCommandCatalog.deprecatedCommandReplacements ?? {}),
   );
   const runtimeGatewayCommands = new Set(
-    (agentCommandCatalog.runtimeGatewayCommands ?? []).filter(
-      (command) => !retiredAgentAppPackageFacadeCommands.has(command),
-    ),
+    agentCommandCatalog.runtimeGatewayCommands ?? [],
   );
   const capabilityDraftCommands = new Set(
     agentCommandCatalog.capabilityDraftCommands ?? [],
@@ -1629,6 +1645,16 @@ function main() {
   );
   const retiredApiKeyProviderFacadeLeaks = new Set(
     [...retiredApiKeyProviderFacadeCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredAgentAppPackageFacadeLeaks = new Set(
+    [...retiredAgentAppPackageFacadeCommands].filter(
       (command) =>
         registeredCommands.has(command) ||
         bridgeTruthCommands.has(command) ||
@@ -1779,6 +1805,14 @@ function main() {
     printGuardFailures(
       "已迁到 App Server modelProvider/* 的旧 Provider 命令不能回到旧客户端源码",
       retiredApiKeyProviderFacadeSourceFailures,
+    );
+  }
+
+  if (retiredAgentAppPackageFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server agentApp* 的旧 Agent App lifecycle 命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredAgentAppPackageFacadeLeaks,
     );
   }
 

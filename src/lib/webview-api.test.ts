@@ -274,9 +274,9 @@ describe("webview-api Browser bridge diagnostics", () => {
         () =>
           saveBrowserProfile({
             id: "profile-1",
+            profile_key: "google",
             name: "Profile",
-            chrome_profile_dir: "/tmp/profile",
-            remote_debugging_port: 9222,
+            launch_url: "https://example.com",
           }),
       ],
       ["archive_browser_profile_cmd", () => archiveBrowserProfile("profile-1")],
@@ -291,9 +291,8 @@ describe("webview-api Browser bridge diagnostics", () => {
           saveBrowserEnvironmentPreset({
             id: "preset-1",
             name: "Preset",
-            description: null,
-            launch_args: [],
-            env: {},
+            description: "Preset",
+            proxy_server: "http://127.0.0.1:8080",
           }),
       ],
       [
@@ -338,7 +337,7 @@ describe("webview-api Browser bridge diagnostics", () => {
         () =>
           chromeBridgeExecuteCommand({
             profile_key: "google",
-            action: "read_page",
+            command: "read_page",
           }),
       ],
       [
@@ -409,7 +408,7 @@ describe("webview-api Browser bridge diagnostics", () => {
         "browser_execute_action",
         () =>
           browserExecuteAction({
-            session_id: "session-1",
+            args: { session_id: "session-1" },
             action: "read_page",
           }),
       ],

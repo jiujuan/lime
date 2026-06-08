@@ -12,7 +12,35 @@
   "methods": [
     {
       "kind": "request",
+      "method": "agentAppInstalled/disabled/set"
+    },
+    {
+      "kind": "request",
       "method": "agentAppInstalled/list"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppInstalled/save"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppInstalled/uninstall"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppInstalled/uninstall/rehearsal"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppLocalPackage/inspect"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppPackage/fetchCloud"
+    },
+    {
+      "kind": "request",
+      "method": "agentAppShell/prepare"
     },
     {
       "kind": "request",
@@ -204,6 +232,10 @@
     },
     {
       "kind": "request",
+      "method": "mcpPrompt/get"
+    },
+    {
+      "kind": "request",
       "method": "mcpPrompt/list"
     },
     {
@@ -212,7 +244,19 @@
     },
     {
       "kind": "request",
+      "method": "mcpResource/read"
+    },
+    {
+      "kind": "request",
       "method": "mcpServer/list"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServer/start"
+    },
+    {
+      "kind": "request",
+      "method": "mcpServer/stop"
     },
     {
       "kind": "request",
@@ -220,7 +264,23 @@
     },
     {
       "kind": "request",
+      "method": "mcpTool/call"
+    },
+    {
+      "kind": "request",
+      "method": "mcpTool/callWithCaller"
+    },
+    {
+      "kind": "request",
       "method": "mcpTool/list"
+    },
+    {
+      "kind": "request",
+      "method": "mcpTool/listForContext"
+    },
+    {
+      "kind": "request",
+      "method": "mcpTool/search"
     },
     {
       "kind": "request",
@@ -399,11 +459,30 @@
       "RequestId"
     ],
     "v0": [
+      "AgentAppCloudReleaseDescriptor",
+      "AgentAppDeleteDataExecutionEvidence",
+      "AgentAppDeleteDataPostDeleteResidualAudit",
+      "AgentAppDeleteDataTargetEvidence",
+      "AgentAppFetchCloudPackageParams",
+      "AgentAppInstalledDisabledSetParams",
       "AgentAppInstalledListResponse",
+      "AgentAppInstalledSaveParams",
+      "AgentAppLocalPackageInspectParams",
+      "AgentAppLocalPackageInspectResponse",
+      "AgentAppPackageCacheEntry",
+      "AgentAppPackageIdentity",
+      "AgentAppShellPackageMount",
+      "AgentAppShellPrepareParams",
+      "AgentAppShellPrepareResponse",
       "AgentAppUiRuntimeStartParams",
       "AgentAppUiRuntimeStatusParams",
       "AgentAppUiRuntimeStatusResponse",
       "AgentAppUiRuntimeStopParams",
+      "AgentAppUninstallParams",
+      "AgentAppUninstallRehearsalParams",
+      "AgentAppUninstallRehearsalResponse",
+      "AgentAppUninstallRehearsalTarget",
+      "AgentAppUninstallResponse",
       "AgentAttachment",
       "AgentEvent",
       "AgentInput",
@@ -501,11 +580,25 @@
       "KnowledgeUpdatePackStatusResponse",
       "KnowledgeValidateContextRunParams",
       "KnowledgeValidateContextRunResponse",
+      "McpContent",
+      "McpPromptGetParams",
+      "McpPromptGetResponse",
       "McpPromptListResponse",
+      "McpPromptMessage",
       "McpResourceListResponse",
+      "McpResourceReadParams",
+      "McpResourceReadResponse",
+      "McpServerLifecycleResponse",
       "McpServerListResponse",
+      "McpServerStartParams",
       "McpServerStatusListResponse",
+      "McpServerStopParams",
+      "McpToolCallParams",
+      "McpToolCallResponse",
+      "McpToolCallWithCallerParams",
+      "McpToolListForContextParams",
       "McpToolListResponse",
+      "McpToolSearchParams",
       "ModelListParams",
       "ModelListResponse",
       "ModelPreferencesListResponse",

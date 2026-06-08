@@ -49,6 +49,7 @@ import {
   METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
   METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
   METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
+  METHOD_AGENT_APP_SHELL_PREPARE,
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
@@ -58,6 +59,7 @@ import {
   type AgentAppLocalPackageInspectParams,
   type AgentAppLocalPackageInspectResponse,
   type AgentAppPackageCacheEntry as AppServerAgentAppPackageCacheEntry,
+  type AgentAppShellPrepareResponse,
   type AgentAppUninstallParams,
   type AgentAppUninstallRehearsalParams,
   type AgentAppUninstallRehearsalResponse,
@@ -507,6 +509,21 @@ function assertAgentAppShellLaunchResult(
   }
 }
 
+function assertAgentAppShellPrepareResponse(
+  method: string,
+  result: unknown,
+): asserts result is AgentAppShellPrepareResponse {
+  assertAgentAppRecord(method, result);
+  assertNonEmptyStringField(method, result, "status");
+  assertBooleanField(method, result, "devShell");
+  assertArrayField(method, result, "blockerCodes");
+  if (result.status === "ready") {
+    assertNonEmptyStringField(method, result, "appId");
+    assertNonEmptyStringField(method, result, "entryKey");
+    assertNonEmptyStringField(method, result, "preparedAt");
+  }
+}
+
 function normalizeInstalledAgentAppListResponse(
   response: AgentAppInstalledListResponse | null | undefined,
 ): InstalledAgentAppStateListResult {
@@ -534,6 +551,23 @@ async function requestAgentAppInstalledListAppServer(
     {},
   );
   return normalizeInstalledAgentAppListResponse(response.result);
+}
+
+async function requestAgentAppShellPrepareAppServer(
+  descriptor: ShellDescriptor,
+  appServerClient: Pick<AppServerClient, "request"> = new AppServerClient(),
+): Promise<AgentAppShellPrepareResponse> {
+  const response = await appServerClient.request<AgentAppShellPrepareResponse>(
+    METHOD_AGENT_APP_SHELL_PREPARE,
+    {
+      descriptor,
+    },
+  );
+  assertAgentAppShellPrepareResponse(
+    METHOD_AGENT_APP_SHELL_PREPARE,
+    response.result,
+  );
+  return response.result;
 }
 
 async function requestAgentAppAppServer<T>(
@@ -1109,4 +1143,7 @@ export async function launchAgentAppShell(
   return result;
 }
 
-export { extractFrontmatter };
+export {
+  extractFrontmatter,
+  requestAgentAppShellPrepareAppServer as prepareAgentAppShellForAppServerTestOnly,
+};

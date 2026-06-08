@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appId": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "appId",
+    "mode"
+  ],
+  "title": "AgentAppUninstallRehearsalParams",
+  "type": "object"
+}

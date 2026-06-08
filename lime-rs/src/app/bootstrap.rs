@@ -6,16 +6,14 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::agent::{initialize_aster_runtime, AsterAgentState};
+use crate::app::connect_state::ConnectStateWrapper;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
-use crate::commands::connect_cmd::ConnectStateWrapper;
 use crate::commands::context_memory::ContextMemoryServiceState;
 use crate::commands::machine_id_cmd::MachineIdState;
 use crate::commands::model_registry_cmd::ModelRegistryState;
 use crate::commands::session_files_cmd::SessionFilesState;
 use crate::commands::skill_cmd::SkillServiceState;
-use crate::commands::webview_cmd::{
-    ChromeProfileManagerWrapper, WebviewManagerState, WebviewManagerWrapper,
-};
+use crate::commands::webview_cmd::ChromeProfileManagerWrapper;
 use crate::config::{GlobalConfigManager, GlobalConfigManagerState};
 use crate::database::{self, DbConnection};
 use crate::logger;
@@ -50,7 +48,6 @@ pub struct AppStates {
     pub connect_state: ConnectStateWrapper,
     pub model_registry: ModelRegistryState,
     pub global_config_manager: GlobalConfigManagerState,
-    pub webview_manager: WebviewManagerWrapper,
     pub chrome_profile_manager: ChromeProfileManagerWrapper,
     pub update_check_service: UpdateCheckServiceState,
     pub session_files: SessionFilesState,
@@ -164,9 +161,6 @@ pub fn init_states(config: &Config) -> Result<AppStates, String> {
     // 初始化 Model Registry 状态（延迟初始化，在 setup hook 中完成）
     let model_registry_state: ModelRegistryState = Arc::new(RwLock::new(None));
 
-    // 初始化 Webview 管理器状态
-    let webview_manager_state =
-        WebviewManagerWrapper(Arc::new(RwLock::new(WebviewManagerState::new())));
     let chrome_profile_manager_state =
         ChromeProfileManagerWrapper(crate::commands::webview_cmd::shared_chrome_profile_manager());
 
@@ -245,7 +239,6 @@ pub fn init_states(config: &Config) -> Result<AppStates, String> {
         connect_state,
         model_registry: model_registry_state,
         global_config_manager: global_config_manager_state,
-        webview_manager: webview_manager_state,
         chrome_profile_manager: chrome_profile_manager_state,
         update_check_service: update_check_service_state,
         session_files: session_files_state,

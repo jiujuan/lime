@@ -10,7 +10,7 @@
 2. 先固定协议、RuntimeCore 和 ExecutionBackend，再迁复杂 runtime。
 3. 不为单一 App 写专用 runtime 分支。
 4. App Server 和 legacy desktop facade 必须共享 RuntimeCore。
-5. 旧 command glue 只能作为 compat facade，不继续长业务逻辑。
+5. 旧 command glue 只能迁出或下线；确需临时兼容时只允许在 current 边界投影，不继续长业务逻辑，也不在 `lime-rs/src/commands/**` 保留 facade。
 6. 新 App 只能走 App Server Client，不直接链接 Lime 内部实现。
 7. `lime-rs/src/commands/**` 是旧 Tauri command wrapper 清理区，不再承接新的业务逻辑、API adapter、runtime 分支或领域服务实现。
 
@@ -23,7 +23,7 @@
 | P2 | RuntimeCore / ExecutionBackend | `RuntimeCore`、`ExecutionBackend`、`RuntimeEventSink`、`RuntimeHostContext`、`MockBackend` | MockBackend 可通过公共事件跑通最小 session/turn。 |
 | P3 | AsterBackend adapter | Aster backend adapter、事件转换、cancel 桥 | 一个 Aster turn 可通过 RuntimeCore 跑通。 |
 | P4 | App Server 接入 RuntimeCore | JSON-RPC router、stdio transport、server request processor | App Server 不直接拼 runtime，只调用 RuntimeCore。 |
-| P5 | Lime Desktop Host bridge / compat facade | Electron Desktop Host bridge、legacy desktop facade、DesktopEventSink | Desktop 主路径不回退，legacy command 只委托。 |
+| P5 | Lime Desktop Host bridge / compat projection | Electron Desktop Host bridge、legacy desktop projection、DesktopEventSink | Desktop 主路径不回退；旧 command name 如需临时存在，只投影到 current 边界并有退出条件。 |
 | P6 | content-studio 试点 | Electron main client、sidecar 管理、业务对象绑定 | content-studio 可通过 App Server 发起 Agent session。 |
 | P7 | Tool / Action / Artifact / Evidence | action/respond、tool events、artifact/evidence API | 审批、artifact、evidence 事件同源。 |
 | P8 | 多 App 复用 | capability discovery、client isolation、本地 socket 评估 | 第二个独立 App 不新增 runtime 实现即可接入。 |
@@ -224,7 +224,7 @@
 
 退出条件：
 
-1. command glue 只做 compat facade。
+1. command glue 已迁出或下线；仍暂留的兼容投影有明确退出条件，且不在 `lime-rs/src/commands/**` 保留 wrapper / stub / facade。
 2. 新 App 只通过 App Server Client。
 3. App Server 协议成为新增 Agent 能力的默认入口。
 4. 治理报告能发现回流。
@@ -289,4 +289,4 @@ npm run smoke:electron
 2. Lime Desktop Agent 主路径通过 service 或 App Server 复用同一 runtime。
 3. content-studio 至少一个真实业务 Agent flow 通过 App Server 完成。
 4. Tool / action / artifact / evidence 事件跨 App 语义一致。
-5. legacy desktop command glue 的 compat / deprecated 退场计划可验证。
+5. legacy desktop command glue 的迁出 / 下线计划可验证，且不会把 `lime-rs/src/commands/**` 当成完成态。

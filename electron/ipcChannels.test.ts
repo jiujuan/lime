@@ -60,6 +60,7 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_home_dir")).toBe(true);
     expect(isElectronHostCommand("agent_app_list_installed")).toBe(false);
     expect(isElectronHostCommand("agent_app_select_directory")).toBe(true);
+    expect(isElectronHostCommand("agent_app_launch_shell")).toBe(true);
     expect(isElectronHostCommand("agent_app_runtime_start_task")).toBe(true);
     expect(isElectronHostCommand("agent_app_runtime_cancel_task")).toBe(true);
     expect(isElectronHostCommand("agent_app_runtime_get_task")).toBe(true);

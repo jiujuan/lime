@@ -51,6 +51,26 @@ describe("desktop-host/core 未注册 mock command", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
+  it("快捷键校验默认 mock 被清理后不再伪造成功", async () => {
+    await expect(
+      invokeMockOnly("validate_shortcut", {
+        shortcutStr: "CommandOrControl+Shift+V",
+      }),
+    ).rejects.toThrow('未注册命令 "validate_shortcut"');
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("前端崩溃上报默认 mock 被清理后不再伪造成功", async () => {
+    await expect(
+      invokeMockOnly("report_frontend_crash", {
+        report: { message: "boom" },
+      }),
+    ).rejects.toThrow('未注册命令 "report_frontend_crash"');
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
   it("测试显式注册的 mock command 仍可使用", async () => {
     mockCommand("test_only_current_fixture", () => ({ ok: true }));
 

@@ -9,13 +9,6 @@
     "aster_agent_reset",
     "app_server_handle_json_lines",
     "app_server_drain_events",
-    "agent_app_inspect_local_package",
-    "agent_app_fetch_cloud_package",
-    "agent_app_save_installed_state",
-    "agent_app_list_installed",
-    "agent_app_set_disabled",
-    "agent_app_uninstall_rehearsal",
-    "agent_app_uninstall",
     "agent_app_start_ui_runtime",
     "agent_app_get_ui_runtime_status",
     "agent_app_stop_ui_runtime",
@@ -216,7 +209,14 @@
     "get_provider_ui_state": "modelProviderUiState/read",
     "read_api_key_provider_ui_state": "modelProviderUiState/read",
     "set_provider_ui_state": "modelProviderUiState/write",
-    "write_api_key_provider_ui_state": "modelProviderUiState/write"
+    "write_api_key_provider_ui_state": "modelProviderUiState/write",
+    "agent_app_inspect_local_package": "agentAppLocalPackage/inspect",
+    "agent_app_fetch_cloud_package": "agentAppPackage/fetchCloud",
+    "agent_app_save_installed_state": "agentAppInstalled/save",
+    "agent_app_list_installed": "agentAppInstalled/list",
+    "agent_app_set_disabled": "agentAppInstalled/disabled/set",
+    "agent_app_uninstall_rehearsal": "agentAppInstalled/uninstall/rehearsal",
+    "agent_app_uninstall": "agentAppInstalled/uninstall"
   },
   "deprecatedHelperReplacements": {
     "createAgentSession": "createAgentRuntimeSession",
@@ -265,5 +265,18 @@
     "modelProviderKey/error/record",
     "modelProviderUiState/read",
     "modelProviderUiState/write"
+  ],
+  "appServerAgentAppMethods": [
+    "agentAppLocalPackage/inspect",
+    "agentAppPackage/fetchCloud",
+    "agentAppInstalled/save",
+    "agentAppInstalled/list",
+    "agentAppInstalled/disabled/set",
+    "agentAppInstalled/uninstall/rehearsal",
+    "agentAppInstalled/uninstall",
+    "agentAppShell/prepare",
+    "agentAppUiRuntime/start",
+    "agentAppUiRuntime/status",
+    "agentAppUiRuntime/stop"
   ]
 }

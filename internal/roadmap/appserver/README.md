@@ -69,7 +69,7 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 1. 把 Lime 的 AI Agent Rust runtime 抽成可复用本地 app-server。
 2. 为 Lime Desktop 和独立 App 提供统一 JSON-RPC 服务边界。
 3. 让 content-studio 成为第一批复用方，但不把方案绑定到单一 App。
-4. 逐步把 legacy desktop command glue 退回 thin facade。
+4. 逐步把 legacy desktop command glue 迁出或下线；确需临时兼容时只能在 App Server / Electron Desktop Host current 边界内投影，不能在 `lime-rs/src/commands/**` 保留 thin facade。
 5. 统一 session / thread / turn / task / tool / action / artifact / evidence facts。
 6. 让未来 App 只接入 App Server Client 和 Capability SDK，不复制 runtime 逻辑。
 7. 让 Aster 作为第一个 `ExecutionBackend` 接入，为后续更多执行后端留出清晰接口。
@@ -83,7 +83,7 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 3. 不让独立 App 直接调用 Lime 内部 Rust 模块。
 4. 不新增第二套 tool runtime、skill runtime、workspace runtime。
 5. 不在 App 侧用 UI-only state 模拟 Agent 执行成功。
-6. 不一次性迁完所有 legacy desktop commands；但 `lime-rs/src/commands/**` 只允许作为清理区处理，不再新增实现。
+6. 不一次性迁完所有 legacy desktop commands；但 `lime-rs/src/commands/**` 只允许作为清理区处理，不再新增实现、stub、compat wrapper 或 thin facade。
 7. 不把 `Aster`、`runtime_turn.rs` 或 legacy desktop command DTO 直接定义成公共协议。
 
 ## 6. 当前执行顺序

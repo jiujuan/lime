@@ -1,7 +1,7 @@
 # App Server 流程图
 
 > 状态：current planning source
-> 更新时间：2026-06-04
+> 更新时间：2026-06-08
 > 作用：用流程图固定 App Server 的用户路径、技术主链、服务抽取、渐进替换和多 App 复用。
 
 ## 1. 用户路径：独立 App 内完成 Agent 任务
@@ -59,8 +59,10 @@ flowchart TD
     K --> L{"行为一致?"}
     L -- 否 --> M["修 core/backend 边界"]
     M --> K
-    L -- 是 --> N["旧 glue 标记 compat / deprecated"]
+    L -- 是 --> N["旧 wrapper 撤注册并删除<br/>删不动登记 blocker"]
 ```
+
+说明：服务抽取完成后，`lime-rs/src/commands/**` 不保留新的 thin facade、fail-closed stub、compat wrapper 或 tombstone；该目录只作为旧 Tauri wrapper 删除清理区。需要保留兼容命令名时，兼容入口也必须在 Electron Desktop Host / App Server current 边界内说明退出条件。
 
 ## 4. 渐进式替换流程
 
@@ -188,5 +190,6 @@ flowchart TD
     B -.禁止.-> E["自建 tool runtime"]
     B -.禁止.-> F["直接写 runtime DB"]
     B -.禁止.-> G["用 UI state 标记执行成功"]
+    B -.禁止.-> I["新增 / 复活 lime-rs/src/commands wrapper"]
     C --> H["Runtime facts"]
 ```

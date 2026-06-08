@@ -15,6 +15,7 @@ import {
   installLocalAgentAppPackage,
   launchAgentAppShell,
   listInstalledAgentApps,
+  prepareAgentAppShellForAppServerTestOnly,
   previewAgentAppUninstall,
   reviewCloudAgentAppRelease,
   reviewLocalAgentAppPackage,
@@ -971,6 +972,37 @@ describe("agentApps API", () => {
     );
   });
 
+  it("Agent App Shell prepare 应直连 App Server current 方法并校验返回形状", async () => {
+    const descriptor = buildShellDescriptor();
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        appId: "content-factory-app",
+        status: "ready",
+        installMode: "standalone",
+        shellKind: "app_shell",
+        descriptorVersion: 1,
+        devShell: true,
+        blockerCodes: [],
+        preparedAt: "2026-05-15T00:00:00.000Z",
+        entryKey: "dashboard",
+        windowTitle: "Content Factory",
+      },
+    });
+
+    await expect(
+      prepareAgentAppShellForAppServerTestOnly(descriptor),
+    ).resolves.toMatchObject({
+      status: "ready",
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+    });
+
+    expect(appServerRequestMock).toHaveBeenCalledWith("agentAppShell/prepare", {
+      descriptor,
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_launch_shell");
+  });
+
   it("Agent App uninstall rehearsal 返回非演练结果时应 fail closed", async () => {
     appServerRequestMock.mockResolvedValueOnce({ result: { success: true } });
 
@@ -1099,6 +1131,10 @@ describe("agentApps API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("agent_app_launch_shell", {
       request: { descriptor },
     });
+    expect(appServerRequestMock).not.toHaveBeenCalledWith(
+      "agentAppShell/prepare",
+      expect.anything(),
+    );
   });
 
   it("Agent App Shell launch blocked 结果不要求 launchedAt", async () => {

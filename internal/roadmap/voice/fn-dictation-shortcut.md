@@ -187,12 +187,14 @@ Fn 不可用时：
 
 ## 7. 命令与合同
 
-若新增 Tauri command，必须同步四侧：
+Fn 探测、快捷键监听和打开系统设置属于桌面壳能力，新增实现必须进入 Electron Desktop Host bridge；不得新增或恢复 Tauri command wrapper。若后续需要把语音输入状态写入后端事实，则通过 App Server JSON-RPC / voice services 承接，不落到 `lime-rs/src/commands/**`。
 
-1. 前端 `safeInvoke(...)`
-2. Rust `tauri::generate_handler!`
+新增 current 能力时至少同步：
+
+1. 前端 `src/lib/api/*` 网关
+2. Electron Desktop Host bridge / preload 白名单，或 App Server JSON-RPC protocol / client
 3. `agentCommandCatalog`
-4. `mockPriorityCommands` / `defaultMocks`
+4. `mockPriorityCommands` / `defaultMocks`，且 mock 只服务测试夹具
 
 建议命令：
 

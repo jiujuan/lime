@@ -10,15 +10,15 @@ use crate::AgentAppLocalPackageInspectParams;
 use crate::AgentAppLocalPackageInspectResponse;
 use crate::AgentAppPackageCacheEntry;
 use crate::AgentAppPackageIdentity;
+use crate::AgentAppUiRuntimeStartParams;
+use crate::AgentAppUiRuntimeStatusParams;
+use crate::AgentAppUiRuntimeStatusResponse;
+use crate::AgentAppUiRuntimeStopParams;
 use crate::AgentAppUninstallParams;
 use crate::AgentAppUninstallRehearsalParams;
 use crate::AgentAppUninstallRehearsalResponse;
 use crate::AgentAppUninstallRehearsalTarget;
 use crate::AgentAppUninstallResponse;
-use crate::AgentAppUiRuntimeStartParams;
-use crate::AgentAppUiRuntimeStatusParams;
-use crate::AgentAppUiRuntimeStatusResponse;
-use crate::AgentAppUiRuntimeStopParams;
 use crate::AgentAttachment;
 use crate::AgentEvent;
 use crate::AgentInput;
@@ -123,11 +123,25 @@ use crate::KnowledgeUpdatePackStatusParams;
 use crate::KnowledgeUpdatePackStatusResponse;
 use crate::KnowledgeValidateContextRunParams;
 use crate::KnowledgeValidateContextRunResponse;
+use crate::McpContent;
+use crate::McpPromptGetParams;
+use crate::McpPromptGetResponse;
 use crate::McpPromptListResponse;
+use crate::McpPromptMessage;
 use crate::McpResourceListResponse;
+use crate::McpResourceReadParams;
+use crate::McpResourceReadResponse;
+use crate::McpServerLifecycleResponse;
 use crate::McpServerListResponse;
+use crate::McpServerStartParams;
 use crate::McpServerStatusListResponse;
+use crate::McpServerStopParams;
+use crate::McpToolCallParams;
+use crate::McpToolCallResponse;
+use crate::McpToolCallWithCallerParams;
+use crate::McpToolListForContextParams;
 use crate::McpToolListResponse;
+use crate::McpToolSearchParams;
 use crate::ModelListParams;
 use crate::ModelListResponse;
 use crate::ModelPreferencesListResponse;
@@ -446,6 +460,20 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AutomationScheduleValidateResponse>("AutomationScheduleValidateResponse"),
         typed_schema::<McpServerListResponse>("McpServerListResponse"),
         typed_schema::<McpServerStatusListResponse>("McpServerStatusListResponse"),
+        typed_schema::<McpServerStartParams>("McpServerStartParams"),
+        typed_schema::<McpServerStopParams>("McpServerStopParams"),
+        typed_schema::<McpServerLifecycleResponse>("McpServerLifecycleResponse"),
+        typed_schema::<McpToolListForContextParams>("McpToolListForContextParams"),
+        typed_schema::<McpToolSearchParams>("McpToolSearchParams"),
+        typed_schema::<McpToolCallParams>("McpToolCallParams"),
+        typed_schema::<McpToolCallWithCallerParams>("McpToolCallWithCallerParams"),
+        typed_schema::<McpToolCallResponse>("McpToolCallResponse"),
+        typed_schema::<McpPromptGetParams>("McpPromptGetParams"),
+        typed_schema::<McpPromptGetResponse>("McpPromptGetResponse"),
+        typed_schema::<McpResourceReadParams>("McpResourceReadParams"),
+        typed_schema::<McpResourceReadResponse>("McpResourceReadResponse"),
+        typed_schema::<McpContent>("McpContent"),
+        typed_schema::<McpPromptMessage>("McpPromptMessage"),
         typed_schema::<McpToolListResponse>("McpToolListResponse"),
         typed_schema::<McpPromptListResponse>("McpPromptListResponse"),
         typed_schema::<McpResourceListResponse>("McpResourceListResponse"),

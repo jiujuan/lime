@@ -298,11 +298,35 @@ describe("modelRegistry API", () => {
     expect(safeInvoke).not.toHaveBeenCalledWith("get_all_alias_configs");
   });
 
-  it("getModelRegistryProviderIds 仅保留兼容命令并透传空集合", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce([]);
+  it("getModelRegistryProviderIds 应通过 App Server provider list 派生去重 id", async () => {
+    resolveAppServerRequest({
+      providers: [
+        { id: "openai", name: "OpenAI" },
+        { id: "anthropic", name: "Anthropic" },
+        { id: "openai", name: "OpenAI duplicate" },
+        { id: "", name: "invalid empty" },
+        { name: "missing id" },
+      ],
+    });
 
-    await expect(getModelRegistryProviderIds()).resolves.toEqual([]);
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
+    await expect(getModelRegistryProviderIds()).resolves.toEqual([
+      "openai",
+      "anthropic",
+    ]);
+
+    expectAppServerRequest(1, "modelProvider/list", {});
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "get_model_registry_provider_ids",
+    );
+  });
+
+  it("getModelRegistryProviderIds 缺少 App Server providers 时应 fail closed", async () => {
+    resolveAppServerRequest({});
+
+    await expect(getModelRegistryProviderIds()).rejects.toThrow(
+      "App Server modelProvider/list did not return providers",
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
       "get_model_registry_provider_ids",
     );
   });
@@ -315,9 +339,6 @@ describe("modelRegistry API", () => {
       },
     });
 
-    await expect(getModelRegistryProviderIds()).rejects.toThrow(
-      "get_model_registry_provider_ids 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
     await expect(refreshModelRegistry()).rejects.toThrow(
       "refresh_model_registry 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
@@ -337,12 +358,8 @@ describe("modelRegistry API", () => {
       .mockResolvedValueOnce({ success: true })
       .mockResolvedValueOnce({ success: true })
       .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
       .mockResolvedValueOnce({ success: true });
 
-    await expect(getModelRegistryProviderIds()).rejects.toThrow(
-      "get_model_registry_provider_ids did not return a string array",
-    );
     await expect(refreshModelRegistry()).rejects.toThrow(
       "refresh_model_registry did not return a finite number",
     );

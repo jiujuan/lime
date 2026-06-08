@@ -115,7 +115,6 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
     webmcp: { enabled: false },
   }),
   save_experimental_config: () => ({}),
-  validate_shortcut: () => true,
 
   get_default_provider: () => "openai",
   set_default_provider: (args: any) => {
@@ -146,19 +145,6 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
 
   // Quick Filter 相关
   delete_quick_filter: () => ({ success: true }),
-
-  report_frontend_crash: () => ({ success: true }),
-
-  // Prompts 相关
-  get_prompts: () => [],
-  upsert_prompt: () => ({ success: true }),
-  add_prompt: () => ({ success: true }),
-  update_prompt: () => ({ success: true }),
-  delete_prompt: () => ({ success: true }),
-  enable_prompt: () => ({ success: true }),
-  import_prompt_from_file: () => ({ success: true }),
-  get_current_prompt_file_content: () => ({ content: "" }),
-  auto_import_prompt: () => ({ success: true }),
 
   get_window_size_options: () => ({ options: [] }),
   set_window_size_by_option: () => ({}),

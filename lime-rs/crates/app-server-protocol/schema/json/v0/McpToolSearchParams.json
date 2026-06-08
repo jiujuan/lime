@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "caller": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "limit": {
+      "default": 10,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "query": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "title": "McpToolSearchParams",
+  "type": "object"
+}

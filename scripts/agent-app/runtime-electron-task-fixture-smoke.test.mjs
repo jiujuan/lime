@@ -39,6 +39,9 @@ describe("agent app runtime Electron task fixture smoke guard", () => {
       /api\.invoke\(\s*"agent_app_runtime_submit_host_response"/,
     );
     expect(content).toContain('api.invoke("agent_app_runtime_cancel_task"');
+    expect(content).toContain(
+      "request: { appId, taskId, sessionId, turnId }",
+    );
     expect(content).toContain('action_type: "ask_user"');
     expect(content).toContain("action_scope");
     expect(content).toContain('taskStatus === "blocked"');
@@ -61,6 +64,8 @@ describe("agent app runtime Electron task fixture smoke guard", () => {
     expect(content).toContain('"turn.canceled"');
     expect(content).toContain("hostOptionsAsterChatRequestSeen");
     expect(content).toContain("turnConfigMirrorSeen");
+    expect(content).toContain("async function waitForBackendKinds(");
+    expect(content).toContain("await waitForBackendKinds(backendLogPath, options)");
     expect(content).not.toContain('APP_SERVER_BACKEND_MODE: "mock"');
     expect(content).not.toContain("mockPriorityCommands");
     expect(content).not.toContain("defaultMocks");

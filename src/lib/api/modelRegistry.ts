@@ -17,12 +17,14 @@ import type {
 import {
   METHOD_MODEL_LIST,
   METHOD_MODEL_PREFERENCES_LIST,
+  METHOD_MODEL_PROVIDER_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_READ,
   METHOD_MODEL_PROVIDER_FETCH_MODELS,
   METHOD_MODEL_SYNC_STATE_READ,
   type ModelListParams,
   type ModelProviderFetchModelsResponse,
+  type ModelProviderListResponse,
 } from "../../../packages/app-server-client/src/protocol";
 
 type ModelRegistryAppServerClient = Pick<AppServerClient, "request">;
@@ -45,6 +47,10 @@ type ModelProviderAliasReadAppServerResponse = {
 
 type ModelProviderAliasListAppServerResponse = {
   configs?: Record<string, ProviderAliasConfig> | null;
+};
+
+type ModelProviderIdRecord = {
+  id?: unknown;
 };
 
 const MODEL_REGISTRY_CURRENT_SURFACE = "真实模型注册表 current 通道";
@@ -147,14 +153,27 @@ async function invokeModelRegistryCompatCommand<T>(
   return result as T;
 }
 
-function assertStringArray(command: string, value: unknown): string[] {
-  if (
-    !Array.isArray(value) ||
-    value.some((item) => typeof item !== "string")
-  ) {
-    throw new Error(`${command} did not return a string array`);
+function assertModelProviderIds(
+  response: ModelProviderListResponse | null | undefined,
+): string[] {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server modelProvider/list did not return providers");
   }
-  return value;
+  if (!Array.isArray(response.providers)) {
+    throw new Error("App Server modelProvider/list did not return providers");
+  }
+
+  return Array.from(
+    new Set(
+      response.providers
+        .map((provider) =>
+          typeof (provider as ModelProviderIdRecord)?.id === "string"
+            ? (provider as ModelProviderIdRecord).id.trim()
+            : "",
+        )
+        .filter((providerId) => providerId.length > 0),
+    ),
+  );
 }
 
 function assertNumber(command: string, value: unknown): number {
@@ -230,14 +249,12 @@ export async function getModelRegistry(
   return cloneValue(await modelRegistryLoadingPromise);
 }
 
-/**
- * 兼容旧模型注册表 provider_id 查询；本地模型目录已下线，后端返回空集合。
- */
 export async function getModelRegistryProviderIds(): Promise<string[]> {
-  const result = await invokeModelRegistryCompatCommand<unknown>(
-    "get_model_registry_provider_ids",
+  const response = await requestModelRegistryAppServer<ModelProviderListResponse>(
+    METHOD_MODEL_PROVIDER_LIST,
+    {},
   );
-  return assertStringArray("get_model_registry_provider_ids", result);
+  return assertModelProviderIds(response);
 }
 
 /**

@@ -5,7 +5,7 @@
 use crate::models::model_registry::{
     EnhancedModelMetadata, ModelSyncState, ModelTier, ProviderAliasConfig, UserModelPreference,
 };
-use lime_services::model_registry_service::{FetchModelsResult, ModelRegistryService};
+use lime_services::model_registry_service::ModelRegistryService;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
@@ -190,30 +190,4 @@ pub async fn refresh_model_registry(state: State<'_, ModelRegistryState>) -> Res
         .ok_or_else(|| "模型注册服务未初始化".to_string())?;
 
     service.force_reload().await
-}
-
-/// 从 Provider API 获取模型列表
-///
-/// 调用 Provider 的 /v1/models 端点获取模型列表；失败时返回错误来源，
-/// 不再回退本地模型目录。
-///
-/// # 参数
-/// - `provider_id`: Provider ID（如 "siliconflow", "openai"）
-/// - `api_host`: API 主机地址
-/// - `api_key`: API Key
-#[tauri::command]
-pub async fn fetch_provider_models_from_api(
-    state: State<'_, ModelRegistryState>,
-    provider_id: String,
-    api_host: String,
-    api_key: String,
-) -> Result<FetchModelsResult, String> {
-    let guard = state.read().await;
-    let service = guard
-        .as_ref()
-        .ok_or_else(|| "模型注册服务未初始化".to_string())?;
-
-    service
-        .fetch_models_from_api(&provider_id, &api_host, &api_key)
-        .await
 }

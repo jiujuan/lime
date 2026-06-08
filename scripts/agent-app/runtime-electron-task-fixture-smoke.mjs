@@ -400,7 +400,7 @@ async function runTaskLifecycleFromPage(page) {
         request: { appId, taskId, sessionId },
       });
       const cancel = await api.invoke("agent_app_runtime_cancel_task", {
-        request: { appId, taskId, sessionId },
+        request: { appId, taskId, sessionId, turnId },
       });
       const finalSnapshot = await api.invoke("agent_app_runtime_get_task", {
         request: { appId, taskId, sessionId },
@@ -467,6 +467,20 @@ function summarizeBackendLog(entries) {
     actionConfirmed: actionRespond?.confirmed ?? null,
     cancelTurnId: turnCancel?.turnId ?? null,
   };
+}
+
+async function waitForBackendKinds(backendLogPath, options) {
+  const startedAt = Date.now();
+  let entries = readBackendLogEntries(backendLogPath);
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const summary = summarizeBackendLog(entries);
+    if (summary.missingBackendKinds.length === 0) {
+      return entries;
+    }
+    await sleep(options.intervalMs);
+    entries = readBackendLogEntries(backendLogPath);
+  }
+  return entries;
 }
 
 function taskSnapshotTurns(snapshot) {
@@ -788,7 +802,7 @@ async function run() {
 
     logStage("run-task-lifecycle");
     const taskLifecycle = await runTaskLifecycleFromPage(page);
-    const backendEntries = readBackendLogEntries(backendLogPath);
+    const backendEntries = await waitForBackendKinds(backendLogPath, options);
     const backendSummary = summarizeBackendLog(backendEntries);
     assertTaskLifecycleResult(taskLifecycle, backendSummary);
 

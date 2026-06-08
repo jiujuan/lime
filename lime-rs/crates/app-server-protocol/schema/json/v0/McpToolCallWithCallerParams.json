@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "arguments": true,
+    "caller": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "toolName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "arguments",
+    "toolName"
+  ],
+  "title": "McpToolCallWithCallerParams",
+  "type": "object"
+}

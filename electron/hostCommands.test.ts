@@ -8,18 +8,44 @@ import { ElectronHostCommands } from "./hostCommands";
 import type { ElectronAppServerHost } from "./appServerHost";
 
 const {
+  browserWindowCtorMock,
+  browserWindowGetAllWindowsMock,
   getFileIconMock,
   getPathMock,
+  loadUrlMock,
   openExternalMock,
   openPathMock,
+  showWindowMock,
+  focusWindowMock,
   showOpenDialogMock,
   showItemInFolderMock,
 } = vi.hoisted(() => {
+  const loadUrlMock = vi.fn();
+  const showWindowMock = vi.fn();
+  const focusWindowMock = vi.fn();
+  const browserWindowCtorMock = vi.fn(() => ({
+    focus: focusWindowMock,
+    loadURL: loadUrlMock,
+    once: vi.fn((event: string, callback: () => void) => {
+      if (event === "ready-to-show") {
+        callback();
+      }
+    }),
+    show: showWindowMock,
+    webContents: {
+      getURL: () => "",
+    },
+  }));
   return {
+    browserWindowCtorMock,
+    browserWindowGetAllWindowsMock: vi.fn(() => []),
     getFileIconMock: vi.fn(),
     getPathMock: vi.fn((_name: string) => os.tmpdir()),
+    loadUrlMock,
     openExternalMock: vi.fn(),
     openPathMock: vi.fn(),
+    showWindowMock,
+    focusWindowMock,
     showOpenDialogMock: vi.fn(),
     showItemInFolderMock: vi.fn(),
   };
@@ -37,6 +63,9 @@ vi.mock("./electronRuntime", () => ({
     getPath: getPathMock,
     getVersion: () => "0.0.0-test",
   },
+  BrowserWindow: Object.assign(browserWindowCtorMock, {
+    getAllWindows: browserWindowGetAllWindowsMock,
+  }),
   dialog: {
     showOpenDialog: showOpenDialogMock,
   },
@@ -81,8 +110,36 @@ function sessionAlreadyExistsError(sessionId: string) {
   );
 }
 
+function buildAgentAppShellDescriptor(): Record<string, unknown> {
+  return {
+    descriptorVersion: 1,
+    appId: "content-factory-app",
+    packageHash: "package-fnv1a-current",
+    manifestHash: "manifest-fnv1a-current",
+    installMode: "standalone",
+    runtimeProfile: {
+      shellKind: "app_shell",
+      installMode: "standalone",
+    },
+    isolation: {
+      packageMount: "read-only",
+      secrets: "refs-only",
+      sideEffects: "runtime-broker",
+      evidence: "runtime-provenance",
+    },
+    entry: {
+      entryKey: "dashboard",
+    },
+    branding: {
+      name: "Content Factory",
+      windowTitle: "Content Factory",
+    },
+  };
+}
+
 afterEach(async () => {
   vi.clearAllMocks();
+  browserWindowGetAllWindowsMock.mockReturnValue([]);
   getPathMock.mockImplementation(() => os.tmpdir());
   showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
   while (tempDirs.length > 0) {
@@ -176,6 +233,177 @@ describe("ElectronHostCommands local file shell facade", () => {
       path: null,
       cancelled: true,
     });
+  });
+
+  it("agent_app_launch_shell 应经 App Server prepare 后启动 UI runtime 并打开 Electron 窗口", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const request = vi.fn(async (method: string, params?: unknown) => {
+      if (method === "agentAppShell/prepare") {
+        expect(params).toEqual({
+          descriptor: buildAgentAppShellDescriptor(),
+        });
+        return {
+          appId: "content-factory-app",
+          status: "ready",
+          installMode: "standalone",
+          shellKind: "app_shell",
+          descriptorVersion: 1,
+          devShell: true,
+          blockerCodes: [],
+          preparedAt: "2026-05-15T00:00:00.000Z",
+          entryKey: "dashboard",
+          windowTitle: "Content Factory",
+          packageMount: {
+            kind: "local_dir",
+            path: "/tmp/content-factory-app",
+            readOnly: true,
+            packageHash: "package-fnv1a-current",
+            manifestHash: "manifest-fnv1a-current",
+          },
+        };
+      }
+      if (method === "agentAppUiRuntime/start") {
+        expect(params).toEqual({
+          appId: "content-factory-app",
+          entryKey: "dashboard",
+        });
+        return {
+          appId: "content-factory-app",
+          status: "running",
+          entryUrl: "http://127.0.0.1:4199/dashboard",
+          baseUrl: "http://127.0.0.1:4199",
+          port: 4199,
+          pid: 41990,
+          entryKey: "dashboard",
+          route: "/dashboard",
+        };
+      }
+      throw new Error(`unexpected App Server method: ${method}`);
+    });
+    const host = createHost(userDataDir, undefined, request);
+
+    await expect(
+      host.invoke("agent_app_launch_shell", {
+        request: {
+          descriptor: buildAgentAppShellDescriptor(),
+        },
+      }),
+    ).resolves.toMatchObject({
+      appId: "content-factory-app",
+      status: "launched",
+      devShell: true,
+      blockerCodes: [],
+      packageMount: {
+        kind: "local_dir",
+        path: "/tmp/content-factory-app",
+        readOnly: true,
+        packageHash: "package-fnv1a-current",
+        manifestHash: "manifest-fnv1a-current",
+      },
+      runtimeStatus: {
+        status: "running",
+        entryUrl: "http://127.0.0.1:4199/dashboard",
+      },
+      shellWindow: {
+        label: "agent-app-shell-content-factory-app-standalone",
+        url: "http://127.0.0.1:4199/dashboard",
+        reused: false,
+        chrome: {
+          deepLinkScheme: "lime-agent-content-factory-app",
+          openEntryKey: "dashboard",
+          trayEnabled: true,
+          closePolicy: "hide_to_tray",
+          multiAppManagement: false,
+          runtimeBypass: false,
+        },
+      },
+    });
+
+    expect(request).toHaveBeenCalledWith("agentAppShell/prepare", {
+      descriptor: buildAgentAppShellDescriptor(),
+    });
+    expect(request).toHaveBeenCalledWith("agentAppUiRuntime/start", {
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+    });
+    expect(browserWindowCtorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Content Factory",
+        width: 1280,
+        height: 860,
+      }),
+    );
+    expect(loadUrlMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:4199/dashboard",
+    );
+    expect(showWindowMock).toHaveBeenCalled();
+    expect(focusWindowMock).toHaveBeenCalled();
+  });
+
+  it("agent_app_launch_shell prepare blocked 时应 fail closed 且不启动 runtime", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const request = vi.fn(async (method: string) => {
+      if (method === "agentAppShell/prepare") {
+        return {
+          appId: "content-factory-app",
+          status: "blocked",
+          devShell: true,
+          blockerCodes: ["INSTALLED_STATE_MISSING"],
+          message: "Agent App 未安装。",
+          preparedAt: "2026-05-15T00:00:00.000Z",
+        };
+      }
+      throw new Error(`unexpected App Server method: ${method}`);
+    });
+    const host = createHost(userDataDir, undefined, request);
+
+    await expect(
+      host.invoke("agent_app_launch_shell", {
+        request: {
+          descriptor: buildAgentAppShellDescriptor(),
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      blockerCodes: ["INSTALLED_STATE_MISSING"],
+    });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(browserWindowCtorMock).not.toHaveBeenCalled();
+  });
+
+  it("agent_app_launch_shell descriptor 无效时由 App Server prepare fail closed", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const request = vi.fn(async (method: string) => {
+      if (method === "agentAppShell/prepare") {
+        return {
+          status: "blocked",
+          devShell: true,
+          blockerCodes: ["PACKAGE_IDENTITY_MISSING"],
+          message: "Agent App shell descriptor 未通过启动前校验。",
+          preparedAt: "2026-05-15T00:00:00.000Z",
+        };
+      }
+      throw new Error(`unexpected App Server method: ${method}`);
+    });
+    const host = createHost(userDataDir, undefined, request);
+
+    await expect(
+      host.invoke("agent_app_launch_shell", {
+        request: {
+          descriptor: {
+            ...buildAgentAppShellDescriptor(),
+            packageHash: "",
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      blockerCodes: ["PACKAGE_IDENTITY_MISSING"],
+    });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(browserWindowCtorMock).not.toHaveBeenCalled();
   });
 
   it("reveal_in_finder 通过 Electron shell 定位本地路径", async () => {

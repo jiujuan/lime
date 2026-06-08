@@ -1,0 +1,297 @@
+{
+  "$defs": {
+    "AgentAppDeleteDataExecutionEvidence": {
+      "properties": {
+        "blockedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dataRoot": {
+          "type": "string"
+        },
+        "failedTarget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "missingTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "postDeleteResidualAudit": {
+          "$ref": "#/$defs/AgentAppDeleteDataPostDeleteResidualAudit"
+        },
+        "removedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "retainedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataRoot",
+        "generatedAt",
+        "postDeleteResidualAudit",
+        "status"
+      ],
+      "type": "object"
+    },
+    "AgentAppDeleteDataPostDeleteResidualAudit": {
+      "properties": {
+        "checkedAt": {
+          "type": "string"
+        },
+        "checkedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failedTarget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "remainingTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "remainingTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkedAt",
+        "checkedTargetCount",
+        "remainingTargetCount",
+        "status"
+      ],
+      "type": "object"
+    },
+    "AgentAppDeleteDataTargetEvidence": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "error": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "kind",
+        "reason",
+        "status",
+        "value"
+      ],
+      "type": "object"
+    },
+    "AgentAppInstalledListResponse": {
+      "properties": {
+        "issues": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "states": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "AgentAppUninstallRehearsalResponse": {
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "deletedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "retainedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "targets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppUninstallRehearsalTarget"
+          },
+          "type": "array"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "appId",
+        "deletedTargetCount",
+        "generatedAt",
+        "mode",
+        "retainedTargetCount"
+      ],
+      "type": "object"
+    },
+    "AgentAppUninstallRehearsalTarget": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "safeToDelete": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "kind",
+        "reason",
+        "safeToDelete",
+        "value"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "blockerCodes": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "deleteEvidence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AgentAppDeleteDataExecutionEvidence"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "list": {
+      "$ref": "#/$defs/AgentAppInstalledListResponse"
+    },
+    "missingTargetCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rehearsal": {
+      "$ref": "#/$defs/AgentAppUninstallRehearsalResponse"
+    },
+    "removedTargetCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "status": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "list",
+    "missingTargetCount",
+    "rehearsal",
+    "removedTargetCount",
+    "status"
+  ],
+  "title": "AgentAppUninstallResponse",
+  "type": "object"
+}

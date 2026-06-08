@@ -5,6 +5,8 @@ pub use app_server_protocol::AgentAppInstalledDisabledSetParams;
 pub use app_server_protocol::AgentAppInstalledListResponse;
 pub use app_server_protocol::AgentAppInstalledSaveParams;
 pub use app_server_protocol::AgentAppLocalPackageInspectParams;
+pub use app_server_protocol::AgentAppShellPrepareParams;
+pub use app_server_protocol::AgentAppShellPrepareResponse;
 pub use app_server_protocol::AgentAppUninstallParams;
 pub use app_server_protocol::AgentAppUninstallRehearsalParams;
 pub use app_server_protocol::AgentAppUiRuntimeStartParams;
@@ -73,11 +75,23 @@ pub use app_server_protocol::KnowledgeUpdatePackStatusParams;
 pub use app_server_protocol::KnowledgeUpdatePackStatusResponse;
 pub use app_server_protocol::KnowledgeValidateContextRunParams;
 pub use app_server_protocol::KnowledgeValidateContextRunResponse;
+pub use app_server_protocol::McpPromptGetParams;
+pub use app_server_protocol::McpPromptGetResponse;
 pub use app_server_protocol::McpPromptListResponse;
 pub use app_server_protocol::McpResourceListResponse;
+pub use app_server_protocol::McpResourceReadParams;
+pub use app_server_protocol::McpResourceReadResponse;
 pub use app_server_protocol::McpServerListResponse;
+pub use app_server_protocol::McpServerLifecycleResponse;
+pub use app_server_protocol::McpServerStartParams;
 pub use app_server_protocol::McpServerStatusListResponse;
+pub use app_server_protocol::McpServerStopParams;
+pub use app_server_protocol::McpToolCallParams;
+pub use app_server_protocol::McpToolCallResponse;
+pub use app_server_protocol::McpToolCallWithCallerParams;
+pub use app_server_protocol::McpToolListForContextParams;
 pub use app_server_protocol::McpToolListResponse;
+pub use app_server_protocol::McpToolSearchParams;
 pub use app_server_protocol::ModelListParams;
 pub use app_server_protocol::ModelProviderAliasReadParams;
 pub use app_server_protocol::ProjectMemoryReadParams;
@@ -105,7 +119,14 @@ pub use app_server_protocol::WorkspaceReadResponse;
 pub use app_server_protocol::WorkspaceSkillBindingsListParams;
 pub use app_server_protocol::WorkspaceSkillBindingsListResponse;
 pub use app_server_protocol::APP_SERVER_METHODS;
+pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_DISABLED_SET;
 pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
+pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_SAVE;
+pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_UNINSTALL;
+pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL;
+pub use app_server_protocol::METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT;
+pub use app_server_protocol::METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD;
+pub use app_server_protocol::METHOD_AGENT_APP_SHELL_PREPARE;
 pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START;
 pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS;
 pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
@@ -148,11 +169,19 @@ pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
 pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_READ;
 pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_STATUS_UPDATE;
 pub use app_server_protocol::METHOD_KNOWLEDGE_SOURCE_IMPORT;
+pub use app_server_protocol::METHOD_MCP_PROMPT_GET;
 pub use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 pub use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
+pub use app_server_protocol::METHOD_MCP_RESOURCE_READ;
 pub use app_server_protocol::METHOD_MCP_SERVER_LIST;
+pub use app_server_protocol::METHOD_MCP_SERVER_START;
 pub use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
+pub use app_server_protocol::METHOD_MCP_SERVER_STOP;
+pub use app_server_protocol::METHOD_MCP_TOOL_CALL;
+pub use app_server_protocol::METHOD_MCP_TOOL_CALL_WITH_CALLER;
 pub use app_server_protocol::METHOD_MCP_TOOL_LIST;
+pub use app_server_protocol::METHOD_MCP_TOOL_LIST_FOR_CONTEXT;
+pub use app_server_protocol::METHOD_MCP_TOOL_SEARCH;
 pub use app_server_protocol::METHOD_MODEL_LIST;
 pub use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 pub use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -397,6 +426,13 @@ impl AppServerClient {
         self.typed_request(typed::uninstall_agent_app(params))
     }
 
+    pub fn prepare_agent_app_shell(
+        &mut self,
+        params: AgentAppShellPrepareParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::prepare_agent_app_shell(params))
+    }
+
     pub fn start_agent_app_ui_runtime(
         &mut self,
         params: AgentAppUiRuntimeStartParams,
@@ -564,16 +600,72 @@ impl AppServerClient {
         self.typed_request(typed::list_mcp_servers_with_status())
     }
 
+    pub fn start_mcp_server(
+        &mut self,
+        params: McpServerStartParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::start_mcp_server(params))
+    }
+
+    pub fn stop_mcp_server(
+        &mut self,
+        params: McpServerStopParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::stop_mcp_server(params))
+    }
+
     pub fn list_mcp_tools(&mut self) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_mcp_tools())
+    }
+
+    pub fn list_mcp_tools_for_context(
+        &mut self,
+        params: McpToolListForContextParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_mcp_tools_for_context(params))
+    }
+
+    pub fn search_mcp_tools(
+        &mut self,
+        params: McpToolSearchParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::search_mcp_tools(params))
+    }
+
+    pub fn call_mcp_tool(
+        &mut self,
+        params: McpToolCallParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::call_mcp_tool(params))
+    }
+
+    pub fn call_mcp_tool_with_caller(
+        &mut self,
+        params: McpToolCallWithCallerParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::call_mcp_tool_with_caller(params))
     }
 
     pub fn list_mcp_prompts(&mut self) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_mcp_prompts())
     }
 
+    pub fn get_mcp_prompt(
+        &mut self,
+        params: McpPromptGetParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::get_mcp_prompt(params))
+    }
+
     pub fn list_mcp_resources(&mut self) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_mcp_resources())
+    }
+
+    pub fn read_mcp_resource(
+        &mut self,
+        params: McpResourceReadParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_mcp_resource(params))
     }
 
     pub fn read_project_memory(
@@ -867,6 +959,12 @@ pub mod typed {
         TypedRequest::new(METHOD_AGENT_APP_INSTALLED_UNINSTALL, params)
     }
 
+    pub fn prepare_agent_app_shell(
+        params: AgentAppShellPrepareParams,
+    ) -> TypedRequest<AgentAppShellPrepareParams> {
+        TypedRequest::new(METHOD_AGENT_APP_SHELL_PREPARE, params)
+    }
+
     pub fn start_agent_app_ui_runtime(
         params: AgentAppUiRuntimeStartParams,
     ) -> TypedRequest<AgentAppUiRuntimeStartParams> {
@@ -1016,16 +1114,54 @@ pub mod typed {
         TypedRequest::new(METHOD_MCP_SERVER_STATUS_LIST, serde_json::json!({}))
     }
 
+    pub fn start_mcp_server(params: McpServerStartParams) -> TypedRequest<McpServerStartParams> {
+        TypedRequest::new(METHOD_MCP_SERVER_START, params)
+    }
+
+    pub fn stop_mcp_server(params: McpServerStopParams) -> TypedRequest<McpServerStopParams> {
+        TypedRequest::new(METHOD_MCP_SERVER_STOP, params)
+    }
+
     pub fn list_mcp_tools() -> TypedRequest<serde_json::Value> {
         TypedRequest::new(METHOD_MCP_TOOL_LIST, serde_json::json!({}))
+    }
+
+    pub fn list_mcp_tools_for_context(
+        params: McpToolListForContextParams,
+    ) -> TypedRequest<McpToolListForContextParams> {
+        TypedRequest::new(METHOD_MCP_TOOL_LIST_FOR_CONTEXT, params)
+    }
+
+    pub fn search_mcp_tools(params: McpToolSearchParams) -> TypedRequest<McpToolSearchParams> {
+        TypedRequest::new(METHOD_MCP_TOOL_SEARCH, params)
+    }
+
+    pub fn call_mcp_tool(params: McpToolCallParams) -> TypedRequest<McpToolCallParams> {
+        TypedRequest::new(METHOD_MCP_TOOL_CALL, params)
+    }
+
+    pub fn call_mcp_tool_with_caller(
+        params: McpToolCallWithCallerParams,
+    ) -> TypedRequest<McpToolCallWithCallerParams> {
+        TypedRequest::new(METHOD_MCP_TOOL_CALL_WITH_CALLER, params)
     }
 
     pub fn list_mcp_prompts() -> TypedRequest<serde_json::Value> {
         TypedRequest::new(METHOD_MCP_PROMPT_LIST, serde_json::json!({}))
     }
 
+    pub fn get_mcp_prompt(params: McpPromptGetParams) -> TypedRequest<McpPromptGetParams> {
+        TypedRequest::new(METHOD_MCP_PROMPT_GET, params)
+    }
+
     pub fn list_mcp_resources() -> TypedRequest<serde_json::Value> {
         TypedRequest::new(METHOD_MCP_RESOURCE_LIST, serde_json::json!({}))
+    }
+
+    pub fn read_mcp_resource(
+        params: McpResourceReadParams,
+    ) -> TypedRequest<McpResourceReadParams> {
+        TypedRequest::new(METHOD_MCP_RESOURCE_READ, params)
     }
 
     pub fn read_project_memory(
@@ -1209,27 +1345,121 @@ mod tests {
     }
 
     #[test]
-    fn mcp_list_helpers_use_current_methods_and_empty_params() {
+    fn mcp_helpers_use_current_methods_and_params() {
         let mut client = AppServerClient::new();
 
         let servers = client.list_mcp_servers().expect("servers");
         let status = client
             .list_mcp_servers_with_status()
             .expect("server status");
+        let start = client
+            .start_mcp_server(McpServerStartParams {
+                name: "filesystem".to_string(),
+            })
+            .expect("start server");
+        let stop = client
+            .stop_mcp_server(McpServerStopParams {
+                name: "filesystem".to_string(),
+            })
+            .expect("stop server");
         let tools = client.list_mcp_tools().expect("tools");
+        let context_tools = client
+            .list_mcp_tools_for_context(McpToolListForContextParams {
+                caller: Some("agent-chat".to_string()),
+                include_deferred: true,
+            })
+            .expect("context tools");
+        let searched_tools = client
+            .search_mcp_tools(McpToolSearchParams {
+                query: "file".to_string(),
+                caller: Some("agent-chat".to_string()),
+                limit: 5,
+            })
+            .expect("searched tools");
+        let tool_call = client
+            .call_mcp_tool(McpToolCallParams {
+                tool_name: "filesystem.read".to_string(),
+                arguments: json!({ "path": "/workspace/README.md" }),
+            })
+            .expect("tool call");
+        let caller_tool_call = client
+            .call_mcp_tool_with_caller(McpToolCallWithCallerParams {
+                tool_name: "filesystem.read".to_string(),
+                arguments: json!({ "path": "/workspace/README.md" }),
+                caller: Some("agent-chat".to_string()),
+            })
+            .expect("caller tool call");
         let prompts = client.list_mcp_prompts().expect("prompts");
+        let prompt = client
+            .get_mcp_prompt(McpPromptGetParams {
+                name: "summarize".to_string(),
+                arguments: serde_json::Map::from_iter([(
+                    "topic".to_string(),
+                    json!("release notes"),
+                )]),
+            })
+            .expect("prompt");
         let resources = client.list_mcp_resources().expect("resources");
+        let resource = client
+            .read_mcp_resource(McpResourceReadParams {
+                uri: "file:///workspace/README.md".to_string(),
+            })
+            .expect("resource");
 
         assert_eq!(servers.method, METHOD_MCP_SERVER_LIST);
         assert_eq!(servers.params.expect("params"), json!({}));
         assert_eq!(status.method, METHOD_MCP_SERVER_STATUS_LIST);
         assert_eq!(status.params.expect("params"), json!({}));
+        assert_eq!(start.method, METHOD_MCP_SERVER_START);
+        assert_eq!(start.params.expect("params"), json!({ "name": "filesystem" }));
+        assert_eq!(stop.method, METHOD_MCP_SERVER_STOP);
+        assert_eq!(stop.params.expect("params"), json!({ "name": "filesystem" }));
         assert_eq!(tools.method, METHOD_MCP_TOOL_LIST);
         assert_eq!(tools.params.expect("params"), json!({}));
+        assert_eq!(context_tools.method, METHOD_MCP_TOOL_LIST_FOR_CONTEXT);
+        assert_eq!(
+            context_tools.params.expect("params"),
+            json!({ "caller": "agent-chat", "includeDeferred": true })
+        );
+        assert_eq!(searched_tools.method, METHOD_MCP_TOOL_SEARCH);
+        assert_eq!(
+            searched_tools.params.expect("params"),
+            json!({ "query": "file", "caller": "agent-chat", "limit": 5 })
+        );
+        assert_eq!(tool_call.method, METHOD_MCP_TOOL_CALL);
+        assert_eq!(
+            tool_call.params.expect("params"),
+            json!({
+                "toolName": "filesystem.read",
+                "arguments": { "path": "/workspace/README.md" },
+            })
+        );
+        assert_eq!(caller_tool_call.method, METHOD_MCP_TOOL_CALL_WITH_CALLER);
+        assert_eq!(
+            caller_tool_call.params.expect("params"),
+            json!({
+                "toolName": "filesystem.read",
+                "arguments": { "path": "/workspace/README.md" },
+                "caller": "agent-chat",
+            })
+        );
         assert_eq!(prompts.method, METHOD_MCP_PROMPT_LIST);
         assert_eq!(prompts.params.expect("params"), json!({}));
+        assert_eq!(prompt.method, METHOD_MCP_PROMPT_GET);
+        assert_eq!(
+            prompt.params.expect("params"),
+            json!({
+                "name": "summarize",
+                "arguments": { "topic": "release notes" },
+            })
+        );
         assert_eq!(resources.method, METHOD_MCP_RESOURCE_LIST);
         assert_eq!(resources.params.expect("params"), json!({}));
+        assert_eq!(resource.method, METHOD_MCP_RESOURCE_READ);
+        assert_eq!(
+            resource.params.expect("params"),
+            json!({ "uri": "file:///workspace/README.md" })
+        );
     }
 
     #[test]
@@ -1435,6 +1665,13 @@ mod tests {
         let installed = client
             .list_agent_app_installed()
             .expect("installed agent apps");
+        let shell_prepare = client
+            .prepare_agent_app_shell(AgentAppShellPrepareParams {
+                descriptor: json!({
+                    "appId": "content-factory-app",
+                }),
+            })
+            .expect("agent app shell prepare");
         let knowledge = client
             .list_knowledge_packs(KnowledgeListPacksParams {
                 working_dir: "/workspace/project".to_string(),
@@ -1590,6 +1827,15 @@ mod tests {
 
         assert_eq!(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
         assert_eq!(installed.params.expect("params"), json!({}));
+        assert_eq!(shell_prepare.method, METHOD_AGENT_APP_SHELL_PREPARE);
+        assert_eq!(
+            shell_prepare.params.expect("params"),
+            json!({
+                "descriptor": {
+                    "appId": "content-factory-app",
+                },
+            })
+        );
         assert_eq!(knowledge.method, METHOD_KNOWLEDGE_PACK_LIST);
         assert_eq!(
             knowledge.params.expect("params"),
@@ -2047,6 +2293,7 @@ mod tests {
         assert!(methods.contains(&METHOD_EVIDENCE_EXPORT));
         assert!(methods.contains(&METHOD_AGENT_SESSION_TURN_START));
         assert!(methods.contains(&METHOD_WORKSPACE_LIST));
+        assert!(methods.contains(&METHOD_AGENT_APP_SHELL_PREPARE));
         assert!(methods.contains(&METHOD_WORKSPACE_READ));
         assert!(methods.contains(&METHOD_WORKSPACE_BY_PATH_READ));
         assert!(methods.contains(&METHOD_WORKSPACE_DEFAULT_READ));

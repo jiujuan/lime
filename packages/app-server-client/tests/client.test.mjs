@@ -23,7 +23,14 @@ import {
   AppServerClient,
   AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
+  METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
   METHOD_AGENT_APP_INSTALLED_LIST,
+  METHOD_AGENT_APP_INSTALLED_SAVE,
+  METHOD_AGENT_APP_INSTALLED_UNINSTALL,
+  METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+  METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+  METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
+  METHOD_AGENT_APP_SHELL_PREPARE,
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
@@ -96,11 +103,19 @@ import {
   METHOD_MODEL_PROVIDER_UI_STATE_WRITE,
   METHOD_MODEL_PROVIDER_UPDATE,
   METHOD_MODEL_SYNC_STATE_READ,
+  METHOD_MCP_PROMPT_GET,
   METHOD_MCP_PROMPT_LIST,
   METHOD_MCP_RESOURCE_LIST,
+  METHOD_MCP_RESOURCE_READ,
   METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
+  METHOD_MCP_SERVER_STOP,
+  METHOD_MCP_TOOL_CALL,
+  METHOD_MCP_TOOL_CALL_WITH_CALLER,
   METHOD_MCP_TOOL_LIST,
+  METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+  METHOD_MCP_TOOL_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
   PROTOCOL_VERSION,
   METHOD_SKILL_LIST,
@@ -358,6 +373,11 @@ test("builds app data surface requests with current methods", () => {
   const runtimeStop = client.stopAgentAppUiRuntime({
     appId: "content-factory-app",
   });
+  const shellPrepare = client.prepareAgentAppShell({
+    descriptor: {
+      appId: "content-factory-app",
+    },
+  });
   const knowledge = client.listKnowledgePacks({
     workingDir: "/workspace/project",
     includeArchived: true,
@@ -440,9 +460,40 @@ test("builds app data surface requests with current methods", () => {
   });
   const mcpServers = client.listMcpServers();
   const mcpServerStatus = client.listMcpServersWithStatus();
+  const mcpServerStart = client.startMcpServer({
+    name: "filesystem",
+  });
+  const mcpServerStop = client.stopMcpServer({
+    name: "filesystem",
+  });
   const mcpTools = client.listMcpTools();
+  const mcpToolsForContext = client.listMcpToolsForContext({
+    caller: "agent-chat",
+    includeDeferred: true,
+  });
+  const mcpToolSearch = client.searchMcpTools({
+    query: "file",
+    caller: "agent-chat",
+    limit: 5,
+  });
+  const mcpToolCall = client.callMcpTool({
+    toolName: "filesystem.read",
+    arguments: { path: "/workspace/README.md" },
+  });
+  const mcpToolCallWithCaller = client.callMcpToolWithCaller({
+    toolName: "filesystem.read",
+    arguments: { path: "/workspace/README.md" },
+    caller: "agent-chat",
+  });
   const mcpPrompts = client.listMcpPrompts();
+  const mcpPrompt = client.getMcpPrompt({
+    name: "summarize",
+    arguments: { topic: "release notes" },
+  });
   const mcpResources = client.listMcpResources();
+  const mcpResource = client.readMcpResource({
+    uri: "file:///workspace/README.md",
+  });
   const memory = client.readProjectMemory({
     projectId: "workspace-main",
   });
@@ -461,6 +512,12 @@ test("builds app data surface requests with current methods", () => {
   assert.equal(runtimeStop.method, METHOD_AGENT_APP_UI_RUNTIME_STOP);
   assert.deepEqual(runtimeStop.params, {
     appId: "content-factory-app",
+  });
+  assert.equal(shellPrepare.method, METHOD_AGENT_APP_SHELL_PREPARE);
+  assert.deepEqual(shellPrepare.params, {
+    descriptor: {
+      appId: "content-factory-app",
+    },
   });
   assert.equal(knowledge.method, METHOD_KNOWLEDGE_PACK_LIST);
   assert.deepEqual(knowledge.params, {
@@ -572,12 +629,51 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(mcpServers.params, {});
   assert.equal(mcpServerStatus.method, METHOD_MCP_SERVER_STATUS_LIST);
   assert.deepEqual(mcpServerStatus.params, {});
+  assert.equal(mcpServerStart.method, METHOD_MCP_SERVER_START);
+  assert.deepEqual(mcpServerStart.params, {
+    name: "filesystem",
+  });
+  assert.equal(mcpServerStop.method, METHOD_MCP_SERVER_STOP);
+  assert.deepEqual(mcpServerStop.params, {
+    name: "filesystem",
+  });
   assert.equal(mcpTools.method, METHOD_MCP_TOOL_LIST);
   assert.deepEqual(mcpTools.params, {});
+  assert.equal(mcpToolsForContext.method, METHOD_MCP_TOOL_LIST_FOR_CONTEXT);
+  assert.deepEqual(mcpToolsForContext.params, {
+    caller: "agent-chat",
+    includeDeferred: true,
+  });
+  assert.equal(mcpToolSearch.method, METHOD_MCP_TOOL_SEARCH);
+  assert.deepEqual(mcpToolSearch.params, {
+    query: "file",
+    caller: "agent-chat",
+    limit: 5,
+  });
+  assert.equal(mcpToolCall.method, METHOD_MCP_TOOL_CALL);
+  assert.deepEqual(mcpToolCall.params, {
+    toolName: "filesystem.read",
+    arguments: { path: "/workspace/README.md" },
+  });
+  assert.equal(mcpToolCallWithCaller.method, METHOD_MCP_TOOL_CALL_WITH_CALLER);
+  assert.deepEqual(mcpToolCallWithCaller.params, {
+    toolName: "filesystem.read",
+    arguments: { path: "/workspace/README.md" },
+    caller: "agent-chat",
+  });
   assert.equal(mcpPrompts.method, METHOD_MCP_PROMPT_LIST);
   assert.deepEqual(mcpPrompts.params, {});
+  assert.equal(mcpPrompt.method, METHOD_MCP_PROMPT_GET);
+  assert.deepEqual(mcpPrompt.params, {
+    name: "summarize",
+    arguments: { topic: "release notes" },
+  });
   assert.equal(mcpResources.method, METHOD_MCP_RESOURCE_LIST);
   assert.deepEqual(mcpResources.params, {});
+  assert.equal(mcpResource.method, METHOD_MCP_RESOURCE_READ);
+  assert.deepEqual(mcpResource.params, {
+    uri: "file:///workspace/README.md",
+  });
   assert.equal(memory.method, METHOD_PROJECT_MEMORY_READ);
   assert.deepEqual(memory.params, {
     projectId: "workspace-main",
@@ -783,7 +879,14 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_SKILL_READ, kind: "request" },
     { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
+    { method: METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, kind: "request" },
+    { method: METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, kind: "request" },
+    { method: METHOD_AGENT_APP_INSTALLED_SAVE, kind: "request" },
     { method: METHOD_AGENT_APP_INSTALLED_LIST, kind: "request" },
+    { method: METHOD_AGENT_APP_INSTALLED_DISABLED_SET, kind: "request" },
+    { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL, kind: "request" },
+    { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL, kind: "request" },
+    { method: METHOD_AGENT_APP_SHELL_PREPARE, kind: "request" },
     { method: METHOD_AGENT_APP_UI_RUNTIME_START, kind: "request" },
     { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
     { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
@@ -810,9 +913,17 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AUTOMATION_SCHEDULE_VALIDATE, kind: "request" },
     { method: METHOD_MCP_SERVER_LIST, kind: "request" },
     { method: METHOD_MCP_SERVER_STATUS_LIST, kind: "request" },
+    { method: METHOD_MCP_SERVER_START, kind: "request" },
+    { method: METHOD_MCP_SERVER_STOP, kind: "request" },
     { method: METHOD_MCP_TOOL_LIST, kind: "request" },
+    { method: METHOD_MCP_TOOL_LIST_FOR_CONTEXT, kind: "request" },
+    { method: METHOD_MCP_TOOL_SEARCH, kind: "request" },
+    { method: METHOD_MCP_TOOL_CALL, kind: "request" },
+    { method: METHOD_MCP_TOOL_CALL_WITH_CALLER, kind: "request" },
     { method: METHOD_MCP_PROMPT_LIST, kind: "request" },
+    { method: METHOD_MCP_PROMPT_GET, kind: "request" },
     { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
+    { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
     { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
     { method: METHOD_USAGE_STATS_READ, kind: "request" },
     { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
@@ -884,6 +995,28 @@ test("exports app-server method catalog with request and notification kinds", ()
   );
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_LIST), true);
   assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD),
+    true,
+  );
+  assert.equal(isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_SAVE), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_DISABLED_SET),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_UNINSTALL),
+    true,
+  );
+  assert.equal(isAppServerRequestMethod(METHOD_AGENT_APP_SHELL_PREPARE), true);
+  assert.equal(
     isAppServerRequestMethod(METHOD_AGENT_APP_UI_RUNTIME_START),
     true,
   );
@@ -948,9 +1081,17 @@ test("exports app-server method catalog with request and notification kinds", ()
   );
   assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_STATUS_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_START), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_STOP), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_LIST_FOR_CONTEXT), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_SEARCH), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_CALL), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_CALL_WITH_CALLER), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_PROMPT_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_PROMPT_GET), true);
   assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_READ), true);
   assert.equal(isAppServerRequestMethod(METHOD_PROJECT_MEMORY_READ), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_CONNECT_DEEP_LINK_RESOLVE),

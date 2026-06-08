@@ -1,7 +1,7 @@
 # App Server 协议草案
 
 > 状态：current planning source
-> 更新时间：2026-06-06
+> 更新时间：2026-06-08
 > 作用：定义 App Server 的 JSON-RPC 协议形态、命名、对象模型、事件和错误。
 
 ## 1. 协议原则
@@ -13,6 +13,7 @@
 5. 业务进度首期通过 server notification 发出；需要 client 响应的审批 / 人工输入首期用 `action.required` + `agentSession/action/respond`，不伪装成已完成事件。若后续引入 server-initiated request，必须单独补 request / response fixture 和 client handling contract。
 6. 初始化前拒绝业务方法，重复 `initialize` 也必须拒绝。
 7. request / response / notification 都必须可 fixture 化，且 stable / experimental schema 必须分别可校验。
+8. 新协议方法不得以 `lime-rs/src/commands/**` 为实现落点，也不得通过新增旧 Tauri wrapper、stub 或 compat facade 暴露；Rust 实现进入 App Server protocol / processor / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host。
 
 ## 2. Transport
 
@@ -382,3 +383,4 @@ agentSession/event
 3. fixture 字段使用 camelCase。
 4. 初始化门禁有测试。
 5. 错误码稳定，不能把 provider 原始错误直接暴露成协议 code。
+6. contract guard 必须阻止 App Server current method 回流到 `lime-rs/src/commands/**` wrapper；涉及旧命令迁移时，旧 wrapper 只能撤注册并删除，删不动时登记 blocker。

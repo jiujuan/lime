@@ -30,6 +30,7 @@ app-server-transport.workspace = true
 lime-core.workspace = true
 lime-agent.workspace = true
 lime-knowledge.workspace = true
+lime-mcp.workspace = true
 lime-skills.workspace = true
 lime-services.workspace = true
 hex.workspace = true

@@ -5,5 +5,4 @@ export const modelMocks: Record<string, (args?: any) => any> = {
   toggle_model_favorite: () => ({ success: true }),
   hide_model: () => ({ success: true }),
   record_model_usage: () => ({}),
-  sync_tray_model_shortcuts: () => ({}),
 };

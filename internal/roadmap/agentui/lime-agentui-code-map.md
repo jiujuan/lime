@@ -78,16 +78,18 @@ flowchart TB
 
 ## 5. Command Gateway 层
 
+本层只用 `lime-rs/src/commands/**` 定位历史迁移锚点。该目录是旧 Tauri command wrapper 删除清理区，不是 AgentUI 的 current 实现目录；新增 runtime、tool、session、thread read、evidence 或 DTO 能力必须进入 App Server JSON-RPC、RuntimeCore、`lime-rs/crates/agent` 或 services。旧文件完成迁出后应撤 runner / DevBridge / catalog / mock 注册并删除，删不动时登记 blocker。
+
 | 文件 | 当前职责 | AgentUI 相关能力 |
 | --- | --- | --- |
 | `src/lib/api/agentRuntime/*` + Electron Desktop Host / App Server JSON-RPC | AgentUI current command gateway | submit、interrupt、compact、resume、get session、thread read、file checkpoint、evidence/review export |
-| `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | legacy `agent_runtime_*` Rust command facade | 迁移期兼容入口，只允许委托 current runtime / service 事实源，不作为新增能力入口 |
-| `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | turn 执行主链 | 提前发 `runtime_status`、执行 provider/runtime/tool/hook/memory/artifact/auto compact |
-| `lime-rs/src/commands/aster_agent_cmd/session_runtime.rs` | session create/list/update/recent runtime context | sidebar/session summary 和 tab 管理基础 |
-| `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs` | subagent runtime | team/capsule 子代理状态基础 |
-| `lime-rs/src/commands/aster_agent_cmd/action_runtime.rs` | action required / response | HITL、权限确认、用户输入请求 |
-| `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | tool bridge | browser、workspace、service skill、media、mcp、subagent、site |
-| `lime-rs/src/commands/aster_agent_cmd/dto.rs` | 后端 DTO | `AgentRuntimeSessionDetail`、history cursor、thread_read 投影 |
+| `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | legacy `agent_runtime_*` cleanup reference | 迁移期兼容入口定位；迁出后删除，不作为新增能力入口 |
+| `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | turn orchestration cleanup reference | 现有行为锚点；新执行编排应进入 RuntimeCore / ExecutionBackend |
+| `lime-rs/src/commands/aster_agent_cmd/session_runtime.rs` | session runtime cleanup reference | sidebar/session summary 和 tab 管理的迁移来源；新读写进入 App Server / RuntimeCore |
+| `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs` | subagent cleanup reference | team/capsule 子代理状态迁移来源；新实现进入 runtime service / `lime-rs/crates/agent` |
+| `lime-rs/src/commands/aster_agent_cmd/action_runtime.rs` | action response cleanup reference | HITL、权限确认、用户输入请求迁移来源；新 action 合同进入 App Server protocol |
+| `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | tool cleanup reference | browser、workspace、service skill、media、mcp、subagent、site 的历史工具锚点；新工具事实进入 RuntimeCore/tool services |
+| `lime-rs/src/commands/aster_agent_cmd/dto.rs` | DTO cleanup reference | `AgentRuntimeSessionDetail`、history cursor、thread_read 投影迁移来源；公共 DTO 进入 protocol / `lime-rs/crates/agent` |
 
 `agent_runtime_get_session` 当前关键行为：
 

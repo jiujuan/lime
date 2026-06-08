@@ -23,7 +23,7 @@ Codex CLI / `codex-rs` 只作为 App Server protocol / daemon lifecycle / client
 
 旧 builder 配置 / CLI、自定义 Windows installer maker 与旧 YAML / blockmap updater metadata 已按 `dead` 处理，不再作为 release、updater、签名、公证、CI、i18n app metadata 或版本同步输入。
 
-旧 Rust / Tauri updater command 面同样已按 `dead / deleted` 处理：`lime-rs/src/commands/update_cmd.rs` 已物理删除，`lime-rs/src/commands/mod.rs` 不再声明 `update_cmd`，`lime-rs/src/app/runner.rs` 不再管理 `UpdateInstallSessionState`、不再启动 Rust 后台更新检查，也不再注册旧 updater `generate_handler!`。后续不得用 stub、compat wrapper 或新实现把 updater 放回 `lime-rs/src/commands/`；只允许经 Electron Desktop Host updater current 链路演进。
+旧 Rust / Tauri updater command 面同样已按 `dead / deleted` 处理：旧 `update_cmd` 文件已物理删除，`lime-rs/src/commands/mod.rs` 不再声明 `update_cmd`，`lime-rs/src/app/runner.rs` 不再管理 `UpdateInstallSessionState`、不再启动 Rust 后台更新检查，也不再注册旧 updater `generate_handler!`。后续不得用 stub、compat wrapper 或新实现把 updater 放回 `lime-rs/src/commands/`；只允许经 Electron Desktop Host updater current 链路演进。
 
 官方依据：
 

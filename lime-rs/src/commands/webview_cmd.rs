@@ -44,50 +44,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use sysinfo::{Pid, Signal, System};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-
-/// Webview 面板信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebviewPanelInfo {
-    /// 面板 ID
-    pub id: String,
-    /// 当前 URL
-    pub url: String,
-    /// 面板标题
-    pub title: String,
-    /// X 坐标
-    pub x: f64,
-    /// Y 坐标
-    pub y: f64,
-    /// 宽度
-    pub width: f64,
-    /// 高度
-    pub height: f64,
-}
-
-/// Webview 管理器状态
-pub struct WebviewManagerState {
-    /// 活跃的 webview 面板
-    panels: HashMap<String, WebviewPanelInfo>,
-}
-
-impl WebviewManagerState {
-    pub fn new() -> Self {
-        Self {
-            panels: HashMap::new(),
-        }
-    }
-}
-
-impl Default for WebviewManagerState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Webview 管理器状态包装
-pub struct WebviewManagerWrapper(pub Arc<RwLock<WebviewManagerState>>);
 
 /// Chrome Profile 进程内部状态
 struct ChromeProfileProcess {
@@ -171,61 +129,12 @@ static WINDOW_SCROLL_SCRIPT_COORD_REGEX: Lazy<Regex> = Lazy::new(|| {
         .expect("window scroll coord regex should be valid")
 });
 
-const DEPRECATED_WEBVIEW_PANEL_MESSAGE: &str =
-    "WebView Panel legacy Tauri 命令已退场；请使用 Browser Runtime / Electron Desktop Host current 主链";
-
-fn deprecated_webview_panel_command_error(command: &str) -> String {
-    tracing::warn!(
-        "[Webview] legacy panel command `{}` 已退场；请改走 Browser Runtime / Electron Desktop Host current 主链",
-        command
-    );
-    format!("{command} 已退场；{DEPRECATED_WEBVIEW_PANEL_MESSAGE}")
-}
-
 pub fn shared_chrome_profile_manager() -> Arc<Mutex<ChromeProfileManagerState>> {
     SHARED_CHROME_PROFILE_MANAGER.clone()
 }
 
 pub fn shared_browser_runtime() -> Arc<BrowserRuntimeManager> {
     SHARED_BROWSER_RUNTIME.clone()
-}
-
-/// 创建嵌入式 webview 的请求参数
-#[derive(Debug, Deserialize)]
-pub struct CreateWebviewRequest {
-    /// 面板 ID（唯一标识）
-    pub panel_id: String,
-    /// 要加载的 URL
-    pub url: String,
-    /// 面板标题
-    pub title: Option<String>,
-    /// X 坐标（相对于主窗口）- 预留，当前使用居中显示
-    #[allow(dead_code)]
-    pub x: f64,
-    /// Y 坐标（相对于主窗口）- 预留，当前使用居中显示
-    #[allow(dead_code)]
-    pub y: f64,
-    /// 宽度
-    pub width: f64,
-    /// 高度
-    pub height: f64,
-    /// Profile 隔离键（用于区分不同站点/用途）
-    #[serde(default)]
-    pub profile_key: Option<String>,
-    /// 是否启用持久化 profile（独立 cookies/localStorage）
-    #[serde(default)]
-    pub persistent_profile: bool,
-}
-
-/// 创建 webview 面板的响应
-#[derive(Debug, Serialize)]
-pub struct CreateWebviewResponse {
-    /// 是否成功
-    pub success: bool,
-    /// 面板 ID
-    pub panel_id: String,
-    /// 错误信息（如果有）
-    pub error: Option<String>,
 }
 
 /// 启动外部 Chrome Profile 的请求参数
@@ -619,21 +528,6 @@ impl BrowserRuntimeAuditRecord {
 
 static BROWSER_RUNTIME_AUDIT_LOGS: Lazy<Mutex<VecDeque<BrowserRuntimeAuditRecord>>> =
     Lazy::new(|| Mutex::new(VecDeque::new()));
-
-/// 创建独立的浏览器窗口
-///
-/// 使用 Tauri 2.x 的 WebviewWindow 创建独立的浏览器窗口。
-#[tauri::command]
-pub async fn create_webview_panel(
-    _app: AppHandle,
-    _state: tauri::State<'_, WebviewManagerWrapper>,
-    request: CreateWebviewRequest,
-) -> Result<CreateWebviewResponse, String> {
-    let _ = request;
-    Err(deprecated_webview_panel_command_error(
-        "create_webview_panel",
-    ))
-}
 
 /// 使用独立 profile 启动外部 Chrome 窗口
 async fn open_chrome_profile_window_with_manager(
@@ -3690,64 +3584,6 @@ fn profile_data_store_identifier(profile_key: &str) -> [u8; 16] {
     out[..8].copy_from_slice(&h1.to_le_bytes());
     out[8..].copy_from_slice(&h2.to_le_bytes());
     out
-}
-
-/// 关闭浏览器窗口
-#[tauri::command]
-pub async fn close_webview_panel(
-    _app: AppHandle,
-    _state: tauri::State<'_, WebviewManagerWrapper>,
-    _panel_id: String,
-) -> Result<bool, String> {
-    Err(deprecated_webview_panel_command_error(
-        "close_webview_panel",
-    ))
-}
-
-/// 导航到新 URL
-#[tauri::command]
-pub async fn navigate_webview_panel(
-    _app: AppHandle,
-    _state: tauri::State<'_, WebviewManagerWrapper>,
-    _panel_id: String,
-    _url: String,
-) -> Result<bool, String> {
-    Err(deprecated_webview_panel_command_error(
-        "navigate_webview_panel",
-    ))
-}
-
-/// 调整窗口大小（独立窗口不需要位置参数）
-#[tauri::command]
-pub async fn resize_webview_panel(
-    _app: AppHandle,
-    _state: tauri::State<'_, WebviewManagerWrapper>,
-    _panel_id: String,
-    _x: f64,
-    _y: f64,
-    _width: f64,
-    _height: f64,
-) -> Result<bool, String> {
-    Err(deprecated_webview_panel_command_error(
-        "resize_webview_panel",
-    ))
-}
-
-/// 获取所有活跃的浏览器窗口
-#[tauri::command]
-pub async fn get_webview_panels(
-    _app: AppHandle,
-    _state: tauri::State<'_, WebviewManagerWrapper>,
-) -> Result<Vec<WebviewPanelInfo>, String> {
-    Err(deprecated_webview_panel_command_error("get_webview_panels"))
-}
-
-/// 聚焦指定的浏览器窗口
-#[tauri::command]
-pub async fn focus_webview_panel(_app: AppHandle, _panel_id: String) -> Result<bool, String> {
-    Err(deprecated_webview_panel_command_error(
-        "focus_webview_panel",
-    ))
 }
 
 #[cfg(test)]

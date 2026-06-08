@@ -7,6 +7,7 @@ use app_server_protocol::AgentAppFetchCloudPackageParams;
 use app_server_protocol::AgentAppInstalledDisabledSetParams;
 use app_server_protocol::AgentAppInstalledSaveParams;
 use app_server_protocol::AgentAppLocalPackageInspectParams;
+use app_server_protocol::AgentAppShellPrepareParams;
 use app_server_protocol::AgentAppUiRuntimeStartParams;
 use app_server_protocol::AgentAppUiRuntimeStatusParams;
 use app_server_protocol::AgentAppUiRuntimeStopParams;
@@ -54,6 +55,14 @@ use app_server_protocol::KnowledgeResolveContextParams;
 use app_server_protocol::KnowledgeSetDefaultPackParams;
 use app_server_protocol::KnowledgeUpdatePackStatusParams;
 use app_server_protocol::KnowledgeValidateContextRunParams;
+use app_server_protocol::McpPromptGetParams;
+use app_server_protocol::McpResourceReadParams;
+use app_server_protocol::McpServerStartParams;
+use app_server_protocol::McpServerStopParams;
+use app_server_protocol::McpToolCallParams;
+use app_server_protocol::McpToolCallWithCallerParams;
+use app_server_protocol::McpToolListForContextParams;
+use app_server_protocol::McpToolSearchParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelProviderAliasReadParams;
 use app_server_protocol::ModelProviderConfigExportParams;
@@ -92,6 +101,7 @@ use app_server_protocol::METHOD_AGENT_APP_INSTALLED_UNINSTALL;
 use app_server_protocol::METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL;
 use app_server_protocol::METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT;
 use app_server_protocol::METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD;
+use app_server_protocol::METHOD_AGENT_APP_SHELL_PREPARE;
 use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START;
 use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS;
 use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
@@ -139,11 +149,19 @@ use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
 use app_server_protocol::METHOD_KNOWLEDGE_PACK_READ;
 use app_server_protocol::METHOD_KNOWLEDGE_PACK_STATUS_UPDATE;
 use app_server_protocol::METHOD_KNOWLEDGE_SOURCE_IMPORT;
+use app_server_protocol::METHOD_MCP_PROMPT_GET;
 use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
+use app_server_protocol::METHOD_MCP_RESOURCE_READ;
 use app_server_protocol::METHOD_MCP_SERVER_LIST;
+use app_server_protocol::METHOD_MCP_SERVER_START;
 use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
+use app_server_protocol::METHOD_MCP_SERVER_STOP;
+use app_server_protocol::METHOD_MCP_TOOL_CALL;
+use app_server_protocol::METHOD_MCP_TOOL_CALL_WITH_CALLER;
 use app_server_protocol::METHOD_MCP_TOOL_LIST;
+use app_server_protocol::METHOD_MCP_TOOL_LIST_FOR_CONTEXT;
+use app_server_protocol::METHOD_MCP_TOOL_SEARCH;
 use app_server_protocol::METHOD_MODEL_LIST;
 use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -296,6 +314,9 @@ impl RequestProcessor {
             METHOD_AGENT_APP_INSTALLED_UNINSTALL => {
                 self.handle_agent_app_installed_uninstall(params).await
             }
+            METHOD_AGENT_APP_SHELL_PREPARE => {
+                self.handle_agent_app_shell_prepare(params).await
+            }
             METHOD_AGENT_APP_UI_RUNTIME_START => {
                 self.handle_agent_app_ui_runtime_start(params).await
             }
@@ -342,9 +363,17 @@ impl RequestProcessor {
             }
             METHOD_MCP_SERVER_LIST => self.handle_mcp_server_list().await,
             METHOD_MCP_SERVER_STATUS_LIST => self.handle_mcp_server_status_list().await,
+            METHOD_MCP_SERVER_START => self.handle_mcp_server_start(params).await,
+            METHOD_MCP_SERVER_STOP => self.handle_mcp_server_stop(params).await,
             METHOD_MCP_TOOL_LIST => self.handle_mcp_tool_list().await,
+            METHOD_MCP_TOOL_LIST_FOR_CONTEXT => self.handle_mcp_tool_list_for_context(params).await,
+            METHOD_MCP_TOOL_SEARCH => self.handle_mcp_tool_search(params).await,
+            METHOD_MCP_TOOL_CALL => self.handle_mcp_tool_call(params).await,
+            METHOD_MCP_TOOL_CALL_WITH_CALLER => self.handle_mcp_tool_call_with_caller(params).await,
             METHOD_MCP_PROMPT_LIST => self.handle_mcp_prompt_list().await,
+            METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get(params).await,
             METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list().await,
+            METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read(params).await,
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
             METHOD_USAGE_STATS_READ => self.handle_usage_stats_read(params).await,
             METHOD_USAGE_STATS_MODEL_RANKING_LIST => {
@@ -749,6 +778,20 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_agent_app_shell_prepare(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppShellPrepareParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .prepare_agent_app_shell(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_agent_app_ui_runtime_start(
         &self,
         params: Option<serde_json::Value>,
@@ -1107,11 +1150,95 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_mcp_server_start(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpServerStartParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .start_mcp_server(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_stop(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpServerStopParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .stop_mcp_server(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_mcp_tool_list(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
             .list_mcp_tools()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_tool_list_for_context(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpToolListForContextParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_mcp_tools_for_context(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_tool_search(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpToolSearchParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .search_mcp_tools(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_tool_call(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpToolCallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .call_mcp_tool(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_tool_call_with_caller(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpToolCallWithCallerParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .call_mcp_tool_with_caller(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -1127,11 +1254,39 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_mcp_prompt_get(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpPromptGetParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .get_mcp_prompt(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_mcp_resource_list(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
             .list_mcp_resources()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_resource_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpResourceReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_mcp_resource(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -2322,6 +2477,100 @@ mod tests {
                     assert_eq!(response.result[field], json!([]));
                 }
                 other => panic!("expected response, got {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn mcp_runtime_methods_require_initialized_and_fail_closed_without_manager() {
+        let processor = RequestProcessor::new(RuntimeCore::default());
+        let blocked = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(1),
+                METHOD_MCP_TOOL_CALL,
+                Some(json!({
+                    "toolName": "mcp__docs__search",
+                    "arguments": {},
+                })),
+            ))
+            .await
+            .expect("blocked response");
+        assert!(matches!(
+            &blocked[0],
+            JsonRpcMessage::Error(error) if error.error.code == error_codes::NOT_INITIALIZED
+        ));
+
+        processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(2),
+                METHOD_INITIALIZE,
+                Some(
+                    serde_json::to_value(InitializeParams {
+                        client_info: ClientInfo {
+                            name: "test-client".to_string(),
+                            title: None,
+                            version: None,
+                        },
+                        capabilities: ClientCapabilities::default(),
+                    })
+                    .expect("initialize params"),
+                ),
+            ))
+            .await
+            .expect("initialize");
+        processor.handle_notification(JsonRpcNotification::new(
+            METHOD_INITIALIZED,
+            Some(json!({})),
+        ));
+
+        let cases = [
+            (
+                RequestId::Integer(3),
+                METHOD_MCP_SERVER_START,
+                json!({ "name": "docs" }),
+            ),
+            (
+                RequestId::Integer(4),
+                METHOD_MCP_SERVER_STOP,
+                json!({ "name": "docs" }),
+            ),
+            (
+                RequestId::Integer(5),
+                METHOD_MCP_TOOL_CALL,
+                json!({ "toolName": "mcp__docs__search", "arguments": {} }),
+            ),
+            (
+                RequestId::Integer(6),
+                METHOD_MCP_TOOL_CALL_WITH_CALLER,
+                json!({
+                    "toolName": "mcp__docs__search",
+                    "arguments": {},
+                    "caller": "assistant",
+                }),
+            ),
+            (
+                RequestId::Integer(7),
+                METHOD_MCP_PROMPT_GET,
+                json!({ "name": "docs_prompt", "arguments": {} }),
+            ),
+            (
+                RequestId::Integer(8),
+                METHOD_MCP_RESOURCE_READ,
+                json!({ "uri": "docs://readme" }),
+            ),
+        ];
+
+        for (id, method, params) in cases {
+            let messages = processor
+                .handle_request(JsonRpcRequest::new(id, method, Some(params)))
+                .await
+                .expect("mcp runtime response");
+
+            match &messages[0] {
+                JsonRpcMessage::Error(error) => {
+                    assert_eq!(error.error.code, error_codes::RUNTIME_ERROR);
+                }
+                other => panic!("expected runtime error, got {other:?}"),
             }
         }
     }

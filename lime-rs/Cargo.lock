@@ -175,6 +175,7 @@ dependencies = [
  "lime-agent",
  "lime-core",
  "lime-knowledge",
+ "lime-mcp",
  "lime-services",
  "lime-skills",
  "reqwest 0.12.28",

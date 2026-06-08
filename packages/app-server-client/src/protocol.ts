@@ -34,7 +34,8 @@ export const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST =
   "workspaceRegisteredSkills/list";
 export const METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT =
   "agentAppLocalPackage/inspect";
-export const METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD = "agentAppPackage/fetchCloud";
+export const METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD =
+  "agentAppPackage/fetchCloud";
 export const METHOD_AGENT_APP_INSTALLED_SAVE = "agentAppInstalled/save";
 export const METHOD_AGENT_APP_INSTALLED_LIST = "agentAppInstalled/list";
 export const METHOD_AGENT_APP_INSTALLED_DISABLED_SET =
@@ -43,6 +44,7 @@ export const METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL =
   "agentAppInstalled/uninstall/rehearsal";
 export const METHOD_AGENT_APP_INSTALLED_UNINSTALL =
   "agentAppInstalled/uninstall";
+export const METHOD_AGENT_APP_SHELL_PREPARE = "agentAppShell/prepare";
 export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start";
 export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status";
 export const METHOD_AGENT_APP_UI_RUNTIME_STOP = "agentAppUiRuntime/stop";
@@ -74,9 +76,17 @@ export const METHOD_AUTOMATION_SCHEDULE_VALIDATE =
   "automationSchedule/validate";
 export const METHOD_MCP_SERVER_LIST = "mcpServer/list";
 export const METHOD_MCP_SERVER_STATUS_LIST = "mcpServerStatus/list";
+export const METHOD_MCP_SERVER_START = "mcpServer/start";
+export const METHOD_MCP_SERVER_STOP = "mcpServer/stop";
 export const METHOD_MCP_TOOL_LIST = "mcpTool/list";
+export const METHOD_MCP_TOOL_LIST_FOR_CONTEXT = "mcpTool/listForContext";
+export const METHOD_MCP_TOOL_SEARCH = "mcpTool/search";
+export const METHOD_MCP_TOOL_CALL = "mcpTool/call";
+export const METHOD_MCP_TOOL_CALL_WITH_CALLER = "mcpTool/callWithCaller";
 export const METHOD_MCP_PROMPT_LIST = "mcpPrompt/list";
+export const METHOD_MCP_PROMPT_GET = "mcpPrompt/get";
 export const METHOD_MCP_RESOURCE_LIST = "mcpResource/list";
+export const METHOD_MCP_RESOURCE_READ = "mcpResource/read";
 export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
 export const METHOD_USAGE_STATS_READ = "usageStats/read";
 export const METHOD_USAGE_STATS_MODEL_RANKING_LIST =
@@ -169,6 +179,7 @@ export const APP_SERVER_METHODS = [
     kind: "request",
   },
   { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL, kind: "request" },
+  { method: METHOD_AGENT_APP_SHELL_PREPARE, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_START, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
@@ -195,9 +206,17 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AUTOMATION_SCHEDULE_VALIDATE, kind: "request" },
   { method: METHOD_MCP_SERVER_LIST, kind: "request" },
   { method: METHOD_MCP_SERVER_STATUS_LIST, kind: "request" },
+  { method: METHOD_MCP_SERVER_START, kind: "request" },
+  { method: METHOD_MCP_SERVER_STOP, kind: "request" },
   { method: METHOD_MCP_TOOL_LIST, kind: "request" },
+  { method: METHOD_MCP_TOOL_LIST_FOR_CONTEXT, kind: "request" },
+  { method: METHOD_MCP_TOOL_SEARCH, kind: "request" },
+  { method: METHOD_MCP_TOOL_CALL, kind: "request" },
+  { method: METHOD_MCP_TOOL_CALL_WITH_CALLER, kind: "request" },
   { method: METHOD_MCP_PROMPT_LIST, kind: "request" },
+  { method: METHOD_MCP_PROMPT_GET, kind: "request" },
   { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
+  { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
   { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
   { method: METHOD_USAGE_STATS_READ, kind: "request" },
   { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
@@ -881,6 +900,33 @@ export type AgentAppUninstallResponse = {
   deleteEvidence?: AgentAppDeleteDataExecutionEvidence | null;
 };
 
+export type AgentAppShellPrepareParams = {
+  descriptor: unknown;
+};
+
+export type AgentAppShellPackageMount = {
+  kind: string;
+  path: string;
+  readOnly: boolean;
+  packageHash: string;
+  manifestHash: string;
+};
+
+export type AgentAppShellPrepareResponse = {
+  appId?: string;
+  status: string;
+  installMode?: string;
+  shellKind?: string;
+  descriptorVersion?: number;
+  devShell: boolean;
+  blockerCodes: string[];
+  message?: string;
+  packageMount?: AgentAppShellPackageMount;
+  entryKey?: string;
+  windowTitle?: string;
+  preparedAt: string;
+};
+
 export type AgentAppUiRuntimeStartParams = {
   appId: string;
   entryKey?: string;
@@ -1109,16 +1155,82 @@ export type McpServerStatusListResponse = {
   servers: unknown[];
 };
 
+export type McpServerStartParams = {
+  name: string;
+};
+
+export type McpServerStopParams = {
+  name: string;
+};
+
+export type McpServerLifecycleResponse = Record<string, never>;
+
 export type McpToolListResponse = {
   tools: unknown[];
+};
+
+export type McpToolListForContextParams = {
+  caller?: string;
+  includeDeferred?: boolean;
+};
+
+export type McpToolSearchParams = {
+  query: string;
+  caller?: string;
+  limit?: number;
+};
+
+export type McpToolCallParams = {
+  toolName: string;
+  arguments: unknown;
+};
+
+export type McpToolCallWithCallerParams = McpToolCallParams & {
+  caller?: string;
+};
+
+export type McpContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mime_type: string }
+  | { type: "resource"; uri: string; text?: string; blob?: string };
+
+export type McpToolCallResponse = {
+  content: McpContent[];
+  is_error: boolean;
 };
 
 export type McpPromptListResponse = {
   prompts: unknown[];
 };
 
+export type McpPromptGetParams = {
+  name: string;
+  arguments?: Record<string, unknown>;
+};
+
+export type McpPromptMessage = {
+  role: string;
+  content: McpContent;
+};
+
+export type McpPromptGetResponse = {
+  description?: string;
+  messages: McpPromptMessage[];
+};
+
 export type McpResourceListResponse = {
   resources: unknown[];
+};
+
+export type McpResourceReadParams = {
+  uri: string;
+};
+
+export type McpResourceReadResponse = {
+  uri: string;
+  mime_type?: string;
+  text?: string;
+  blob?: string;
 };
 
 export type ProjectMemoryReadParams = {

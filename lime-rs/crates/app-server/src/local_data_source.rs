@@ -71,11 +71,25 @@ use app_server_protocol::KnowledgeUpdatePackStatusParams;
 use app_server_protocol::KnowledgeUpdatePackStatusResponse;
 use app_server_protocol::KnowledgeValidateContextRunParams;
 use app_server_protocol::KnowledgeValidateContextRunResponse;
+use app_server_protocol::McpContent;
+use app_server_protocol::McpPromptGetParams;
+use app_server_protocol::McpPromptGetResponse;
 use app_server_protocol::McpPromptListResponse;
+use app_server_protocol::McpPromptMessage;
 use app_server_protocol::McpResourceListResponse;
+use app_server_protocol::McpResourceReadParams;
+use app_server_protocol::McpResourceReadResponse;
+use app_server_protocol::McpServerLifecycleResponse;
 use app_server_protocol::McpServerListResponse;
+use app_server_protocol::McpServerStartParams;
 use app_server_protocol::McpServerStatusListResponse;
+use app_server_protocol::McpServerStopParams;
+use app_server_protocol::McpToolCallParams;
+use app_server_protocol::McpToolCallResponse;
+use app_server_protocol::McpToolCallWithCallerParams;
+use app_server_protocol::McpToolListForContextParams;
 use app_server_protocol::McpToolListResponse;
+use app_server_protocol::McpToolSearchParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -173,6 +187,10 @@ use lime_core::database::system_providers::get_system_providers;
 use lime_core::database::system_providers::SystemProviderDef;
 use lime_core::database::DbConnection;
 use lime_core::models::model_registry::ModelTier;
+use lime_mcp::McpClientManager;
+use lime_mcp::McpError;
+use lime_mcp::McpManagerState;
+use lime_mcp::McpServerConfig;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::mcp_service::McpService;
 use lime_services::model_registry_service::FetchModelsResult;
@@ -198,6 +216,8 @@ use std::io::Cursor;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
+use tokio::sync::Mutex as TokioMutex;
 use url::Url;
 use uuid::Uuid;
 use zip::ZipArchive;
@@ -229,6 +249,7 @@ pub struct LocalAppDataSource {
     db: DbConnection,
     api_key_provider_service: ApiKeyProviderService,
     model_registry_service: ModelRegistryService,
+    mcp_manager: McpManagerState,
 }
 
 impl LocalAppDataSource {
@@ -241,6 +262,7 @@ impl LocalAppDataSource {
             db,
             api_key_provider_service,
             model_registry_service,
+            mcp_manager: Arc::new(TokioMutex::new(McpClientManager::new(None))),
         })
     }
 }
@@ -803,37 +825,170 @@ impl AppDataSource for LocalAppDataSource {
         &self,
     ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
         let servers = McpService::get_all(&self.db).map_err(data_error)?;
-        Ok(McpServerStatusListResponse {
-            servers: servers
-                .into_iter()
-                .map(|server| {
-                    json!({
-                        "id": server.id,
-                        "name": server.name,
-                        "description": server.description,
-                        "config": server.parse_config(),
-                        "is_running": false,
-                        "server_info": null,
-                        "enabled_lime": server.enabled_lime,
-                        "enabled_claude": server.enabled_claude,
-                        "enabled_codex": server.enabled_codex,
-                        "enabled_gemini": server.enabled_gemini,
-                    })
-                })
-                .collect(),
-        })
+        let manager = self.mcp_manager.lock().await;
+        let mut result = Vec::with_capacity(servers.len());
+        for server in servers {
+            let is_running = manager.is_server_running(&server.name).await;
+            let server_info = if is_running {
+                manager.get_client_capabilities(&server.name).await
+            } else {
+                None
+            };
+            result.push(json!({
+                "id": server.id,
+                "name": server.name,
+                "description": server.description,
+                "config": server.parse_config(),
+                "is_running": is_running,
+                "server_info": server_info,
+                "enabled_lime": server.enabled_lime,
+                "enabled_claude": server.enabled_claude,
+                "enabled_codex": server.enabled_codex,
+                "enabled_gemini": server.enabled_gemini,
+            }));
+        }
+        Ok(McpServerStatusListResponse { servers: result })
+    }
+
+    async fn start_mcp_server(
+        &self,
+        params: McpServerStartParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        let server = McpService::get_all(&self.db)
+            .map_err(data_error)?
+            .into_iter()
+            .find(|server| server.name == params.name)
+            .ok_or_else(|| {
+                RuntimeCoreError::Backend(format!("MCP server not found: {}", params.name))
+            })?;
+        let config = parse_mcp_server_config(&server.server_config);
+        let manager = self.mcp_manager.lock().await;
+        manager
+            .start_server(&params.name, &config)
+            .await
+            .map_err(mcp_error)?;
+        Ok(McpServerLifecycleResponse::default())
+    }
+
+    async fn stop_mcp_server(
+        &self,
+        params: McpServerStopParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        let manager = self.mcp_manager.lock().await;
+        manager.stop_server(&params.name).await.map_err(mcp_error)?;
+        Ok(McpServerLifecycleResponse::default())
     }
 
     async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
-        Ok(McpToolListResponse::default())
+        let manager = self.mcp_manager.lock().await;
+        Ok(McpToolListResponse {
+            tools: values_from_serializable_vec(manager.list_tools().await.map_err(mcp_error)?)?,
+        })
+    }
+
+    async fn list_mcp_tools_for_context(
+        &self,
+        params: McpToolListForContextParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        let manager = self.mcp_manager.lock().await;
+        Ok(McpToolListResponse {
+            tools: values_from_serializable_vec(
+                manager
+                    .list_tools_for_context(params.caller.as_deref(), params.include_deferred)
+                    .await
+                    .map_err(mcp_error)?,
+            )?,
+        })
+    }
+
+    async fn search_mcp_tools(
+        &self,
+        params: McpToolSearchParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        let manager = self.mcp_manager.lock().await;
+        Ok(McpToolListResponse {
+            tools: values_from_serializable_vec(
+                manager
+                    .search_tools(&params.query, params.limit, params.caller.as_deref())
+                    .await
+                    .map_err(mcp_error)?,
+            )?,
+        })
+    }
+
+    async fn call_mcp_tool(
+        &self,
+        params: McpToolCallParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        let manager = self.mcp_manager.lock().await;
+        let result = manager
+            .call_tool(&params.tool_name, params.arguments)
+            .await
+            .map_err(mcp_error)?;
+        Ok(to_mcp_tool_call_response(result))
+    }
+
+    async fn call_mcp_tool_with_caller(
+        &self,
+        params: McpToolCallWithCallerParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        let manager = self.mcp_manager.lock().await;
+        let result = manager
+            .call_tool_with_caller(
+                &params.tool_name,
+                params.arguments,
+                params.caller.as_deref(),
+            )
+            .await
+            .map_err(mcp_error)?;
+        Ok(to_mcp_tool_call_response(result))
     }
 
     async fn list_mcp_prompts(&self) -> Result<McpPromptListResponse, RuntimeCoreError> {
-        Ok(McpPromptListResponse::default())
+        let manager = self.mcp_manager.lock().await;
+        Ok(McpPromptListResponse {
+            prompts: values_from_serializable_vec(
+                manager.list_prompts().await.map_err(mcp_error)?,
+            )?,
+        })
+    }
+
+    async fn get_mcp_prompt(
+        &self,
+        params: McpPromptGetParams,
+    ) -> Result<McpPromptGetResponse, RuntimeCoreError> {
+        let manager = self.mcp_manager.lock().await;
+        let result = manager
+            .get_prompt(&params.name, params.arguments)
+            .await
+            .map_err(mcp_error)?;
+        Ok(to_mcp_prompt_get_response(result))
     }
 
     async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
-        Ok(McpResourceListResponse::default())
+        let manager = self.mcp_manager.lock().await;
+        Ok(McpResourceListResponse {
+            resources: values_from_serializable_vec(
+                manager.list_resources().await.map_err(mcp_error)?,
+            )?,
+        })
+    }
+
+    async fn read_mcp_resource(
+        &self,
+        params: McpResourceReadParams,
+    ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
+        let manager = self.mcp_manager.lock().await;
+        let result = manager
+            .read_resource(&params.uri)
+            .await
+            .map_err(mcp_error)?;
+        Ok(McpResourceReadResponse {
+            uri: result.uri,
+            mime_type: result.mime_type,
+            text: result.text,
+            blob: result.blob,
+        })
     }
 
     async fn read_automation_scheduler_config(
@@ -2838,6 +2993,81 @@ fn value_from_serializable<T: serde::Serialize>(value: T) -> Result<Value, Runti
     serde_json::to_value(value).map_err(data_error)
 }
 
+fn parse_mcp_server_config(config_value: &Value) -> McpServerConfig {
+    serde_json::from_value(config_value.clone()).unwrap_or_else(|_| McpServerConfig {
+        command: config_value
+            .get("command")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+        args: config_value
+            .get("args")
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str().map(ToString::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        env: config_value
+            .get("env")
+            .and_then(|value| value.as_object())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        value.as_str().map(|value| (key.clone(), value.to_string()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        cwd: config_value
+            .get("cwd")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string),
+        timeout: config_value
+            .get("timeout")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(30),
+    })
+}
+
+fn mcp_error(error: McpError) -> RuntimeCoreError {
+    RuntimeCoreError::Backend(format!("MCP current runtime error: {error}"))
+}
+
+fn to_mcp_tool_call_response(result: lime_mcp::McpToolResult) -> McpToolCallResponse {
+    McpToolCallResponse {
+        content: result.content.into_iter().map(to_mcp_content).collect(),
+        is_error: result.is_error,
+    }
+}
+
+fn to_mcp_prompt_get_response(result: lime_mcp::McpPromptResult) -> McpPromptGetResponse {
+    McpPromptGetResponse {
+        description: result.description,
+        messages: result
+            .messages
+            .into_iter()
+            .map(|message| McpPromptMessage {
+                role: message.role,
+                content: to_mcp_content(message.content),
+            })
+            .collect(),
+    }
+}
+
+fn to_mcp_content(content: lime_mcp::McpContent) -> McpContent {
+    match content {
+        lime_mcp::McpContent::Text { text } => McpContent::Text { text },
+        lime_mcp::McpContent::Image { data, mime_type } => McpContent::Image { data, mime_type },
+        lime_mcp::McpContent::Resource { uri, text, blob } => {
+            McpContent::Resource { uri, text, blob }
+        }
+    }
+}
+
 fn to_lime_knowledge_context_pack_request(
     params: KnowledgeResolveContextPackParams,
 ) -> lime_knowledge::KnowledgeResolveContextPackRequest {
@@ -4707,6 +4937,7 @@ mod tests {
             model_registry_service: ModelRegistryService::new(Arc::new(Mutex::new(
                 Connection::open_in_memory().expect("open model db"),
             ))),
+            mcp_manager: Arc::new(TokioMutex::new(McpClientManager::new(None))),
         }
     }
 
@@ -4975,7 +5206,10 @@ mod tests {
     #[test]
     fn remove_agent_app_install_reference_paths_removes_only_reference_files() {
         let temp = TempDir::new().expect("temp dir");
-        let installed = temp.path().join("installed").join("content-factory-app.json");
+        let installed = temp
+            .path()
+            .join("installed")
+            .join("content-factory-app.json");
         let setup = temp.path().join("setup").join("content-factory-app.json");
         let storage = temp
             .path()
@@ -5004,7 +5238,10 @@ mod tests {
     #[test]
     fn remove_agent_app_install_reference_paths_counts_missing_reference_files() {
         let temp = TempDir::new().expect("temp dir");
-        let installed = temp.path().join("installed").join("content-factory-app.json");
+        let installed = temp
+            .path()
+            .join("installed")
+            .join("content-factory-app.json");
         let setup = temp.path().join("setup").join("content-factory-app.json");
 
         fs::create_dir_all(installed.parent().expect("installed parent")).expect("installed dir");

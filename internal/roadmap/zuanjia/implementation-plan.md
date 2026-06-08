@@ -138,11 +138,11 @@ src/components/experts/**
 src/i18n/resources/*/agentExperts.json 或现有 agent namespace
 ```
 
-如果新增 Tauri command，必须同步：
+专家能力不得新增 Tauri command wrapper。若后续需要后端事实，走 App Server JSON-RPC / RuntimeCore / services；若需要文件选择、窗口或系统能力，走 Electron Desktop Host bridge。新增 current 命令面必须同步：
 
 ```text
-safeInvoke(...) / invoke(...)
-tauri::generate_handler!
+src/lib/api/* 网关
+Electron Desktop Host bridge 或 App Server JSON-RPC protocol / client
 agentCommandCatalog
 mockPriorityCommands / defaultMocks
 ```

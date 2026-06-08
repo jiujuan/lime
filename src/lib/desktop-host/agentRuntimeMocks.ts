@@ -12,12 +12,12 @@ const deprecatedAgentCommandReplacements =
   agentCommandCatalog.deprecatedCommandReplacements as Record<string, string>;
 
 const deprecatedAgentCommandMocks = Object.fromEntries(
-  Object.entries(deprecatedAgentCommandReplacements).map(
-    ([command, replacement]) => [
+  Object.entries(deprecatedAgentCommandReplacements)
+    .filter(([, replacement]) => !replacement.startsWith("agentApp"))
+    .map(([command, replacement]) => [
       command,
       createDeprecatedCommandMock(command, replacement),
-    ],
-  ),
+    ]),
 ) as Record<string, () => never>;
 
 const createAppServerSessionCurrentMock =

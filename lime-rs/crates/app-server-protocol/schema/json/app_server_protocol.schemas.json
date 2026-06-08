@@ -1,5 +1,461 @@
 {
   "$defs": {
+    "AgentAppCloudReleaseDescriptor": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "channel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "loadedAt": {
+          "type": "string"
+        },
+        "manifestHash": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": "string"
+        },
+        "packageUrl": {
+          "type": "string"
+        },
+        "releaseId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "signatureRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceUri": {
+          "type": "string"
+        },
+        "tenantEnablementRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tenantId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "loadedAt",
+        "manifestHash",
+        "packageHash",
+        "packageUrl",
+        "sourceUri",
+        "version"
+      ],
+      "title": "AgentAppCloudReleaseDescriptor",
+      "type": "object"
+    },
+    "AgentAppDeleteDataExecutionEvidence": {
+      "$defs": {
+        "AgentAppDeleteDataPostDeleteResidualAudit": {
+          "properties": {
+            "checkedAt": {
+              "type": "string"
+            },
+            "checkedTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failedTarget": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "remainingTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "remainingTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "checkedAt",
+            "checkedTargetCount",
+            "remainingTargetCount",
+            "status"
+          ],
+          "type": "object"
+        },
+        "AgentAppDeleteDataTargetEvidence": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "blockerCodes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "error": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "status",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dataRoot": {
+          "type": "string"
+        },
+        "failedTarget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "missingTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "postDeleteResidualAudit": {
+          "$ref": "#/$defs/AgentAppDeleteDataPostDeleteResidualAudit"
+        },
+        "removedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "retainedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataRoot",
+        "generatedAt",
+        "postDeleteResidualAudit",
+        "status"
+      ],
+      "title": "AgentAppDeleteDataExecutionEvidence",
+      "type": "object"
+    },
+    "AgentAppDeleteDataPostDeleteResidualAudit": {
+      "$defs": {
+        "AgentAppDeleteDataTargetEvidence": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "blockerCodes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "error": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "status",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkedAt": {
+          "type": "string"
+        },
+        "checkedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failedTarget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "remainingTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "remainingTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkedAt",
+        "checkedTargetCount",
+        "remainingTargetCount",
+        "status"
+      ],
+      "title": "AgentAppDeleteDataPostDeleteResidualAudit",
+      "type": "object"
+    },
+    "AgentAppDeleteDataTargetEvidence": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "error": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "kind",
+        "reason",
+        "status",
+        "value"
+      ],
+      "title": "AgentAppDeleteDataTargetEvidence",
+      "type": "object"
+    },
+    "AgentAppFetchCloudPackageParams": {
+      "$defs": {
+        "AgentAppCloudReleaseDescriptor": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "channel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "loadedAt": {
+              "type": "string"
+            },
+            "manifestHash": {
+              "type": "string"
+            },
+            "packageHash": {
+              "type": "string"
+            },
+            "packageUrl": {
+              "type": "string"
+            },
+            "releaseId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "signatureRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceUri": {
+              "type": "string"
+            },
+            "tenantEnablementRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tenantId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "appId",
+            "loadedAt",
+            "manifestHash",
+            "packageHash",
+            "packageUrl",
+            "sourceUri",
+            "version"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "descriptor": {
+          "$ref": "#/$defs/AgentAppCloudReleaseDescriptor"
+        }
+      },
+      "required": [
+        "descriptor"
+      ],
+      "title": "AgentAppFetchCloudPackageParams",
+      "type": "object"
+    },
+    "AgentAppInstalledDisabledSetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId",
+        "disabled"
+      ],
+      "title": "AgentAppInstalledDisabledSetParams",
+      "type": "object"
+    },
     "AgentAppInstalledListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -15,6 +471,238 @@
         }
       },
       "title": "AgentAppInstalledListResponse",
+      "type": "object"
+    },
+    "AgentAppInstalledSaveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "state": true
+      },
+      "required": [
+        "state"
+      ],
+      "title": "AgentAppInstalledSaveParams",
+      "type": "object"
+    },
+    "AgentAppLocalPackageInspectParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appDir"
+      ],
+      "title": "AgentAppLocalPackageInspectParams",
+      "type": "object"
+    },
+    "AgentAppLocalPackageInspectResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appDir": {
+          "type": "string"
+        },
+        "appMarkdown": {
+          "type": "string"
+        },
+        "inspectedAt": {
+          "type": "string"
+        },
+        "manifest": true,
+        "manifestHash": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": "string"
+        },
+        "sourceKind": {
+          "type": "string"
+        },
+        "sourceUri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appDir",
+        "appMarkdown",
+        "inspectedAt",
+        "manifest",
+        "manifestHash",
+        "packageHash",
+        "sourceKind",
+        "sourceUri"
+      ],
+      "title": "AgentAppLocalPackageInspectResponse",
+      "type": "object"
+    },
+    "AgentAppPackageCacheEntry": {
+      "$defs": {
+        "AgentAppPackageIdentity": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "appVersion": {
+              "type": "string"
+            },
+            "channel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "loadedAt": {
+              "type": "string"
+            },
+            "manifestHash": {
+              "type": "string"
+            },
+            "packageHash": {
+              "type": "string"
+            },
+            "releaseId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "signatureRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceKind": {
+              "type": "string"
+            },
+            "sourceUri": {
+              "type": "string"
+            },
+            "tenantEnablementRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tenantId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "appVersion",
+            "loadedAt",
+            "manifestHash",
+            "packageHash",
+            "sourceKind",
+            "sourceUri"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "cachePath": {
+          "type": "string"
+        },
+        "cachedAt": {
+          "type": "string"
+        },
+        "identity": {
+          "$ref": "#/$defs/AgentAppPackageIdentity"
+        },
+        "manifestHash": {
+          "type": "string"
+        },
+        "manifestSnapshot": true,
+        "packageHash": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "cachePath",
+        "cachedAt",
+        "identity",
+        "manifestHash",
+        "manifestSnapshot",
+        "packageHash"
+      ],
+      "title": "AgentAppPackageCacheEntry",
+      "type": "object"
+    },
+    "AgentAppPackageIdentity": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "appVersion": {
+          "type": "string"
+        },
+        "channel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "loadedAt": {
+          "type": "string"
+        },
+        "manifestHash": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": "string"
+        },
+        "releaseId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "signatureRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceKind": {
+          "type": "string"
+        },
+        "sourceUri": {
+          "type": "string"
+        },
+        "tenantEnablementRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tenantId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId",
+        "appVersion",
+        "loadedAt",
+        "manifestHash",
+        "packageHash",
+        "sourceKind",
+        "sourceUri"
+      ],
+      "title": "AgentAppPackageIdentity",
       "type": "object"
     },
     "AgentAppUiRuntimeStartParams": {
@@ -124,6 +812,454 @@
         "appId"
       ],
       "title": "AgentAppUiRuntimeStopParams",
+      "type": "object"
+    },
+    "AgentAppUninstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "confirmationPhrase": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "mode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "mode"
+      ],
+      "title": "AgentAppUninstallParams",
+      "type": "object"
+    },
+    "AgentAppUninstallRehearsalParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "mode"
+      ],
+      "title": "AgentAppUninstallRehearsalParams",
+      "type": "object"
+    },
+    "AgentAppUninstallRehearsalResponse": {
+      "$defs": {
+        "AgentAppUninstallRehearsalTarget": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "safeToDelete": {
+              "type": "boolean"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "safeToDelete",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "deletedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "retainedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "targets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppUninstallRehearsalTarget"
+          },
+          "type": "array"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "appId",
+        "deletedTargetCount",
+        "generatedAt",
+        "mode",
+        "retainedTargetCount"
+      ],
+      "title": "AgentAppUninstallRehearsalResponse",
+      "type": "object"
+    },
+    "AgentAppUninstallRehearsalTarget": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "safeToDelete": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "kind",
+        "reason",
+        "safeToDelete",
+        "value"
+      ],
+      "title": "AgentAppUninstallRehearsalTarget",
+      "type": "object"
+    },
+    "AgentAppUninstallResponse": {
+      "$defs": {
+        "AgentAppDeleteDataExecutionEvidence": {
+          "properties": {
+            "blockedTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "blockerCodes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "dataRoot": {
+              "type": "string"
+            },
+            "failedTarget": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "generatedAt": {
+              "type": "string"
+            },
+            "missingTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "postDeleteResidualAudit": {
+              "$ref": "#/$defs/AgentAppDeleteDataPostDeleteResidualAudit"
+            },
+            "removedTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "retainedTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "dataRoot",
+            "generatedAt",
+            "postDeleteResidualAudit",
+            "status"
+          ],
+          "type": "object"
+        },
+        "AgentAppDeleteDataPostDeleteResidualAudit": {
+          "properties": {
+            "checkedAt": {
+              "type": "string"
+            },
+            "checkedTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failedTarget": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "remainingTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "remainingTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "checkedAt",
+            "checkedTargetCount",
+            "remainingTargetCount",
+            "status"
+          ],
+          "type": "object"
+        },
+        "AgentAppDeleteDataTargetEvidence": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "blockerCodes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "error": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "status",
+            "value"
+          ],
+          "type": "object"
+        },
+        "AgentAppInstalledListResponse": {
+          "properties": {
+            "issues": {
+              "default": [],
+              "items": true,
+              "type": "array"
+            },
+            "states": {
+              "default": [],
+              "items": true,
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "AgentAppUninstallRehearsalResponse": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "deletedTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generatedAt": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "packageHash": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "retainedTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "targets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppUninstallRehearsalTarget"
+              },
+              "type": "array"
+            },
+            "warnings": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "appId",
+            "deletedTargetCount",
+            "generatedAt",
+            "mode",
+            "retainedTargetCount"
+          ],
+          "type": "object"
+        },
+        "AgentAppUninstallRehearsalTarget": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "safeToDelete": {
+              "type": "boolean"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "safeToDelete",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deleteEvidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAppDeleteDataExecutionEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "list": {
+          "$ref": "#/$defs/AgentAppInstalledListResponse"
+        },
+        "missingTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rehearsal": {
+          "$ref": "#/$defs/AgentAppUninstallRehearsalResponse"
+        },
+        "removedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "list",
+        "missingTargetCount",
+        "rehearsal",
+        "removedTargetCount",
+        "status"
+      ],
+      "title": "AgentAppUninstallResponse",
       "type": "object"
     },
     "AgentAttachment": {
@@ -4171,6 +5307,199 @@
       "title": "KnowledgeValidateContextRunResponse",
       "type": "object"
     },
+    "McpContent": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "mime_type": {
+              "type": "string"
+            },
+            "type": {
+              "const": "image",
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "mime_type",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "blob": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "text": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "type": {
+              "const": "resource",
+              "type": "string"
+            },
+            "uri": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "uri"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "McpContent"
+    },
+    "McpPromptGetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "arguments": {
+          "additionalProperties": true,
+          "default": {},
+          "type": "object"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "McpPromptGetParams",
+      "type": "object"
+    },
+    "McpPromptGetResponse": {
+      "$defs": {
+        "McpContent": {
+          "oneOf": [
+            {
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "text",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text",
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "mime_type": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "image",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "data",
+                "mime_type",
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "blob": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "text": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "type": {
+                  "const": "resource",
+                  "type": "string"
+                },
+                "uri": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "uri"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "McpPromptMessage": {
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/McpContent"
+            },
+            "role": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "role"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "messages": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/McpPromptMessage"
+          },
+          "type": "array"
+        }
+      },
+      "title": "McpPromptGetResponse",
+      "type": "object"
+    },
     "McpPromptListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4181,6 +5510,93 @@
         }
       },
       "title": "McpPromptListResponse",
+      "type": "object"
+    },
+    "McpPromptMessage": {
+      "$defs": {
+        "McpContent": {
+          "oneOf": [
+            {
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "text",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text",
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "mime_type": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "image",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "data",
+                "mime_type",
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "blob": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "text": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "type": {
+                  "const": "resource",
+                  "type": "string"
+                },
+                "uri": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "uri"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/McpContent"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "role"
+      ],
+      "title": "McpPromptMessage",
       "type": "object"
     },
     "McpResourceListResponse": {
@@ -4195,6 +5611,55 @@
       "title": "McpResourceListResponse",
       "type": "object"
     },
+    "McpResourceReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "McpResourceReadParams",
+      "type": "object"
+    },
+    "McpResourceReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blob": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "mime_type": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "text": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "McpResourceReadResponse",
+      "type": "object"
+    },
+    "McpServerLifecycleResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "McpServerLifecycleResponse",
+      "type": "object"
+    },
     "McpServerListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4205,6 +5670,19 @@
         }
       },
       "title": "McpServerListResponse",
+      "type": "object"
+    },
+    "McpServerStartParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "McpServerStartParams",
       "type": "object"
     },
     "McpServerStatusListResponse": {
@@ -4219,6 +5697,162 @@
       "title": "McpServerStatusListResponse",
       "type": "object"
     },
+    "McpServerStopParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "McpServerStopParams",
+      "type": "object"
+    },
+    "McpToolCallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "arguments": true,
+        "toolName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "arguments",
+        "toolName"
+      ],
+      "title": "McpToolCallParams",
+      "type": "object"
+    },
+    "McpToolCallResponse": {
+      "$defs": {
+        "McpContent": {
+          "oneOf": [
+            {
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "text",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text",
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "mime_type": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "image",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "data",
+                "mime_type",
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "blob": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "text": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "type": {
+                  "const": "resource",
+                  "type": "string"
+                },
+                "uri": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "uri"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/McpContent"
+          },
+          "type": "array"
+        },
+        "is_error": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "is_error"
+      ],
+      "title": "McpToolCallResponse",
+      "type": "object"
+    },
+    "McpToolCallWithCallerParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "arguments": true,
+        "caller": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "toolName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "arguments",
+        "toolName"
+      ],
+      "title": "McpToolCallWithCallerParams",
+      "type": "object"
+    },
+    "McpToolListForContextParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "caller": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "includeDeferred": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "McpToolListForContextParams",
+      "type": "object"
+    },
     "McpToolListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4229,6 +5863,31 @@
         }
       },
       "title": "McpToolListResponse",
+      "type": "object"
+    },
+    "McpToolSearchParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "caller": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "limit": {
+          "default": 10,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "McpToolSearchParams",
       "type": "object"
     },
     "ModelListParams": {
@@ -5706,7 +7365,14 @@
         "requests": {
           "items": {
             "enum": [
+              "agentAppInstalled/disabled/set",
               "agentAppInstalled/list",
+              "agentAppInstalled/save",
+              "agentAppInstalled/uninstall",
+              "agentAppInstalled/uninstall/rehearsal",
+              "agentAppLocalPackage/inspect",
+              "agentAppPackage/fetchCloud",
+              "agentAppShell/prepare",
               "agentAppUiRuntime/start",
               "agentAppUiRuntime/status",
               "agentAppUiRuntime/stop",
@@ -5752,11 +7418,19 @@
               "knowledgePack/read",
               "knowledgePack/source/import",
               "knowledgePack/status/update",
+              "mcpPrompt/get",
               "mcpPrompt/list",
               "mcpResource/list",
+              "mcpResource/read",
               "mcpServer/list",
+              "mcpServer/start",
+              "mcpServer/stop",
               "mcpServerStatus/list",
+              "mcpTool/call",
+              "mcpTool/callWithCaller",
               "mcpTool/list",
+              "mcpTool/listForContext",
+              "mcpTool/search",
               "model/list",
               "modelPreferences/list",
               "modelProvider/catalog/list",

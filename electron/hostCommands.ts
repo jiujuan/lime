@@ -1,8 +1,9 @@
 /* global Buffer, process */
-import { app, dialog, shell } from "./electronRuntime";
+import { app, BrowserWindow, dialog, shell } from "./electronRuntime";
 import {
   AppServerRequestError,
   ERROR_CODES,
+  METHOD_AGENT_APP_SHELL_PREPARE,
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
@@ -50,7 +51,7 @@ import {
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartResponse,
   type AgentSessionUpdateResponse,
-  type AgentAppInstalledListResponse,
+  type AgentAppShellPrepareResponse,
   type AgentAppUiRuntimeStartParams,
   type AgentAppUiRuntimeStatusParams,
   type AgentAppUiRuntimeStatusResponse,
@@ -105,6 +106,48 @@ type ElectronKnownPathName = "home" | "desktop" | "documents" | "downloads";
 type UsageStatsSummaryWire = UsageStatsReadResponse["stats"];
 type UsageStatsModelUsageWire = UsageStatsModelRankingListResponse["ranking"][number];
 type UsageStatsDailyUsageWire = UsageStatsDailyTrendsListResponse["trends"][number];
+type AgentAppShellPrepareFields = {
+  descriptorVersion?: number;
+  appId: string;
+  installMode: string;
+  shellKind: string;
+  entryKey: string;
+  windowTitle: string;
+};
+type AgentAppShellLaunchResult = {
+  appId?: string;
+  status: "launched" | "blocked";
+  installMode?: string;
+  shellKind?: string;
+  descriptorVersion?: number;
+  devShell: true;
+  blockerCodes: string[];
+  message?: string;
+  packageMount?: {
+    kind: "local_dir";
+    path: string;
+    readOnly: true;
+    packageHash: string;
+    manifestHash: string;
+  };
+  runtimeStatus?: AgentAppUiRuntimeStatusResponse;
+  shellWindow?: {
+    label: string;
+    title: string;
+    url: string;
+    reused: boolean;
+    chrome: {
+      deepLinkScheme: string;
+      openEntryKey: string;
+      trayEnabled: boolean;
+      closePolicy: "hide_to_tray";
+      menuItemIds: string[];
+      multiAppManagement: boolean;
+      runtimeBypass: boolean;
+    };
+  };
+  launchedAt: string;
+};
 
 const CONFIG_FILE = "config.json";
 const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT = "oem-cloud-oauth-callback";
@@ -301,6 +344,8 @@ export class ElectronHostCommands {
         return await this.#readProjectMemory(args);
       case "agent_app_select_directory":
         return await this.#selectAgentAppDirectory(args);
+      case "agent_app_launch_shell":
+        return await this.#launchAgentAppShell(args);
       case "agent_app_start_ui_runtime":
         return await this.#startAgentAppUiRuntime(args);
       case "agent_app_get_ui_runtime_status":
@@ -581,6 +626,70 @@ export class ElectronHostCommands {
       path,
       cancelled: path === null,
     };
+  }
+
+  async #launchAgentAppShell(args: HostArgs): Promise<AgentAppShellLaunchResult> {
+    const launchedAt = new Date().toISOString();
+    const request = readRequest(args);
+    const prepare = await this.#appServerRequest<AgentAppShellPrepareResponse>(
+      METHOD_AGENT_APP_SHELL_PREPARE,
+      {
+        descriptor: request.descriptor ?? {},
+      },
+    );
+    const fields = prepareAgentAppShellFields(prepare);
+    if (prepare.status !== "ready") {
+      return buildAgentAppShellLaunchResult({
+        fields,
+        status: "blocked",
+        blockerCodes: Array.isArray(prepare.blockerCodes)
+          ? prepare.blockerCodes
+          : ["SHELL_PREPARE_FAILED"],
+        message: prepare.message ?? "Agent App shell 启动前校验未通过。",
+        packageMount: normalizeAgentAppShellPackageMount(prepare.packageMount),
+        launchedAt,
+      });
+    }
+    if (!fields) {
+      return buildAgentAppShellLaunchResult({
+        status: "blocked",
+        blockerCodes: ["SHELL_PREPARE_RESULT_INVALID"],
+        message: "App Server agentAppShell/prepare 未返回可启动字段。",
+        launchedAt,
+      });
+    }
+
+    const packageMount = normalizeAgentAppShellPackageMount(prepare.packageMount);
+    const runtimeStatus = await this.#startAgentAppUiRuntime({
+      appId: fields.appId,
+      entryKey: fields.entryKey,
+    });
+    if (!runtimeStatus.entryUrl) {
+      return buildAgentAppShellLaunchResult({
+        fields,
+        status: "blocked",
+        blockerCodes: ["SHELL_ENTRY_URL_MISSING"],
+        message: "Agent App UI runtime 未返回可打开的 entry URL。",
+        packageMount,
+        runtimeStatus,
+        launchedAt,
+      });
+    }
+
+    const shellWindow = openAgentAppShellBrowserWindow(
+      fields,
+      runtimeStatus.entryUrl,
+    );
+    return buildAgentAppShellLaunchResult({
+      fields,
+      status: "launched",
+      blockerCodes: [],
+      message: "Agent App dev shell 已复用 current UI runtime 并打开独立窗口。",
+      packageMount,
+      runtimeStatus,
+      shellWindow,
+      launchedAt,
+    });
   }
 
   async #startAgentAppUiRuntime(
@@ -1893,6 +2002,125 @@ function readRecord(
 
 function readRequest(value: unknown): Record<string, unknown> {
   return readRecord(value, "request") ?? toRecord(value) ?? {};
+}
+
+function openAgentAppShellBrowserWindow(
+  fields: AgentAppShellPrepareFields,
+  entryUrl: string,
+): NonNullable<AgentAppShellLaunchResult["shellWindow"]> {
+  const label = `agent-app-shell-${fields.appId}-${fields.installMode}`;
+  const existing = BrowserWindow.getAllWindows().find(
+    (window) => window.webContents.getURL() === entryUrl,
+  );
+  const targetWindow =
+    existing ??
+    new BrowserWindow({
+      width: 1280,
+      height: 860,
+      minWidth: 960,
+      minHeight: 640,
+      title: fields.windowTitle,
+      show: false,
+      backgroundColor: "#f7fbf4",
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+  if (!existing) {
+    void targetWindow.loadURL(entryUrl);
+    targetWindow.once("ready-to-show", () => {
+      targetWindow.show();
+    });
+  } else {
+    targetWindow.show();
+  }
+  targetWindow.focus();
+
+  return {
+    label,
+    title: fields.windowTitle,
+    url: entryUrl,
+    reused: Boolean(existing),
+    chrome: {
+      deepLinkScheme: `lime-agent-${fields.appId.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+      openEntryKey: fields.entryKey,
+      trayEnabled: true,
+      closePolicy: "hide_to_tray",
+      menuItemIds: ["open", "check_updates", "quit"],
+      multiAppManagement: false,
+      runtimeBypass: false,
+    },
+  };
+}
+
+function prepareAgentAppShellFields(
+  response: AgentAppShellPrepareResponse,
+): AgentAppShellPrepareFields | undefined {
+  if (
+    !response.appId ||
+    !response.installMode ||
+    !response.shellKind ||
+    !response.entryKey
+  ) {
+    return undefined;
+  }
+  return {
+    appId: response.appId,
+    installMode: response.installMode,
+    shellKind: response.shellKind,
+    descriptorVersion: response.descriptorVersion,
+    entryKey: response.entryKey,
+    windowTitle: response.windowTitle || response.appId,
+  };
+}
+
+function normalizeAgentAppShellPackageMount(
+  value: AgentAppShellPrepareResponse["packageMount"],
+): AgentAppShellLaunchResult["packageMount"] | undefined {
+  if (
+    !value ||
+    value.kind !== "local_dir" ||
+    !value.path ||
+    !value.packageHash ||
+    !value.manifestHash
+  ) {
+    return undefined;
+  }
+  return {
+    kind: "local_dir",
+    path: value.path,
+    readOnly: true,
+    packageHash: value.packageHash,
+    manifestHash: value.manifestHash,
+  };
+}
+
+function buildAgentAppShellLaunchResult(params: {
+  fields?: AgentAppShellPrepareFields;
+  status: "launched" | "blocked";
+  blockerCodes: string[];
+  message?: string;
+  packageMount?: AgentAppShellLaunchResult["packageMount"];
+  runtimeStatus?: AgentAppUiRuntimeStatusResponse;
+  shellWindow?: AgentAppShellLaunchResult["shellWindow"];
+  launchedAt: string;
+}): AgentAppShellLaunchResult {
+  return {
+    appId: params.fields?.appId,
+    status: params.status,
+    installMode: params.fields?.installMode,
+    shellKind: params.fields?.shellKind,
+    descriptorVersion: params.fields?.descriptorVersion,
+    devShell: true,
+    blockerCodes: params.blockerCodes,
+    message: params.message,
+    packageMount: params.packageMount,
+    runtimeStatus: params.runtimeStatus,
+    shellWindow: params.shellWindow,
+    launchedAt: params.launchedAt,
+  };
 }
 
 function readUsageStatsParams(args: HostArgs): UsageStatsRangeParams {

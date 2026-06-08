@@ -3,26 +3,26 @@ import { safeInvoke } from "@/lib/dev-bridge";
 
 import { getMcpInnerToolName, mcpApi } from "./mcp";
 
+const appServerRequestMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api/appServer", () => ({
+  AppServerClient: vi.fn().mockImplementation(() => ({
+    request: appServerRequestMock,
+  })),
+}));
+
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
-function createDiagnosticList(command: string): unknown[] {
-  const result: unknown[] = [];
-  Object.defineProperty(result, "__diagnostic", {
-    value: {
-      source: "electron-host-diagnostic",
-      command,
-      status: "degraded",
-    },
-    enumerable: false,
-  });
-  return result;
+function mockAppServerResult<T>(result: T): void {
+  appServerRequestMock.mockResolvedValueOnce({ result });
 }
 
 describe("mcp", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    appServerRequestMock.mockReset();
   });
 
   it("应在已知 server 名下提取 inner tool 名", () => {
@@ -41,103 +41,66 @@ describe("mcp", () => {
     expect(getMcpInnerToolName("WebSearch", "docs")).toBe("WebSearch");
   });
 
-  it("列表命令遇到 Electron empty diagnostic list 时应 fail closed", async () => {
-    const cases: Array<[string, () => Promise<unknown>]> = [
-      ["get_mcp_servers", () => mcpApi.getServers()],
-      ["mcp_list_servers_with_status", () => mcpApi.listServersWithStatus()],
-      ["mcp_list_tools", () => mcpApi.listTools()],
-      ["mcp_list_prompts", () => mcpApi.listPrompts()],
-      ["mcp_list_resources", () => mcpApi.listResources()],
+  it("列表命令应通过 App Server current 空态返回空数组", async () => {
+    const cases: Array<[string, string, () => Promise<unknown>]> = [
+      ["mcpServer/list", "servers", () => mcpApi.getServers()],
+      ["mcpServerStatus/list", "servers", () => mcpApi.listServersWithStatus()],
+      ["mcpTool/list", "tools", () => mcpApi.listTools()],
+      ["mcpPrompt/list", "prompts", () => mcpApi.listPrompts()],
+      ["mcpResource/list", "resources", () => mcpApi.listResources()],
     ];
 
-    for (const [command, action] of cases) {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(createDiagnosticList(command));
-
-      await expect(action()).rejects.toThrow(
-        `${command} 尚未接入真实 MCP current 通道，收到 electron-host-diagnostic 诊断返回。`,
-      );
-    }
-  });
-
-  it("列表命令收到真实 current 空态时应返回空数组", async () => {
-    const cases: Array<[string, () => Promise<unknown>]> = [
-      ["get_mcp_servers", () => mcpApi.getServers()],
-      ["mcp_list_servers_with_status", () => mcpApi.listServersWithStatus()],
-      ["mcp_list_tools", () => mcpApi.listTools()],
-      ["mcp_list_prompts", () => mcpApi.listPrompts()],
-      ["mcp_list_resources", () => mcpApi.listResources()],
-    ];
-
-    for (const [command, action] of cases) {
-      vi.mocked(safeInvoke).mockResolvedValueOnce([]);
+    for (const [method, field, action] of cases) {
+      mockAppServerResult({ [field]: [] });
 
       await expect(action()).resolves.toEqual([]);
-      expect(safeInvoke).toHaveBeenLastCalledWith(command);
+      expect(appServerRequestMock).toHaveBeenLastCalledWith(method, {});
     }
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("MCP 使用命令应通过 API 网关传递参数", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([
-        {
-          name: "mcp__docs__search_docs",
-          server_name: "docs",
-          description: "search",
-          input_schema: {},
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          name: "mcp__docs__search_docs",
-          server_name: "docs",
-          description: "search",
-          input_schema: {},
-        },
-      ])
-      .mockResolvedValueOnce({
-        content: [{ type: "text", text: "ok" }],
-        is_error: false,
-      })
-      .mockResolvedValueOnce({
-        content: [{ type: "text", text: "caller ok" }],
-        is_error: false,
-      })
-      .mockResolvedValueOnce({
-        description: "prompt",
-        messages: [{ role: "user", content: { type: "text", text: "hello" } }],
-      })
-      .mockResolvedValueOnce({
-        uri: "docs://readme",
-        mime_type: "text/plain",
-        text: "README",
-      });
-
-    await expect(
-      mcpApi.listToolsForContext("assistant", true),
-    ).resolves.toEqual([
-      {
-        name: "mcp__docs__search_docs",
-        server_name: "docs",
-        description: "search",
-        input_schema: {},
-      },
-    ]);
-    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_list_tools_for_context", {
-      caller: "assistant",
-      includeDeferred: true,
+  it("MCP runtime 使用命令应通过 App Server current method 传递参数", async () => {
+    const tool = {
+      name: "mcp__docs__search_docs",
+      server_name: "docs",
+      description: "search",
+      input_schema: {},
+    };
+    mockAppServerResult({ tools: [tool] });
+    mockAppServerResult({ tools: [tool] });
+    mockAppServerResult({
+      content: [{ type: "text", text: "ok" }],
+      is_error: false,
+    });
+    mockAppServerResult({
+      content: [{ type: "text", text: "caller ok" }],
+      is_error: false,
+    });
+    mockAppServerResult({
+      description: "prompt",
+      messages: [{ role: "user", content: { type: "text", text: "hello" } }],
+    });
+    mockAppServerResult({
+      uri: "docs://readme",
+      mime_type: "text/plain",
+      text: "README",
     });
 
     await expect(
-      mcpApi.searchTools("search", "tool_search", 5),
-    ).resolves.toEqual([
+      mcpApi.listToolsForContext("assistant", true),
+    ).resolves.toEqual([tool]);
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpTool/listForContext",
       {
-        name: "mcp__docs__search_docs",
-        server_name: "docs",
-        description: "search",
-        input_schema: {},
+        caller: "assistant",
+        includeDeferred: true,
       },
-    ]);
-    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_search_tools", {
+    );
+
+    await expect(
+      mcpApi.searchTools("search", "tool_search", 5),
+    ).resolves.toEqual([tool]);
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpTool/search", {
       query: "search",
       caller: "tool_search",
       limit: 5,
@@ -149,7 +112,7 @@ describe("mcp", () => {
       content: [{ type: "text", text: "ok" }],
       is_error: false,
     });
-    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_call_tool", {
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpTool/call", {
       toolName: "mcp__docs__search_docs",
       arguments: { q: "lime" },
     });
@@ -164,11 +127,14 @@ describe("mcp", () => {
       content: [{ type: "text", text: "caller ok" }],
       is_error: false,
     });
-    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_call_tool_with_caller", {
-      toolName: "mcp__docs__search_docs",
-      arguments: { q: "lime" },
-      caller: "assistant",
-    });
+    expect(appServerRequestMock).toHaveBeenLastCalledWith(
+      "mcpTool/callWithCaller",
+      {
+        toolName: "mcp__docs__search_docs",
+        arguments: { q: "lime" },
+        caller: "assistant",
+      },
+    );
 
     await expect(
       mcpApi.getPrompt("docs_summarize", { topic: "lime" }),
@@ -176,7 +142,7 @@ describe("mcp", () => {
       description: "prompt",
       messages: [{ role: "user", content: { type: "text", text: "hello" } }],
     });
-    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_get_prompt", {
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpPrompt/get", {
       name: "docs_summarize",
       arguments: { topic: "lime" },
     });
@@ -186,8 +152,25 @@ describe("mcp", () => {
       mime_type: "text/plain",
       text: "README",
     });
-    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_read_resource", {
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpResource/read", {
       uri: "docs://readme",
     });
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("MCP lifecycle 应通过 App Server current method 传递参数", async () => {
+    mockAppServerResult({});
+    mockAppServerResult({});
+
+    await expect(mcpApi.startServer("docs")).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpServer/start", {
+      name: "docs",
+    });
+
+    await expect(mcpApi.stopServer("docs")).resolves.toBeUndefined();
+    expect(appServerRequestMock).toHaveBeenLastCalledWith("mcpServer/stop", {
+      name: "docs",
+    });
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 });

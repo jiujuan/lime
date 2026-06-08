@@ -7,12 +7,7 @@ const REPO_ROOT = process.cwd();
 const RUST_COMMANDS_ROOT = "lime-rs/src/commands";
 
 // 删除下列任一旧 stub 文件时，必须同步从这个集合移除，保持该集合只收缩不扩张。
-const ALLOWED_DEPRECATED_COMMAND_STUB_FILES = new Set([
-  "lime-rs/src/commands/companion_cmd.rs",
-  "lime-rs/src/commands/connect_cmd.rs",
-  "lime-rs/src/commands/tray_cmd.rs",
-  "lime-rs/src/commands/webview_cmd.rs",
-]);
+const ALLOWED_DEPRECATED_COMMAND_STUB_FILES = new Set<string>([]);
 
 const DEPRECATED_COMMAND_STUB_PATTERN =
   /DEPRECATED_[A-Z0-9_]*COMMAND|deprecated_[a-z0-9_]*command|fail-closed 退场面|旧 Tauri .*已退场|legacy Tauri command/iu;
@@ -194,8 +189,6 @@ const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
   ["lime-rs/src/commands/browser_profile_cmd.rs", 26],
   ["lime-rs/src/commands/browser_runtime_cmd.rs", 48],
   ["lime-rs/src/commands/capability_draft_cmd.rs", 7],
-  ["lime-rs/src/commands/companion_cmd.rs", 8],
-  ["lime-rs/src/commands/connect_cmd.rs", 7],
   ["lime-rs/src/commands/content_cmd.rs", 26],
   ["lime-rs/src/commands/execution_run_cmd.rs", 16],
   ["lime-rs/src/commands/gallery_material_cmd.rs", 27],
@@ -211,18 +204,16 @@ const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
   ["lime-rs/src/commands/memory_management_cmd.rs", 48],
   ["lime-rs/src/commands/memory_search_cmd.rs", 35],
   ["lime-rs/src/commands/modality_runtime_contracts.rs", 2],
-  ["lime-rs/src/commands/model_registry_cmd.rs", 28],
+  ["lime-rs/src/commands/model_registry_cmd.rs", 26],
   ["lime-rs/src/commands/security_perf_cmd.rs", 2],
   ["lime-rs/src/commands/session_files_cmd.rs", 28],
   ["lime-rs/src/commands/site_capability_cmd.rs", 24],
   ["lime-rs/src/commands/skill_cmd.rs", 228],
   ["lime-rs/src/commands/skill_exec_cmd.rs", 10],
-  ["lime-rs/src/commands/telegram_remote_cmd.rs", 18],
-  ["lime-rs/src/commands/tray_cmd.rs", 2],
   ["lime-rs/src/commands/unified_memory_cmd.rs", 50],
   ["lime-rs/src/commands/video_generation_cmd.rs", 18],
   ["lime-rs/src/commands/voice_model_cmd.rs", 44],
-  ["lime-rs/src/commands/webview_cmd.rs", 131],
+  ["lime-rs/src/commands/webview_cmd.rs", 114],
   ["lime-rs/src/commands/wechat_channel_cmd.rs", 23],
   ["lime-rs/src/commands/windows_startup_cmd.rs", 20],
   ["lime-rs/src/commands/workspace_cmd.rs", 49],

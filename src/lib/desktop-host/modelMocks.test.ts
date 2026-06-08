@@ -21,4 +21,8 @@ describe("desktop-host/modelMocks", () => {
     expect(modelMocks).toHaveProperty("hide_model");
     expect(modelMocks).toHaveProperty("record_model_usage");
   });
+
+  it("托盘模型同步不再注册 desktop-host 默认 mock", () => {
+    expect(modelMocks).not.toHaveProperty("sync_tray_model_shortcuts");
+  });
 });

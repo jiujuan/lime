@@ -1,5 +1,27 @@
-import { safeInvoke } from "@/lib/dev-bridge";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
+import { AppServerClient } from "@/lib/api/appServer";
+import {
+  METHOD_MCP_PROMPT_GET,
+  METHOD_MCP_PROMPT_LIST,
+  METHOD_MCP_RESOURCE_LIST,
+  METHOD_MCP_RESOURCE_READ,
+  METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_START,
+  METHOD_MCP_SERVER_STATUS_LIST,
+  METHOD_MCP_SERVER_STOP,
+  METHOD_MCP_TOOL_CALL,
+  METHOD_MCP_TOOL_CALL_WITH_CALLER,
+  METHOD_MCP_TOOL_LIST,
+  METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+  METHOD_MCP_TOOL_SEARCH,
+  type McpPromptGetResponse as AppServerMcpPromptGetResponse,
+  type McpPromptListResponse as AppServerMcpPromptListResponse,
+  type McpResourceListResponse as AppServerMcpResourceListResponse,
+  type McpResourceReadResponse as AppServerMcpResourceReadResponse,
+  type McpServerListResponse as AppServerMcpServerListResponse,
+  type McpServerStatusListResponse as AppServerMcpServerStatusListResponse,
+  type McpToolCallResponse as AppServerMcpToolCallResponse,
+  type McpToolListResponse as AppServerMcpToolListResponse,
+} from "../../../packages/app-server-client/src/protocol";
 
 // ============================================================================
 // 基础类型定义
@@ -97,21 +119,34 @@ export function getMcpInnerToolName(
   return parts.length >= 3 ? parts.slice(2).join("__") : toolName;
 }
 
-async function invokeMcpListCommand<T>(command: string): Promise<T[]> {
-  const result = await safeInvoke<T[]>(command);
-  assertNotDiagnosticFacade(command, result, "真实 MCP current 通道");
-  return result;
+type McpAppServerClient = Pick<AppServerClient, "request">;
+
+async function requestMcpAppServer<T>(
+  method: string,
+  params: unknown = {},
+  appServerClient: McpAppServerClient = new AppServerClient(),
+): Promise<T> {
+  const response = await appServerClient.request<T>(method, params);
+  return response.result;
 }
 
-async function invokeMcpCommand<T>(
-  command: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  const result = args
-    ? await safeInvoke<T>(command, args)
-    : await safeInvoke<T>(command);
-  assertNotDiagnosticFacade(command, result, "真实 MCP current 通道");
-  return result;
+function failClosedMcpCurrentGap(command: string): never {
+  throw new Error(`${command} 尚未接入 App Server MCP current 通道`);
+}
+
+function assertArrayField<T>(
+  method: string,
+  response: unknown,
+  field: string,
+): T[] {
+  if (
+    !response ||
+    typeof response !== "object" ||
+    !Array.isArray((response as Record<string, unknown>)[field])
+  ) {
+    throw new Error(`${method} did not return ${field}`);
+  }
+  return (response as Record<string, T[]>)[field];
 }
 
 // ============================================================================
@@ -176,31 +211,54 @@ export const mcpApi = {
   // --------------------------------------------------------------------------
 
   getServers: (): Promise<McpServer[]> =>
-    invokeMcpListCommand<McpServer>("get_mcp_servers"),
+    requestMcpAppServer<AppServerMcpServerListResponse>(
+      METHOD_MCP_SERVER_LIST,
+    ).then((response) =>
+      assertArrayField<McpServer>(METHOD_MCP_SERVER_LIST, response, "servers"),
+    ),
 
   addServer: (server: McpServer): Promise<void> =>
-    invokeMcpCommand("add_mcp_server", { server }),
+    Promise.resolve().then(() => {
+      void server;
+      failClosedMcpCurrentGap("add_mcp_server");
+    }),
 
   updateServer: (server: McpServer): Promise<void> =>
-    invokeMcpCommand("update_mcp_server", { server }),
+    Promise.resolve().then(() => {
+      void server;
+      failClosedMcpCurrentGap("update_mcp_server");
+    }),
 
   deleteServer: (id: string): Promise<void> =>
-    invokeMcpCommand("delete_mcp_server", { id }),
+    Promise.resolve().then(() => {
+      void id;
+      failClosedMcpCurrentGap("delete_mcp_server");
+    }),
 
   toggleServer: (
     id: string,
     appType: string,
     enabled: boolean,
   ): Promise<void> =>
-    invokeMcpCommand("toggle_mcp_server", { id, appType, enabled }),
+    Promise.resolve().then(() => {
+      void id;
+      void appType;
+      void enabled;
+      failClosedMcpCurrentGap("toggle_mcp_server");
+    }),
 
   /** 从外部应用导入 MCP 配置 */
   importFromApp: (appType: string): Promise<number> =>
-    invokeMcpCommand("import_mcp_from_app", { appType }),
+    Promise.resolve().then(() => {
+      void appType;
+      failClosedMcpCurrentGap("import_mcp_from_app");
+    }),
 
   /** 同步所有 MCP 配置到实际配置文件 */
   syncAllToLive: (): Promise<void> =>
-    invokeMcpCommand("sync_all_mcp_to_live"),
+    Promise.resolve().then(() =>
+      failClosedMcpCurrentGap("sync_all_mcp_to_live"),
+    ),
 
   // --------------------------------------------------------------------------
   // 生命周期管理 API
@@ -208,15 +266,25 @@ export const mcpApi = {
 
   /** 获取所有服务器及其运行状态 */
   listServersWithStatus: (): Promise<McpServerInfo[]> =>
-    invokeMcpListCommand<McpServerInfo>("mcp_list_servers_with_status"),
+    requestMcpAppServer<AppServerMcpServerStatusListResponse>(
+      METHOD_MCP_SERVER_STATUS_LIST,
+    ).then((response) =>
+      assertArrayField<McpServerInfo>(
+        METHOD_MCP_SERVER_STATUS_LIST,
+        response,
+        "servers",
+      ),
+    ),
 
   /** 启动 MCP 服务器 */
   startServer: (name: string): Promise<void> =>
-    invokeMcpCommand("mcp_start_server", { name }),
+    requestMcpAppServer(METHOD_MCP_SERVER_START, { name }).then(
+      () => undefined,
+    ),
 
   /** 停止 MCP 服务器 */
   stopServer: (name: string): Promise<void> =>
-    invokeMcpCommand("mcp_stop_server", { name }),
+    requestMcpAppServer(METHOD_MCP_SERVER_STOP, { name }).then(() => undefined),
 
   // --------------------------------------------------------------------------
   // 工具管理 API
@@ -224,17 +292,34 @@ export const mcpApi = {
 
   /** 获取所有可用工具，返回名格式为 `mcp__<server>__<tool>`。 */
   listTools: (): Promise<McpToolDefinition[]> =>
-    invokeMcpListCommand<McpToolDefinition>("mcp_list_tools"),
+    requestMcpAppServer<AppServerMcpToolListResponse>(
+      METHOD_MCP_TOOL_LIST,
+    ).then((response) =>
+      assertArrayField<McpToolDefinition>(
+        METHOD_MCP_TOOL_LIST,
+        response,
+        "tools",
+      ),
+    ),
 
   /** 按调用上下文获取可见工具（支持 deferred_loading） */
   listToolsForContext: (
     caller?: string,
     includeDeferred = false,
   ): Promise<McpToolDefinition[]> =>
-    invokeMcpCommand("mcp_list_tools_for_context", {
-      caller,
-      includeDeferred,
-    }),
+    requestMcpAppServer<AppServerMcpToolListResponse>(
+      METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+      {
+        caller,
+        includeDeferred,
+      },
+    ).then((response) =>
+      assertArrayField<McpToolDefinition>(
+        METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+        response,
+        "tools",
+      ),
+    ),
 
   /** 工具搜索（Tool Search），返回名格式为 `mcp__<server>__<tool>`。 */
   searchTools: (
@@ -242,14 +327,27 @@ export const mcpApi = {
     caller?: string,
     limit = 10,
   ): Promise<McpToolDefinition[]> =>
-    invokeMcpCommand("mcp_search_tools", { query, caller, limit }),
+    requestMcpAppServer<AppServerMcpToolListResponse>(METHOD_MCP_TOOL_SEARCH, {
+      query,
+      caller,
+      limit,
+    }).then((response) =>
+      assertArrayField<McpToolDefinition>(
+        METHOD_MCP_TOOL_SEARCH,
+        response,
+        "tools",
+      ),
+    ),
 
   /** 调用工具，`toolName` 当前格式为 `mcp__<server>__<tool>`。 */
   callTool: (
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<McpToolResult> =>
-    invokeMcpCommand("mcp_call_tool", { toolName, arguments: args }),
+    requestMcpAppServer<AppServerMcpToolCallResponse>(METHOD_MCP_TOOL_CALL, {
+      toolName,
+      arguments: args,
+    }),
 
   /** 带 caller 校验调用工具，`toolName` 当前格式为 `mcp__<server>__<tool>`。 */
   callToolWithCaller: (
@@ -257,11 +355,14 @@ export const mcpApi = {
     args: Record<string, unknown>,
     caller?: string,
   ): Promise<McpToolResult> =>
-    invokeMcpCommand("mcp_call_tool_with_caller", {
-      toolName,
-      arguments: args,
-      caller,
-    }),
+    requestMcpAppServer<AppServerMcpToolCallResponse>(
+      METHOD_MCP_TOOL_CALL_WITH_CALLER,
+      {
+        toolName,
+        arguments: args,
+        caller,
+      },
+    ),
 
   // --------------------------------------------------------------------------
   // 提示词管理 API
@@ -269,14 +370,25 @@ export const mcpApi = {
 
   /** 获取所有可用提示词 */
   listPrompts: (): Promise<McpPromptDefinition[]> =>
-    invokeMcpListCommand<McpPromptDefinition>("mcp_list_prompts"),
+    requestMcpAppServer<AppServerMcpPromptListResponse>(
+      METHOD_MCP_PROMPT_LIST,
+    ).then((response) =>
+      assertArrayField<McpPromptDefinition>(
+        METHOD_MCP_PROMPT_LIST,
+        response,
+        "prompts",
+      ),
+    ),
 
   /** 获取提示词内容 */
   getPrompt: (
     name: string,
     args: Record<string, unknown>,
   ): Promise<McpPromptResult> =>
-    invokeMcpCommand("mcp_get_prompt", { name, arguments: args }),
+    requestMcpAppServer<AppServerMcpPromptGetResponse>(METHOD_MCP_PROMPT_GET, {
+      name,
+      arguments: args,
+    }),
 
   // --------------------------------------------------------------------------
   // 资源管理 API
@@ -284,9 +396,20 @@ export const mcpApi = {
 
   /** 获取所有可用资源 */
   listResources: (): Promise<McpResourceDefinition[]> =>
-    invokeMcpListCommand<McpResourceDefinition>("mcp_list_resources"),
+    requestMcpAppServer<AppServerMcpResourceListResponse>(
+      METHOD_MCP_RESOURCE_LIST,
+    ).then((response) =>
+      assertArrayField<McpResourceDefinition>(
+        METHOD_MCP_RESOURCE_LIST,
+        response,
+        "resources",
+      ),
+    ),
 
   /** 读取资源内容 */
   readResource: (uri: string): Promise<McpResourceContent> =>
-    invokeMcpCommand("mcp_read_resource", { uri }),
+    requestMcpAppServer<AppServerMcpResourceReadResponse>(
+      METHOD_MCP_RESOURCE_READ,
+      { uri },
+    ),
 };

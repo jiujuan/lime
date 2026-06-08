@@ -70,6 +70,9 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "AgentAppDeleteDataExecutionEvidence",
     "AgentAppDeleteDataTargetEvidence",
     "AgentAppDeleteDataPostDeleteResidualAudit",
+    "AgentAppShellPrepareParams",
+    "AgentAppShellPrepareResponse",
+    "AgentAppShellPackageMount",
     "AgentAppUiRuntimeStartParams",
     "AgentAppUiRuntimeStatusParams",
     "AgentAppUiRuntimeStopParams",
@@ -112,6 +115,26 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "AutomationScheduleValidateResponse",
     "McpServerListResponse",
     "McpServerStatusListResponse",
+    "McpServerCreateParams",
+    "McpServerUpdateParams",
+    "McpServerDeleteParams",
+    "McpServerEnabledSetParams",
+    "McpServerImportFromAppParams",
+    "McpServerImportFromAppResponse",
+    "McpServerStartParams",
+    "McpServerStopParams",
+    "McpServerLifecycleResponse",
+    "McpToolListForContextParams",
+    "McpToolSearchParams",
+    "McpToolCallParams",
+    "McpToolCallWithCallerParams",
+    "McpToolCallResponse",
+    "McpPromptGetParams",
+    "McpPromptGetResponse",
+    "McpResourceReadParams",
+    "McpResourceReadResponse",
+    "McpContent",
+    "McpPromptMessage",
     "McpToolListResponse",
     "McpPromptListResponse",
     "McpResourceListResponse",
@@ -232,6 +255,7 @@ pub const METHOD_AGENT_APP_INSTALLED_DISABLED_SET: &str = "agentAppInstalled/dis
 pub const METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL: &str =
     "agentAppInstalled/uninstall/rehearsal";
 pub const METHOD_AGENT_APP_INSTALLED_UNINSTALL: &str = "agentAppInstalled/uninstall";
+pub const METHOD_AGENT_APP_SHELL_PREPARE: &str = "agentAppShell/prepare";
 pub const METHOD_AGENT_APP_UI_RUNTIME_START: &str = "agentAppUiRuntime/start";
 pub const METHOD_AGENT_APP_UI_RUNTIME_STATUS: &str = "agentAppUiRuntime/status";
 pub const METHOD_AGENT_APP_UI_RUNTIME_STOP: &str = "agentAppUiRuntime/stop";
@@ -258,9 +282,23 @@ pub const METHOD_AUTOMATION_SCHEDULE_PREVIEW: &str = "automationSchedule/preview
 pub const METHOD_AUTOMATION_SCHEDULE_VALIDATE: &str = "automationSchedule/validate";
 pub const METHOD_MCP_SERVER_LIST: &str = "mcpServer/list";
 pub const METHOD_MCP_SERVER_STATUS_LIST: &str = "mcpServerStatus/list";
+pub const METHOD_MCP_SERVER_CREATE: &str = "mcpServer/create";
+pub const METHOD_MCP_SERVER_UPDATE: &str = "mcpServer/update";
+pub const METHOD_MCP_SERVER_DELETE: &str = "mcpServer/delete";
+pub const METHOD_MCP_SERVER_ENABLED_SET: &str = "mcpServer/enabled/set";
+pub const METHOD_MCP_SERVER_IMPORT_FROM_APP: &str = "mcpServer/importFromApp";
+pub const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE: &str = "mcpServer/syncAllToLive";
+pub const METHOD_MCP_SERVER_START: &str = "mcpServer/start";
+pub const METHOD_MCP_SERVER_STOP: &str = "mcpServer/stop";
 pub const METHOD_MCP_TOOL_LIST: &str = "mcpTool/list";
+pub const METHOD_MCP_TOOL_LIST_FOR_CONTEXT: &str = "mcpTool/listForContext";
+pub const METHOD_MCP_TOOL_SEARCH: &str = "mcpTool/search";
+pub const METHOD_MCP_TOOL_CALL: &str = "mcpTool/call";
+pub const METHOD_MCP_TOOL_CALL_WITH_CALLER: &str = "mcpTool/callWithCaller";
 pub const METHOD_MCP_PROMPT_LIST: &str = "mcpPrompt/list";
+pub const METHOD_MCP_PROMPT_GET: &str = "mcpPrompt/get";
 pub const METHOD_MCP_RESOURCE_LIST: &str = "mcpResource/list";
+pub const METHOD_MCP_RESOURCE_READ: &str = "mcpResource/read";
 pub const METHOD_PROJECT_MEMORY_READ: &str = "projectMemory/read";
 pub const METHOD_USAGE_STATS_READ: &str = "usageStats/read";
 pub const METHOD_USAGE_STATS_MODEL_RANKING_LIST: &str = "usageStats/modelRanking/list";
@@ -445,6 +483,10 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_AGENT_APP_SHELL_PREPARE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_AGENT_APP_UI_RUNTIME_START,
         kind: AppServerMethodKind::Request,
     },
@@ -549,7 +591,55 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_CREATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_DELETE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_ENABLED_SET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_IMPORT_FROM_APP,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_START,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_SERVER_STOP,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_MCP_TOOL_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_TOOL_SEARCH,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_TOOL_CALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_TOOL_CALL_WITH_CALLER,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -557,7 +647,15 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_MCP_PROMPT_GET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_MCP_RESOURCE_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MCP_RESOURCE_READ,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -1057,11 +1155,113 @@ pub struct McpServerStatusListResponse {
     pub servers: Vec<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerCreateParams {
+    pub server: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerUpdateParams {
+    pub server: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerDeleteParams {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerEnabledSetParams {
+    pub id: String,
+    pub app_type: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerImportFromAppParams {
+    pub app_type: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerImportFromAppResponse {
+    pub imported_count: usize,
+    #[serde(default)]
+    pub servers: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerStartParams {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerStopParams {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerLifecycleResponse {}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct McpToolListResponse {
     #[serde(default)]
     pub tools: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolListForContextParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+    #[serde(default)]
+    pub include_deferred: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolSearchParams {
+    pub query: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+    #[serde(default = "default_mcp_tool_search_limit")]
+    pub limit: usize,
+}
+
+fn default_mcp_tool_search_limit() -> usize {
+    10
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolCallParams {
+    pub tool_name: String,
+    pub arguments: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolCallWithCallerParams {
+    pub tool_name: String,
+    pub arguments: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct McpToolCallResponse {
+    #[serde(default)]
+    pub content: Vec<McpContent>,
+    pub is_error: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -1071,11 +1271,69 @@ pub struct McpPromptListResponse {
     pub prompts: Vec<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptGetParams {
+    pub name: String,
+    #[serde(default)]
+    pub arguments: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptGetResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub messages: Vec<McpPromptMessage>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct McpResourceListResponse {
     #[serde(default)]
     pub resources: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpResourceReadParams {
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct McpResourceReadResponse {
+    pub uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blob: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type")]
+pub enum McpContent {
+    #[serde(rename = "text")]
+    Text { text: String },
+    #[serde(rename = "image")]
+    Image { data: String, mime_type: String },
+    #[serde(rename = "resource")]
+    Resource {
+        uri: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blob: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct McpPromptMessage {
+    pub role: String,
+    pub content: McpContent,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1465,6 +1723,48 @@ pub struct AgentAppDeleteDataPostDeleteResidualAudit {
     pub remaining_targets: Vec<AgentAppDeleteDataTargetEvidence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failed_target: Option<AgentAppDeleteDataTargetEvidence>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppShellPrepareParams {
+    pub descriptor: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppShellPackageMount {
+    pub kind: String,
+    pub path: String,
+    pub read_only: bool,
+    pub package_hash: String,
+    pub manifest_hash: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppShellPrepareResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor_version: Option<u64>,
+    pub dev_shell: bool,
+    #[serde(default)]
+    pub blocker_codes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_mount: Option<AgentAppShellPackageMount>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_title: Option<String>,
+    pub prepared_at: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -3228,9 +3528,23 @@ mod tests {
                 METHOD_AUTOMATION_SCHEDULE_VALIDATE,
                 METHOD_MCP_SERVER_LIST,
                 METHOD_MCP_SERVER_STATUS_LIST,
+                METHOD_MCP_SERVER_CREATE,
+                METHOD_MCP_SERVER_UPDATE,
+                METHOD_MCP_SERVER_DELETE,
+                METHOD_MCP_SERVER_ENABLED_SET,
+                METHOD_MCP_SERVER_IMPORT_FROM_APP,
+                METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
+                METHOD_MCP_SERVER_START,
+                METHOD_MCP_SERVER_STOP,
                 METHOD_MCP_TOOL_LIST,
+                METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+                METHOD_MCP_TOOL_SEARCH,
+                METHOD_MCP_TOOL_CALL,
+                METHOD_MCP_TOOL_CALL_WITH_CALLER,
                 METHOD_MCP_PROMPT_LIST,
+                METHOD_MCP_PROMPT_GET,
                 METHOD_MCP_RESOURCE_LIST,
+                METHOD_MCP_RESOURCE_READ,
                 METHOD_PROJECT_MEMORY_READ,
                 METHOD_MODEL_LIST,
                 METHOD_MODEL_PREFERENCES_LIST,

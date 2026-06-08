@@ -22,6 +22,7 @@ import {
   METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
   METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
   METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
+  METHOD_AGENT_APP_SHELL_PREPARE,
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
@@ -95,10 +96,18 @@ import {
   METHOD_MODEL_PROVIDER_UPDATE,
   METHOD_MODEL_SYNC_STATE_READ,
   METHOD_MCP_PROMPT_LIST,
+  METHOD_MCP_PROMPT_GET,
   METHOD_MCP_RESOURCE_LIST,
+  METHOD_MCP_RESOURCE_READ,
   METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
+  METHOD_MCP_SERVER_STOP,
+  METHOD_MCP_TOOL_CALL,
+  METHOD_MCP_TOOL_CALL_WITH_CALLER,
   METHOD_MCP_TOOL_LIST,
+  METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+  METHOD_MCP_TOOL_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
   METHOD_SKILL_LIST,
   METHOD_SKILL_READ,
@@ -147,6 +156,8 @@ import {
   type AgentAppLocalPackageInspectParams,
   type AgentAppLocalPackageInspectResponse,
   type AgentAppPackageCacheEntry,
+  type AgentAppShellPrepareParams,
+  type AgentAppShellPrepareResponse,
   type AgentAppUninstallParams,
   type AgentAppUninstallRehearsalParams,
   type AgentAppUninstallRehearsalResponse,
@@ -250,10 +261,22 @@ import {
   type ModelProviderUpdateParams,
   type ModelSyncStateReadResponse,
   type McpPromptListResponse,
+  type McpPromptGetParams,
+  type McpPromptGetResponse,
   type McpResourceListResponse,
+  type McpResourceReadParams,
+  type McpResourceReadResponse,
   type McpServerListResponse,
+  type McpServerLifecycleResponse,
+  type McpServerStartParams,
   type McpServerStatusListResponse,
+  type McpServerStopParams,
+  type McpToolCallParams,
+  type McpToolCallResponse,
+  type McpToolCallWithCallerParams,
+  type McpToolListForContextParams,
   type McpToolListResponse,
+  type McpToolSearchParams,
   type ProtocolSchemaFile,
   type ProtocolSchemaGroup,
   type ProjectMemoryReadParams,
@@ -585,6 +608,10 @@ export class AppServerClient {
     return this.request(METHOD_AGENT_APP_INSTALLED_UNINSTALL, params);
   }
 
+  prepareAgentAppShell(params: AgentAppShellPrepareParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_APP_SHELL_PREPARE, params);
+  }
+
   startAgentAppUiRuntime(params: AgentAppUiRuntimeStartParams): JsonRpcRequest {
     return this.request(METHOD_AGENT_APP_UI_RUNTIME_START, params);
   }
@@ -703,16 +730,48 @@ export class AppServerClient {
     return this.request(METHOD_MCP_SERVER_STATUS_LIST, {});
   }
 
+  startMcpServer(params: McpServerStartParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_START, params);
+  }
+
+  stopMcpServer(params: McpServerStopParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_STOP, params);
+  }
+
   listMcpTools(): JsonRpcRequest {
     return this.request(METHOD_MCP_TOOL_LIST, {});
+  }
+
+  listMcpToolsForContext(params: McpToolListForContextParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_TOOL_LIST_FOR_CONTEXT, params);
+  }
+
+  searchMcpTools(params: McpToolSearchParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_TOOL_SEARCH, params);
+  }
+
+  callMcpTool(params: McpToolCallParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_TOOL_CALL, params);
+  }
+
+  callMcpToolWithCaller(params: McpToolCallWithCallerParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_TOOL_CALL_WITH_CALLER, params);
   }
 
   listMcpPrompts(): JsonRpcRequest {
     return this.request(METHOD_MCP_PROMPT_LIST, {});
   }
 
+  getMcpPrompt(params: McpPromptGetParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_PROMPT_GET, params);
+  }
+
   listMcpResources(): JsonRpcRequest {
     return this.request(METHOD_MCP_RESOURCE_LIST, {});
+  }
+
+  readMcpResource(params: McpResourceReadParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_RESOURCE_READ, params);
   }
 
   readProjectMemory(params: ProjectMemoryReadParams): JsonRpcRequest {
@@ -1193,6 +1252,17 @@ export class AppServerConnection {
     );
   }
 
+  async prepareAgentAppShell(
+    params: AgentAppShellPrepareParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentAppShellPrepareResponse>> {
+    return await this.request<AgentAppShellPrepareResponse>(
+      this.client.prepareAgentAppShell(params),
+      METHOD_AGENT_APP_SHELL_PREPARE,
+      options,
+    );
+  }
+
   async startAgentAppUiRuntime(
     params: AgentAppUiRuntimeStartParams,
     options: AppServerRequestOptions = {},
@@ -1474,12 +1544,78 @@ export class AppServerConnection {
     );
   }
 
+  async startMcpServer(
+    params: McpServerStartParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerLifecycleResponse>> {
+    return await this.request<McpServerLifecycleResponse>(
+      this.client.startMcpServer(params),
+      METHOD_MCP_SERVER_START,
+      options,
+    );
+  }
+
+  async stopMcpServer(
+    params: McpServerStopParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerLifecycleResponse>> {
+    return await this.request<McpServerLifecycleResponse>(
+      this.client.stopMcpServer(params),
+      METHOD_MCP_SERVER_STOP,
+      options,
+    );
+  }
+
   async listMcpTools(
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<McpToolListResponse>> {
     return await this.request<McpToolListResponse>(
       this.client.listMcpTools(),
       METHOD_MCP_TOOL_LIST,
+      options,
+    );
+  }
+
+  async listMcpToolsForContext(
+    params: McpToolListForContextParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpToolListResponse>> {
+    return await this.request<McpToolListResponse>(
+      this.client.listMcpToolsForContext(params),
+      METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
+      options,
+    );
+  }
+
+  async searchMcpTools(
+    params: McpToolSearchParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpToolListResponse>> {
+    return await this.request<McpToolListResponse>(
+      this.client.searchMcpTools(params),
+      METHOD_MCP_TOOL_SEARCH,
+      options,
+    );
+  }
+
+  async callMcpTool(
+    params: McpToolCallParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpToolCallResponse>> {
+    return await this.request<McpToolCallResponse>(
+      this.client.callMcpTool(params),
+      METHOD_MCP_TOOL_CALL,
+      options,
+    );
+  }
+
+  async callMcpToolWithCaller(
+    params: McpToolCallWithCallerParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpToolCallResponse>> {
+    return await this.request<McpToolCallResponse>(
+      this.client.callMcpToolWithCaller(params),
+      METHOD_MCP_TOOL_CALL_WITH_CALLER,
       options,
     );
   }
@@ -1494,12 +1630,34 @@ export class AppServerConnection {
     );
   }
 
+  async getMcpPrompt(
+    params: McpPromptGetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpPromptGetResponse>> {
+    return await this.request<McpPromptGetResponse>(
+      this.client.getMcpPrompt(params),
+      METHOD_MCP_PROMPT_GET,
+      options,
+    );
+  }
+
   async listMcpResources(
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<McpResourceListResponse>> {
     return await this.request<McpResourceListResponse>(
       this.client.listMcpResources(),
       METHOD_MCP_RESOURCE_LIST,
+      options,
+    );
+  }
+
+  async readMcpResource(
+    params: McpResourceReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpResourceReadResponse>> {
+    return await this.request<McpResourceReadResponse>(
+      this.client.readMcpResource(params),
+      METHOD_MCP_RESOURCE_READ,
       options,
     );
   }
