@@ -9,8 +9,12 @@
     "isolatedModules": true,
     "strict": true,
     "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "app-server-client": ["packages/app-server-client/src/index.ts"]
+    },
     "types": ["node", "electron"],
     "noEmit": true
   },
-  "include": ["electron/**/*.ts"]
+  "include": ["electron/**/*.ts", "packages/app-server-client/src/**/*.ts"]
 }

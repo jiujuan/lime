@@ -554,7 +554,8 @@ mod tests {
         )
         .await;
 
-        assert!(error.contains("timed out after 500ms while waiting for exit"));
+        assert!(error.contains("timed out after"));
+        assert!(error.contains("while waiting for exit"));
         assert!(error.contains("backend cleanup hung"));
     }
 

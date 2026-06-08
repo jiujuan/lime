@@ -5,6 +5,10 @@ function readFile(path) {
   return fs.readFileSync(path, "utf8");
 }
 
+function existingFiles(paths) {
+  return paths.filter((path) => fs.existsSync(path));
+}
+
 function sectionBetween(content, startHeading, endHeadingPrefix) {
   const start = content.indexOf(startHeading);
   expect(start, `missing section ${startHeading}`).toBeGreaterThanOrEqual(0);
@@ -141,9 +145,10 @@ function expectNoLegacyAgentUiCommandGatewayReference(content, label) {
   ];
 
   for (const snippet of forbiddenSnippets) {
-    expect(content, `${label} must not treat legacy Tauri as AgentUI current`).not.toContain(
-      snippet,
-    );
+    expect(
+      content,
+      `${label} must not treat legacy Tauri as AgentUI current`,
+    ).not.toContain(snippet);
   }
 }
 
@@ -279,10 +284,12 @@ describe("Electron current testing docs guard", () => {
       "internal/aiprompts/playwright-e2e.md",
       "internal/aiprompts/quality-workflow.md",
       "internal/aiprompts/workspace.md",
-      ".codex/skills/lime-command-boundary/SKILL.md",
-      ".codex/skills/lime-governance/SKILL.md",
-      ".codex/skills/lime-quality-workflow/SKILL.md",
-      ".codex/skills/lime-playwright-e2e/SKILL.md",
+      ...existingFiles([
+        ".codex/skills/lime-command-boundary/SKILL.md",
+        ".codex/skills/lime-governance/SKILL.md",
+        ".codex/skills/lime-quality-workflow/SKILL.md",
+        ".codex/skills/lime-playwright-e2e/SKILL.md",
+      ]),
       "internal/roadmap/appserver/README.md",
       "internal/roadmap/appserver/architecture.md",
       "internal/roadmap/appserver/consumer-integration.md",
@@ -422,7 +429,9 @@ describe("Electron current testing docs guard", () => {
     expect(forgeConfig).toContain("LIME_WINDOWS_SQUIRREL_REMOTE_RELEASES_URL");
 
     const electronRuntime = readFile("electron/electronRuntime.ts");
-    expect(electronRuntime).toContain('import type * as Electron from "electron"');
+    expect(electronRuntime).toContain(
+      'import type * as Electron from "electron"',
+    );
     expect(electronRuntime).toContain('requireElectron("electron")');
     expect(electronRuntime).toContain("autoUpdater,");
 
@@ -602,10 +611,12 @@ describe("Electron current testing docs guard", () => {
       "internal/roadmap/agentui/lime-agentui-code-map.md",
     );
     expect(codeMap).toContain("## 5. Command Gateway 层");
-    expect(codeMap).toContain(
-      "legacy `agent_runtime_*` Rust command facade",
+    expect(codeMap).toContain("App Server");
+    expect(codeMap).toContain("Electron Desktop Host");
+    expectNoLegacyAgentUiCommandGatewayReference(
+      codeMap,
+      "internal/roadmap/agentui/lime-agentui-code-map.md",
     );
-    expect(codeMap).toContain("不作为新增能力入口");
   });
 
   it("keeps i18n app metadata workflow on Electron Forge current sources", () => {

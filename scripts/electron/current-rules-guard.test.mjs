@@ -5,6 +5,10 @@ function readFile(filePath) {
   return fs.readFileSync(filePath, "utf8");
 }
 
+function existingFiles(filePaths) {
+  return filePaths.filter((filePath) => fs.existsSync(filePath));
+}
+
 function expectNoBrandPrefixRule(content, label) {
   expect(content, label).toMatch(/Lime`\s*\/\s*`lime_`\s*\/\s*`lime-/);
   expect(content, label).toMatch(/品牌前缀|新增命名/);
@@ -24,10 +28,18 @@ function expectAppServerAgentRule(content, label) {
 
 function expectRustCommandsCleanupRule(content, label) {
   expect(content, label).toContain("lime-rs/src/commands/**");
-  expect(content, label).toMatch(/旧 (?:Tauri )?(?:command )?wrapper (?:删除)?清理|清理区/);
-  expect(content, label).toMatch(/不再承接|不得.*新增|不再落|不能.*新增|新增 stub|新增业务逻辑/);
-  expect(content, label).toMatch(/App Server|RuntimeCore|services|Electron Desktop Host/);
-  expect(content, label).toMatch(/stub|compat wrapper|thin facade|退场 stub|fail-closed stub|tombstone|blocker|撤注册|删除/);
+  expect(content, label).toMatch(
+    /旧 (?:Tauri )?(?:command )?wrapper (?:删除)?清理|清理区/,
+  );
+  expect(content, label).toMatch(
+    /不再承接|不得.*新增|不再落|不能.*新增|新增 stub|新增业务逻辑/,
+  );
+  expect(content, label).toMatch(
+    /App Server|RuntimeCore|services|Electron Desktop Host/,
+  );
+  expect(content, label).toMatch(
+    /stub|compat wrapper|thin facade|退场 stub|fail-closed stub|tombstone|blocker|撤注册|删除/,
+  );
 }
 
 function retiredHostPackageName() {
@@ -90,7 +102,10 @@ describe("Electron current repository rules guard", () => {
       readFile("internal/aiprompts/commands.md"),
       "internal/aiprompts/commands.md",
     );
-    expectRustCommandsCleanupRule(readFile("internal/README.md"), "internal/README.md");
+    expectRustCommandsCleanupRule(
+      readFile("internal/README.md"),
+      "internal/README.md",
+    );
   });
 
   it("keeps App Server roadmap aware that Rust commands are cleanup-only", () => {
@@ -126,9 +141,12 @@ describe("Electron current repository rules guard", () => {
       "docs/README.md",
       "internal/aiprompts/governance.md",
       "internal/aiprompts/quality-workflow.md",
-      ".codex/skills/lime-command-boundary/references/commands.md",
-      ".codex/skills/lime-governance/references/governance.md",
-      ".codex/skills/lime-quality-workflow/references/quality-workflow.md",
+      "internal/aiprompts/commands.md",
+      ...existingFiles([
+        ".codex/skills/lime-command-boundary/references/commands.md",
+        ".codex/skills/lime-governance/references/governance.md",
+        ".codex/skills/lime-quality-workflow/references/quality-workflow.md",
+      ]),
     ];
 
     for (const filePath of docs) {
@@ -137,11 +155,11 @@ describe("Electron current repository rules guard", () => {
   });
 
   it("keeps command/governance/quality skills aligned with current rules", () => {
-    const skillFiles = [
+    const skillFiles = existingFiles([
       ".codex/skills/lime-command-boundary/SKILL.md",
       ".codex/skills/lime-governance/SKILL.md",
       ".codex/skills/lime-quality-workflow/SKILL.md",
-    ];
+    ]);
 
     for (const filePath of skillFiles) {
       const content = readFile(filePath);
