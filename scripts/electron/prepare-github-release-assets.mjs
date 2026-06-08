@@ -83,6 +83,33 @@ function duplicateTargetLabel(target) {
   return target.replace(/[^A-Za-z0-9._-]+/g, "-") || "asset";
 }
 
+function normalizeVersion(value) {
+  const version = String(value || "")
+    .trim()
+    .replace(/^v/, "");
+  return version || "";
+}
+
+function versionedDuplicateAssetName(basename, targetLabel, version) {
+  if (basename === "RELEASES" || basename === "RELEASES.json") {
+    return `${targetLabel}-${basename}`;
+  }
+  const extension = path.extname(basename);
+  const stem = basename.slice(0, basename.length - extension.length);
+  if (!version || !extension) {
+    return `${targetLabel}-${basename}`;
+  }
+  if (
+    new RegExp(
+      `(?:^|[-_.])v?${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[-_.]|$)`,
+      "i",
+    ).test(stem)
+  ) {
+    return `${targetLabel}-${basename}`;
+  }
+  return `${targetLabel}-${stem}-${version}${extension}`;
+}
+
 function githubAssetName(filePath, context) {
   const basename = path.basename(filePath);
   const target = targetFromAssetPath(context.assetsDir, filePath);
@@ -92,7 +119,11 @@ function githubAssetName(filePath, context) {
     return basename;
   }
 
-  return `${duplicateTargetLabel(target)}-${basename}`;
+  return versionedDuplicateAssetName(
+    basename,
+    duplicateTargetLabel(target),
+    context.version,
+  );
 }
 
 function assertNoRetiredUpdaterAssets(files) {
@@ -111,6 +142,7 @@ function assertNoRetiredUpdaterAssets(files) {
 function prepareGitHubReleaseAssets(options) {
   const assetsDir = path.resolve(options.assetsDir || "release-assets");
   const outDir = path.resolve(options.outDir || "release-github-assets");
+  const version = normalizeVersion(options.version);
   const extraAssets = (options.extraAssets || []).map((item) =>
     path.resolve(item),
   );
@@ -145,6 +177,7 @@ function prepareGitHubReleaseAssets(options) {
     const name = githubAssetName(filePath, {
       assetsDir,
       basenameCounts,
+      version,
     });
     if (usedNames.has(name)) {
       throw new Error(`duplicate GitHub release asset name: ${name}`);
@@ -169,6 +202,7 @@ function main() {
     assetsDir: args["assets-dir"],
     extraAssets: args.extraAsset,
     outDir: args["out-dir"],
+    version: args.version,
   });
 
   console.log("Prepared GitHub release upload assets:");

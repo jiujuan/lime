@@ -420,14 +420,15 @@ describe("GitHub release asset staging", () => {
     const copied = prepareGitHubReleaseAssets({
       assetsDir,
       outDir,
+      version: "v1.29.0",
     });
 
     expect(copied.map((item) => item.name).sort()).toEqual(
       [
         "Lime-1.29.0 Setup.exe",
-        "macos-arm64-Lime.dmg",
+        "macos-arm64-Lime-1.29.0.dmg",
         "macos-arm64-RELEASES.json",
-        "macos-x64-Lime.dmg",
+        "macos-x64-Lime-1.29.0.dmg",
         "macos-x64-RELEASES.json",
         "RELEASES",
       ].sort(),
