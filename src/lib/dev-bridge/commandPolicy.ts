@@ -75,8 +75,6 @@ const bridgeTruthCommands = new Set<string>([
   "agent_runtime_wait_subagents",
   "agent_runtime_resume_subagent",
   "agent_runtime_close_subagent",
-  "list_executable_skills",
-  "get_skill_detail",
   "execute_skill",
   "gateway_channel_status",
   "wechat_channel_list_accounts",
@@ -138,19 +136,7 @@ const bridgeTruthCommands = new Set<string>([
   "install_marketplace_skill_for_app",
   "install_skill_from_download_url_for_app",
   "inspect_remote_skill",
-  "knowledge_import_source",
-  "knowledge_compile_pack",
-  "knowledge_list_packs",
-  "knowledge_get_pack",
-  "knowledge_set_default_pack",
-  "knowledge_update_pack_status",
-  "knowledge_resolve_context",
-  "knowledge_validate_context_run",
   "project_memory_get",
-  "create_file",
-  "create_directory",
-  "delete_file",
-  "rename_file",
   "get_file_name",
   "session_files_save_file",
   "session_files_resolve_file_path",
@@ -188,8 +174,6 @@ const devBridgeCooldownBypassCommands = new Set([
   "agent_runtime_submit_turn",
   "agent_runtime_create_session",
   "agent_runtime_send_subagent_input",
-  "list_executable_skills",
-  "get_skill_detail",
   "execute_skill",
   "get_or_create_default_project",
   "workspace_get",
@@ -213,13 +197,17 @@ const devBridgeStartupTruthCommands = new Set([
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
 const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
-const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD =
-  "agentAppUiRuntime/start";
-const APP_SERVER_READ_METHODS = new Set([
+const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD = "agentAppUiRuntime/start";
+const APP_SERVER_KNOWLEDGE_COMPILE_METHOD = "knowledgePack/compile";
+const APP_SERVER_CURRENT_METHODS = new Set([
   "capability/list",
   "artifact/read",
   "fileSystem/listDirectory",
   "fileSystem/readFilePreview",
+  "fileSystem/createFile",
+  "fileSystem/createDirectory",
+  "fileSystem/renameFile",
+  "fileSystem/deleteFile",
   "agentSession/read",
   "skill/list",
   "skill/read",
@@ -228,6 +216,13 @@ const APP_SERVER_READ_METHODS = new Set([
   "agentAppInstalled/list",
   "agentAppUiRuntime/status",
   "knowledgePack/list",
+  "knowledgePack/read",
+  "knowledgePack/source/import",
+  "knowledgePack/compile",
+  "knowledgePack/default/set",
+  "knowledgePack/status/update",
+  "knowledgeContext/resolve",
+  "knowledgeContextRun/validate",
   "automationJob/list",
   "projectMemory/read",
   "model/list",
@@ -328,7 +323,10 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerStartupTruthCommand(command, args)) {
     return "startup-truth";
   }
-  if (isAppServerReadCommand(command, args)) {
+  if (isAppServerKnowledgeCompileCommand(command, args)) {
+    return "knowledge-compile";
+  }
+  if (isAppServerCurrentMethodCommand(command, args)) {
     return "app-server-read";
   }
   if (
@@ -345,9 +343,6 @@ export function resolveDevBridgeCommandTimeoutProfile(
   }
   if (devBridgeSkillExecutionCommands.has(command)) {
     return "skill-execution";
-  }
-  if (command === "knowledge_compile_pack") {
-    return "knowledge-compile";
   }
   if (command === "voice_models_download") {
     return "voice-model-download";
@@ -409,12 +404,27 @@ function isAppServerStartupTruthCommand(
   );
 }
 
-function isAppServerReadCommand(command: string, args: unknown): boolean {
+function isAppServerKnowledgeCompileCommand(
+  command: string,
+  args: unknown,
+): boolean {
   if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
     return false;
   }
   return extractAppServerJsonLines(args).some((line) =>
-    jsonRpcLineHasAnyMethod(line, APP_SERVER_READ_METHODS),
+    jsonRpcLineHasMethod(line, APP_SERVER_KNOWLEDGE_COMPILE_METHOD),
+  );
+}
+
+function isAppServerCurrentMethodCommand(
+  command: string,
+  args: unknown,
+): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasAnyMethod(line, APP_SERVER_CURRENT_METHODS),
   );
 }
 

@@ -1,9 +1,8 @@
 use crate::agent::AsterAgentState;
 use crate::app::LogState;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
-use crate::commands::aster_agent_cmd::app_server_host::{
-    app_server_handle_json_lines, AppServerHandleJsonLinesRequest,
-};
+use crate::commands::aster_agent_cmd::app_server_host::handle_in_process_app_server_json_lines;
+use crate::commands::aster_agent_cmd::RuntimeCommandContext;
 use crate::config::GlobalConfigManagerState;
 use crate::database::DbConnection;
 use crate::mcp::McpManagerState;
@@ -77,9 +76,8 @@ pub(super) async fn invoke_agent_app_runtime_app_server_value(
             Some(params),
         )),
     )?];
-    let response = handle_agent_app_runtime_app_server_lines(app, lines).await?;
-    let message = response
-        .lines
+    let response_lines = handle_agent_app_runtime_app_server_lines(app, lines).await?;
+    let message = response_lines
         .iter()
         .filter_map(|line| serde_json::from_str::<app_server::JsonRpcMessage>(line).ok())
         .find_map(|message| match message {
@@ -144,20 +142,18 @@ async fn ensure_agent_app_runtime_app_server_initialized(app: AppHandle) -> Resu
 async fn handle_agent_app_runtime_app_server_lines(
     app: AppHandle,
     lines: Vec<String>,
-) -> Result<crate::commands::aster_agent_cmd::app_server_host::AppServerHandleJsonLinesResult, String>
-{
-    app_server_handle_json_lines(
+) -> Result<Vec<String>, String> {
+    let runtime = RuntimeCommandContext::new(
         app.clone(),
-        app.state::<AsterAgentState>(),
-        app.state::<DbConnection>(),
-        app.state::<ApiKeyProviderServiceState>(),
-        app.state::<LogState>(),
-        app.state::<GlobalConfigManagerState>(),
-        app.state::<McpManagerState>(),
-        app.state::<AutomationServiceState>(),
-        AppServerHandleJsonLinesRequest { lines },
-    )
-    .await
+        app.state::<AsterAgentState>().inner(),
+        app.state::<DbConnection>().inner(),
+        app.state::<ApiKeyProviderServiceState>().inner(),
+        app.state::<LogState>().inner(),
+        app.state::<GlobalConfigManagerState>().inner(),
+        app.state::<McpManagerState>().inner(),
+        app.state::<AutomationServiceState>().inner(),
+    );
+    handle_in_process_app_server_json_lines(runtime, lines).await
 }
 
 fn serialize_app_server_line(message: app_server::JsonRpcMessage) -> Result<String, String> {

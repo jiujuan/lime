@@ -180,10 +180,20 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
 
 describe("agentRuntime clientFactory", () => {
   it("传入 invoke 时应同时驱动 command 与 bridge client", async () => {
+    const siteAdapter = {
+      name: "adapter-1",
+      domain: "example.com",
+      description: "示例站点适配器",
+      read_only: true,
+      capabilities: ["extract"],
+      input_schema: { type: "object" },
+      example_args: {},
+      example: "读取示例站点",
+    };
     const invoke = vi
       .fn()
       .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce([{ id: "adapter-1" }]);
+      .mockResolvedValueOnce([siteAdapter]);
     const client = createAgentRuntimeClient({ invoke });
 
     await expect(
@@ -191,9 +201,7 @@ describe("agentRuntime clientFactory", () => {
         session_id: "session-1",
       }),
     ).resolves.toBe(true);
-    await expect(client.siteListAdapters()).resolves.toEqual([
-      { id: "adapter-1" },
-    ]);
+    await expect(client.siteListAdapters()).resolves.toEqual([siteAdapter]);
 
     expect(invoke).toHaveBeenNthCalledWith(1, "agent_runtime_resume_thread", {
       request: {

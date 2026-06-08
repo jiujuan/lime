@@ -106,6 +106,28 @@ function invalidateConfigCache(): void {
   configCacheStamp = null;
 }
 
+function assertNonEmptyString(
+  command: string,
+  value: unknown,
+  label: string,
+): asserts value is string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${command} 未返回有效${label}`);
+  }
+}
+
+function assertConfigShape(value: unknown): asserts value is Config {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("get_config 未返回有效配置");
+  }
+
+  const defaultProvider = (value as { default_provider?: unknown })
+    .default_provider;
+  if (typeof defaultProvider !== "string" || defaultProvider.trim().length === 0) {
+    throw new Error("get_config 未返回有效配置");
+  }
+}
+
 export function invalidateAppConfigCache(): void {
   invalidateConfigCache();
 }
@@ -150,8 +172,10 @@ export async function getConfig(
   }
 
   if (!configLoadingPromise) {
-    configLoadingPromise = safeInvoke<Config>("get_config")
+    configLoadingPromise = safeInvoke<unknown>("get_config")
       .then((config) => {
+        assertNotDiagnosticFacade("get_config", config, "真实配置 current 通道");
+        assertConfigShape(config);
         configCache = normalizeConfig(config);
         configCacheStamp = readAppConfigChangeStamp();
         return configCache;
@@ -165,7 +189,8 @@ export async function getConfig(
 }
 
 export async function saveConfig(config: Config): Promise<void> {
-  await safeInvoke("save_config", { config });
+  const result = await safeInvoke("save_config", { config });
+  assertNotDiagnosticFacade("save_config", result, "真实配置 current 通道");
   configCache = cloneConfig(config);
   configCacheStamp = markAppConfigChanged();
 }
@@ -181,13 +206,26 @@ export async function getEnvironmentPreview(): Promise<EnvironmentPreview> {
 }
 
 export async function getDefaultProvider(): Promise<string> {
-  return safeInvoke("get_default_provider");
+  const result = await safeInvoke<unknown>("get_default_provider");
+  assertNotDiagnosticFacade(
+    "get_default_provider",
+    result,
+    "真实默认 Provider current 通道",
+  );
+  assertNonEmptyString("get_default_provider", result, "默认 Provider");
+  return result;
 }
 
 export async function setDefaultProvider(provider: string): Promise<string> {
-  const nextProvider = await safeInvoke<string>("set_default_provider", {
+  const nextProvider = await safeInvoke<unknown>("set_default_provider", {
     provider,
   });
+  assertNotDiagnosticFacade(
+    "set_default_provider",
+    nextProvider,
+    "真实默认 Provider current 通道",
+  );
+  assertNonEmptyString("set_default_provider", nextProvider, "默认 Provider");
 
   if (configCache) {
     configCache = {
@@ -204,11 +242,16 @@ export async function updateProviderEnvVars(
   apiHost: string,
   apiKey?: string,
 ): Promise<void> {
-  await safeInvoke("update_provider_env_vars", {
+  const result = await safeInvoke("update_provider_env_vars", {
     providerType,
     apiHost,
     apiKey: apiKey || null,
   });
+  assertNotDiagnosticFacade(
+    "update_provider_env_vars",
+    result,
+    "真实 Provider 环境变量 current 通道",
+  );
   invalidateConfigCache();
   configCacheStamp = markAppConfigChanged();
 }

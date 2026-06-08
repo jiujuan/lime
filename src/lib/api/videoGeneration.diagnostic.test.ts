@@ -79,4 +79,58 @@ describe("videoGeneration API diagnostic fail-closed", () => {
       videoGenerationApi.cancelTask("missing-task"),
     ).resolves.toBeNull();
   });
+
+  it("创建视频任务收到非任务形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(
+      videoGenerationApi.createTask({
+        projectId: "project-1",
+        providerId: "doubao",
+        model: "seedance-1-5-pro",
+        prompt: "城市夜景",
+      }),
+    ).rejects.toThrow(
+      "create_video_generation_task did not return video generation task",
+    );
+  });
+
+  it("列表视频任务收到错误元素形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce([
+      {
+        id: "task-1",
+        status: "processing",
+      },
+    ]);
+
+    await expect(videoGenerationApi.listTasks("project-1")).rejects.toThrow(
+      "list_video_generation_tasks did not return video generation task list",
+    );
+  });
+
+  it("查询和取消视频任务收到错误对象时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      })
+      .mockResolvedValueOnce({
+        id: "task-2",
+        projectId: "project-1",
+        providerId: "doubao",
+        model: "seedance-1-5-pro",
+        prompt: "城市夜景",
+        status: "cancelled",
+        createdAt: 1,
+      });
+
+    await expect(videoGenerationApi.getTask("task-1")).rejects.toThrow(
+      "get_video_generation_task did not return video generation task",
+    );
+    await expect(videoGenerationApi.cancelTask("task-2")).rejects.toThrow(
+      "cancel_video_generation_task did not return video generation task",
+    );
+  });
 });

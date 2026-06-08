@@ -136,6 +136,7 @@ export function useMcp(): UseMcpReturn {
     try {
       const list = await mcpApi.listServersWithStatus();
       setServers(list);
+      setError(null);
     } catch (e) {
       console.error("[useMcp] 获取服务器列表失败:", e);
       setError(e instanceof Error ? e.message : String(e));

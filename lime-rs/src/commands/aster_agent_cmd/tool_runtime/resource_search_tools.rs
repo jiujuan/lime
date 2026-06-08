@@ -1,7 +1,7 @@
 use super::*;
 use crate::agent_tools::catalog::LIME_SEARCH_WEB_IMAGES_TOOL_NAME;
 use crate::app::AppState;
-use crate::commands::image_search_cmd::{
+use crate::services::image_search_service::{
     get_pexels_api_key_from_app_state, search_web_images_with_pexels_api_key, WebImageSearchRequest,
 };
 use tauri::Manager;

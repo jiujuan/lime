@@ -8,7 +8,7 @@
 
 1. 普通用户打开 `.html / .htm` 文件时，默认看到网页预览，而不是源码。
 2. 用户需要看代码时，可以在同一画布切换到源码。
-3. 真实本地 HTML 文件在 Tauri 中应通过受控 asset protocol 预览，并可打开独立预览窗口。
+3. 真实本地 HTML 文件应通过 Electron Desktop Host 受控本地文件预览能力展示，并可打开独立预览窗口。
 4. 用户在 AI 服务商设置页点测试时，文本模型应做真实聊天试跑，不能只用极轻量探活显示“连接成功”。
 5. 聊天页真实调用遇到 `402 Payment Required / Insufficient Balance / 余额不足` 时，应展示余额或额度不足的可操作提示。
 
@@ -20,13 +20,13 @@
 | HTML 文件识别               | `workspaceFilePreview.ts` 将 `.html / .htm` 解析为 `contentType: "html"`、`language: "html"`                                                                                                                                                                  | 已实现 |
 | 默认网页预览                | `CanvasPanel` 对 HTML 默认渲染 iframe；无真实路径用 `srcDoc`                                                                                                                                                                                                  | 已实现 |
 | 源码切换                    | HTML 工具栏提供“预览 / 源码”切换，源码走 `CodePreview`                                                                                                                                                                                                        | 已实现 |
-| Tauri 本地文件预览          | 有 `sourcePath` 或绝对 `baseFilePath` 时使用 `convertFileSrc` 生成 iframe `src`                                                                                                                                                                               | 已实现 |
-| 浏览器 / DevBridge 回退预览 | `convertFileSrc` 不可用且返回原始绝对路径时，不再把 `/Users/...html` 当成 Vite 站内 iframe `src`；改用 `srcDoc` 展示真实 HTML 内容                                                                                                                            | 已实现 |
-| 独立预览窗口                | `openHtmlPreviewWindow` 使用 Tauri `WebviewWindow` 创建 `html-preview-*`，失败回退系统默认应用                                                                                                                                                                | 已实现 |
+| 本地文件预览                | 有 `sourcePath` 或绝对 `baseFilePath` 时通过 Electron Desktop Host / renderer-safe file URL resolver 生成 iframe `src`                                                                                                                                          | 已实现 |
+| 浏览器 / DevBridge 回退预览 | 本地文件 resolver 不可用且返回原始绝对路径时，不再把 `/Users/...html` 当成 Vite 站内 iframe `src`；改用 `srcDoc` 展示真实 HTML 内容                                                                                                                            | 已实现 |
+| 独立预览窗口                | `openHtmlPreviewWindow` 通过 Electron Desktop Host 打开 `html-preview-*` 独立预览窗口，失败回退系统默认应用                                                                                                                                                    | 已实现 |
 | HTML artifact 流式阶段预览  | `resolveDefaultArtifactViewMode` 对 `html` 与 `code + language: html` 始终返回 `preview`，不再因 `writePhase: streaming` 默认源码                                                                                                                             | 已实现 |
 | HTML artifact 工具栏切换    | `HtmlRenderer` 接入外部 `viewMode / previewSize` 受控状态；工作区已有外部工具栏时隐藏内部重复工具栏，源码切换会真实移除 iframe 并渲染源码                                                                                                                     | 已实现 |
 | `.htm` 产物识别             | `buildArtifactFromWrite` 将 `.htm` 构建为 `html` artifact，并标记 `language: "html"`                                                                                                                                                                          | 已实现 |
-| Tauri 权限与 CSP            | `tauri.conf*.json` 启用 `assetProtocol`，CSP 覆盖 `asset:` / `http://asset.localhost` / `frame-src`；capability 覆盖 `html-preview-*` 与 `core:webview:allow-create-webview-window`                                                                           | 已实现 |
+| Electron 权限与 CSP         | current 预览能力应由 Electron Desktop Host / App Server 文件边界提供受控 URL，CSP 覆盖本地预览 iframe 来源；旧 Tauri `assetProtocol` / `WebviewWindow` 证据仅作为 deprecated reference                                                                       | 待复核 |
 | Provider 设置页不再误导     | 文本模型按钮显示“试跑当前模型”，并通过 App Server current `modelProvider/testChat` 做真实聊天试跑；旧 `test_api_key_provider_chat` 已判为 `dead`，不得作为正向证据恢复                                                                                          | 已实现 |
 | 402 额度错误友好化          | `agentRuntimeErrorPresentation` 将 `402 / Payment Required / Insufficient Balance / 余额不足 / 额度不足` 归一为额度不足提示；聊天时间线、折叠摘要、流式失败 assistant patch 与会话概览均在 presentation 层显示友好提示，不再向普通用户暴露 raw Provider error | 已实现 |
 | 失败态不过度重复            | 失败详情只保留在时间线错误卡等主解释位置；assistant 正文若只是同一失败详情的重复文案会被隐藏，底部运行状态行只保留“失败 + 耗时”等短状态                                                                                                                       | 已实现 |
@@ -34,12 +34,12 @@
 
 ## 外部依据
 
-Context7 查询 Tauri v2 官方文档后确认：
+迁移前 Tauri v2 官方文档曾用于确认旧实现：
 
 - `convertFileSrc()` 用于把设备文件路径转换为 WebView 可加载 URL；需要在 `tauri.conf.json` 配置 `assetProtocol`、scope 与 CSP。
 - 前端创建新 WebView window 需要 `core:webview:allow-create-webview-window` capability；动态窗口 label 需要 capability `windows` 覆盖。
 
-当前实现与上述方向一致。
+当前 Tauri -> Electron 迁移下，上述内容只能作为 deprecated reference；current 证据应回到 Electron Desktop Host / App Server 文件边界。
 
 ## 已执行验证
 
@@ -57,7 +57,7 @@ npx vitest run \
   "src/components/agent/chat/workspace/useWorkspaceArtifactPreviewActions.test.tsx"
 ```
 
-结果：4 个文件、26 个用例通过。最新复跑时与 HTML artifact、Provider 试跑和 402 错误展示相关用例合并执行，12 个文件、98 个用例通过。覆盖 Tauri asset URL 预览、浏览器 / DevBridge 回退 `srcDoc` 预览、源码切换、真实路径保留、HTML artifact 默认预览、Provider 文本模型真实试跑入口和额度不足提示。
+结果：4 个文件、26 个用例通过。最新复跑时与 HTML artifact、Provider 试跑和 402 错误展示相关用例合并执行，12 个文件、98 个用例通过。覆盖本地 HTML 预览、浏览器 / DevBridge 回退 `srcDoc` 预览、源码切换、真实路径保留、HTML artifact 默认预览、Provider 文本模型真实试跑入口和额度不足提示。
 
 ```bash
 npx vitest run \

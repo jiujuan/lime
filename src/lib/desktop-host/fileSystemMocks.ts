@@ -14,8 +14,4 @@ export const fileSystemMocks: Record<string, (args?: any) => any> = {
   start_oem_cloud_oauth_callback_bridge: () => ({
     callbackUrl: "http://127.0.0.1:1420/oauth/callback",
   }),
-  delete_file: () => ({ success: true }),
-  create_file: () => ({ success: true }),
-  create_directory: () => ({ success: true }),
-  rename_file: () => ({ success: true }),
 };

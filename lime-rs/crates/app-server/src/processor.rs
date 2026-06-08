@@ -26,8 +26,12 @@ use app_server_protocol::ConnectDeepLinkResolveParams;
 use app_server_protocol::ConnectOpenDeepLinkResolveParams;
 use app_server_protocol::ConnectRelayApiKeySaveParams;
 use app_server_protocol::EvidenceExportParams;
+use app_server_protocol::FileSystemCreateDirectoryParams;
+use app_server_protocol::FileSystemCreateFileParams;
+use app_server_protocol::FileSystemDeleteFileParams;
 use app_server_protocol::FileSystemListDirectoryParams;
 use app_server_protocol::FileSystemReadFilePreviewParams;
+use app_server_protocol::FileSystemRenameFileParams;
 use app_server_protocol::InitializeParams;
 use app_server_protocol::InitializeResponse;
 use app_server_protocol::JsonRpcError;
@@ -36,7 +40,14 @@ use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::JsonRpcResponse;
+use app_server_protocol::KnowledgeCompilePackParams;
+use app_server_protocol::KnowledgeImportSourceParams;
 use app_server_protocol::KnowledgeListPacksParams;
+use app_server_protocol::KnowledgeReadPackParams;
+use app_server_protocol::KnowledgeResolveContextParams;
+use app_server_protocol::KnowledgeSetDefaultPackParams;
+use app_server_protocol::KnowledgeUpdatePackStatusParams;
+use app_server_protocol::KnowledgeValidateContextRunParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelProviderAliasReadParams;
 use app_server_protocol::ModelProviderConfigExportParams;
@@ -61,6 +72,7 @@ use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
 use app_server_protocol::SkillReadParams;
+use app_server_protocol::UsageStatsRangeParams;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspacePathReadParams;
 use app_server_protocol::WorkspaceProjectPathResolveParams;
@@ -99,11 +111,22 @@ use app_server_protocol::METHOD_CONNECT_DEEP_LINK_RESOLVE;
 use app_server_protocol::METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE;
 use app_server_protocol::METHOD_CONNECT_RELAY_API_KEY_SAVE;
 use app_server_protocol::METHOD_EVIDENCE_EXPORT;
+use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_DIRECTORY;
+use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_FILE;
+use app_server_protocol::METHOD_FILE_SYSTEM_DELETE_FILE;
 use app_server_protocol::METHOD_FILE_SYSTEM_LIST_DIRECTORY;
 use app_server_protocol::METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
+use app_server_protocol::METHOD_FILE_SYSTEM_RENAME_FILE;
 use app_server_protocol::METHOD_INITIALIZE;
 use app_server_protocol::METHOD_INITIALIZED;
+use app_server_protocol::METHOD_KNOWLEDGE_CONTEXT_RESOLVE;
+use app_server_protocol::METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE;
+use app_server_protocol::METHOD_KNOWLEDGE_PACK_COMPILE;
+use app_server_protocol::METHOD_KNOWLEDGE_PACK_DEFAULT_SET;
 use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
+use app_server_protocol::METHOD_KNOWLEDGE_PACK_READ;
+use app_server_protocol::METHOD_KNOWLEDGE_PACK_STATUS_UPDATE;
+use app_server_protocol::METHOD_KNOWLEDGE_SOURCE_IMPORT;
 use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
 use app_server_protocol::METHOD_MCP_SERVER_LIST;
@@ -137,6 +160,9 @@ use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
 use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 use app_server_protocol::METHOD_SKILL_LIST;
 use app_server_protocol::METHOD_SKILL_READ;
+use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
+use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
+use app_server_protocol::METHOD_USAGE_STATS_READ;
 use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
@@ -211,6 +237,12 @@ impl RequestProcessor {
             METHOD_FILE_SYSTEM_READ_FILE_PREVIEW => {
                 self.handle_file_system_read_file_preview(params).await
             }
+            METHOD_FILE_SYSTEM_CREATE_FILE => self.handle_file_system_create_file(params).await,
+            METHOD_FILE_SYSTEM_CREATE_DIRECTORY => {
+                self.handle_file_system_create_directory(params).await
+            }
+            METHOD_FILE_SYSTEM_RENAME_FILE => self.handle_file_system_rename_file(params).await,
+            METHOD_FILE_SYSTEM_DELETE_FILE => self.handle_file_system_delete_file(params).await,
             METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params).await,
             METHOD_AGENT_SESSION_LIST => self.handle_session_list(params).await,
             METHOD_AGENT_SESSION_UPDATE => self.handle_session_update(params).await,
@@ -243,6 +275,19 @@ impl RequestProcessor {
             }
             METHOD_AGENT_APP_UI_RUNTIME_STOP => self.handle_agent_app_ui_runtime_stop(params).await,
             METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list(params).await,
+            METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read(params).await,
+            METHOD_KNOWLEDGE_SOURCE_IMPORT => self.handle_knowledge_source_import(params).await,
+            METHOD_KNOWLEDGE_PACK_COMPILE => self.handle_knowledge_pack_compile(params).await,
+            METHOD_KNOWLEDGE_PACK_DEFAULT_SET => {
+                self.handle_knowledge_pack_default_set(params).await
+            }
+            METHOD_KNOWLEDGE_PACK_STATUS_UPDATE => {
+                self.handle_knowledge_pack_status_update(params).await
+            }
+            METHOD_KNOWLEDGE_CONTEXT_RESOLVE => self.handle_knowledge_context_resolve(params).await,
+            METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE => {
+                self.handle_knowledge_context_run_validate(params).await
+            }
             METHOD_AUTOMATION_SCHEDULER_CONFIG_READ => {
                 self.handle_automation_scheduler_config_read().await
             }
@@ -272,6 +317,13 @@ impl RequestProcessor {
             METHOD_MCP_PROMPT_LIST => self.handle_mcp_prompt_list().await,
             METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list().await,
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
+            METHOD_USAGE_STATS_READ => self.handle_usage_stats_read(params).await,
+            METHOD_USAGE_STATS_MODEL_RANKING_LIST => {
+                self.handle_usage_stats_model_ranking_list(params).await
+            }
+            METHOD_USAGE_STATS_DAILY_TRENDS_LIST => {
+                self.handle_usage_stats_daily_trends_list(params).await
+            }
             METHOD_MODEL_LIST => self.handle_model_list(params).await,
             METHOD_MODEL_PREFERENCES_LIST => self.handle_model_preferences_list().await,
             METHOD_MODEL_SYNC_STATE_READ => self.handle_model_sync_state_read().await,
@@ -640,6 +692,104 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_knowledge_pack_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: KnowledgeReadPackParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_knowledge_pack(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_knowledge_source_import(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: KnowledgeImportSourceParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .import_knowledge_source(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_knowledge_pack_compile(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: KnowledgeCompilePackParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .compile_knowledge_pack(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_knowledge_pack_default_set(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: KnowledgeSetDefaultPackParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .set_default_knowledge_pack(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_knowledge_pack_status_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: KnowledgeUpdatePackStatusParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_knowledge_pack_status(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_knowledge_context_resolve(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: KnowledgeResolveContextParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .resolve_knowledge_context(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_knowledge_context_run_validate(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: KnowledgeValidateContextRunParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .validate_knowledge_context_run(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_automation_job_list(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
@@ -869,6 +1019,48 @@ impl RequestProcessor {
         let response = self
             .runtime
             .list_mcp_resources()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_usage_stats_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UsageStatsRangeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_usage_stats(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_usage_stats_model_ranking_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UsageStatsRangeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_usage_stats_model_ranking(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_usage_stats_daily_trends_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UsageStatsRangeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_usage_stats_daily_trends(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -1301,6 +1493,62 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_file_system_create_file(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: FileSystemCreateFileParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_file(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_file_system_create_directory(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: FileSystemCreateDirectoryParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_directory(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_file_system_rename_file(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: FileSystemRenameFileParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .rename_file(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_file_system_delete_file(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: FileSystemDeleteFileParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_file(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_evidence_export(
         &self,
         params: Option<serde_json::Value>,
@@ -1724,7 +1972,7 @@ mod tests {
         let blocked = processor
             .handle_request(JsonRpcRequest::new(
                 RequestId::Integer(1),
-                METHOD_FILE_SYSTEM_LIST_DIRECTORY,
+                METHOD_FILE_SYSTEM_CREATE_FILE,
                 Some(json!({ "path": "." })),
             ))
             .await
@@ -1760,6 +2008,9 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let file_path = temp_dir.path().join("README.md");
         std::fs::write(&file_path, "# Lime").expect("write file");
+        let created_file_path = temp_dir.path().join("created.txt");
+        let created_dir_path = temp_dir.path().join("created-dir");
+        let renamed_file_path = temp_dir.path().join("renamed.txt");
         let expected_dir_path = std::fs::canonicalize(temp_dir.path())
             .expect("canonical temp dir")
             .to_string_lossy()
@@ -1790,9 +2041,89 @@ mod tests {
             other => panic!("expected response, got {other:?}"),
         }
 
+        let create_file_messages = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(5),
+                METHOD_FILE_SYSTEM_CREATE_FILE,
+                Some(json!({ "path": created_file_path })),
+            ))
+            .await
+            .expect("create file response");
+        assert!(matches!(
+            &create_file_messages[0],
+            JsonRpcMessage::Response(response)
+                if response.result == serde_json::json!({})
+        ));
+        assert!(created_file_path.is_file());
+
+        let create_directory_messages = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(6),
+                METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
+                Some(json!({ "path": created_dir_path })),
+            ))
+            .await
+            .expect("create directory response");
+        assert!(matches!(
+            &create_directory_messages[0],
+            JsonRpcMessage::Response(response)
+                if response.result == serde_json::json!({})
+        ));
+        assert!(created_dir_path.is_dir());
+
+        let rename_file_messages = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(7),
+                METHOD_FILE_SYSTEM_RENAME_FILE,
+                Some(json!({
+                    "oldPath": created_file_path,
+                    "newPath": renamed_file_path,
+                })),
+            ))
+            .await
+            .expect("rename file response");
+        assert!(matches!(
+            &rename_file_messages[0],
+            JsonRpcMessage::Response(response)
+                if response.result == serde_json::json!({})
+        ));
+        assert!(!created_file_path.exists());
+        assert!(renamed_file_path.is_file());
+
+        let delete_file_messages = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(8),
+                METHOD_FILE_SYSTEM_DELETE_FILE,
+                Some(json!({
+                    "path": renamed_file_path,
+                    "recursive": false,
+                })),
+            ))
+            .await
+            .expect("delete file response");
+        assert!(matches!(
+            &delete_file_messages[0],
+            JsonRpcMessage::Response(response)
+                if response.result == serde_json::json!({})
+        ));
+        assert!(!renamed_file_path.exists());
+
+        processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(9),
+                METHOD_FILE_SYSTEM_DELETE_FILE,
+                Some(json!({
+                    "path": created_dir_path,
+                    "recursive": true,
+                })),
+            ))
+            .await
+            .expect("delete directory response");
+        assert!(!created_dir_path.exists());
+
         let preview_messages = processor
             .handle_request(JsonRpcRequest::new(
-                RequestId::Integer(4),
+                RequestId::Integer(10),
                 METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
                 Some(json!({
                     "path": file_path,
@@ -1876,6 +2207,90 @@ mod tests {
             match &messages[0] {
                 JsonRpcMessage::Response(response) => {
                     assert_eq!(response.result[field], json!([]));
+                }
+                other => panic!("expected response, got {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn usage_stats_methods_require_initialized_and_return_current_dto() {
+        let processor = RequestProcessor::new(RuntimeCore::default());
+        let blocked = processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(1),
+                METHOD_USAGE_STATS_READ,
+                Some(json!({ "timeRange": "month" })),
+            ))
+            .await
+            .expect("blocked response");
+        assert!(matches!(
+            &blocked[0],
+            JsonRpcMessage::Error(error) if error.error.code == error_codes::NOT_INITIALIZED
+        ));
+
+        processor
+            .handle_request(JsonRpcRequest::new(
+                RequestId::Integer(2),
+                METHOD_INITIALIZE,
+                Some(
+                    serde_json::to_value(InitializeParams {
+                        client_info: ClientInfo {
+                            name: "test-client".to_string(),
+                            title: None,
+                            version: None,
+                        },
+                        capabilities: ClientCapabilities::default(),
+                    })
+                    .expect("initialize params"),
+                ),
+            ))
+            .await
+            .expect("initialize");
+        processor.handle_notification(JsonRpcNotification::new(
+            METHOD_INITIALIZED,
+            Some(json!({})),
+        ));
+
+        let cases = [
+            (
+                RequestId::Integer(3),
+                METHOD_USAGE_STATS_READ,
+                "stats",
+                "object",
+            ),
+            (
+                RequestId::Integer(4),
+                METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+                "ranking",
+                "array",
+            ),
+            (
+                RequestId::Integer(5),
+                METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
+                "trends",
+                "array",
+            ),
+        ];
+
+        for (id, method, field, expected_kind) in cases {
+            let messages = processor
+                .handle_request(JsonRpcRequest::new(
+                    id,
+                    method,
+                    Some(json!({ "timeRange": "month" })),
+                ))
+                .await
+                .expect("usage stats response");
+
+            match &messages[0] {
+                JsonRpcMessage::Response(response) => {
+                    let value = response.result.get(field).expect("response field");
+                    match expected_kind {
+                        "object" => assert!(value.is_object()),
+                        "array" => assert!(value.is_array()),
+                        other => panic!("unexpected expected kind {other}"),
+                    }
                 }
                 other => panic!("expected response, got {other:?}"),
             }

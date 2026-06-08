@@ -80,6 +80,21 @@ describe("layeredDesignProject API", () => {
     );
   });
 
+  it("saveLayeredDesignProjectExport 收到非导出结果时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(
+      saveLayeredDesignProjectExport({
+        projectRootPath: "/workspace",
+        documentId: "doc",
+        title: "Document",
+        files: [],
+      }),
+    ).rejects.toThrow(
+      "save_layered_design_project_export did not return a layered design project export result",
+    );
+  });
+
   it("readLayeredDesignProjectExport 应代理到 project export 命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       projectRootPath: "/workspace",
@@ -121,6 +136,24 @@ describe("layeredDesignProject API", () => {
       readLayeredDesignProjectExport({ projectRootPath: "/workspace" }),
     ).rejects.toThrow(
       "read_layered_design_project_export 尚未接入真实 Layered Design project export current 通道",
+    );
+  });
+
+  it("readLayeredDesignProjectExport 收到非工程文档时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      projectRootPath: "/workspace",
+      exportDirectoryPath: "/workspace/.lime/layered-designs/doc.layered-design",
+      exportDirectoryRelativePath: ".lime/layered-designs/doc.layered-design",
+      designPath:
+        "/workspace/.lime/layered-designs/doc.layered-design/design.json",
+      assetCount: 0,
+      fileCount: 1,
+    });
+
+    await expect(
+      readLayeredDesignProjectExport({ projectRootPath: "/workspace" }),
+    ).rejects.toThrow(
+      "read_layered_design_project_export did not return a layered design project export document",
     );
   });
 });

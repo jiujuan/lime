@@ -11,10 +11,17 @@ import {
   METHOD_ARTIFACT_READ,
   METHOD_CAPABILITY_LIST,
   METHOD_EVIDENCE_EXPORT,
+  METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
+  METHOD_FILE_SYSTEM_CREATE_FILE,
+  METHOD_FILE_SYSTEM_DELETE_FILE,
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+  METHOD_FILE_SYSTEM_RENAME_FILE,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
+  METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
+  METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+  METHOD_USAGE_STATS_READ,
   PROTOCOL_VERSION,
   SERVER_NAME,
   decodeMessage,
@@ -60,11 +67,16 @@ import {
   type EvidenceExportResponse,
   type EvidencePackArtifact,
   type EvidencePackSummary,
+  type FileSystemCreateDirectoryParams,
+  type FileSystemCreateFileParams,
+  type FileSystemDeleteFileParams,
   type FileSystemDirectoryListing,
   type FileSystemFileEntry,
   type FileSystemFilePreview,
   type FileSystemListDirectoryParams,
+  type FileSystemMutationResponse,
   type FileSystemReadFilePreviewParams,
+  type FileSystemRenameFileParams,
   type InitializeParams,
   type InitializeResponse,
   type JsonRpcError,
@@ -76,6 +88,10 @@ import {
   type JsonValue,
   type RequestId,
   type RuntimeOptions,
+  type UsageStatsDailyTrendsListResponse,
+  type UsageStatsModelRankingListResponse,
+  type UsageStatsRangeParams,
+  type UsageStatsReadResponse,
 } from "../../../packages/app-server-client/src/protocol";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
@@ -91,6 +107,14 @@ export const APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY =
   METHOD_FILE_SYSTEM_LIST_DIRECTORY;
 export const APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW =
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
+export const APP_SERVER_METHOD_FILE_SYSTEM_CREATE_FILE =
+  METHOD_FILE_SYSTEM_CREATE_FILE;
+export const APP_SERVER_METHOD_FILE_SYSTEM_CREATE_DIRECTORY =
+  METHOD_FILE_SYSTEM_CREATE_DIRECTORY;
+export const APP_SERVER_METHOD_FILE_SYSTEM_RENAME_FILE =
+  METHOD_FILE_SYSTEM_RENAME_FILE;
+export const APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE =
+  METHOD_FILE_SYSTEM_DELETE_FILE;
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = METHOD_EVIDENCE_EXPORT;
 export const APP_SERVER_METHOD_AGENT_SESSION_START = METHOD_AGENT_SESSION_START;
 export const APP_SERVER_METHOD_AGENT_SESSION_READ = METHOD_AGENT_SESSION_READ;
@@ -103,6 +127,11 @@ export const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =
 export const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
   METHOD_AGENT_SESSION_ACTION_RESPOND;
 export const APP_SERVER_METHOD_AGENT_SESSION_EVENT = METHOD_AGENT_SESSION_EVENT;
+export const APP_SERVER_METHOD_USAGE_STATS_READ = METHOD_USAGE_STATS_READ;
+export const APP_SERVER_METHOD_USAGE_STATS_MODEL_RANKING_LIST =
+  METHOD_USAGE_STATS_MODEL_RANKING_LIST;
+export const APP_SERVER_METHOD_USAGE_STATS_DAILY_TRENDS_LIST =
+  METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 
 export type AppServerHandleJsonLinesRequest = {
   lines: string[];
@@ -146,6 +175,12 @@ export type AppServerFileSystemListDirectoryParams =
   FileSystemListDirectoryParams;
 export type AppServerFileSystemReadFilePreviewParams =
   FileSystemReadFilePreviewParams;
+export type AppServerFileSystemCreateFileParams = FileSystemCreateFileParams;
+export type AppServerFileSystemCreateDirectoryParams =
+  FileSystemCreateDirectoryParams;
+export type AppServerFileSystemRenameFileParams = FileSystemRenameFileParams;
+export type AppServerFileSystemDeleteFileParams = FileSystemDeleteFileParams;
+export type AppServerFileSystemMutationResponse = FileSystemMutationResponse;
 export type AppServerFileSystemDirectoryListing = FileSystemDirectoryListing;
 export type AppServerFileSystemFileEntry = FileSystemFileEntry;
 export type AppServerFileSystemFilePreview = FileSystemFilePreview;
@@ -180,6 +215,12 @@ export type AppServerAgentSessionTurnCancelResponse =
   AgentSessionTurnCancelResponse;
 export type AppServerAgentSessionActionRespondResponse =
   AgentSessionActionRespondResponse;
+export type AppServerUsageStatsRangeParams = UsageStatsRangeParams;
+export type AppServerUsageStatsReadResponse = UsageStatsReadResponse;
+export type AppServerUsageStatsModelRankingListResponse =
+  UsageStatsModelRankingListResponse;
+export type AppServerUsageStatsDailyTrendsListResponse =
+  UsageStatsDailyTrendsListResponse;
 
 export type AppServerRequestResult<T> = {
   id: AppServerRequestId;
@@ -353,6 +394,42 @@ export class AppServerClient {
     );
   }
 
+  async createFile(
+    params: AppServerFileSystemCreateFileParams,
+  ): Promise<AppServerRequestResult<AppServerFileSystemMutationResponse>> {
+    return await this.request<AppServerFileSystemMutationResponse>(
+      APP_SERVER_METHOD_FILE_SYSTEM_CREATE_FILE,
+      params,
+    );
+  }
+
+  async createDirectory(
+    params: AppServerFileSystemCreateDirectoryParams,
+  ): Promise<AppServerRequestResult<AppServerFileSystemMutationResponse>> {
+    return await this.request<AppServerFileSystemMutationResponse>(
+      APP_SERVER_METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
+      params,
+    );
+  }
+
+  async renameFile(
+    params: AppServerFileSystemRenameFileParams,
+  ): Promise<AppServerRequestResult<AppServerFileSystemMutationResponse>> {
+    return await this.request<AppServerFileSystemMutationResponse>(
+      APP_SERVER_METHOD_FILE_SYSTEM_RENAME_FILE,
+      params,
+    );
+  }
+
+  async deleteFile(
+    params: AppServerFileSystemDeleteFileParams,
+  ): Promise<AppServerRequestResult<AppServerFileSystemMutationResponse>> {
+    return await this.request<AppServerFileSystemMutationResponse>(
+      APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE,
+      params,
+    );
+  }
+
   async exportEvidence(
     params: AppServerEvidenceExportParams,
   ): Promise<AppServerRequestResult<AppServerEvidenceExportResponse>> {
@@ -405,6 +482,37 @@ export class AppServerClient {
   > {
     return await this.request<AppServerAgentSessionActionRespondResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+      params,
+    );
+  }
+
+  async readUsageStats(
+    params: AppServerUsageStatsRangeParams,
+  ): Promise<AppServerRequestResult<AppServerUsageStatsReadResponse>> {
+    return await this.request<AppServerUsageStatsReadResponse>(
+      APP_SERVER_METHOD_USAGE_STATS_READ,
+      params,
+    );
+  }
+
+  async listUsageStatsModelRanking(
+    params: AppServerUsageStatsRangeParams,
+  ): Promise<
+    AppServerRequestResult<AppServerUsageStatsModelRankingListResponse>
+  > {
+    return await this.request<AppServerUsageStatsModelRankingListResponse>(
+      APP_SERVER_METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+      params,
+    );
+  }
+
+  async listUsageStatsDailyTrends(
+    params: AppServerUsageStatsRangeParams,
+  ): Promise<
+    AppServerRequestResult<AppServerUsageStatsDailyTrendsListResponse>
+  > {
+    return await this.request<AppServerUsageStatsDailyTrendsListResponse>(
+      APP_SERVER_METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
       params,
     );
   }

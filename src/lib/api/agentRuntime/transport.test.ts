@@ -27,14 +27,17 @@ describe("agentRuntime transport", () => {
   });
 
   it("有 payload 时应透传命令名与请求体", async () => {
-    const invoke = vi.fn().mockResolvedValueOnce({ success: true });
+    const invoke = vi.fn().mockResolvedValueOnce({
+      success: true,
+      task_id: "task-1",
+    });
     const bridgeInvoke = createAgentRuntimeBridgeInvoke({ invoke });
 
     await expect(
       bridgeInvoke("site_run_adapter", {
         request: { adapter: "x/article-export" },
       }),
-    ).resolves.toEqual({ success: true });
+    ).resolves.toEqual({ success: true, task_id: "task-1" });
 
     expect(invoke).toHaveBeenCalledWith("site_run_adapter", {
       request: { adapter: "x/article-export" },
@@ -102,5 +105,34 @@ describe("agentRuntime transport", () => {
     await expect(bridgeInvoke("agent_runtime_list_sessions")).rejects.toThrow(
       "agent_runtime_list_sessions 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
+  });
+
+  it("bridge invoker 遇到 mock-like success envelope 时应 fail closed", async () => {
+    const invoke = vi.fn().mockResolvedValueOnce({ success: true });
+    const bridgeInvoke = createAgentRuntimeBridgeInvoke({ invoke });
+
+    await expect(
+      bridgeInvoke("agent_runtime_export_handoff_bundle", {
+        request: { session_id: "session-1" },
+      }),
+    ).rejects.toThrow(
+      "agent_runtime_export_handoff_bundle returned a mock-like success envelope",
+    );
+  });
+
+  it("command invoker 遇到 error envelope 时应 fail closed", async () => {
+    const bridgeInvoke = vi.fn().mockResolvedValueOnce({
+      error: {
+        code: "COMMAND_UNSUPPORTED",
+        message: "not available",
+      },
+    });
+    const invokeCommand = createAgentRuntimeCommandInvoke({ bridgeInvoke });
+
+    await expect(
+      invokeCommand("agent_runtime_spawn_subagent", {
+        request: { name: "worker" },
+      }),
+    ).rejects.toThrow("agent_runtime_spawn_subagent returned an error envelope");
   });
 });

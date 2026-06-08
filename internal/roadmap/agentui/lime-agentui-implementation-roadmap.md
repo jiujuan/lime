@@ -304,7 +304,7 @@ useAgentSession
 | 文档变更 | markdown 格式检查、`git status --short` |
 | 前端 UI/Hook | 受影响 `*.test.tsx` / `*.test.ts`，默认 `npm run verify:local` |
 | 流式事件逻辑 | `agentStreamRuntimeHandler.test.ts`、`agentStreamTurnEventBinding.test.ts` |
-| Tauri command / bridge | `npm run verify:local` + `npm run test:contracts` |
+| Electron Desktop Host / App Server command boundary | `npm run verify:local` + `npm run test:contracts` |
 | GUI 主路径 | `npm run verify:local` + `npm run verify:gui-smoke` |
 | 真实交互 | Playwright E2E：新建对话、打开两个历史会话、发送消息、queue/steer、pending action |
 

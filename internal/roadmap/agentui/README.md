@@ -11,7 +11,7 @@ AgentUI 不是再做一个聊天页面，而是把 Lime 已有的 runtime、time
 本目录回答四类问题：
 
 1. **产品结构**：Lime 的 AgentUI 应该由哪些层组成，哪些信息应该出现在首屏，哪些应该进入展开详情。
-2. **代码结构**：现有前端、协议、Tauri command、Rust runtime、service、持久化层分别负责什么。
+2. **代码结构**：现有前端、协议、Electron Desktop Host / App Server command gateway、Rust runtime、service、持久化层分别负责什么。
 3. **运行流程**：发送消息、打开旧会话、排队输入、权限确认、产物生成、证据导出如何流动。
 4. **落地顺序**：哪些改动先解决体感慢、卡顿、重复吐字和多任务管理，哪些进入中长期演进。
 

@@ -55,11 +55,22 @@ import {
   METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_RELAY_API_KEY_SAVE,
   METHOD_EVIDENCE_EXPORT,
+  METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
+  METHOD_FILE_SYSTEM_CREATE_FILE,
+  METHOD_FILE_SYSTEM_DELETE_FILE,
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+  METHOD_FILE_SYSTEM_RENAME_FILE,
   METHOD_INITIALIZED,
   METHOD_INITIALIZE,
+  METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
+  METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
+  METHOD_KNOWLEDGE_PACK_COMPILE,
+  METHOD_KNOWLEDGE_PACK_DEFAULT_SET,
   METHOD_KNOWLEDGE_PACK_LIST,
+  METHOD_KNOWLEDGE_PACK_READ,
+  METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+  METHOD_KNOWLEDGE_SOURCE_IMPORT,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PREFERENCES_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
@@ -94,6 +105,9 @@ import {
   PROTOCOL_VERSION,
   METHOD_SKILL_LIST,
   METHOD_SKILL_READ,
+  METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
+  METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+  METHOD_USAGE_STATS_READ,
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
@@ -348,6 +362,40 @@ test("builds app data surface requests with current methods", () => {
     workingDir: "/workspace/project",
     includeArchived: true,
   });
+  const knowledgeDetail = client.readKnowledgePack({
+    workingDir: "/workspace/project",
+    name: "sample-product",
+  });
+  const importedKnowledgeSource = client.importKnowledgeSource({
+    workingDir: "/workspace/project",
+    packName: "sample-product",
+    sourceText: "示例产品事实",
+  });
+  const compiledKnowledgePack = client.compileKnowledgePack({
+    workingDir: "/workspace/project",
+    name: "sample-product",
+    builderRuntime: { enabled: true },
+  });
+  const defaultKnowledgePack = client.setDefaultKnowledgePack({
+    workingDir: "/workspace/project",
+    name: "sample-product",
+  });
+  const updatedKnowledgePackStatus = client.updateKnowledgePackStatus({
+    workingDir: "/workspace/project",
+    name: "sample-product",
+    status: "ready",
+  });
+  const knowledgeContext = client.resolveKnowledgeContext({
+    workingDir: "/workspace/project",
+    name: "sample-product",
+    task: "写产品介绍",
+    writeRun: true,
+  });
+  const knowledgeContextValidation = client.validateKnowledgeContextRun({
+    workingDir: "/workspace/project",
+    name: "sample-product",
+    runPath: "runs/context.json",
+  });
   const schedulerConfig = client.readAutomationSchedulerConfig();
   const schedulerConfigUpdate = client.updateAutomationSchedulerConfig({
     config: {
@@ -418,6 +466,53 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(knowledge.params, {
     workingDir: "/workspace/project",
     includeArchived: true,
+  });
+  assert.equal(knowledgeDetail.method, METHOD_KNOWLEDGE_PACK_READ);
+  assert.deepEqual(knowledgeDetail.params, {
+    workingDir: "/workspace/project",
+    name: "sample-product",
+  });
+  assert.equal(importedKnowledgeSource.method, METHOD_KNOWLEDGE_SOURCE_IMPORT);
+  assert.deepEqual(importedKnowledgeSource.params, {
+    workingDir: "/workspace/project",
+    packName: "sample-product",
+    sourceText: "示例产品事实",
+  });
+  assert.equal(compiledKnowledgePack.method, METHOD_KNOWLEDGE_PACK_COMPILE);
+  assert.deepEqual(compiledKnowledgePack.params, {
+    workingDir: "/workspace/project",
+    name: "sample-product",
+    builderRuntime: { enabled: true },
+  });
+  assert.equal(defaultKnowledgePack.method, METHOD_KNOWLEDGE_PACK_DEFAULT_SET);
+  assert.deepEqual(defaultKnowledgePack.params, {
+    workingDir: "/workspace/project",
+    name: "sample-product",
+  });
+  assert.equal(
+    updatedKnowledgePackStatus.method,
+    METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+  );
+  assert.deepEqual(updatedKnowledgePackStatus.params, {
+    workingDir: "/workspace/project",
+    name: "sample-product",
+    status: "ready",
+  });
+  assert.equal(knowledgeContext.method, METHOD_KNOWLEDGE_CONTEXT_RESOLVE);
+  assert.deepEqual(knowledgeContext.params, {
+    workingDir: "/workspace/project",
+    name: "sample-product",
+    task: "写产品介绍",
+    writeRun: true,
+  });
+  assert.equal(
+    knowledgeContextValidation.method,
+    METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
+  );
+  assert.deepEqual(knowledgeContextValidation.params, {
+    workingDir: "/workspace/project",
+    name: "sample-product",
+    runPath: "runs/context.json",
   });
   assert.equal(schedulerConfig.method, METHOD_AUTOMATION_SCHEDULER_CONFIG_READ);
   assert.deepEqual(schedulerConfig.params, {});
@@ -531,7 +626,7 @@ test("builds artifact read requests with optional content lookup", () => {
   });
 });
 
-test("builds file system read requests with current methods", () => {
+test("builds file system requests with current methods", () => {
   const client = new AppServerClient();
 
   const listing = client.listDirectory({
@@ -540,6 +635,20 @@ test("builds file system read requests with current methods", () => {
   const preview = client.readFilePreview({
     path: "/workspace/README.md",
     maxSize: 1024,
+  });
+  const createFile = client.createFile({
+    path: "/workspace/new.md",
+  });
+  const createDirectory = client.createDirectory({
+    path: "/workspace/new-dir",
+  });
+  const renameFile = client.renameFile({
+    oldPath: "/workspace/new.md",
+    newPath: "/workspace/renamed.md",
+  });
+  const deleteFile = client.deleteFile({
+    path: "/workspace/renamed.md",
+    recursive: false,
   });
 
   assert.equal(listing.id, 1);
@@ -552,6 +661,28 @@ test("builds file system read requests with current methods", () => {
   assert.deepEqual(preview.params, {
     path: "/workspace/README.md",
     maxSize: 1024,
+  });
+  assert.equal(createFile.id, 3);
+  assert.equal(createFile.method, METHOD_FILE_SYSTEM_CREATE_FILE);
+  assert.deepEqual(createFile.params, {
+    path: "/workspace/new.md",
+  });
+  assert.equal(createDirectory.id, 4);
+  assert.equal(createDirectory.method, METHOD_FILE_SYSTEM_CREATE_DIRECTORY);
+  assert.deepEqual(createDirectory.params, {
+    path: "/workspace/new-dir",
+  });
+  assert.equal(renameFile.id, 5);
+  assert.equal(renameFile.method, METHOD_FILE_SYSTEM_RENAME_FILE);
+  assert.deepEqual(renameFile.params, {
+    oldPath: "/workspace/new.md",
+    newPath: "/workspace/renamed.md",
+  });
+  assert.equal(deleteFile.id, 6);
+  assert.equal(deleteFile.method, METHOD_FILE_SYSTEM_DELETE_FILE);
+  assert.deepEqual(deleteFile.params, {
+    path: "/workspace/renamed.md",
+    recursive: false,
   });
 });
 
@@ -633,6 +764,10 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_ARTIFACT_READ, kind: "request" },
     { method: METHOD_FILE_SYSTEM_LIST_DIRECTORY, kind: "request" },
     { method: METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, kind: "request" },
+    { method: METHOD_FILE_SYSTEM_CREATE_FILE, kind: "request" },
+    { method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY, kind: "request" },
+    { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
+    { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
     { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
     { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
     { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
@@ -653,6 +788,13 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
     { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
     { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
+    { method: METHOD_KNOWLEDGE_PACK_READ, kind: "request" },
+    { method: METHOD_KNOWLEDGE_SOURCE_IMPORT, kind: "request" },
+    { method: METHOD_KNOWLEDGE_PACK_COMPILE, kind: "request" },
+    { method: METHOD_KNOWLEDGE_PACK_DEFAULT_SET, kind: "request" },
+    { method: METHOD_KNOWLEDGE_PACK_STATUS_UPDATE, kind: "request" },
+    { method: METHOD_KNOWLEDGE_CONTEXT_RESOLVE, kind: "request" },
+    { method: METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE, kind: "request" },
     { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_READ, kind: "request" },
     { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE, kind: "request" },
     { method: METHOD_AUTOMATION_SCHEDULER_STATUS, kind: "request" },
@@ -672,6 +814,9 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_MCP_PROMPT_LIST, kind: "request" },
     { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
     { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
+    { method: METHOD_USAGE_STATS_READ, kind: "request" },
+    { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
+    { method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST, kind: "request" },
     { method: METHOD_MODEL_LIST, kind: "request" },
     { method: METHOD_MODEL_PREFERENCES_LIST, kind: "request" },
     { method: METHOD_MODEL_SYNC_STATE_READ, kind: "request" },
@@ -718,6 +863,13 @@ test("exports app-server method catalog with request and notification kinds", ()
     isAppServerRequestMethod(METHOD_FILE_SYSTEM_READ_FILE_PREVIEW),
     true,
   );
+  assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_CREATE_FILE), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_FILE_SYSTEM_CREATE_DIRECTORY),
+    true,
+  );
+  assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_RENAME_FILE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_DELETE_FILE), true);
   assert.equal(isAppServerRequestMethod(METHOD_EVIDENCE_EXPORT), true);
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_UPDATE), true);
   assert.equal(isAppServerRequestMethod(METHOD_WORKSPACE_LIST), true);
@@ -744,6 +896,25 @@ test("exports app-server method catalog with request and notification kinds", ()
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_READ), true);
+  assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_SOURCE_IMPORT), true);
+  assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_COMPILE), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_DEFAULT_SET),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_STATUS_UPDATE),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_KNOWLEDGE_CONTEXT_RESOLVE),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE),
+    true,
+  );
   assert.equal(
     isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULER_CONFIG_READ),
     true,
@@ -1199,7 +1370,7 @@ test("connection wraps artifact read response", async () => {
   assert.equal(result.result.nextCursor, "1");
 });
 
-test("connection wraps file system read responses", async () => {
+test("connection wraps file system responses", async () => {
   const sent = [];
   const inbound = [
     {
@@ -1231,6 +1402,22 @@ test("connection wraps file system read responses", async () => {
         error: null,
       },
     },
+    {
+      id: 3,
+      result: {},
+    },
+    {
+      id: 4,
+      result: {},
+    },
+    {
+      id: 5,
+      result: {},
+    },
+    {
+      id: 6,
+      result: {},
+    },
   ];
   const connection = new AppServerConnection({
     send(message) {
@@ -1252,6 +1439,20 @@ test("connection wraps file system read responses", async () => {
     path: "/workspace/README.md",
     maxSize: 1024,
   });
+  const createFileResult = await connection.createFile({
+    path: "/workspace/new.md",
+  });
+  const createDirectoryResult = await connection.createDirectory({
+    path: "/workspace/new-dir",
+  });
+  const renameFileResult = await connection.renameFile({
+    oldPath: "/workspace/new.md",
+    newPath: "/workspace/renamed.md",
+  });
+  const deleteFileResult = await connection.deleteFile({
+    path: "/workspace/renamed.md",
+    recursive: false,
+  });
 
   assert.equal(sent[0].method, METHOD_FILE_SYSTEM_LIST_DIRECTORY);
   assert.deepEqual(sent[0].params, {
@@ -1262,8 +1463,30 @@ test("connection wraps file system read responses", async () => {
     path: "/workspace/README.md",
     maxSize: 1024,
   });
+  assert.equal(sent[2].method, METHOD_FILE_SYSTEM_CREATE_FILE);
+  assert.deepEqual(sent[2].params, {
+    path: "/workspace/new.md",
+  });
+  assert.equal(sent[3].method, METHOD_FILE_SYSTEM_CREATE_DIRECTORY);
+  assert.deepEqual(sent[3].params, {
+    path: "/workspace/new-dir",
+  });
+  assert.equal(sent[4].method, METHOD_FILE_SYSTEM_RENAME_FILE);
+  assert.deepEqual(sent[4].params, {
+    oldPath: "/workspace/new.md",
+    newPath: "/workspace/renamed.md",
+  });
+  assert.equal(sent[5].method, METHOD_FILE_SYSTEM_DELETE_FILE);
+  assert.deepEqual(sent[5].params, {
+    path: "/workspace/renamed.md",
+    recursive: false,
+  });
   assert.equal(result.result.entries[0].name, "README.md");
   assert.equal(previewResult.result.content, "# Lime");
+  assert.deepEqual(createFileResult.result, {});
+  assert.deepEqual(createDirectoryResult.result, {});
+  assert.deepEqual(renameFileResult.result, {});
+  assert.deepEqual(deleteFileResult.result, {});
 });
 
 test("connection wraps evidence export response", async () => {

@@ -10,6 +10,15 @@ const RUNNING_THREAD_STATUSES = new Set(["running", "queued", "interrupting"]);
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
 const APP_SERVER_METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
+const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
+const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
+const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
+  "agentSession/turn/start";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =
+  "agentSession/turn/cancel";
+const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
+  "agentSession/action/respond";
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -162,7 +171,8 @@ export async function invokeAppServerMethod(
     { request: { lines: [`${JSON.stringify(request)}\n`] } },
     timeoutMs,
   );
-  const messages = (Array.isArray(result?.lines) ? result.lines : [])
+  const responseLines = result?.result?.lines ?? result?.lines;
+  const messages = (Array.isArray(responseLines) ? responseLines : [])
     .map((line) => {
       try {
         return JSON.parse(String(line));
@@ -184,6 +194,277 @@ export async function invokeAppServerMethod(
     throw new Error(`${method} missing App Server response`);
   }
   return response.result;
+}
+
+export async function createAgentSessionCurrent(
+  options,
+  {
+    workspaceId,
+    title,
+    executionStrategy = "react",
+    metadata = {},
+  },
+) {
+  const metadataRecord =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? metadata
+      : {};
+  const harnessMetadata =
+    metadataRecord.harness &&
+    typeof metadataRecord.harness === "object" &&
+    !Array.isArray(metadataRecord.harness)
+      ? metadataRecord.harness
+      : {};
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_START,
+    {
+      appId: "desktop",
+      workspaceId,
+      businessObjectRef: {
+        kind: "agent.session",
+        id: `agent-session:${workspaceId}:${Date.now()}`,
+        title,
+        metadata: {
+          ...metadataRecord,
+          title,
+          executionStrategy,
+          runStartHooks: false,
+          harness: {
+            source: "smoke:managed-objective-continuation",
+            ...harnessMetadata,
+          },
+        },
+      },
+    },
+    30_000,
+  );
+  const sessionId = String(response?.session?.sessionId || "").trim();
+  if (!sessionId) {
+    throw new Error("agentSession/start 未返回 sessionId");
+  }
+  return sessionId;
+}
+
+export async function updateAgentSessionRuntimeCurrent(
+  options,
+  { sessionId, provider, executionStrategy = "react" },
+) {
+  await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
+    {
+      sessionId,
+      providerSelector: provider.providerPreference,
+      providerName: provider.providerName,
+      modelName: provider.modelPreference,
+      executionStrategy,
+    },
+    30_000,
+  );
+}
+
+export async function readAgentSessionDetailCurrent(
+  options,
+  sessionId,
+  { historyLimit = 20 } = {},
+) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    {
+      sessionId,
+      historyLimit,
+    },
+  );
+  const detail = response?.detail;
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    return detail;
+  }
+  return {
+    id: response?.session?.sessionId || sessionId,
+    thread_id: response?.session?.threadId || sessionId,
+    workspace_id: response?.session?.workspaceId || null,
+    turns: Array.isArray(response?.turns) ? response.turns : [],
+    messages: [],
+    items: [],
+  };
+}
+
+function normalizeTurnConfig(turnConfig = {}) {
+  const config =
+    turnConfig && typeof turnConfig === "object" && !Array.isArray(turnConfig)
+      ? turnConfig
+      : {};
+  return {
+    providerPreference:
+      config.providerPreference ?? config.provider_preference ?? undefined,
+    modelPreference:
+      config.modelPreference ?? config.model_preference ?? undefined,
+    providerConfig:
+      config.providerConfig ?? config.provider_config ?? undefined,
+    approvalPolicy:
+      config.approvalPolicy ?? config.approval_policy ?? undefined,
+    sandboxPolicy: config.sandboxPolicy ?? config.sandbox_policy ?? undefined,
+    metadata: config.metadata ?? undefined,
+    executionStrategy:
+      config.executionStrategy ?? config.execution_strategy ?? undefined,
+    webSearch: config.webSearch ?? config.web_search ?? undefined,
+    searchMode: config.searchMode ?? config.search_mode ?? undefined,
+  };
+}
+
+function compactRecord(record) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== undefined),
+  );
+}
+
+export async function startAgentSessionTurnCurrent(
+  options,
+  {
+    sessionId,
+    workspaceId,
+    message,
+    eventName,
+    turnId,
+    turnConfig = {},
+    queueIfBusy,
+    queuedTurnId,
+    skipPreSubmitResume = true,
+  },
+) {
+  const normalizedConfig = normalizeTurnConfig(turnConfig);
+  const asterChatRequest = compactRecord({
+    message,
+    session_id: sessionId,
+    workspace_id: workspaceId,
+    event_name: eventName,
+    turn_id: turnId,
+    provider_preference: normalizedConfig.providerPreference,
+    model_preference: normalizedConfig.modelPreference,
+    provider_config: normalizedConfig.providerConfig,
+    approval_policy: normalizedConfig.approvalPolicy,
+    sandbox_policy: normalizedConfig.sandboxPolicy,
+    metadata: normalizedConfig.metadata,
+    execution_strategy: normalizedConfig.executionStrategy,
+    web_search: normalizedConfig.webSearch,
+    search_mode: normalizedConfig.searchMode,
+    queue_if_busy: queueIfBusy,
+    queued_turn_id: queuedTurnId,
+  });
+  const runtimeOptions = compactRecord({
+    stream: true,
+    eventName,
+    providerPreference: normalizedConfig.providerPreference,
+    modelPreference: normalizedConfig.modelPreference,
+    metadata: normalizedConfig.metadata,
+    queuedTurnId,
+    hostOptions: {
+      asterChatRequest,
+    },
+  });
+  return invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+    compactRecord({
+      sessionId,
+      turnId,
+      input: {
+        text: message,
+      },
+      runtimeOptions,
+      queueIfBusy,
+      skipPreSubmitResume,
+    }),
+  );
+}
+
+export async function cancelAgentSessionTurnCurrent(
+  options,
+  { sessionId, turnId },
+) {
+  return invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+    {
+      sessionId,
+      turnId,
+    },
+  );
+}
+
+export async function respondAgentSessionActionCurrent(
+  options,
+  {
+    sessionId,
+    requestId,
+    actionType,
+    confirmed,
+    response,
+    userData,
+    metadata,
+    eventName,
+    actionScope,
+  },
+) {
+  const normalizedScope =
+    actionScope && typeof actionScope === "object" && !Array.isArray(actionScope)
+      ? {
+          sessionId: actionScope.sessionId ?? actionScope.session_id,
+          threadId: actionScope.threadId ?? actionScope.thread_id,
+          turnId: actionScope.turnId ?? actionScope.turn_id,
+        }
+      : undefined;
+  return invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+    compactRecord({
+      sessionId,
+      requestId,
+      actionType,
+      confirmed,
+      response,
+      userData,
+      metadata,
+      eventName,
+      actionScope: normalizedScope ? compactRecord(normalizedScope) : undefined,
+    }),
+  );
+}
+
+export async function readAgentRuntimeThreadCurrent(
+  options,
+  sessionId,
+  { historyLimit } = {},
+) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_READ,
+    compactRecord({
+      sessionId,
+      historyLimit,
+    }),
+  );
+  const threadRead =
+    response?.detail?.thread_read || response?.detail?.threadRead;
+  if (threadRead && typeof threadRead === "object" && !Array.isArray(threadRead)) {
+    return threadRead;
+  }
+  const turns = Array.isArray(response?.turns) ? response.turns : [];
+  const latestTurn = turns[turns.length - 1] || null;
+  return {
+    thread_id: response?.session?.threadId || sessionId,
+    status: response?.session?.status || latestTurn?.status || "idle",
+    active_turn_id:
+      response?.session?.activeTurnId ||
+      response?.session?.active_turn_id ||
+      latestTurn?.turnId ||
+      null,
+    turns,
+    queued_turns: [],
+    pending_requests: [],
+  };
 }
 
 export async function resolveProviderPreference(options) {
@@ -453,13 +734,9 @@ export async function waitForObjectiveState(options, sessionId, predicate, label
 
   while (Date.now() - startedAt < options.timeoutMs) {
     const [threadRead, objective, sessionDetail] = await Promise.all([
-      invokeDevBridge(options, "agent_runtime_get_thread_read", { sessionId }),
+      readAgentRuntimeThreadCurrent(options, sessionId),
       invokeDevBridge(options, "agent_runtime_get_objective", { sessionId }),
-      invokeDevBridge(options, "agent_runtime_get_session", {
-        sessionId,
-        resumeSessionStartHooks: false,
-        historyLimit: 20,
-      }),
+      readAgentSessionDetailCurrent(options, sessionId),
     ]);
     lastSnapshot = {
       threadRead: summarizeThreadRead(threadRead),

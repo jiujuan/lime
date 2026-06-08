@@ -2,12 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import {
   cleanupEmpty,
+  cleanupExpired,
   createSession,
+  getOrCreateSession,
+  getSessionDetail,
   importDocument,
   importDocumentToSession,
   listFiles,
+  listSessions,
   readFile,
+  readImageFromSession,
   resolveFilePath,
+  saveFile,
+  sessionExists,
+  updateSessionMeta,
   uploadImageToSession,
 } from "./session-files";
 
@@ -127,6 +135,72 @@ describe("session-files API", () => {
 
     await expect(readFile("session-1", "article.md")).rejects.toThrow(
       "session_files_read_file 尚未接入真实 Session files current 通道",
+    );
+  });
+
+  it("遇到非 Session files 返回形态时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce([{ success: true }])
+      .mockResolvedValueOnce({
+        meta: {
+          sessionId: "session-1",
+          createdAt: 1_700_000_000_000,
+          updatedAt: 1_700_000_000_000,
+          fileCount: 1,
+          totalSize: 64,
+        },
+        files: [{ success: true }],
+      })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce(["document text"])
+      .mockResolvedValueOnce({ success: true });
+
+    await expect(sessionExists("session-1")).rejects.toThrow(
+      "session_files_exists did not return a boolean",
+    );
+    await expect(getOrCreateSession("session-1")).rejects.toThrow(
+      "session_files_get_or_create did not return session metadata",
+    );
+    await expect(listSessions()).rejects.toThrow(
+      "session_files_list[0] did not return a session summary",
+    );
+    await expect(getSessionDetail("session-1")).rejects.toThrow(
+      "session_files_get_detail.files[0] did not return a session file",
+    );
+    await expect(
+      updateSessionMeta("session-1", { title: "新会话" }),
+    ).rejects.toThrow(
+      "session_files_update_meta did not return session metadata",
+    );
+    await expect(
+      saveFile("session-1", "article.md", "# title"),
+    ).rejects.toThrow("session_files_save_file did not return a session file");
+    await expect(resolveFilePath("session-1", "article.md")).rejects.toThrow(
+      "session_files_resolve_file_path did not return a string",
+    );
+    await expect(cleanupExpired(30)).rejects.toThrow(
+      "session_files_cleanup_expired did not return a number",
+    );
+    await expect(readImageFromSession("session-1", "cover.png")).rejects.toThrow(
+      "read_image_from_session did not return a string",
+    );
+    await expect(importDocument("/tmp/doc.md")).rejects.toThrow(
+      "import_document did not return a string",
+    );
+    await expect(
+      importDocumentToSession("session-1", "/tmp/doc.md"),
+    ).rejects.toThrow(
+      "import_document_to_session did not return imported document tuple",
+    );
+    await expect(cleanupEmpty()).rejects.toThrow(
+      "session_files_cleanup_empty did not return a number",
     );
   });
 });

@@ -10,8 +10,12 @@ import {
   getProviderAliasConfig,
   getModelSyncState,
   fetchProviderModelsAuto,
+  hideModel,
   invalidateModelRegistryCache,
+  recordModelUsage,
   refreshModelRegistry,
+  searchModels,
+  toggleModelFavorite,
 } from "./modelRegistry";
 
 const appServerRequestMock = vi.hoisted(() => vi.fn());
@@ -134,6 +138,35 @@ describe("modelRegistry API", () => {
     expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
       "refresh_model_registry",
     );
+  });
+
+  it("searchModels 应基于 App Server current 模型列表做前端过滤", async () => {
+    resolveAppServerRequest({
+      models: [
+        {
+          id: "openai/gpt-4.1",
+          display_name: "GPT-4.1",
+          provider_id: "openai",
+          provider_name: "OpenAI",
+        },
+        {
+          id: "anthropic/claude-sonnet-4",
+          display_name: "Claude Sonnet 4",
+          provider_id: "anthropic",
+          provider_name: "Anthropic",
+        },
+      ],
+    });
+
+    await expect(searchModels("gpt", 1)).resolves.toEqual([
+      expect.objectContaining({ id: "openai/gpt-4.1" }),
+    ]);
+
+    expectAppServerRequest(1, "model/list", {});
+    expect(safeInvoke).not.toHaveBeenCalledWith("search_models", {
+      query: "gpt",
+      limit: 1,
+    });
   });
 
   it("模型偏好、同步状态、provider 与 tier 读取应走 App Server current", async () => {
@@ -271,6 +304,56 @@ describe("modelRegistry API", () => {
     await expect(getModelRegistryProviderIds()).resolves.toEqual([]);
     expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
       "get_model_registry_provider_ids",
+    );
+  });
+
+  it("模型注册表 compat 命令收到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      diagnostic: {
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+      },
+    });
+
+    await expect(getModelRegistryProviderIds()).rejects.toThrow(
+      "get_model_registry_provider_ids 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(refreshModelRegistry()).rejects.toThrow(
+      "refresh_model_registry 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(toggleModelFavorite("gpt-4.1")).rejects.toThrow(
+      "toggle_model_favorite 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(hideModel("gpt-4.1")).rejects.toThrow(
+      "hide_model 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(recordModelUsage("gpt-4.1")).rejects.toThrow(
+      "record_model_usage 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("模型注册表 compat 命令返回错误形态时不应吞成成功", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true });
+
+    await expect(getModelRegistryProviderIds()).rejects.toThrow(
+      "get_model_registry_provider_ids did not return a string array",
+    );
+    await expect(refreshModelRegistry()).rejects.toThrow(
+      "refresh_model_registry did not return a finite number",
+    );
+    await expect(toggleModelFavorite("gpt-4.1")).rejects.toThrow(
+      "toggle_model_favorite did not return a boolean",
+    );
+    await expect(hideModel("gpt-4.1")).rejects.toThrow(
+      "hide_model did not return an empty result",
+    );
+    await expect(recordModelUsage("gpt-4.1")).rejects.toThrow(
+      "record_model_usage did not return an empty result",
     );
   });
 });

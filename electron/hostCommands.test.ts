@@ -399,6 +399,33 @@ describe("ElectronHostCommands MCP current source", () => {
   });
 });
 
+describe("ElectronHostCommands retired Knowledge legacy facade", () => {
+  it.each([
+    "knowledge_list_packs",
+    "knowledge_get_pack",
+    "knowledge_import_source",
+    "knowledge_compile_pack",
+    "knowledge_set_default_pack",
+    "knowledge_update_pack_status",
+    "knowledge_resolve_context",
+    "knowledge_validate_context_run",
+  ])("%s 已从 Electron Host 退场，生产只能走 App Server JSONL current", async (command) => {
+    const userDataDir = await createTempUserDataDir();
+    const request = vi.fn();
+    const host = createHost(userDataDir, () => undefined, request);
+
+    await expect(
+      host.invoke(command, {
+        request: {
+          workingDir: "/workspace/project",
+          name: "sample-product",
+        },
+      }),
+    ).rejects.toThrow(`Electron host command is not implemented: ${command}`);
+    expect(request).not.toHaveBeenCalled();
+  });
+});
+
 describe("ElectronHostCommands model provider current source", () => {
   it("get_default_provider 应忽略旧配置值并返回 App Server 当前已配置 Provider", async () => {
     const userDataDir = await createTempUserDataDir();

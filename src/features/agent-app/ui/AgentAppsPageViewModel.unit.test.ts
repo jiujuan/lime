@@ -306,6 +306,24 @@ describe("AgentAppsPageViewModel", () => {
       }),
     ).toBe("https://lime.local/icon.png");
     expect(
+      resolveAppIconSrc({
+        title: "Cloud",
+        cloudApp: buildCloudApp({
+          logo: "https://lime.local/logo.png",
+        }),
+      }),
+    ).toBe("https://lime.local/logo.png");
+    expect(
+      resolveAppIconSrc({
+        title: "Cloud",
+        cloudApp: buildCloudApp({
+          presentation: {
+            logo: "https://lime.local/presentation-logo.png",
+          },
+        }),
+      }),
+    ).toBe("https://lime.local/presentation-logo.png");
+    expect(
       decodeURIComponent(
         resolveAppIconSrc({
           title: "Inline",
@@ -315,6 +333,18 @@ describe("AgentAppsPageViewModel", () => {
         }),
       ),
     ).toContain("<text>Inline</text>");
+    expect(
+      resolveAppIconSrc({
+        title: "已安装应用",
+        installedState: buildReadyState({
+          manifest: buildManifest({
+            presentation: {
+              logo: "https://lime.local/installed-logo.png",
+            },
+          }),
+        }),
+      }),
+    ).toBe("https://lime.local/installed-logo.png");
     expect(
       decodeURIComponent(
         resolveAppIconSrc({

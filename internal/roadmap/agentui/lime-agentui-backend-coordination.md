@@ -329,7 +329,7 @@ session detail + thread_read + timeline + artifacts + verification
 | P0 | session summary snapshot | `session_runtime.rs` / DTO | 打开 tab 不拉全量 detail |
 | P0 | first event / first text tracing | `runtime_turn.rs` / event converter | 首字慢可分段定位 |
 | P0 | getSession 可关闭 timeline detail | `runtime_api.rs` / `session_store.rs` | 旧会话 messages 先渲染 |
-| P1 | timeline page API | runtime command + DAO | 展开过程时分页加载 |
+| P1 | timeline page API | App Server JSON-RPC method + DAO | 展开过程时分页加载 |
 | P1 | batch session patch | session update command | access mode/provider/strategy 回填合并 |
 | P1 | queue/capsule summary in list | session list DTO | sidebar/tab 不抢 detail |
 | P1 | tool detail on-demand | tool IO offload + command | 大工具输出不进正文 |
@@ -339,10 +339,10 @@ session detail + thread_read + timeline + artifacts + verification
 
 ## 10. 命令边界注意事项
 
-任何新增或修改 Tauri command 必须同步四侧：
+任何新增或修改 AgentUI command surface 必须走 Electron Desktop Host / App Server current 主链，并同步四侧：
 
 1. 前端 API client。
-2. Rust command 注册。
+2. Electron Desktop Host bridge / App Server JSON-RPC method。
 3. command catalog。
 4. mock / browser fallback。
 

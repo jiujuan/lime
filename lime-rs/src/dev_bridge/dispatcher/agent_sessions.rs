@@ -9,8 +9,6 @@ use tauri::Manager;
 
 type DynError = Box<dyn std::error::Error>;
 
-#[path = "agent_sessions/export.rs"]
-mod export;
 #[path = "agent_sessions/objective.rs"]
 mod objective;
 
@@ -81,7 +79,6 @@ pub(super) async fn try_handle(
             | "agent_runtime_clear_objective"
             | "agent_runtime_continue_objective"
             | "agent_runtime_audit_objective"
-            | "agent_runtime_export_evidence_pack"
             | "agent_runtime_list_file_checkpoints"
             | "agent_runtime_get_file_checkpoint"
             | "agent_runtime_diff_file_checkpoint"
@@ -508,9 +505,6 @@ pub(super) async fn try_handle(
         }
         "agent_runtime_audit_objective" => {
             objective::handle_audit_objective(&app_handle, args).await?
-        }
-        "agent_runtime_export_evidence_pack" => {
-            export::handle_export_evidence_pack(&app_handle, args).await?
         }
         "agent_runtime_list_file_checkpoints" => {
             let request = parse_request::<

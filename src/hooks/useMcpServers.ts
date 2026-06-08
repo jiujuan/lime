@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { mcpApi, McpServer } from "@/lib/api/mcp";
 
 export function useMcpServers() {
@@ -6,7 +6,6 @@ export function useMcpServers() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const hasAutoImported = useRef(false);
 
   const fetchServers = useCallback(async () => {
     try {
@@ -55,19 +54,8 @@ export function useMcpServers() {
   };
 
   useEffect(() => {
-    const init = async () => {
-      await fetchServers();
-      // 首次加载时，如果没有数据，自动从所有应用导入
-      if (!hasAutoImported.current) {
-        hasAutoImported.current = true;
-        const list = await mcpApi.getServers();
-        if (list.length === 0) {
-          await importFromAllApps();
-        }
-      }
-    };
-    init();
-  }, [fetchServers, importFromAllApps]);
+    void fetchServers();
+  }, [fetchServers]);
 
   const addServer = async (server: Omit<McpServer, "id" | "created_at">) => {
     const newServer: McpServer = {

@@ -69,6 +69,38 @@ describe("appUpdate API", () => {
     );
   });
 
+  it("检查更新收到非版本信息时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(checkForUpdates()).rejects.toThrow(
+      "check_for_updates did not return version info",
+    );
+  });
+
+  it("下载更新收到非下载结果时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(downloadUpdate()).rejects.toThrow(
+      "download_update did not return a download result",
+    );
+  });
+
+  it("更新设置收到非设置对象时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ enabled: true });
+
+    await expect(getUpdateCheckSettings()).rejects.toThrow(
+      "get_update_check_settings did not return update check settings",
+    );
+  });
+
+  it("更新提醒指标收到非指标对象时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ shown_count: 1 });
+
+    await expect(getUpdateNotificationMetrics()).rejects.toThrow(
+      "get_update_notification_metrics did not return update notification metrics",
+    );
+  });
+
   it("检查更新遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {
@@ -149,6 +181,14 @@ describe("appUpdate API", () => {
     expect(safeInvoke).toHaveBeenNthCalledWith(2, "open_update_window");
   });
 
+  it("更新提醒数值命令收到非 number 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ dismissed: true });
+
+    await expect(dismissUpdateNotification("1.2.3")).rejects.toThrow(
+      "dismiss_update_notification did not return a finite number",
+    );
+  });
+
   it("打开更新提醒窗口时应传递更新按钮锚点矩形", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
 
@@ -208,5 +248,16 @@ describe("appUpdate API", () => {
     const bridgeHandler = vi.mocked(safeListen).mock.calls.at(-1)?.[1];
     bridgeHandler?.({ payload: session });
     expect(handler).toHaveBeenCalledWith(session);
+  });
+
+  it("更新安装会话收到非 session 对象时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      sessionId: "session-1",
+      stage: "downloading",
+    });
+
+    await expect(startUpdateInstallSession()).rejects.toThrow(
+      "start_update_install_session did not return an update install session",
+    );
   });
 });

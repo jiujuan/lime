@@ -119,6 +119,84 @@ function readBoolean(record: Record<string, unknown>, key: string): boolean {
   return record[key] === true;
 }
 
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isNullableOptionalString(
+  value: unknown,
+): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === "string";
+}
+
+function assertConnectDeepLinkResolveResult(
+  value: unknown,
+): asserts value is AppServerConnectDeepLinkResolveResponse {
+  if (!isRecord(value) || !isRecord(value.payload)) {
+    throw new Error("connectDeepLink/resolve did not return payload");
+  }
+  const payload = value.payload;
+  if (
+    typeof payload.relay !== "string" ||
+    typeof payload.key !== "string" ||
+    !isOptionalString(payload.name) ||
+    !isOptionalString(payload.refCode) ||
+    !(
+      value.relayInfo === null ||
+      value.relayInfo === undefined ||
+      isRecord(value.relayInfo)
+    ) ||
+    typeof value.isVerified !== "boolean"
+  ) {
+    throw new Error("connectDeepLink/resolve did not return payload");
+  }
+}
+
+function assertConnectOpenDeepLinkResolveResult(
+  value: unknown,
+): asserts value is AppServerConnectOpenDeepLinkResolveResponse {
+  if (!isRecord(value) || !isRecord(value.payload)) {
+    throw new Error("connectOpenDeepLink/resolve did not return payload");
+  }
+  const payload = value.payload;
+  if (
+    (payload.kind !== "skill" && payload.kind !== "prompt") ||
+    typeof payload.slug !== "string" ||
+    !isNullableOptionalString(payload.source) ||
+    !isNullableOptionalString(payload.version) ||
+    !(
+      payload.action === undefined ||
+      payload.action === null ||
+      payload.action === "open" ||
+      payload.action === "install"
+    )
+  ) {
+    throw new Error("connectOpenDeepLink/resolve did not return payload");
+  }
+}
+
+function assertConnectRelayApiKeySaveResult(
+  value: unknown,
+): asserts value is AppServerConnectRelayApiKeySaveResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.providerId !== "string" ||
+    typeof value.keyId !== "string" ||
+    typeof value.providerName !== "string" ||
+    typeof value.isNewProvider !== "boolean"
+  ) {
+    throw new Error("connectRelayApiKey/save did not return saved API key");
+  }
+}
+
+function assertConnectCallbackSendResult(
+  value: unknown,
+): asserts value is ConnectCallbackSendResponse {
+  if (!isRecord(value) || typeof value.delivered !== "boolean") {
+    throw new Error("connectCallback/send did not return delivered status");
+  }
+}
+
 function projectRelayInfo(value: unknown): RelayInfo | null {
   if (!isRecord(value)) {
     return null;
@@ -184,6 +262,7 @@ export async function resolveConnectDeepLink(
       METHOD_CONNECT_DEEP_LINK_RESOLVE,
       { url },
     );
+  assertConnectDeepLinkResolveResult(response.result);
   return {
     payload: {
       relay: response.result.payload.relay,
@@ -205,6 +284,7 @@ export async function resolveOpenDeepLink(
       METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
       { url },
     );
+  assertConnectOpenDeepLinkResolveResult(response.result);
   const payload = response.result.payload;
   return {
     payload: {
@@ -229,6 +309,7 @@ export async function saveConnectRelayApiKey(
       METHOD_CONNECT_RELAY_API_KEY_SAVE,
       params,
     );
+  assertConnectRelayApiKeySaveResult(response.result);
   return {
     provider_id: response.result.providerId,
     key_id: response.result.keyId,
@@ -245,5 +326,6 @@ export async function sendConnectCallback(
     METHOD_CONNECT_CALLBACK_SEND,
     params,
   );
+  assertConnectCallbackSendResult(response.result);
   return response.result.delivered;
 }

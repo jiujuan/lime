@@ -32,7 +32,7 @@ function appServerClientMock(): AppServerSessionRpcClient {
           updatedAt: "2026-06-06T00:00:00.000Z",
         },
       },
-      response: { id: 1, result: {} },
+      response: { id: 1, result: {} as never },
       notifications: [],
       messages: [],
     }),
@@ -128,6 +128,31 @@ describe("appServerSessionClient", () => {
     expect(appServerClient.startSession).not.toHaveBeenCalled();
   });
 
+  it("create 收到半截 App Server session 时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startSession).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+      } as never,
+      response: { id: 1, result: {} as never },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(
+      client.createAgentRuntimeSession("workspace-1"),
+    ).rejects.toThrow(
+      "agentSession/start did not return an App Server session",
+    );
+  });
+
   it("list 应通过 agentSession/list 读取并投影 runtime session info", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.request).mockResolvedValueOnce({
@@ -184,6 +209,76 @@ describe("appServerSessionClient", () => {
       workspaceId: "workspace-1",
       limit: 12,
     });
+  });
+
+  it("list 收到 mock-like envelope 时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.request).mockResolvedValueOnce({
+      id: 2,
+      result: { success: true } as never,
+      response: { id: 2, result: {} },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(client.listAgentRuntimeSessions()).rejects.toThrow(
+      "agentSession/list did not return session list",
+    );
+  });
+
+  it("list 收到半截 session overview 时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.request).mockResolvedValueOnce({
+      id: 2,
+      result: {
+        sessions: [
+          {
+            sessionId: "session-1",
+            createdAt: "2026-06-06T00:00:00.000Z",
+            updatedAt: "2026-06-06T00:00:02.000Z",
+          },
+        ],
+      } as never,
+      response: { id: 2, result: {} },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(client.listAgentRuntimeSessions()).rejects.toThrow(
+      "agentSession/list did not return session list",
+    );
+  });
+
+  it("list 应接受 App Server current 的空 model 字符串", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.request).mockResolvedValueOnce({
+      id: 2,
+      result: {
+        sessions: [
+          {
+            sessionId: "session-empty-model",
+            model: "",
+            createdAt: "2026-06-06T00:00:00.000Z",
+            updatedAt: "2026-06-06T00:00:02.000Z",
+            messagesCount: 0,
+          },
+        ],
+      },
+      response: { id: 2, result: {} },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(client.listAgentRuntimeSessions()).resolves.toEqual([
+      expect.objectContaining({
+        id: "session-empty-model",
+        model: "",
+        messages_count: 0,
+      }),
+    ]);
   });
 
   it("get 应优先返回 App Server detail 并透传 history 游标", async () => {
@@ -450,6 +545,40 @@ describe("appServerSessionClient", () => {
     );
 
     expect(appServerClient.readSession).not.toHaveBeenCalled();
+  });
+
+  it("get 收到错误 turn status 时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+      id: 3,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "desktop",
+          workspaceId: "workspace-1",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [
+          {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "done",
+          },
+        ],
+      } as never,
+      response: { id: 3, result: {} as never },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(client.getAgentRuntimeSession("session-1")).rejects.toThrow(
+      "agentSession/read did not return session detail",
+    );
   });
 
   it("update 应通过 agentSession/update 写 current session 状态", async () => {

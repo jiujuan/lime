@@ -181,7 +181,7 @@
 | 要求                          | 证据                                                                                                      |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------- |
 | 全量能力名只有一份事实源。    | catalog 测试断言 `LIME_CAPABILITY_NAMES`、profile keys、adapter keys 一致。                               |
-| App 不再自建底层 Agent 能力。 | 内容工厂只调用 SDK facade；无裸模型 API / 私有 bridge / 专用 Tauri command。                              |
+| App 不再自建底层 Agent 能力。 | 内容工厂只调用 SDK facade；无裸模型 API / 私有 bridge / 专用 legacy desktop command。                      |
 | Lime 主 App 封装运行过程。    | `runtimeProcess` 包含 thinking、text、execution、tools、skills、model、usage、cost、artifacts、evidence。 |
 | 过程不消失。                  | 终态默认折叠但 timeline 保留。                                                                            |
 | 使用 Skills。                 | `lime.agent` task 的 capability hints / skill bindings 可被 Host 投影，调用证据可见。                     |

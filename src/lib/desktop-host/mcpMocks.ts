@@ -7,10 +7,4 @@ export const mcpMocks: Record<string, (args?: any) => any> = {
   sync_all_mcp_to_live: () => ({ success: true }),
   mcp_start_server: () => ({ success: true }),
   mcp_stop_server: () => ({ success: true }),
-  mcp_list_tools_for_context: () => [],
-  mcp_search_tools: () => [],
-  mcp_call_tool: () => ({ content: [], is_error: false }),
-  mcp_call_tool_with_caller: () => ({ content: [], is_error: false }),
-  mcp_get_prompt: () => ({ description: "", messages: [] }),
-  mcp_read_resource: () => ({}),
 };

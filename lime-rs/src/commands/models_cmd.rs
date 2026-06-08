@@ -1,55 +1,43 @@
-//! 模型配置命令模块
+//! 模型配置 legacy Tauri 命令模块
 //!
-//! 提供动态模型配置的 Tauri 命令
+//! Provider / Model 生产事实源已迁移到 App Server JSON-RPC `model*` / `modelProvider*`
+//! / `modelProviderKey*` 方法。旧 Tauri helper 仅保留 fail-closed 退场面，防止继续读取
+//! 或写入旧 `state.config.models`。
 
-use crate::commands::model_registry_cmd::ModelRegistryState;
-use crate::config::{save_config, ModelInfo, ModelsConfig, ProviderModelsConfig};
-use crate::AppState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::State;
 
-/// 获取模型配置
-#[tauri::command]
-pub async fn get_models_config(app_state: State<'_, AppState>) -> Result<ModelsConfig, String> {
-    let state = app_state.read().await;
-    Ok(state.config.models.clone())
+const CURRENT_MODEL_PROVIDER_PATH: &str = "App Server JSON-RPC model/modelProvider current 主链";
+
+fn deprecated_model_provider_command_error(command: &str) -> String {
+    tracing::warn!(
+        "[Models] legacy Tauri command `{}` 已退场；请改走 {}",
+        command,
+        CURRENT_MODEL_PROVIDER_PATH
+    );
+    format!("{command} 已退场；Provider / Model 只能走 {CURRENT_MODEL_PROVIDER_PATH}")
 }
 
-/// 保存模型配置
+/// 旧 Tauri 模型配置读取命令已退场。
 #[tauri::command]
-pub async fn save_models_config(
-    app_state: State<'_, AppState>,
-    config: ModelsConfig,
-) -> Result<(), String> {
-    let mut state = app_state.write().await;
-    state.config.models = config;
-    // 保存配置到文件
-    save_config(&state.config).map_err(|e| e.to_string())?;
-    Ok(())
+pub async fn get_models_config() -> Result<(), String> {
+    Err(deprecated_model_provider_command_error("get_models_config"))
 }
 
-/// 获取指定 Provider 的模型列表
+/// 旧 Tauri 模型配置写入命令已退场。
 #[tauri::command]
-pub async fn get_provider_models(
-    app_state: State<'_, AppState>,
-    provider: String,
-) -> Result<Vec<String>, String> {
-    let state = app_state.read().await;
-    let models = state
-        .config
-        .models
-        .providers
-        .get(&provider)
-        .map(|p| {
-            p.models
-                .iter()
-                .filter(|m| m.enabled)
-                .map(|m| m.id.clone())
-                .collect()
-        })
-        .unwrap_or_default();
-    Ok(models)
+pub async fn save_models_config(_config: serde_json::Value) -> Result<(), String> {
+    Err(deprecated_model_provider_command_error(
+        "save_models_config",
+    ))
+}
+
+/// 旧 Tauri Provider 模型列表命令已退场。
+#[tauri::command]
+pub async fn get_provider_models(_provider: String) -> Result<Vec<String>, String> {
+    Err(deprecated_model_provider_command_error(
+        "get_provider_models",
+    ))
 }
 
 /// 简化的 Provider 配置（用于前端）
@@ -59,201 +47,57 @@ pub struct SimpleProviderConfig {
     pub models: Vec<String>,
 }
 
-/// 凭证池 Provider 别名已退役；模型列表统一走模型注册表。
-const ALIAS_PROVIDERS: &[&str] = &[];
-
-/// 别名配置文件名映射（某些 Provider 共享同一个别名配置）
-fn get_alias_config_key(provider: &str) -> &str {
-    provider
-}
-
-/// 获取所有 Provider 的简化配置（用于前端下拉框）
-/// 模型列表统一来自模型注册表。
+/// 旧 Tauri Provider 简化配置命令已退场。
 #[tauri::command]
-pub async fn get_all_provider_models(
-    app_state: State<'_, AppState>,
-    model_registry_state: State<'_, ModelRegistryState>,
-) -> Result<HashMap<String, SimpleProviderConfig>, String> {
-    let state = app_state.read().await;
-
-    // 获取别名配置
-    let alias_configs = {
-        let guard = model_registry_state.read().await;
-        if let Some(service) = guard.as_ref() {
-            let configs = service.get_all_alias_configs().await;
-            tracing::info!(
-                "[get_all_provider_models] 加载了 {} 个别名配置: {:?}",
-                configs.len(),
-                configs.keys().collect::<Vec<_>>()
-            );
-            configs
-        } else {
-            tracing::warn!("[get_all_provider_models] ModelRegistryService 未初始化");
-            HashMap::new()
-        }
-    };
-
-    let result: HashMap<String, SimpleProviderConfig> = state
-        .config
-        .models
-        .providers
-        .iter()
-        .map(|(key, value)| {
-            // 对于别名 Provider，优先使用别名配置中的模型列表
-            let models = if ALIAS_PROVIDERS.contains(&key.as_str()) {
-                // 使用映射获取实际的别名配置文件名
-                let alias_config_key = get_alias_config_key(key);
-                if let Some(alias_config) = alias_configs.get(alias_config_key) {
-                    tracing::info!(
-                        "[get_all_provider_models] {} 使用别名配置 {}: {:?}",
-                        key,
-                        alias_config_key,
-                        alias_config.models
-                    );
-                    alias_config.models.clone()
-                } else {
-                    tracing::warn!(
-                        "[get_all_provider_models] {} 没有找到别名配置 {}，使用用户配置",
-                        key,
-                        alias_config_key
-                    );
-                    // 降级到用户配置
-                    value
-                        .models
-                        .iter()
-                        .filter(|m| m.enabled)
-                        .map(|m| m.id.clone())
-                        .collect()
-                }
-            } else {
-                value
-                    .models
-                    .iter()
-                    .filter(|m| m.enabled)
-                    .map(|m| m.id.clone())
-                    .collect()
-            };
-
-            (
-                key.clone(),
-                SimpleProviderConfig {
-                    label: value.label.clone(),
-                    models,
-                },
-            )
-        })
-        .collect();
-    Ok(result)
+pub async fn get_all_provider_models() -> Result<HashMap<String, SimpleProviderConfig>, String> {
+    Err(deprecated_model_provider_command_error(
+        "get_all_provider_models",
+    ))
 }
 
-/// 添加模型到指定 Provider
+/// 旧 Tauri Provider 模型写入命令已退场。
 #[tauri::command]
 pub async fn add_model_to_provider(
-    app_state: State<'_, AppState>,
-    provider: String,
-    model_id: String,
-    model_name: Option<String>,
+    _provider: String,
+    _model_id: String,
+    _model_name: Option<String>,
 ) -> Result<(), String> {
-    let mut state = app_state.write().await;
-
-    if let Some(provider_config) = state.config.models.providers.get_mut(&provider) {
-        // 检查是否已存在
-        if provider_config.models.iter().any(|m| m.id == model_id) {
-            return Err(format!("模型 {model_id} 已存在于 {provider} 中"));
-        }
-        provider_config.models.push(ModelInfo {
-            id: model_id,
-            name: model_name,
-            enabled: true,
-        });
-    } else {
-        return Err(format!("Provider {provider} 不存在"));
-    }
-
-    save_config(&state.config).map_err(|e| e.to_string())?;
-    Ok(())
+    Err(deprecated_model_provider_command_error(
+        "add_model_to_provider",
+    ))
 }
 
-/// 从指定 Provider 移除模型
+/// 旧 Tauri Provider 模型移除命令已退场。
 #[tauri::command]
 pub async fn remove_model_from_provider(
-    app_state: State<'_, AppState>,
-    provider: String,
-    model_id: String,
+    _provider: String,
+    _model_id: String,
 ) -> Result<(), String> {
-    let mut state = app_state.write().await;
-
-    if let Some(provider_config) = state.config.models.providers.get_mut(&provider) {
-        provider_config.models.retain(|m| m.id != model_id);
-    } else {
-        return Err(format!("Provider {provider} 不存在"));
-    }
-
-    save_config(&state.config).map_err(|e| e.to_string())?;
-    Ok(())
+    Err(deprecated_model_provider_command_error(
+        "remove_model_from_provider",
+    ))
 }
 
-/// 切换模型启用状态
+/// 旧 Tauri Provider 模型启用状态命令已退场。
 #[tauri::command]
 pub async fn toggle_model_enabled(
-    app_state: State<'_, AppState>,
-    provider: String,
-    model_id: String,
-    enabled: bool,
+    _provider: String,
+    _model_id: String,
+    _enabled: bool,
 ) -> Result<(), String> {
-    let mut state = app_state.write().await;
-
-    if let Some(provider_config) = state.config.models.providers.get_mut(&provider) {
-        if let Some(model) = provider_config.models.iter_mut().find(|m| m.id == model_id) {
-            model.enabled = enabled;
-        } else {
-            return Err(format!("模型 {model_id} 不存在于 {provider} 中"));
-        }
-    } else {
-        return Err(format!("Provider {provider} 不存在"));
-    }
-
-    save_config(&state.config).map_err(|e| e.to_string())?;
-    Ok(())
+    Err(deprecated_model_provider_command_error(
+        "toggle_model_enabled",
+    ))
 }
 
-/// 添加新的 Provider
+/// 旧 Tauri Provider 创建命令已退场。
 #[tauri::command]
-pub async fn add_provider(
-    app_state: State<'_, AppState>,
-    provider_id: String,
-    label: String,
-) -> Result<(), String> {
-    let mut state = app_state.write().await;
-
-    if state.config.models.providers.contains_key(&provider_id) {
-        return Err(format!("Provider {provider_id} 已存在"));
-    }
-
-    state.config.models.providers.insert(
-        provider_id,
-        ProviderModelsConfig {
-            label,
-            models: vec![],
-        },
-    );
-
-    save_config(&state.config).map_err(|e| e.to_string())?;
-    Ok(())
+pub async fn add_provider(_provider_id: String, _label: String) -> Result<(), String> {
+    Err(deprecated_model_provider_command_error("add_provider"))
 }
 
-/// 移除 Provider
+/// 旧 Tauri Provider 删除命令已退场。
 #[tauri::command]
-pub async fn remove_provider(
-    app_state: State<'_, AppState>,
-    provider_id: String,
-) -> Result<(), String> {
-    let mut state = app_state.write().await;
-
-    if state.config.models.providers.remove(&provider_id).is_none() {
-        return Err(format!("Provider {provider_id} 不存在"));
-    }
-
-    save_config(&state.config).map_err(|e| e.to_string())?;
-    Ok(())
+pub async fn remove_provider(_provider_id: String) -> Result<(), String> {
+    Err(deprecated_model_provider_command_error("remove_provider"))
 }

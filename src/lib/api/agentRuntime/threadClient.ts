@@ -122,48 +122,45 @@ export function createThreadClient({
   async function compactAgentRuntimeSession(
     request: AgentRuntimeCompactSessionRequest,
   ): Promise<void> {
-    return await invokeCommand<void>(AGENT_RUNTIME_COMMANDS.compactSession, {
-      request,
-    });
+    const command = AGENT_RUNTIME_COMMANDS.compactSession;
+    const result = await invokeCommand(command, { request });
+    assertVoidResult(command, result);
   }
 
   async function resumeAgentRuntimeThread(
     request: AgentRuntimeResumeThreadRequest,
   ): Promise<boolean> {
-    return await invokeCommand<boolean>(AGENT_RUNTIME_COMMANDS.resumeThread, {
-      request,
-    });
+    const command = AGENT_RUNTIME_COMMANDS.resumeThread;
+    const result = await invokeCommand(command, { request });
+    assertBooleanResult(command, result);
+    return result;
   }
 
   async function replayAgentRuntimeRequest(
     request: AgentRuntimeReplayRequestRequest,
   ): Promise<AgentRuntimeReplayedActionRequiredView | null> {
-    return await invokeCommand<AgentRuntimeReplayedActionRequiredView | null>(
-      AGENT_RUNTIME_COMMANDS.replayRequest,
-      {
-        request,
-      },
-    );
+    const command = AGENT_RUNTIME_COMMANDS.replayRequest;
+    const result = await invokeCommand(command, { request });
+    assertReplayedActionRequiredViewOrNull(command, result);
+    return result;
   }
 
   async function removeAgentRuntimeQueuedTurn(
     request: AgentRuntimeRemoveQueuedTurnRequest,
   ): Promise<boolean> {
-    return await invokeCommand<boolean>(
-      AGENT_RUNTIME_COMMANDS.removeQueuedTurn,
-      {
-        request,
-      },
-    );
+    const command = AGENT_RUNTIME_COMMANDS.removeQueuedTurn;
+    const result = await invokeCommand(command, { request });
+    assertBooleanResult(command, result);
+    return result;
   }
 
   async function promoteAgentRuntimeQueuedTurn(
     request: AgentRuntimePromoteQueuedTurnRequest,
   ): Promise<boolean> {
-    return await invokeCommand<boolean>(
-      AGENT_RUNTIME_COMMANDS.promoteQueuedTurn,
-      { request },
-    );
+    const command = AGENT_RUNTIME_COMMANDS.promoteQueuedTurn;
+    const result = await invokeCommand(command, { request });
+    assertBooleanResult(command, result);
+    return result;
   }
 
   async function respondAgentRuntimeAction(
@@ -207,37 +204,37 @@ export function createThreadClient({
   async function listAgentRuntimeFileCheckpoints(
     request: AgentRuntimeListFileCheckpointsRequest,
   ): Promise<AgentRuntimeFileCheckpointListResult> {
-    return await invokeCommand<AgentRuntimeFileCheckpointListResult>(
-      AGENT_RUNTIME_COMMANDS.listFileCheckpoints,
-      { request },
-    );
+    const command = AGENT_RUNTIME_COMMANDS.listFileCheckpoints;
+    const result = await invokeCommand(command, { request });
+    assertFileCheckpointListResult(command, result);
+    return result;
   }
 
   async function getAgentRuntimeFileCheckpoint(
     request: AgentRuntimeGetFileCheckpointRequest,
   ): Promise<AgentRuntimeFileCheckpointDetail> {
-    return await invokeCommand<AgentRuntimeFileCheckpointDetail>(
-      AGENT_RUNTIME_COMMANDS.getFileCheckpoint,
-      { request },
-    );
+    const command = AGENT_RUNTIME_COMMANDS.getFileCheckpoint;
+    const result = await invokeCommand(command, { request });
+    assertFileCheckpointDetail(command, result);
+    return result;
   }
 
   async function diffAgentRuntimeFileCheckpoint(
     request: AgentRuntimeDiffFileCheckpointRequest,
   ): Promise<AgentRuntimeFileCheckpointDiffResult> {
-    return await invokeCommand<AgentRuntimeFileCheckpointDiffResult>(
-      AGENT_RUNTIME_COMMANDS.diffFileCheckpoint,
-      { request },
-    );
+    const command = AGENT_RUNTIME_COMMANDS.diffFileCheckpoint;
+    const result = await invokeCommand(command, { request });
+    assertFileCheckpointDiffResult(command, result);
+    return result;
   }
 
   async function restoreAgentRuntimeFileCheckpoint(
     request: AgentRuntimeRestoreFileCheckpointRequest,
   ): Promise<AgentRuntimeFileCheckpointRestoreResult> {
-    return await invokeCommand<AgentRuntimeFileCheckpointRestoreResult>(
-      AGENT_RUNTIME_COMMANDS.restoreFileCheckpoint,
-      { request },
-    );
+    const command = AGENT_RUNTIME_COMMANDS.restoreFileCheckpoint;
+    const result = await invokeCommand(command, { request });
+    assertFileCheckpointRestoreResult(command, result);
+    return result;
   }
 
   return {
@@ -339,6 +336,191 @@ type AppServerAgentSessionEventRoute = {
   sessionId: string;
   turnId?: string;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isRequiredString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isOptionalFiniteNumber(value: unknown): value is number | undefined {
+  return (
+    value === undefined ||
+    (typeof value === "number" && Number.isFinite(value))
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isFileCheckpointSummary(
+  value: unknown,
+): value is AgentRuntimeFileCheckpointListResult["checkpoints"][number] {
+  return (
+    isRecord(value) &&
+    isRequiredString(value.checkpoint_id) &&
+    isRequiredString(value.turn_id) &&
+    isRequiredString(value.path) &&
+    isRequiredString(value.source) &&
+    (typeof value.updated_at === "string" ||
+      typeof value.updated_at === "number") &&
+    isOptionalFiniteNumber(value.version_no) &&
+    isOptionalString(value.version_id) &&
+    isOptionalString(value.request_id) &&
+    isOptionalString(value.title) &&
+    isOptionalString(value.kind) &&
+    isOptionalString(value.status) &&
+    isOptionalString(value.preview_text) &&
+    isOptionalString(value.snapshot_path) &&
+    typeof value.validation_issue_count === "number" &&
+    Number.isFinite(value.validation_issue_count)
+  );
+}
+
+function isFileCheckpointListResult(
+  value: unknown,
+): value is AgentRuntimeFileCheckpointListResult {
+  return (
+    isRecord(value) &&
+    isRequiredString(value.session_id) &&
+    isRequiredString(value.thread_id) &&
+    typeof value.checkpoint_count === "number" &&
+    Number.isFinite(value.checkpoint_count) &&
+    Array.isArray(value.checkpoints) &&
+    value.checkpoints.every(isFileCheckpointSummary)
+  );
+}
+
+function isFileCheckpointDetail(
+  value: unknown,
+): value is AgentRuntimeFileCheckpointDetail {
+  return (
+    isRecord(value) &&
+    isRequiredString(value.session_id) &&
+    isRequiredString(value.thread_id) &&
+    isFileCheckpointSummary(value.checkpoint) &&
+    isRequiredString(value.live_path) &&
+    isRequiredString(value.snapshot_path) &&
+    Array.isArray(value.version_history) &&
+    isStringArray(value.validation_issues) &&
+    (value.content === undefined || typeof value.content === "string")
+  );
+}
+
+function isFileCheckpointDiffResult(
+  value: unknown,
+): value is AgentRuntimeFileCheckpointDiffResult {
+  return (
+    isRecord(value) &&
+    isRequiredString(value.session_id) &&
+    isRequiredString(value.thread_id) &&
+    isFileCheckpointSummary(value.checkpoint) &&
+    isOptionalString(value.current_version_id) &&
+    isOptionalString(value.previous_version_id)
+  );
+}
+
+function isFileCheckpointRestoreResult(
+  value: unknown,
+): value is AgentRuntimeFileCheckpointRestoreResult {
+  return (
+    isRecord(value) &&
+    isRequiredString(value.session_id) &&
+    isRequiredString(value.thread_id) &&
+    isFileCheckpointSummary(value.checkpoint) &&
+    isRequiredString(value.live_path) &&
+    isRequiredString(value.snapshot_path) &&
+    (value.backup_path === undefined ||
+      value.backup_path === null ||
+      typeof value.backup_path === "string") &&
+    (typeof value.restored_at === "string" ||
+      typeof value.restored_at === "number")
+  );
+}
+
+function isReplayedActionRequiredView(
+  value: unknown,
+): value is AgentRuntimeReplayedActionRequiredView {
+  return (
+    isRecord(value) &&
+    value.type === "action_required" &&
+    isRequiredString(value.request_id) &&
+    (value.action_type === "tool_confirmation" ||
+      value.action_type === "ask_user" ||
+      value.action_type === "elicitation") &&
+    (value.tool_name === undefined || typeof value.tool_name === "string") &&
+    (value.arguments === undefined || isRecord(value.arguments)) &&
+    (value.prompt === undefined || typeof value.prompt === "string") &&
+    (value.requested_schema === undefined || isRecord(value.requested_schema))
+  );
+}
+
+function assertVoidResult(command: string, value: unknown): void {
+  if (value !== undefined && value !== null) {
+    throw new Error(`${command} did not return void`);
+  }
+}
+
+function assertBooleanResult(
+  command: string,
+  value: unknown,
+): asserts value is boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${command} did not return boolean`);
+  }
+}
+
+function assertReplayedActionRequiredViewOrNull(
+  command: string,
+  value: unknown,
+): asserts value is AgentRuntimeReplayedActionRequiredView | null {
+  if (value !== null && !isReplayedActionRequiredView(value)) {
+    throw new Error(`${command} did not return replayed action view`);
+  }
+}
+
+function assertFileCheckpointListResult(
+  command: string,
+  value: unknown,
+): asserts value is AgentRuntimeFileCheckpointListResult {
+  if (!isFileCheckpointListResult(value)) {
+    throw new Error(`${command} did not return file checkpoint list`);
+  }
+}
+
+function assertFileCheckpointDetail(
+  command: string,
+  value: unknown,
+): asserts value is AgentRuntimeFileCheckpointDetail {
+  if (!isFileCheckpointDetail(value)) {
+    throw new Error(`${command} did not return file checkpoint detail`);
+  }
+}
+
+function assertFileCheckpointDiffResult(
+  command: string,
+  value: unknown,
+): asserts value is AgentRuntimeFileCheckpointDiffResult {
+  if (!isFileCheckpointDiffResult(value)) {
+    throw new Error(`${command} did not return file checkpoint diff`);
+  }
+}
+
+function assertFileCheckpointRestoreResult(
+  command: string,
+  value: unknown,
+): asserts value is AgentRuntimeFileCheckpointRestoreResult {
+  if (!isFileCheckpointRestoreResult(value)) {
+    throw new Error(`${command} did not return file checkpoint restore result`);
+  }
+}
 
 class AppServerAgentSessionEventDrainRouter {
   readonly #appServerClient: AgentRuntimeAppServerClient;

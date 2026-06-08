@@ -9,6 +9,7 @@ import {
   type KnowledgePackDetail,
   type KnowledgePackStatus,
 } from "@/lib/api/knowledge";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { getDefaultProject, getProject } from "@/lib/api/project";
 import type { KnowledgePageParams } from "@/types/page";
 import { KnowledgePage } from "./KnowledgePage";
@@ -277,10 +278,11 @@ describe("KnowledgePage", () => {
   let readyPack: KnowledgePackDetail;
   let pendingPack: KnowledgePackDetail;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     (globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }).IS_REACT_ACT_ENVIRONMENT = true;
+    await changeLimeLocale("zh-CN");
     vi.clearAllMocks();
     window.localStorage.clear();
 
@@ -485,10 +487,10 @@ describe("KnowledgePage", () => {
     });
   });
 
-  it("安装版未支持资料详情命令时不应触发旧详情读取", async () => {
+  it("安装版不依赖旧资料详情命令时仍应通过 current API 读取详情", async () => {
     window.electronAPI = {
       invoke: vi.fn(),
-      supportsCommand: (command: string) => command !== "knowledge_get_pack",
+      supportsCommand: () => false,
       listen: vi.fn(),
       emit: vi.fn(),
     };
@@ -502,7 +504,10 @@ describe("KnowledgePage", () => {
     expect(listKnowledgePacks).toHaveBeenCalledWith({
       workingDir: "/tmp/project",
     });
-    expect(getKnowledgePack).not.toHaveBeenCalled();
+    expect(getKnowledgePack).toHaveBeenCalledWith(
+      "/tmp/project",
+      "founder-personal-ip",
+    );
   });
 
   it("整理新资料应覆盖用途、原始资料和确认前不生效提示", async () => {

@@ -237,6 +237,59 @@ describe("appServerArtifactClient", () => {
     });
   });
 
+  it("App Server artifact/read 返回假成功 envelope 时应 fail closed", async () => {
+    const appServerClient = {
+      readArtifacts: vi.fn().mockResolvedValue({
+        id: 1,
+        result: {
+          success: true,
+        },
+        response: {
+          id: 1,
+          result: {},
+        },
+        notifications: [],
+        messages: [],
+      }),
+    };
+    const client = createAppServerArtifactClient({ appServerClient });
+
+    await expect(
+      client.readAgentRuntimeTimelineArtifactContent(createFileArtifactItem()),
+    ).rejects.toThrow("artifact/read did not return artifact summaries");
+  });
+
+  it("App Server artifact/read 返回半截 artifact summary 时应 fail closed", async () => {
+    const appServerClient = {
+      readArtifacts: vi.fn().mockResolvedValue({
+        id: 1,
+        result: {
+          artifacts: [
+            {
+              artifactRef: "artifact-report",
+              contentStatus: "available",
+              content: "# Report",
+            },
+          ],
+        },
+        response: {
+          id: 1,
+          result: {},
+        },
+        notifications: [],
+        messages: [],
+      }),
+    };
+    const client = createAppServerArtifactClient({ appServerClient });
+
+    await expect(
+      client.readAgentRuntimeArtifactPreviewContent(
+        createArtifact(),
+        ".app-server/artifacts/report.md",
+      ),
+    ).rejects.toThrow("artifact/read did not return artifact summaries");
+  });
+
   it("App Server 未返回可用 content 时不伪造 artifact 正文", () => {
     expect(
       projectTimelineArtifactContentFromAppServerSummaries({

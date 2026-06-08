@@ -10,7 +10,7 @@ use lime_skills::{
 
 /// 可执行 Skill 信息
 ///
-/// 用于 list_executable_skills 命令的返回类型
+/// 用于 App Server `skill/list` 返回类型。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutableSkillInfo {
     /// Skill 名称（唯一标识）
@@ -124,7 +124,7 @@ pub fn list_executable_skill_catalog() -> Result<Vec<ExecutableSkillInfo>, Strin
         .collect();
 
     tracing::info!(
-        "[list_executable_skills] 返回 {} 个可执行 Skills",
+        "[skill/list] 返回 {} 个可执行 Skills",
         executable_skills.len()
     );
 
@@ -165,7 +165,7 @@ pub fn get_skill_detail_info(skill_name: &str) -> Result<SkillDetailInfo, String
         when_to_use: skill.when_to_use,
     };
 
-    tracing::info!("[get_skill_detail] 返回 Skill 详情: name={}", skill_name);
+    tracing::info!("[skill/read] 返回 Skill 详情: name={}", skill_name);
 
     Ok(detail)
 }

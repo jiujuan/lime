@@ -8,6 +8,11 @@ import {
   assertLiveProviderSmokeAllowed,
   liveProviderSmokeAllowed,
 } from "../lib/live-provider-smoke-gate.mjs";
+import {
+  createAgentSessionCurrent,
+  readAgentRuntimeThreadCurrent,
+  startAgentSessionTurnCurrent,
+} from "../lib/managed-objective-continuation-smoke-core.mjs";
 
 const DEFAULTS = {
   mode: "replay",
@@ -386,7 +391,8 @@ async function invokeAppServerMethod(options, method, params, timeoutMs = 30_000
     { request: { lines: [`${JSON.stringify(request)}\n`] } },
     timeoutMs,
   );
-  const messages = (Array.isArray(result?.lines) ? result.lines : [])
+  const responseLines = result?.result?.lines ?? result?.lines;
+  const messages = (Array.isArray(responseLines) ? responseLines : [])
     .map((line) => {
       try {
         return JSON.parse(String(line));
@@ -526,7 +532,7 @@ function addExpectedPrefixAssertion(assertions, expectations, key, actual, expec
 }
 
 async function readProjection(options, sessionId, taskId) {
-  const threadRead = await invoke(options, "agent_runtime_get_thread_read", { sessionId });
+  const threadRead = await readAgentRuntimeThreadCurrent(options, sessionId);
   const task = await invoke(options, "agent_app_runtime_get_task", {
     request: {
       appId: options.appId,
@@ -793,10 +799,17 @@ async function runLive(options) {
   const workspaceId = await getWorkspaceId(options);
   const providerPreference = await resolveProviderPreference(options);
   const stamp = `${Date.now()}-${process.pid}`;
-  const sessionId = await invoke(options, "agent_runtime_create_session", {
+  const sessionId = await createAgentSessionCurrent(options, {
     workspaceId,
-    name: `P18.7-E connector outbox smoke ${stamp}`,
-    runStartHooks: false,
+    title: `P18.7-E connector outbox smoke ${stamp}`,
+    metadata: {
+      harness: {
+        hiddenFromUserRecents: true,
+        source: "smoke:agent-app-connector-outbox",
+        connectorId: options.connectorId,
+        action: options.action,
+      },
+    },
   });
   const taskId = options.taskId || `agent-app-connector-outbox-runtime-${stamp}`;
   const turnId = `connector-outbox-${stamp}`;
@@ -804,39 +817,32 @@ async function runLive(options) {
   const idempotencyKey = `${options.connectorId}-${options.action}-${stamp}`;
   const expectedToolName = toolNameFor(options.connectorId, options.action);
 
-  await invoke(
-    options,
-    "agent_runtime_submit_turn",
-    {
-      request: {
-        message: [
-          `Call ${expectedToolName} exactly once.`,
-          `Use exactly this tool argument JSON: ${JSON.stringify({
-            connectorId: options.connectorId,
-            action: options.action,
-            input: { title: options.title },
-            reason: `Agent App connector outbox smoke ${idempotencyKey}`,
-          })}.`,
-          `Do not use connectorId values other than "${options.connectorId}".`,
-          `Do not use action values other than "${options.action}".`,
-          "Do not call the external provider API directly.",
-          "Do not request or output tokens or secrets.",
-          "After the tool call, summarize the queued outbox result in one sentence.",
-        ].join(" "),
-        session_id: sessionId,
-        workspace_id: workspaceId,
-        event_name: eventName,
-        turn_id: turnId,
-        turn_config: {
-          provider_preference: providerPreference.providerPreference,
-          model_preference: providerPreference.modelPreference,
-          metadata: buildLiveMetadata(options, taskId, idempotencyKey),
-        },
-        skip_pre_submit_resume: true,
-      },
+  await startAgentSessionTurnCurrent(options, {
+    sessionId,
+    workspaceId,
+    message: [
+      `Call ${expectedToolName} exactly once.`,
+      `Use exactly this tool argument JSON: ${JSON.stringify({
+        connectorId: options.connectorId,
+        action: options.action,
+        input: { title: options.title },
+        reason: `Agent App connector outbox smoke ${idempotencyKey}`,
+      })}.`,
+      `Do not use connectorId values other than "${options.connectorId}".`,
+      `Do not use action values other than "${options.action}".`,
+      "Do not call the external provider API directly.",
+      "Do not request or output tokens or secrets.",
+      "After the tool call, summarize the queued outbox result in one sentence.",
+    ].join(" "),
+    eventName,
+    turnId,
+    turnConfig: {
+      providerPreference: providerPreference.providerPreference,
+      modelPreference: providerPreference.modelPreference,
+      metadata: buildLiveMetadata(options, taskId, idempotencyKey),
     },
-    60_000,
-  );
+    skipPreSubmitResume: true,
+  });
 
   const projection = await waitForProjection(options, sessionId, taskId, expectedToolName);
   return {

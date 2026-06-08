@@ -14,6 +14,8 @@ const DEFAULTS = {
   headless: true,
 };
 
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+
 const ONBOARDING_VERSION = "1.1.0";
 const USER_FACING_FORBIDDEN_TEXT = [
   ".lime/knowledge",
@@ -218,28 +220,57 @@ async function invoke(options, cmd, args) {
   return payload.result;
 }
 
+let appServerRequestId = 1;
+
+async function invokeAppServerMethod(options, method, params = {}) {
+  const id = `knowledge-product-${appServerRequestId++}`;
+  const result = await invoke(options, APP_SERVER_HANDLE_JSON_LINES_COMMAND, {
+    request: { lines: [`${JSON.stringify({ id, method, params })}\n`] },
+  });
+  const messages = (Array.isArray(result?.lines) ? result.lines : [])
+    .map((line) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    throw new Error(
+      `${method}: ${error.error?.message || "App Server JSON-RPC error"}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method}: missing App Server response`);
+  }
+  return response.result;
+}
+
 async function seedPack(options, workingDir, pack) {
-  await invoke(options, "knowledge_import_source", {
-    request: {
-      workingDir,
-      packName: pack.name,
-      description: pack.title,
-      packType: pack.type,
-      sourceFileName: pack.sourceFileName,
-      sourceText: pack.sourceText,
+  await invokeAppServerMethod(options, "knowledgePack/source/import", {
+    workingDir,
+    packName: pack.name,
+    description: pack.title,
+    packType: pack.type,
+    sourceFileName: pack.sourceFileName,
+    sourceText: pack.sourceText,
+  });
+  await invokeAppServerMethod(options, "knowledgePack/compile", {
+    workingDir,
+    name: pack.name,
+    builderRuntime: {
+      enabled: false,
     },
   });
-  await invoke(options, "knowledge_compile_pack", {
-    request: {
-      workingDir,
-      name: pack.name,
-      builderRuntime: {
-        enabled: false,
-      },
-    },
-  });
-  await invoke(options, "knowledge_update_pack_status", {
-    request: { workingDir, name: pack.name, status: pack.status },
+  await invokeAppServerMethod(options, "knowledgePack/status/update", {
+    workingDir,
+    name: pack.name,
+    status: pack.status,
   });
 }
 
@@ -385,8 +416,9 @@ async function prepareProject(options) {
   await seedPack(options, projectRoot, PACKS.persona);
   await seedPack(options, projectRoot, PACKS.ready);
   await seedPack(options, projectRoot, PACKS.review);
-  await invoke(options, "knowledge_set_default_pack", {
-    request: { workingDir: projectRoot, name: PACKS.ready.name },
+  await invokeAppServerMethod(options, "knowledgePack/default/set", {
+    workingDir: projectRoot,
+    name: PACKS.ready.name,
   });
 
   return { projectId, projectRoot };

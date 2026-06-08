@@ -268,7 +268,7 @@ function installState(state: InstalledAgentAppState): InstalledAgentAppState {
   return state;
 }
 
-function buildReviewResult(state: InstalledAgentAppState) {
+export function buildReviewResult(state: InstalledAgentAppState) {
   return {
     state,
     review: {

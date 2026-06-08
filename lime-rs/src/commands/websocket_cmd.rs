@@ -1,9 +1,20 @@
-//! WebSocket 相关的 Tauri 命令
+//! WebSocket legacy Tauri commands.
+//!
+//! WebSocket RPC / channel 能力不再由这组本地内存状态命令控制；后续需要
+//! WebSocket 运行时事实时，应回到 App Server / channel current 主链。
 
 use lime_websocket::{WsConnection, WsStatsSnapshot};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+const DEPRECATED_WEBSOCKET_COMMAND_MESSAGE: &str =
+    "WebSocket Tauri 控制命令已退场；请使用 App Server / channel current 主链";
+
+fn deprecated_websocket_command_error(command: &str) -> String {
+    tracing::warn!("[WebSocket] legacy Tauri command `{}` 已退场", command);
+    format!("{command} 已退场；{DEPRECATED_WEBSOCKET_COMMAND_MESSAGE}")
+}
 
 /// WebSocket 服务状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,41 +84,26 @@ impl Default for WsServiceState {
     }
 }
 
-/// 获取 WebSocket 服务状态
-#[allow(dead_code)]
 #[tauri::command]
 pub async fn get_websocket_status(
-    state: tauri::State<'_, WsServiceState>,
+    _state: tauri::State<'_, WsServiceState>,
 ) -> Result<WsServiceStatus, String> {
-    let enabled = *state.enabled.read().await;
-    let stats = state.stats.read().await.clone();
-
-    Ok(WsServiceStatus {
-        enabled,
-        active_connections: stats.active_connections,
-        total_connections: stats.total_connections,
-        total_messages: stats.total_messages,
-        total_errors: stats.total_errors,
-    })
+    Err(deprecated_websocket_command_error("get_websocket_status"))
 }
 
-/// 获取 WebSocket 连接列表
-#[allow(dead_code)]
 #[tauri::command]
 pub async fn get_websocket_connections(
-    state: tauri::State<'_, WsServiceState>,
+    _state: tauri::State<'_, WsServiceState>,
 ) -> Result<Vec<WsConnectionInfo>, String> {
-    let connections = state.connections.read().await.clone();
-    Ok(connections)
+    Err(deprecated_websocket_command_error(
+        "get_websocket_connections",
+    ))
 }
 
-/// 启用/禁用 WebSocket 服务
-#[allow(dead_code)]
 #[tauri::command]
 pub async fn set_websocket_enabled(
-    state: tauri::State<'_, WsServiceState>,
-    enabled: bool,
+    _state: tauri::State<'_, WsServiceState>,
+    _enabled: bool,
 ) -> Result<(), String> {
-    *state.enabled.write().await = enabled;
-    Ok(())
+    Err(deprecated_websocket_command_error("set_websocket_enabled"))
 }

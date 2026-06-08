@@ -747,6 +747,7 @@
   "skills.workspace.marketplace.error.requestFailed": "リクエストに失敗しました（{{status}}）",
   "skills.workspace.marketplace.error.skillNameRequired": "Skill 名が必要です",
   "skills.workspace.marketplace.error.invalidBundle": "公式 Skill バンドルの形式が不正です",
+  "skills.workspace.marketplace.error.invalidResponse": "公式 Skill マーケットのレスポンス形式が不正です",
   "skills.workspace.marketplace.detail.version": "バージョン {{version}}",
   "skills.workspace.marketplace.detail.deliverable": "成果物",
   "skills.workspace.marketplace.detail.package": "パッケージ",

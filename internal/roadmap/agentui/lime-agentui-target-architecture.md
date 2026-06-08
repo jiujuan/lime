@@ -39,13 +39,13 @@ flowchart TB
 
   Composer --> RuntimeApi[agentRuntime API clients]
   RuntimeApi --> Protocol[AgentEvent / Session DTO / ThreadRead]
-  RuntimeApi --> Tauri[Tauri Commands agent_runtime_*]
+  RuntimeApi --> CommandGateway[Electron Desktop Host bridge / App Server JSON-RPC]
 
-  Tauri --> RuntimeQueue[Runtime Queue]
-  Tauri --> SessionStore[Session Store]
-  Tauri --> TimelineRecorder[AgentTimelineRecorder]
-  Tauri --> ArtifactServices[Artifact Services]
-  Tauri --> EvidenceServices[Evidence / Review Services]
+  CommandGateway --> RuntimeQueue[Runtime Queue]
+  CommandGateway --> SessionStore[Session Store]
+  CommandGateway --> TimelineRecorder[AgentTimelineRecorder]
+  CommandGateway --> ArtifactServices[Artifact Services]
+  CommandGateway --> EvidenceServices[Evidence / Review Services]
 
   RuntimeQueue --> Aster[Aster Agent Runtime]
   Aster --> Events[AgentEvent stream]

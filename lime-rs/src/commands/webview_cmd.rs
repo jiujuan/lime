@@ -171,6 +171,17 @@ static WINDOW_SCROLL_SCRIPT_COORD_REGEX: Lazy<Regex> = Lazy::new(|| {
         .expect("window scroll coord regex should be valid")
 });
 
+const DEPRECATED_WEBVIEW_PANEL_MESSAGE: &str =
+    "WebView Panel legacy Tauri 命令已退场；请使用 Browser Runtime / Electron Desktop Host current 主链";
+
+fn deprecated_webview_panel_command_error(command: &str) -> String {
+    tracing::warn!(
+        "[Webview] legacy panel command `{}` 已退场；请改走 Browser Runtime / Electron Desktop Host current 主链",
+        command
+    );
+    format!("{command} 已退场；{DEPRECATED_WEBVIEW_PANEL_MESSAGE}")
+}
+
 pub fn shared_chrome_profile_manager() -> Arc<Mutex<ChromeProfileManagerState>> {
     SHARED_CHROME_PROFILE_MANAGER.clone()
 }
@@ -614,123 +625,14 @@ static BROWSER_RUNTIME_AUDIT_LOGS: Lazy<Mutex<VecDeque<BrowserRuntimeAuditRecord
 /// 使用 Tauri 2.x 的 WebviewWindow 创建独立的浏览器窗口。
 #[tauri::command]
 pub async fn create_webview_panel(
-    app: AppHandle,
-    state: tauri::State<'_, WebviewManagerWrapper>,
+    _app: AppHandle,
+    _state: tauri::State<'_, WebviewManagerWrapper>,
     request: CreateWebviewRequest,
 ) -> Result<CreateWebviewResponse, String> {
-    let panel_id = request.panel_id.clone();
-    let url = request.url.clone();
-    let title = request.title.unwrap_or_else(|| "Web Browser".to_string());
-
-    tracing::info!(
-        "[Webview] 创建独立窗口: id={}, url={}, size={}x{}",
-        panel_id,
-        url,
-        request.width,
-        request.height
-    );
-
-    // 解析 URL
-    let parsed_url = match url.parse::<url::Url>() {
-        Ok(parsed_url) => parsed_url,
-        Err(e) => {
-            return Ok(CreateWebviewResponse {
-                success: false,
-                panel_id,
-                error: Some(format!("无效的 URL: {e}")),
-            });
-        }
-    };
-    let webview_url = WebviewUrl::External(parsed_url.clone());
-
-    // 若窗口已存在，复用并导航
-    if let Some(window) = app.get_webview_window(&panel_id) {
-        let js_url =
-            serde_json::to_string(parsed_url.as_str()).map_err(|e| format!("URL 编码失败: {e}"))?;
-        let js = format!("window.location.href = {js_url};");
-        if let Err(e) = window.eval(&js) {
-            tracing::warn!("[Webview] 已存在窗口导航失败: {}", e);
-        }
-        let _ = window.set_title(&title);
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-
-        let mut manager = state.0.write().await;
-        manager.panels.insert(
-            panel_id.clone(),
-            WebviewPanelInfo {
-                id: panel_id.clone(),
-                url,
-                title,
-                x: 0.0,
-                y: 0.0,
-                width: request.width,
-                height: request.height,
-            },
-        );
-
-        tracing::info!("[Webview] 复用已存在窗口: {}", panel_id);
-        return Ok(CreateWebviewResponse {
-            success: true,
-            panel_id,
-            error: None,
-        });
-    }
-
-    // 创建独立的 WebviewWindow
-    let mut builder = WebviewWindowBuilder::new(&app, &panel_id, webview_url)
-        .title(&title)
-        .inner_size(request.width, request.height)
-        .min_inner_size(400.0, 300.0)
-        .resizable(true)
-        .center();
-
-    if request.persistent_profile {
-        let profile_key = request.profile_key.as_deref().unwrap_or(&panel_id);
-        let profile_dir = resolve_profile_data_dir(&app, profile_key)?;
-        std::fs::create_dir_all(&profile_dir).map_err(|e| format!("创建 profile 目录失败: {e}"))?;
-        builder = builder.data_directory(profile_dir);
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            builder = builder.data_store_identifier(profile_data_store_identifier(profile_key));
-        }
-    }
-
-    match builder.build() {
-        Ok(_window) => {
-            // 记录窗口信息
-            let mut manager = state.0.write().await;
-            manager.panels.insert(
-                panel_id.clone(),
-                WebviewPanelInfo {
-                    id: panel_id.clone(),
-                    url,
-                    title,
-                    x: 0.0,
-                    y: 0.0,
-                    width: request.width,
-                    height: request.height,
-                },
-            );
-
-            tracing::info!("[Webview] 独立窗口创建成功: {}", panel_id);
-
-            Ok(CreateWebviewResponse {
-                success: true,
-                panel_id,
-                error: None,
-            })
-        }
-        Err(e) => {
-            tracing::error!("[Webview] 创建独立窗口失败: {}", e);
-            Ok(CreateWebviewResponse {
-                success: false,
-                panel_id,
-                error: Some(format!("创建窗口失败: {e}")),
-            })
-        }
-    }
+    let _ = request;
+    Err(deprecated_webview_panel_command_error(
+        "create_webview_panel",
+    ))
 }
 
 /// 使用独立 profile 启动外部 Chrome 窗口
@@ -3793,149 +3695,59 @@ fn profile_data_store_identifier(profile_key: &str) -> [u8; 16] {
 /// 关闭浏览器窗口
 #[tauri::command]
 pub async fn close_webview_panel(
-    app: AppHandle,
-    state: tauri::State<'_, WebviewManagerWrapper>,
-    panel_id: String,
+    _app: AppHandle,
+    _state: tauri::State<'_, WebviewManagerWrapper>,
+    _panel_id: String,
 ) -> Result<bool, String> {
-    tracing::info!("[Webview] 尝试关闭窗口: {}", panel_id);
-
-    // 获取并关闭窗口
-    match app.get_webview_window(&panel_id) {
-        Some(window) => {
-            tracing::info!("[Webview] 找到窗口: {}", panel_id);
-
-            // 关闭窗口
-            match window.close() {
-                Ok(_) => {
-                    tracing::info!("[Webview] 窗口已关闭: {}", panel_id);
-                }
-                Err(e) => {
-                    tracing::error!("[Webview] 关闭窗口失败: {}", e);
-                }
-            }
-        }
-        None => {
-            tracing::warn!("[Webview] 未找到窗口: {}", panel_id);
-        }
-    }
-
-    // 从状态中移除
-    let mut manager = state.0.write().await;
-    manager.panels.remove(&panel_id);
-
-    tracing::info!("[Webview] 窗口已从状态中移除: {}", panel_id);
-    Ok(true)
+    Err(deprecated_webview_panel_command_error(
+        "close_webview_panel",
+    ))
 }
 
 /// 导航到新 URL
 #[tauri::command]
 pub async fn navigate_webview_panel(
-    app: AppHandle,
-    state: tauri::State<'_, WebviewManagerWrapper>,
-    panel_id: String,
-    url: String,
+    _app: AppHandle,
+    _state: tauri::State<'_, WebviewManagerWrapper>,
+    _panel_id: String,
+    _url: String,
 ) -> Result<bool, String> {
-    tracing::info!("[Webview] 导航窗口 {} 到: {}", panel_id, url);
-
-    // 解析 URL
-    let parsed_url = url
-        .parse::<url::Url>()
-        .map_err(|e| format!("无效的 URL: {e}"))?;
-
-    // 获取窗口并导航
-    if let Some(window) = app.get_webview_window(&panel_id) {
-        // 使用 eval 来导航
-        let js = format!("window.location.href = '{parsed_url}';");
-        window.eval(&js).map_err(|e| format!("导航失败: {e}"))?;
-
-        // 更新状态中的 URL
-        let mut manager = state.0.write().await;
-        if let Some(panel) = manager.panels.get_mut(&panel_id) {
-            panel.url = url;
-        }
-
-        Ok(true)
-    } else {
-        Err(format!("窗口不存在: {panel_id}"))
-    }
+    Err(deprecated_webview_panel_command_error(
+        "navigate_webview_panel",
+    ))
 }
 
 /// 调整窗口大小（独立窗口不需要位置参数）
 #[tauri::command]
 pub async fn resize_webview_panel(
-    app: AppHandle,
-    state: tauri::State<'_, WebviewManagerWrapper>,
-    panel_id: String,
+    _app: AppHandle,
+    _state: tauri::State<'_, WebviewManagerWrapper>,
+    _panel_id: String,
     _x: f64,
     _y: f64,
-    width: f64,
-    height: f64,
+    _width: f64,
+    _height: f64,
 ) -> Result<bool, String> {
-    tracing::info!(
-        "[Webview] 调整窗口 {} 大小: size={}x{}",
-        panel_id,
-        width,
-        height
-    );
-
-    // 获取窗口
-    if let Some(window) = app.get_webview_window(&panel_id) {
-        // 设置大小
-        window
-            .set_size(tauri::LogicalSize::new(width, height))
-            .map_err(|e| format!("设置大小失败: {e}"))?;
-
-        // 更新状态
-        let mut manager = state.0.write().await;
-        if let Some(panel) = manager.panels.get_mut(&panel_id) {
-            panel.width = width;
-            panel.height = height;
-        }
-
-        Ok(true)
-    } else {
-        Err(format!("窗口不存在: {panel_id}"))
-    }
+    Err(deprecated_webview_panel_command_error(
+        "resize_webview_panel",
+    ))
 }
 
 /// 获取所有活跃的浏览器窗口
 #[tauri::command]
 pub async fn get_webview_panels(
-    app: AppHandle,
-    state: tauri::State<'_, WebviewManagerWrapper>,
+    _app: AppHandle,
+    _state: tauri::State<'_, WebviewManagerWrapper>,
 ) -> Result<Vec<WebviewPanelInfo>, String> {
-    let stale_panel_ids = {
-        let manager = state.0.read().await;
-        manager
-            .panels
-            .keys()
-            .filter(|panel_id| app.get_webview_window(panel_id).is_none())
-            .cloned()
-            .collect::<Vec<_>>()
-    };
-
-    if !stale_panel_ids.is_empty() {
-        let mut manager = state.0.write().await;
-        for panel_id in stale_panel_ids {
-            manager.panels.remove(&panel_id);
-        }
-    }
-
-    let manager = state.0.read().await;
-    Ok(manager.panels.values().cloned().collect())
+    Err(deprecated_webview_panel_command_error("get_webview_panels"))
 }
 
 /// 聚焦指定的浏览器窗口
 #[tauri::command]
-pub async fn focus_webview_panel(app: AppHandle, panel_id: String) -> Result<bool, String> {
-    if let Some(window) = app.get_webview_window(&panel_id) {
-        let _ = window.unminimize();
-        window.show().map_err(|e| format!("显示窗口失败: {e}"))?;
-        window.set_focus().map_err(|e| format!("聚焦失败: {e}"))?;
-        Ok(true)
-    } else {
-        Err(format!("窗口不存在: {panel_id}"))
-    }
+pub async fn focus_webview_panel(_app: AppHandle, _panel_id: String) -> Result<bool, String> {
+    Err(deprecated_webview_panel_command_error(
+        "focus_webview_panel",
+    ))
 }
 
 #[cfg(test)]

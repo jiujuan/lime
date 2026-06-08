@@ -76,30 +76,96 @@ export interface CompanionPetLive2DActionPayload {
   motion_index?: number | null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isCompanionPetVisualState(
+  value: unknown,
+): value is CompanionPetVisualState | null {
+  return (
+    value === null ||
+    value === "hidden" ||
+    value === "idle" ||
+    value === "walking" ||
+    value === "thinking" ||
+    value === "done"
+  );
+}
+
+function isCompanionPetStatus(value: unknown): value is CompanionPetStatus {
+  return (
+    isRecord(value) &&
+    typeof value.endpoint === "string" &&
+    typeof value.server_listening === "boolean" &&
+    typeof value.connected === "boolean" &&
+    isNullableString(value.client_id) &&
+    isNullableString(value.platform) &&
+    Array.isArray(value.capabilities) &&
+    value.capabilities.every((capability) => typeof capability === "string") &&
+    isNullableString(value.last_event) &&
+    isNullableString(value.last_error) &&
+    isCompanionPetVisualState(value.last_state)
+  );
+}
+
+function isCompanionLaunchPetResult(
+  value: unknown,
+): value is CompanionLaunchPetResult {
+  return (
+    isRecord(value) &&
+    typeof value.launched === "boolean" &&
+    isNullableString(value.resolved_path) &&
+    typeof value.endpoint === "string" &&
+    isNullableString(value.message)
+  );
+}
+
+function isCompanionPetSendResult(
+  value: unknown,
+): value is CompanionPetSendResult {
+  return (
+    isRecord(value) &&
+    typeof value.delivered === "boolean" &&
+    typeof value.connected === "boolean"
+  );
+}
+
 async function invokeCompanionCommand<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
   const result = args
-    ? await safeInvoke(command, args)
-    : await safeInvoke(command);
+    ? await safeInvoke<unknown>(command, args)
+    : await safeInvoke<unknown>(command);
   assertNotDiagnosticFacade(command, result, "真实 Companion current 通道");
   return result as T;
 }
 
 export async function getCompanionPetStatus(): Promise<CompanionPetStatus> {
-  return invokeCompanionCommand<CompanionPetStatus>("companion_get_pet_status");
+  const result = await invokeCompanionCommand<unknown>(
+    "companion_get_pet_status",
+  );
+  if (!isCompanionPetStatus(result)) {
+    throw new Error("companion_get_pet_status did not return companion status");
+  }
+  return result;
 }
 
 export async function launchCompanionPet(
   request: CompanionLaunchPetRequest = {},
 ): Promise<CompanionLaunchPetResult> {
-  return invokeCompanionCommand<CompanionLaunchPetResult>(
-    "companion_launch_pet",
-    {
-      request,
-    },
-  );
+  const result = await invokeCompanionCommand<unknown>("companion_launch_pet", {
+    request,
+  });
+  if (!isCompanionLaunchPetResult(result)) {
+    throw new Error("companion_launch_pet did not return launch result");
+  }
+  return result;
 }
 
 export async function sendCompanionPetCommand<
@@ -107,12 +173,16 @@ export async function sendCompanionPetCommand<
 >(
   request: CompanionPetCommandRequest<TPayload>,
 ): Promise<CompanionPetSendResult> {
-  return invokeCompanionCommand<CompanionPetSendResult>(
+  const result = await invokeCompanionCommand<unknown>(
     "companion_send_pet_command",
     {
       request,
     },
   );
+  if (!isCompanionPetSendResult(result)) {
+    throw new Error("companion_send_pet_command did not return send result");
+  }
+  return result;
 }
 
 export async function listenCompanionPetStatus(

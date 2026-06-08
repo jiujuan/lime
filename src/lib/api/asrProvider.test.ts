@@ -111,6 +111,182 @@ describe("asrProvider API", () => {
     );
   });
 
+  it("ASR 写链、指令与录音命令遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      addAsrCredential({
+        provider: "openai",
+        is_default: true,
+        disabled: false,
+        language: "zh-CN",
+      }),
+    ).rejects.toThrow(
+      "add_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(
+      updateAsrCredential({
+        id: "cred-2",
+        provider: "openai",
+        is_default: true,
+        disabled: false,
+        language: "zh-CN",
+      }),
+    ).rejects.toThrow(
+      "update_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(deleteAsrCredential("cred-2")).rejects.toThrow(
+      "delete_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(setDefaultAsrCredential("cred-2")).rejects.toThrow(
+      "set_default_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(testAsrCredential("cred-2")).rejects.toThrow(
+      "test_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(getVoiceInstructions()).rejects.toThrow(
+      "get_voice_instructions 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(
+      saveVoiceInstruction({
+        id: "inst-2",
+        name: "润色",
+        prompt: "请优化",
+        is_preset: false,
+      }),
+    ).rejects.toThrow(
+      "save_voice_instruction 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(deleteVoiceInstruction("inst-2")).rejects.toThrow(
+      "delete_voice_instruction 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(
+      transcribeAudio(new Uint8Array([1, 2, 3]), 16000, "cred-1"),
+    ).rejects.toThrow(
+      "transcribe_audio 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(polishVoiceText("你好")).rejects.toThrow(
+      "polish_voice_text 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(outputVoiceText("hello", "type")).rejects.toThrow(
+      "output_voice_text 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(startRecording("default")).rejects.toThrow(
+      "start_recording 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(stopRecording()).rejects.toThrow(
+      "stop_recording 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(getRecordingSnapshot()).rejects.toThrow(
+      "get_recording_snapshot 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(getRecordingSegment(16000, 0.8)).rejects.toThrow(
+      "get_recording_segment 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(cancelRecording()).rejects.toThrow(
+      "cancel_recording 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(getRecordingStatus()).rejects.toThrow(
+      "get_recording_status 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("ASR 写链、转写与录音命令返回错误形态时不应吞成成功", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true });
+
+    await expect(
+      addAsrCredential({
+        provider: "openai",
+        is_default: true,
+        disabled: false,
+        language: "zh-CN",
+      }),
+    ).rejects.toThrow("add_asr_credential did not return an ASR credential");
+    await expect(
+      updateAsrCredential({
+        id: "cred-2",
+        provider: "openai",
+        is_default: true,
+        disabled: false,
+        language: "zh-CN",
+      }),
+    ).rejects.toThrow("update_asr_credential did not return an empty result");
+    await expect(deleteAsrCredential("cred-2")).rejects.toThrow(
+      "delete_asr_credential did not return an empty result",
+    );
+    await expect(setDefaultAsrCredential("cred-2")).rejects.toThrow(
+      "set_default_asr_credential did not return an empty result",
+    );
+    await expect(testAsrCredential("cred-2")).rejects.toThrow(
+      "test_asr_credential did not return a test result",
+    );
+    await expect(getVoiceInstructions()).rejects.toThrow(
+      "get_voice_instructions did not return an array",
+    );
+    await expect(
+      saveVoiceInstruction({
+        id: "inst-2",
+        name: "润色",
+        prompt: "请优化",
+        is_preset: false,
+      }),
+    ).rejects.toThrow(
+      "save_voice_instruction did not return an empty result",
+    );
+    await expect(deleteVoiceInstruction("inst-2")).rejects.toThrow(
+      "delete_voice_instruction did not return an empty result",
+    );
+    await expect(
+      transcribeAudio(new Uint8Array([1, 2, 3]), 16000, "cred-1"),
+    ).rejects.toThrow("transcribe_audio did not return a transcribe result");
+    await expect(polishVoiceText("你好")).rejects.toThrow(
+      "polish_voice_text did not return a polish result",
+    );
+    await expect(outputVoiceText("hello", "type")).rejects.toThrow(
+      "output_voice_text did not return an empty result",
+    );
+    await expect(startRecording("default")).rejects.toThrow(
+      "start_recording did not return an empty result",
+    );
+    await expect(stopRecording()).rejects.toThrow(
+      "stop_recording did not return an audio capture result",
+    );
+    await expect(getRecordingSnapshot()).rejects.toThrow(
+      "get_recording_snapshot did not return an audio capture result",
+    );
+    await expect(getRecordingSegment(16000, 0.8)).rejects.toThrow(
+      "get_recording_segment did not return an audio capture result",
+    );
+    await expect(cancelRecording()).rejects.toThrow(
+      "cancel_recording did not return an empty result",
+    );
+    await expect(getRecordingStatus()).rejects.toThrow(
+      "get_recording_status did not return a recording status",
+    );
+  });
+
   it("应通过 app config 读写语音输入配置", async () => {
     const config = {
       enabled: true,

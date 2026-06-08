@@ -338,6 +338,7 @@ export interface LifecycleDeclaration {
 export interface AgentAppPresentation {
   icon?: string;
   iconUrl?: string;
+  logo?: string;
   logoUrl?: string;
   category?: string;
   title?: string;
@@ -526,6 +527,7 @@ export interface CloudBootstrapApp {
   version: string;
   icon?: string;
   iconUrl?: string;
+  logo?: string;
   logoUrl?: string;
   presentation?: AgentAppPresentation;
   releaseId?: string;

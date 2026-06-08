@@ -35,13 +35,18 @@ async function requestSkillExecutionAppServer<T>(
 async function invokeSkillExecutionCommand<T>(
   command: string,
   args: Record<string, unknown>,
+  validate: (
+    command: string,
+    value: unknown,
+  ) => asserts value is T,
 ): Promise<T> {
-  const result = await safeInvoke<T>(command, args);
+  const result = await safeInvoke<unknown>(command, args);
   assertNotDiagnosticFacade(
     command,
     result,
     "真实 Skill execution current 通道",
   );
+  validate(command, result);
   return result;
 }
 
@@ -159,6 +164,34 @@ export interface SkillExecutionResult {
   error?: string;
   /** 已完成的步骤结果 */
   steps_completed: StepResult[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertSkillExecutionResult(
+  command: string,
+  value: unknown,
+): asserts value is SkillExecutionResult {
+  if (
+    !isRecord(value) ||
+    typeof value.success !== "boolean" ||
+    !Array.isArray(value.steps_completed)
+  ) {
+    throw new Error(`${command} did not return a skill execution result`);
+  }
+
+  for (const step of value.steps_completed) {
+    if (
+      !isRecord(step) ||
+      typeof step.step_id !== "string" ||
+      typeof step.step_name !== "string" ||
+      typeof step.success !== "boolean"
+    ) {
+      throw new Error(`${command} did not return valid skill execution steps`);
+    }
+  }
 }
 
 /**
@@ -302,6 +335,7 @@ export const skillExecutionApi = {
     return invokeSkillExecutionCommand(
       "execute_skill",
       request as unknown as Record<string, unknown>,
+      assertSkillExecutionResult,
     );
   },
 

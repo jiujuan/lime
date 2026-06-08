@@ -82,7 +82,7 @@ describe("managed-objective-automation-smoke-support", () => {
       managed_objective: {
         completion_audit: "artifact_or_evidence_required",
         continuation_policy: {
-          dispatch: "agent_runtime_submit_turn",
+          dispatch: "agentSession/turn/start",
         },
       },
     });
@@ -189,7 +189,7 @@ describe("managed-objective-automation-smoke-support", () => {
             owner_id: "job-1",
             completion_audit: "artifact_or_evidence_required",
             continuation_policy: {
-              dispatch: "agent_runtime_submit_turn",
+              dispatch: "agentSession/turn/start",
             },
           },
         },
@@ -279,7 +279,7 @@ describe("managed-objective-automation-smoke-support", () => {
             owner_id: "job-1",
             completion_audit: "artifact_or_evidence_required",
             continuation_policy: {
-              dispatch: "agent_runtime_submit_turn",
+              dispatch: "agentSession/turn/start",
             },
           },
         },

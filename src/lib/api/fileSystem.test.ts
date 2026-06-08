@@ -91,6 +91,57 @@ describe("fileSystem API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("get_home_dir");
   });
 
+  it("文件壳命令遇到 Electron diagnostic facade 时应 fail closed", async () => {
+    const diagnosticResult = {
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "reveal_in_finder",
+        status: "degraded",
+      },
+    };
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticResult);
+    await expect(revealPathInFinder("/tmp/demo.txt")).rejects.toThrow(
+      "reveal_in_finder 尚未接入真实文件壳 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      ...diagnosticResult,
+      diagnostic: {
+        ...diagnosticResult.diagnostic,
+        command: "open_with_default_app",
+      },
+    });
+    await expect(openPathWithDefaultApp("/tmp/demo.txt")).rejects.toThrow(
+      "open_with_default_app 尚未接入真实文件壳 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      ...diagnosticResult,
+      diagnostic: {
+        ...diagnosticResult.diagnostic,
+        command: "get_home_dir",
+      },
+    });
+    await expect(getHomeDirectory()).rejects.toThrow(
+      "get_home_dir 尚未接入真实文件壳 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("get_home_dir 返回非空字符串以外的形态时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ home: "/Users/demo" });
+
+    await expect(getHomeDirectory()).rejects.toThrow(
+      "get_home_dir did not return a home directory",
+    );
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce("   ");
+
+    await expect(getHomeDirectory()).rejects.toThrow(
+      "get_home_dir did not return a home directory",
+    );
+  });
+
   it("应代理 convertFileSrc", () => {
     vi.mocked(convertFileSrc).mockReturnValueOnce("asset://demo.txt");
 

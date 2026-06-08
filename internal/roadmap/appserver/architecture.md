@@ -1,7 +1,7 @@
 # App Server 架构蓝图
 
 > 状态：current planning source
-> 更新时间：2026-06-06
+> 更新时间：2026-06-08
 > 作用：定义 App Server 的分层、进程边界、服务抽象、事实源和替换路线。
 
 ## 1. 架构目标
@@ -28,7 +28,7 @@ flowchart TB
     subgraph HostBridge["Desktop Host Bridge / Clients"]
         LimeElectronBridge["Lime Electron Desktop Host Bridge<br/>current"]
         ContentStudioBridge["content-studio Desktop Host bridge<br/>App Server client"]
-        LegacyFacade["Legacy Desktop Facade<br/>compat / deprecated"]
+        LegacyFacade["Legacy Desktop Facade<br/>compat cleanup"]
         GenericClient["Generic TS / Rust Client"]
     end
 
@@ -108,6 +108,8 @@ flowchart TB
 | RuntimeCore Facade | session、turn、action、capability、artifact、evidence 的统一服务门面 | 具体桌面壳实现、具体后端私有循环 |
 | ExecutionBackend | Aster / 未来执行引擎的 runtime 下游适配 | 公共 facts、App 生命周期、Desktop Host bridge |
 | Runtime Services | Tool、Skill、Workspace、Memory、Policy、Artifact、Evidence | App UI 投影 |
+
+Rust 实现落点必须跟随这张分层表。`lime-rs/src/commands/**` 是旧 Tauri command wrapper 清理区，不属于 RuntimeCore、ExecutionBackend 或 Runtime Services 的新实现目录；它只允许删除旧 wrapper、迁出逻辑、或把迁移期 legacy desktop facade 收窄成带退出条件的薄委托。新增后端能力进入 App Server crates / RuntimeCore / services；桌面壳能力进入 Electron Desktop Host。
 
 ## 4. 事实流
 
@@ -216,11 +218,12 @@ target:
 迁移原则：
 
 1. 先抽 service，后改 legacy facade。
-2. legacy command 保留原命令名和兼容合同，内部只委托。
+2. legacy command 如仍保留原命令名和兼容合同，内部只能委托 current 主链，并写清退出条件。
 3. App Server 与 legacy facade 共享 RuntimeCore，不共享壳层对象。
 4. Aster 逻辑先收进 `AsterBackend`，不要上浮成公共协议。
 5. 新能力只加到 core / backend / protocol，不再加到 legacy command glue。
 6. backend mode 由 runtime factory 声明；standalone binary 默认 `mock`，legacy desktop facade 如保留只负责注入 `AsterBackendHost`。
+7. 新实现不得落到 `lime-rs/src/commands/**`；发现旧 wrapper 阻碍 current 主链时，优先迁出或删除，而不是新增 compat 包装。
 
 ## 8. 独立 App 集成边界
 

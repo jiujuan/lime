@@ -18,6 +18,12 @@ interface MainWindowStartupHtmlOptions {
   subtitle?: string;
 }
 
+const FALLBACK_STARTUP_LOGO_SVG = `<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#064E3B"/><stop offset="35%" stop-color="#10B981"/><stop offset="70%" stop-color="#84CC16"/><stop offset="100%" stop-color="#D9F99D"/></linearGradient><linearGradient id="starGrad" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#22C55E"/><stop offset="100%" stop-color="#ECFCCB"/></linearGradient><filter id="macOSVolume" x="-15%" y="-15%" width="130%" height="130%"><feOffset dx="2" dy="2" in="SourceAlpha" result="lightOffset"/><feComposite operator="out" in="SourceAlpha" in2="lightOffset" result="lightEdge"/><feFlood flood-color="#ffffff" flood-opacity="0.6" result="lightColor"/><feComposite operator="in" in="lightColor" in2="lightEdge" result="lightRim"/><feOffset dx="-3" dy="-3" in="SourceAlpha" result="darkOffset"/><feComposite operator="out" in="SourceAlpha" in2="darkOffset" result="darkEdge"/><feFlood flood-color="#022C22" flood-opacity="0.5" result="darkColor"/><feComposite operator="in" in="darkColor" in2="darkEdge" result="darkRim"/><feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#022C22" flood-opacity="0.15" in="SourceGraphic" result="shadowedGraphic"/><feMerge><feMergeNode in="shadowedGraphic"/><feMergeNode in="lightRim"/><feMergeNode in="darkRim"/></feMerge></filter><mask id="ringMask"><rect width="512" height="512" fill="white"/><line x1="256" y1="256" x2="-20" y2="256" stroke="black" stroke-width="14"/><line x1="256" y1="256" x2="-20" y2="532" stroke="black" stroke-width="14"/><line x1="256" y1="256" x2="256" y2="532" stroke="black" stroke-width="14"/></mask></defs><g filter="url(#macOSVolume)"><g mask="url(#ringMask)"><path d="M 256 56 A 200 200 0 0 0 56 256 A 200 200 0 0 0 256 456 A 200 200 0 0 0 456 256 L 336 256 A 80 80 0 0 1 256 336 A 80 80 0 0 1 176 256 A 80 80 0 0 1 256 176 Z" fill="url(#ringGrad)"/></g><path d="M 256 220 Q 256 256 292 256 Q 256 256 256 292 Q 256 256 220 256 Q 256 256 256 220 Z" fill="#10B981"/><path d="M 356 92 Q 356 156 420 156 Q 356 156 356 220 Q 356 156 292 156 Q 356 156 356 92 Z" fill="url(#starGrad)"/><circle cx="436" cy="62" r="10" fill="#D9F99D"/><circle cx="456" cy="100" r="5" fill="#84CC16"/></g></svg>`;
+
+const FALLBACK_STARTUP_LOGO_DATA_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  FALLBACK_STARTUP_LOGO_SVG,
+)}`;
+
 const MAIN_WINDOW_STARTUP_COPY = {
   "zh-CN": {
     slogan: "青柠一下，灵感即来",
@@ -60,9 +66,8 @@ export function buildMainWindowStartupHtml({
   const escapedAppName = escapeHtml(appName);
   const escapedSlogan = escapeHtml(slogan ?? copy.slogan);
   const escapedSubtitle = escapeHtml(subtitle ?? copy.subtitle);
-  const logoMarkup = iconDataUrl
-    ? `<img class="startup-logo" src="${escapeHtml(iconDataUrl)}" alt="${escapedAppName}" data-lime-startup-logo />`
-    : `<div class="startup-logo startup-logo-fallback" aria-label="${escapedAppName}" data-lime-startup-logo>${escapedAppName.slice(0, 1)}</div>`;
+  const startupLogoSrc = resolveStartupLogoDataUrl(iconDataUrl);
+  const logoMarkup = `<img class="startup-logo" src="${escapeHtml(startupLogoSrc)}" alt="${escapedAppName}" data-lime-startup-logo />`;
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -175,16 +180,6 @@ export function buildMainWindowStartupHtml({
         object-fit: contain;
         animation: startup-logo-float 4.2s ease-in-out infinite;
         filter: drop-shadow(0 28px 44px rgba(15, 23, 42, 0.16));
-      }
-
-      .startup-logo-fallback {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #13bf73;
-        color: #ffffff;
-        font-size: 96px;
-        font-weight: 700;
       }
 
       .startup-copy {
@@ -421,6 +416,11 @@ export function resolveMainWindowStartupCopy(locale?: string): {
 
 export function buildMainWindowStartupDataUrl(html: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+export function resolveStartupLogoDataUrl(iconDataUrl?: string | null): string {
+  const normalizedIconDataUrl = iconDataUrl?.trim();
+  return normalizedIconDataUrl || FALLBACK_STARTUP_LOGO_DATA_URL;
 }
 
 export function buildMainWindowChromeOptions(

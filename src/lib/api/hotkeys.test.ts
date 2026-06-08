@@ -88,4 +88,26 @@ describe("hotkeys API", () => {
       shortcutStr: "CommandOrControl+Shift+V",
     });
   });
+
+  it("通用快捷键校验遇到 Electron degraded 诊断返回时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "validate_shortcut",
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+      },
+    });
+
+    await expect(validateShortcut("CommandOrControl+Shift+V")).rejects.toThrow(
+      "validate_shortcut 尚未接入真实快捷键校验 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("通用快捷键校验收到非 boolean 返回时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(validateShortcut("CommandOrControl+Shift+V")).rejects.toThrow(
+      "validate_shortcut did not return a boolean",
+    );
+  });
 });

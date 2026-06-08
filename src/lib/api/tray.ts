@@ -31,7 +31,7 @@ export interface SyncTrayModelShortcutsPayload {
 export async function syncTrayModelShortcuts(
   payload: SyncTrayModelShortcutsPayload,
 ): Promise<void> {
-  const result = await safeInvoke("sync_tray_model_shortcuts", {
+  const result = await safeInvoke<unknown>("sync_tray_model_shortcuts", {
     currentModelProviderType: payload.current_model_provider_type,
     currentModelProviderLabel: payload.current_model_provider_label,
     currentModel: payload.current_model,
@@ -43,6 +43,11 @@ export async function syncTrayModelShortcuts(
     result,
     "真实托盘 current 通道",
   );
+  if (result !== null && result !== undefined) {
+    throw new Error(
+      "sync_tray_model_shortcuts did not return tray sync result",
+    );
+  }
 }
 
 export const trayApi = {

@@ -672,8 +672,6 @@ describe("http-client", () => {
       resolveBridgeRequestTimeoutMs("agent_app_get_ui_runtime_status"),
     ).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("gateway_channel_status")).toBe(5000);
-    expect(resolveBridgeRequestTimeoutMs("list_executable_skills")).toBe(5000);
-    expect(resolveBridgeRequestTimeoutMs("get_skill_detail")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("execute_skill")).toBe(300000);
     expect(
       resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
@@ -797,7 +795,7 @@ describe("http-client", () => {
     });
   });
 
-  it("Knowledge Pack 整理命令应保留 Builder Skill 长请求窗口", async () => {
+  it("App Server Knowledge Pack 整理应保留 Builder Skill 长请求窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(electronHostHealthResponse())
@@ -805,10 +803,18 @@ describe("http-client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     let settled = false;
-    const invokePromise = invokeViaHttp("knowledge_compile_pack", {
+    const invokePromise = invokeViaHttp("app_server_handle_json_lines", {
       request: {
-        workingDir: "/tmp/lime-knowledge-smoke",
-        name: "content-ops-acceptance",
+        lines: [
+          JSON.stringify({
+            id: "knowledge-compile",
+            method: "knowledgePack/compile",
+            params: {
+              workingDir: "/tmp/lime-knowledge-smoke",
+              name: "content-ops-acceptance",
+            },
+          }),
+        ],
       },
     }).then(
       () => ({ ok: true as const }),

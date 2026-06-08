@@ -13,7 +13,6 @@ import {
   normalizeSubagentSessionInfo,
   normalizeThreadReadModel,
 } from "./normalizers";
-import type { AgentRuntimeCommandInvoke } from "./transport";
 import type {
   AsterExecutionStrategy,
   AsterSessionDetail,
@@ -41,7 +40,6 @@ function isTransientSessionReadError(error: unknown): boolean {
 }
 
 export interface AgentRuntimeSessionClientDeps {
-  invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AppServerSessionRpcClient;
   appServerSessionClient?: AppServerSessionClient;
 }

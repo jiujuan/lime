@@ -106,6 +106,29 @@ describe("materials API", () => {
     });
   });
 
+  it("getMaterialCount 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "get_material_count",
+        reason: "not-supported",
+      },
+    });
+
+    await expect(getMaterialCount("project-2")).rejects.toThrow(
+      "get_material_count 尚未接入真实 Materials current 通道",
+    );
+  });
+
+  it("getMaterialCount 遇到非数字返回时不应伪装成 0", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      count: 0,
+    });
+
+    await expect(getMaterialCount("project-2")).rejects.toThrow(
+      "get_material_count did not return a number",
+    );
+  });
+
   it("uploadMaterial 应发送兼容字段并规范化返回值", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       id: "m2",
@@ -141,6 +164,24 @@ describe("materials API", () => {
     });
   });
 
+  it("uploadMaterial 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "upload_material",
+        reason: "not-supported",
+      },
+    });
+
+    await expect(
+      uploadMaterial({
+        projectId: "project-3",
+        name: "upload.png",
+        type: "image",
+        filePath: "/tmp/upload.png",
+      }),
+    ).rejects.toThrow("upload_material 尚未接入真实 Materials current 通道");
+  });
+
   it("importMaterialFromUrl 应统一走网关请求格式", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({ id: "m3" });
 
@@ -161,6 +202,26 @@ describe("materials API", () => {
         url: "https://example.com/demo.png",
       }),
     });
+  });
+
+  it("importMaterialFromUrl 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        command: "import_material_from_url",
+        reason: "not-supported",
+      },
+    });
+
+    await expect(
+      importMaterialFromUrl({
+        projectId: "project-4",
+        name: "remote-image",
+        type: "image",
+        url: "https://example.com/demo.png",
+      }),
+    ).rejects.toThrow(
+      "import_material_from_url 尚未接入真实 Materials current 通道",
+    );
   });
 
   it("updateMaterial / deleteMaterial / getMaterialContent 应代理到对应命令", async () => {
@@ -193,5 +254,37 @@ describe("materials API", () => {
     expect(safeInvoke).toHaveBeenNthCalledWith(3, "get_material_content", {
       id: "m4",
     });
+  });
+
+  it("updateMaterial / deleteMaterial / getMaterialContent 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        diagnostic: {
+          command: "update_material",
+          reason: "not-supported",
+        },
+      })
+      .mockResolvedValueOnce({
+        diagnostic: {
+          command: "delete_material",
+          reason: "not-supported",
+        },
+      })
+      .mockResolvedValueOnce({
+        diagnostic: {
+          command: "get_material_content",
+          reason: "not-supported",
+        },
+      });
+
+    await expect(updateMaterial("m4", { name: "new-name" })).rejects.toThrow(
+      "update_material 尚未接入真实 Materials current 通道",
+    );
+    await expect(deleteMaterial("m4")).rejects.toThrow(
+      "delete_material 尚未接入真实 Materials current 通道",
+    );
+    await expect(getMaterialContent("m4")).rejects.toThrow(
+      "get_material_content 尚未接入真实 Materials current 通道",
+    );
   });
 });

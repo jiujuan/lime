@@ -286,7 +286,6 @@ pub fn run() {
         .manage(webview_manager_state)
         .manage(chrome_profile_manager_state)
         .manage(update_check_service_state)
-        .manage(commands::update_cmd::UpdateInstallSessionState::default())
         .manage(session_files_state)
         .manage(context_memory_service)
         .manage(recording_service)
@@ -856,17 +855,6 @@ pub fn run() {
                 }
             });
 
-            // 启动后台更新检查任务
-            let app_handle_for_update = app.handle().clone();
-            let update_service_for_task = update_check_service_clone.clone();
-            tauri::async_runtime::spawn(async move {
-                crate::commands::update_cmd::start_background_update_check(
-                    app_handle_for_update,
-                    update_service_for_task,
-                ).await;
-            });
-            tracing::info!("[启动] 后台更新检查任务已启动");
-
             // 启动会话文件清理任务（清理 30 天前的过期会话）
             tauri::async_runtime::spawn(async move {
                 // 延迟 10 秒执行，避免影响启动性能
@@ -1178,7 +1166,6 @@ pub fn run() {
             commands::capability_draft_cmd::capability_draft_get,
             commands::capability_draft_cmd::capability_draft_verify,
             commands::capability_draft_cmd::capability_draft_register,
-            commands::capability_draft_cmd::capability_draft_list_registered_skills,
             commands::capability_draft_cmd::capability_draft_submit_approval_session_inputs,
             commands::capability_draft_cmd::capability_draft_execute_controlled_get,
             // Agent App commands
@@ -1200,22 +1187,11 @@ pub fn run() {
             commands::agent_app_runtime_cmd::host_response::agent_app_runtime_submit_host_response,
             // Skill Execution commands
             commands::skill_exec_cmd::execute_skill,
-            commands::skill_exec_cmd::list_executable_skills,
-            commands::skill_exec_cmd::get_skill_detail,
             // Execution run commands
             commands::execution_run_cmd::execution_run_list,
             commands::execution_run_cmd::execution_run_get,
             commands::execution_run_cmd::execution_run_get_general_workbench_state,
             commands::execution_run_cmd::execution_run_list_general_workbench_history,
-            // Agent Knowledge commands
-            commands::knowledge_cmd::knowledge_import_source,
-            commands::knowledge_cmd::knowledge_compile_pack,
-            commands::knowledge_cmd::knowledge_list_packs,
-            commands::knowledge_cmd::knowledge_get_pack,
-            commands::knowledge_cmd::knowledge_set_default_pack,
-            commands::knowledge_cmd::knowledge_update_pack_status,
-            commands::knowledge_cmd::knowledge_resolve_context,
-            commands::knowledge_cmd::knowledge_validate_context_run,
             // Ecommerce Review Reply commands
             commands::ecommerce_review_reply_cmd::execute_ecommerce_review_reply,
             commands::browser_runtime_cmd::open_browser_runtime_debugger_window,
@@ -1290,8 +1266,6 @@ pub fn run() {
             commands::aster_agent_cmd::command_api::provider_api::aster_agent_status,
             commands::aster_agent_cmd::command_api::provider_api::aster_agent_reset,
             commands::aster_agent_cmd::command_api::provider_api::aster_agent_configure_provider,
-            commands::aster_agent_cmd::app_server_host::app_server_handle_json_lines,
-            commands::aster_agent_cmd::app_server_host::app_server_drain_events,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_submit_turn,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_interrupt_turn,
             commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_compact_session,
@@ -1395,10 +1369,6 @@ pub fn run() {
             crate::services::sysinfo_service::subscribe_sysinfo,
             crate::services::sysinfo_service::unsubscribe_sysinfo,
             // File browser commands
-            crate::services::file_browser_service::create_file,
-            crate::services::file_browser_service::create_directory,
-            crate::services::file_browser_service::delete_file,
-            crate::services::file_browser_service::rename_file,
             crate::services::file_browser_service::get_file_name,
             // Webview commands
             commands::webview_cmd::create_webview_panel,
@@ -1434,22 +1404,6 @@ pub fn run() {
             commands::experimental_cmd::get_experimental_config,
             commands::experimental_cmd::save_experimental_config,
             commands::hotkey_cmd::validate_shortcut,
-            // Update Check commands
-            commands::update_cmd::check_update,
-            commands::update_cmd::check_for_updates,
-            commands::update_cmd::start_update_install_session,
-            commands::update_cmd::get_update_install_session,
-            commands::update_cmd::download_update,
-            commands::update_cmd::get_update_check_settings,
-            commands::update_cmd::set_update_check_settings,
-            commands::update_cmd::get_update_notification_metrics,
-            commands::update_cmd::record_update_notification_action,
-            commands::update_cmd::skip_update_version,
-            commands::update_cmd::remind_update_later,
-            commands::update_cmd::dismiss_update_notification,
-            commands::update_cmd::update_last_check_timestamp,
-            commands::update_cmd::close_update_window,
-            commands::update_cmd::test_update_window,
             // Session Files commands
             commands::session_files_cmd::session_files_create,
             commands::session_files_cmd::session_files_exists,
@@ -1493,15 +1447,6 @@ pub fn run() {
             commands::workspace_cmd::get_project_context,
             commands::workspace_cmd::build_project_system_prompt,
             // Persona commands
-            commands::persona_cmd::create_persona,
-            commands::persona_cmd::list_personas,
-            commands::persona_cmd::get_persona,
-            commands::persona_cmd::update_persona,
-            commands::persona_cmd::delete_persona,
-            commands::persona_cmd::set_default_persona,
-            commands::persona_cmd::list_persona_templates,
-            commands::persona_cmd::get_default_persona,
-            commands::persona_cmd::generate_persona,
             // Material commands
             commands::material_cmd::upload_material,
             commands::material_cmd::import_material_from_url,
@@ -1566,10 +1511,6 @@ pub fn run() {
             commands::memory_cmd::outline_node_update,
             commands::memory_cmd::outline_node_delete,
             commands::memory_cmd::project_memory_get,
-            // Usage Stats commands
-            commands::usage_stats_cmd::get_usage_stats,
-            commands::usage_stats_cmd::get_model_usage_ranking,
-            commands::usage_stats_cmd::get_daily_usage_trends,
             // Memory Management commands
             commands::memory_management_cmd::memory_runtime_get_stats,
             commands::memory_management_cmd::memory_runtime_get_overview,
@@ -1603,8 +1544,6 @@ pub fn run() {
             commands::voice_test_cmd::test_tts,
             commands::voice_test_cmd::get_available_voices,
             // File Upload commands
-            commands::file_upload_cmd::upload_avatar,
-            commands::file_upload_cmd::delete_avatar,
             // ASR commands
             commands::asr_cmd::get_asr_credentials,
             commands::asr_cmd::add_asr_credential,

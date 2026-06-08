@@ -42,8 +42,22 @@ use app_server_protocol::ConnectOpenDeepLinkResolveResponse;
 use app_server_protocol::ConnectPayload;
 use app_server_protocol::ConnectRelayApiKeySaveParams;
 use app_server_protocol::ConnectRelayApiKeySaveResponse;
+use app_server_protocol::KnowledgeCompilePackResponse;
+use app_server_protocol::KnowledgeContextResolutionResponse;
+use app_server_protocol::KnowledgeImportSourceParams;
+use app_server_protocol::KnowledgeImportSourceResponse;
 use app_server_protocol::KnowledgeListPacksParams;
 use app_server_protocol::KnowledgeListPacksResponse;
+use app_server_protocol::KnowledgeReadPackParams;
+use app_server_protocol::KnowledgeReadPackResponse;
+use app_server_protocol::KnowledgeResolveContextPackParams;
+use app_server_protocol::KnowledgeResolveContextParams;
+use app_server_protocol::KnowledgeSetDefaultPackParams;
+use app_server_protocol::KnowledgeSetDefaultPackResponse;
+use app_server_protocol::KnowledgeUpdatePackStatusParams;
+use app_server_protocol::KnowledgeUpdatePackStatusResponse;
+use app_server_protocol::KnowledgeValidateContextRunParams;
+use app_server_protocol::KnowledgeValidateContextRunResponse;
 use app_server_protocol::McpPromptListResponse;
 use app_server_protocol::McpResourceListResponse;
 use app_server_protocol::McpServerListResponse;
@@ -94,6 +108,13 @@ use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::SkillListResponse;
 use app_server_protocol::SkillReadParams;
 use app_server_protocol::SkillReadResponse;
+use app_server_protocol::UsageStatsDailyTrendsListResponse;
+use app_server_protocol::UsageStatsDailyUsage;
+use app_server_protocol::UsageStatsModelRankingListResponse;
+use app_server_protocol::UsageStatsModelUsage;
+use app_server_protocol::UsageStatsRangeParams;
+use app_server_protocol::UsageStatsReadResponse;
+use app_server_protocol::UsageStatsSummary;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspaceEnsureReadyResponse;
 use app_server_protocol::WorkspaceListResponse;
@@ -143,6 +164,7 @@ use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::mcp_service::McpService;
 use lime_services::model_registry_service::FetchModelsResult;
 use lime_services::model_registry_service::ModelRegistryService;
+use lime_services::usage_statistics_service;
 use lime_skills::find_skill_by_name;
 use lime_skills::get_skill_roots;
 use lime_skills::load_skill_from_file;
@@ -534,6 +556,156 @@ impl AppDataSource for LocalAppDataSource {
         })
     }
 
+    async fn read_knowledge_pack(
+        &self,
+        params: KnowledgeReadPackParams,
+    ) -> Result<KnowledgeReadPackResponse, RuntimeCoreError> {
+        let pack = lime_knowledge::get_knowledge_pack(lime_knowledge::KnowledgeGetPackRequest {
+            working_dir: params.working_dir,
+            name: params.name,
+        })
+        .map_err(data_error)?;
+
+        Ok(KnowledgeReadPackResponse {
+            pack: value_from_serializable(pack)?,
+        })
+    }
+
+    async fn import_knowledge_source(
+        &self,
+        params: KnowledgeImportSourceParams,
+    ) -> Result<KnowledgeImportSourceResponse, RuntimeCoreError> {
+        let response =
+            lime_knowledge::import_knowledge_source(lime_knowledge::KnowledgeImportSourceRequest {
+                working_dir: params.working_dir,
+                pack_name: params.pack_name,
+                description: params.description,
+                pack_type: params.pack_type,
+                language: params.language,
+                source_file_name: params.source_file_name,
+                source_text: params.source_text,
+            })
+            .map_err(data_error)?;
+
+        Ok(KnowledgeImportSourceResponse {
+            pack: value_from_serializable(response.pack)?,
+            source: value_from_serializable(response.source)?,
+        })
+    }
+
+    async fn compile_knowledge_pack(
+        &self,
+        request: lime_knowledge::KnowledgeCompilePackRequest,
+    ) -> Result<KnowledgeCompilePackResponse, RuntimeCoreError> {
+        let response = lime_knowledge::compile_knowledge_pack(request).map_err(data_error)?;
+
+        Ok(KnowledgeCompilePackResponse {
+            pack: value_from_serializable(response.pack)?,
+            selected_source_count: response.selected_source_count,
+            compiled_view: value_from_serializable(response.compiled_view)?,
+            run: value_from_serializable(response.run)?,
+            warnings: response.warnings,
+        })
+    }
+
+    async fn set_default_knowledge_pack(
+        &self,
+        params: KnowledgeSetDefaultPackParams,
+    ) -> Result<KnowledgeSetDefaultPackResponse, RuntimeCoreError> {
+        let response = lime_knowledge::set_default_knowledge_pack(
+            lime_knowledge::KnowledgeSetDefaultPackRequest {
+                working_dir: params.working_dir,
+                name: params.name,
+            },
+        )
+        .map_err(data_error)?;
+
+        Ok(KnowledgeSetDefaultPackResponse {
+            default_pack_name: response.default_pack_name,
+            default_marker_path: response.default_marker_path,
+        })
+    }
+
+    async fn update_knowledge_pack_status(
+        &self,
+        params: KnowledgeUpdatePackStatusParams,
+    ) -> Result<KnowledgeUpdatePackStatusResponse, RuntimeCoreError> {
+        let response = lime_knowledge::update_knowledge_pack_status(
+            lime_knowledge::KnowledgeUpdatePackStatusRequest {
+                working_dir: params.working_dir,
+                name: params.name,
+                status: params.status,
+            },
+        )
+        .map_err(data_error)?;
+
+        Ok(KnowledgeUpdatePackStatusResponse {
+            pack: value_from_serializable(response.pack)?,
+            previous_status: response.previous_status,
+            cleared_default: response.cleared_default,
+        })
+    }
+
+    async fn resolve_knowledge_context(
+        &self,
+        params: KnowledgeResolveContextParams,
+    ) -> Result<KnowledgeContextResolutionResponse, RuntimeCoreError> {
+        let response = lime_knowledge::resolve_knowledge_context(
+            lime_knowledge::KnowledgeResolveContextRequest {
+                working_dir: params.working_dir,
+                name: params.name,
+                packs: params
+                    .packs
+                    .into_iter()
+                    .map(to_lime_knowledge_context_pack_request)
+                    .collect(),
+                task: params.task,
+                max_chars: params.max_chars,
+                activation: params.activation,
+                write_run: params.write_run,
+                run_reason: params.run_reason,
+            },
+        )
+        .map_err(data_error)?;
+
+        Ok(KnowledgeContextResolutionResponse {
+            pack_name: response.pack_name,
+            status: response.status,
+            grounding: response.grounding,
+            selected_views: values_from_serializable_vec(response.selected_views)?,
+            selected_files: response.selected_files,
+            source_anchors: response.source_anchors,
+            warnings: values_from_serializable_vec(response.warnings)?,
+            missing: response.missing,
+            token_estimate: response.token_estimate,
+            fenced_context: response.fenced_context,
+            run_id: response.run_id,
+            run_path: response.run_path,
+        })
+    }
+
+    async fn validate_knowledge_context_run(
+        &self,
+        params: KnowledgeValidateContextRunParams,
+    ) -> Result<KnowledgeValidateContextRunResponse, RuntimeCoreError> {
+        let response = lime_knowledge::validate_knowledge_context_run(
+            lime_knowledge::KnowledgeValidateContextRunRequest {
+                working_dir: params.working_dir,
+                name: params.name,
+                run_path: params.run_path,
+            },
+        )
+        .map_err(data_error)?;
+
+        Ok(KnowledgeValidateContextRunResponse {
+            valid: response.valid,
+            run_id: response.run_id,
+            status: response.status,
+            errors: response.errors,
+            warnings: response.warnings,
+        })
+    }
+
     async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError> {
         let conn = database::lock_db(&self.db).map_err(data_error)?;
         let jobs = AutomationJobDao::list(&conn).map_err(data_error)?;
@@ -846,6 +1018,66 @@ impl AppDataSource for LocalAppDataSource {
         Ok(ProjectMemoryReadResponse {
             memory: serde_json::to_value(memory).map_err(data_error)?,
         })
+    }
+
+    async fn read_usage_stats(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsReadResponse, RuntimeCoreError> {
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let stats = usage_statistics_service::get_usage_stats_from_db(&params.time_range, &conn)
+            .map_err(data_error)?;
+        Ok(UsageStatsReadResponse {
+            stats: UsageStatsSummary {
+                total_conversations: stats.total_conversations,
+                total_messages: stats.total_messages,
+                total_tokens: stats.total_tokens,
+                total_time_minutes: stats.total_time_minutes,
+                monthly_conversations: stats.monthly_conversations,
+                monthly_messages: stats.monthly_messages,
+                monthly_tokens: stats.monthly_tokens,
+                today_conversations: stats.today_conversations,
+                today_messages: stats.today_messages,
+                today_tokens: stats.today_tokens,
+            },
+        })
+    }
+
+    async fn list_usage_stats_model_ranking(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsModelRankingListResponse, RuntimeCoreError> {
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let ranking =
+            usage_statistics_service::get_model_usage_ranking_from_db(&params.time_range, &conn)
+                .map_err(data_error)?
+                .into_iter()
+                .map(|item| UsageStatsModelUsage {
+                    model: item.model,
+                    conversations: item.conversations,
+                    tokens: item.tokens,
+                    percentage: item.percentage,
+                })
+                .collect();
+        Ok(UsageStatsModelRankingListResponse { ranking })
+    }
+
+    async fn list_usage_stats_daily_trends(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsDailyTrendsListResponse, RuntimeCoreError> {
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let trends =
+            usage_statistics_service::get_daily_usage_trends_from_db(&params.time_range, &conn)
+                .map_err(data_error)?
+                .into_iter()
+                .map(|item| UsageStatsDailyUsage {
+                    date: item.date,
+                    conversations: item.conversations,
+                    tokens: item.tokens,
+                })
+                .collect();
+        Ok(UsageStatsDailyTrendsListResponse { trends })
     }
 
     async fn list_models(
@@ -2523,6 +2755,19 @@ fn values_from_serializable_vec<T: serde::Serialize>(
         .into_iter()
         .map(|value| serde_json::to_value(value).map_err(data_error))
         .collect()
+}
+
+fn value_from_serializable<T: serde::Serialize>(value: T) -> Result<Value, RuntimeCoreError> {
+    serde_json::to_value(value).map_err(data_error)
+}
+
+fn to_lime_knowledge_context_pack_request(
+    params: KnowledgeResolveContextPackParams,
+) -> lime_knowledge::KnowledgeResolveContextPackRequest {
+    lime_knowledge::KnowledgeResolveContextPackRequest {
+        name: params.name,
+        activation: params.activation,
+    }
 }
 
 async fn load_connect_registry_best_effort() -> Option<connect::RelayRegistry> {

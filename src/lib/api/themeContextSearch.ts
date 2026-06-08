@@ -204,6 +204,10 @@ export async function searchThemeContextWithAppServer(
     extractAssistantTextFromReadResponse(readResult.result, turnId) ||
     extractAssistantTextFromNotifications(turnResult.notifications, turnId);
 
+  if (!rawResponse) {
+    throw new Error("App Server 上下文搜索未返回 assistant 输出");
+  }
+
   return {
     rawResponse,
     attemptsSummary: extractAttemptsSummary(turnResult.notifications, turnId),

@@ -1,6 +1,43 @@
 import { describe, expect, it, vi } from "vitest";
 import { createInventoryClient } from "./inventoryClient";
 
+const emptyToolInventory = {
+  request: {
+    caller: "assistant",
+    surface: {
+      workbench: true,
+      browser_assist: false,
+    },
+  },
+  agent_initialized: true,
+  warnings: [],
+  mcp_servers: [],
+  default_allowed_tools: [],
+  counts: {
+    catalog_total: 0,
+    catalog_current_total: 0,
+    catalog_compat_total: 0,
+    catalog_deprecated_total: 0,
+    default_allowed_total: 0,
+    registry_total: 0,
+    registry_visible_total: 0,
+    registry_catalog_unmapped_total: 0,
+    extension_surface_total: 0,
+    extension_mcp_bridge_total: 0,
+    extension_runtime_total: 0,
+    extension_tool_total: 0,
+    extension_tool_visible_total: 0,
+    mcp_server_total: 0,
+    mcp_tool_total: 0,
+    mcp_tool_visible_total: 0,
+  },
+  catalog_tools: [],
+  registry_tools: [],
+  extension_surfaces: [],
+  extension_tools: [],
+  mcp_tools: [],
+};
+
 describe("agentRuntime inventoryClient", () => {
   it("workspace skill bindings 应通过 App Server JSON-RPC 获取 readiness", async () => {
     const appServerClient = {
@@ -74,42 +111,7 @@ describe("agentRuntime inventoryClient", () => {
   });
 
   it("tool inventory 暂保 compat command，避免用 capability/list 伪装完整库存", async () => {
-    const invokeCommand = vi.fn().mockResolvedValueOnce({
-      request: {
-        caller: "assistant",
-        surface: {
-          workbench: true,
-          browser_assist: false,
-        },
-      },
-      agent_initialized: true,
-      warnings: [],
-      mcp_servers: [],
-      default_allowed_tools: [],
-      counts: {
-        catalog_total: 0,
-        catalog_current_total: 0,
-        catalog_compat_total: 0,
-        catalog_deprecated_total: 0,
-        default_allowed_total: 0,
-        registry_total: 0,
-        registry_visible_total: 0,
-        registry_catalog_unmapped_total: 0,
-        extension_surface_total: 0,
-        extension_mcp_bridge_total: 0,
-        extension_runtime_total: 0,
-        extension_tool_total: 0,
-        extension_tool_visible_total: 0,
-        mcp_server_total: 0,
-        mcp_tool_total: 0,
-        mcp_tool_visible_total: 0,
-      },
-      catalog_tools: [],
-      registry_tools: [],
-      extension_surfaces: [],
-      extension_tools: [],
-      mcp_tools: [],
-    });
+    const invokeCommand = vi.fn().mockResolvedValueOnce(emptyToolInventory);
     const client = createInventoryClient({ invokeCommand });
 
     await expect(
@@ -132,6 +134,144 @@ describe("agentRuntime inventoryClient", () => {
           workbench: true,
         },
       },
+    );
+  });
+
+  it("tool inventory 应接受包含 runtime / extension / MCP 条目的真实库存", async () => {
+    const inventory = {
+      ...emptyToolInventory,
+      counts: {
+        ...emptyToolInventory.counts,
+        runtime_total: 1,
+        runtime_visible_total: 1,
+      },
+      catalog_tools: [
+        {
+          name: "site_run_adapter",
+          profiles: [],
+          capabilities: [],
+          lifecycle: "compat",
+          source: "runtime",
+          permission_plane: "workspace",
+          workspace_default_allow: false,
+          execution_warning_policy: "warn",
+          execution_warning_policy_source: "catalog",
+          execution_restriction_profile: "standard",
+          execution_restriction_profile_source: "catalog",
+          execution_sandbox_profile: "workspace-write",
+          execution_sandbox_profile_source: "catalog",
+        },
+      ],
+      registry_tools: [
+        {
+          name: "site_run_adapter",
+          description: "Run site adapter",
+          deferred_loading: false,
+          always_visible: false,
+          allowed_callers: ["assistant"],
+          tags: ["site"],
+          input_examples_count: 1,
+          caller_allowed: true,
+          visible_in_context: true,
+        },
+      ],
+      runtime_tools: [
+        {
+          name: "site_run_adapter",
+          description: "Run site adapter",
+          source_kind: "current_surface",
+          deferred_loading: false,
+          always_visible: false,
+          allowed_callers: ["assistant"],
+          tags: ["site"],
+          input_examples_count: 1,
+          caller_allowed: true,
+          visible_in_context: true,
+        },
+      ],
+      extension_surfaces: [
+        {
+          extension_name: "mcp",
+          description: "MCP bridge",
+          source_kind: "mcp_bridge",
+          deferred_loading: true,
+          available_tools: ["mcp.search"],
+          always_expose_tools: [],
+          loaded_tools: [],
+          searchable_tools: ["mcp.search"],
+        },
+      ],
+      extension_tools: [
+        {
+          name: "mcp.search",
+          description: "Search via MCP",
+          extension_name: "mcp",
+          source_kind: "mcp_bridge",
+          deferred_loading: true,
+          status: "available",
+          caller_allowed: true,
+          visible_in_context: true,
+        },
+      ],
+      mcp_tools: [
+        {
+          server_name: "docs",
+          name: "search",
+          description: "Search docs",
+          deferred_loading: false,
+          always_visible: false,
+          allowed_callers: ["assistant"],
+          tags: [],
+          input_examples_count: 0,
+          caller_allowed: true,
+          visible_in_context: true,
+        },
+      ],
+    };
+    const invokeCommand = vi.fn().mockResolvedValueOnce(inventory);
+    const client = createInventoryClient({ invokeCommand });
+
+    await expect(client.getAgentRuntimeToolInventory()).resolves.toEqual(
+      inventory,
+    );
+  });
+
+  it("tool inventory 收到错误返回形态时应 fail closed", async () => {
+    const invokeCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        ...emptyToolInventory,
+        counts: { catalog_total: 0 },
+      })
+      .mockResolvedValueOnce({
+        ...emptyToolInventory,
+        registry_tools: [{ name: "site_run_adapter" }],
+      })
+      .mockResolvedValueOnce({
+        ...emptyToolInventory,
+        runtime_tools: [{ name: "site_run_adapter" }],
+      })
+      .mockResolvedValueOnce({
+        ...emptyToolInventory,
+        mcp_tools: [{ name: "search" }],
+      });
+    const client = createInventoryClient({ invokeCommand });
+
+    await expect(client.getAgentRuntimeToolInventory()).rejects.toThrow(
+      "agent_runtime_get_tool_inventory did not return tool inventory",
+    );
+    await expect(client.getAgentRuntimeToolInventory()).rejects.toThrow(
+      "agent_runtime_get_tool_inventory did not return tool inventory",
+    );
+    await expect(client.getAgentRuntimeToolInventory()).rejects.toThrow(
+      "agent_runtime_get_tool_inventory did not return tool inventory",
+    );
+    await expect(client.getAgentRuntimeToolInventory()).rejects.toThrow(
+      "agent_runtime_get_tool_inventory did not return tool inventory",
+    );
+    await expect(client.getAgentRuntimeToolInventory()).rejects.toThrow(
+      "agent_runtime_get_tool_inventory did not return tool inventory",
     );
   });
 });

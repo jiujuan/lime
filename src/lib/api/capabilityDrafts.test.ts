@@ -88,12 +88,14 @@ describe("capabilityDraftsApi", () => {
     });
   });
 
-  it("列表接口应防御非数组返回，并归一化 camelCase 返回", async () => {
+  it("列表接口收到非数组返回时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({ not: "array" });
     await expect(
       capabilityDraftsApi.list({ workspaceRoot: "/tmp/work" }),
-    ).resolves.toEqual([]);
+    ).rejects.toThrow("capability_draft_list did not return drafts");
+  });
 
+  it("列表接口应归一化 camelCase 返回", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce([
       {
         draftId: "capdraft-2",

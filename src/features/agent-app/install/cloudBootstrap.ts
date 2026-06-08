@@ -447,6 +447,7 @@ function normalizeCloudBootstrapApp(
     version,
     icon: normalizeOptionalString(record.icon),
     iconUrl: normalizeOptionalString(record.iconUrl),
+    logo: normalizeOptionalString(record.logo),
     logoUrl: normalizeOptionalString(record.logoUrl),
     presentation: isRecord(record.presentation)
       ? record.presentation

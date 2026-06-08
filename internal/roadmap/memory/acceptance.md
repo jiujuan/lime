@@ -162,15 +162,16 @@
 5. 新前台 projection 不反向定义 runtime prompt。
 6. 开发者开关只控制展示 / 实验，不改变事实源地位。
 
-### 4.2 命令和 mock 同步
+### 4.2 命令边界和 mock 同步
 
-如果新增或修改 Tauri 命令，必须满足：
+如果新增或修改 Electron Desktop Host IPC / App Server JSON-RPC / legacy desktop facade 命令边界，必须满足：
 
 1. 前端 API 网关同步。
-2. Rust `generate_handler!` 同步。
+2. App Server protocol / runtime 或 Electron Host bridge 同步。
 3. `agentCommandCatalog` 同步。
-4. DevBridge mock / browser mock 同步。
+4. DevBridge mock / desktop-host mock 同步。
 5. `npm run test:contracts` 通过。
+6. 不得在 `lime-rs/src/commands/**` 新增业务逻辑；该目录只允许清理旧 wrapper 或保留带退出条件的薄兼容委托。
 
 ### 4.3 测试覆盖
 

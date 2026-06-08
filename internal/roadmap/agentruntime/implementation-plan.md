@@ -213,8 +213,8 @@
 
 ### 9.2 Contract 测试
 
-- Tauri command、frontend gateway、catalog、mock 与 profile control plane 映射一致。
-- `safeInvoke(...)` / Rust handler / command catalog / mocks 同步。
+- Electron Desktop Host / App Server / legacy facade、frontend gateway、catalog、mock 与 profile control plane 映射一致。
+- frontend gateway / App Server method / legacy facade handler / command catalog / mocks 同步。
 
 ### 9.3 Replay 测试
 
@@ -253,7 +253,7 @@
 
 - Rust 定向测试覆盖 Evidence / Replay / Analysis / Review Markdown locale。
 - `cargo check -p lime --lib` 不出现 presentation copy unused warning。
-- 未新增 Tauri command、前端 gateway、mock 或 request shape。
+- 未新增 legacy desktop facade、前端 gateway、mock 或 request shape；不得在 `lime-rs/src/commands/**` 新增业务逻辑。
 
 ## 12. 实施后的下一刀
 

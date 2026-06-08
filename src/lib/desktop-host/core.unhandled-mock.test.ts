@@ -33,6 +33,14 @@ describe("desktop-host/core 未注册 mock command", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
+  it("Companion 默认 mock 被清理后不再伪造状态成功", async () => {
+    await expect(invokeMockOnly("companion_get_pet_status")).rejects.toThrow(
+      '未注册命令 "companion_get_pet_status"',
+    );
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
   it("测试显式注册的 mock command 仍可使用", async () => {
     mockCommand("test_only_current_fixture", () => ({ ok: true }));
 

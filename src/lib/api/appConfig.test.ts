@@ -63,6 +63,96 @@ describe("appConfig API", () => {
     );
   });
 
+  it("读取配置遇到 diagnostic facade 或无效配置时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "get_config",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ default_provider: "" });
+
+    await expect(getConfig()).rejects.toThrow(
+      "get_config 尚未接入真实配置 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(getConfig()).rejects.toThrow("get_config 未返回有效配置");
+    await expect(getConfig()).rejects.toThrow("get_config 未返回有效配置");
+  });
+
+  it("默认 Provider 命令遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "get_default_provider",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "set_default_provider",
+          status: "degraded",
+        },
+      });
+
+    await expect(getDefaultProvider()).rejects.toThrow(
+      "get_default_provider 尚未接入真实默认 Provider current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(setDefaultProvider("gemini")).rejects.toThrow(
+      "set_default_provider 尚未接入真实默认 Provider current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("默认 Provider 命令应校验返回形态", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce("   ");
+
+    await expect(getDefaultProvider()).rejects.toThrow(
+      "get_default_provider 未返回有效默认 Provider",
+    );
+    await expect(setDefaultProvider("gemini")).rejects.toThrow(
+      "set_default_provider 未返回有效默认 Provider",
+    );
+    await expect(setDefaultProvider("gemini")).rejects.toThrow(
+      "set_default_provider 未返回有效默认 Provider",
+    );
+  });
+
+  it("写配置命令遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "save_config",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "update_provider_env_vars",
+          status: "degraded",
+        },
+      });
+
+    await expect(
+      saveConfig({ default_provider: "claude" } as never),
+    ).rejects.toThrow(
+      "save_config 尚未接入真实配置 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(
+      updateProviderEnvVars("openai", "https://example.com", "key"),
+    ).rejects.toThrow(
+      "update_provider_env_vars 尚未接入真实 Provider 环境变量 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
   it("应代理写配置命令", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce(undefined)

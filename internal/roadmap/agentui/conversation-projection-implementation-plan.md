@@ -79,7 +79,7 @@
 
 暂不改：
 
-1. Tauri command。
+1. Electron Desktop Host / App Server command gateway。
 2. agent runtime event protocol。
 3. Warp governance JSON。
 

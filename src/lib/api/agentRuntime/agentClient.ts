@@ -21,6 +21,67 @@ export interface GenerateAgentRuntimeTitleRequest {
 
 const LOCAL_TITLE_MAX_LENGTH = 32;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isOptionalFiniteNumber(
+  value: unknown,
+): value is number | undefined {
+  return (
+    value === undefined ||
+    (typeof value === "number" && Number.isFinite(value))
+  );
+}
+
+function isAgentProcessStatus(value: unknown): value is AgentProcessStatus {
+  return (
+    isRecord(value) &&
+    typeof value.running === "boolean" &&
+    isOptionalString(value.base_url) &&
+    isOptionalFiniteNumber(value.port)
+  );
+}
+
+function assertAgentProcessStatus(
+  command: string,
+  value: unknown,
+): asserts value is AgentProcessStatus {
+  if (!isAgentProcessStatus(value)) {
+    throw new Error(`${command} did not return agent process status`);
+  }
+}
+
+function assertVoidResult(command: string, value: unknown): void {
+  if (value !== undefined && value !== null) {
+    throw new Error(`${command} did not return void result`);
+  }
+}
+
+function isAsterAgentStatus(value: unknown): value is AsterAgentStatus {
+  return (
+    isRecord(value) &&
+    typeof value.initialized === "boolean" &&
+    typeof value.provider_configured === "boolean" &&
+    isOptionalString(value.provider_name) &&
+    isOptionalString(value.provider_selector) &&
+    isOptionalString(value.model_name)
+  );
+}
+
+function assertAsterAgentStatus(
+  command: string,
+  value: unknown,
+): asserts value is AsterAgentStatus {
+  if (!isAsterAgentStatus(value)) {
+    throw new Error(`${command} did not return Aster agent status`);
+  }
+}
+
 function stripPreviewRolePrefix(line: string): string {
   return line.replace(
     /^(?:user|assistant|system|human|用户|助手|系统)\s*[:：]\s*/i,
@@ -70,15 +131,23 @@ export function createAgentClient({
   bridgeInvoke = invokeAgentRuntimeBridge,
 }: AgentRuntimeAgentClientDeps = {}) {
   async function startAgentProcess(): Promise<AgentProcessStatus> {
-    return await bridgeInvoke("agent_start_process", {});
+    const command = "agent_start_process";
+    const result = await bridgeInvoke<unknown>(command, {});
+    assertAgentProcessStatus(command, result);
+    return result;
   }
 
   async function stopAgentProcess(): Promise<void> {
-    return await bridgeInvoke("agent_stop_process");
+    const command = "agent_stop_process";
+    const result = await bridgeInvoke<unknown>(command);
+    assertVoidResult(command, result);
   }
 
   async function getAgentProcessStatus(): Promise<AgentProcessStatus> {
-    return await bridgeInvoke("agent_get_process_status");
+    const command = "agent_get_process_status";
+    const result = await bridgeInvoke<unknown>(command);
+    assertAgentProcessStatus(command, result);
+    return result;
   }
 
   async function generateAgentRuntimeTitleResult(
@@ -114,21 +183,30 @@ export function createAgentClient({
   }
 
   async function initAsterAgent(): Promise<AsterAgentStatus> {
-    return await bridgeInvoke("aster_agent_init");
+    const command = "aster_agent_init";
+    const result = await bridgeInvoke<unknown>(command);
+    assertAsterAgentStatus(command, result);
+    return result;
   }
 
   async function getAsterAgentStatus(): Promise<AsterAgentStatus> {
-    return await bridgeInvoke("aster_agent_status");
+    const command = "aster_agent_status";
+    const result = await bridgeInvoke<unknown>(command);
+    assertAsterAgentStatus(command, result);
+    return result;
   }
 
   async function configureAsterProvider(
     config: AsterProviderConfig,
     sessionId: string,
   ): Promise<AsterAgentStatus> {
-    return await bridgeInvoke("aster_agent_configure_provider", {
+    const command = "aster_agent_configure_provider";
+    const result = await bridgeInvoke<unknown>(command, {
       request: config,
       session_id: sessionId,
     });
+    assertAsterAgentStatus(command, result);
+    return result;
   }
 
   return {

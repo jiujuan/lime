@@ -1,10 +1,22 @@
 import { AppServerClient } from "@/lib/api/appServer";
-import { safeInvoke } from "@/lib/dev-bridge";
 import {
+  METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
+  METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
+  METHOD_KNOWLEDGE_PACK_COMPILE,
+  METHOD_KNOWLEDGE_PACK_DEFAULT_SET,
   METHOD_KNOWLEDGE_PACK_LIST,
+  METHOD_KNOWLEDGE_PACK_READ,
+  METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+  METHOD_KNOWLEDGE_SOURCE_IMPORT,
+  type KnowledgeCompilePackResponse as AppServerKnowledgeCompilePackResponse,
+  type KnowledgeContextResolutionResponse as AppServerKnowledgeContextResolutionResponse,
+  type KnowledgeImportSourceResponse as AppServerKnowledgeImportSourceResponse,
   type KnowledgeListPacksResponse as AppServerKnowledgeListPacksResponse,
+  type KnowledgeReadPackResponse as AppServerKnowledgeReadPackResponse,
+  type KnowledgeSetDefaultPackResponse as AppServerKnowledgeSetDefaultPackResponse,
+  type KnowledgeUpdatePackStatusResponse as AppServerKnowledgeUpdatePackStatusResponse,
+  type KnowledgeValidateContextRunResponse as AppServerKnowledgeValidateContextRunResponse,
 } from "../../../packages/app-server-client/src/protocol";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type KnowledgeAppServerClient = Pick<AppServerClient, "request">;
 
@@ -21,17 +33,119 @@ async function requestKnowledgeAppServer<T>(
   return response.result;
 }
 
-async function invokeKnowledgeCommand<T>(
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertKnowledgePackDetail(
   command: string,
-  args: Record<string, unknown>,
-): Promise<T> {
-  const result = await safeInvoke<T>(command, args);
-  assertNotDiagnosticFacade(
-    command,
-    result,
-    "真实 Knowledge current 通道",
-  );
-  return result;
+  value: unknown,
+): asserts value is KnowledgePackDetail {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.metadata) ||
+    typeof value.rootPath !== "string"
+  ) {
+    throw new Error(`${command} did not return a knowledge pack detail`);
+  }
+}
+
+function assertKnowledgeFileEntry(
+  command: string,
+  value: unknown,
+  label: string,
+): asserts value is KnowledgePackFileEntry {
+  if (!isRecord(value) || typeof value.relativePath !== "string") {
+    throw new Error(`${command} did not return ${label}`);
+  }
+}
+
+function assertKnowledgeImportSourceResponse(
+  command: string,
+  value: unknown,
+): asserts value is KnowledgeImportSourceResponse {
+  if (!isRecord(value)) {
+    throw new Error(`${command} did not return an import source result`);
+  }
+  assertKnowledgePackDetail(command, value.pack);
+  assertKnowledgeFileEntry(command, value.source, "an imported source file");
+}
+
+function assertKnowledgeCompilePackResponse(
+  command: string,
+  value: unknown,
+): asserts value is KnowledgeCompilePackResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.selectedSourceCount !== "number" ||
+    !Array.isArray(value.warnings)
+  ) {
+    throw new Error(`${command} did not return a compile result`);
+  }
+  assertKnowledgePackDetail(command, value.pack);
+  assertKnowledgeFileEntry(command, value.compiledView, "a compiled view file");
+  assertKnowledgeFileEntry(command, value.run, "a compile run file");
+}
+
+function assertKnowledgeSetDefaultPackResponse(
+  command: string,
+  value: unknown,
+): asserts value is KnowledgeSetDefaultPackResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.defaultPackName !== "string" ||
+    typeof value.defaultMarkerPath !== "string"
+  ) {
+    throw new Error(`${command} did not return a default pack result`);
+  }
+}
+
+function assertKnowledgeUpdatePackStatusResponse(
+  command: string,
+  value: unknown,
+): asserts value is KnowledgeUpdatePackStatusResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.previousStatus !== "string" ||
+    typeof value.clearedDefault !== "boolean"
+  ) {
+    throw new Error(`${command} did not return a status update result`);
+  }
+  assertKnowledgePackDetail(command, value.pack);
+}
+
+function assertKnowledgeContextResolution(
+  command: string,
+  value: unknown,
+): asserts value is KnowledgeContextResolution {
+  if (
+    !isRecord(value) ||
+    typeof value.packName !== "string" ||
+    typeof value.status !== "string" ||
+    typeof value.fencedContext !== "string" ||
+    typeof value.tokenEstimate !== "number" ||
+    !Array.isArray(value.selectedViews) ||
+    !Array.isArray(value.selectedFiles) ||
+    !Array.isArray(value.sourceAnchors) ||
+    !Array.isArray(value.warnings) ||
+    !Array.isArray(value.missing)
+  ) {
+    throw new Error(`${command} did not return a context resolution`);
+  }
+}
+
+function assertKnowledgeValidateContextRunResponse(
+  command: string,
+  value: unknown,
+): asserts value is KnowledgeValidateContextRunResponse {
+  if (
+    !isRecord(value) ||
+    typeof value.valid !== "boolean" ||
+    !Array.isArray(value.errors) ||
+    !Array.isArray(value.warnings)
+  ) {
+    throw new Error(`${command} did not return a context run validation`);
+  }
 }
 
 function requireAppServerString(value: unknown, message: string): string {
@@ -39,7 +153,7 @@ function requireAppServerString(value: unknown, message: string): string {
     throw new Error(message);
   }
 
-  return value;
+  return value.trim();
 }
 
 function normalizeKnowledgeListPacksResponse(
@@ -64,6 +178,68 @@ function normalizeKnowledgeListPacksResponse(
     ),
     packs: response.packs as KnowledgePackSummary[],
   };
+}
+
+function normalizeKnowledgeReadPackResponse(
+  response: AppServerKnowledgeReadPackResponse | null | undefined,
+): KnowledgePackDetail {
+  if (!response || typeof response !== "object") {
+    throw new Error("App Server knowledgePack/read did not return pack");
+  }
+
+  assertKnowledgePackDetail(METHOD_KNOWLEDGE_PACK_READ, response.pack);
+  return response.pack;
+}
+
+function normalizeKnowledgeImportSourceResponse(
+  response: AppServerKnowledgeImportSourceResponse | null | undefined,
+): KnowledgeImportSourceResponse {
+  assertKnowledgeImportSourceResponse(METHOD_KNOWLEDGE_SOURCE_IMPORT, response);
+  return response;
+}
+
+function normalizeKnowledgeCompilePackResponse(
+  response: AppServerKnowledgeCompilePackResponse | null | undefined,
+): KnowledgeCompilePackResponse {
+  assertKnowledgeCompilePackResponse(METHOD_KNOWLEDGE_PACK_COMPILE, response);
+  return response;
+}
+
+function normalizeKnowledgeSetDefaultPackResponse(
+  response: AppServerKnowledgeSetDefaultPackResponse | null | undefined,
+): KnowledgeSetDefaultPackResponse {
+  assertKnowledgeSetDefaultPackResponse(
+    METHOD_KNOWLEDGE_PACK_DEFAULT_SET,
+    response,
+  );
+  return response;
+}
+
+function normalizeKnowledgeUpdatePackStatusResponse(
+  response: AppServerKnowledgeUpdatePackStatusResponse | null | undefined,
+): KnowledgeUpdatePackStatusResponse {
+  assertKnowledgeUpdatePackStatusResponse(
+    METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+    response,
+  );
+  return response;
+}
+
+function normalizeKnowledgeContextResolutionResponse(
+  response: AppServerKnowledgeContextResolutionResponse | null | undefined,
+): KnowledgeContextResolution {
+  assertKnowledgeContextResolution(METHOD_KNOWLEDGE_CONTEXT_RESOLVE, response);
+  return response as KnowledgeContextResolution;
+}
+
+function normalizeKnowledgeValidateContextRunResponse(
+  response: AppServerKnowledgeValidateContextRunResponse | null | undefined,
+): KnowledgeValidateContextRunResponse {
+  assertKnowledgeValidateContextRunResponse(
+    METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
+    response,
+  );
+  return response;
 }
 
 export type KnowledgePackStatus =
@@ -276,82 +452,178 @@ export async function listKnowledgePacks(
   return normalizeKnowledgeListPacksResponse(response);
 }
 
-export function getKnowledgePack(
+export async function getKnowledgePack(
   workingDir: string,
   name: string,
 ): Promise<KnowledgePackDetail> {
-  return invokeKnowledgeCommand<KnowledgePackDetail>("knowledge_get_pack", {
-    request: {
-      workingDir,
-      name,
-    },
-  });
+  const normalizedWorkingDir = workingDir.trim();
+  const normalizedName = name.trim();
+  if (!normalizedWorkingDir) {
+    throw new Error(
+      "workingDir is required to read App Server knowledge pack",
+    );
+  }
+  if (!normalizedName) {
+    throw new Error("name is required to read App Server knowledge pack");
+  }
+
+  const response =
+    await requestKnowledgeAppServer<AppServerKnowledgeReadPackResponse>(
+      METHOD_KNOWLEDGE_PACK_READ,
+      {
+        workingDir: normalizedWorkingDir,
+        name: normalizedName,
+      },
+    );
+  return normalizeKnowledgeReadPackResponse(response);
 }
 
-export function importKnowledgeSource(
+export async function importKnowledgeSource(
   request: KnowledgeImportSourceRequest,
 ): Promise<KnowledgeImportSourceResponse> {
-  return invokeKnowledgeCommand<KnowledgeImportSourceResponse>(
-    "knowledge_import_source",
-    { request },
+  const normalizedWorkingDir = requireAppServerString(
+    request.workingDir,
+    "workingDir is required to import App Server knowledge source",
   );
+  const normalizedPackName = requireAppServerString(
+    request.packName,
+    "packName is required to import App Server knowledge source",
+  );
+  const response =
+    await requestKnowledgeAppServer<AppServerKnowledgeImportSourceResponse>(
+      METHOD_KNOWLEDGE_SOURCE_IMPORT,
+      {
+        ...request,
+        workingDir: normalizedWorkingDir,
+        packName: normalizedPackName,
+      },
+    );
+  return normalizeKnowledgeImportSourceResponse(response);
 }
 
-export function compileKnowledgePack(
+export async function compileKnowledgePack(
   workingDir: string,
   name: string,
   builderRuntime?: KnowledgeBuilderRuntimeOptions,
 ): Promise<KnowledgeCompilePackResponse> {
-  return invokeKnowledgeCommand<KnowledgeCompilePackResponse>(
-    "knowledge_compile_pack",
-    {
-      request: {
-        workingDir,
-        name,
+  const normalizedWorkingDir = requireAppServerString(
+    workingDir,
+    "workingDir is required to compile App Server knowledge pack",
+  );
+  const normalizedName = requireAppServerString(
+    name,
+    "name is required to compile App Server knowledge pack",
+  );
+  const response =
+    await requestKnowledgeAppServer<AppServerKnowledgeCompilePackResponse>(
+      METHOD_KNOWLEDGE_PACK_COMPILE,
+      {
+        workingDir: normalizedWorkingDir,
+        name: normalizedName,
         ...(builderRuntime ? { builderRuntime } : {}),
       },
-    },
-  );
+    );
+  return normalizeKnowledgeCompilePackResponse(response);
 }
 
-export function setDefaultKnowledgePack(
+export async function setDefaultKnowledgePack(
   workingDir: string,
   name: string,
 ): Promise<KnowledgeSetDefaultPackResponse> {
-  return invokeKnowledgeCommand<KnowledgeSetDefaultPackResponse>(
-    "knowledge_set_default_pack",
-    {
-      request: {
-        workingDir,
-        name,
-      },
-    },
+  const normalizedWorkingDir = requireAppServerString(
+    workingDir,
+    "workingDir is required to set App Server default knowledge pack",
   );
+  const normalizedName = requireAppServerString(
+    name,
+    "name is required to set App Server default knowledge pack",
+  );
+  const response =
+    await requestKnowledgeAppServer<AppServerKnowledgeSetDefaultPackResponse>(
+      METHOD_KNOWLEDGE_PACK_DEFAULT_SET,
+      {
+        workingDir: normalizedWorkingDir,
+        name: normalizedName,
+      },
+    );
+  return normalizeKnowledgeSetDefaultPackResponse(response);
 }
 
-export function updateKnowledgePackStatus(
+export async function updateKnowledgePackStatus(
   request: KnowledgeUpdatePackStatusRequest,
 ): Promise<KnowledgeUpdatePackStatusResponse> {
-  return invokeKnowledgeCommand<KnowledgeUpdatePackStatusResponse>(
-    "knowledge_update_pack_status",
-    { request },
+  const normalizedWorkingDir = requireAppServerString(
+    request.workingDir,
+    "workingDir is required to update App Server knowledge pack status",
   );
+  const normalizedName = requireAppServerString(
+    request.name,
+    "name is required to update App Server knowledge pack status",
+  );
+  const normalizedStatus = requireAppServerString(
+    request.status,
+    "status is required to update App Server knowledge pack status",
+  );
+  const response =
+    await requestKnowledgeAppServer<AppServerKnowledgeUpdatePackStatusResponse>(
+      METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+      {
+        ...request,
+        workingDir: normalizedWorkingDir,
+        name: normalizedName,
+        status: normalizedStatus,
+      },
+    );
+  return normalizeKnowledgeUpdatePackStatusResponse(response);
 }
 
-export function resolveKnowledgeContext(
+export async function resolveKnowledgeContext(
   request: KnowledgeResolveContextRequest,
 ): Promise<KnowledgeContextResolution> {
-  return invokeKnowledgeCommand<KnowledgeContextResolution>(
-    "knowledge_resolve_context",
-    { request },
+  const normalizedWorkingDir = requireAppServerString(
+    request.workingDir,
+    "workingDir is required to resolve App Server knowledge context",
   );
+  const normalizedName = requireAppServerString(
+    request.name,
+    "name is required to resolve App Server knowledge context",
+  );
+  const response =
+    await requestKnowledgeAppServer<AppServerKnowledgeContextResolutionResponse>(
+      METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
+      {
+        ...request,
+        workingDir: normalizedWorkingDir,
+        name: normalizedName,
+      },
+    );
+  return normalizeKnowledgeContextResolutionResponse(response);
 }
 
-export function validateKnowledgeContextRun(
+export async function validateKnowledgeContextRun(
   request: KnowledgeValidateContextRunRequest,
 ): Promise<KnowledgeValidateContextRunResponse> {
-  return invokeKnowledgeCommand<KnowledgeValidateContextRunResponse>(
-    "knowledge_validate_context_run",
-    { request },
+  const normalizedWorkingDir = requireAppServerString(
+    request.workingDir,
+    "workingDir is required to validate App Server knowledge context run",
   );
+  const normalizedName = requireAppServerString(
+    request.name,
+    "name is required to validate App Server knowledge context run",
+  );
+  const normalizedRunPath = requireAppServerString(
+    request.runPath,
+    "runPath is required to validate App Server knowledge context run",
+  );
+  const response =
+    await requestKnowledgeAppServer<AppServerKnowledgeValidateContextRunResponse>(
+      METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
+      {
+        ...request,
+        workingDir: normalizedWorkingDir,
+        name: normalizedName,
+        runPath: normalizedRunPath,
+      },
+    );
+  return normalizeKnowledgeValidateContextRunResponse(response);
 }

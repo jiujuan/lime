@@ -2991,6 +2991,51 @@
       "title": "EvidencePackSummary",
       "type": "object"
     },
+    "FileSystemCreateDirectoryParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FileSystemCreateDirectoryParams",
+      "type": "object"
+    },
+    "FileSystemCreateFileParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FileSystemCreateFileParams",
+      "type": "object"
+    },
+    "FileSystemDeleteFileParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "recursive": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FileSystemDeleteFileParams",
+      "type": "object"
+    },
     "FileSystemDirectoryListing": {
       "$defs": {
         "FileSystemFileEntry": {
@@ -3221,6 +3266,11 @@
       "title": "FileSystemListDirectoryParams",
       "type": "object"
     },
+    "FileSystemMutationResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "FileSystemMutationResponse",
+      "type": "object"
+    },
     "FileSystemReadFilePreviewParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3240,6 +3290,23 @@
         "path"
       ],
       "title": "FileSystemReadFilePreviewParams",
+      "type": "object"
+    },
+    "FileSystemRenameFileParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "newPath": {
+          "type": "string"
+        },
+        "oldPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "newPath",
+        "oldPath"
+      ],
+      "title": "FileSystemRenameFileParams",
       "type": "object"
     },
     "InitializeParams": {
@@ -3630,6 +3697,188 @@
       "title": "JsonRpcResponse",
       "type": "object"
     },
+    "KnowledgeCompilePackParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "builderRuntime": true,
+        "name": {
+          "type": "string"
+        },
+        "workingDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "workingDir"
+      ],
+      "title": "KnowledgeCompilePackParams",
+      "type": "object"
+    },
+    "KnowledgeCompilePackResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "compiledView": true,
+        "pack": true,
+        "run": true,
+        "selectedSourceCount": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "compiledView",
+        "pack",
+        "run",
+        "selectedSourceCount"
+      ],
+      "title": "KnowledgeCompilePackResponse",
+      "type": "object"
+    },
+    "KnowledgeContextResolutionResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "fencedContext": {
+          "type": "string"
+        },
+        "grounding": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "missing": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "packName": {
+          "type": "string"
+        },
+        "runId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "selectedFiles": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "selectedViews": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "sourceAnchors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        },
+        "tokenEstimate": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warnings": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "fencedContext",
+        "packName",
+        "status",
+        "tokenEstimate"
+      ],
+      "title": "KnowledgeContextResolutionResponse",
+      "type": "object"
+    },
+    "KnowledgeImportSourceParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "language": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "packName": {
+          "type": "string"
+        },
+        "packType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceFileName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceText": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workingDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "packName",
+        "workingDir"
+      ],
+      "title": "KnowledgeImportSourceParams",
+      "type": "object"
+    },
+    "KnowledgeImportSourceResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "pack": true,
+        "source": true
+      },
+      "required": [
+        "pack",
+        "source"
+      ],
+      "title": "KnowledgeImportSourceResponse",
+      "type": "object"
+    },
     "KnowledgeListPacksParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3667,6 +3916,259 @@
         "workingDir"
       ],
       "title": "KnowledgeListPacksResponse",
+      "type": "object"
+    },
+    "KnowledgeReadPackParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "workingDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "workingDir"
+      ],
+      "title": "KnowledgeReadPackParams",
+      "type": "object"
+    },
+    "KnowledgeReadPackResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "pack": true
+      },
+      "required": [
+        "pack"
+      ],
+      "title": "KnowledgeReadPackResponse",
+      "type": "object"
+    },
+    "KnowledgeResolveContextPackParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "activation": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "KnowledgeResolveContextPackParams",
+      "type": "object"
+    },
+    "KnowledgeResolveContextParams": {
+      "$defs": {
+        "KnowledgeResolveContextPackParams": {
+          "properties": {
+            "activation": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "activation": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "maxChars": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "packs": {
+          "items": {
+            "$ref": "#/$defs/KnowledgeResolveContextPackParams"
+          },
+          "type": "array"
+        },
+        "runReason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "task": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workingDir": {
+          "type": "string"
+        },
+        "writeRun": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "workingDir"
+      ],
+      "title": "KnowledgeResolveContextParams",
+      "type": "object"
+    },
+    "KnowledgeSetDefaultPackParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "workingDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "workingDir"
+      ],
+      "title": "KnowledgeSetDefaultPackParams",
+      "type": "object"
+    },
+    "KnowledgeSetDefaultPackResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "defaultMarkerPath": {
+          "type": "string"
+        },
+        "defaultPackName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "defaultMarkerPath",
+        "defaultPackName"
+      ],
+      "title": "KnowledgeSetDefaultPackResponse",
+      "type": "object"
+    },
+    "KnowledgeUpdatePackStatusParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "workingDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status",
+        "workingDir"
+      ],
+      "title": "KnowledgeUpdatePackStatusParams",
+      "type": "object"
+    },
+    "KnowledgeUpdatePackStatusResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "clearedDefault": {
+          "type": "boolean"
+        },
+        "pack": true,
+        "previousStatus": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "clearedDefault",
+        "pack",
+        "previousStatus"
+      ],
+      "title": "KnowledgeUpdatePackStatusResponse",
+      "type": "object"
+    },
+    "KnowledgeValidateContextRunParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "runPath": {
+          "type": "string"
+        },
+        "workingDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "runPath",
+        "workingDir"
+      ],
+      "title": "KnowledgeValidateContextRunParams",
+      "type": "object"
+    },
+    "KnowledgeValidateContextRunResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "errors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "runId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "valid"
+      ],
+      "title": "KnowledgeValidateContextRunResponse",
       "type": "object"
     },
     "McpPromptListResponse": {
@@ -4635,6 +5137,308 @@
       "title": "SkillReadResponse",
       "type": "object"
     },
+    "UsageStatsDailyTrendsListResponse": {
+      "$defs": {
+        "UsageStatsDailyUsage": {
+          "properties": {
+            "conversations": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "date": {
+              "type": "string"
+            },
+            "tokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "conversations",
+            "date",
+            "tokens"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "trends": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/UsageStatsDailyUsage"
+          },
+          "type": "array"
+        }
+      },
+      "title": "UsageStatsDailyTrendsListResponse",
+      "type": "object"
+    },
+    "UsageStatsDailyUsage": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "conversations": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "date": {
+          "type": "string"
+        },
+        "tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "conversations",
+        "date",
+        "tokens"
+      ],
+      "title": "UsageStatsDailyUsage",
+      "type": "object"
+    },
+    "UsageStatsModelRankingListResponse": {
+      "$defs": {
+        "UsageStatsModelUsage": {
+          "properties": {
+            "conversations": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "model": {
+              "type": "string"
+            },
+            "percentage": {
+              "format": "float",
+              "type": "number"
+            },
+            "tokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "conversations",
+            "model",
+            "percentage",
+            "tokens"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "ranking": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/UsageStatsModelUsage"
+          },
+          "type": "array"
+        }
+      },
+      "title": "UsageStatsModelRankingListResponse",
+      "type": "object"
+    },
+    "UsageStatsModelUsage": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "conversations": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "percentage": {
+          "format": "float",
+          "type": "number"
+        },
+        "tokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "conversations",
+        "model",
+        "percentage",
+        "tokens"
+      ],
+      "title": "UsageStatsModelUsage",
+      "type": "object"
+    },
+    "UsageStatsRangeParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "timeRange": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "timeRange"
+      ],
+      "title": "UsageStatsRangeParams",
+      "type": "object"
+    },
+    "UsageStatsReadResponse": {
+      "$defs": {
+        "UsageStatsSummary": {
+          "properties": {
+            "monthlyConversations": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "monthlyMessages": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "monthlyTokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "todayConversations": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "todayMessages": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "todayTokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalConversations": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalMessages": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalTimeMinutes": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalTokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "monthlyConversations",
+            "monthlyMessages",
+            "monthlyTokens",
+            "todayConversations",
+            "todayMessages",
+            "todayTokens",
+            "totalConversations",
+            "totalMessages",
+            "totalTimeMinutes",
+            "totalTokens"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "stats": {
+          "$ref": "#/$defs/UsageStatsSummary"
+        }
+      },
+      "required": [
+        "stats"
+      ],
+      "title": "UsageStatsReadResponse",
+      "type": "object"
+    },
+    "UsageStatsSummary": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "monthlyConversations": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "monthlyMessages": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "monthlyTokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "todayConversations": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "todayMessages": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "todayTokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalConversations": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalMessages": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalTimeMinutes": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalTokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "monthlyConversations",
+        "monthlyMessages",
+        "monthlyTokens",
+        "todayConversations",
+        "todayMessages",
+        "todayTokens",
+        "totalConversations",
+        "totalMessages",
+        "totalTimeMinutes",
+        "totalTokens"
+      ],
+      "title": "UsageStatsSummary",
+      "type": "object"
+    },
     "WorkspaceEnsureParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -4933,10 +5737,21 @@
               "connectOpenDeepLink/resolve",
               "connectRelayApiKey/save",
               "evidence/export",
+              "fileSystem/createDirectory",
+              "fileSystem/createFile",
+              "fileSystem/deleteFile",
               "fileSystem/listDirectory",
               "fileSystem/readFilePreview",
+              "fileSystem/renameFile",
               "initialize",
+              "knowledgeContext/resolve",
+              "knowledgeContextRun/validate",
+              "knowledgePack/compile",
+              "knowledgePack/default/set",
               "knowledgePack/list",
+              "knowledgePack/read",
+              "knowledgePack/source/import",
+              "knowledgePack/status/update",
               "mcpPrompt/list",
               "mcpResource/list",
               "mcpServer/list",
@@ -4970,6 +5785,9 @@
               "projectMemory/read",
               "skill/list",
               "skill/read",
+              "usageStats/dailyTrends/list",
+              "usageStats/modelRanking/list",
+              "usageStats/read",
               "workspace/byPath/read",
               "workspace/default/ensure",
               "workspace/default/read",

@@ -2,6 +2,7 @@ import { summarizeEvidencePack } from "./managed-objective-continuation-smoke-co
 
 const CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
 const COMPLETION_AUDIT_POLICY = "artifact_or_evidence_required";
+const CURRENT_AGENT_TURN_DISPATCH = "agentSession/turn/start";
 const AUTOMATION_SMOKE_SKILL_TITLE =
   "Managed Objective Automation Smoke Report";
 
@@ -181,7 +182,8 @@ async function invokeAppServer(options, invoke, method, params = {}) {
       ],
     },
   });
-  const lines = Array.isArray(response?.lines) ? response.lines : [];
+  const responseLines = response?.result?.lines ?? response?.lines;
+  const lines = Array.isArray(responseLines) ? responseLines : [];
   for (const line of lines) {
     const text = typeof line === "string" ? line.trim() : "";
     if (!text) {
@@ -389,13 +391,13 @@ function buildManagedObjectiveHarness(skillBinding) {
       objective:
         "Managed Objective automation smoke：通过离线 fixture 执行一次自动化任务，并导出 owner evidence。",
       success_criteria: [
-        "automation job 执行通过 agent_runtime_submit_turn",
+        "automation job 执行通过 agentSession/turn/start",
         "运行记录能按 runtime session 查询 automation owner",
         "evidence pack 能解释 automation owner 与 objective audit",
       ],
       continuation_policy: {
         mode: "automation_due_job",
-        dispatch: "agent_runtime_submit_turn",
+        dispatch: CURRENT_AGENT_TURN_DISPATCH,
       },
       completion_audit: COMPLETION_AUDIT_POLICY,
       completion_evidence_policy: {
@@ -524,7 +526,7 @@ export function buildAutomationSmokeEvidence({
     managedObjectiveProjected:
       managedObjective?.owner_id === job?.id &&
       managedObjective?.continuation_policy?.dispatch ===
-        "agent_runtime_submit_turn",
+        CURRENT_AGENT_TURN_DISPATCH,
     ownerRunHasAuditInputs:
       Boolean(agentEnvelope) &&
       Boolean(workspaceSkillRuntimeEnable) &&
@@ -559,7 +561,7 @@ export function buildAutomationSmokeEvidence({
     coverage: {
       usesDevBridgeCurrentCommands: true,
       usesAutomationJobOwner: true,
-      usesCurrentRuntimeSubmitTurn: true,
+      usesAppServerJsonRpcSubmitTurn: true,
       usesRegisteredWorkspaceSkill: Boolean(workspaceSkillRuntimeEnable),
       usesLocalFixtureProvider: provider?.source === "localhost-fixture",
       avoidsLiveProviderByDefault: !options.allowLiveProvider,

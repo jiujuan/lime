@@ -2,8 +2,20 @@ use crate::capability::capability_descriptor_allows_agent_turn_start;
 use crate::CapabilityInventorySource;
 use crate::CapabilityListContext;
 use crate::CapabilitySource;
+use crate::KnowledgeBuilderRuntimeExecutor;
+use crate::NativeKnowledgeBuilderRuntimeExecutor;
 use app_server_protocol::error_codes;
+use app_server_protocol::AgentAppFetchCloudPackageParams;
+use app_server_protocol::AgentAppInstalledDisabledSetParams;
 use app_server_protocol::AgentAppInstalledListResponse;
+use app_server_protocol::AgentAppInstalledSaveParams;
+use app_server_protocol::AgentAppLocalPackageInspectParams;
+use app_server_protocol::AgentAppLocalPackageInspectResponse;
+use app_server_protocol::AgentAppPackageCacheEntry;
+use app_server_protocol::AgentAppUninstallParams;
+use app_server_protocol::AgentAppUninstallRehearsalParams;
+use app_server_protocol::AgentAppUninstallRehearsalResponse;
+use app_server_protocol::AgentAppUninstallResponse;
 use app_server_protocol::AgentAppUiRuntimeStartParams;
 use app_server_protocol::AgentAppUiRuntimeStatusParams;
 use app_server_protocol::AgentAppUiRuntimeStatusResponse;
@@ -68,14 +80,33 @@ use app_server_protocol::ConnectRelayApiKeySaveResponse;
 use app_server_protocol::EvidenceExportParams;
 use app_server_protocol::EvidenceExportResponse;
 use app_server_protocol::EvidencePackSummary;
+use app_server_protocol::FileSystemCreateDirectoryParams;
+use app_server_protocol::FileSystemCreateFileParams;
+use app_server_protocol::FileSystemDeleteFileParams;
 use app_server_protocol::FileSystemDirectoryListing;
 use app_server_protocol::FileSystemFileEntry;
 use app_server_protocol::FileSystemFilePreview;
 use app_server_protocol::FileSystemListDirectoryParams;
+use app_server_protocol::FileSystemMutationResponse;
 use app_server_protocol::FileSystemReadFilePreviewParams;
+use app_server_protocol::FileSystemRenameFileParams;
 use app_server_protocol::JsonRpcError;
+use app_server_protocol::KnowledgeCompilePackParams;
+use app_server_protocol::KnowledgeCompilePackResponse;
+use app_server_protocol::KnowledgeContextResolutionResponse;
+use app_server_protocol::KnowledgeImportSourceParams;
+use app_server_protocol::KnowledgeImportSourceResponse;
 use app_server_protocol::KnowledgeListPacksParams;
 use app_server_protocol::KnowledgeListPacksResponse;
+use app_server_protocol::KnowledgeReadPackParams;
+use app_server_protocol::KnowledgeReadPackResponse;
+use app_server_protocol::KnowledgeResolveContextParams;
+use app_server_protocol::KnowledgeSetDefaultPackParams;
+use app_server_protocol::KnowledgeSetDefaultPackResponse;
+use app_server_protocol::KnowledgeUpdatePackStatusParams;
+use app_server_protocol::KnowledgeUpdatePackStatusResponse;
+use app_server_protocol::KnowledgeValidateContextRunParams;
+use app_server_protocol::KnowledgeValidateContextRunResponse;
 use app_server_protocol::McpPromptListResponse;
 use app_server_protocol::McpResourceListResponse;
 use app_server_protocol::McpServerListResponse;
@@ -125,6 +156,10 @@ use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::SkillListResponse;
 use app_server_protocol::SkillReadParams;
 use app_server_protocol::SkillReadResponse;
+use app_server_protocol::UsageStatsDailyTrendsListResponse;
+use app_server_protocol::UsageStatsModelRankingListResponse;
+use app_server_protocol::UsageStatsRangeParams;
+use app_server_protocol::UsageStatsReadResponse;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspaceEnsureReadyResponse;
 use app_server_protocol::WorkspaceListResponse;
@@ -336,10 +371,75 @@ pub trait AppDataSource: Send + Sync {
         &self,
     ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError>;
 
+    async fn inspect_agent_app_local_package(
+        &self,
+        params: AgentAppLocalPackageInspectParams,
+    ) -> Result<AgentAppLocalPackageInspectResponse, RuntimeCoreError>;
+
+    async fn fetch_agent_app_cloud_package(
+        &self,
+        params: AgentAppFetchCloudPackageParams,
+    ) -> Result<AgentAppPackageCacheEntry, RuntimeCoreError>;
+
+    async fn save_agent_app_installed(
+        &self,
+        params: AgentAppInstalledSaveParams,
+    ) -> Result<serde_json::Value, RuntimeCoreError>;
+
+    async fn set_agent_app_installed_disabled(
+        &self,
+        params: AgentAppInstalledDisabledSetParams,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError>;
+
+    async fn preview_agent_app_uninstall(
+        &self,
+        params: AgentAppUninstallRehearsalParams,
+    ) -> Result<AgentAppUninstallRehearsalResponse, RuntimeCoreError>;
+
+    async fn uninstall_agent_app(
+        &self,
+        params: AgentAppUninstallParams,
+    ) -> Result<AgentAppUninstallResponse, RuntimeCoreError>;
+
     async fn list_knowledge_packs(
         &self,
         params: KnowledgeListPacksParams,
     ) -> Result<KnowledgeListPacksResponse, RuntimeCoreError>;
+
+    async fn read_knowledge_pack(
+        &self,
+        params: KnowledgeReadPackParams,
+    ) -> Result<KnowledgeReadPackResponse, RuntimeCoreError>;
+
+    async fn import_knowledge_source(
+        &self,
+        params: KnowledgeImportSourceParams,
+    ) -> Result<KnowledgeImportSourceResponse, RuntimeCoreError>;
+
+    async fn compile_knowledge_pack(
+        &self,
+        request: lime_knowledge::KnowledgeCompilePackRequest,
+    ) -> Result<KnowledgeCompilePackResponse, RuntimeCoreError>;
+
+    async fn set_default_knowledge_pack(
+        &self,
+        params: KnowledgeSetDefaultPackParams,
+    ) -> Result<KnowledgeSetDefaultPackResponse, RuntimeCoreError>;
+
+    async fn update_knowledge_pack_status(
+        &self,
+        params: KnowledgeUpdatePackStatusParams,
+    ) -> Result<KnowledgeUpdatePackStatusResponse, RuntimeCoreError>;
+
+    async fn resolve_knowledge_context(
+        &self,
+        params: KnowledgeResolveContextParams,
+    ) -> Result<KnowledgeContextResolutionResponse, RuntimeCoreError>;
+
+    async fn validate_knowledge_context_run(
+        &self,
+        params: KnowledgeValidateContextRunParams,
+    ) -> Result<KnowledgeValidateContextRunResponse, RuntimeCoreError>;
 
     async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError>;
 
@@ -487,6 +587,21 @@ pub trait AppDataSource: Send + Sync {
         &self,
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError>;
+
+    async fn read_usage_stats(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsReadResponse, RuntimeCoreError>;
+
+    async fn list_usage_stats_model_ranking(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsModelRankingListResponse, RuntimeCoreError>;
+
+    async fn list_usage_stats_daily_trends(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsDailyTrendsListResponse, RuntimeCoreError>;
 
     async fn list_models(
         &self,
@@ -912,6 +1027,69 @@ impl AppDataSource for NoopAppDataSource {
         Ok(KnowledgeListPacksResponse::default())
     }
 
+    async fn read_knowledge_pack(
+        &self,
+        _params: KnowledgeReadPackParams,
+    ) -> Result<KnowledgeReadPackResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "knowledgePack/read is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn import_knowledge_source(
+        &self,
+        _params: KnowledgeImportSourceParams,
+    ) -> Result<KnowledgeImportSourceResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "knowledgePack/source/import is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn compile_knowledge_pack(
+        &self,
+        _request: lime_knowledge::KnowledgeCompilePackRequest,
+    ) -> Result<KnowledgeCompilePackResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "knowledgePack/compile is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn set_default_knowledge_pack(
+        &self,
+        _params: KnowledgeSetDefaultPackParams,
+    ) -> Result<KnowledgeSetDefaultPackResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "knowledgePack/default/set is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_knowledge_pack_status(
+        &self,
+        _params: KnowledgeUpdatePackStatusParams,
+    ) -> Result<KnowledgeUpdatePackStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "knowledgePack/status/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn resolve_knowledge_context(
+        &self,
+        _params: KnowledgeResolveContextParams,
+    ) -> Result<KnowledgeContextResolutionResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "knowledgeContext/resolve is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn validate_knowledge_context_run(
+        &self,
+        _params: KnowledgeValidateContextRunParams,
+    ) -> Result<KnowledgeValidateContextRunResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "knowledgeContextRun/validate is not available without an app data source".to_string(),
+        ))
+    }
+
     async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError> {
         Ok(AutomationJobListResponse::default())
     }
@@ -943,6 +1121,27 @@ impl AppDataSource for NoopAppDataSource {
         _params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
         Ok(ProjectMemoryReadResponse::default())
+    }
+
+    async fn read_usage_stats(
+        &self,
+        _params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsReadResponse, RuntimeCoreError> {
+        Ok(UsageStatsReadResponse::default())
+    }
+
+    async fn list_usage_stats_model_ranking(
+        &self,
+        _params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsModelRankingListResponse, RuntimeCoreError> {
+        Ok(UsageStatsModelRankingListResponse::default())
+    }
+
+    async fn list_usage_stats_daily_trends(
+        &self,
+        _params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsDailyTrendsListResponse, RuntimeCoreError> {
+        Ok(UsageStatsDailyTrendsListResponse::default())
     }
 
     async fn list_models(
@@ -1154,6 +1353,7 @@ pub struct RuntimeCore {
     capability_source: Arc<dyn CapabilitySource>,
     artifact_content_provider: Arc<dyn ArtifactContentProvider>,
     evidence_export_provider: Arc<dyn EvidenceExportProvider>,
+    knowledge_builder_runtime_executor: Arc<dyn KnowledgeBuilderRuntimeExecutor>,
     app_data_source: Arc<dyn AppDataSource>,
 }
 
@@ -1289,6 +1489,19 @@ fn file_system_file_preview_from_service(
         size: preview.size,
         error: preview.error,
     }
+}
+
+fn file_system_required_path(
+    path: String,
+    method: &'static str,
+) -> Result<String, RuntimeCoreError> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "path is required for {method}"
+        )));
+    }
+    Ok(path.to_string())
 }
 
 fn stored_session_hidden_from_user_recents(stored: &StoredSession) -> bool {
@@ -1493,12 +1706,21 @@ impl RuntimeCore {
             capability_source,
             artifact_content_provider,
             evidence_export_provider,
+            knowledge_builder_runtime_executor: Arc::new(NativeKnowledgeBuilderRuntimeExecutor::new()),
             app_data_source: Arc::new(NoopAppDataSource),
         }
     }
 
     pub fn with_app_data_source(mut self, app_data_source: Arc<dyn AppDataSource>) -> Self {
         self.app_data_source = app_data_source;
+        self
+    }
+
+    pub fn with_knowledge_builder_runtime_executor(
+        mut self,
+        executor: Arc<dyn KnowledgeBuilderRuntimeExecutor>,
+    ) -> Self {
+        self.knowledge_builder_runtime_executor = executor;
         self
     }
 
@@ -1813,6 +2035,72 @@ impl RuntimeCore {
         Ok(file_system_file_preview_from_service(preview))
     }
 
+    pub async fn create_file(
+        &self,
+        params: FileSystemCreateFileParams,
+    ) -> Result<FileSystemMutationResponse, RuntimeCoreError> {
+        let path = file_system_required_path(params.path, "fileSystem/createFile")?;
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || {
+            handle.block_on(lime_services::file_browser_service::create_file(path))
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("文件创建任务失败: {error}")))?
+        .map_err(RuntimeCoreError::Backend)?;
+        Ok(FileSystemMutationResponse::default())
+    }
+
+    pub async fn create_directory(
+        &self,
+        params: FileSystemCreateDirectoryParams,
+    ) -> Result<FileSystemMutationResponse, RuntimeCoreError> {
+        let path = file_system_required_path(params.path, "fileSystem/createDirectory")?;
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || {
+            handle.block_on(lime_services::file_browser_service::create_directory(path))
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("目录创建任务失败: {error}")))?
+        .map_err(RuntimeCoreError::Backend)?;
+        Ok(FileSystemMutationResponse::default())
+    }
+
+    pub async fn rename_file(
+        &self,
+        params: FileSystemRenameFileParams,
+    ) -> Result<FileSystemMutationResponse, RuntimeCoreError> {
+        let old_path = file_system_required_path(params.old_path, "fileSystem/renameFile.oldPath")?;
+        let new_path = file_system_required_path(params.new_path, "fileSystem/renameFile.newPath")?;
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || {
+            handle.block_on(lime_services::file_browser_service::rename_file(
+                old_path, new_path,
+            ))
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("文件重命名任务失败: {error}")))?
+        .map_err(RuntimeCoreError::Backend)?;
+        Ok(FileSystemMutationResponse::default())
+    }
+
+    pub async fn delete_file(
+        &self,
+        params: FileSystemDeleteFileParams,
+    ) -> Result<FileSystemMutationResponse, RuntimeCoreError> {
+        let path = file_system_required_path(params.path, "fileSystem/deleteFile")?;
+        let recursive = params.recursive.unwrap_or(false);
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || {
+            handle.block_on(lime_services::file_browser_service::delete_file(
+                path, recursive,
+            ))
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("文件删除任务失败: {error}")))?
+        .map_err(RuntimeCoreError::Backend)?;
+        Ok(FileSystemMutationResponse::default())
+    }
+
     pub async fn list_workspace_skill_bindings(
         &self,
         params: WorkspaceSkillBindingsListParams,
@@ -1943,6 +2231,90 @@ impl RuntimeCore {
         self.app_data_source.list_knowledge_packs(params).await
     }
 
+    pub async fn read_knowledge_pack(
+        &self,
+        params: KnowledgeReadPackParams,
+    ) -> Result<KnowledgeReadPackResponse, RuntimeCoreError> {
+        self.app_data_source.read_knowledge_pack(params).await
+    }
+
+    pub async fn import_knowledge_source(
+        &self,
+        params: KnowledgeImportSourceParams,
+    ) -> Result<KnowledgeImportSourceResponse, RuntimeCoreError> {
+        self.app_data_source.import_knowledge_source(params).await
+    }
+
+    pub async fn compile_knowledge_pack(
+        &self,
+        params: KnowledgeCompilePackParams,
+    ) -> Result<KnowledgeCompilePackResponse, RuntimeCoreError> {
+        let mut request = Self::to_lime_knowledge_compile_pack_request(params)?;
+        if let Some(plan) = lime_knowledge::plan_knowledge_builder_runtime(&request)
+            .map_err(RuntimeCoreError::Backend)?
+        {
+            request.builder_execution = Some(
+                self.knowledge_builder_runtime_executor
+                    .execute(plan)
+                    .await?,
+            );
+        }
+        self.app_data_source.compile_knowledge_pack(request).await
+    }
+
+    fn to_lime_knowledge_compile_pack_request(
+        params: KnowledgeCompilePackParams,
+    ) -> Result<lime_knowledge::KnowledgeCompilePackRequest, RuntimeCoreError> {
+        Ok(lime_knowledge::KnowledgeCompilePackRequest {
+            working_dir: params.working_dir,
+            name: params.name,
+            builder_runtime: params
+                .builder_runtime
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|error| {
+                    RuntimeCoreError::Backend(format!(
+                        "knowledgePack/compile builderRuntime 参数无效: {error}"
+                    ))
+                })?,
+            builder_execution: None,
+        })
+    }
+
+    pub async fn set_default_knowledge_pack(
+        &self,
+        params: KnowledgeSetDefaultPackParams,
+    ) -> Result<KnowledgeSetDefaultPackResponse, RuntimeCoreError> {
+        self.app_data_source
+            .set_default_knowledge_pack(params)
+            .await
+    }
+
+    pub async fn update_knowledge_pack_status(
+        &self,
+        params: KnowledgeUpdatePackStatusParams,
+    ) -> Result<KnowledgeUpdatePackStatusResponse, RuntimeCoreError> {
+        self.app_data_source
+            .update_knowledge_pack_status(params)
+            .await
+    }
+
+    pub async fn resolve_knowledge_context(
+        &self,
+        params: KnowledgeResolveContextParams,
+    ) -> Result<KnowledgeContextResolutionResponse, RuntimeCoreError> {
+        self.app_data_source.resolve_knowledge_context(params).await
+    }
+
+    pub async fn validate_knowledge_context_run(
+        &self,
+        params: KnowledgeValidateContextRunParams,
+    ) -> Result<KnowledgeValidateContextRunResponse, RuntimeCoreError> {
+        self.app_data_source
+            .validate_knowledge_context_run(params)
+            .await
+    }
+
     pub async fn list_automation_jobs(
         &self,
     ) -> Result<AutomationJobListResponse, RuntimeCoreError> {
@@ -2070,6 +2442,31 @@ impl RuntimeCore {
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
         self.app_data_source.read_project_memory(params).await
+    }
+
+    pub async fn read_usage_stats(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsReadResponse, RuntimeCoreError> {
+        self.app_data_source.read_usage_stats(params).await
+    }
+
+    pub async fn list_usage_stats_model_ranking(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsModelRankingListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_usage_stats_model_ranking(params)
+            .await
+    }
+
+    pub async fn list_usage_stats_daily_trends(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsDailyTrendsListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_usage_stats_daily_trends(params)
+            .await
     }
 
     pub async fn list_models(
@@ -4550,6 +4947,57 @@ mod tests {
             NoopAppDataSource.list_knowledge_packs(params).await
         }
 
+        async fn read_knowledge_pack(
+            &self,
+            params: KnowledgeReadPackParams,
+        ) -> Result<KnowledgeReadPackResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_knowledge_pack(params).await
+        }
+
+        async fn import_knowledge_source(
+            &self,
+            params: KnowledgeImportSourceParams,
+        ) -> Result<KnowledgeImportSourceResponse, RuntimeCoreError> {
+            NoopAppDataSource.import_knowledge_source(params).await
+        }
+
+        async fn compile_knowledge_pack(
+            &self,
+            request: lime_knowledge::KnowledgeCompilePackRequest,
+        ) -> Result<KnowledgeCompilePackResponse, RuntimeCoreError> {
+            NoopAppDataSource.compile_knowledge_pack(request).await
+        }
+
+        async fn set_default_knowledge_pack(
+            &self,
+            params: KnowledgeSetDefaultPackParams,
+        ) -> Result<KnowledgeSetDefaultPackResponse, RuntimeCoreError> {
+            NoopAppDataSource.set_default_knowledge_pack(params).await
+        }
+
+        async fn update_knowledge_pack_status(
+            &self,
+            params: KnowledgeUpdatePackStatusParams,
+        ) -> Result<KnowledgeUpdatePackStatusResponse, RuntimeCoreError> {
+            NoopAppDataSource.update_knowledge_pack_status(params).await
+        }
+
+        async fn resolve_knowledge_context(
+            &self,
+            params: KnowledgeResolveContextParams,
+        ) -> Result<KnowledgeContextResolutionResponse, RuntimeCoreError> {
+            NoopAppDataSource.resolve_knowledge_context(params).await
+        }
+
+        async fn validate_knowledge_context_run(
+            &self,
+            params: KnowledgeValidateContextRunParams,
+        ) -> Result<KnowledgeValidateContextRunResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .validate_knowledge_context_run(params)
+                .await
+        }
+
         async fn list_automation_jobs(
             &self,
         ) -> Result<AutomationJobListResponse, RuntimeCoreError> {
@@ -4561,6 +5009,31 @@ mod tests {
             params: ProjectMemoryReadParams,
         ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
             NoopAppDataSource.read_project_memory(params).await
+        }
+
+        async fn read_usage_stats(
+            &self,
+            params: UsageStatsRangeParams,
+        ) -> Result<UsageStatsReadResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_usage_stats(params).await
+        }
+
+        async fn list_usage_stats_model_ranking(
+            &self,
+            params: UsageStatsRangeParams,
+        ) -> Result<UsageStatsModelRankingListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .list_usage_stats_model_ranking(params)
+                .await
+        }
+
+        async fn list_usage_stats_daily_trends(
+            &self,
+            params: UsageStatsRangeParams,
+        ) -> Result<UsageStatsDailyTrendsListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .list_usage_stats_daily_trends(params)
+                .await
         }
 
         async fn list_models(

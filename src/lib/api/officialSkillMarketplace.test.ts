@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getOfficialSkillMarketplaceBundle,
+  installOfficialMarketplaceSkill,
   listOfficialSkillMarketplace,
 } from "./officialSkillMarketplace";
+
+const skillsApiMock = vi.hoisted(() => ({
+  installMarketplaceBundle: vi.fn(),
+}));
+
+vi.mock("./skills", () => ({
+  skillsApi: skillsApiMock,
+}));
 
 function mockJsonResponse(payload: unknown, ok = true, status = 200) {
   return {
@@ -54,10 +63,6 @@ describe("officialSkillMarketplace", () => {
                   isStandard: true,
                 },
               },
-            },
-            {
-              id: "",
-              title: "非法条目",
             },
           ],
         },
@@ -156,6 +161,136 @@ describe("officialSkillMarketplace", () => {
 
     await expect(listOfficialSkillMarketplace()).rejects.toThrow(
       "marketplace unavailable",
+    );
+  });
+
+  it("业务 envelope 返回错误时应透传服务端 message", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      mockJsonResponse({
+        code: 500,
+        message: "marketplace disabled",
+        data: null,
+      }),
+    );
+
+    await expect(listOfficialSkillMarketplace()).rejects.toThrow(
+      "marketplace disabled",
+    );
+  });
+
+  it("列表 data 不是 marketplace item page 时应 fail closed", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      mockJsonResponse({
+        code: 0,
+        message: "ok",
+        data: {},
+      }),
+    );
+
+    await expect(listOfficialSkillMarketplace()).rejects.toThrow(
+      "The official skill marketplace response is invalid",
+    );
+  });
+
+  it("列表 item 缺少关键字段时应 fail closed", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      mockJsonResponse({
+        code: 0,
+        message: "ok",
+        data: {
+          items: [
+            {
+              id: "official:broken",
+              name: "broken",
+              title: "非法条目",
+              aliases: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    await expect(listOfficialSkillMarketplace()).rejects.toThrow(
+      "The official skill marketplace response is invalid",
+    );
+  });
+
+  it("安装包缺少 bundle 关键字段时应 fail closed 且不进入安装 facade", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      mockJsonResponse({
+        code: 0,
+        message: "ok",
+        data: {
+          manifestVersion: "agentskills.v1",
+          name: "analysis",
+          aliases: [],
+          version: "2026.05",
+          files: [
+            {
+              path: "SKILL.md",
+              content: "# Analysis",
+            },
+          ],
+        },
+      }),
+    );
+
+    await expect(installOfficialMarketplaceSkill("analysis")).rejects.toThrow(
+      "The official skill bundle is invalid",
+    );
+    expect(skillsApiMock.installMarketplaceBundle).not.toHaveBeenCalled();
+  });
+
+  it("安装包文件缺少 content 时应 fail closed", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      mockJsonResponse({
+        code: 0,
+        message: "ok",
+        data: {
+          manifestVersion: "agentskills.v1",
+          name: "analysis",
+          aliases: [],
+          version: "2026.05",
+          contentHash: "sha256:bundle",
+          fileCount: 1,
+          files: [
+            {
+              path: "SKILL.md",
+            },
+          ],
+        },
+      }),
+    );
+
+    await expect(getOfficialSkillMarketplaceBundle("analysis")).rejects.toThrow(
+      "The official skill bundle is invalid",
+    );
+  });
+
+  it("安装包 fileCount 与 files 不一致时应 fail closed", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      mockJsonResponse({
+        code: 0,
+        message: "ok",
+        data: {
+          manifestVersion: "agentskills.v1",
+          name: "analysis",
+          aliases: [],
+          version: "2026.05",
+          contentHash: "sha256:bundle",
+          fileCount: 2,
+          files: [
+            {
+              path: "SKILL.md",
+              content: "# Analysis",
+            },
+          ],
+        },
+      }),
+    );
+
+    await expect(getOfficialSkillMarketplaceBundle("analysis")).rejects.toThrow(
+      "The official skill bundle is invalid",
     );
   });
 });

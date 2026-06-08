@@ -22,6 +22,19 @@ const IMAGE_PROMPT = "E2E 图片命令路由测试，请生成一张青柠插画
 const CHAT_PROVIDER_PREFERENCE = "deepseek";
 const CHAT_MODEL_PREFERENCE = "deepseek-v4-flash";
 const CONTEXT_CLOSE_TIMEOUT_MS = 5_000;
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
+  "agentSession/turn/start";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =
+  "agentSession/turn/cancel";
+const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const TERMINAL_THREAD_STATUSES = new Set([
+  "completed",
+  "failed",
+  "aborted",
+  "idle",
+  "cancelled",
+]);
 
 function parseArgs(argv) {
   const options = {
@@ -315,6 +328,51 @@ function isLegacyImageRuntimeSubmit(invoke) {
   return invoke?.cmd === "agent_runtime_submit_turn";
 }
 
+function parseAppServerJsonRpcMessages(args) {
+  const lines = args?.request?.lines;
+  const rawLines = Array.isArray(lines)
+    ? lines
+    : typeof lines === "string"
+      ? lines.split("\n")
+      : [];
+  return rawLines
+    .flatMap((line) => String(line || "").split("\n"))
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function getAppServerRequests(invoke) {
+  if (invoke?.cmd !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return [];
+  }
+  return parseAppServerJsonRpcMessages(invoke.args).filter(
+    (message) => typeof message?.method === "string",
+  );
+}
+
+function getAppServerMethodRequest(invoke, method) {
+  return getAppServerRequests(invoke).find(
+    (message) => message.method === method,
+  );
+}
+
+function isCurrentImageRuntimeSubmit(invoke) {
+  return Boolean(
+    getAppServerMethodRequest(
+      invoke,
+      APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+    ),
+  );
+}
+
 function parseInvokeRequest(request, invokeUrl) {
   const requestUrl = request.url();
   const normalizedInvokeUrl = invokeUrl.replace(/\/$/, "");
@@ -361,25 +419,57 @@ async function invokeBridgeCommand(options, cmd, args, timeoutMs = 30_000) {
   }
 }
 
-async function interruptSubmittedTurn(options, request) {
-  const sessionId = String(
-    request.session_id || request.sessionId || "",
-  ).trim();
-  const turnId = String(request.turn_id || request.turnId || "").trim();
+let appServerRequestId = 1;
+
+async function invokeAppServerMethod(
+  options,
+  method,
+  params,
+  timeoutMs = 30_000,
+) {
+  const id = `at-command-registry-e2e-${appServerRequestId++}`;
+  const request =
+    params === undefined ? { id, method } : { id, method, params };
+  const result = await invokeBridgeCommand(
+    options,
+    APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+    { request: { lines: [`${JSON.stringify(request)}\n`] } },
+    timeoutMs,
+  );
+  const responseLines = result?.result?.lines ?? result?.lines;
+  const messages = parseAppServerJsonRpcMessages({
+    request: { lines: responseLines },
+  });
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    throw new Error(
+      `${method} error: ${error.error?.message || "App Server JSON-RPC error"}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method} missing App Server response`);
+  }
+  return response.result;
+}
+
+async function cleanupSubmittedCurrentTurn(options, turnParams) {
+  const sessionId = String(turnParams?.sessionId || "").trim();
+  const turnId = String(turnParams?.turnId || "").trim();
   if (!sessionId) {
     return { attempted: false, reason: "missing-session-id" };
   }
-
-  const interruptRequest = {
-    session_id: sessionId,
-    ...(turnId ? { turn_id: turnId } : {}),
-  };
+  if (!turnId) {
+    return { attempted: false, reason: "missing-turn-id", sessionId };
+  }
 
   try {
-    await invokeBridgeCommand(
+    await invokeAppServerMethod(
       options,
-      "agent_runtime_interrupt_turn",
-      { request: interruptRequest },
+      APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+      { sessionId, turnId },
       20_000,
     );
   } catch (error) {
@@ -395,25 +485,29 @@ async function interruptSubmittedTurn(options, request) {
   const drained = await waitForCondition(
     "等待 @配图 smoke 提交任务清理",
     async () => {
-      const threadRead = await invokeBridgeCommand(
+      const sessionRead = await invokeAppServerMethod(
         options,
-        "agent_runtime_get_thread_read",
+        APP_SERVER_METHOD_AGENT_SESSION_READ,
         { sessionId },
         20_000,
       ).catch(() => null);
-      if (!threadRead) {
+      if (!sessionRead) {
         return null;
       }
-      const status = String(threadRead.status || "").toLowerCase();
-      const queuedTurns = Array.isArray(threadRead.queued_turns)
+      const threadRead =
+        sessionRead.detail?.thread_read || sessionRead.detail?.threadRead;
+      const status = String(
+        threadRead?.status || sessionRead.session?.status || "",
+      ).toLowerCase();
+      const queuedTurns = Array.isArray(threadRead?.queued_turns)
         ? threadRead.queued_turns.length
         : 0;
       const activeTurnId =
-        threadRead.active_turn_id || threadRead.activeTurnId || null;
+        threadRead?.active_turn_id || threadRead?.activeTurnId || null;
       return !activeTurnId &&
         queuedTurns === 0 &&
-        (status === "idle" || status === "completed" || status === "cancelled")
-        ? { status: threadRead.status || null, queuedTurns }
+        TERMINAL_THREAD_STATUSES.has(status)
+        ? { status: status || null, queuedTurns }
         : null;
     },
     30_000,
@@ -704,10 +798,15 @@ async function main() {
           .find(
             (item) =>
               isImageGenerateSkillExecution(item) ||
+              isCurrentImageRuntimeSubmit(item) ||
               isLegacyImageRuntimeSubmit(item),
           ) || null,
       options.timeoutMs,
       options.intervalMs,
+    );
+    assert(
+      !isLegacyImageRuntimeSubmit(submitInvoke),
+      "@配图 不应再通过 agent_runtime_submit_turn 提交，必须走 execute_skill 或 agentSession/turn/start current 主链",
     );
 
     if (isImageGenerateSkillExecution(submitInvoke)) {
@@ -761,9 +860,17 @@ async function main() {
         modelOverride: args.modelOverride ?? null,
       };
     } else {
-      const request = submitInvoke.args?.request || {};
-      const turnConfig = request.turn_config || {};
-      const metadata = turnConfig.metadata || {};
+      const request = getAppServerMethodRequest(
+        submitInvoke,
+        APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+      );
+      assert(request, "@配图 current 提交缺少 agentSession/turn/start");
+      const params = request.params || {};
+      const runtimeOptions = params.runtimeOptions || {};
+      const metadata = runtimeOptions.metadata || {};
+      const asterChatRequest =
+        runtimeOptions.hostOptions?.asterChatRequest || {};
+      const turnConfig = asterChatRequest.turn_config || asterChatRequest;
       const { launch, imageTask } = readImageLaunch(metadata);
       const runtimeContract = readNestedObject(imageTask, [
         "runtime_contract",
@@ -798,12 +905,16 @@ async function main() {
       summary.assertions.imageGenerationContractPreserved = true;
       summary.assertions.chatModelPreferenceSuppressed = true;
       summary.submitRequest = {
-        routeMode: "agent_runtime_submit_turn",
-        message: request.message,
-        sessionId: request.session_id || null,
-        turnId: request.turn_id || null,
-        providerPreference: turnConfig.provider_preference ?? null,
-        modelPreference: turnConfig.model_preference ?? null,
+        routeMode: "agentSession/turn/start",
+        message: params.input?.text || asterChatRequest.message || null,
+        sessionId: params.sessionId || null,
+        turnId: params.turnId || null,
+        providerPreference:
+          runtimeOptions.providerPreference ??
+          turnConfig.provider_preference ??
+          null,
+        modelPreference:
+          runtimeOptions.modelPreference ?? turnConfig.model_preference ?? null,
         contractKey,
         imagePrompt: imageTask.prompt,
       };
@@ -817,10 +928,10 @@ async function main() {
       fullPage: true,
     });
 
-    if (summary.submitRequest?.routeMode === "agent_runtime_submit_turn") {
-      summary.cleanup = await interruptSubmittedTurn(
+    if (summary.submitRequest?.routeMode === "agentSession/turn/start") {
+      summary.cleanup = await cleanupSubmittedCurrentTurn(
         options,
-        submitInvoke.args?.request || {},
+        summary.submitRequest,
       );
     } else {
       summary.cleanup = {

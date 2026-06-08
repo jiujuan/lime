@@ -11,17 +11,30 @@ import {
   renamePath,
 } from "./fileBrowser";
 
-const { appServerListDirectoryMock, appServerReadFilePreviewMock } = vi.hoisted(
-  () => ({
-    appServerListDirectoryMock: vi.fn(),
-    appServerReadFilePreviewMock: vi.fn(),
-  }),
-);
+const {
+  appServerCreateDirectoryMock,
+  appServerCreateFileMock,
+  appServerDeleteFileMock,
+  appServerListDirectoryMock,
+  appServerReadFilePreviewMock,
+  appServerRenameFileMock,
+} = vi.hoisted(() => ({
+  appServerCreateDirectoryMock: vi.fn(),
+  appServerCreateFileMock: vi.fn(),
+  appServerDeleteFileMock: vi.fn(),
+  appServerListDirectoryMock: vi.fn(),
+  appServerReadFilePreviewMock: vi.fn(),
+  appServerRenameFileMock: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appServer", () => ({
   AppServerClient: vi.fn(() => ({
+    createDirectory: appServerCreateDirectoryMock,
+    createFile: appServerCreateFileMock,
+    deleteFile: appServerDeleteFileMock,
     listDirectory: appServerListDirectoryMock,
     readFilePreview: appServerReadFilePreviewMock,
+    renameFile: appServerRenameFileMock,
   })),
 }));
 
@@ -35,26 +48,25 @@ describe("fileBrowser API", () => {
   });
 
   it("应通过 App Server current 主链获取目录列表与文件预览", async () => {
-    appServerListDirectoryMock
-      .mockResolvedValueOnce({
-        result: {
-          path: "~",
-          parentPath: null,
-          entries: [
-            {
-              name: "Lime.app",
-              path: "/Applications/Lime.app",
-              isDir: true,
-              size: 0,
-              modifiedAt: 1,
-              iconDataUrl: "data:image/png;base64,abc",
-              isHidden: false,
-              isSymlink: false,
-            },
-          ],
-          error: null,
-        },
-      });
+    appServerListDirectoryMock.mockResolvedValueOnce({
+      result: {
+        path: "~",
+        parentPath: null,
+        entries: [
+          {
+            name: "Lime.app",
+            path: "/Applications/Lime.app",
+            isDir: true,
+            size: 0,
+            modifiedAt: 1,
+            iconDataUrl: "data:image/png;base64,abc",
+            isHidden: false,
+            isSymlink: false,
+          },
+        ],
+        error: null,
+      },
+    });
     appServerReadFilePreviewMock.mockResolvedValueOnce({
       result: {
         path: "/tmp/demo.txt",
@@ -92,11 +104,10 @@ describe("fileBrowser API", () => {
   });
 
   it("应代理文件增删改命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined);
+    appServerCreateFileMock.mockResolvedValueOnce({ result: {} });
+    appServerCreateDirectoryMock.mockResolvedValueOnce({ result: {} });
+    appServerRenameFileMock.mockResolvedValueOnce({ result: {} });
+    appServerDeleteFileMock.mockResolvedValueOnce({ result: {} });
 
     await expect(createFileAtPath("/tmp/demo.txt")).resolves.toBeUndefined();
     await expect(
@@ -106,32 +117,63 @@ describe("fileBrowser API", () => {
       renamePath("/tmp/demo.txt", "/tmp/demo2.txt"),
     ).resolves.toBeUndefined();
     await expect(deletePath("/tmp/demo2.txt", false)).resolves.toBeUndefined();
+
+    expect(appServerCreateFileMock).toHaveBeenCalledWith({
+      path: "/tmp/demo.txt",
+    });
+    expect(appServerCreateDirectoryMock).toHaveBeenCalledWith({
+      path: "/tmp/demo-dir",
+    });
+    expect(appServerRenameFileMock).toHaveBeenCalledWith({
+      oldPath: "/tmp/demo.txt",
+      newPath: "/tmp/demo2.txt",
+    });
+    expect(appServerDeleteFileMock).toHaveBeenCalledWith({
+      path: "/tmp/demo2.txt",
+      recursive: false,
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "create_file",
+      expect.anything(),
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "create_directory",
+      expect.anything(),
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "rename_file",
+      expect.anything(),
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "delete_file",
+      expect.anything(),
+    );
   });
 
-  it("文件写命令遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "create_file",
-        category: "electron-diagnostic-facade",
-        source: "electron-host-diagnostic",
-        status: "degraded",
-      },
-    });
+  it("文件写命令应透传 App Server RPC 错误", async () => {
+    const error = new Error("fileSystem/createFile failed");
+    appServerCreateFileMock.mockRejectedValueOnce(error);
 
-    await expect(createFileAtPath("/tmp/demo.txt")).rejects.toThrow(
-      "create_file 尚未接入真实文件管理 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    await expect(createFileAtPath("/tmp/demo.txt")).rejects.toThrow(error);
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "create_file",
+      expect.anything(),
     );
   });
 
   it("创建目录时应原样传递 Windows 原生路径", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
+    appServerCreateDirectoryMock.mockResolvedValueOnce({ result: {} });
     const windowsPath = String.raw`C:\Users\demo\workspace\new-folder`;
 
     await expect(createDirectoryAtPath(windowsPath)).resolves.toBeUndefined();
 
-    expect(safeInvoke).toHaveBeenCalledWith("create_directory", {
+    expect(appServerCreateDirectoryMock).toHaveBeenCalledWith({
       path: windowsPath,
     });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "create_directory",
+      expect.anything(),
+    );
   });
 
   it("应代理文件管理器快捷入口命令", async () => {

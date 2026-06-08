@@ -1,9 +1,10 @@
-import { type AgentRuntimeCommandInvoke } from "./transport";
+import type { AppServerSessionClient, AppServerSessionRpcClient } from "./appServerSessionClient";
 import type { AsterExecutionStrategy, AsterSessionDetail, AsterSessionInfo, AgentRuntimeCreateSessionOptions, AgentRuntimeListSessionsOptions, AgentRuntimeGetSessionOptions, AgentRuntimeUpdateSessionRequest } from "./types";
 export interface AgentRuntimeSessionClientDeps {
-    invokeCommand?: AgentRuntimeCommandInvoke;
+    appServerClient?: AppServerSessionRpcClient;
+    appServerSessionClient?: AppServerSessionClient;
 }
-export declare function createSessionClient({ invokeCommand, }?: AgentRuntimeSessionClientDeps): {
+export declare function createSessionClient({ appServerClient, appServerSessionClient, }?: AgentRuntimeSessionClientDeps): {
     createAgentRuntimeSession: (workspaceId: string, name?: string, executionStrategy?: AsterExecutionStrategy, options?: AgentRuntimeCreateSessionOptions) => Promise<string>;
     deleteAgentRuntimeSession: (sessionId: string) => Promise<void>;
     getAgentRuntimeSession: (sessionId: string, options?: AgentRuntimeGetSessionOptions) => Promise<AsterSessionDetail>;

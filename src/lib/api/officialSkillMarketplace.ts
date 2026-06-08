@@ -75,10 +75,10 @@ export interface SkillMarketplaceInstallResult {
   inspection: SkillInspection;
 }
 
-interface SkillMarketplaceListEnvelope {
-  code?: number;
+interface SkillMarketplaceEnvelope {
+  code: number;
   message?: string;
-  data?: unknown;
+  data: unknown;
 }
 
 export interface ListSkillMarketplaceParams {
@@ -122,7 +122,35 @@ function readEnvValue(name: string): string | null {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object";
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isOptionalStringList(value: unknown): boolean {
+  return value === undefined || isStringList(value);
+}
+
+function isOptionalStringRecord(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (isRecord(value) &&
+      Object.values(value).every((item) => typeof item === "string"))
+  );
 }
 
 function normalizeStringList(value: unknown): string[] {
@@ -216,6 +244,99 @@ function normalizeBundleSummary(
   };
 }
 
+function assertMarketplaceVisualAsset(value: unknown): void {
+  if (
+    value !== undefined &&
+    (!isRecord(value) ||
+      !isOptionalString(value.kind) ||
+      !isOptionalString(value.url) ||
+      !isOptionalString(value.svg) ||
+      !isOptionalString(value.prompt) ||
+      !isOptionalString(value.generatedAt))
+  ) {
+    throw new Error(tMarketplaceError("invalidResponse"));
+  }
+}
+
+function assertResourceSummary(value: unknown): void {
+  if (
+    !isRecord(value) ||
+    (value.hasScripts !== undefined &&
+      typeof value.hasScripts !== "boolean") ||
+    (value.hasReferences !== undefined &&
+      typeof value.hasReferences !== "boolean") ||
+    (value.hasAssets !== undefined && typeof value.hasAssets !== "boolean")
+  ) {
+    throw new Error(tMarketplaceError("invalidResponse"));
+  }
+}
+
+function assertStandardCompliance(value: unknown): void {
+  if (
+    !isRecord(value) ||
+    typeof value.isStandard !== "boolean" ||
+    !isOptionalStringList(value.validationErrors) ||
+    !isOptionalStringList(value.deprecatedFields)
+  ) {
+    throw new Error(tMarketplaceError("invalidResponse"));
+  }
+}
+
+function assertBundleSummary(value: unknown): void {
+  if (value === undefined) {
+    return;
+  }
+  if (
+    !isRecord(value) ||
+    typeof value.name !== "string" ||
+    typeof value.description !== "string" ||
+    !isOptionalString(value.license) ||
+    !isOptionalString(value.compatibility) ||
+    !isOptionalStringRecord(value.metadata) ||
+    !isOptionalStringList(value.allowedTools)
+  ) {
+    throw new Error(tMarketplaceError("invalidResponse"));
+  }
+  assertResourceSummary(value.resourceSummary);
+  assertStandardCompliance(value.standardCompliance);
+}
+
+function assertMarketplaceItem(value: unknown): void {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    !value.id.trim() ||
+    typeof value.name !== "string" ||
+    !value.name.trim() ||
+    !isStringList(value.aliases) ||
+    typeof value.title !== "string" ||
+    !value.title.trim() ||
+    typeof value.summary !== "string" ||
+    typeof value.category !== "string" ||
+    typeof value.outputHint !== "string" ||
+    typeof value.version !== "string" ||
+    !isFiniteNumber(value.sort) ||
+    !isOptionalString(value.contentHash) ||
+    !isOptionalString(value.updatedAt)
+  ) {
+    throw new Error(tMarketplaceError("invalidResponse"));
+  }
+  assertMarketplaceVisualAsset(value.icon);
+  assertMarketplaceVisualAsset(value.cover);
+  assertBundleSummary(value.bundle);
+}
+
+function assertMarketplaceListPayload(
+  value: unknown,
+): asserts value is { items: unknown[] } {
+  if (!isRecord(value) || !Array.isArray(value.items)) {
+    throw new Error(tMarketplaceError("invalidResponse"));
+  }
+  for (const item of value.items) {
+    assertMarketplaceItem(item);
+  }
+}
+
 function normalizeMarketplaceItem(value: unknown): SkillMarketplaceItem | null {
   if (!isRecord(value)) {
     return null;
@@ -246,12 +367,23 @@ function normalizeMarketplaceItem(value: unknown): SkillMarketplaceItem | null {
 }
 
 function normalizeMarketplaceItems(value: unknown): SkillMarketplaceItem[] {
-  if (!isRecord(value) || !Array.isArray(value.items)) {
-    return [];
-  }
+  assertMarketplaceListPayload(value);
   return value.items
     .map(normalizeMarketplaceItem)
     .filter((item): item is SkillMarketplaceItem => Boolean(item));
+}
+
+function assertMarketplaceFile(value: unknown): void {
+  if (
+    !isRecord(value) ||
+    typeof value.path !== "string" ||
+    !value.path.trim() ||
+    typeof value.content !== "string" ||
+    !isOptionalString(value.encoding) ||
+    !isOptionalString(value.sha256)
+  ) {
+    throw new Error(tMarketplaceError("invalidBundle"));
+  }
 }
 
 function normalizeMarketplaceFile(value: unknown): SkillMarketplaceFile | null {
@@ -271,9 +403,43 @@ function normalizeMarketplaceFile(value: unknown): SkillMarketplaceFile | null {
   };
 }
 
+function assertMarketplaceBundle(value: unknown): void {
+  if (!isRecord(value)) {
+    throw new Error(tMarketplaceError("invalidBundle"));
+  }
+
+  const fileCount = value.fileCount;
+  if (
+    typeof fileCount !== "number" ||
+    !Number.isInteger(fileCount) ||
+    fileCount < 1
+  ) {
+    throw new Error(tMarketplaceError("invalidBundle"));
+  }
+
+  if (
+    typeof value.manifestVersion !== "string" ||
+    !value.manifestVersion.trim() ||
+    typeof value.name !== "string" ||
+    !value.name.trim() ||
+    !isStringList(value.aliases) ||
+    typeof value.version !== "string" ||
+    typeof value.contentHash !== "string" ||
+    !Array.isArray(value.files) ||
+    value.files.length === 0 ||
+    fileCount !== value.files.length
+  ) {
+    throw new Error(tMarketplaceError("invalidBundle"));
+  }
+  for (const file of value.files) {
+    assertMarketplaceFile(file);
+  }
+}
+
 function normalizeMarketplaceBundle(
   value: unknown,
 ): SkillMarketplaceBundle | null {
+  assertMarketplaceBundle(value);
   if (!isRecord(value)) {
     return null;
   }
@@ -298,27 +464,56 @@ function normalizeMarketplaceBundle(
   };
 }
 
+function readEnvelopeMessage(payload: unknown): string | null {
+  if (!isRecord(payload) || typeof payload.message !== "string") {
+    return null;
+  }
+  const message = payload.message.trim();
+  return message || null;
+}
+
+function assertMarketplaceEnvelope(
+  payload: unknown,
+): asserts payload is SkillMarketplaceEnvelope {
+  if (
+    !isRecord(payload) ||
+    typeof payload.code !== "number" ||
+    !isOptionalString(payload.message) ||
+    !hasOwn(payload, "data")
+  ) {
+    throw new Error(tMarketplaceError("invalidResponse"));
+  }
+
+  if (payload.code !== 0) {
+    throw new Error(
+      readEnvelopeMessage(payload) || tMarketplaceError("invalidResponse"),
+    );
+  }
+}
+
 async function requestMarketplaceJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     method: "GET",
     headers: { Accept: "application/json" },
   });
 
-  let payload: SkillMarketplaceListEnvelope | null = null;
+  let payload: unknown = null;
   try {
-    payload = (await response.json()) as SkillMarketplaceListEnvelope;
+    payload = await response.json();
   } catch {
     payload = null;
   }
 
   if (!response.ok) {
     throw new Error(
-      payload?.message?.trim() ||
+      readEnvelopeMessage(payload) ||
         tMarketplaceError("requestFailed", { status: response.status }),
     );
   }
 
-  return payload?.data as T;
+  assertMarketplaceEnvelope(payload);
+
+  return payload.data as T;
 }
 
 export function resolveSkillMarketplaceApiBaseUrl(): string {

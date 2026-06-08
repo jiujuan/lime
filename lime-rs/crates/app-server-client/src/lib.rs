@@ -35,19 +35,38 @@ pub use app_server_protocol::AutomationSchedulerConfigUpdateResponse;
 pub use app_server_protocol::AutomationSchedulerStatusResponse;
 pub use app_server_protocol::CapabilityListParams;
 pub use app_server_protocol::EvidenceExportParams;
+pub use app_server_protocol::FileSystemCreateDirectoryParams;
+pub use app_server_protocol::FileSystemCreateFileParams;
+pub use app_server_protocol::FileSystemDeleteFileParams;
 pub use app_server_protocol::FileSystemDirectoryListing;
 pub use app_server_protocol::FileSystemFileEntry;
 pub use app_server_protocol::FileSystemFilePreview;
 pub use app_server_protocol::FileSystemListDirectoryParams;
+pub use app_server_protocol::FileSystemMutationResponse;
 pub use app_server_protocol::FileSystemReadFilePreviewParams;
+pub use app_server_protocol::FileSystemRenameFileParams;
 pub use app_server_protocol::InitializeParams;
 use app_server_protocol::JsonRpcErrorResponse;
 use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::JsonRpcResponse;
+pub use app_server_protocol::KnowledgeCompilePackParams;
+pub use app_server_protocol::KnowledgeCompilePackResponse;
+pub use app_server_protocol::KnowledgeContextResolutionResponse;
+pub use app_server_protocol::KnowledgeImportSourceParams;
+pub use app_server_protocol::KnowledgeImportSourceResponse;
 pub use app_server_protocol::KnowledgeListPacksParams;
 pub use app_server_protocol::KnowledgeListPacksResponse;
+pub use app_server_protocol::KnowledgeReadPackParams;
+pub use app_server_protocol::KnowledgeReadPackResponse;
+pub use app_server_protocol::KnowledgeResolveContextParams;
+pub use app_server_protocol::KnowledgeSetDefaultPackParams;
+pub use app_server_protocol::KnowledgeSetDefaultPackResponse;
+pub use app_server_protocol::KnowledgeUpdatePackStatusParams;
+pub use app_server_protocol::KnowledgeUpdatePackStatusResponse;
+pub use app_server_protocol::KnowledgeValidateContextRunParams;
+pub use app_server_protocol::KnowledgeValidateContextRunResponse;
 pub use app_server_protocol::McpPromptListResponse;
 pub use app_server_protocol::McpResourceListResponse;
 pub use app_server_protocol::McpServerListResponse;
@@ -61,6 +80,13 @@ use app_server_protocol::RequestId;
 pub use app_server_protocol::SkillListResponse;
 pub use app_server_protocol::SkillReadParams;
 pub use app_server_protocol::SkillReadResponse;
+pub use app_server_protocol::UsageStatsDailyTrendsListResponse;
+pub use app_server_protocol::UsageStatsDailyUsage;
+pub use app_server_protocol::UsageStatsModelRankingListResponse;
+pub use app_server_protocol::UsageStatsModelUsage;
+pub use app_server_protocol::UsageStatsRangeParams;
+pub use app_server_protocol::UsageStatsReadResponse;
+pub use app_server_protocol::UsageStatsSummary;
 pub use app_server_protocol::WorkspaceEnsureParams;
 pub use app_server_protocol::WorkspaceEnsureReadyResponse;
 pub use app_server_protocol::WorkspaceListResponse;
@@ -100,11 +126,22 @@ pub use app_server_protocol::METHOD_AUTOMATION_SCHEDULE_PREVIEW;
 pub use app_server_protocol::METHOD_AUTOMATION_SCHEDULE_VALIDATE;
 pub use app_server_protocol::METHOD_CAPABILITY_LIST;
 pub use app_server_protocol::METHOD_EVIDENCE_EXPORT;
+pub use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_DIRECTORY;
+pub use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_FILE;
+pub use app_server_protocol::METHOD_FILE_SYSTEM_DELETE_FILE;
 pub use app_server_protocol::METHOD_FILE_SYSTEM_LIST_DIRECTORY;
 pub use app_server_protocol::METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
+pub use app_server_protocol::METHOD_FILE_SYSTEM_RENAME_FILE;
 pub use app_server_protocol::METHOD_INITIALIZE;
 pub use app_server_protocol::METHOD_INITIALIZED;
+pub use app_server_protocol::METHOD_KNOWLEDGE_CONTEXT_RESOLVE;
+pub use app_server_protocol::METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE;
+pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_COMPILE;
+pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_DEFAULT_SET;
 pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
+pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_READ;
+pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_STATUS_UPDATE;
+pub use app_server_protocol::METHOD_KNOWLEDGE_SOURCE_IMPORT;
 pub use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 pub use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
 pub use app_server_protocol::METHOD_MCP_SERVER_LIST;
@@ -120,6 +157,9 @@ pub use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
 pub use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 pub use app_server_protocol::METHOD_SKILL_LIST;
 pub use app_server_protocol::METHOD_SKILL_READ;
+pub use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
+pub use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
+pub use app_server_protocol::METHOD_USAGE_STATS_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
@@ -337,6 +377,55 @@ impl AppServerClient {
         self.typed_request(typed::list_knowledge_packs(params))
     }
 
+    pub fn read_knowledge_pack(
+        &mut self,
+        params: KnowledgeReadPackParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_knowledge_pack(params))
+    }
+
+    pub fn import_knowledge_source(
+        &mut self,
+        params: KnowledgeImportSourceParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::import_knowledge_source(params))
+    }
+
+    pub fn compile_knowledge_pack(
+        &mut self,
+        params: KnowledgeCompilePackParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::compile_knowledge_pack(params))
+    }
+
+    pub fn set_default_knowledge_pack(
+        &mut self,
+        params: KnowledgeSetDefaultPackParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::set_default_knowledge_pack(params))
+    }
+
+    pub fn update_knowledge_pack_status(
+        &mut self,
+        params: KnowledgeUpdatePackStatusParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::update_knowledge_pack_status(params))
+    }
+
+    pub fn resolve_knowledge_context(
+        &mut self,
+        params: KnowledgeResolveContextParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::resolve_knowledge_context(params))
+    }
+
+    pub fn validate_knowledge_context_run(
+        &mut self,
+        params: KnowledgeValidateContextRunParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::validate_knowledge_context_run(params))
+    }
+
     pub fn list_automation_jobs(&mut self) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_automation_jobs())
     }
@@ -446,6 +535,27 @@ impl AppServerClient {
         self.typed_request(typed::read_project_memory(params))
     }
 
+    pub fn read_usage_stats(
+        &mut self,
+        params: UsageStatsRangeParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_usage_stats(params))
+    }
+
+    pub fn list_usage_stats_model_ranking(
+        &mut self,
+        params: UsageStatsRangeParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_usage_stats_model_ranking(params))
+    }
+
+    pub fn list_usage_stats_daily_trends(
+        &mut self,
+        params: UsageStatsRangeParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_usage_stats_daily_trends(params))
+    }
+
     pub fn list_models(&mut self, params: ModelListParams) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_models(params))
     }
@@ -496,6 +606,34 @@ impl AppServerClient {
         params: FileSystemReadFilePreviewParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::read_file_preview(params))
+    }
+
+    pub fn create_file(
+        &mut self,
+        params: FileSystemCreateFileParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::create_file(params))
+    }
+
+    pub fn create_directory(
+        &mut self,
+        params: FileSystemCreateDirectoryParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::create_directory(params))
+    }
+
+    pub fn rename_file(
+        &mut self,
+        params: FileSystemRenameFileParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::rename_file(params))
+    }
+
+    pub fn delete_file(
+        &mut self,
+        params: FileSystemDeleteFileParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::delete_file(params))
     }
 
     pub fn export_evidence(
@@ -669,6 +807,48 @@ pub mod typed {
         TypedRequest::new(METHOD_KNOWLEDGE_PACK_LIST, params)
     }
 
+    pub fn read_knowledge_pack(
+        params: KnowledgeReadPackParams,
+    ) -> TypedRequest<KnowledgeReadPackParams> {
+        TypedRequest::new(METHOD_KNOWLEDGE_PACK_READ, params)
+    }
+
+    pub fn import_knowledge_source(
+        params: KnowledgeImportSourceParams,
+    ) -> TypedRequest<KnowledgeImportSourceParams> {
+        TypedRequest::new(METHOD_KNOWLEDGE_SOURCE_IMPORT, params)
+    }
+
+    pub fn compile_knowledge_pack(
+        params: KnowledgeCompilePackParams,
+    ) -> TypedRequest<KnowledgeCompilePackParams> {
+        TypedRequest::new(METHOD_KNOWLEDGE_PACK_COMPILE, params)
+    }
+
+    pub fn set_default_knowledge_pack(
+        params: KnowledgeSetDefaultPackParams,
+    ) -> TypedRequest<KnowledgeSetDefaultPackParams> {
+        TypedRequest::new(METHOD_KNOWLEDGE_PACK_DEFAULT_SET, params)
+    }
+
+    pub fn update_knowledge_pack_status(
+        params: KnowledgeUpdatePackStatusParams,
+    ) -> TypedRequest<KnowledgeUpdatePackStatusParams> {
+        TypedRequest::new(METHOD_KNOWLEDGE_PACK_STATUS_UPDATE, params)
+    }
+
+    pub fn resolve_knowledge_context(
+        params: KnowledgeResolveContextParams,
+    ) -> TypedRequest<KnowledgeResolveContextParams> {
+        TypedRequest::new(METHOD_KNOWLEDGE_CONTEXT_RESOLVE, params)
+    }
+
+    pub fn validate_knowledge_context_run(
+        params: KnowledgeValidateContextRunParams,
+    ) -> TypedRequest<KnowledgeValidateContextRunParams> {
+        TypedRequest::new(METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE, params)
+    }
+
     pub fn list_automation_jobs() -> TypedRequest<serde_json::Value> {
         TypedRequest::new(METHOD_AUTOMATION_JOB_LIST, serde_json::json!({}))
     }
@@ -770,6 +950,22 @@ pub mod typed {
         TypedRequest::new(METHOD_PROJECT_MEMORY_READ, params)
     }
 
+    pub fn read_usage_stats(params: UsageStatsRangeParams) -> TypedRequest<UsageStatsRangeParams> {
+        TypedRequest::new(METHOD_USAGE_STATS_READ, params)
+    }
+
+    pub fn list_usage_stats_model_ranking(
+        params: UsageStatsRangeParams,
+    ) -> TypedRequest<UsageStatsRangeParams> {
+        TypedRequest::new(METHOD_USAGE_STATS_MODEL_RANKING_LIST, params)
+    }
+
+    pub fn list_usage_stats_daily_trends(
+        params: UsageStatsRangeParams,
+    ) -> TypedRequest<UsageStatsRangeParams> {
+        TypedRequest::new(METHOD_USAGE_STATS_DAILY_TRENDS_LIST, params)
+    }
+
     pub fn list_models(params: ModelListParams) -> TypedRequest<ModelListParams> {
         TypedRequest::new(METHOD_MODEL_LIST, params)
     }
@@ -814,6 +1010,30 @@ pub mod typed {
         params: FileSystemReadFilePreviewParams,
     ) -> TypedRequest<FileSystemReadFilePreviewParams> {
         TypedRequest::new(METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, params)
+    }
+
+    pub fn create_file(
+        params: FileSystemCreateFileParams,
+    ) -> TypedRequest<FileSystemCreateFileParams> {
+        TypedRequest::new(METHOD_FILE_SYSTEM_CREATE_FILE, params)
+    }
+
+    pub fn create_directory(
+        params: FileSystemCreateDirectoryParams,
+    ) -> TypedRequest<FileSystemCreateDirectoryParams> {
+        TypedRequest::new(METHOD_FILE_SYSTEM_CREATE_DIRECTORY, params)
+    }
+
+    pub fn rename_file(
+        params: FileSystemRenameFileParams,
+    ) -> TypedRequest<FileSystemRenameFileParams> {
+        TypedRequest::new(METHOD_FILE_SYSTEM_RENAME_FILE, params)
+    }
+
+    pub fn delete_file(
+        params: FileSystemDeleteFileParams,
+    ) -> TypedRequest<FileSystemDeleteFileParams> {
+        TypedRequest::new(METHOD_FILE_SYSTEM_DELETE_FILE, params)
     }
 
     pub fn export_evidence(params: EvidenceExportParams) -> TypedRequest<EvidenceExportParams> {
@@ -1137,6 +1357,62 @@ mod tests {
                 include_archived: true,
             })
             .expect("knowledge packs");
+        let knowledge_detail = client
+            .read_knowledge_pack(KnowledgeReadPackParams {
+                working_dir: "/workspace/project".to_string(),
+                name: "sample-product".to_string(),
+            })
+            .expect("knowledge pack detail");
+        let imported_knowledge_source = client
+            .import_knowledge_source(KnowledgeImportSourceParams {
+                working_dir: "/workspace/project".to_string(),
+                pack_name: "sample-product".to_string(),
+                description: None,
+                pack_type: None,
+                language: None,
+                source_file_name: None,
+                source_text: Some("示例产品事实".to_string()),
+            })
+            .expect("knowledge source import");
+        let compiled_knowledge_pack = client
+            .compile_knowledge_pack(KnowledgeCompilePackParams {
+                working_dir: "/workspace/project".to_string(),
+                name: "sample-product".to_string(),
+                builder_runtime: Some(json!({ "enabled": true })),
+            })
+            .expect("knowledge pack compile");
+        let default_knowledge_pack = client
+            .set_default_knowledge_pack(KnowledgeSetDefaultPackParams {
+                working_dir: "/workspace/project".to_string(),
+                name: "sample-product".to_string(),
+            })
+            .expect("knowledge pack default");
+        let updated_knowledge_pack_status = client
+            .update_knowledge_pack_status(KnowledgeUpdatePackStatusParams {
+                working_dir: "/workspace/project".to_string(),
+                name: "sample-product".to_string(),
+                status: "ready".to_string(),
+            })
+            .expect("knowledge pack status");
+        let knowledge_context = client
+            .resolve_knowledge_context(KnowledgeResolveContextParams {
+                working_dir: "/workspace/project".to_string(),
+                name: "sample-product".to_string(),
+                packs: Vec::new(),
+                task: Some("写产品介绍".to_string()),
+                max_chars: None,
+                activation: None,
+                write_run: true,
+                run_reason: None,
+            })
+            .expect("knowledge context");
+        let knowledge_context_validation = client
+            .validate_knowledge_context_run(KnowledgeValidateContextRunParams {
+                working_dir: "/workspace/project".to_string(),
+                name: "sample-product".to_string(),
+                run_path: "runs/context.json".to_string(),
+            })
+            .expect("knowledge context validation");
         let scheduler_config = client
             .read_automation_scheduler_config()
             .expect("automation scheduler config");
@@ -1236,6 +1512,85 @@ mod tests {
             json!({
                 "workingDir": "/workspace/project",
                 "includeArchived": true,
+            })
+        );
+        assert_eq!(knowledge_detail.method, METHOD_KNOWLEDGE_PACK_READ);
+        assert_eq!(
+            knowledge_detail.params.expect("params"),
+            json!({
+                "workingDir": "/workspace/project",
+                "name": "sample-product",
+            })
+        );
+        assert_eq!(
+            imported_knowledge_source.method,
+            METHOD_KNOWLEDGE_SOURCE_IMPORT
+        );
+        assert_eq!(
+            imported_knowledge_source.params.expect("params"),
+            json!({
+                "workingDir": "/workspace/project",
+                "packName": "sample-product",
+                "sourceText": "示例产品事实",
+            })
+        );
+        assert_eq!(
+            compiled_knowledge_pack.method,
+            METHOD_KNOWLEDGE_PACK_COMPILE
+        );
+        assert_eq!(
+            compiled_knowledge_pack.params.expect("params"),
+            json!({
+                "workingDir": "/workspace/project",
+                "name": "sample-product",
+                "builderRuntime": {
+                    "enabled": true,
+                },
+            })
+        );
+        assert_eq!(
+            default_knowledge_pack.method,
+            METHOD_KNOWLEDGE_PACK_DEFAULT_SET
+        );
+        assert_eq!(
+            default_knowledge_pack.params.expect("params"),
+            json!({
+                "workingDir": "/workspace/project",
+                "name": "sample-product",
+            })
+        );
+        assert_eq!(
+            updated_knowledge_pack_status.method,
+            METHOD_KNOWLEDGE_PACK_STATUS_UPDATE
+        );
+        assert_eq!(
+            updated_knowledge_pack_status.params.expect("params"),
+            json!({
+                "workingDir": "/workspace/project",
+                "name": "sample-product",
+                "status": "ready",
+            })
+        );
+        assert_eq!(knowledge_context.method, METHOD_KNOWLEDGE_CONTEXT_RESOLVE);
+        assert_eq!(
+            knowledge_context.params.expect("params"),
+            json!({
+                "workingDir": "/workspace/project",
+                "name": "sample-product",
+                "task": "写产品介绍",
+                "writeRun": true,
+            })
+        );
+        assert_eq!(
+            knowledge_context_validation.method,
+            METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE
+        );
+        assert_eq!(
+            knowledge_context_validation.params.expect("params"),
+            json!({
+                "workingDir": "/workspace/project",
+                "name": "sample-product",
+                "runPath": "runs/context.json",
             })
         );
         assert_eq!(
@@ -1358,7 +1713,7 @@ mod tests {
     }
 
     #[test]
-    fn file_system_read_helpers_use_current_methods() {
+    fn file_system_helpers_use_current_methods() {
         let mut client = AppServerClient::new();
 
         let listing = client
@@ -1372,6 +1727,28 @@ mod tests {
                 max_size: Some(1024),
             })
             .expect("preview");
+        let create_file = client
+            .create_file(FileSystemCreateFileParams {
+                path: "/workspace/new.md".to_string(),
+            })
+            .expect("create file");
+        let create_directory = client
+            .create_directory(FileSystemCreateDirectoryParams {
+                path: "/workspace/new-dir".to_string(),
+            })
+            .expect("create directory");
+        let rename_file = client
+            .rename_file(FileSystemRenameFileParams {
+                old_path: "/workspace/new.md".to_string(),
+                new_path: "/workspace/renamed.md".to_string(),
+            })
+            .expect("rename file");
+        let delete_file = client
+            .delete_file(FileSystemDeleteFileParams {
+                path: "/workspace/renamed.md".to_string(),
+                recursive: Some(false),
+            })
+            .expect("delete file");
 
         assert_eq!(listing.id, RequestId::Integer(1));
         assert_eq!(listing.method, METHOD_FILE_SYSTEM_LIST_DIRECTORY);
@@ -1388,6 +1765,40 @@ mod tests {
             json!({
                 "path": "/workspace/README.md",
                 "maxSize": 1024,
+            })
+        );
+        assert_eq!(create_file.id, RequestId::Integer(3));
+        assert_eq!(create_file.method, METHOD_FILE_SYSTEM_CREATE_FILE);
+        assert_eq!(
+            create_file.params.expect("params"),
+            json!({
+                "path": "/workspace/new.md",
+            })
+        );
+        assert_eq!(create_directory.id, RequestId::Integer(4));
+        assert_eq!(create_directory.method, METHOD_FILE_SYSTEM_CREATE_DIRECTORY);
+        assert_eq!(
+            create_directory.params.expect("params"),
+            json!({
+                "path": "/workspace/new-dir",
+            })
+        );
+        assert_eq!(rename_file.id, RequestId::Integer(5));
+        assert_eq!(rename_file.method, METHOD_FILE_SYSTEM_RENAME_FILE);
+        assert_eq!(
+            rename_file.params.expect("params"),
+            json!({
+                "oldPath": "/workspace/new.md",
+                "newPath": "/workspace/renamed.md",
+            })
+        );
+        assert_eq!(delete_file.id, RequestId::Integer(6));
+        assert_eq!(delete_file.method, METHOD_FILE_SYSTEM_DELETE_FILE);
+        assert_eq!(
+            delete_file.params.expect("params"),
+            json!({
+                "path": "/workspace/renamed.md",
+                "recursive": false,
             })
         );
     }
@@ -1545,6 +1956,10 @@ mod tests {
         assert!(methods.contains(&METHOD_ARTIFACT_READ));
         assert!(methods.contains(&METHOD_FILE_SYSTEM_LIST_DIRECTORY));
         assert!(methods.contains(&METHOD_FILE_SYSTEM_READ_FILE_PREVIEW));
+        assert!(methods.contains(&METHOD_FILE_SYSTEM_CREATE_FILE));
+        assert!(methods.contains(&METHOD_FILE_SYSTEM_CREATE_DIRECTORY));
+        assert!(methods.contains(&METHOD_FILE_SYSTEM_RENAME_FILE));
+        assert!(methods.contains(&METHOD_FILE_SYSTEM_DELETE_FILE));
         assert!(methods.contains(&METHOD_EVIDENCE_EXPORT));
         assert!(methods.contains(&METHOD_AGENT_SESSION_TURN_START));
         assert!(methods.contains(&METHOD_WORKSPACE_LIST));
@@ -1560,6 +1975,7 @@ mod tests {
         assert!(methods.contains(&METHOD_WORKSPACE_SKILL_BINDINGS_LIST));
         assert!(methods.contains(&METHOD_AGENT_APP_INSTALLED_LIST));
         assert!(methods.contains(&METHOD_KNOWLEDGE_PACK_LIST));
+        assert!(methods.contains(&METHOD_KNOWLEDGE_PACK_READ));
         assert!(methods.contains(&METHOD_AUTOMATION_SCHEDULER_CONFIG_READ));
         assert!(methods.contains(&METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE));
         assert!(methods.contains(&METHOD_AUTOMATION_SCHEDULER_STATUS));
@@ -1583,6 +1999,12 @@ mod tests {
         assert!(is_app_server_request_method(
             METHOD_FILE_SYSTEM_READ_FILE_PREVIEW
         ));
+        assert!(is_app_server_request_method(METHOD_FILE_SYSTEM_CREATE_FILE));
+        assert!(is_app_server_request_method(
+            METHOD_FILE_SYSTEM_CREATE_DIRECTORY
+        ));
+        assert!(is_app_server_request_method(METHOD_FILE_SYSTEM_RENAME_FILE));
+        assert!(is_app_server_request_method(METHOD_FILE_SYSTEM_DELETE_FILE));
         assert!(is_app_server_request_method(METHOD_EVIDENCE_EXPORT));
         assert!(is_app_server_request_method(METHOD_WORKSPACE_LIST));
         assert!(is_app_server_request_method(METHOD_SKILL_LIST));
@@ -1590,6 +2012,7 @@ mod tests {
             METHOD_AGENT_APP_INSTALLED_LIST
         ));
         assert!(is_app_server_request_method(METHOD_KNOWLEDGE_PACK_LIST));
+        assert!(is_app_server_request_method(METHOD_KNOWLEDGE_PACK_READ));
         assert!(is_app_server_request_method(
             METHOD_AUTOMATION_SCHEDULER_CONFIG_READ
         ));

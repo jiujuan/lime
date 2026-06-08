@@ -45,10 +45,26 @@ describe("hintRoutes API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("get_hint_routes");
   });
 
-  it("旧命令返回非数组时 fail closed 为空数组", async () => {
+  it("旧命令返回非数组时应 fail closed", async () => {
     vi.mocked(isOptionalLegacyUxCommandAvailable).mockReturnValue(true);
     vi.mocked(safeInvoke).mockResolvedValueOnce(null);
 
-    await expect(listHintRoutes()).resolves.toEqual([]);
+    await expect(listHintRoutes()).rejects.toThrow(
+      "get_hint_routes did not return hint routes",
+    );
+  });
+
+  it("旧命令返回 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(isOptionalLegacyUxCommandAvailable).mockReturnValue(true);
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(listHintRoutes()).rejects.toThrow(
+      "get_hint_routes 尚未接入真实提示路由 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
   });
 });

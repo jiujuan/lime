@@ -1,7 +1,7 @@
 # Electron Release / Updater 边界
 
 > 状态：current planning source
-> 更新时间：2026-06-07
+> 更新时间：2026-06-08
 > 作用：固定 Lime Desktop 下线上一代前端宿主后的 release、签名、公证、updater feed 与平稳迁移口径。
 
 ## 1. 事实源
@@ -22,6 +22,8 @@ Lime Desktop 的发布与更新链路由 Electron current 接管：
 Codex CLI / `codex-rs` 只作为 App Server protocol / daemon lifecycle / client 分层参考；release、updater、tray、Dock、窗口和桌面产品交互都以 Lime Electron Desktop Host 为事实源，不从 Codex App UI 推断。
 
 旧 builder 配置 / CLI、自定义 Windows installer maker 与旧 YAML / blockmap updater metadata 已按 `dead` 处理，不再作为 release、updater、签名、公证、CI、i18n app metadata 或版本同步输入。
+
+旧 Rust / Tauri updater command 面同样已按 `dead / deleted` 处理：`lime-rs/src/commands/update_cmd.rs` 已物理删除，`lime-rs/src/commands/mod.rs` 不再声明 `update_cmd`，`lime-rs/src/app/runner.rs` 不再管理 `UpdateInstallSessionState`、不再启动 Rust 后台更新检查，也不再注册旧 updater `generate_handler!`。后续不得用 stub、compat wrapper 或新实现把 updater 放回 `lime-rs/src/commands/`；只允许经 Electron Desktop Host updater current 链路演进。
 
 官方依据：
 
@@ -148,6 +150,8 @@ Renderer 仍通过既有命令名进入更新体验，但实现 owner 已切到 
 | `get_update_install_session`   | `ElectronUpdateHost` 内存会话投影          |
 | `get_update_check_settings`    | Electron updater 设置投影                  |
 | `open_update_window`           | Electron 通知窗口生命周期与定位            |
+
+这些命令名只是前端体验的稳定入口，不代表可以恢复 Tauri command。`check_update`、`check_for_updates`、`download_update`、`start_update_install_session`、`get_update_install_session`、`get_update_check_settings`、`set_update_check_settings`、`get_update_notification_metrics`、`record_update_notification_action`、`skip_update_version`、`remind_update_later`、`dismiss_update_notification`、`update_last_check_timestamp`、`close_update_window`、`test_update_window` 的旧 Rust 注册和实现已经删除；如果 Electron Host 缺少真实能力，前端必须 fail closed，而不是回落到 Rust `commands/`。
 
 开发态默认不启用真实 updater。只有显式设置 `LIME_ELECTRON_ENABLE_DEV_UPDATER=1` 时才允许在开发包里调用 Electron 内置 `autoUpdater`，避免开发环境误连生产 feed。
 

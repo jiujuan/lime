@@ -116,6 +116,148 @@ describe("unifiedMemory API", () => {
     );
   });
 
+  it("统一记忆列表遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "unified_memory_list",
+        status: "degraded",
+      },
+    });
+
+    await expect(listUnifiedMemories()).rejects.toThrow(
+      "unified_memory_list 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("统一记忆列表遇到非数组返回时不应伪装成空列表", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      memories: [],
+    });
+
+    await expect(listUnifiedMemories()).rejects.toThrow(
+      "unified_memory_list did not return a memories array",
+    );
+  });
+
+  it("统一记忆搜索遇到 diagnostic facade 或非数组返回时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "unified_memory_search",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({ memories: [] });
+
+    await expect(searchUnifiedMemories("关键词")).rejects.toThrow(
+      "unified_memory_search 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(searchUnifiedMemories("关键词")).rejects.toThrow(
+      "unified_memory_search did not return a memories array",
+    );
+  });
+
+  it("统一记忆 get/create/update/delete 遇到 diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "unified_memory_get",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "unified_memory_create",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "unified_memory_update",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "unified_memory_delete",
+          status: "degraded",
+        },
+      });
+
+    await expect(getUnifiedMemory("m1")).rejects.toThrow(
+      "unified_memory_get 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(
+      createUnifiedMemory({
+        session_id: "session-1",
+        title: "标题",
+        content: "内容",
+        summary: "摘要",
+      }),
+    ).rejects.toThrow(
+      "unified_memory_create 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(updateUnifiedMemory("m1", { title: "更新" })).rejects.toThrow(
+      "unified_memory_update 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(deleteUnifiedMemory("m1")).rejects.toThrow(
+      "unified_memory_delete 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("统一记忆 get/create/update/delete 遇到错误形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce("bad")
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ deleted: true });
+
+    await expect(getUnifiedMemory("m1")).rejects.toThrow(
+      "unified_memory_get did not return a memory object or null",
+    );
+    await expect(
+      createUnifiedMemory({
+        session_id: "session-1",
+        title: "标题",
+        content: "内容",
+        summary: "摘要",
+      }),
+    ).rejects.toThrow("unified_memory_create did not return a memory object");
+    await expect(updateUnifiedMemory("m1", { title: "更新" })).rejects.toThrow(
+      "unified_memory_update did not return a memory object",
+    );
+    await expect(deleteUnifiedMemory("m1")).rejects.toThrow(
+      "unified_memory_delete did not return a boolean",
+    );
+  });
+
+  it("统一记忆分析遇到 diagnostic facade 或错误形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "unified_memory_analyze",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({
+        analyzed_sessions: 1,
+      });
+
+    await expect(analyzeUnifiedMemories()).rejects.toThrow(
+      "unified_memory_analyze 尚未接入真实统一记忆分析 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(analyzeUnifiedMemories()).rejects.toThrow(
+      "unified_memory_analyze did not return an analysis result",
+    );
+  });
+
   it("应代理语义搜索与混合搜索命令", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce([{ id: "m4" }])
@@ -152,6 +294,39 @@ describe("unifiedMemory API", () => {
           limit: 6,
         },
       },
+    );
+  });
+
+  it("语义搜索与混合搜索遇到 diagnostic facade 或非数组返回时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "unified_memory_semantic_search",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({ memories: [] })
+      .mockResolvedValueOnce({
+        diagnostic: {
+          source: "electron-host-diagnostic",
+          command: "unified_memory_hybrid_search",
+          status: "degraded",
+        },
+      })
+      .mockResolvedValueOnce({ memories: [] });
+
+    await expect(semanticSearch("语义")).rejects.toThrow(
+      "unified_memory_semantic_search 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(semanticSearch("语义")).rejects.toThrow(
+      "unified_memory_semantic_search did not return a memories array",
+    );
+    await expect(hybridSearch("混合")).rejects.toThrow(
+      "unified_memory_hybrid_search 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(hybridSearch("混合")).rejects.toThrow(
+      "unified_memory_hybrid_search did not return a memories array",
     );
   });
 

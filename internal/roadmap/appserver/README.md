@@ -1,7 +1,7 @@
 # App Server 路线图
 
 > 状态：current planning source
-> 更新时间：2026-06-06
+> 更新时间：2026-06-08
 > Owner：Lime Runtime / App Server / 独立 App 集成
 
 ## 1. 定位
@@ -41,11 +41,13 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 | `current target`    | `RuntimeCore`                                                              | 跨 App、跨执行后端复用的公共 runtime service 层。                                         |
 | `current target`    | `ExecutionBackend`                                                         | Aster 和未来更多执行后端的适配接口。                                                      |
 | `current reference` | `lime-rs/crates/agent`                                                     | 当前最接近 runtime core 的 crate，后续继续拆公共模型与服务。                              |
-| `current reference` | `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 及相邻 service 逻辑 | Aster backend 的现有实现参考；不能继续被当作公共 runtime core。                           |
 | `current client`    | Lime Desktop / content-studio / 更多独立 App 的 app-server client          | 独立 App 只通过协议消费 runtime，不直接 import Lime 内部实现。                            |
-| `compat`            | legacy desktop facade                                                      | 迁移期继续服务 Lime Desktop，但只能委托 App Server service，不继续拥有独立 runtime 事实。 |
+| `compat cleanup`    | `lime-rs/src/commands/**`                                                  | 旧 Tauri command wrapper 清理区；只能删除、迁出或收窄为带退出条件的薄委托，不再承接新实现。 |
+| `compat`            | legacy desktop facade                                                      | 迁移期继续服务 Lime Desktop，但只能委托 App Server / Electron Desktop Host current 主链，不继续拥有独立 runtime 事实。 |
 | `deprecated`        | 壳层内直接拼接 runtime 业务逻辑                                            | 只允许迁移和下线，不允许新增能力。                                                        |
 | `dead`              | 新独立 App 自建完整 Agent runtime                                          | 不再作为 Lime 生态扩展方向。                                                              |
+
+`lime-rs/src/commands/**` 的历史实现只能作为迁移参考，不能再作为新业务逻辑、API adapter、runtime 分支或领域服务的落点。新增 Rust 后端能力必须进入 App Server crates / RuntimeCore / services 等 current 事实源；窗口、托盘、Dock、updater、shell、deep link 等桌面壳能力进入 Electron Desktop Host。若某个能力仍只能通过 `commands/` wrapper 才能跑通，应把它判为 current 主链缺口，而不是继续补旧 wrapper。
 
 ## 3. 文档索引
 
@@ -81,7 +83,7 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 3. 不让独立 App 直接调用 Lime 内部 Rust 模块。
 4. 不新增第二套 tool runtime、skill runtime、workspace runtime。
 5. 不在 App 侧用 UI-only state 模拟 Agent 执行成功。
-6. 不一次性迁完所有 legacy desktop commands；先迁 Agent runtime 主链。
+6. 不一次性迁完所有 legacy desktop commands；但 `lime-rs/src/commands/**` 只允许作为清理区处理，不再新增实现。
 7. 不把 `Aster`、`runtime_turn.rs` 或 legacy desktop command DTO 直接定义成公共协议。
 
 ## 6. 当前执行顺序

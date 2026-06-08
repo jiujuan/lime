@@ -36,7 +36,7 @@ P17.2 已完成以下主链：
 - 不做真实 delete-data。
 - 不做完整行业内容系统。
 - 不把 `agent-app-lab` 的 smoke 当正式入口证据。
-- 不让 App 直接调用 Lime internal store、Tauri command 或 raw Worker。
+- 不让 App 直接调用 Lime internal store、legacy desktop facade 或 raw Worker。
 - 不解决 P17.4 runtime production hardening；P17.4 只在 P17.3 状态契约稳定后继续。
 
 ## 客户端 / 服务端边界
@@ -55,7 +55,7 @@ P17.2 已完成以下主链：
 | 分类 | 对象 | P17.3 规则 |
 |---|---|---|
 | current | `src/features/agent-app/install/*` | installed state、setup state、cleanup preview、package cache、install review 的客户端事实源。 |
-| current | `src/lib/api/agentApps.ts` | 允许集中调用 Tauri command 的 API gateway；feature island 不直接 `safeInvoke` / `invoke`。 |
+| current | `src/lib/api/agentApps.ts` | Agent Apps 前端命令网关；feature island 不直接 `safeInvoke` / `invoke`。 |
 | current | `src/features/agent-app/ui/AgentAppsPage.tsx` | 正式用户入口，展示 lifecycle / cleanup review / residual audit。 |
 | current | `src/features/agent-app/runtime/entryRuntimeGuard.ts` | 启动前唯一 guard；P17.3 要让它消费 disabled / cleanup-blocked 状态。 |
 | current | `internal/roadmap/agentapp/p17-lifecycle-cleanup-contract-hardening.md` | P17.3 当前执行计划。 |
@@ -75,7 +75,7 @@ P17.2 已完成以下主链：
 | P17.3-US4 | 作为用户，我能选择保留数据卸载演练。 | keep-data rehearsal 只标记 package / lifecycle action；storage / artifact / evidence 保留原因清晰。 |
 | P17.3-US5 | 作为维护者，我能导出 cleanup evidence。 | evidence 不含 secret value；包含 appId、version、namespace、action、blocked reason、timestamp。 |
 | P17.3-US6 | 作为维护者，我能看到 residual audit。 | audit 只检查 Agent App namespace；残留按 blocking / warning / informational 分类。 |
-| P17.3-US7 | 作为开发者，我能证明 App 无法绕过 lifecycle。 | `src/features/agent-app` 无直接 Tauri / raw Worker；launch 必经 P14 guard 和 P17.3 lifecycle gate。 |
+| P17.3-US7 | 作为开发者，我能证明 App 无法绕过 lifecycle。 | `src/features/agent-app` 无直接 legacy desktop facade / raw Worker；launch 必经 P14 guard 和 P17.3 lifecycle gate。 |
 
 ## 状态模型
 
@@ -221,7 +221,7 @@ flowchart TD
 | P17.3.3 | 已完成最小实现：Cleanup namespace classifier。 | 复用 cleanup plan，补 package / setup / overlay / secret / storage / artifact / evidence 分类。 | 单测覆盖 keep-data 与 delete-data rehearsal 差异。 |
 | P17.3.4 | 已完成最小实现：Evidence export / residual audit formalize。 | 复用 P16-H evidence / audit，正式入口展示 JSON preview。 | evidence 不含 secret value；audit 只查 Agent App namespace。 |
 | P17.3.5 | 已完成最小实现：Guard integration。 | P14 guard 消费 lifecycle disabled / cleanup-blocked。 | disabled / cleanup-blocked 都不能启动；enabled 仍走 readiness。 |
-| P17.3.6 | 已完成：Boundary and regression。 | feature island boundary rg、UI tests、schema cross-check 回归。 | 不新增 Tauri command；不直接 `safeInvoke`；P17.2.5 cross-check 继续通过。 |
+| P17.3.6 | 已完成：Boundary and regression。 | feature island boundary rg、UI tests、schema cross-check 回归。 | 不新增 legacy desktop facade；不直接 `safeInvoke`；P17.2.5 cross-check 继续通过。 |
 
 ## 验收标准
 
@@ -233,7 +233,7 @@ flowchart TD
 6. residual audit 只检查 Agent App namespace，不扫描全局用户目录。
 7. keep-data 与 delete-data rehearsal 的数据影响可解释。
 8. `agent-app-lab` 仍只是研发验证入口，不能替代正式入口证据。
-9. `src/features/agent-app` 不直接 `safeInvoke` / `invoke` / Tauri command / raw Worker。
+9. `src/features/agent-app` 不直接 `safeInvoke` / `invoke` / legacy desktop facade / raw Worker。
 10. Cloud / LimeCore 不运行 Agent、不渲染 UI、不接管本地 storage 或 delete-data。
 
 ## 最小验证
@@ -255,7 +255,7 @@ rg -n "safeInvoke|invoke\(|tauri::|generate_handler|mockPriorityCommands|default
 git diff --check -- internal/roadmap/agentapp src/features/agent-app src/lib/api/agentApps.ts
 ```
 
-如改动 Tauri command / bridge，必须追加：
+如触碰 Electron Desktop Host IPC / App Server JSON-RPC / legacy desktop facade 命令边界，必须追加：
 
 ```bash
 npm run test:contracts
@@ -296,7 +296,7 @@ P17.3.0 到 P17.3.6 已完成阶段闭环：lifecycle descriptor、正式页面 
 
 1. 本轮只触碰客户端正式入口 `AgentAppsPage`、对应 UI 回归和本 P17.3 roadmap 记录。
 2. 不触碰 `/Users/coso/Documents/dev/ai/limecloud/limecore`、`agentknowledge`、Cloud control-plane 文档和上游 `agentapp` 标准仓库。
-3. 不继续改 Tauri command / mock / API gateway；P17.3.1 已完成的 rehearsal-only 命令边界保持原样。
+3. 不继续改 legacy desktop facade / mock / API gateway；P17.3.1 已完成的 rehearsal-only 命令边界保持原样。
 
 本轮完成内容：
 
@@ -327,7 +327,7 @@ P17.3.0 到 P17.3.6 已完成阶段闭环：lifecycle descriptor、正式页面 
 
 1. 本轮只触碰客户端 cleanup contract、Agent App feature island 内部 adapter/mock uninstall projection、对应测试和本 P17.3 roadmap。
 2. 不触碰 `/Users/coso/Documents/dev/ai/limecloud/limecore`、`agentknowledge`、Cloud control-plane 文档和上游 `agentapp` 标准仓库。
-3. 不新增 Tauri command，不改 `src/lib/api/agentApps.ts`，不改变 P17.3 rehearsal-only 卸载边界。
+3. 不新增 legacy desktop facade，不改 `src/lib/api/agentApps.ts`，不改变 P17.3 rehearsal-only 卸载边界。
 
 本轮完成内容：
 
@@ -362,7 +362,7 @@ P17.3.0 到 P17.3.6 已完成阶段闭环：lifecycle descriptor、正式页面 
 
 1. 本轮只触碰正式客户端入口 `AgentAppsPage`、对应 UI 回归和本 P17.3 roadmap。
 2. 不新增 i18n key；正式入口复用已覆盖五语言的 cleanup evidence / residual audit 展示 key，避免新增未本地化文案。
-3. 不新增 Tauri command，不改 `src/lib/api/agentApps.ts`，不改变 P17.3 rehearsal-only 卸载边界。
+3. 不新增 legacy desktop facade，不改 `src/lib/api/agentApps.ts`，不改变 P17.3 rehearsal-only 卸载边界。
 
 本轮完成内容：
 
@@ -390,7 +390,7 @@ P17.3.0 到 P17.3.6 已完成阶段闭环：lifecycle descriptor、正式页面 
 协作分工：
 
 1. 本轮只触碰 P14 runtime guard、正式入口 guard 调用、Lab guard 调用、对应 guard / UI 回归和本 P17.3 roadmap。
-2. 不新增 Tauri command，不改 `src/lib/api/agentApps.ts`，不改变 P17.3 rehearsal-only 卸载边界。
+2. 不新增 legacy desktop facade，不改 `src/lib/api/agentApps.ts`，不改变 P17.3 rehearsal-only 卸载边界。
 3. 不触碰 Cloud / LimeCore / agentknowledge / 上游 `agentapp` 标准仓库。
 
 本轮完成内容：
@@ -424,14 +424,14 @@ P17.3.0 到 P17.3.6 已完成阶段闭环：lifecycle descriptor、正式页面 
 协作分工：
 
 1. 本轮只做 P17.3 阶段回归与边界验证，不继续扩大实现范围。
-2. 不新增 Tauri command，不改 `src/lib/api/agentApps.ts`，不改变 P17.3 rehearsal-only 卸载边界。
+2. 不新增 legacy desktop facade，不改 `src/lib/api/agentApps.ts`，不改变 P17.3 rehearsal-only 卸载边界。
 3. 不触碰 Cloud / LimeCore / agentknowledge / 上游 `agentapp` 标准仓库。
 
 本轮验证内容：
 
 1. reference CLI / public schema cross-check 继续通过，证明 P17.2.5 标准对齐未被 P17.3 lifecycle / cleanup 改动破坏。
 2. 正式入口 `AgentAppsPage`、runtime surface `AgentAppRuntimePage`、P14 guard、cleanup classifier / evidence / audit、Lab manager、adapter/mock uninstall projection 均完成定向回归。
-3. feature island boundary 扫描无命中：`src/features/agent-app` 仍不直接 `safeInvoke` / `invoke` / Tauri command / raw Worker。
+3. feature island boundary 扫描无命中：`src/features/agent-app` 仍不直接 `safeInvoke` / `invoke` / legacy desktop facade / raw Worker。
 4. touched-file whitespace check 通过。
 5. `nice -n 10 npm run typecheck` 通过；上轮外部 experts test 类型错误已不再出现。
 

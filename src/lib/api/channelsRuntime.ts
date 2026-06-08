@@ -28,6 +28,45 @@ async function invokeChannelsCommand<T>(
   return result as T;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function assertGatewayChannelStatusResponse(
+  command: string,
+  value: unknown,
+): asserts value is GatewayChannelStatusResponse {
+  if (!isRecord(value) || !isString(value.channel) || !isRecord(value.status)) {
+    throw new Error(`${command} 未返回有效渠道运行状态`);
+  }
+}
+
+function assertWechatConfiguredAccounts(
+  command: string,
+  value: unknown,
+): asserts value is WechatConfiguredAccount[] {
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (account) =>
+        !isRecord(account) ||
+        !isString(account.accountId) ||
+        !isBoolean(account.enabled) ||
+        !isBoolean(account.hasToken),
+    )
+  ) {
+    throw new Error(`${command} 未返回有效微信账号列表`);
+  }
+}
+
 export type {
   ChannelsConfig,
   CloudflaredInstallResult,
@@ -107,11 +146,13 @@ export async function gatewayChannelStop(params?: {
 export async function gatewayChannelStatus(params?: {
   channel?: "telegram" | "feishu" | "discord" | "wechat";
 }): Promise<GatewayChannelStatusResponse> {
-  return invokeChannelsCommand("gateway_channel_status", {
+  const result = await invokeChannelsCommand<unknown>("gateway_channel_status", {
     request: {
       channel: params?.channel ?? "telegram",
     },
   });
+  assertGatewayChannelStatusResponse("gateway_channel_status", result);
+  return result;
 }
 
 export async function telegramChannelProbe(params?: {
@@ -189,7 +230,11 @@ export async function wechatChannelLoginWait(params: {
 export async function wechatChannelListAccounts(): Promise<
   WechatConfiguredAccount[]
 > {
-  return invokeChannelsCommand("wechat_channel_list_accounts");
+  const result = await invokeChannelsCommand<unknown>(
+    "wechat_channel_list_accounts",
+  );
+  assertWechatConfiguredAccounts("wechat_channel_list_accounts", result);
+  return result;
 }
 
 export async function wechatChannelRemoveAccount(params: {

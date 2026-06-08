@@ -170,7 +170,8 @@ describe("workspaceSkillAgentAutomationDraft", () => {
         successCriteriaControlledGet: "Controlled GET evidence is required.",
         successCriteriaEvidence: "Completion depends on evidence.",
         successCriteriaRuntimeEnable: "Runtime enable must be explicit.",
-        successCriteriaSubmitTurn: "Use agent_runtime_submit_turn.",
+        successCriteriaSubmitTurn:
+          "Use agentSession/turn/start current JSON-RPC.",
       },
     });
 
@@ -189,7 +190,7 @@ describe("workspaceSkillAgentAutomationDraft", () => {
         managed_objective: {
           objective: "Run 只读 CLI 报告 on schedule.",
           success_criteria: [
-            "Use agent_runtime_submit_turn.",
+            "Use agentSession/turn/start current JSON-RPC.",
             "Runtime enable must be explicit.",
             "Completion depends on evidence.",
             "Controlled GET evidence is required.",
@@ -197,6 +198,9 @@ describe("workspaceSkillAgentAutomationDraft", () => {
         },
       },
     });
+    expect(
+      JSON.stringify(initialValues?.agent_request_metadata),
+    ).not.toContain("agent_runtime_submit_turn");
   });
 
   it("应识别 workspace skill 对应的 Managed Job 并生成状态摘要", () => {

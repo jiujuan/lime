@@ -4,15 +4,15 @@
 
 use crate::services::capability_draft_service::{
     create_capability_draft, execute_capability_draft_controlled_get, get_capability_draft,
-    list_capability_drafts, list_workspace_registered_skills, register_capability_draft,
+    list_capability_drafts, register_capability_draft,
     submit_capability_draft_approval_session_inputs, verify_capability_draft,
     CapabilityDraftRecord, CreateCapabilityDraftRequest,
     ExecuteCapabilityDraftControlledGetRequest, ExecuteCapabilityDraftControlledGetResult,
-    GetCapabilityDraftRequest, ListCapabilityDraftsRequest, ListWorkspaceRegisteredSkillsRequest,
+    GetCapabilityDraftRequest, ListCapabilityDraftsRequest,
     RegisterCapabilityDraftRequest, RegisterCapabilityDraftResult,
     SubmitCapabilityDraftApprovalSessionInputsRequest,
     SubmitCapabilityDraftApprovalSessionInputsResult, VerifyCapabilityDraftRequest,
-    VerifyCapabilityDraftResult, WorkspaceRegisteredSkillRecord,
+    VerifyCapabilityDraftResult,
 };
 
 #[tauri::command]
@@ -48,13 +48,6 @@ pub fn capability_draft_register(
     request: RegisterCapabilityDraftRequest,
 ) -> Result<RegisterCapabilityDraftResult, String> {
     register_capability_draft(request)
-}
-
-#[tauri::command]
-pub fn capability_draft_list_registered_skills(
-    request: ListWorkspaceRegisteredSkillsRequest,
-) -> Result<Vec<WorkspaceRegisteredSkillRecord>, String> {
-    list_workspace_registered_skills(request)
 }
 
 #[tauri::command]

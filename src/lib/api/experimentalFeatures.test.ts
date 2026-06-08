@@ -52,6 +52,28 @@ describe("experimentalFeatures API", () => {
     );
   });
 
+  it("读取实验配置遇到非配置对象时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      })
+      .mockResolvedValueOnce({ webmcp: {} });
+
+    await expect(getExperimentalConfig()).rejects.toThrow(
+      "get_experimental_config did not return experimental config",
+    );
+    await expect(getExperimentalConfig()).rejects.toThrow(
+      "get_experimental_config did not return experimental config",
+    );
+    await expect(getExperimentalConfig()).rejects.toThrow(
+      "get_experimental_config did not return experimental config",
+    );
+  });
+
   it("保存实验配置遇到 diagnostic facade 时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {

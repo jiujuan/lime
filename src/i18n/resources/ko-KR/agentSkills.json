@@ -747,6 +747,7 @@
   "skills.workspace.marketplace.error.requestFailed": "요청 실패({{status}})",
   "skills.workspace.marketplace.error.skillNameRequired": "Skill 이름이 필요합니다",
   "skills.workspace.marketplace.error.invalidBundle": "공식 Skill 번들 형식이 올바르지 않습니다",
+  "skills.workspace.marketplace.error.invalidResponse": "공식 Skill 마켓 응답 형식이 올바르지 않습니다",
   "skills.workspace.marketplace.detail.version": "버전 {{version}}",
   "skills.workspace.marketplace.detail.deliverable": "결과물",
   "skills.workspace.marketplace.detail.package": "설치 패키지",

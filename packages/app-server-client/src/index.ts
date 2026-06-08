@@ -47,11 +47,22 @@ import {
   METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE,
   METHOD_CONNECT_RELAY_API_KEY_SAVE,
   METHOD_EVIDENCE_EXPORT,
+  METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
+  METHOD_FILE_SYSTEM_CREATE_FILE,
+  METHOD_FILE_SYSTEM_DELETE_FILE,
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+  METHOD_FILE_SYSTEM_RENAME_FILE,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
+  METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
+  METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
+  METHOD_KNOWLEDGE_PACK_COMPILE,
+  METHOD_KNOWLEDGE_PACK_DEFAULT_SET,
   METHOD_KNOWLEDGE_PACK_LIST,
+  METHOD_KNOWLEDGE_PACK_READ,
+  METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+  METHOD_KNOWLEDGE_SOURCE_IMPORT,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PREFERENCES_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
@@ -85,6 +96,9 @@ import {
   METHOD_PROJECT_MEMORY_READ,
   METHOD_SKILL_LIST,
   METHOD_SKILL_READ,
+  METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
+  METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+  METHOD_USAGE_STATS_READ,
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
@@ -161,10 +175,15 @@ import {
   type ConnectRelayApiKeySaveResponse,
   type EvidenceExportParams,
   type EvidenceExportResponse,
+  type FileSystemCreateDirectoryParams,
+  type FileSystemCreateFileParams,
+  type FileSystemDeleteFileParams,
   type FileSystemDirectoryListing,
   type FileSystemFilePreview,
   type FileSystemListDirectoryParams,
+  type FileSystemMutationResponse,
   type FileSystemReadFilePreviewParams,
+  type FileSystemRenameFileParams,
   type InitializeParams,
   type InitializeResponse,
   type JsonRpcErrorResponse,
@@ -172,8 +191,22 @@ import {
   type JsonRpcNotification,
   type JsonRpcRequest,
   type JsonRpcResponse,
+  type KnowledgeCompilePackParams,
+  type KnowledgeCompilePackResponse,
+  type KnowledgeContextResolutionResponse,
+  type KnowledgeImportSourceParams,
+  type KnowledgeImportSourceResponse,
   type KnowledgeListPacksParams,
   type KnowledgeListPacksResponse,
+  type KnowledgeReadPackParams,
+  type KnowledgeReadPackResponse,
+  type KnowledgeResolveContextParams,
+  type KnowledgeSetDefaultPackParams,
+  type KnowledgeSetDefaultPackResponse,
+  type KnowledgeUpdatePackStatusParams,
+  type KnowledgeUpdatePackStatusResponse,
+  type KnowledgeValidateContextRunParams,
+  type KnowledgeValidateContextRunResponse,
   type ModelListParams,
   type ModelListResponse,
   type ModelPreferencesListResponse,
@@ -213,6 +246,10 @@ import {
   type SkillListResponse,
   type SkillReadParams,
   type SkillReadResponse,
+  type UsageStatsDailyTrendsListResponse,
+  type UsageStatsModelRankingListResponse,
+  type UsageStatsRangeParams,
+  type UsageStatsReadResponse,
   type WorkspaceEnsureParams,
   type WorkspaceEnsureReadyResponse,
   type WorkspaceListResponse,
@@ -518,6 +555,42 @@ export class AppServerClient {
     return this.request(METHOD_KNOWLEDGE_PACK_LIST, params);
   }
 
+  readKnowledgePack(params: KnowledgeReadPackParams): JsonRpcRequest {
+    return this.request(METHOD_KNOWLEDGE_PACK_READ, params);
+  }
+
+  importKnowledgeSource(params: KnowledgeImportSourceParams): JsonRpcRequest {
+    return this.request(METHOD_KNOWLEDGE_SOURCE_IMPORT, params);
+  }
+
+  compileKnowledgePack(params: KnowledgeCompilePackParams): JsonRpcRequest {
+    return this.request(METHOD_KNOWLEDGE_PACK_COMPILE, params);
+  }
+
+  setDefaultKnowledgePack(
+    params: KnowledgeSetDefaultPackParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_KNOWLEDGE_PACK_DEFAULT_SET, params);
+  }
+
+  updateKnowledgePackStatus(
+    params: KnowledgeUpdatePackStatusParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_KNOWLEDGE_PACK_STATUS_UPDATE, params);
+  }
+
+  resolveKnowledgeContext(
+    params: KnowledgeResolveContextParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_KNOWLEDGE_CONTEXT_RESOLVE, params);
+  }
+
+  validateKnowledgeContextRun(
+    params: KnowledgeValidateContextRunParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE, params);
+  }
+
   listAutomationJobs(): JsonRpcRequest {
     return this.request(METHOD_AUTOMATION_JOB_LIST, {});
   }
@@ -598,6 +671,18 @@ export class AppServerClient {
     return this.request(METHOD_PROJECT_MEMORY_READ, params);
   }
 
+  readUsageStats(params: UsageStatsRangeParams): JsonRpcRequest {
+    return this.request(METHOD_USAGE_STATS_READ, params);
+  }
+
+  listUsageStatsModelRanking(params: UsageStatsRangeParams): JsonRpcRequest {
+    return this.request(METHOD_USAGE_STATS_MODEL_RANKING_LIST, params);
+  }
+
+  listUsageStatsDailyTrends(params: UsageStatsRangeParams): JsonRpcRequest {
+    return this.request(METHOD_USAGE_STATS_DAILY_TRENDS_LIST, params);
+  }
+
   readArtifacts(params: ArtifactReadParams): JsonRpcRequest {
     return this.request(METHOD_ARTIFACT_READ, params);
   }
@@ -608,6 +693,22 @@ export class AppServerClient {
 
   readFilePreview(params: FileSystemReadFilePreviewParams): JsonRpcRequest {
     return this.request(METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, params);
+  }
+
+  createFile(params: FileSystemCreateFileParams): JsonRpcRequest {
+    return this.request(METHOD_FILE_SYSTEM_CREATE_FILE, params);
+  }
+
+  createDirectory(params: FileSystemCreateDirectoryParams): JsonRpcRequest {
+    return this.request(METHOD_FILE_SYSTEM_CREATE_DIRECTORY, params);
+  }
+
+  renameFile(params: FileSystemRenameFileParams): JsonRpcRequest {
+    return this.request(METHOD_FILE_SYSTEM_RENAME_FILE, params);
+  }
+
+  deleteFile(params: FileSystemDeleteFileParams): JsonRpcRequest {
+    return this.request(METHOD_FILE_SYSTEM_DELETE_FILE, params);
   }
 
   exportEvidence(params: EvidenceExportParams): JsonRpcRequest {
@@ -692,27 +793,19 @@ export class AppServerClient {
     return this.request(METHOD_MODEL_PROVIDER_FETCH_MODELS, params);
   }
 
-  createModelProviderKey(
-    params: ModelProviderKeyCreateParams,
-  ): JsonRpcRequest {
+  createModelProviderKey(params: ModelProviderKeyCreateParams): JsonRpcRequest {
     return this.request(METHOD_MODEL_PROVIDER_KEY_CREATE, params);
   }
 
-  updateModelProviderKey(
-    params: ModelProviderKeyUpdateParams,
-  ): JsonRpcRequest {
+  updateModelProviderKey(params: ModelProviderKeyUpdateParams): JsonRpcRequest {
     return this.request(METHOD_MODEL_PROVIDER_KEY_UPDATE, params);
   }
 
-  deleteModelProviderKey(
-    params: ModelProviderKeyDeleteParams,
-  ): JsonRpcRequest {
+  deleteModelProviderKey(params: ModelProviderKeyDeleteParams): JsonRpcRequest {
     return this.request(METHOD_MODEL_PROVIDER_KEY_DELETE, params);
   }
 
-  readNextModelProviderKey(
-    params: ModelProviderKeyNextParams,
-  ): JsonRpcRequest {
+  readNextModelProviderKey(params: ModelProviderKeyNextParams): JsonRpcRequest {
     return this.request(METHOD_MODEL_PROVIDER_KEY_NEXT, params);
   }
 
@@ -748,9 +841,7 @@ export class AppServerClient {
     return this.request(METHOD_MODEL_PROVIDER_ALIAS_LIST, {});
   }
 
-  resolveConnectDeepLink(
-    params: ConnectDeepLinkResolveParams,
-  ): JsonRpcRequest {
+  resolveConnectDeepLink(params: ConnectDeepLinkResolveParams): JsonRpcRequest {
     return this.request(METHOD_CONNECT_DEEP_LINK_RESOLVE, params);
   }
 
@@ -760,9 +851,7 @@ export class AppServerClient {
     return this.request(METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE, params);
   }
 
-  saveConnectRelayApiKey(
-    params: ConnectRelayApiKeySaveParams,
-  ): JsonRpcRequest {
+  saveConnectRelayApiKey(params: ConnectRelayApiKeySaveParams): JsonRpcRequest {
     return this.request(METHOD_CONNECT_RELAY_API_KEY_SAVE, params);
   }
 
@@ -1034,6 +1123,83 @@ export class AppServerConnection {
     );
   }
 
+  async readKnowledgePack(
+    params: KnowledgeReadPackParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<KnowledgeReadPackResponse>> {
+    return await this.request<KnowledgeReadPackResponse>(
+      this.client.readKnowledgePack(params),
+      METHOD_KNOWLEDGE_PACK_READ,
+      options,
+    );
+  }
+
+  async importKnowledgeSource(
+    params: KnowledgeImportSourceParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<KnowledgeImportSourceResponse>> {
+    return await this.request<KnowledgeImportSourceResponse>(
+      this.client.importKnowledgeSource(params),
+      METHOD_KNOWLEDGE_SOURCE_IMPORT,
+      options,
+    );
+  }
+
+  async compileKnowledgePack(
+    params: KnowledgeCompilePackParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<KnowledgeCompilePackResponse>> {
+    return await this.request<KnowledgeCompilePackResponse>(
+      this.client.compileKnowledgePack(params),
+      METHOD_KNOWLEDGE_PACK_COMPILE,
+      options,
+    );
+  }
+
+  async setDefaultKnowledgePack(
+    params: KnowledgeSetDefaultPackParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<KnowledgeSetDefaultPackResponse>> {
+    return await this.request<KnowledgeSetDefaultPackResponse>(
+      this.client.setDefaultKnowledgePack(params),
+      METHOD_KNOWLEDGE_PACK_DEFAULT_SET,
+      options,
+    );
+  }
+
+  async updateKnowledgePackStatus(
+    params: KnowledgeUpdatePackStatusParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<KnowledgeUpdatePackStatusResponse>> {
+    return await this.request<KnowledgeUpdatePackStatusResponse>(
+      this.client.updateKnowledgePackStatus(params),
+      METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+      options,
+    );
+  }
+
+  async resolveKnowledgeContext(
+    params: KnowledgeResolveContextParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<KnowledgeContextResolutionResponse>> {
+    return await this.request<KnowledgeContextResolutionResponse>(
+      this.client.resolveKnowledgeContext(params),
+      METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
+      options,
+    );
+  }
+
+  async validateKnowledgeContextRun(
+    params: KnowledgeValidateContextRunParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<KnowledgeValidateContextRunResponse>> {
+    return await this.request<KnowledgeValidateContextRunResponse>(
+      this.client.validateKnowledgeContextRun(params),
+      METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
+      options,
+    );
+  }
+
   async listAutomationJobs(
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<AutomationJobListResponse>> {
@@ -1235,6 +1401,39 @@ export class AppServerConnection {
     );
   }
 
+  async readUsageStats(
+    params: UsageStatsRangeParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UsageStatsReadResponse>> {
+    return await this.request<UsageStatsReadResponse>(
+      this.client.readUsageStats(params),
+      METHOD_USAGE_STATS_READ,
+      options,
+    );
+  }
+
+  async listUsageStatsModelRanking(
+    params: UsageStatsRangeParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UsageStatsModelRankingListResponse>> {
+    return await this.request<UsageStatsModelRankingListResponse>(
+      this.client.listUsageStatsModelRanking(params),
+      METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+      options,
+    );
+  }
+
+  async listUsageStatsDailyTrends(
+    params: UsageStatsRangeParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UsageStatsDailyTrendsListResponse>> {
+    return await this.request<UsageStatsDailyTrendsListResponse>(
+      this.client.listUsageStatsDailyTrends(params),
+      METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
+      options,
+    );
+  }
+
   async readArtifacts(
     params: ArtifactReadParams,
     options: AppServerRequestOptions = {},
@@ -1264,6 +1463,50 @@ export class AppServerConnection {
     return await this.request<FileSystemFilePreview>(
       this.client.readFilePreview(params),
       METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+      options,
+    );
+  }
+
+  async createFile(
+    params: FileSystemCreateFileParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<FileSystemMutationResponse>> {
+    return await this.request<FileSystemMutationResponse>(
+      this.client.createFile(params),
+      METHOD_FILE_SYSTEM_CREATE_FILE,
+      options,
+    );
+  }
+
+  async createDirectory(
+    params: FileSystemCreateDirectoryParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<FileSystemMutationResponse>> {
+    return await this.request<FileSystemMutationResponse>(
+      this.client.createDirectory(params),
+      METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
+      options,
+    );
+  }
+
+  async renameFile(
+    params: FileSystemRenameFileParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<FileSystemMutationResponse>> {
+    return await this.request<FileSystemMutationResponse>(
+      this.client.renameFile(params),
+      METHOD_FILE_SYSTEM_RENAME_FILE,
+      options,
+    );
+  }
+
+  async deleteFile(
+    params: FileSystemDeleteFileParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<FileSystemMutationResponse>> {
+    return await this.request<FileSystemMutationResponse>(
+      this.client.deleteFile(params),
+      METHOD_FILE_SYSTEM_DELETE_FILE,
       options,
     );
   }

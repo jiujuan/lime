@@ -88,6 +88,33 @@ describe("companion API", () => {
     ]);
   });
 
+  it("桌宠命令遇到非 Companion 响应形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      })
+      .mockResolvedValueOnce({ delivered: true });
+
+    await expect(getCompanionPetStatus()).rejects.toThrow(
+      "companion_get_pet_status did not return companion status",
+    );
+    await expect(launchCompanionPet()).rejects.toThrow(
+      "companion_launch_pet did not return launch result",
+    );
+    await expect(
+      sendCompanionPetCommand({
+        event: "pet.show_bubble",
+        payload: { text: "你好" },
+      }),
+    ).rejects.toThrow(
+      "companion_send_pet_command did not return send result",
+    );
+  });
+
   it("应代理桌宠状态监听", async () => {
     vi.mocked(safeListen).mockImplementationOnce(async (_event, handler) => {
       handler({

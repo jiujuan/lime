@@ -32,4 +32,24 @@ describe("agentRuntimeMocks", () => {
       "agent_runtime_close_subagent",
     );
   });
+
+  it("checkpoint / handoff / review / replay residual mock 不再伪造成功结果", () => {
+    const commands = [
+      "agent_runtime_list_file_checkpoints",
+      "agent_runtime_get_file_checkpoint",
+      "agent_runtime_diff_file_checkpoint",
+      "agent_runtime_restore_file_checkpoint",
+      "agent_runtime_export_analysis_handoff",
+      "agent_runtime_export_handoff_bundle",
+      "agent_runtime_export_review_decision_template",
+      "agent_runtime_save_review_decision",
+      "agent_runtime_export_replay_case",
+    ];
+
+    for (const command of commands) {
+      expect(() => agentRuntimeMocks[command]?.()).toThrow(
+        `${command} 仍属于 P9 Agent Runtime`,
+      );
+    }
+  });
 });

@@ -135,7 +135,7 @@ Host Bridge 是 P17.4 Runtime surface production hardening 的前置子项。没
 | P17.4.2 | 已完成：Agent task stream contract hardening。 | `lime.agent.startTask / streamTask / getTask / cancelTask / retryTask` 与 Host Bridge response 证据。 | App 内可 start / stream / get / cancel / retry，不回跳通用 Chat。                    |
 | P17.4.3 | 已完成：Structured write-back guard。          | storage namespace / artifact kind / evidence subject 写回声明校验。                                   | 未声明 storage / artifact / evidence 写回被拒绝；声明项写回保留 provenance。         |
 | P17.4.4 | App bootstrap sample。                         | content factory runtime package / host-bridge.js 样板。                                               | 示例 App 通过标准 bridge 取 snapshot、发 task、写回结果。                            |
-| P17.4.5 | 已完成：Security and smoke。                   | hostBridge 安全、RuntimePage UI、schema / contract 回归。                                             | feature island 无直接 Tauri / raw Worker，完整 GUI smoke 已通过。                    |
+| P17.4.5 | 已完成：Security and smoke。                   | hostBridge 安全、RuntimePage UI、schema / contract 回归。                                             | feature island 无直接 legacy desktop host API / raw Worker，完整 GUI smoke 已通过。  |
 
 ## 当前下一刀
 
@@ -146,7 +146,7 @@ P17.4 已完成当前 production hardening 闭环：`AgentAppHostBridge`、`capa
 协作分工：
 
 1. 本轮只触碰客户端 runtime surface、对应 UI 回归和本 P17.4 roadmap。
-2. 不新增 Tauri command，不改 `src/lib/api/agentApps.ts`，不改变 Cloud / LimeCore control-plane 边界。
+2. 不新增 legacy desktop facade，不改 `src/lib/api/agentApps.ts`，不改变 Cloud / LimeCore control-plane 边界。
 3. 不触碰 agentknowledge、上游 `agentapp` 标准仓库或真实 delete-data。
 
 本轮完成内容：
@@ -176,7 +176,7 @@ P17.4 已完成当前 production hardening 闭环：`AgentAppHostBridge`、`capa
 协作分工：
 
 1. 本轮只认领客户端 Host Bridge runtime 任务流回归，不触碰 `agentknowledge`、Lime Cloud / LimeCore、上游标准仓库或 AgentApp 其他 roadmap 资料。
-2. 不新增 Tauri command，不改 `src/lib/api/agentApps.ts`，不改变桌面端 Agent 本地运行边界。
+2. 不新增 legacy desktop facade，不改 `src/lib/api/agentApps.ts`，不改变桌面端 Agent 本地运行边界。
 3. P17.4.2 暂不声明完整完成；本轮只证明 App UI 内 start / stream / cancel 可以通过标准 `capability:invoke` 闭环。
 
 本轮完成内容：
@@ -202,7 +202,7 @@ P17.4 已完成当前 production hardening 闭环：`AgentAppHostBridge`、`capa
 协作分工：
 
 1. 本轮只认领 P17.4.2 Host Bridge task contract，不触碰 AgentApp 其他 roadmap 总纲资料、`agentknowledge`、Lime Cloud / LimeCore 或上游标准仓库。
-2. 不新增 Tauri command，不改 `src/lib/api/agentApps.ts`，不绕过 `src/features/agent-app` feature island。
+2. 不新增 legacy desktop facade，不改 `src/lib/api/agentApps.ts`，不绕过 `src/features/agent-app` feature island。
 3. retry 语义先做 SDK / adapter / mock / dispatcher / Host Bridge response 的最小闭环，不提前做真实模型重试、成本策略或后台队列。
 
 本轮完成内容：
@@ -234,7 +234,7 @@ P17.4 已完成当前 production hardening 闭环：`AgentAppHostBridge`、`capa
 
 1. 本轮只认领内容工厂 App bootstrap 和 Host Bridge request / response 样板，不触碰 SceneApp 清理、安装生命周期和 Cloud / LimeCore 控制面。
 2. 内容工厂继续保持非技术用户界面；Host 同步发生在用户确认链后，不把业务主链回跳到通用 Chat。
-3. 不新增私有 postMessage 协议，不新增 Tauri command，不绕过 Host capability readiness。
+3. 不新增私有 postMessage 协议，不新增 legacy desktop facade，不绕过 Host capability readiness。
 
 本轮完成内容：
 
@@ -264,7 +264,7 @@ P17.4 已完成当前 production hardening 闭环：`AgentAppHostBridge`、`capa
 协作分工：
 
 1. 本轮只认领客户端 Host 侧 structured write-back guard，不触碰上游 `content-factory-app`、Lime Cloud / LimeCore 或其他 AgentApp roadmap 总纲资料。
-2. 不新增 Tauri command，不改 `src/lib/api/agentApps.ts`，App UI 仍只能通过 `capability:invoke` 进入 Host Capability SDK。
+2. 不新增 legacy desktop facade，不改 `src/lib/api/agentApps.ts`，App UI 仍只能通过 `capability:invoke` 进入 Host Capability SDK。
 3. storage 暂按 manifest storage namespace 约束，不扩展到表级 schema 校验；artifact / evidence 做声明级强制校验。
 
 本轮完成内容：

@@ -332,6 +332,12 @@ describe("mediaTasks API", () => {
           blocked_count: 0,
           routing_outcomes: [{ outcome: "accepted", count: 1 }],
           model_registry_assessment_count: 0,
+          audio_output_count: 0,
+          audio_output_statuses: [],
+          audio_output_error_codes: [],
+          transcript_count: 0,
+          transcript_statuses: [],
+          transcript_error_codes: [],
           snapshots: [
             {
               task_id: "task-image-2",

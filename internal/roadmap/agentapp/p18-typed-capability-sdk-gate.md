@@ -65,7 +65,7 @@ P18 的问题不是继续扩大页面能力，而是把已经出现的 `lime.age
 - 不执行任意 raw worker bundle；P18 只允许 typed workflow / capability invoke。
 - 不把通用 Chat 作为 Agent App 核心流程容器；Expert Chat 只是 entry 或嵌入式协作者。
 - 不新增第二套 repository、installer、cleanup scanner 或 Agent Runtime。
-- 不为了 P18 增加新的 Tauri command；除非现有 host service 无法表达且先完成命令边界审计。
+- 不为了 P18 增加新的 legacy desktop facade；新增后端能力必须进 App Server current 主链，桌面壳能力进 Electron Desktop Host。
 
 ## 核心原则
 
@@ -257,7 +257,7 @@ flowchart TD
 | App 开发者  | 我只依赖 `@lime/app-sdk` 类型和 mock host，就能本地测试 App 工作流。  | 不 import Lime internal path；mock / real host 的错误码一致。                       |
 | 平台维护者  | 我升级 storage、AgentRuntime 或 Tool Broker 时，不需要修改每个 App。  | SDK contract tests 通过；App 只感知兼容版本和稳定错误码。                           |
 | 企业管理员  | 我可以用 policy / tenant overlay 控制工具、secret、成本和 network。   | Bridge 层强制策略；UI 只展示结果，不承担最终授权。                                  |
-| QA / 智能体 | 我能用 contract tests 和 GUI smoke 证明正式入口与 SDK 边界没有漂移。  | `src/features/agent-app` 无直接 `safeInvoke` / `invoke` / Tauri / raw Worker 越界。 |
+| QA / 智能体 | 我能用 contract tests 和 GUI smoke 证明正式入口与 SDK 边界没有漂移。  | `src/features/agent-app` 无直接 `safeInvoke` / `invoke` / legacy desktop facade / raw Worker 越界。 |
 
 ## 用例
 
@@ -435,7 +435,7 @@ nice -n 10 npm test -- src/features/agent-app/runtime/workflowRuntimeHost.test.t
 rg -n "SceneApp|contentEngineering|sceneapp_|safeInvoke|invoke\\(|new Worker|Worker\\(" src/features/agent-app || true
 ```
 
-边界：P18.6 未新增 worker runtime、未执行 raw worker、未新增 network / filesystem / secret 通道，也未修改 Cloud / LimeCore / Tauri command。
+边界：P18.6 未新增 worker runtime、未执行 raw worker、未新增 network / filesystem / secret 通道，也未修改 Cloud / LimeCore / legacy desktop facade。
 
 ## 验收标准
 
@@ -465,7 +465,7 @@ npm run smoke:agent-apps -- --timeout-ms 300000 --interval-ms 1000
 npm run verify:gui-smoke -- --reuse-running --timeout-ms 300000
 ```
 
-如果 P18 引入或修改 Tauri command，必须同步前端 gateway、Rust handler、治理目录册和 mock priority，并执行 `npm run test:contracts`。
+P18 不得在 `lime-rs/src/commands/**` 新增业务逻辑。若触碰 Electron Desktop Host IPC / App Server JSON-RPC / legacy desktop facade 命令边界，必须同步前端 gateway、治理目录册和 mock priority，并执行 `npm run test:contracts`。
 
 ## 风险与应对
 

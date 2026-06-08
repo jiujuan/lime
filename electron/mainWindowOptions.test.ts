@@ -5,6 +5,7 @@ import {
   buildMainWindowStartupDataUrl,
   buildMainWindowStartupHtml,
   buildMainWindowStartupOptions,
+  resolveStartupLogoDataUrl,
 } from "./mainWindowOptions";
 
 describe("main window chrome options", () => {
@@ -39,9 +40,23 @@ describe("main window chrome options", () => {
 
     expect(html).toContain("Lime &lt;Dev&gt; &quot;Fast&quot;");
     expect(html).not.toContain('Lime <Dev> "Fast"');
-    expect(html).toContain("startup-logo-fallback");
+    expect(html).toContain('class="startup-logo"');
+    expect(html).toContain("data:image/svg+xml;charset=utf-8");
+    expect(html).not.toContain("startup-logo-fallback");
     expect(dataUrl.startsWith("data:text/html;charset=utf-8,")).toBe(true);
     expect(decodeURIComponent(dataUrl.split(",", 2)[1] ?? "")).toBe(html);
+  });
+
+  it("启动页缺少外部图标资源时应保留 Lime 图形 Logo 兜底", () => {
+    const fallbackLogo = resolveStartupLogoDataUrl(null);
+
+    expect(fallbackLogo).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    expect(decodeURIComponent(fallbackLogo.split(",", 2)[1] ?? "")).toContain(
+      "ringGrad",
+    );
+    expect(resolveStartupLogoDataUrl(" data:image/png;base64,abc ")).toBe(
+      "data:image/png;base64,abc",
+    );
   });
 
   it("启动页文案应支持 Electron 侧五语言选择", () => {

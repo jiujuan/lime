@@ -218,6 +218,53 @@ export interface UnifiedMemoryAnalysisResult {
   deduplicated_entries: number;
 }
 
+const assertMemoryArrayResult = (
+  command: string,
+  value: unknown,
+): UnifiedMemory[] => {
+  assertNotDiagnosticFacade(command, value, "真实统一记忆 current 通道");
+  if (!Array.isArray(value)) {
+    throw new Error(`${command} did not return a memories array`);
+  }
+
+  return value as UnifiedMemory[];
+};
+
+const assertMemoryObjectResult = (
+  command: string,
+  value: unknown,
+): UnifiedMemory => {
+  assertNotDiagnosticFacade(command, value, "真实统一记忆 current 通道");
+  if (!value || typeof value !== "object") {
+    throw new Error(`${command} did not return a memory object`);
+  }
+
+  return value as UnifiedMemory;
+};
+
+const assertAnalysisResult = (value: unknown): UnifiedMemoryAnalysisResult => {
+  assertNotDiagnosticFacade(
+    "unified_memory_analyze",
+    value,
+    "真实统一记忆分析 current 通道",
+  );
+  if (!value || typeof value !== "object") {
+    throw new Error("unified_memory_analyze did not return an analysis result");
+  }
+
+  const result = value as Partial<UnifiedMemoryAnalysisResult>;
+  if (
+    typeof result.analyzed_sessions !== "number" ||
+    typeof result.analyzed_messages !== "number" ||
+    typeof result.generated_entries !== "number" ||
+    typeof result.deduplicated_entries !== "number"
+  ) {
+    throw new Error("unified_memory_analyze did not return an analysis result");
+  }
+
+  return result as UnifiedMemoryAnalysisResult;
+};
+
 // ==================== API 函数 ====================
 
 /**
@@ -235,8 +282,10 @@ export async function listUnifiedMemories(
     filters: filters || null,
   });
 
-  console.log("[记忆列表] Results:", result);
-  return result;
+  const memories = assertMemoryArrayResult("unified_memory_list", result);
+
+  console.log("[记忆列表] Results:", memories);
+  return memories;
 }
 
 /**
@@ -267,8 +316,9 @@ export async function searchUnifiedMemories(
     limit,
   });
 
-  console.log("[关键词搜索] Results:", result);
-  return result;
+  const memories = assertMemoryArrayResult("unified_memory_search", result);
+  console.log("[关键词搜索] Results:", memories);
+  return memories;
 }
 
 /**
@@ -285,6 +335,14 @@ export async function getUnifiedMemory(
   const result = await safeInvoke<UnifiedMemory | null>("unified_memory_get", {
     id,
   });
+  assertNotDiagnosticFacade(
+    "unified_memory_get",
+    result,
+    "真实统一记忆 current 通道",
+  );
+  if (result !== null && typeof result !== "object") {
+    throw new Error("unified_memory_get did not return a memory object or null");
+  }
 
   console.log("[获取记忆] Result:", result);
   return result;
@@ -305,8 +363,9 @@ export async function createUnifiedMemory(
     request,
   });
 
-  console.log("[创建记忆] Result:", result);
-  return result;
+  const memory = assertMemoryObjectResult("unified_memory_create", result);
+  console.log("[创建记忆] Result:", memory);
+  return memory;
 }
 
 /**
@@ -327,8 +386,9 @@ export async function updateUnifiedMemory(
     request,
   });
 
-  console.log("[更新记忆] Result:", result);
-  return result;
+  const memory = assertMemoryObjectResult("unified_memory_update", result);
+  console.log("[更新记忆] Result:", memory);
+  return memory;
 }
 
 /**
@@ -341,6 +401,14 @@ export async function deleteUnifiedMemory(id: string): Promise<boolean> {
   console.log("[删除记忆] ID:", id);
 
   const result = await safeInvoke<boolean>("unified_memory_delete", { id });
+  assertNotDiagnosticFacade(
+    "unified_memory_delete",
+    result,
+    "真实统一记忆 current 通道",
+  );
+  if (typeof result !== "boolean") {
+    throw new Error("unified_memory_delete did not return a boolean");
+  }
 
   console.log("[删除记忆] Result:", result);
   return result;
@@ -374,10 +442,15 @@ export async function analyzeUnifiedMemories(
     toTimestamp,
   });
 
-  return safeInvoke<UnifiedMemoryAnalysisResult>("unified_memory_analyze", {
-    fromTimestamp,
-    toTimestamp,
-  });
+  const result = await safeInvoke<UnifiedMemoryAnalysisResult>(
+    "unified_memory_analyze",
+    {
+      fromTimestamp,
+      toTimestamp,
+    },
+  );
+
+  return assertAnalysisResult(result);
 }
 
 /**
@@ -416,8 +489,12 @@ export async function semanticSearch(
     },
   );
 
-  console.log("[语义搜索] Results:", result);
-  return result;
+  const memories = assertMemoryArrayResult(
+    "unified_memory_semantic_search",
+    result,
+  );
+  console.log("[语义搜索] Results:", memories);
+  return memories;
 }
 
 /**
@@ -461,8 +538,12 @@ export async function hybridSearch(
     },
   );
 
-  console.log("[混合搜索] Results:", result);
-  return result;
+  const memories = assertMemoryArrayResult(
+    "unified_memory_hybrid_search",
+    result,
+  );
+  console.log("[混合搜索] Results:", memories);
+  return memories;
 }
 
 // ==================== 辅助函数 ====================

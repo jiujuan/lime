@@ -5,7 +5,7 @@ export async function saveExportedDocument(
   filePath: string,
   content: string,
 ): Promise<void> {
-  const result = await safeInvoke("save_exported_document", {
+  const result = await safeInvoke<unknown>("save_exported_document", {
     filePath,
     content,
   });
@@ -14,4 +14,7 @@ export async function saveExportedDocument(
     result,
     "真实 Document Export current 通道",
   );
+  if (result !== null && result !== undefined) {
+    throw new Error("save_exported_document did not return void result");
+  }
 }

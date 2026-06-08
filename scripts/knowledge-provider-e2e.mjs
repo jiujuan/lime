@@ -34,7 +34,7 @@ const DEFAULT_SOURCE_TEXT = [
 function printHelp() {
   console.log(`Usage: node scripts/knowledge-provider-e2e.mjs [options]
 
-真实 Provider E2E，验证 knowledge_compile_pack -> Builder Skill -> documents/ -> compiled/splits -> persona context。
+真实 Provider E2E，验证 app_server_handle_json_lines -> knowledgePack/compile -> Builder Skill -> documents/ -> compiled/splits -> persona context。
 默认不会调用外部模型；必须显式传 --allow-live-provider 或 --allow-external-provider。
 
 Options:
@@ -79,12 +79,24 @@ function parseArgs(argv) {
       options.listProviders = true;
       continue;
     }
-    if (["--invoke-url", "--provider", "--model", "--working-dir", "--pack-name", "--source-file", "--output"].includes(arg)) {
+    if (
+      [
+        "--invoke-url",
+        "--provider",
+        "--model",
+        "--working-dir",
+        "--pack-name",
+        "--source-file",
+        "--output",
+      ].includes(arg)
+    ) {
       const value = argv[index + 1];
       if (!value) {
         throw new Error(`${arg} 需要参数`);
       }
-      const key = arg.slice(2).replace(/-([a-z])/g, (_, char) => char.toUpperCase());
+      const key = arg
+        .slice(2)
+        .replace(/-([a-z])/g, (_, char) => char.toUpperCase());
       options[key] = value;
       index += 1;
       continue;
@@ -167,7 +179,9 @@ function loadSourceText(sourceFile) {
 
 function ensureProviderOptions(options) {
   if (!options.provider || !options.model) {
-    throw new Error("真实 Provider E2E 需要同时传 --provider 和 --model；可先用 --list-providers 查看摘要");
+    throw new Error(
+      "真实 Provider E2E 需要同时传 --provider 和 --model；可先用 --list-providers 查看摘要",
+    );
   }
   assertLiveProviderSmokeAllowed({
     allowed: options.allowLiveProvider,
@@ -202,8 +216,10 @@ async function runProviderE2E(options) {
   const sourceText = loadSourceText(options.sourceFile);
   const sessionId = `knowledge-provider-e2e-${Date.now()}`;
 
-  await invoke(options.invokeUrl, "knowledge_import_source", {
-    request: {
+  await invokeAppServerMethod(
+    options.invokeUrl,
+    "knowledgePack/source/import",
+    {
       workingDir,
       packName,
       description: "真实 Provider E2E：内容增长顾问个人 IP 知识包",
@@ -212,31 +228,55 @@ async function runProviderE2E(options) {
       sourceFileName: "provider-e2e-source.md",
       sourceText,
     },
-  });
+  );
 
-  const compileResult = await invoke(options.invokeUrl, "knowledge_compile_pack", {
-    request: {
+  let compileResult;
+  try {
+    compileResult = await invokeAppServerMethod(
+      options.invokeUrl,
+      "knowledgePack/compile",
+      {
+        workingDir,
+        name: packName,
+        builderRuntime: {
+          enabled: true,
+          providerOverride: options.provider,
+          modelOverride: options.model,
+          sessionId,
+        },
+      },
+    );
+  } catch (error) {
+    throw new Error(
+      `Knowledge Provider E2E 尚未迁入 App Server current builder runtime binding: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  await invokeAppServerMethod(
+    options.invokeUrl,
+    "knowledgePack/status/update",
+    {
       workingDir,
       name: packName,
-      builderRuntime: {
-        enabled: true,
-        providerOverride: options.provider,
-        modelOverride: options.model,
-        sessionId,
-      },
+      status: "ready",
     },
-  });
+  );
 
-  await invoke(options.invokeUrl, "knowledge_update_pack_status", {
-    request: { workingDir, name: packName, status: "ready" },
-  });
+  const detail = await invokeAppServerMethod(
+    options.invokeUrl,
+    "knowledgePack/read",
+    {
+      workingDir,
+      name: packName,
+    },
+  );
 
-  const detail = await invoke(options.invokeUrl, "knowledge_get_pack", {
-    request: { workingDir, name: packName },
-  });
-
-  const context = await invoke(options.invokeUrl, "knowledge_resolve_context", {
-    request: {
+  const context = await invokeAppServerMethod(
+    options.invokeUrl,
+    "knowledgeContext/resolve",
+    {
       workingDir,
       name: packName,
       task: "根据个人 IP 知识库写一段不夸大的视频号简介",
@@ -245,12 +285,23 @@ async function runProviderE2E(options) {
       writeRun: true,
       runReason: "provider-e2e-script",
     },
-  });
+  );
 
-  const runRecord = JSON.parse(fs.readFileSync(compileResult.run.absolutePath, "utf8"));
+  const runRecord = JSON.parse(
+    fs.readFileSync(compileResult.run.absolutePath, "utf8"),
+  );
   const docPath = detail.documents?.[0]?.absolutePath;
-  const doc = docPath && fs.existsSync(docPath) ? fs.readFileSync(docPath, "utf8") : "";
-  const indexPath = path.join(workingDir, ".lime", "knowledge", "packs", packName, "compiled", "index.json");
+  const doc =
+    docPath && fs.existsSync(docPath) ? fs.readFileSync(docPath, "utf8") : "";
+  const indexPath = path.join(
+    workingDir,
+    ".lime",
+    "knowledge",
+    "packs",
+    packName,
+    "compiled",
+    "index.json",
+  );
   const compiledIndex = readJsonIfExists(indexPath);
 
   const evidence = {
@@ -284,7 +335,8 @@ async function runProviderE2E(options) {
     documentShape: {
       startsWithMarkdownHeading: doc.trimStart().startsWith("# "),
       startsWithJsonFence: doc.trimStart().startsWith("```json"),
-      containsBoundary: doc.includes("上市公司") || doc.includes("GMV") || doc.includes("不得"),
+      containsBoundary:
+        doc.includes("上市公司") || doc.includes("GMV") || doc.includes("不得"),
       length: [...doc].length,
       preview: doc.slice(0, 600),
     },

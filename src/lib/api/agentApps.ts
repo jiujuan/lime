@@ -257,7 +257,7 @@ export interface AgentAppShellLaunchResult {
   packageMount?: AgentAppShellPackageMount;
   runtimeStatus?: AgentAppUiRuntimeStatus;
   shellWindow?: AgentAppShellWindowInfo;
-  launchedAt: string;
+  launchedAt?: string;
 }
 
 export interface AgentAppFetchCloudPackageRequest {
@@ -303,6 +303,196 @@ async function invokeAgentAppCommand<T>(
   const result = await safeInvoke<T>(command, args);
   assertNotDiagnosticFacade(command, result, "真实 Agent App current 通道");
   return result;
+}
+
+function assertAgentAppRecord(
+  command: string,
+  result: unknown,
+): asserts result is Record<string, unknown> {
+  if (!isRecord(result)) {
+    throw new Error(`${command} did not return an object`);
+  }
+}
+
+function assertNonEmptyStringField(
+  command: string,
+  result: Record<string, unknown>,
+  field: string,
+): void {
+  if (typeof result[field] !== "string" || !result[field].trim()) {
+    throw new Error(`${command} did not return ${field}`);
+  }
+}
+
+function assertBooleanField(
+  command: string,
+  result: Record<string, unknown>,
+  field: string,
+): void {
+  if (typeof result[field] !== "boolean") {
+    throw new Error(`${command} did not return ${field}`);
+  }
+}
+
+function assertArrayField(
+  command: string,
+  result: Record<string, unknown>,
+  field: string,
+): void {
+  if (!Array.isArray(result[field])) {
+    throw new Error(`${command} did not return ${field}`);
+  }
+}
+
+function assertInstalledAgentAppStateResult(
+  command: string,
+  result: unknown,
+): asserts result is InstalledAgentAppState {
+  assertAgentAppRecord(command, result);
+  assertNonEmptyStringField(command, result, "appId");
+  assertNonEmptyStringField(command, result, "installMode");
+  assertNonEmptyStringField(command, result, "installedAt");
+  assertNonEmptyStringField(command, result, "updatedAt");
+  assertBooleanField(command, result, "disabled");
+  if (
+    !isRecord(result.identity) ||
+    !isRecord(result.manifest) ||
+    !isRecord(result.projection) ||
+    !isRecord(result.readiness) ||
+    !isRecord(result.runtimeProfileSummary) ||
+    !isRecord(result.setup)
+  ) {
+    throw new Error(`${command} did not return an installed Agent App state`);
+  }
+}
+
+function assertAgentAppLocalPackageInspectionResult(
+  command: string,
+  result: unknown,
+): asserts result is AgentAppLocalPackageInspection {
+  assertAgentAppRecord(command, result);
+  assertNonEmptyStringField(command, result, "appDir");
+  assertNonEmptyStringField(command, result, "sourceUri");
+  assertNonEmptyStringField(command, result, "manifestHash");
+  assertNonEmptyStringField(command, result, "packageHash");
+  assertNonEmptyStringField(command, result, "inspectedAt");
+  if (!isRecord(result.manifest)) {
+    throw new Error(`${command} did not return manifest`);
+  }
+}
+
+function assertAgentAppPackageCacheEntryResult(
+  command: string,
+  result: unknown,
+): asserts result is AgentAppPackageCacheEntry {
+  assertAgentAppRecord(command, result);
+  assertNonEmptyStringField(command, result, "appId");
+  assertNonEmptyStringField(command, result, "packageHash");
+  assertNonEmptyStringField(command, result, "manifestHash");
+  assertNonEmptyStringField(command, result, "cachePath");
+  assertNonEmptyStringField(command, result, "cachedAt");
+  if (!isRecord(result.identity) || result.manifestSnapshot == null) {
+    throw new Error(`${command} did not return a package cache entry`);
+  }
+}
+
+function assertInstalledAgentAppStateListResult(
+  command: string,
+  result: unknown,
+): asserts result is InstalledAgentAppStateListResult {
+  assertAgentAppRecord(command, result);
+  const states = result.states;
+  const issues = result.issues;
+  if (!Array.isArray(states)) {
+    throw new Error(`${command} did not return states`);
+  }
+  if (!Array.isArray(issues)) {
+    throw new Error(`${command} did not return issues`);
+  }
+  states.forEach((state, index) => {
+    assertInstalledAgentAppStateResult(`${command}.states[${index}]`, state);
+  });
+}
+
+function assertAgentAppUninstallRehearsalResult(
+  command: string,
+  result: unknown,
+): asserts result is AgentAppUninstallRehearsalResult {
+  assertAgentAppRecord(command, result);
+  assertNonEmptyStringField(command, result, "appId");
+  assertNonEmptyStringField(command, result, "mode");
+  assertNonEmptyStringField(command, result, "generatedAt");
+  if (result.mode !== "keep-data" && result.mode !== "delete-data") {
+    throw new Error(`${command} returned unsupported uninstall mode`);
+  }
+  if (
+    typeof result.deletedTargetCount !== "number" ||
+    typeof result.retainedTargetCount !== "number" ||
+    !Array.isArray(result.targets) ||
+    !Array.isArray(result.warnings)
+  ) {
+    throw new Error(`${command} did not return uninstall rehearsal details`);
+  }
+}
+
+function assertAgentAppUninstallResult(
+  command: string,
+  result: unknown,
+): asserts result is AgentAppUninstallResult {
+  assertAgentAppRecord(command, result);
+  if (result.status != null && typeof result.status !== "string") {
+    throw new Error(`${command} did not return status`);
+  }
+  if (!isRecord(result.rehearsal)) {
+    throw new Error(`${command} did not return rehearsal`);
+  }
+  assertAgentAppUninstallRehearsalResult(command, result.rehearsal);
+  assertInstalledAgentAppStateListResult(command, result.list);
+  if (
+    typeof result.removedTargetCount !== "number" ||
+    typeof result.missingTargetCount !== "number"
+  ) {
+    throw new Error(`${command} did not return uninstall counters`);
+  }
+  if (result.blockerCodes != null && !Array.isArray(result.blockerCodes)) {
+    throw new Error(`${command} did not return blockerCodes`);
+  }
+}
+
+function assertAgentAppSelectDirectoryResult(
+  command: string,
+  result: unknown,
+): asserts result is AgentAppSelectDirectoryResult {
+  assertAgentAppRecord(command, result);
+  const selectedPath = result.path;
+  if (typeof result.cancelled !== "boolean") {
+    throw new Error(`${command} did not return cancelled`);
+  }
+  if (selectedPath !== null && typeof selectedPath !== "string") {
+    throw new Error(`${command} did not return path`);
+  }
+  if (
+    result.cancelled === false &&
+    (selectedPath === null || !selectedPath.trim())
+  ) {
+    throw new Error(`${command} did not return selected path`);
+  }
+}
+
+function assertAgentAppShellLaunchResult(
+  command: string,
+  result: unknown,
+): asserts result is AgentAppShellLaunchResult {
+  assertAgentAppRecord(command, result);
+  assertNonEmptyStringField(command, result, "status");
+  if (result.status !== "launched" && result.status !== "blocked") {
+    throw new Error(`${command} returned unsupported shell status`);
+  }
+  assertBooleanField(command, result, "devShell");
+  assertArrayField(command, result, "blockerCodes");
+  if (result.status === "launched") {
+    assertNonEmptyStringField(command, result, "launchedAt");
+  }
 }
 
 function normalizeInstalledAgentAppListResponse(
@@ -483,10 +673,15 @@ function readBootstrapAgentAppCatalog(): CloudBootstrapPayload | null {
 export async function inspectLocalAgentAppPackage(
   appDir: string,
 ): Promise<AgentAppLocalPackageInspection> {
-  return invokeAgentAppCommand<AgentAppLocalPackageInspection>(
+  const result = await invokeAgentAppCommand<unknown>(
     "agent_app_inspect_local_package",
     { appDir },
   );
+  assertAgentAppLocalPackageInspectionResult(
+    "agent_app_inspect_local_package",
+    result,
+  );
+  return result;
 }
 
 export async function selectLocalAgentAppDirectory(
@@ -503,18 +698,20 @@ export async function listInstalledAgentApps(): Promise<InstalledAgentAppStateLi
 export async function saveInstalledAgentAppState(
   request: AgentAppInstalledStateSaveRequest,
 ): Promise<InstalledAgentAppState> {
-  return invokeAgentAppCommand<InstalledAgentAppState>(
+  const result = await invokeAgentAppCommand<unknown>(
     "agent_app_save_installed_state",
     {
       request,
     },
   );
+  assertInstalledAgentAppStateResult("agent_app_save_installed_state", result);
+  return result;
 }
 
 export async function fetchCloudAgentAppPackage(
   descriptor: CloudBootstrapReleaseDescriptor,
 ): Promise<AgentAppPackageCacheEntry> {
-  return invokeAgentAppCommand<AgentAppPackageCacheEntry>(
+  const result = await invokeAgentAppCommand<unknown>(
     "agent_app_fetch_cloud_package",
     {
       request: {
@@ -522,6 +719,8 @@ export async function fetchCloudAgentAppPackage(
       } satisfies AgentAppFetchCloudPackageRequest,
     },
   );
+  assertAgentAppPackageCacheEntryResult("agent_app_fetch_cloud_package", result);
+  return result;
 }
 
 export async function reviewLocalAgentAppPackage(params: {
@@ -800,33 +999,42 @@ export async function reviewCloudAgentAppRelease(params: {
 export async function setAgentAppDisabled(
   request: AgentAppDisabledRequest,
 ): Promise<InstalledAgentAppStateListResult> {
-  return invokeAgentAppCommand<InstalledAgentAppStateListResult>(
+  const result = await invokeAgentAppCommand<unknown>(
     "agent_app_set_disabled",
     {
       request,
     },
   );
+  assertInstalledAgentAppStateListResult("agent_app_set_disabled", result);
+  return result;
 }
 
 export async function previewAgentAppUninstall(
   request: AgentAppUninstallRehearsalRequest,
 ): Promise<AgentAppUninstallRehearsalResult> {
-  return invokeAgentAppCommand<AgentAppUninstallRehearsalResult>(
+  const result = await invokeAgentAppCommand<unknown>(
     "agent_app_uninstall_rehearsal",
     { request },
   );
+  assertAgentAppUninstallRehearsalResult(
+    "agent_app_uninstall_rehearsal",
+    result,
+  );
+  return result;
 }
 
 export async function uninstallAgentApp(
   request: AgentAppUninstallRequest,
 ): Promise<AgentAppUninstallResult> {
   // delete-data 只有在调用方传入精确 confirmationPhrase 时才会进入受控删除 adapter。
-  return invokeAgentAppCommand<AgentAppUninstallResult>(
+  const result = await invokeAgentAppCommand<unknown>(
     "agent_app_uninstall",
     {
       request,
     },
   );
+  assertAgentAppUninstallResult("agent_app_uninstall", result);
+  return result;
 }
 
 export async function startAgentAppUiRuntime(
@@ -857,23 +1065,27 @@ export async function stopAgentAppUiRuntime(
 export async function selectAgentAppDirectory(
   request: AgentAppSelectDirectoryRequest = {},
 ): Promise<AgentAppSelectDirectoryResult> {
-  return invokeAgentAppCommand<AgentAppSelectDirectoryResult>(
+  const result = await invokeAgentAppCommand<unknown>(
     "agent_app_select_directory",
     {
       request,
     },
   );
+  assertAgentAppSelectDirectoryResult("agent_app_select_directory", result);
+  return result;
 }
 
 export async function launchAgentAppShell(
   request: AgentAppShellLaunchRequest,
 ): Promise<AgentAppShellLaunchResult> {
-  return invokeAgentAppCommand<AgentAppShellLaunchResult>(
+  const result = await invokeAgentAppCommand<unknown>(
     "agent_app_launch_shell",
     {
       request,
     },
   );
+  assertAgentAppShellLaunchResult("agent_app_launch_shell", result);
+  return result;
 }
 
 export { extractFrontmatter };

@@ -269,4 +269,41 @@ describe("skillsApi", () => {
       "install_local_skill_package_for_app 尚未接入真实 Skill 管理 current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
+
+  it("Skill package 文件关联状态遇到假成功或缺字段时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        platform: "macos",
+        extension: "skill",
+        mimeType: "application/vnd.lime.skill+zip",
+        appIdentifier: "com.limecloud.lime",
+        isDefault: false,
+        canSetDefault: true,
+      });
+
+    await expect(
+      skillsApi.getSkillPackageFileAssociationStatus(),
+    ).rejects.toThrow(
+      "get_skill_package_file_association_status did not return file association status",
+    );
+    await expect(
+      skillsApi.getSkillPackageFileAssociationStatus(),
+    ).rejects.toThrow(
+      "get_skill_package_file_association_status did not return file association status",
+    );
+  });
+
+  it("Skill package 文件关联设置结果缺少状态时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      changed: true,
+      message: "updated",
+    });
+
+    await expect(
+      skillsApi.setSkillPackageFileAssociationDefault(),
+    ).rejects.toThrow(
+      "set_skill_package_file_association_default did not return file association apply result",
+    );
+  });
 });

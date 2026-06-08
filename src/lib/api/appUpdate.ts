@@ -78,22 +78,34 @@ export interface UpdateNotificationAnchorRect {
 }
 
 export async function checkForUpdates(): Promise<VersionInfo> {
-  return invokeUpdateCommand<VersionInfo>("check_for_updates");
+  return invokeUpdateCommand<VersionInfo>(
+    "check_for_updates",
+    undefined,
+    assertVersionInfo,
+  );
 }
 
 export async function downloadUpdate(): Promise<DownloadUpdateResult> {
-  return invokeUpdateCommand<DownloadUpdateResult>("download_update");
+  return invokeUpdateCommand<DownloadUpdateResult>(
+    "download_update",
+    undefined,
+    assertDownloadUpdateResult,
+  );
 }
 
 export async function startUpdateInstallSession(): Promise<UpdateInstallSession> {
   return invokeUpdateCommand<UpdateInstallSession>(
     "start_update_install_session",
+    undefined,
+    assertUpdateInstallSession,
   );
 }
 
 export async function getUpdateInstallSession(): Promise<UpdateInstallSession> {
   return invokeUpdateCommand<UpdateInstallSession>(
     "get_update_install_session",
+    undefined,
+    assertUpdateInstallSession,
   );
 }
 
@@ -122,7 +134,11 @@ export function isUpdateInstallSessionActive(
 }
 
 export async function getUpdateCheckSettings(): Promise<UpdateCheckConfig> {
-  return invokeUpdateCommand<UpdateCheckConfig>("get_update_check_settings");
+  return invokeUpdateCommand<UpdateCheckConfig>(
+    "get_update_check_settings",
+    undefined,
+    assertUpdateCheckConfig,
+  );
 }
 
 export async function setUpdateCheckSettings(
@@ -134,6 +150,8 @@ export async function setUpdateCheckSettings(
 export async function getUpdateNotificationMetrics(): Promise<UpdateNotificationMetrics> {
   return invokeUpdateCommand<UpdateNotificationMetrics>(
     "get_update_notification_metrics",
+    undefined,
+    assertUpdateNotificationMetrics,
   );
 }
 
@@ -160,9 +178,13 @@ export async function closeUpdateWindow(): Promise<void> {
 export async function dismissUpdateNotification(
   version?: string | null,
 ): Promise<number> {
-  return invokeUpdateCommand<number>("dismiss_update_notification", {
-    version: version ?? null,
-  });
+  return invokeUpdateCommand<number>(
+    "dismiss_update_notification",
+    {
+      version: version ?? null,
+    },
+    assertNumberResult,
+  );
 }
 
 export async function recordUpdateNotificationAction(
@@ -172,7 +194,11 @@ export async function recordUpdateNotificationAction(
 }
 
 export async function remindUpdateLater(hours: number): Promise<number> {
-  return invokeUpdateCommand<number>("remind_update_later", { hours });
+  return invokeUpdateCommand<number>(
+    "remind_update_later",
+    { hours },
+    assertNumberResult,
+  );
 }
 
 export async function skipUpdateVersion(version: string): Promise<void> {
@@ -182,13 +208,110 @@ export async function skipUpdateVersion(version: string): Promise<void> {
 async function invokeUpdateCommand<T = void>(
   command: string,
   args?: Record<string, unknown>,
+  validate?: (command: string, value: unknown) => asserts value is T,
 ): Promise<T> {
   const result =
     args === undefined
-      ? await safeInvoke<T>(command)
-      : await safeInvoke<T>(command, args);
+      ? await safeInvoke<unknown>(command)
+      : await safeInvoke<unknown>(command, args);
   assertNotDiagnosticFacade(command, result, "真实 updater current 通道");
-  return result;
+  validate?.(command, result);
+  return result as T;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertVersionInfo(
+  command: string,
+  value: unknown,
+): asserts value is VersionInfo {
+  if (
+    !isRecord(value) ||
+    typeof value.current !== "string" ||
+    typeof value.hasUpdate !== "boolean"
+  ) {
+    throw new Error(`${command} did not return version info`);
+  }
+}
+
+function assertDownloadUpdateResult(
+  command: string,
+  value: unknown,
+): asserts value is DownloadUpdateResult {
+  if (
+    !isRecord(value) ||
+    typeof value.success !== "boolean" ||
+    typeof value.message !== "string"
+  ) {
+    throw new Error(`${command} did not return a download result`);
+  }
+}
+
+function assertUpdateInstallSession(
+  command: string,
+  value: unknown,
+): asserts value is UpdateInstallSession {
+  if (
+    !isRecord(value) ||
+    typeof value.sessionId !== "string" ||
+    typeof value.stage !== "string" ||
+    typeof value.currentVersion !== "string" ||
+    typeof value.downloadedBytes !== "number" ||
+    typeof value.percent !== "number" ||
+    typeof value.message !== "string" ||
+    typeof value.startedAt !== "number" ||
+    typeof value.updatedAt !== "number" ||
+    typeof value.canCloseWindow !== "boolean" ||
+    typeof value.isActive !== "boolean"
+  ) {
+    throw new Error(`${command} did not return an update install session`);
+  }
+}
+
+function assertUpdateCheckConfig(
+  command: string,
+  value: unknown,
+): asserts value is UpdateCheckConfig {
+  if (
+    !isRecord(value) ||
+    typeof value.enabled !== "boolean" ||
+    typeof value.check_interval_hours !== "number" ||
+    typeof value.show_notification !== "boolean" ||
+    typeof value.last_check_timestamp !== "number"
+  ) {
+    throw new Error(`${command} did not return update check settings`);
+  }
+}
+
+function assertUpdateNotificationMetrics(
+  command: string,
+  value: unknown,
+): asserts value is UpdateNotificationMetrics {
+  if (
+    !isRecord(value) ||
+    typeof value.shown_count !== "number" ||
+    typeof value.update_now_count !== "number" ||
+    typeof value.remind_later_count !== "number" ||
+    typeof value.skip_version_count !== "number" ||
+    typeof value.dismiss_count !== "number" ||
+    typeof value.update_now_rate !== "number" ||
+    typeof value.remind_later_rate !== "number" ||
+    typeof value.skip_version_rate !== "number" ||
+    typeof value.dismiss_rate !== "number"
+  ) {
+    throw new Error(`${command} did not return update notification metrics`);
+  }
+}
+
+function assertNumberResult(
+  command: string,
+  value: unknown,
+): asserts value is number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${command} did not return a finite number`);
+  }
 }
 
 function normalizeUpdateNotificationAnchorRect(

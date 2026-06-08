@@ -76,6 +76,18 @@ const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
 const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
 const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event";
+const FORBIDDEN_AGENT_RUNTIME_SESSION_COMMANDS = new Set([
+  "agent_runtime_create_session",
+  "agent_runtime_update_session",
+  "agent_runtime_list_sessions",
+  "agent_runtime_get_session",
+  "agent_runtime_delete_session",
+]);
+const FORBIDDEN_AGENT_RUNTIME_CURRENT_METHOD_COMMANDS = new Set([
+  ...FORBIDDEN_AGENT_RUNTIME_SESSION_COMMANDS,
+  "agent_runtime_submit_turn",
+  "agent_runtime_respond_action",
+]);
 const WORKSPACE_HARNESS_DEBUG_OVERRIDE_KEY =
   "lime:debug:workspace-harness-enabled:v1";
 const RUNTIME_TOOL_AVAILABILITY_OVERRIDE = {
@@ -1609,81 +1621,16 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
       });
       return;
     }
-    if (command === "agent_runtime_create_session") {
-      createSessionRequests.push(args);
-      if (createSessionRequests.length > 20) {
-        createSessionRequests.shift();
-      }
-      const requestedWorkspaceId =
-        typeof args?.workspaceId === "string"
-          ? args.workspaceId
-          : typeof args?.workspace_id === "string"
-            ? args.workspace_id
-            : CODE_FIXTURE_WORKSPACE_ID;
-      fixture = buildCodeRuntimeSessionFixture(
-        CODE_FIXTURE_SESSION_ID,
-        requestedWorkspaceId,
-      );
-      sessionCreated = true;
+    if (FORBIDDEN_AGENT_RUNTIME_CURRENT_METHOD_COMMANDS.has(command)) {
       await route.fulfill({
-        status: 200,
+        status: 500,
         contentType: "application/json",
-        body: JSON.stringify({ result: fixture.id }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_update_session") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ result: null }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_submit_turn") {
-      const submitRequest = args?.request ?? null;
-      submitTurnRequests.push(submitRequest);
-      if (submitTurnRequests.length > 20) {
-        submitTurnRequests.shift();
-      }
-      if (submitRequest?.message === QUEUED_PROMPT_TEXT) {
-        const queuedTurn = buildCodeRuntimeQueuedTurn();
-        const nowIso = new Date().toISOString();
-        fixture = {
-          ...fixture,
-          queued_turns: [queuedTurn],
-          thread_read: {
-            ...fixture.thread_read,
-            status: "running",
-            queued_turns: [queuedTurn],
-            updated_at: nowIso,
+        body: JSON.stringify({
+          error: {
+            code: "legacy_agent_runtime_current_method_command",
+            message: `${command} 已下线，本 smoke 必须走 agentSession/* App Server JSON-RPC current 方法`,
           },
-        };
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ result: null }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_respond_action") {
-      respondActionRequests.push(args?.request ?? null);
-      if (respondActionRequests.length > 20) {
-        respondActionRequests.shift();
-      }
-      fixture = {
-        ...fixture,
-        thread_read: {
-          ...fixture.thread_read,
-          pending_requests: [],
-          updated_at: new Date().toISOString(),
-        },
-      };
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ result: null }),
+        }),
       });
       return;
     }
@@ -1742,50 +1689,6 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
             snapshot_path: CODE_FIXTURE_CHECKPOINT_SNAPSHOT_PATH,
             backup_path: CODE_FIXTURE_RESTORE_BACKUP_PATH,
             restored_at: nowIso,
-          },
-        }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_list_sessions") {
-      if (!sessionCreated) {
-        await route.fallback();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          result: [
-            {
-              id: fixture.id,
-              name: fixture.name,
-              created_at: fixture.created_at,
-              updated_at: fixture.updated_at,
-              model: fixture.model,
-              messages_count: fixture.messages.length,
-              execution_strategy: fixture.execution_strategy,
-              workspace_id: fixture.workspace_id,
-              working_dir: fixture.working_dir,
-            },
-          ],
-        }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_get_session") {
-      const requestedSessionId = args?.sessionId || args?.session_id;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          result: {
-            ...fixture,
-            id: requestedSessionId || fixture.id,
-            execution_runtime: {
-              ...fixture.execution_runtime,
-              session_id: requestedSessionId || fixture.id,
-            },
           },
         }),
       });
@@ -2664,6 +2567,13 @@ function hasAppServerMethodCount(diagnostics, method, minCount = 1) {
   return (diagnostics?.appServerMethodCounts?.[method] ?? 0) >= minCount;
 }
 
+function findForbiddenAgentRuntimeCurrentMethodCommands(diagnostics) {
+  const commandCounts = diagnostics?.commandCounts ?? {};
+  return Array.from(FORBIDDEN_AGENT_RUNTIME_CURRENT_METHOD_COMMANDS).filter(
+    (command) => (commandCounts[command] ?? 0) > 0,
+  );
+}
+
 async function waitForCheck(options, label, check) {
   const startedAt = Date.now();
   let lastValue = null;
@@ -3404,7 +3314,7 @@ async function main() {
     try {
       approvalResponseDiagnostics = await waitForCheck(
         options,
-        "权限确认响应提交到 DevBridge",
+        "权限确认响应提交到 App Server JSON-RPC",
         async () => {
           const diagnostics = fixtureRuntime.getDiagnostics();
           const latestRequest =
@@ -3454,6 +3364,16 @@ async function main() {
         `真实页面仍出现不应存在的页级告警: ${warning}`,
       );
     }
+    const finalDiagnostics = fixtureRuntime.getDiagnostics();
+    const forbiddenCurrentMethodCommands =
+      findForbiddenAgentRuntimeCurrentMethodCommands(finalDiagnostics);
+    assert(
+      forbiddenCurrentMethodCommands.length === 0,
+      `页面 smoke 不应再调用已有 current 覆盖的旧 agent_runtime facade: ${JSON.stringify({
+        forbiddenCurrentMethodCommands,
+        diagnostics: finalDiagnostics,
+      })}`,
+    );
 
     console.log("[smoke:agent-runtime-tool-surface-page] 通过");
     console.log(

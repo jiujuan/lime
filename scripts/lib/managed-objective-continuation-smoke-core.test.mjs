@@ -2,10 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildSmokeEvidence,
+  createAgentSessionCurrent,
   evidencePackExplainsObjectiveStop,
   guardDecisionFromSummary,
   objectiveReachedBudgetLimit,
   objectiveStopState,
+  readAgentRuntimeThreadCurrent,
+  readAgentSessionDetailCurrent,
+  respondAgentSessionActionCurrent,
+  startAgentSessionTurnCurrent,
+  updateAgentSessionRuntimeCurrent,
 } from "./managed-objective-continuation-smoke-core.mjs";
 
 function options() {
@@ -241,5 +247,205 @@ describe("managed-objective-continuation-smoke-core", () => {
     expect(guardDecisionFromSummary("auto_continuation_guard decision=allow")).toBe(
       "allow",
     );
+  });
+
+  it("session helper 应只经 App Server JSON-RPC current 方法读写会话", async () => {
+    const originalFetch = globalThis.fetch;
+    const observedParams = [];
+    const observedMethods = [];
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body || "{}"));
+      expect(body.cmd).toBe("app_server_handle_json_lines");
+      const line = JSON.parse(String(body.args?.request?.lines?.[0] || "{}"));
+      observedMethods.push(line.method);
+      observedParams.push(line.params);
+      const resultByMethod = {
+        "agentSession/start": {
+          session: {
+            sessionId: "session-current",
+            threadId: "thread-current",
+            appId: "desktop",
+            status: "idle",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z",
+          },
+        },
+        "agentSession/update": {
+          session: {
+            sessionId: "session-current",
+            model: "fixture-model",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z",
+            messagesCount: 0,
+          },
+        },
+        "agentSession/read": {
+          session: {
+            sessionId: "session-current",
+            threadId: "thread-current",
+            appId: "desktop",
+            status: "idle",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z",
+          },
+          turns: [],
+          detail: {
+            id: "session-current",
+            turns: [],
+            messages: [],
+            items: [],
+          },
+        },
+        "agentSession/turn/start": {
+          turn: {
+            turnId: "turn-current",
+            sessionId: "session-current",
+            threadId: "thread-current",
+            status: "accepted",
+          },
+        },
+        "agentSession/action/respond": {},
+        "agentSession/turn/cancel": {},
+      };
+      return new Response(
+        JSON.stringify({
+          result: {
+            lines: [
+              JSON.stringify({
+                id: line.id,
+                result: resultByMethod[line.method],
+              }),
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    };
+
+    try {
+      const smokeOptions = {
+        invokeUrl: "http://127.0.0.1:3030/invoke",
+        timeoutMs: 180_000,
+      };
+      const sessionId = await createAgentSessionCurrent(smokeOptions, {
+        workspaceId: "workspace-current",
+        title: "Current session",
+        metadata: {
+          harness: {
+            hiddenFromUserRecents: true,
+            source: "smoke:agent-runtime-tool-execution",
+            scenarioId: "safe-core-tools",
+          },
+        },
+      });
+      await updateAgentSessionRuntimeCurrent(smokeOptions, {
+        sessionId,
+        provider: provider(),
+      });
+      await startAgentSessionTurnCurrent(smokeOptions, {
+        sessionId,
+        workspaceId: "workspace-current",
+        message: "请只回复 OK",
+        eventName: "event-current",
+        turnId: "turn-current",
+        turnConfig: {
+          providerPreference: "fixture-provider",
+          modelPreference: "fixture-model",
+          approvalPolicy: "never",
+          sandboxPolicy: "read-only",
+          metadata: { source: "test" },
+        },
+        skipPreSubmitResume: true,
+      });
+      await respondAgentSessionActionCurrent(smokeOptions, {
+        sessionId,
+        requestId: "request-current",
+        actionType: "elicitation",
+        confirmed: true,
+        response: JSON.stringify({ answer: "继续" }),
+        userData: { answer: "继续" },
+        eventName: "event-current",
+        actionScope: {
+          session_id: sessionId,
+          thread_id: "thread-current",
+          turn_id: "turn-current",
+        },
+      });
+      await readAgentRuntimeThreadCurrent(smokeOptions, sessionId);
+      const detail = await readAgentSessionDetailCurrent(
+        smokeOptions,
+        sessionId,
+        { historyLimit: 80 },
+      );
+
+      expect(sessionId).toBe("session-current");
+      expect(detail.id).toBe("session-current");
+      expect(observedMethods).toEqual([
+        "agentSession/start",
+        "agentSession/update",
+        "agentSession/turn/start",
+        "agentSession/action/respond",
+        "agentSession/read",
+        "agentSession/read",
+      ]);
+      expect(observedMethods).not.toContain("agent_runtime_create_session");
+      expect(observedMethods).not.toContain("agent_runtime_update_session");
+      expect(observedMethods).not.toContain("agent_runtime_get_session");
+      expect(observedMethods).not.toContain("agent_runtime_submit_turn");
+      expect(observedMethods).not.toContain("agent_runtime_respond_action");
+      expect(observedParams[0].businessObjectRef.metadata.harness).toEqual({
+        hiddenFromUserRecents: true,
+        source: "smoke:agent-runtime-tool-execution",
+        scenarioId: "safe-core-tools",
+      });
+      expect(observedParams[2]).toMatchObject({
+        sessionId: "session-current",
+        turnId: "turn-current",
+        input: {
+          text: "请只回复 OK",
+        },
+        runtimeOptions: {
+          eventName: "event-current",
+          providerPreference: "fixture-provider",
+          modelPreference: "fixture-model",
+          metadata: { source: "test" },
+          hostOptions: {
+            asterChatRequest: {
+              message: "请只回复 OK",
+              session_id: "session-current",
+              workspace_id: "workspace-current",
+              event_name: "event-current",
+              turn_id: "turn-current",
+              provider_preference: "fixture-provider",
+              model_preference: "fixture-model",
+              approval_policy: "never",
+              sandbox_policy: "read-only",
+              metadata: { source: "test" },
+            },
+          },
+        },
+        skipPreSubmitResume: true,
+      });
+      expect(observedParams[3]).toMatchObject({
+        sessionId: "session-current",
+        requestId: "request-current",
+        actionType: "elicitation",
+        confirmed: true,
+        actionScope: {
+          sessionId: "session-current",
+          threadId: "thread-current",
+          turnId: "turn-current",
+        },
+      });
+      expect(observedParams[5]).toMatchObject({
+        sessionId: "session-current",
+        historyLimit: 80,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

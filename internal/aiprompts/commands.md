@@ -23,6 +23,8 @@
 
 这条路径是 current 事实源。Electron 只负责 Desktop Host bridge：preload / IPC 白名单、窗口、托盘、Dock、菜单、updater、签名发布、sidecar 生命周期和少量 renderer-safe projection。Electron 不是第二套后端，也不要把它命名成后端适配层；App Server JSON-RPC 才是 backend 事实入口。
 
+Updater 是明确的 Desktop Host 壳能力，不进入 App Server，也不得回流 Rust Tauri command facade。旧 updater command 面已删除：`lime-rs/src/commands/update_cmd.rs` 不再存在，`lime-rs/src/commands/mod.rs` 不再声明 `update_cmd`，`runner.rs` 不再注册旧 updater handler 或后台检查任务。后续若调整更新体验，只能改 Electron Desktop Host updater current 链路、前端 `src/lib/api/appUpdate.ts` 网关和 release / Forge 文档，不得在 `lime-rs/src/commands/` 新增 updater stub、compat wrapper 或业务实现。
+
 生产路径不能 mock。`safeInvoke` / `invoke`、Electron Host、App Server sidecar、GUI smoke 和业务 E2E 必须进入真实 Electron Desktop Host IPC / App Server JSON-RPC；无真实通道时 fail-closed。`mockPriorityCommands`、`defaultMocks`、`invokeMockOnly`、`explicitMockFallback`、内存事件 / 窗口 / 快捷键夹具和 mock backend 只允许测试文件或显式测试夹具使用，不能作为产品降级、浏览器模式兜底或交付证据。
 
 macOS 真实 Electron E2E / GUI smoke 可以使用 Chromium `--use-mock-keychain` 隔离系统钥匙串。这只隔离测试进程的 Keychain backend，不等于业务 mock；目的是避免隔离 `HOME / ELECTRON_E2E_USER_DATA_DIR` 时触发“找不到用于储存 `Lime Key` 的钥匙串”系统弹窗或污染用户真实钥匙串。生产 App 和普通开发预览不得依赖该参数。
@@ -30,6 +32,8 @@ macOS 真实 Electron E2E / GUI smoke 可以使用 Chromium `--use-mock-keychain
 新增命令和对应前端网关命名必须使用领域名，不要加 `Lime` / `lime_` / `lime-` 品牌前缀。例如 App Server 入口使用 `app_server_*`，不要写成带品牌前缀的命名。只有历史兼容、对外品牌标识或外部生态已固定的名字才允许例外，并在路线图或执行计划写明原因和退出条件。
 
 新增 AI Agent / runtime / host integration / 跨 App 复用能力默认走 App Server JSON-RPC current 主链。Electron main / preload 只作为 Desktop Host bridge，负责桌面壳能力、sidecar 生命周期与白名单 IPC；只有为旧 GUI 做兼容适配时，才继续触碰 `agent_runtime_*` / Aster legacy command facade；这类改动不能承接新业务逻辑，必须写清退出条件。
+
+`lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。允许触碰它的场景只剩：删除旧 wrapper；撤 runner / DevBridge dispatcher / catalog / mock 注册后的机械编译修复；或记录无法删除的 blocker。新增 Rust 后端能力必须落到 App Server crates / RuntimeCore / services 等 current 事实源；桌面壳能力落到 Electron Desktop Host。
 
 这样做的目的不是“多包一层”，而是为了保证：
 
@@ -688,6 +692,7 @@ npm run verify:local
 
 - 在页面、组件、普通 Hook 中直接散落 `invoke`
 - 给 `compat` 路径继续长新业务逻辑
+- 在 `lime-rs/src/commands/**` 新增业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub；该目录只允许删除旧 Tauri wrapper、撤注册后的机械编译修复，或登记 blocker
 - 把已经进入 `deprecated` / `dead-candidate` / `dead` 的命令重新接回主链
 - 只改前端或只改 Rust，一侧通过就宣布完成
 - 用“先兼容一下”作为长期保留第二套入口的理由

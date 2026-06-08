@@ -22,6 +22,12 @@ function expectAppServerAgentRule(content, label) {
   expect(content, label).toMatch(/兼容适配|compat/);
 }
 
+function expectRustCommandsCleanupRule(content, label) {
+  expect(content, label).toContain("lime-rs/src/commands/**");
+  expect(content, label).toMatch(/旧 (?:Tauri )?(?:command )?wrapper (?:删除)?清理|清理区/);
+  expect(content, label).toMatch(/不再承接|不得.*新增|不再落|不能.*新增|新增 stub|新增业务逻辑/);
+}
+
 function retiredHostPackageName() {
   return ["@", "ta", "uri-apps"].join("");
 }
@@ -73,6 +79,45 @@ describe("Electron current repository rules guard", () => {
       readFile("internal/aiprompts/README.md"),
       "internal/aiprompts/README.md",
     );
+    expectRustCommandsCleanupRule(readFile("AGENTS.md"), "AGENTS.md");
+    expectRustCommandsCleanupRule(
+      readFile("internal/aiprompts/README.md"),
+      "internal/aiprompts/README.md",
+    );
+    expectRustCommandsCleanupRule(
+      readFile("internal/aiprompts/commands.md"),
+      "internal/aiprompts/commands.md",
+    );
+  });
+
+  it("keeps App Server roadmap aware that Rust commands are cleanup-only", () => {
+    const docs = [
+      "internal/roadmap/appserver/README.md",
+      "internal/roadmap/appserver/architecture.md",
+      "internal/roadmap/appserver/frontend-electron-migration.md",
+      "internal/roadmap/appserver/service-extraction.md",
+      "internal/roadmap/appserver/testing-migration.md",
+      "internal/roadmap/appserver/implementation-plan.md",
+    ];
+
+    for (const filePath of docs) {
+      expectRustCommandsCleanupRule(readFile(filePath), filePath);
+    }
+  });
+
+  it("keeps governance, quality, docs, and skill references aware of Rust commands cleanup", () => {
+    const docs = [
+      "docs/README.md",
+      "internal/aiprompts/governance.md",
+      "internal/aiprompts/quality-workflow.md",
+      ".codex/skills/lime-command-boundary/references/commands.md",
+      ".codex/skills/lime-governance/references/governance.md",
+      ".codex/skills/lime-quality-workflow/references/quality-workflow.md",
+    ];
+
+    for (const filePath of docs) {
+      expectRustCommandsCleanupRule(readFile(filePath), filePath);
+    }
   });
 
   it("keeps command/governance/quality skills aligned with current rules", () => {

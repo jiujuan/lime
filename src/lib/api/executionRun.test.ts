@@ -70,6 +70,19 @@ describe("executionRun API", () => {
     );
   });
 
+  it("executionRunList 收到非 run 列表形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce([
+      {
+        id: "run-1",
+        status: "success",
+      },
+    ]);
+
+    await expect(executionRunList()).rejects.toThrow(
+      "execution_run_list did not return execution run list",
+    );
+  });
+
   it("executionRunGet 应代理到执行历史详情命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce(mockRun);
 
@@ -86,6 +99,22 @@ describe("executionRun API", () => {
 
     await expect(executionRunGet("run-1")).rejects.toThrow(
       "execution_run_get 尚未接入真实 Execution run current 通道",
+    );
+  });
+
+  it("executionRunGet 允许真实 null，错误 envelope 应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      });
+
+    await expect(executionRunGet("missing-run")).resolves.toBeNull();
+    await expect(executionRunGet("run-1")).rejects.toThrow(
+      "execution_run_get did not return execution run",
     );
   });
 
@@ -120,6 +149,20 @@ describe("executionRun API", () => {
     );
   });
 
+  it("executionRunGetGeneralWorkbenchState 收到缺字段状态时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      run_state: "idle",
+      latest_terminal: null,
+      updated_at: "2026-06-08T00:00:00.000Z",
+    });
+
+    await expect(
+      executionRunGetGeneralWorkbenchState("session-1"),
+    ).rejects.toThrow(
+      "execution_run_get_general_workbench_state did not return general workbench state",
+    );
+  });
+
   it("executionRunListGeneralWorkbenchHistory 应发送分页参数", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce(mockHistoryPage);
 
@@ -149,6 +192,29 @@ describe("executionRun API", () => {
       executionRunListGeneralWorkbenchHistory("session-1"),
     ).rejects.toThrow(
       "execution_run_list_general_workbench_history 尚未接入真实 Execution run current 通道",
+    );
+  });
+
+  it("executionRunListGeneralWorkbenchHistory 收到错误分页形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      items: [
+        {
+          run_id: "run-1",
+          title: "执行中",
+          status: "success",
+          source: "chat",
+          source_ref: null,
+          started_at: "2026-06-08T00:00:00.000Z",
+        },
+      ],
+      has_more: false,
+      next_offset: null,
+    });
+
+    await expect(
+      executionRunListGeneralWorkbenchHistory("session-1"),
+    ).rejects.toThrow(
+      "execution_run_list_general_workbench_history did not return general workbench history page",
     );
   });
 });

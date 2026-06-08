@@ -1,4 +1,5 @@
 import { isDevBridgeAvailable, safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export interface FrontendDebugLogReport {
   message: string;
@@ -15,5 +16,10 @@ export async function reportFrontendDebugLog(
       "report_frontend_debug_log 尚未接入浏览器 DevBridge current 通道，前端调试日志不能静默跳过真实上报。",
     );
   }
-  await safeInvoke("report_frontend_debug_log", { report });
+  const result = await safeInvoke("report_frontend_debug_log", { report });
+  assertNotDiagnosticFacade(
+    "report_frontend_debug_log",
+    result,
+    "真实前端调试日志 current 通道",
+  );
 }

@@ -26,7 +26,7 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("workspace_list")).toBe(true);
     expect(isBridgeTruthCommand("get_model_registry")).toBe(true);
     expect(isBridgeTruthCommand("agent_app_list_installed")).toBe(true);
-    expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(true);
+    expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(false);
     expect(isBridgeTruthCommand("get_automation_jobs")).toBe(false);
     expect(isBridgeTruthCommand("project_memory_get")).toBe(true);
     expect(isBridgeTruthCommand("agent_generate_title")).toBe(false);
@@ -173,13 +173,26 @@ describe("commandPolicy", () => {
           lines: [
             JSON.stringify({
               id: "knowledge",
-              method: "knowledgePack/list",
+              method: "knowledgePack/compile",
               params: {},
             }),
             JSON.stringify({
               id: "models",
               method: "modelProvider/list",
               params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe("knowledge-compile");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "file-write",
+              method: "fileSystem/createFile",
+              params: { path: "/tmp/demo.txt" },
             }),
           ],
         },

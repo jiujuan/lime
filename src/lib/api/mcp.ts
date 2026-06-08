@@ -103,6 +103,17 @@ async function invokeMcpListCommand<T>(command: string): Promise<T[]> {
   return result;
 }
 
+async function invokeMcpCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke<T>(command, args)
+    : await safeInvoke<T>(command);
+  assertNotDiagnosticFacade(command, result, "真实 MCP current 通道");
+  return result;
+}
+
 // ============================================================================
 // 提示词类型
 // ============================================================================
@@ -168,26 +179,28 @@ export const mcpApi = {
     invokeMcpListCommand<McpServer>("get_mcp_servers"),
 
   addServer: (server: McpServer): Promise<void> =>
-    safeInvoke("add_mcp_server", { server }),
+    invokeMcpCommand("add_mcp_server", { server }),
 
   updateServer: (server: McpServer): Promise<void> =>
-    safeInvoke("update_mcp_server", { server }),
+    invokeMcpCommand("update_mcp_server", { server }),
 
   deleteServer: (id: string): Promise<void> =>
-    safeInvoke("delete_mcp_server", { id }),
+    invokeMcpCommand("delete_mcp_server", { id }),
 
   toggleServer: (
     id: string,
     appType: string,
     enabled: boolean,
-  ): Promise<void> => safeInvoke("toggle_mcp_server", { id, appType, enabled }),
+  ): Promise<void> =>
+    invokeMcpCommand("toggle_mcp_server", { id, appType, enabled }),
 
   /** 从外部应用导入 MCP 配置 */
   importFromApp: (appType: string): Promise<number> =>
-    safeInvoke("import_mcp_from_app", { appType }),
+    invokeMcpCommand("import_mcp_from_app", { appType }),
 
   /** 同步所有 MCP 配置到实际配置文件 */
-  syncAllToLive: (): Promise<void> => safeInvoke("sync_all_mcp_to_live"),
+  syncAllToLive: (): Promise<void> =>
+    invokeMcpCommand("sync_all_mcp_to_live"),
 
   // --------------------------------------------------------------------------
   // 生命周期管理 API
@@ -199,11 +212,11 @@ export const mcpApi = {
 
   /** 启动 MCP 服务器 */
   startServer: (name: string): Promise<void> =>
-    safeInvoke("mcp_start_server", { name }),
+    invokeMcpCommand("mcp_start_server", { name }),
 
   /** 停止 MCP 服务器 */
   stopServer: (name: string): Promise<void> =>
-    safeInvoke("mcp_stop_server", { name }),
+    invokeMcpCommand("mcp_stop_server", { name }),
 
   // --------------------------------------------------------------------------
   // 工具管理 API
@@ -218,7 +231,10 @@ export const mcpApi = {
     caller?: string,
     includeDeferred = false,
   ): Promise<McpToolDefinition[]> =>
-    safeInvoke("mcp_list_tools_for_context", { caller, includeDeferred }),
+    invokeMcpCommand("mcp_list_tools_for_context", {
+      caller,
+      includeDeferred,
+    }),
 
   /** 工具搜索（Tool Search），返回名格式为 `mcp__<server>__<tool>`。 */
   searchTools: (
@@ -226,14 +242,14 @@ export const mcpApi = {
     caller?: string,
     limit = 10,
   ): Promise<McpToolDefinition[]> =>
-    safeInvoke("mcp_search_tools", { query, caller, limit }),
+    invokeMcpCommand("mcp_search_tools", { query, caller, limit }),
 
   /** 调用工具，`toolName` 当前格式为 `mcp__<server>__<tool>`。 */
   callTool: (
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<McpToolResult> =>
-    safeInvoke("mcp_call_tool", { toolName, arguments: args }),
+    invokeMcpCommand("mcp_call_tool", { toolName, arguments: args }),
 
   /** 带 caller 校验调用工具，`toolName` 当前格式为 `mcp__<server>__<tool>`。 */
   callToolWithCaller: (
@@ -241,7 +257,7 @@ export const mcpApi = {
     args: Record<string, unknown>,
     caller?: string,
   ): Promise<McpToolResult> =>
-    safeInvoke("mcp_call_tool_with_caller", {
+    invokeMcpCommand("mcp_call_tool_with_caller", {
       toolName,
       arguments: args,
       caller,
@@ -260,7 +276,7 @@ export const mcpApi = {
     name: string,
     args: Record<string, unknown>,
   ): Promise<McpPromptResult> =>
-    safeInvoke("mcp_get_prompt", { name, arguments: args }),
+    invokeMcpCommand("mcp_get_prompt", { name, arguments: args }),
 
   // --------------------------------------------------------------------------
   // 资源管理 API
@@ -272,5 +288,5 @@ export const mcpApi = {
 
   /** 读取资源内容 */
   readResource: (uri: string): Promise<McpResourceContent> =>
-    safeInvoke("mcp_read_resource", { uri }),
+    invokeMcpCommand("mcp_read_resource", { uri }),
 };

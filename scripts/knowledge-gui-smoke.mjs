@@ -22,6 +22,7 @@ const DEFAULT_ACTION_TIMEOUT_MS = 45_000;
 const DEFAULT_NAVIGATION_TIMEOUT_MS = 120_000;
 const POST_HEALTH_SETTLE_MS = 1_000;
 const ONBOARDING_VERSION = "1.1.0";
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 
 const DEFAULT_PACK = {
   name: "smoke-default",
@@ -133,7 +134,7 @@ function rewriteKnowledgeCompileInvokePayload(rawPostData) {
     return null;
   }
 
-  if (payload?.cmd !== "knowledge_compile_pack") {
+  if (payload?.cmd !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
     return null;
   }
 
@@ -141,10 +142,45 @@ function rewriteKnowledgeCompileInvokePayload(rawPostData) {
     payload.args && typeof payload.args === "object" ? { ...payload.args } : {};
   const request =
     args.request && typeof args.request === "object" ? { ...args.request } : {};
-  const builderRuntime =
-    request.builderRuntime && typeof request.builderRuntime === "object"
-      ? { ...request.builderRuntime }
-      : {};
+  const lines = Array.isArray(request.lines) ? request.lines : [];
+  let rewritten = false;
+  const rewrittenLines = lines.map((line) => {
+    let message;
+    try {
+      message = JSON.parse(String(line));
+    } catch {
+      return line;
+    }
+
+    if (message?.method !== "knowledgePack/compile") {
+      return line;
+    }
+
+    const params =
+      message.params && typeof message.params === "object"
+        ? { ...message.params }
+        : {};
+    const builderRuntime =
+      params.builderRuntime && typeof params.builderRuntime === "object"
+        ? { ...params.builderRuntime }
+        : {};
+
+    rewritten = true;
+    return `${JSON.stringify({
+      ...message,
+      params: {
+        ...params,
+        builderRuntime: {
+          ...builderRuntime,
+          enabled: false,
+        },
+      },
+    })}\n`;
+  });
+
+  if (!rewritten) {
+    return null;
+  }
 
   return JSON.stringify({
     ...payload,
@@ -152,10 +188,7 @@ function rewriteKnowledgeCompileInvokePayload(rawPostData) {
       ...args,
       request: {
         ...request,
-        builderRuntime: {
-          ...builderRuntime,
-          enabled: false,
-        },
+        lines: rewrittenLines,
       },
     },
   });
@@ -342,6 +375,37 @@ async function invoke(options, cmd, args) {
   }
 
   throw new Error(`[smoke:knowledge-gui] ${cmd} 请求失败: unknown error`);
+}
+
+let appServerRequestId = 1;
+
+async function invokeAppServerMethod(options, method, params = {}) {
+  const id = `knowledge-gui-${appServerRequestId++}`;
+  const result = await invoke(options, APP_SERVER_HANDLE_JSON_LINES_COMMAND, {
+    request: { lines: [`${JSON.stringify({ id, method, params })}\n`] },
+  });
+  const messages = (Array.isArray(result?.lines) ? result.lines : [])
+    .map((line) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const error = messages.find((message) => message.id === id && message.error);
+  if (error) {
+    throw new Error(
+      `${method}: ${error.error?.message || "App Server JSON-RPC error"}`,
+    );
+  }
+  const response = messages.find(
+    (message) => message.id === id && Object.hasOwn(message, "result"),
+  );
+  if (!response) {
+    throw new Error(`${method}: missing App Server response`);
+  }
+  return response.result;
 }
 
 async function waitForHealth(options) {
@@ -1155,12 +1219,14 @@ async function waitForKnowledgePack(options, label, matcher) {
 
   while (Date.now() - startedAt < options.timeoutMs) {
     try {
-      const result = await invoke(options, "knowledge_list_packs", {
-        request: {
+      const result = await invokeAppServerMethod(
+        options,
+        "knowledgePack/list",
+        {
           workingDir: options.workingDir,
           includeArchived: true,
         },
-      });
+      );
       const packs = Array.isArray(result?.packs) ? result.packs : [];
       const found = packs.find((pack) => {
         const metadata = pack?.metadata || {};
@@ -1565,11 +1631,11 @@ async function runPlaywrightGuiFlow(options) {
     await verifyBuilderImportAndReview(page, options);
     if (offlineBuilderCompileInterceptCount < 1) {
       throw new Error(
-        "[smoke:knowledge-gui] 未拦截到整理新资料的 knowledge_compile_pack 请求，无法证明默认 GUI smoke 没有调用真实 Provider",
+        "[smoke:knowledge-gui] 未拦截到整理新资料的 knowledgePack/compile 请求，无法证明默认 GUI smoke 没有调用真实 Provider",
       );
     }
     console.log(
-      `[smoke:knowledge-gui] offline builder runtime enforced for ${offlineBuilderCompileInterceptCount} knowledge_compile_pack request(s)`,
+      `[smoke:knowledge-gui] offline builder runtime enforced for ${offlineBuilderCompileInterceptCount} knowledgePack/compile request(s)`,
     );
 
     if (consoleErrors.length > 0) {
@@ -1587,31 +1653,25 @@ async function runPlaywrightGuiFlow(options) {
 }
 
 async function seedPack(options, pack) {
-  await invoke(options, "knowledge_import_source", {
-    request: {
-      workingDir: options.workingDir,
-      packName: pack.name,
-      description: pack.title,
-      packType: pack.type,
-      sourceFileName: pack.sourceFileName,
-      sourceText: pack.sourceText,
+  await invokeAppServerMethod(options, "knowledgePack/source/import", {
+    workingDir: options.workingDir,
+    packName: pack.name,
+    description: pack.title,
+    packType: pack.type,
+    sourceFileName: pack.sourceFileName,
+    sourceText: pack.sourceText,
+  });
+  await invokeAppServerMethod(options, "knowledgePack/compile", {
+    workingDir: options.workingDir,
+    name: pack.name,
+    builderRuntime: {
+      enabled: false,
     },
   });
-  await invoke(options, "knowledge_compile_pack", {
-    request: {
-      workingDir: options.workingDir,
-      name: pack.name,
-      builderRuntime: {
-        enabled: false,
-      },
-    },
-  });
-  await invoke(options, "knowledge_update_pack_status", {
-    request: {
-      workingDir: options.workingDir,
-      name: pack.name,
-      status: "ready",
-    },
+  await invokeAppServerMethod(options, "knowledgePack/status/update", {
+    workingDir: options.workingDir,
+    name: pack.name,
+    status: "ready",
   });
 }
 
@@ -1624,11 +1684,9 @@ async function seedKnowledgePacks(options) {
   await seedPack(options, PERSONA_PACK);
   await seedPack(options, DEFAULT_PACK);
   await seedPack(options, SECONDARY_PACK);
-  await invoke(options, "knowledge_set_default_pack", {
-    request: {
-      workingDir: options.workingDir,
-      name: DEFAULT_PACK.name,
-    },
+  await invokeAppServerMethod(options, "knowledgePack/default/set", {
+    workingDir: options.workingDir,
+    name: DEFAULT_PACK.name,
   });
 }
 

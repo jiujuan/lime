@@ -57,7 +57,7 @@ export interface ReadLayeredDesignProjectExportOutput {
 export async function saveLayeredDesignProjectExport(
   request: SaveLayeredDesignProjectExportRequest,
 ): Promise<SaveLayeredDesignProjectExportOutput> {
-  const result = await safeInvoke<SaveLayeredDesignProjectExportOutput>(
+  const result = await safeInvoke<unknown>(
     "save_layered_design_project_export",
     { request },
   );
@@ -65,6 +65,10 @@ export async function saveLayeredDesignProjectExport(
     "save_layered_design_project_export",
     result,
     "真实 Layered Design project export current 通道",
+  );
+  assertSaveLayeredDesignProjectExportOutput(
+    "save_layered_design_project_export",
+    result,
   );
   return result;
 }
@@ -72,7 +76,7 @@ export async function saveLayeredDesignProjectExport(
 export async function readLayeredDesignProjectExport(
   request: ReadLayeredDesignProjectExportRequest,
 ): Promise<ReadLayeredDesignProjectExportOutput> {
-  const result = await safeInvoke<ReadLayeredDesignProjectExportOutput>(
+  const result = await safeInvoke<unknown>(
     "read_layered_design_project_export",
     { request },
   );
@@ -81,5 +85,57 @@ export async function readLayeredDesignProjectExport(
     result,
     "真实 Layered Design project export current 通道",
   );
+  assertReadLayeredDesignProjectExportOutput(
+    "read_layered_design_project_export",
+    result,
+  );
   return result;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertSaveLayeredDesignProjectExportOutput(
+  command: string,
+  value: unknown,
+): asserts value is SaveLayeredDesignProjectExportOutput {
+  if (
+    !isRecord(value) ||
+    typeof value.projectRootPath !== "string" ||
+    typeof value.exportDirectoryPath !== "string" ||
+    typeof value.exportDirectoryRelativePath !== "string" ||
+    typeof value.designPath !== "string" ||
+    typeof value.manifestPath !== "string" ||
+    typeof value.assetCount !== "number" ||
+    typeof value.fileCount !== "number" ||
+    typeof value.bytesWritten !== "number" ||
+    typeof value.remoteReferenceAssetCount !== "number" ||
+    typeof value.cachedRemoteAssetCount !== "number" ||
+    typeof value.uncachedRemoteAssetCount !== "number"
+  ) {
+    throw new Error(
+      `${command} did not return a layered design project export result`,
+    );
+  }
+}
+
+function assertReadLayeredDesignProjectExportOutput(
+  command: string,
+  value: unknown,
+): asserts value is ReadLayeredDesignProjectExportOutput {
+  if (
+    !isRecord(value) ||
+    typeof value.projectRootPath !== "string" ||
+    typeof value.exportDirectoryPath !== "string" ||
+    typeof value.exportDirectoryRelativePath !== "string" ||
+    typeof value.designPath !== "string" ||
+    typeof value.designJson !== "string" ||
+    typeof value.assetCount !== "number" ||
+    typeof value.fileCount !== "number"
+  ) {
+    throw new Error(
+      `${command} did not return a layered design project export document`,
+    );
+  }
 }

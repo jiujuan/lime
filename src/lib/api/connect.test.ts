@@ -191,4 +191,59 @@ describe("connect API", () => {
     );
     expect(safeInvoke).not.toHaveBeenCalled();
   });
+
+  it("Connect App Server current result 缺少关键字段时应 fail closed", async () => {
+    appServerRequestMock
+      .mockResolvedValueOnce({
+        result: {
+          payload: {
+            relay: "relay-one",
+          },
+          isVerified: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          payload: {
+            kind: "skill",
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          providerId: "provider-1",
+          keyId: "key-1",
+          providerName: "Relay Key",
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          delivered: "yes",
+        },
+      });
+
+    await expect(
+      resolveConnectDeepLink("lime://connect?relay=relay-one"),
+    ).rejects.toThrow("connectDeepLink/resolve did not return payload");
+    await expect(resolveOpenDeepLink("lime://open?kind=skill")).rejects.toThrow(
+      "connectOpenDeepLink/resolve did not return payload",
+    );
+    await expect(
+      saveConnectRelayApiKey({
+        relayId: "relay-one",
+        apiKey: "sk-relay-key",
+      }),
+    ).rejects.toThrow("connectRelayApiKey/save did not return saved API key");
+    await expect(
+      sendConnectCallback({
+        relayId: "relay-one",
+        apiKey: "sk-relay-key",
+        status: "success",
+      }),
+    ).rejects.toThrow(
+      "connectCallback/send did not return delivered status",
+    );
+
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
 });

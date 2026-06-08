@@ -204,6 +204,46 @@ function normalizeStringList(value: string[] | null | undefined): string[] {
     : [];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === "string";
+}
+
+function isSkillPackageFileAssociationStatus(
+  value: unknown,
+): value is SkillPackageFileAssociationStatus {
+  return (
+    isRecord(value) &&
+    typeof value.platform === "string" &&
+    typeof value.extension === "string" &&
+    (value.extensions === undefined ||
+      (Array.isArray(value.extensions) &&
+        value.extensions.every((item) => typeof item === "string"))) &&
+    typeof value.mimeType === "string" &&
+    typeof value.appIdentifier === "string" &&
+    typeof value.isDefault === "boolean" &&
+    typeof value.canSetDefault === "boolean" &&
+    typeof value.requiresUserConfirmation === "boolean" &&
+    isOptionalString(value.currentHandler) &&
+    isOptionalString(value.settingsUrl) &&
+    isOptionalString(value.detail)
+  );
+}
+
+function isSkillPackageFileAssociationApplyResult(
+  value: unknown,
+): value is SkillPackageFileAssociationApplyResult {
+  return (
+    isRecord(value) &&
+    typeof value.changed === "boolean" &&
+    typeof value.message === "string" &&
+    isSkillPackageFileAssociationStatus(value.status)
+  );
+}
+
 export const skillsApi = {
   async getLocal(app: AppType = "lime"): Promise<Skill[]> {
     const skills = await invokeSkillsCommand<Skill[]>(
@@ -413,15 +453,27 @@ export const skillsApi = {
   },
 
   async getSkillPackageFileAssociationStatus(): Promise<SkillPackageFileAssociationStatus> {
-    return invokeSkillsCommand<SkillPackageFileAssociationStatus>(
+    const result = await invokeSkillsCommand<unknown>(
       "get_skill_package_file_association_status",
     );
+    if (!isSkillPackageFileAssociationStatus(result)) {
+      throw new Error(
+        "get_skill_package_file_association_status did not return file association status",
+      );
+    }
+    return result;
   },
 
   async setSkillPackageFileAssociationDefault(): Promise<SkillPackageFileAssociationApplyResult> {
-    return invokeSkillsCommand<SkillPackageFileAssociationApplyResult>(
+    const result = await invokeSkillsCommand<unknown>(
       "set_skill_package_file_association_default",
     );
+    if (!isSkillPackageFileAssociationApplyResult(result)) {
+      throw new Error(
+        "set_skill_package_file_association_default did not return file association apply result",
+      );
+    }
+    return result;
   },
 
   async exportLocalSkillPackage(

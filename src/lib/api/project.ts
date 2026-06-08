@@ -55,13 +55,13 @@ async function invokeProjectCommand<T>(
   command: string,
   args: Record<string, unknown>,
 ): Promise<T> {
-  const result = await safeInvoke<T>(command, args);
+  const result = await safeInvoke<unknown>(command, args);
   assertNotDiagnosticFacade(
     command,
     result,
     "真实 Workspace / Content / General Workbench current 通道",
   );
-  return result;
+  return result as T;
 }
 
 // ==================== 类型定义 ====================
@@ -218,6 +218,166 @@ function invalidateProjectDetailCache(id: string): void {
   projectDetailInflight.delete(resolveProjectDetailCacheKey(id));
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isOptionalRecordOrNull(
+  value: unknown,
+): value is Record<string, unknown> | null | undefined {
+  return value === undefined || value === null || isRecord(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isRawProject(value: unknown): value is RawProject {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    isOptionalString(value.workspaceType) &&
+    isOptionalString(value.workspace_type) &&
+    isOptionalString(value.rootPath) &&
+    isOptionalString(value.root_path) &&
+    (value.isDefault === undefined || typeof value.isDefault === "boolean") &&
+    (value.is_default === undefined || typeof value.is_default === "boolean") &&
+    (value.createdAt === undefined || isFiniteNumber(value.createdAt)) &&
+    (value.created_at === undefined || isFiniteNumber(value.created_at)) &&
+    (value.updatedAt === undefined || isFiniteNumber(value.updatedAt)) &&
+    (value.updated_at === undefined || isFiniteNumber(value.updated_at)) &&
+    (value.isFavorite === undefined || typeof value.isFavorite === "boolean") &&
+    (value.is_favorite === undefined ||
+      typeof value.is_favorite === "boolean") &&
+    (value.isArchived === undefined || typeof value.isArchived === "boolean") &&
+    (value.is_archived === undefined ||
+      typeof value.is_archived === "boolean") &&
+    (value.tags === undefined || isStringArray(value.tags))
+  );
+}
+
+function isContentListItem(value: unknown): value is ContentListItem {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.project_id === "string" &&
+    typeof value.title === "string" &&
+    typeof value.content_type === "string" &&
+    typeof value.status === "string" &&
+    isFiniteNumber(value.order) &&
+    isFiniteNumber(value.word_count) &&
+    isOptionalRecordOrNull(value.metadata) &&
+    isFiniteNumber(value.created_at) &&
+    isFiniteNumber(value.updated_at)
+  );
+}
+
+function isContentDetail(value: unknown): value is ContentDetail {
+  return (
+    isContentListItem(value) &&
+    isRecord(value) &&
+    typeof value.body === "string"
+  );
+}
+
+function isGeneralWorkbenchVersionState(
+  value: unknown,
+): value is GeneralWorkbenchVersionState {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isFiniteNumber(value.created_at) &&
+    (value.description === undefined ||
+      typeof value.description === "string") &&
+    (value.status === undefined ||
+      value.status === "in_progress" ||
+      value.status === "pending" ||
+      value.status === "merged" ||
+      value.status === "candidate") &&
+    typeof value.is_current === "boolean"
+  );
+}
+
+function isGeneralWorkbenchDocumentState(
+  value: unknown,
+): value is GeneralWorkbenchDocumentState {
+  return (
+    isRecord(value) &&
+    typeof value.content_id === "string" &&
+    typeof value.current_version_id === "string" &&
+    isFiniteNumber(value.version_count) &&
+    Array.isArray(value.versions) &&
+    value.versions.every(isGeneralWorkbenchVersionState)
+  );
+}
+
+function assertRawProject(command: string, value: unknown): asserts value is RawProject {
+  if (!isRawProject(value)) {
+    throw new Error(`${command} did not return workspace`);
+  }
+}
+
+function assertContentDetailOrNull(
+  command: string,
+  value: unknown,
+): asserts value is ContentDetail | null {
+  if (value !== null && !isContentDetail(value)) {
+    throw new Error(`${command} did not return content detail`);
+  }
+}
+
+function assertContentList(
+  command: string,
+  value: unknown,
+): asserts value is ContentListItem[] {
+  if (!Array.isArray(value) || !value.every(isContentListItem)) {
+    throw new Error(`${command} did not return content list`);
+  }
+}
+
+function assertGeneralWorkbenchDocumentStateOrNull(
+  command: string,
+  value: unknown,
+): asserts value is GeneralWorkbenchDocumentState | null {
+  if (value !== null && !isGeneralWorkbenchDocumentState(value)) {
+    throw new Error(`${command} did not return general workbench document state`);
+  }
+}
+
+function assertBooleanResult(command: string, value: unknown): asserts value is boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${command} did not return boolean result`);
+  }
+}
+
+function assertVoidResult(command: string, value: unknown): void {
+  if (value !== undefined && value !== null) {
+    throw new Error(`${command} did not return void result`);
+  }
+}
+
+function assertContentStats(
+  command: string,
+  value: unknown,
+): asserts value is [number, number, number] {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 3 ||
+    !value.every(isFiniteNumber)
+  ) {
+    throw new Error(`${command} did not return content stats`);
+  }
+}
+
 export function clearProjectDetailCacheForTests(): void {
   projectDetailCache.clear();
   projectDetailInflight.clear();
@@ -328,9 +488,11 @@ export interface ListContentQuery {
 export async function createProject(
   request: CreateProjectRequest,
 ): Promise<Project> {
-  const project = await invokeProjectCommand<RawProject>("workspace_create", {
+  const command = "workspace_create";
+  const project = await invokeProjectCommand<unknown>(command, {
     request,
   });
+  assertRawProject(command, project);
   return normalizeProject(project);
 }
 
@@ -474,7 +636,9 @@ async function ensureDefaultProjectThroughAppServer(): Promise<Project> {
 
 /** 设置默认项目 */
 export async function setDefaultProject(id: string): Promise<void> {
-  await invokeProjectCommand<void>("workspace_set_default", { id });
+  const command = "workspace_set_default";
+  const result = await invokeProjectCommand<unknown>(command, { id });
+  assertVoidResult(command, result);
 }
 
 /** 获取或创建默认项目 */
@@ -592,10 +756,12 @@ export async function updateProject(
   request: UpdateProjectRequest,
 ): Promise<Project> {
   invalidateProjectDetailCache(id);
-  const project = await invokeProjectCommand<RawProject>("workspace_update", {
+  const command = "workspace_update";
+  const project = await invokeProjectCommand<unknown>(command, {
     id,
     request,
   });
+  assertRawProject(command, project);
   invalidateProjectDetailCache(id);
   return normalizeProject(project);
 }
@@ -606,10 +772,12 @@ export async function deleteProject(
   deleteDirectory?: boolean,
 ): Promise<boolean> {
   invalidateProjectDetailCache(id);
-  const deleted = await invokeProjectCommand<boolean>("workspace_delete", {
+  const command = "workspace_delete";
+  const deleted = await invokeProjectCommand<unknown>(command, {
     id,
     deleteDirectory,
   });
+  assertBooleanResult(command, deleted);
   invalidateProjectDetailCache(id);
   return deleted;
 }
@@ -620,22 +788,31 @@ export async function deleteProject(
 export async function createContent(
   request: CreateContentRequest,
 ): Promise<ContentDetail> {
-  return invokeProjectCommand<ContentDetail>("content_create", { request });
+  const command = "content_create";
+  const content = await invokeProjectCommand<unknown>(command, { request });
+  assertContentDetailOrNull(command, content);
+  if (!content) {
+    throw new Error(`${command} did not return content detail`);
+  }
+  return content;
 }
 
 /** 获取内容详情 */
 export async function getContent(id: string): Promise<ContentDetail | null> {
-  return invokeProjectCommand<ContentDetail | null>("content_get", { id });
+  const command = "content_get";
+  const content = await invokeProjectCommand<unknown>(command, { id });
+  assertContentDetailOrNull(command, content);
+  return content;
 }
 
 /** 获取工作区文稿版本状态（后端解析 content.metadata，并兼容旧协议元数据键） */
 export async function getGeneralWorkbenchDocumentState(
   id: string,
 ): Promise<GeneralWorkbenchDocumentState | null> {
-  return invokeProjectCommand<GeneralWorkbenchDocumentState | null>(
-    "content_get_general_workbench_document_state",
-    { id },
-  );
+  const command = "content_get_general_workbench_document_state";
+  const state = await invokeProjectCommand<unknown>(command, { id });
+  assertGeneralWorkbenchDocumentStateOrNull(command, state);
+  return state;
 }
 
 /** 获取项目的内容列表 */
@@ -643,15 +820,12 @@ export async function listContents(
   projectId: string,
   query?: ListContentQuery,
 ): Promise<ContentListItem[]> {
-  const contents = await invokeProjectCommand<ContentListItem[]>("content_list", {
+  const command = "content_list";
+  const contents = await invokeProjectCommand<unknown>(command, {
     projectId,
     query,
   });
-  // 防御性编程：确保返回数组
-  if (!Array.isArray(contents)) {
-    console.warn("listContents 返回非数组值:", contents);
-    return [];
-  }
+  assertContentList(command, contents);
   return contents;
 }
 
@@ -660,12 +834,21 @@ export async function updateContent(
   id: string,
   request: UpdateContentRequest,
 ): Promise<ContentDetail> {
-  return invokeProjectCommand<ContentDetail>("content_update", { id, request });
+  const command = "content_update";
+  const content = await invokeProjectCommand<unknown>(command, { id, request });
+  assertContentDetailOrNull(command, content);
+  if (!content) {
+    throw new Error(`${command} did not return content detail`);
+  }
+  return content;
 }
 
 /** 删除内容 */
 export async function deleteContent(id: string): Promise<boolean> {
-  return invokeProjectCommand<boolean>("content_delete", { id });
+  const command = "content_delete";
+  const deleted = await invokeProjectCommand<unknown>(command, { id });
+  assertBooleanResult(command, deleted);
+  return deleted;
 }
 
 /** 重新排序内容 */
@@ -673,19 +856,24 @@ export async function reorderContents(
   projectId: string,
   contentIds: string[],
 ): Promise<void> {
-  return invokeProjectCommand<void>("content_reorder", {
+  const command = "content_reorder";
+  const result = await invokeProjectCommand<unknown>(command, {
     projectId,
     contentIds,
   });
+  assertVoidResult(command, result);
 }
 
 /** 获取项目内容统计 */
 export async function getContentStats(
   projectId: string,
 ): Promise<[number, number, number]> {
-  return invokeProjectCommand<[number, number, number]>("content_stats", {
+  const command = "content_stats";
+  const stats = await invokeProjectCommand<unknown>(command, {
     projectId,
   });
+  assertContentStats(command, stats);
+  return stats;
 }
 
 // ==================== 辅助函数 ====================

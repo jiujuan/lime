@@ -9,6 +9,10 @@ export const METHOD_ARTIFACT_READ = "artifact/read";
 export const METHOD_FILE_SYSTEM_LIST_DIRECTORY = "fileSystem/listDirectory";
 export const METHOD_FILE_SYSTEM_READ_FILE_PREVIEW =
   "fileSystem/readFilePreview";
+export const METHOD_FILE_SYSTEM_CREATE_FILE = "fileSystem/createFile";
+export const METHOD_FILE_SYSTEM_CREATE_DIRECTORY = "fileSystem/createDirectory";
+export const METHOD_FILE_SYSTEM_RENAME_FILE = "fileSystem/renameFile";
+export const METHOD_FILE_SYSTEM_DELETE_FILE = "fileSystem/deleteFile";
 export const METHOD_EVIDENCE_EXPORT = "evidence/export";
 export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
 export const METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
@@ -33,6 +37,15 @@ export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start";
 export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status";
 export const METHOD_AGENT_APP_UI_RUNTIME_STOP = "agentAppUiRuntime/stop";
 export const METHOD_KNOWLEDGE_PACK_LIST = "knowledgePack/list";
+export const METHOD_KNOWLEDGE_PACK_READ = "knowledgePack/read";
+export const METHOD_KNOWLEDGE_SOURCE_IMPORT = "knowledgePack/source/import";
+export const METHOD_KNOWLEDGE_PACK_COMPILE = "knowledgePack/compile";
+export const METHOD_KNOWLEDGE_PACK_DEFAULT_SET = "knowledgePack/default/set";
+export const METHOD_KNOWLEDGE_PACK_STATUS_UPDATE =
+  "knowledgePack/status/update";
+export const METHOD_KNOWLEDGE_CONTEXT_RESOLVE = "knowledgeContext/resolve";
+export const METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE =
+  "knowledgeContextRun/validate";
 export const METHOD_AUTOMATION_SCHEDULER_CONFIG_READ =
   "automationScheduler/config/read";
 export const METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE =
@@ -46,8 +59,7 @@ export const METHOD_AUTOMATION_JOB_DELETE = "automationJob/delete";
 export const METHOD_AUTOMATION_JOB_RUN_NOW = "automationJob/runNow";
 export const METHOD_AUTOMATION_JOB_HEALTH = "automationJob/health";
 export const METHOD_AUTOMATION_JOB_RUN_HISTORY = "automationJob/runHistory";
-export const METHOD_AUTOMATION_SCHEDULE_PREVIEW =
-  "automationSchedule/preview";
+export const METHOD_AUTOMATION_SCHEDULE_PREVIEW = "automationSchedule/preview";
 export const METHOD_AUTOMATION_SCHEDULE_VALIDATE =
   "automationSchedule/validate";
 export const METHOD_MCP_SERVER_LIST = "mcpServer/list";
@@ -56,6 +68,11 @@ export const METHOD_MCP_TOOL_LIST = "mcpTool/list";
 export const METHOD_MCP_PROMPT_LIST = "mcpPrompt/list";
 export const METHOD_MCP_RESOURCE_LIST = "mcpResource/list";
 export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
+export const METHOD_USAGE_STATS_READ = "usageStats/read";
+export const METHOD_USAGE_STATS_MODEL_RANKING_LIST =
+  "usageStats/modelRanking/list";
+export const METHOD_USAGE_STATS_DAILY_TRENDS_LIST =
+  "usageStats/dailyTrends/list";
 export const METHOD_AGENT_SESSION_START = "agentSession/start";
 export const METHOD_AGENT_SESSION_READ = "agentSession/read";
 export const METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
@@ -88,8 +105,7 @@ export const METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD =
   "modelProviderKey/usage/record";
 export const METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD =
   "modelProviderKey/error/record";
-export const METHOD_MODEL_PROVIDER_UI_STATE_READ =
-  "modelProviderUiState/read";
+export const METHOD_MODEL_PROVIDER_UI_STATE_READ = "modelProviderUiState/read";
 export const METHOD_MODEL_PROVIDER_UI_STATE_WRITE =
   "modelProviderUiState/write";
 export const METHOD_MODEL_PROVIDER_ALIAS_READ = "modelProviderAlias/read";
@@ -114,6 +130,10 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_ARTIFACT_READ, kind: "request" },
   { method: METHOD_FILE_SYSTEM_LIST_DIRECTORY, kind: "request" },
   { method: METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, kind: "request" },
+  { method: METHOD_FILE_SYSTEM_CREATE_FILE, kind: "request" },
+  { method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY, kind: "request" },
+  { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
+  { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
   { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
   { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
   { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
@@ -134,6 +154,13 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
   { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
   { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
+  { method: METHOD_KNOWLEDGE_PACK_READ, kind: "request" },
+  { method: METHOD_KNOWLEDGE_SOURCE_IMPORT, kind: "request" },
+  { method: METHOD_KNOWLEDGE_PACK_COMPILE, kind: "request" },
+  { method: METHOD_KNOWLEDGE_PACK_DEFAULT_SET, kind: "request" },
+  { method: METHOD_KNOWLEDGE_PACK_STATUS_UPDATE, kind: "request" },
+  { method: METHOD_KNOWLEDGE_CONTEXT_RESOLVE, kind: "request" },
+  { method: METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE, kind: "request" },
   { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_READ, kind: "request" },
   { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE, kind: "request" },
   { method: METHOD_AUTOMATION_SCHEDULER_STATUS, kind: "request" },
@@ -153,6 +180,9 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MCP_PROMPT_LIST, kind: "request" },
   { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
   { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
+  { method: METHOD_USAGE_STATS_READ, kind: "request" },
+  { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
+  { method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST, kind: "request" },
   { method: METHOD_MODEL_LIST, kind: "request" },
   { method: METHOD_MODEL_PREFERENCES_LIST, kind: "request" },
   { method: METHOD_MODEL_SYNC_STATE_READ, kind: "request" },
@@ -350,6 +380,26 @@ export type FileSystemReadFilePreviewParams = {
   path: string;
   maxSize?: number;
 };
+
+export type FileSystemCreateFileParams = {
+  path: string;
+};
+
+export type FileSystemCreateDirectoryParams = {
+  path: string;
+};
+
+export type FileSystemRenameFileParams = {
+  oldPath: string;
+  newPath: string;
+};
+
+export type FileSystemDeleteFileParams = {
+  path: string;
+  recursive?: boolean;
+};
+
+export type FileSystemMutationResponse = Record<string, never>;
 
 export type FileSystemDirectoryListing = {
   path: string;
@@ -709,6 +759,111 @@ export type KnowledgeListPacksResponse = {
   packs: unknown[];
 };
 
+export type KnowledgeReadPackParams = {
+  workingDir: string;
+  name: string;
+};
+
+export type KnowledgeReadPackResponse = {
+  pack: unknown;
+};
+
+export type KnowledgeImportSourceParams = {
+  workingDir: string;
+  packName: string;
+  description?: string;
+  packType?: string;
+  language?: string;
+  sourceFileName?: string;
+  sourceText?: string;
+};
+
+export type KnowledgeImportSourceResponse = {
+  pack: unknown;
+  source: unknown;
+};
+
+export type KnowledgeCompilePackParams = {
+  workingDir: string;
+  name: string;
+  builderRuntime?: unknown;
+};
+
+export type KnowledgeCompilePackResponse = {
+  pack: unknown;
+  selectedSourceCount: number;
+  compiledView: unknown;
+  run: unknown;
+  warnings: string[];
+};
+
+export type KnowledgeSetDefaultPackParams = {
+  workingDir: string;
+  name: string;
+};
+
+export type KnowledgeSetDefaultPackResponse = {
+  defaultPackName: string;
+  defaultMarkerPath: string;
+};
+
+export type KnowledgeUpdatePackStatusParams = {
+  workingDir: string;
+  name: string;
+  status: string;
+};
+
+export type KnowledgeUpdatePackStatusResponse = {
+  pack: unknown;
+  previousStatus: string;
+  clearedDefault: boolean;
+};
+
+export type KnowledgeResolveContextPackParams = {
+  name: string;
+  activation?: string;
+};
+
+export type KnowledgeResolveContextParams = {
+  workingDir: string;
+  name: string;
+  packs?: KnowledgeResolveContextPackParams[];
+  task?: string;
+  maxChars?: number;
+  activation?: string;
+  writeRun?: boolean;
+  runReason?: string;
+};
+
+export type KnowledgeContextResolutionResponse = {
+  packName: string;
+  status: string;
+  grounding?: string;
+  selectedViews: unknown[];
+  selectedFiles: string[];
+  sourceAnchors: string[];
+  warnings: unknown[];
+  missing: string[];
+  tokenEstimate: number;
+  fencedContext: string;
+  runId?: string;
+  runPath?: string;
+};
+
+export type KnowledgeValidateContextRunParams = {
+  workingDir: string;
+  name: string;
+  runPath: string;
+};
+
+export type KnowledgeValidateContextRunResponse = {
+  valid: boolean;
+  runId?: string;
+  status?: string;
+  errors: string[];
+  warnings: string[];
+};
+
 export type AutomationJobListResponse = {
   jobs: unknown[];
 };
@@ -814,6 +969,48 @@ export type ProjectMemoryReadParams = {
 
 export type ProjectMemoryReadResponse = {
   memory: unknown;
+};
+
+export type UsageStatsRangeParams = {
+  timeRange: string;
+};
+
+export type UsageStatsSummary = {
+  totalConversations: number;
+  totalMessages: number;
+  totalTokens: number;
+  totalTimeMinutes: number;
+  monthlyConversations: number;
+  monthlyMessages: number;
+  monthlyTokens: number;
+  todayConversations: number;
+  todayMessages: number;
+  todayTokens: number;
+};
+
+export type UsageStatsReadResponse = {
+  stats: UsageStatsSummary;
+};
+
+export type UsageStatsModelUsage = {
+  model: string;
+  conversations: number;
+  tokens: number;
+  percentage: number;
+};
+
+export type UsageStatsModelRankingListResponse = {
+  ranking: UsageStatsModelUsage[];
+};
+
+export type UsageStatsDailyUsage = {
+  date: string;
+  conversations: number;
+  tokens: number;
+};
+
+export type UsageStatsDailyTrendsListResponse = {
+  trends: UsageStatsDailyUsage[];
 };
 
 export type AgentSessionReadResponse = {

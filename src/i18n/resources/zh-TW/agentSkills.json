@@ -747,6 +747,7 @@
   "skills.workspace.marketplace.error.requestFailed": "請求失敗（{{status}}）",
   "skills.workspace.marketplace.error.skillNameRequired": "缺少技能名稱",
   "skills.workspace.marketplace.error.invalidBundle": "官方技能安裝包格式不合法",
+  "skills.workspace.marketplace.error.invalidResponse": "官方技能市場返回格式不合法",
   "skills.workspace.marketplace.detail.version": "版本 {{version}}",
   "skills.workspace.marketplace.detail.deliverable": "交付內容",
   "skills.workspace.marketplace.detail.package": "安裝包",

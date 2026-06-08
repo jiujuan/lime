@@ -6,7 +6,6 @@ import {
 } from "@/features/agent-app/install/installedAppState";
 import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
 import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { buildAgentAppPackageCacheEntry } from "@/features/agent-app/install/packageCache";
 import { buildAgentAppLabResolvedSetupState } from "@/features/agent-app/install/labInstallFlow";
 import { buildWorkflowRuntimeCapabilityProfile } from "@/features/agent-app/runtime/workflowRuntimeCapabilityProfile";
 import type { AppManifest, InstalledAgentAppState } from "@/features/agent-app/types";
@@ -20,12 +19,12 @@ function now() {
 
 function buildFixtureState(): InstalledAgentAppState {
   const manifest = contentFactoryFixture as AppManifest;
-    const identity = buildPackageIdentity({
-      manifest,
-      sourceKind: "local_folder",
-      sourceUri: "/mock/agent-apps/content-factory-app",
-      loadedAt: now(),
-    });
+  const identity = buildPackageIdentity({
+    manifest,
+    sourceKind: "local_folder",
+    sourceUri: "/mock/agent-apps/content-factory-app",
+    loadedAt: now(),
+  });
   const profile = buildWorkflowRuntimeCapabilityProfile({
     realAdapterEnabled: true,
     uiRuntimeEnabled: true,
@@ -93,60 +92,11 @@ async function resolveMockRuntimeStatus(args: any) {
 }
 
 export const agentAppMocks = {
-  agent_app_inspect_local_package: async (args: any) => {
-    const appDir = String(args?.appDir ?? args?.app_dir ?? "").trim();
-    const manifest = contentFactoryFixture as AppManifest;
-    const identity = buildPackageIdentity({
-      manifest,
-      sourceKind: "local_folder",
-      sourceUri: appDir || "/mock/agent-apps/content-factory-app",
-      loadedAt: now(),
-    });
-    return {
-      sourceKind: "local_folder",
-      sourceUri: identity.sourceUri,
-      appDir: identity.sourceUri,
-      appMarkdown: "",
-      manifest,
-      manifestHash: identity.manifestHash,
-      packageHash: identity.packageHash,
-      inspectedAt: now(),
-    };
-  },
-  agent_app_fetch_cloud_package: async (args: any) => {
-    const descriptor = args?.request?.descriptor;
-    if (!descriptor?.identity) {
-      throw new Error("缺少 Agent App cloud release descriptor。");
-    }
-    return buildAgentAppPackageCacheEntry({
-      identity: descriptor.identity,
-      manifestSnapshot: contentFactoryFixture,
-      actualPackageHash: descriptor.packageHash,
-      actualManifestHash: descriptor.manifestHash,
-      cachedAt: descriptor.loadedAt ?? now(),
-    });
-  },
-  agent_app_save_installed_state: async (args: any) => {
-    const state = args?.request?.state;
-    if (!state) {
-      throw new Error("缺少 Agent App installed state。");
-    }
-    return repository.save(state, now());
-  },
   agent_app_list_installed: async () => {
     await ensureSeeded();
     return repository.list();
   },
-  agent_app_set_disabled: async (args: any) => {
-    const request = args?.request ?? {};
-    await repository.setDisabled(
-      String(request.appId ?? ""),
-      Boolean(request.disabled),
-      String(request.updatedAt ?? now()),
-    );
-    return repository.list();
-  },
-  agent_app_uninstall_rehearsal: async (args: any) => {
+  agent_app_uninstall: async (args: any) => {
     await ensureSeeded();
     const request = args?.request ?? {};
     const appId = String(request.appId ?? "content-factory-app");
@@ -171,7 +121,7 @@ export const agentAppMocks = {
         reason: "App storage namespace declared by manifest.",
       },
     ];
-    return {
+    const rehearsal = {
       appId,
       packageHash,
       mode,
@@ -183,16 +133,13 @@ export const agentAppMocks = {
       targets,
       warnings: ["DRY_RUN_ONLY"],
     };
-  },
-  agent_app_uninstall: async (args: any) => {
-    const request = args?.request ?? {};
-    const rehearsal = await agentAppMocks.agent_app_uninstall_rehearsal(args);
-    const expectedConfirmation = `DELETE_AGENT_APP_DATA ${rehearsal.appId} ${rehearsal.packageHash}`;
+
+    const expectedConfirmation = `DELETE_AGENT_APP_DATA ${appId} ${packageHash}`;
     if (
-      rehearsal.mode === "delete-data" &&
+      mode === "delete-data" &&
       request.confirmationPhrase === expectedConfirmation
     ) {
-      const removed = await repository.remove(rehearsal.appId);
+      const removed = await repository.remove(appId);
       const removedTargetCount = removed ? rehearsal.deletedTargetCount : 0;
       const missingTargetCount = removed ? 0 : rehearsal.deletedTargetCount;
       const removedTargets = rehearsal.targets
@@ -250,11 +197,6 @@ export const agentAppMocks = {
       deleteEvidence: null,
     };
   },
-  agent_app_select_directory: async () => ({
-    path: null,
-    cancelled: true,
-    message: "浏览器预览无法打开本机目录选择器，请在 Lime 桌面端使用。",
-  }),
   agent_app_launch_shell: async (args: any) => {
     const descriptor = args?.request?.descriptor ?? {};
     const appId = String(descriptor.appId ?? "content-factory-app");

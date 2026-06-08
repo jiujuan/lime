@@ -7,12 +7,8 @@ mod agent_sessions;
 mod app_runtime;
 mod browser;
 mod capability_drafts;
-mod channels;
-mod companion;
 mod content;
-mod external_tools;
 mod files;
-mod knowledge;
 mod logs;
 mod media_tasks;
 mod memory;
@@ -22,7 +18,6 @@ mod project_resources;
 mod providers;
 mod runtime_queries;
 mod skills;
-mod tray;
 mod voice;
 mod workspace;
 
@@ -96,14 +91,6 @@ pub async fn handle_command(
         return Ok(result);
     }
 
-    if let Some(result) = companion::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = channels::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
     if let Some(result) = logs::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
@@ -112,15 +99,7 @@ pub async fn handle_command(
         return Ok(result);
     }
 
-    if let Some(result) = external_tools::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
     if let Some(result) = media_tasks::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = knowledge::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
@@ -153,10 +132,6 @@ pub async fn handle_command(
     }
 
     if let Some(result) = agent_apps::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = tray::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
@@ -709,31 +684,6 @@ mod tests {
         assert_eq!(value["adapter"], "x/article-export");
         assert_eq!(value["domain"], "x.com");
         assert_eq!(value["status"], "requires_browser_runtime");
-    }
-
-    #[tokio::test]
-    async fn skill_execution_catalog_commands_are_bridged() {
-        let state = make_test_state();
-
-        let list_value = handle_command(&state, "list_executable_skills", None)
-            .await
-            .unwrap();
-        let skills = list_value.as_array().expect("skills should be array");
-        assert!(!skills.is_empty());
-        assert!(skills.iter().any(|item| item["name"] == "image_generate"));
-
-        let detail_value = handle_command(
-            &state,
-            "get_skill_detail",
-            Some(serde_json::json!({
-                "skillName": "image_generate"
-            })),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(detail_value["name"], "image_generate");
-        assert_eq!(detail_value["execution_mode"], "prompt");
     }
 
     #[tokio::test]

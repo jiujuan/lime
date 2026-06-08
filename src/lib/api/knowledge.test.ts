@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { safeInvoke } from "@/lib/dev-bridge";
 import {
   compileKnowledgePack,
   getKnowledgePack,
@@ -19,15 +18,10 @@ vi.mock("@/lib/api/appServer", () => ({
   })),
 }));
 
-vi.mock("@/lib/dev-bridge", () => ({
-  safeInvoke: vi.fn(),
-}));
-
 describe("knowledge API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     appServerRequestMock.mockReset();
-    vi.mocked(safeInvoke).mockReset();
   });
 
   it("知识包列表应通过 App Server knowledgePack/list 读取", async () => {
@@ -51,7 +45,6 @@ describe("knowledge API", () => {
       workingDir: "/tmp/workspace",
       includeArchived: false,
     });
-    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("知识包列表应透传 includeArchived 到 App Server", async () => {
@@ -72,7 +65,6 @@ describe("knowledge API", () => {
       workingDir: "/tmp/workspace",
       includeArchived: true,
     });
-    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("知识包列表缺少 workingDir 时应 fail closed", async () => {
@@ -81,10 +73,9 @@ describe("knowledge API", () => {
     );
 
     expect(appServerRequestMock).not.toHaveBeenCalled();
-    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("App Server 知识包列表缺少 packs 时不应回退 legacy knowledge_list_packs", async () => {
+  it("App Server 知识包列表缺少 packs 时应 fail closed", async () => {
     appServerRequestMock.mockResolvedValueOnce({
       result: {
         workingDir: "/tmp/workspace",
@@ -100,41 +91,100 @@ describe("knowledge API", () => {
       workingDir: "/tmp/workspace",
       includeArchived: false,
     });
-    expect(safeInvoke).not.toHaveBeenCalledWith("knowledge_list_packs", {
-      request: {
-        workingDir: "/tmp/workspace",
-      },
-    });
   });
 
-  it("应通过统一网关代理知识包命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ metadata: { name: "sample-product" } })
-      .mockResolvedValueOnce({ source: { relativePath: "sources/brief.md" } })
-      .mockResolvedValueOnce({ selectedSourceCount: 1 })
-      .mockResolvedValueOnce({ defaultPackName: "sample-product" })
+  it("应通过 App Server current 网关代理全部知识包命令", async () => {
+    const packDetail = {
+      metadata: { name: "sample-product" },
+      rootPath: "/tmp/workspace/.lime/knowledge/sample-product",
+      knowledgePath: "/tmp/workspace/.lime/knowledge/sample-product",
+      defaultForWorkspace: false,
+      updatedAt: 0,
+      sourceCount: 1,
+      wikiCount: 0,
+      compiledCount: 1,
+      runCount: 1,
+      guide: "",
+      sources: [],
+      wiki: [],
+      compiled: [],
+      runs: [],
+    };
+    const sourceFile = {
+      relativePath: "sources/brief.md",
+      absolutePath: "/tmp/workspace/.lime/knowledge/sample-product/sources/brief.md",
+      bytes: 10,
+      updatedAt: 0,
+    };
+    const compiledView = {
+      relativePath: "compiled/index.md",
+      absolutePath: "/tmp/workspace/.lime/knowledge/sample-product/compiled/index.md",
+      bytes: 20,
+      updatedAt: 0,
+    };
+    const compileRun = {
+      relativePath: "runs/compile.json",
+      absolutePath: "/tmp/workspace/.lime/knowledge/sample-product/runs/compile.json",
+      bytes: 30,
+      updatedAt: 0,
+    };
+
+    appServerRequestMock
       .mockResolvedValueOnce({
-        pack: { metadata: { name: "sample-product", status: "ready" } },
-        previousStatus: "needs-review",
-        clearedDefault: false,
+        result: {
+          pack: packDetail,
+        },
       })
       .mockResolvedValueOnce({
-        packName: "sample-product",
-        fencedContext:
-          '<knowledge_pack name="sample-product"></knowledge_pack>',
-        selectedViews: [],
-        selectedFiles: [],
-        sourceAnchors: [],
-        warnings: [],
-        missing: [],
-        tokenEstimate: 1,
+        result: { pack: packDetail, source: sourceFile },
       })
       .mockResolvedValueOnce({
-        valid: true,
-        runId: "context-20260506T091000Z",
-        status: "passed",
-        errors: [],
-        warnings: [],
+        result: {
+          pack: packDetail,
+          selectedSourceCount: 1,
+          compiledView,
+          run: compileRun,
+          warnings: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          defaultPackName: "sample-product",
+          defaultMarkerPath: "/tmp/workspace/.lime/knowledge/default",
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          pack: {
+            ...packDetail,
+            metadata: { name: "sample-product", status: "ready" },
+          },
+          previousStatus: "needs-review",
+          clearedDefault: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          packName: "sample-product",
+          status: "ready",
+          fencedContext:
+            '<knowledge_pack name="sample-product"></knowledge_pack>',
+          selectedViews: [],
+          selectedFiles: [],
+          sourceAnchors: [],
+          warnings: [],
+          missing: [],
+          tokenEstimate: 1,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          valid: true,
+          runId: "context-20260506T091000Z",
+          status: "passed",
+          errors: [],
+          warnings: [],
+        },
       });
 
     await expect(
@@ -159,7 +209,10 @@ describe("knowledge API", () => {
     await expect(
       setDefaultKnowledgePack("/tmp/workspace", "sample-product"),
     ).resolves.toEqual(
-      expect.objectContaining({ defaultPackName: "sample-product" }),
+      expect.objectContaining({
+        defaultPackName: "sample-product",
+        defaultMarkerPath: "/tmp/workspace/.lime/knowledge/default",
+      }),
     );
     await expect(
       updateKnowledgePackStatus({
@@ -193,96 +246,178 @@ describe("knowledge API", () => {
       }),
     ).resolves.toEqual(expect.objectContaining({ valid: true }));
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "knowledge_get_pack", {
-      request: {
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
+      1,
+      "knowledgePack/read",
+      {
         workingDir: "/tmp/workspace",
         name: "sample-product",
       },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "knowledge_import_source", {
-      request: {
+    );
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
+      2,
+      "knowledgePack/source/import",
+      {
         workingDir: "/tmp/workspace",
         packName: "sample-product",
         sourceText: "示例产品事实",
       },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(3, "knowledge_compile_pack", {
-      request: {
+    );
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
+      3,
+      "knowledgePack/compile",
+      {
         workingDir: "/tmp/workspace",
         name: "sample-product",
       },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(
+    );
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       4,
-      "knowledge_set_default_pack",
+      "knowledgePack/default/set",
       {
-        request: {
-          workingDir: "/tmp/workspace",
-          name: "sample-product",
-        },
+        workingDir: "/tmp/workspace",
+        name: "sample-product",
       },
     );
-    expect(safeInvoke).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       5,
-      "knowledge_update_pack_status",
+      "knowledgePack/status/update",
       {
-        request: {
-          workingDir: "/tmp/workspace",
-          name: "sample-product",
-          status: "ready",
-        },
+        workingDir: "/tmp/workspace",
+        name: "sample-product",
+        status: "ready",
       },
     );
-    expect(safeInvoke).toHaveBeenNthCalledWith(6, "knowledge_resolve_context", {
-      request: {
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
+      6,
+      "knowledgeContext/resolve",
+      {
         workingDir: "/tmp/workspace",
         name: "sample-product",
         task: "写产品介绍",
         writeRun: true,
       },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(
+    );
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       7,
-      "knowledge_validate_context_run",
+      "knowledgeContextRun/validate",
       {
-        request: {
-          workingDir: "/tmp/workspace",
-          name: "sample-product",
-          runPath: "runs/context-20260506T091000Z.json",
+        workingDir: "/tmp/workspace",
+        name: "sample-product",
+        runPath: "runs/context-20260506T091000Z.json",
+      },
+    );
+    expect(
+      appServerRequestMock.mock.calls.some(([method]) =>
+        String(method).startsWith("knowledge_"),
+      ),
+    ).toBe(false);
+  });
+
+  it("Knowledge 编译应向 App Server 透传 builderRuntime 请求", async () => {
+    const packDetail = {
+      metadata: { name: "sample-product" },
+      rootPath: "/tmp/workspace/.lime/knowledge/sample-product",
+      knowledgePath: "/tmp/workspace/.lime/knowledge/sample-product",
+      defaultForWorkspace: false,
+      updatedAt: 0,
+      sourceCount: 1,
+      wikiCount: 0,
+      compiledCount: 1,
+      runCount: 1,
+      guide: "",
+      sources: [],
+      wiki: [],
+      compiled: [],
+      runs: [],
+    };
+    const compiledView = {
+      relativePath: "compiled/index.md",
+      absolutePath: "/tmp/workspace/.lime/knowledge/sample-product/compiled/index.md",
+      bytes: 20,
+      updatedAt: 0,
+    };
+    const compileRun = {
+      relativePath: "runs/compile.json",
+      absolutePath: "/tmp/workspace/.lime/knowledge/sample-product/runs/compile.json",
+      bytes: 30,
+      updatedAt: 0,
+    };
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        pack: packDetail,
+        selectedSourceCount: 1,
+        compiledView,
+        run: compileRun,
+        warnings: [],
+      },
+    });
+
+    await compileKnowledgePack(" /tmp/workspace ", " sample-product ", {
+      enabled: true,
+      providerOverride: "local-provider",
+      modelOverride: "local-model",
+      sessionId: "session-1",
+    });
+
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "knowledgePack/compile",
+      {
+        workingDir: "/tmp/workspace",
+        name: "sample-product",
+        builderRuntime: {
+          enabled: true,
+          providerOverride: "local-provider",
+          modelOverride: "local-model",
+          sessionId: "session-1",
         },
       },
     );
-    expect(safeInvoke).not.toHaveBeenCalledWith("knowledge_list_packs", {
-      request: {
-        workingDir: "/tmp/workspace",
-      },
-    });
+  });
+
+  it("Knowledge 编译缺少 workingDir 时应 fail closed", async () => {
+    await expect(
+      compileKnowledgePack("   ", "sample-product"),
+    ).rejects.toThrow(
+      "workingDir is required to compile App Server knowledge pack",
+    );
     expect(appServerRequestMock).not.toHaveBeenCalled();
   });
 
-  it("Knowledge 写链遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "knowledge_compile_pack",
-        source: "electron-host-diagnostic",
+  it("Knowledge 导入缺少 packName 时应 fail closed", async () => {
+    await expect(
+      importKnowledgeSource({
+        workingDir: "/tmp/workspace",
+        packName: "  ",
+        sourceText: "示例产品事实",
+      }),
+    ).rejects.toThrow(
+      "packName is required to import App Server knowledge source",
+    );
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("App Server Knowledge 详情缺少 pack 时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        success: true,
       },
     });
 
     await expect(
-      compileKnowledgePack("/tmp/workspace", "sample-product"),
+      getKnowledgePack("/tmp/workspace", "sample-product"),
     ).rejects.toThrow(
-      "knowledge_compile_pack 尚未接入真实 Knowledge current 通道",
+      "knowledgePack/read did not return a knowledge pack detail",
     );
-    expect(appServerRequestMock).not.toHaveBeenCalled();
   });
 
-  it("Knowledge 写链遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "knowledge_import_source",
-        category: "electron-diagnostic-facade",
-        source: "electron-host-diagnostic",
-        status: "degraded",
+  it("App Server Knowledge 导入缺少 source 时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        pack: {
+          metadata: { name: "sample-product" },
+          rootPath: "/tmp/workspace/.lime/knowledge/sample-product",
+        },
       },
     });
 
@@ -293,33 +428,56 @@ describe("knowledge API", () => {
         sourceText: "示例产品事实",
       }),
     ).rejects.toThrow(
-      "knowledge_import_source 尚未接入真实 Knowledge current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "knowledgePack/source/import did not return an imported source file",
     );
-    expect(appServerRequestMock).not.toHaveBeenCalled();
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "knowledgePack/source/import",
+      {
+        workingDir: "/tmp/workspace",
+        packName: "sample-product",
+        sourceText: "示例产品事实",
+      },
+    );
   });
 
-  it("Knowledge 上下文解析遇到 Electron empty diagnostic list 时应 fail closed", async () => {
-    const diagnosticList: unknown[] = [];
-    Object.defineProperty(diagnosticList, "__diagnostic", {
-      value: {
-        command: "knowledge_resolve_context",
-        source: "electron-empty-diagnostic",
-        status: "degraded",
+  it("App Server Knowledge 编译缺少 compile result 时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        error: { code: -32603, message: "not implemented" },
       },
-      enumerable: false,
     });
 
-    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
-
     await expect(
-      resolveKnowledgeContext({
+      compileKnowledgePack("/tmp/workspace", "sample-product"),
+    ).rejects.toThrow("knowledgePack/compile did not return a compile result");
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "knowledgePack/compile",
+      {
         workingDir: "/tmp/workspace",
         name: "sample-product",
-        task: "写产品介绍",
+      },
+    );
+  });
+
+  it("App Server Knowledge 上下文校验缺少 validation 时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({ result: { success: true } });
+
+    await expect(
+      validateKnowledgeContextRun({
+        workingDir: "/tmp/workspace",
+        name: "sample-product",
+        runPath: "runs/context-20260506T091000Z.json",
       }),
     ).rejects.toThrow(
-      "knowledge_resolve_context 尚未接入真实 Knowledge current 通道，收到 electron-empty-diagnostic 诊断返回。",
+      "knowledgeContextRun/validate did not return a context run validation",
     );
-    expect(appServerRequestMock).not.toHaveBeenCalled();
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "knowledgeContextRun/validate",
+      {
+        workingDir: "/tmp/workspace",
+        name: "sample-product",
+        runPath: "runs/context-20260506T091000Z.json",
+      },
+    );
   });
 });

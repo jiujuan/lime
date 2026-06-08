@@ -31,6 +31,56 @@ async function invokeMemoryRuntimeCommand<T>(
   return result as T;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isMemoryStatsResponse(
+  value: unknown,
+): value is MemoryStatsResponse {
+  return (
+    isRecord(value) &&
+    isNumber(value.total_entries) &&
+    isNumber(value.storage_used) &&
+    isNumber(value.memory_count)
+  );
+}
+
+function isMemoryOverviewResponse(
+  value: unknown,
+): value is MemoryOverviewResponse {
+  return (
+    isRecord(value) &&
+    isMemoryStatsResponse(value.stats) &&
+    Array.isArray(value.categories) &&
+    Array.isArray(value.entries)
+  );
+}
+
+function isAutoMemoryIndexResponse(
+  value: unknown,
+): value is AutoMemoryIndexResponse {
+  return (
+    isRecord(value) &&
+    typeof value.enabled === "boolean" &&
+    typeof value.root_dir === "string" &&
+    typeof value.entrypoint === "string" &&
+    isNumber(value.max_loaded_lines) &&
+    typeof value.entry_exists === "boolean" &&
+    isNumber(value.total_lines) &&
+    isStringArray(value.preview_lines) &&
+    Array.isArray(value.items)
+  );
+}
+
 export type {
   AutoMemoryIndexResponse,
   AutoMemoryIndexItem,
@@ -77,11 +127,26 @@ export type {
 export async function getContextMemoryOverview(
   limit?: number,
 ): Promise<MemoryOverviewResponse> {
-  return invokeMemoryRuntimeCommand("memory_runtime_get_overview", { limit });
+  const result = await invokeMemoryRuntimeCommand<unknown>(
+    "memory_runtime_get_overview",
+    { limit },
+  );
+  if (!isMemoryOverviewResponse(result)) {
+    throw new Error(
+      "memory_runtime_get_overview did not return memory overview",
+    );
+  }
+  return result;
 }
 
 export async function getContextMemoryStats(): Promise<MemoryStatsResponse> {
-  return invokeMemoryRuntimeCommand("memory_runtime_get_stats");
+  const result = await invokeMemoryRuntimeCommand<unknown>(
+    "memory_runtime_get_stats",
+  );
+  if (!isMemoryStatsResponse(result)) {
+    throw new Error("memory_runtime_get_stats did not return memory stats");
+  }
+  return result;
 }
 
 export async function analyzeContextMemory(
@@ -133,7 +198,14 @@ export async function getContextMemoryEffectiveSources(
 export async function getContextMemoryAutoIndex(
   workingDir?: string,
 ): Promise<AutoMemoryIndexResponse> {
-  return invokeMemoryRuntimeCommand("memory_get_auto_index", { workingDir });
+  const result = await invokeMemoryRuntimeCommand<unknown>(
+    "memory_get_auto_index",
+    { workingDir },
+  );
+  if (!isAutoMemoryIndexResponse(result)) {
+    throw new Error("memory_get_auto_index did not return auto memory index");
+  }
+  return result;
 }
 
 export async function toggleContextMemoryAuto(

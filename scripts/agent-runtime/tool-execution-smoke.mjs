@@ -7,11 +7,17 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   assertSmoke,
+  createAgentSessionCurrent,
   invokeDevBridge,
+  readAgentRuntimeThreadCurrent,
+  readAgentSessionDetailCurrent,
+  respondAgentSessionActionCurrent,
   sleep,
+  startAgentSessionTurnCurrent,
   summarizeEvidencePack,
   summarizeThreadRead,
   threadSettled,
+  updateAgentSessionRuntimeCurrent,
   waitForHealth,
 } from "../lib/managed-objective-continuation-smoke-core.mjs";
 import {
@@ -1503,17 +1509,15 @@ async function respondPendingRequests(
       request?.request_type || request?.requestType,
     );
     const userData = buildUserResponseForRequest(request);
-    await invokeDevBridge(options, "agent_runtime_respond_action", {
-      request: {
-        session_id: sessionId,
-        request_id: requestId,
-        action_type: actionType,
-        confirmed: true,
-        response: JSON.stringify(userData),
-        user_data: userData,
-        event_name: eventName,
-        action_scope: buildActionScope(sessionId, request, turnId),
-      },
+    await respondAgentSessionActionCurrent(options, {
+      sessionId,
+      requestId,
+      actionType,
+      confirmed: true,
+      response: JSON.stringify(userData),
+      userData,
+      eventName,
+      actionScope: buildActionScope(sessionId, request, turnId),
     });
     respondedCount += 1;
     console.log(
@@ -1605,12 +1609,8 @@ async function waitForRuntimeCompletion(
 
   while (Date.now() - startedAt < options.timeoutMs) {
     const [threadRead, sessionDetail] = await Promise.all([
-      invokeDevBridge(options, "agent_runtime_get_thread_read", { sessionId }),
-      invokeDevBridge(options, "agent_runtime_get_session", {
-        sessionId,
-        resumeSessionStartHooks: false,
-        historyLimit: 80,
-      }),
+      readAgentRuntimeThreadCurrent(options, sessionId, { historyLimit: 80 }),
+      readAgentSessionDetailCurrent(options, sessionId, { historyLimit: 80 }),
     ]);
     const matrix = buildToolExecutionMatrix(threadRead, targetTools);
     const turnObserved = runtimeTurnObserved(threadRead, fixture);
@@ -1723,54 +1723,44 @@ async function runSmoke(options) {
 
   try {
     console.log(`${LOG_PREFIX} stage=session`);
-    const sessionId = await invokeDevBridge(
-      options,
-      "agent_runtime_create_session",
-      {
-        workspaceId,
-        name: `Tool execution fixture ${scenario.id} ${new Date().toISOString()}`,
-        executionStrategy: "react",
-        runStartHooks: false,
-        metadata: {
-          harness: {
-            hiddenFromUserRecents: true,
-            source: "smoke:agent-runtime-tool-execution",
-            scenarioId: scenario.id,
-          },
+    const sessionId = await createAgentSessionCurrent(options, {
+      workspaceId,
+      title: `Tool execution fixture ${scenario.id} ${new Date().toISOString()}`,
+      executionStrategy: "react",
+      metadata: {
+        harness: {
+          hiddenFromUserRecents: true,
+          source: "smoke:agent-runtime-tool-execution",
+          scenarioId: scenario.id,
         },
       },
-    );
-    assertSmoke(sessionId, "agent_runtime_create_session 未返回 sessionId");
+    });
+    assertSmoke(sessionId, "agentSession/start 未返回 sessionId");
 
-    await invokeDevBridge(options, "agent_runtime_update_session", {
-      request: {
-        sessionId,
-        providerSelector: fixture.provider.providerPreference,
-        providerName: fixture.provider.providerName,
-        modelName: fixture.provider.modelPreference,
-      },
+    await updateAgentSessionRuntimeCurrent(options, {
+      sessionId,
+      provider: fixture.provider,
+      executionStrategy: "react",
     });
 
     console.log(`${LOG_PREFIX} stage=submit-turn session=${sessionId}`);
     const turnId = `tool-execution-${Date.now()}-${process.pid}`;
     const eventName = `agent_runtime_tool_execution_${turnId}`;
-    await invokeDevBridge(options, "agent_runtime_submit_turn", {
-      request: {
-        message: scenario.prompt,
-        sessionId,
-        workspaceId,
-        eventName,
-        turnId,
-        turnConfig: {
-          providerPreference: fixture.provider.providerPreference,
-          modelPreference: fixture.provider.modelPreference,
-          providerConfig: fixture.provider.providerConfig,
-          approvalPolicy: "never",
-          sandboxPolicy: "danger-full-access",
-          metadata: turnMetadata,
-        },
-        skipPreSubmitResume: true,
+    await startAgentSessionTurnCurrent(options, {
+      sessionId,
+      workspaceId,
+      message: scenario.prompt,
+      eventName,
+      turnId,
+      turnConfig: {
+        providerPreference: fixture.provider.providerPreference,
+        modelPreference: fixture.provider.modelPreference,
+        providerConfig: fixture.provider.providerConfig,
+        approvalPolicy: "never",
+        sandboxPolicy: "danger-full-access",
+        metadata: turnMetadata,
       },
+      skipPreSubmitResume: true,
     });
 
     console.log(`${LOG_PREFIX} stage=wait-runtime`);

@@ -140,4 +140,53 @@ describe("skillExecutionApi", () => {
 
     expect(appServerRequestMock).not.toHaveBeenCalled();
   });
+
+  it("Skill 执行收到错误 envelope 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      error: { code: -32603, message: "not implemented" },
+    });
+
+    await expect(
+      skillExecutionApi.executeSkill({
+        skillName: "writer",
+        userInput: "写一段介绍",
+      }),
+    ).rejects.toThrow("execute_skill did not return a skill execution result");
+
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("Skill 执行缺少 steps_completed 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      success: true,
+      output: "done",
+    });
+
+    await expect(
+      skillExecutionApi.executeSkill({
+        skillName: "writer",
+        userInput: "写一段介绍",
+      }),
+    ).rejects.toThrow("execute_skill did not return a skill execution result");
+
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("Skill 执行返回无效步骤条目时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      success: true,
+      steps_completed: [{ step_id: "step-1", step_name: "生成" }],
+    });
+
+    await expect(
+      skillExecutionApi.executeSkill({
+        skillName: "writer",
+        userInput: "写一段介绍",
+      }),
+    ).rejects.toThrow(
+      "execute_skill did not return valid skill execution steps",
+    );
+
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+  });
 });

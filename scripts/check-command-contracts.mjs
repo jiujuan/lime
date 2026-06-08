@@ -30,6 +30,10 @@ const knownDeferredRegistrationReasons = new Map();
 const retiredFileBrowserFacadeCommands = new Set([
   "list_dir",
   "read_file_preview_cmd",
+  "create_file",
+  "create_directory",
+  "delete_file",
+  "rename_file",
 ]);
 const retiredAutomationFacadeCommands = new Set([
   "get_automation_scheduler_config",
@@ -123,12 +127,12 @@ const currentElectronHostRequiredCommands = new Set([
   "get_model_registry",
   "get_model_registry_provider_ids",
   "get_model_sync_state",
+  "get_daily_usage_trends",
+  "get_model_usage_ranking",
   "get_models_by_tier",
   "get_models_for_provider",
   "get_provider_alias_config",
-  "get_skill_detail",
-  "knowledge_list_packs",
-  "list_executable_skills",
+  "get_usage_stats",
   "open_external_url",
   "project_memory_get",
   "save_experimental_config",
@@ -150,7 +154,6 @@ const currentDevBridgeTruthRequiredCommands = new Set([
   "agent_app_stop_ui_runtime",
   "open_external_url",
   "start_oem_cloud_oauth_callback_bridge",
-  "knowledge_list_packs",
   "project_memory_get",
 ]);
 
@@ -163,10 +166,7 @@ const electronDiagnosticFacadeCommands = new Set([
   "get_chrome_bridge_endpoint_info",
   "get_chrome_bridge_status",
   "get_chrome_profile_sessions",
-  "get_daily_usage_trends",
   "get_environment_preview",
-  "get_model_usage_ranking",
-  "get_usage_stats",
   "get_voice_input_config",
   "get_voice_shortcut_runtime_status",
   "list_audio_devices",
@@ -248,13 +248,6 @@ addDeferredCommands(
 
 addDeferredCommands(
   [
-    "knowledge_import_source",
-    "knowledge_compile_pack",
-    "knowledge_get_pack",
-    "knowledge_set_default_pack",
-    "knowledge_update_pack_status",
-    "knowledge_resolve_context",
-    "knowledge_validate_context_run",
     "gateway_channel_status",
     "wechat_channel_list_accounts",
     "site_list_adapters",
@@ -1208,33 +1201,35 @@ function collectRetiredFileBrowserFacadeSourceFailures() {
     {
       path: "src/lib/desktop-host/fileSystemMocks.ts",
       message:
-        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能继续保留 desktop-host mock fixture",
+        "已迁到 App Server fileSystem/* 的旧文件浏览 facade 命令不能继续保留 desktop-host mock fixture",
     },
     {
       path: "lime-rs/src/app/runner.rs",
       message:
-        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 legacy Tauri generate_handler",
+        "已迁到 App Server fileSystem/* 的旧文件浏览 facade 命令不能回到 legacy Tauri generate_handler",
     },
     {
       path: "lime-rs/src/dev_bridge/dispatcher/files.rs",
       message:
-        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 Rust DevBridge dispatcher",
+        "已迁到 App Server fileSystem/* 的旧文件浏览 facade 命令不能回到 Rust DevBridge dispatcher",
     },
     {
       path: "lime-rs/src/services/file_browser_service.rs",
       message:
-        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 Tauri command wrapper",
+        "已迁到 App Server fileSystem/* 的旧文件浏览 facade 命令不能回到 Tauri command wrapper",
     },
     {
       path: "lime-rs/crates/services/src/file_browser_service.rs",
       message:
-        "已迁到 App Server fileSystem/* 的旧文件浏览读命令不能回到 services compat wrapper",
+        "已迁到 App Server fileSystem/* 的旧文件浏览 facade 命令不能回到 services compat wrapper",
+      commands: ["list_dir", "read_file_preview_cmd"],
     },
   ];
 
   for (const source of restrictedSources) {
     const sourceCode = readProductionSourceForGuard(source.path);
-    for (const command of retiredFileBrowserFacadeCommands) {
+    const commands = source.commands ?? retiredFileBrowserFacadeCommands;
+    for (const command of commands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
         failures.push({
           file: source.path,

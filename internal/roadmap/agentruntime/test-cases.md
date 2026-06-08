@@ -31,7 +31,7 @@ agent_runtime_submit_turn
 | --- | --- | --- | --- |
 | Schema / Fixture | 验证 Lime Profile 事件和 snapshot 形状 | AgentRuntime profile fixtures | 改 schema、事件字段、snapshot 字段时 |
 | Runtime Unit | 验证 ids、事件 envelope、状态转换 | `runtime_turn`、runtime queue、read model builder | 改 submit turn、事件构造、状态机时 |
-| Contract | 验证 Tauri command、frontend gateway、catalog、mock 同步 | `agent_runtime_*` commands | 改命令或 bridge 时 |
+| Contract | 验证 Electron Desktop Host / App Server / legacy facade、frontend gateway、catalog、mock 同步 | `agent_runtime_*` current / compat command boundary | 改命令边界或 bridge 时 |
 | Replay / Projection | 验证 event stream 可重建 read model | `ThreadReadModel`、`TaskSnapshot` | 改 projection 或恢复逻辑时 |
 | Evidence Consistency | 验证 evidence/replay/review 同源 | `agent_runtime_export_evidence_pack` | 改 evidence、review、analysis 时 |
 | GUI Smoke | 验证用户真实看到 runtime facts | Workspace、Harness、Dashboard | 改 GUI 主路径时 |
@@ -179,9 +179,9 @@ Owner 侧对应测试文档：
 
 | ID | 用例 | 检查对象 | 期望结果 |
 | --- | --- | --- | --- |
-| AR-CONTRACT-001 | submit command 同步 | frontend `safeInvoke`、Rust handler、catalog、mock | `agent_runtime_submit_turn` 四侧一致 |
-| AR-CONTRACT-002 | evidence command 同步 | frontend gateway、Rust handler、catalog、mock | `agent_runtime_export_evidence_pack` 四侧一致 |
-| AR-CONTRACT-003 | action response command 同步 | permission/action gateway、Rust handler、catalog、mock | `respond_action` 或现有等价 command 不漂移 |
+| AR-CONTRACT-001 | submit command 同步 | frontend gateway、App Server method / legacy facade handler、catalog、mock | `agent_runtime_submit_turn` 兼容面委托 current 主链且不漂移 |
+| AR-CONTRACT-002 | evidence command 同步 | frontend gateway、App Server method / legacy facade handler、catalog、mock | `agent_runtime_export_evidence_pack` 兼容面委托 current 主链且不漂移 |
+| AR-CONTRACT-003 | action response command 同步 | permission/action gateway、App Server method / legacy facade handler、catalog、mock | `respond_action` 或现有等价 command 不漂移 |
 | AR-CONTRACT-004 | compat 命令只委托 current | 旧 evidence/replay command | 只调用 `agent_runtime_export_*`，不重建第二套导出逻辑 |
 | AR-CONTRACT-005 | mock 与真实 contract 同形 | `mockPriorityCommands` / `defaultMocks` | mock 返回字段不缺 current read model required fields |
 
@@ -247,7 +247,7 @@ npm run governance:legacy-report
 | 改 AgentContext / AgentPolicy / AgentEvidence linkage | 对应 AR-CTX / AR-POL / AR-EVID-LINK 用例 + 定向 owner ref 测试 |
 | 改 AgentUI profile event 兼容 / presentation mapper | `agentStreamUnknownEventController` / `agentStreamListenerReadinessController` / `agentUiTeamWorkbenchViewModel` / `AgentUiTeamWorkbenchSurfaceView` / `TeamWorkbenchSummaryPanel` / `HarnessStatusPanel` / `AgentThreadReliabilityPanel` / `AgentThreadTimelineArtifactCard` 定向单测 |
 | 改 deprecated/compat 路径 | Governance guard + 相关 contract 用例 |
-| 改 Rust runtime 主链 | 定向 Rust 测试 + Runtime identity / Event 用例 + 必要时 `npm run verify:local` |
+| 改 Rust runtime 主链 | App Server / RuntimeCore 定向 Rust 测试 + Runtime identity / Event 用例 + 必要时 `npm run verify:local` |
 
 ## 17. 不通过判定
 

@@ -26,6 +26,8 @@ vi.mock("./oemCloudRuntime", () => ({
 describe("voiceModels API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(safeInvoke).mockReset();
+    vi.mocked(safeListen).mockReset();
     vi.mocked(resolveOemCloudRuntimeContext).mockReturnValue(null);
   });
 
@@ -34,12 +36,31 @@ describe("voiceModels API", () => {
   });
 
   it("应代理本地语音模型管理命令", async () => {
+    const installState = {
+      model_id: "sensevoice-small-int8-2024-07-17",
+      installed: false,
+      installing: false,
+      install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+      installed_bytes: 0,
+      missing_files: ["model.int8.onnx"],
+    };
+    const installedState = {
+      ...installState,
+      installed: true,
+      installed_bytes: 1024,
+      missing_files: [],
+    };
+
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce([{ id: "sensevoice-small-int8-2024-07-17" }])
-      .mockResolvedValueOnce({ installed: false })
-      .mockResolvedValueOnce({ state: { installed: true } })
-      .mockResolvedValueOnce({ installed: false })
-      .mockResolvedValueOnce({ id: "sensevoice-local", is_default: true })
+      .mockResolvedValueOnce(installState)
+      .mockResolvedValueOnce({ state: installedState })
+      .mockResolvedValueOnce(installState)
+      .mockResolvedValueOnce({
+        id: "sensevoice-local",
+        provider: "sensevoice_local",
+        is_default: true,
+      })
       .mockResolvedValueOnce({
         text: "这是一段测试转写结果。",
         duration_secs: 3.2,
@@ -55,7 +76,9 @@ describe("voiceModels API", () => {
     ).resolves.toEqual(expect.objectContaining({ installed: false }));
     await expect(
       downloadVoiceModel("sensevoice-small-int8-2024-07-17"),
-    ).resolves.toEqual(expect.objectContaining({ state: { installed: true } }));
+    ).resolves.toEqual({
+      state: expect.objectContaining({ installed: true }),
+    });
     await expect(
       deleteVoiceModel("sensevoice-small-int8-2024-07-17"),
     ).resolves.toEqual(expect.objectContaining({ installed: false }));
@@ -175,6 +198,71 @@ describe("voiceModels API", () => {
     );
   });
 
+  it("语音模型 side-effect 命令遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        status: "degraded",
+      },
+    });
+
+    await expect(
+      downloadVoiceModel("sensevoice-small-int8-2024-07-17"),
+    ).rejects.toThrow(
+      "voice_models_download 尚未接入真实语音模型 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(
+      deleteVoiceModel("sensevoice-small-int8-2024-07-17"),
+    ).rejects.toThrow(
+      "voice_models_delete 尚未接入真实语音模型 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(
+      setDefaultVoiceModel("sensevoice-small-int8-2024-07-17"),
+    ).rejects.toThrow(
+      "voice_models_set_default 尚未接入真实语音模型 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(
+      testTranscribeVoiceModelFile(
+        "sensevoice-small-int8-2024-07-17",
+        "/tmp/interview.wav",
+      ),
+    ).rejects.toThrow(
+      "voice_models_test_transcribe_file 尚未接入真实语音模型 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("语音模型 side-effect 命令返回错误形态时不应吞成成功", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true });
+
+    await expect(
+      downloadVoiceModel("sensevoice-small-int8-2024-07-17"),
+    ).rejects.toThrow(
+      "voice_models_download did not return a voice model install state",
+    );
+    await expect(
+      deleteVoiceModel("sensevoice-small-int8-2024-07-17"),
+    ).rejects.toThrow(
+      "voice_models_delete did not return a voice model install state",
+    );
+    await expect(
+      setDefaultVoiceModel("sensevoice-small-int8-2024-07-17"),
+    ).rejects.toThrow(
+      "voice_models_set_default did not return an ASR credential",
+    );
+    await expect(
+      testTranscribeVoiceModelFile(
+        "sensevoice-small-int8-2024-07-17",
+        "/tmp/interview.wav",
+      ),
+    ).rejects.toThrow(
+      "voice_models_test_transcribe_file did not return a transcribe test result",
+    );
+  });
+
   it("默认本地 SenseVoice readiness 遇到 degraded 安装状态时不应返回假未安装状态", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce([
@@ -279,12 +367,22 @@ describe("voiceModels API", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(safeInvoke).mockResolvedValueOnce({
-      state: { installed: true },
+      state: {
+        model_id: "sensevoice-small-int8-2024-07-17",
+        installed: true,
+        installing: false,
+        install_dir:
+          "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+        installed_bytes: 1024,
+        missing_files: [],
+      },
     });
 
     await expect(
       downloadVoiceModel("sensevoice-small-int8-2024-07-17"),
-    ).resolves.toEqual(expect.objectContaining({ state: { installed: true } }));
+    ).resolves.toEqual({
+      state: expect.objectContaining({ installed: true }),
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://cloud.example.com/api/v1/public/tenants/tenant-0001/client/voice-model-catalog",

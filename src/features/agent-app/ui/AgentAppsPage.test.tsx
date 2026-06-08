@@ -5,6 +5,7 @@ import {
   act,
   apiMocks,
   buildReadyState,
+  buildReviewResult,
   cleanupAgentAppsPageTest,
   contentFactoryFixture,
   expectInstallReviewDialog,
@@ -104,6 +105,7 @@ describe("AgentAppsPage", () => {
       ),
     ).not.toBeNull();
     expect(container.textContent).toContain("内容工厂");
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it("正式入口页面壳和主按钮应接入 Lime 主题变量", async () => {
@@ -170,6 +172,76 @@ describe("AgentAppsPage", () => {
     ) as HTMLImageElement | null;
     expect(detailIcon?.getAttribute("src")).toBe(
       `asset://${LOCAL_APP_DIR}/assets/icon.svg`,
+    );
+  });
+
+  it("安装确认弹层应展示待安装 App 的 manifest 图标", async () => {
+    const stateWithIcon = buildReadyState({
+      manifest: {
+        ...(contentFactoryFixture as AppManifest),
+        install: {
+          branding: {
+            name: "内容工厂",
+            icon: "./assets/icon.svg",
+            windowTitle: "内容工厂",
+          },
+        },
+      },
+    });
+    apiMocks.reviewLocalAgentAppPackage.mockResolvedValue(
+      buildReviewResult(stateWithIcon),
+    );
+
+    const container = await renderPage();
+    await flush();
+
+    const installLocal = container.querySelector(
+      '[data-testid="agent-apps-install-local"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      installLocal?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expectInstallReviewDialog(container);
+    const reviewIcon = container.querySelector(
+      '[data-testid="agent-apps-install-review-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(reviewIcon?.getAttribute("src")).toBe(
+      `asset://${LOCAL_APP_DIR}/assets/icon.svg`,
+    );
+  });
+
+  it("应用卡片应兼容 manifest presentation.logo 字段", async () => {
+    installedStates.push(
+      buildReadyState({
+        manifest: {
+          ...(contentFactoryFixture as AppManifest),
+          presentation: {
+            logo: "https://lime.local/content-factory-logo.png",
+          },
+        },
+      }),
+    );
+    const container = await renderPage();
+    await flush();
+
+    const icon = container.querySelector(
+      '[data-testid="agent-apps-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(icon?.getAttribute("src")).toBe(
+      "https://lime.local/content-factory-logo.png",
+    );
+
+    await openAppDetail(container);
+
+    const detailIcon = container.querySelector(
+      '[data-testid="agent-apps-detail-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(detailIcon?.getAttribute("src")).toBe(
+      "https://lime.local/content-factory-logo.png",
     );
   });
 
@@ -597,6 +669,7 @@ describe("AgentAppsPage", () => {
         appId: "content-factory-app",
       }),
     });
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it("Cloud App 缺少 hash 时应阻断安装审查", async () => {

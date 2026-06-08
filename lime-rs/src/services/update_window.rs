@@ -5,7 +5,7 @@
 //!
 //! input: UpdateInfo（更新信息）
 //! output: 独立的更新提醒窗口
-//! pos: services 层，被 update_cmd 调用
+//! pos: services 层，供 Electron updater host 复用
 
 use mouse_position::mouse_position::Mouse;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};

@@ -1473,36 +1473,6 @@ static TAURI_APP_SERVER: OnceLock<InProcessAppServerState> = OnceLock::new();
 
 struct InProcessAppServerState {
     server: AppServer,
-    outbound: tokio::sync::Mutex<tokio::sync::broadcast::Receiver<JsonRpcMessage>>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AppServerHandleJsonLinesRequest {
-    pub(crate) lines: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AppServerHandleJsonLinesResult {
-    pub(crate) lines: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AppServerDrainEventsRequest {
-    #[serde(default = "default_app_server_drain_limit")]
-    pub(crate) limit: usize,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AppServerDrainEventsResult {
-    pub(crate) lines: Vec<String>,
-}
-
-fn default_app_server_drain_limit() -> usize {
-    100
 }
 
 fn in_process_app_server(runtime: RuntimeCommandContext) -> &'static InProcessAppServerState {
@@ -1533,42 +1503,17 @@ fn in_process_app_server(runtime: RuntimeCommandContext) -> &'static InProcessAp
             ),
         );
         let _ = app_server_bridge.set(server.event_bridge());
-        let outbound = server.subscribe_outbound_messages();
-        InProcessAppServerState {
-            server,
-            outbound: tokio::sync::Mutex::new(outbound),
-        }
+        InProcessAppServerState { server }
     })
 }
 
-#[tauri::command]
-pub(crate) async fn app_server_handle_json_lines(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, crate::agent::AsterAgentState>,
-    db: tauri::State<'_, crate::database::DbConnection>,
-    api_key_provider_service: tauri::State<
-        '_,
-        crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState,
-    >,
-    logs: tauri::State<'_, crate::LogState>,
-    config_manager: tauri::State<'_, crate::config::GlobalConfigManagerState>,
-    mcp_manager: tauri::State<'_, crate::mcp::McpManagerState>,
-    automation_state: tauri::State<'_, crate::services::automation_service::AutomationServiceState>,
-    request: AppServerHandleJsonLinesRequest,
-) -> Result<AppServerHandleJsonLinesResult, String> {
-    let runtime = RuntimeCommandContext::new(
-        app,
-        state.inner(),
-        db.inner(),
-        api_key_provider_service.inner(),
-        logs.inner(),
-        config_manager.inner(),
-        mcp_manager.inner(),
-        automation_state.inner(),
-    );
+pub(crate) async fn handle_in_process_app_server_json_lines(
+    runtime: RuntimeCommandContext,
+    request_lines: Vec<String>,
+) -> Result<Vec<String>, String> {
     let app_server = in_process_app_server(runtime);
     let mut lines = Vec::new();
-    for line in request.lines {
+    for line in request_lines {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -1580,52 +1525,7 @@ pub(crate) async fn app_server_handle_json_lines(
             .map_err(|error| error.to_string())?;
         lines.extend(responses);
     }
-    Ok(AppServerHandleJsonLinesResult { lines })
-}
-
-#[tauri::command]
-pub(crate) async fn app_server_drain_events(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, crate::agent::AsterAgentState>,
-    db: tauri::State<'_, crate::database::DbConnection>,
-    api_key_provider_service: tauri::State<
-        '_,
-        crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState,
-    >,
-    logs: tauri::State<'_, crate::LogState>,
-    config_manager: tauri::State<'_, crate::config::GlobalConfigManagerState>,
-    mcp_manager: tauri::State<'_, crate::mcp::McpManagerState>,
-    automation_state: tauri::State<'_, crate::services::automation_service::AutomationServiceState>,
-    request: AppServerDrainEventsRequest,
-) -> Result<AppServerDrainEventsResult, String> {
-    let runtime = RuntimeCommandContext::new(
-        app,
-        state.inner(),
-        db.inner(),
-        api_key_provider_service.inner(),
-        logs.inner(),
-        config_manager.inner(),
-        mcp_manager.inner(),
-        automation_state.inner(),
-    );
-    let app_server = in_process_app_server(runtime);
-    let limit = request.limit.clamp(1, 1000);
-    let mut receiver = app_server.outbound.lock().await;
-    let mut lines = Vec::new();
-    while lines.len() < limit {
-        match receiver.try_recv() {
-            Ok(message) => {
-                let mut line =
-                    serde_json::to_string(&message).map_err(|error| error.to_string())?;
-                line.push('\n');
-                lines.push(line);
-            }
-            Err(tokio::sync::broadcast::error::TryRecvError::Empty) => break,
-            Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => continue,
-            Err(tokio::sync::broadcast::error::TryRecvError::Closed) => break,
-        }
-    }
-    Ok(AppServerDrainEventsResult { lines })
+    Ok(lines)
 }
 
 #[async_trait]

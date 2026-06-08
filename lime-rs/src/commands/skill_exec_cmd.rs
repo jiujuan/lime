@@ -2,8 +2,6 @@
 //!
 //! 本模块提供 Skill 执行相关的 Tauri 命令，包括：
 //! - `execute_skill`: 执行指定的 Skill
-//! - `list_executable_skills`: 列出所有可执行的 Skills
-//! - `get_skill_detail`: 获取 Skill 详情
 //!
 //! ## 依赖
 //! - `AsterAgentState`: Aster Agent 状态管理，提供底层 Agent 执行能力
@@ -12,8 +10,6 @@
 //!
 //! ## Requirements
 //! - 3.1: execute_skill 命令接受 skill_name 和 user_input 参数
-//! - 4.1: list_executable_skills 返回所有可执行的 skills
-//! - 5.1: get_skill_detail 接受 skill_name 参数
 
 use tauri::State;
 
@@ -22,8 +18,7 @@ use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::config::GlobalConfigManagerState;
 use crate::database::DbConnection;
 use crate::skills::{
-    execute_named_skill, get_skill_detail_info, list_executable_skill_catalog, ExecutableSkillInfo,
-    SkillDetailInfo, SkillExecutionImageInput, SkillExecutionRequest, SkillExecutionResult,
+    execute_named_skill, SkillExecutionImageInput, SkillExecutionRequest, SkillExecutionResult,
 };
 
 // ============================================================================
@@ -87,45 +82,4 @@ pub async fn execute_skill(
         },
     )
     .await
-}
-
-/// 列出可执行的 Skills
-///
-/// 返回所有可以执行的 Skills 列表，过滤掉无效 Skill 包和
-/// disable_model_invocation=true 的 Skills。
-///
-/// # Returns
-/// * `Ok(Vec<ExecutableSkillInfo>)` - 可执行的 Skills 列表
-/// * `Err(String)` - 错误信息
-///
-/// # Requirements
-/// - 4.1: 返回所有可执行的 skills
-/// - 4.2: 包含 name, description, execution_mode
-/// - 4.3: 指示是否有 workflow 定义
-/// - 4.4: 过滤 disable_model_invocation=true 的 skills
-/// - 4.5: 过滤未通过标准校验的 skills
-#[tauri::command]
-pub async fn list_executable_skills() -> Result<Vec<ExecutableSkillInfo>, String> {
-    list_executable_skill_catalog()
-}
-
-/// 获取 Skill 详情
-///
-/// 根据 skill_name 返回完整的 Skill 详情信息。
-///
-/// # Arguments
-/// * `skill_name` - Skill 名称
-///
-/// # Returns
-/// * `Ok(SkillDetailInfo)` - Skill 详情
-/// * `Err(String)` - 错误信息（如 skill 不存在）
-///
-/// # Requirements
-/// - 5.1: 接受 skill_name 参数
-/// - 5.2: 返回完整的 SkillDefinition
-/// - 5.3: 包含 workflow steps 信息（如果有）
-/// - 5.4: skill 不存在时返回错误
-#[tauri::command]
-pub async fn get_skill_detail(skill_name: String) -> Result<SkillDetailInfo, String> {
-    get_skill_detail_info(&skill_name)
 }

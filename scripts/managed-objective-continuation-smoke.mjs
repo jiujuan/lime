@@ -8,11 +8,14 @@ import { fileURLToPath } from "node:url";
 import {
   assertSmoke,
   buildSmokeEvidence,
+  createAgentSessionCurrent,
   guardSummaryText,
   invokeDevBridge,
   objectiveReachedBudgetLimit,
   resolveProviderPreference,
+  startAgentSessionTurnCurrent,
   threadSettled,
+  updateAgentSessionRuntimeCurrent,
   waitForHealth,
   waitForObjectiveState,
 } from "./lib/managed-objective-continuation-smoke-core.mjs";
@@ -53,7 +56,7 @@ Lime Managed Objective Continuation Smoke
 
 用途:
   通过 DevBridge current 命令验证 Managed Objective 的受控自动续跑：
-  首轮标准 agent_runtime_submit_turn 完成后自动投递下一轮，随后在 maxAutoTurns 下进入 budget_limited。
+  首轮 agentSession/turn/start current JSON-RPC 完成后自动投递下一轮，随后在 maxAutoTurns 下进入 budget_limited。
 
 用法:
   npm run smoke:managed-objective-continuation
@@ -267,25 +270,13 @@ async function createManagedObjectiveSession(options, provider) {
   const workspaceId = workspaceIdFromDefaultProject(workspace);
   assertSmoke(workspaceId, "默认 workspace 缺少 id");
 
-  const sessionId = await invokeDevBridge(
-    options,
-    "agent_runtime_create_session",
-    {
-      workspaceId,
-      name: `MO continuation smoke ${new Date().toISOString()}`,
-      runStartHooks: false,
-    },
-  );
-  assertSmoke(sessionId, "agent_runtime_create_session 未返回 sessionId");
-
-  await invokeDevBridge(options, "agent_runtime_update_session", {
-    request: {
-      sessionId,
-      providerSelector: provider.providerPreference,
-      providerName: provider.providerName,
-      modelName: provider.modelPreference,
-    },
+  const sessionId = await createAgentSessionCurrent(options, {
+    workspaceId,
+    title: `MO continuation smoke ${new Date().toISOString()}`,
   });
+  assertSmoke(sessionId, "agentSession/start 未返回 sessionId");
+
+  await updateAgentSessionRuntimeCurrent(options, { sessionId, provider });
 
   const objective = await invokeDevBridge(
     options,
@@ -297,7 +288,7 @@ async function createManagedObjectiveSession(options, provider) {
         objectiveText:
           "Managed Objective 自动续跑 smoke：完成首轮、自动续跑一轮，并在预算限制下停止。",
         successCriteria: [
-          "首轮标准 agent_runtime_submit_turn 完成",
+          "首轮 agentSession/turn/start current JSON-RPC 完成",
           "空闲后自动 continuation 至少提交一次",
           "达到 maxAutoTurns 后目标进入 budget_limited",
         ],
@@ -317,27 +308,25 @@ async function createManagedObjectiveSession(options, provider) {
 
 async function submitInitialTurn(options, sessionId, workspaceId, provider) {
   const turnId = `mo-continuation-smoke-${Date.now()}-${process.pid}`;
-  await invokeDevBridge(options, "agent_runtime_submit_turn", {
-    request: {
-      message: "请只回复 MO_OK，不要解释。",
-      sessionId,
-      workspaceId,
-      eventName: `managed_objective_continuation_smoke_${turnId}`,
-      turnId,
-      turnConfig: {
-        providerPreference: provider.providerPreference,
-        modelPreference: provider.modelPreference,
-        ...(provider.providerConfig
-          ? {
-              providerConfig: provider.providerConfig,
-            }
-          : {}),
-        approvalPolicy: "never",
-        sandboxPolicy: "read-only",
-        metadata: buildInitialTurnMetadata(),
-      },
-      skipPreSubmitResume: true,
+  await startAgentSessionTurnCurrent(options, {
+    sessionId,
+    workspaceId,
+    message: "请只回复 MO_OK，不要解释。",
+    eventName: `managed_objective_continuation_smoke_${turnId}`,
+    turnId,
+    turnConfig: {
+      providerPreference: provider.providerPreference,
+      modelPreference: provider.modelPreference,
+      ...(provider.providerConfig
+        ? {
+            providerConfig: provider.providerConfig,
+          }
+        : {}),
+      approvalPolicy: "never",
+      sandboxPolicy: "read-only",
+      metadata: buildInitialTurnMetadata(),
     },
+    skipPreSubmitResume: true,
   });
   return turnId;
 }

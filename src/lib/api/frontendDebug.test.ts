@@ -14,7 +14,7 @@ describe("frontendDebug API", () => {
 
   it("应代理前端调试日志上报命令", async () => {
     vi.mocked(isDevBridgeAvailable).mockReturnValue(false);
-    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
 
     await expect(
       reportFrontendDebugLog({
@@ -37,5 +37,24 @@ describe("frontendDebug API", () => {
     );
 
     expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
+    vi.mocked(isDevBridgeAvailable).mockReturnValue(false);
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        category: "electron-diagnostic-facade",
+        source: "electron-host-diagnostic",
+      },
+    });
+
+    await expect(
+      reportFrontendDebugLog({
+        message: "AgentChatPage.loadData.start",
+        category: "agent",
+      }),
+    ).rejects.toThrow(
+      "report_frontend_debug_log 尚未接入真实前端调试日志 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
   });
 });

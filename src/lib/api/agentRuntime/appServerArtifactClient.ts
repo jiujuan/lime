@@ -1,5 +1,6 @@
 import {
   AppServerClient,
+  type AppServerArtifactReadResponse,
   type AppServerArtifactReadParams,
   type AppServerArtifactSummary,
 } from "@/lib/api/appServer";
@@ -38,6 +39,7 @@ export function createAppServerArtifactClient({
     }
 
     const response = await appServerClient.readArtifacts(params);
+    assertArtifactReadResponse(response.result);
     return projectTimelineArtifactContentFromAppServerSummaries({
       item,
       params,
@@ -58,6 +60,7 @@ export function createAppServerArtifactClient({
     }
 
     const response = await appServerClient.readArtifacts(params);
+    assertArtifactReadResponse(response.result);
     return projectArtifactPreviewContentFromAppServerSummaries({
       artifact,
       artifactPath,
@@ -70,6 +73,62 @@ export function createAppServerArtifactClient({
     readAgentRuntimeArtifactPreviewContent,
     readAgentRuntimeTimelineArtifactContent,
   };
+}
+
+function assertArtifactReadResponse(
+  value: unknown,
+): asserts value is AppServerArtifactReadResponse {
+  if (!isArtifactReadResponse(value)) {
+    throw new Error("artifact/read did not return artifact summaries");
+  }
+}
+
+function isArtifactReadResponse(
+  value: unknown,
+): value is AppServerArtifactReadResponse {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Array.isArray((value as { artifacts?: unknown }).artifacts) &&
+    (value as { artifacts: unknown[] }).artifacts.every(isArtifactSummary) &&
+    (typeof (value as { nextCursor?: unknown }).nextCursor === "undefined" ||
+      typeof (value as { nextCursor?: unknown }).nextCursor === "string")
+  );
+}
+
+function isArtifactSummary(value: unknown): value is AppServerArtifactSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const artifact = value as Record<string, unknown>;
+  return (
+    typeof artifact.artifactRef === "string" &&
+    artifact.artifactRef.length > 0 &&
+    typeof artifact.eventId === "string" &&
+    artifact.eventId.length > 0 &&
+    typeof artifact.sequence === "number" &&
+    Number.isFinite(artifact.sequence) &&
+    isArtifactContentStatus(artifact.contentStatus) &&
+    optionalString(artifact.turnId) &&
+    optionalString(artifact.artifactId) &&
+    optionalString(artifact.path) &&
+    optionalString(artifact.title) &&
+    optionalString(artifact.kind) &&
+    optionalString(artifact.status) &&
+    optionalString(artifact.content)
+  );
+}
+
+function isArtifactContentStatus(value: unknown): boolean {
+  return (
+    value === "notRequested" || value === "available" || value === "unavailable"
+  );
+}
+
+function optionalString(value: unknown): boolean {
+  return typeof value === "undefined" || typeof value === "string";
 }
 
 export function appServerArtifactReadParamsFromTimelineItem(

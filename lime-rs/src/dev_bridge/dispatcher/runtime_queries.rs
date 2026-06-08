@@ -11,27 +11,6 @@ pub(super) async fn try_handle(
     args: Option<&JsonValue>,
 ) -> Result<Option<JsonValue>, DynError> {
     let result = match cmd {
-        "execution_run_list" => {
-            let args = args_or_default(args);
-            let limit = args
-                .get("limit")
-                .and_then(|value| value.as_u64())
-                .map(|value| value as usize);
-            let offset = args
-                .get("offset")
-                .and_then(|value| value.as_u64())
-                .map(|value| value as usize);
-
-            if let Some(db) = &state.db {
-                let tracker =
-                    crate::services::execution_tracker_service::ExecutionTracker::new(db.clone());
-                serde_json::to_value(
-                    tracker.list_runs(limit.unwrap_or(50).clamp(1, 200), offset.unwrap_or(0))?,
-                )?
-            } else {
-                serde_json::json!([])
-            }
-        }
         "wechat_channel_set_runtime_model" => {
             let app_handle = require_app_handle(state)?;
             let args = args_or_default(args);

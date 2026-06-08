@@ -20,6 +20,11 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "ArtifactReadResponse",
     "FileSystemListDirectoryParams",
     "FileSystemReadFilePreviewParams",
+    "FileSystemCreateFileParams",
+    "FileSystemCreateDirectoryParams",
+    "FileSystemRenameFileParams",
+    "FileSystemDeleteFileParams",
+    "FileSystemMutationResponse",
     "FileSystemDirectoryListing",
     "FileSystemFileEntry",
     "FileSystemFilePreview",
@@ -48,13 +53,44 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "WorkspaceSkillBindingsListResponse",
     "WorkspaceRegisteredSkillsListParams",
     "WorkspaceRegisteredSkillsListResponse",
+    "AgentAppLocalPackageInspectParams",
+    "AgentAppLocalPackageInspectResponse",
+    "AgentAppFetchCloudPackageParams",
+    "AgentAppCloudReleaseDescriptor",
+    "AgentAppPackageCacheEntry",
+    "AgentAppPackageIdentity",
+    "AgentAppInstalledSaveParams",
+    "AgentAppInstalledDisabledSetParams",
     "AgentAppInstalledListResponse",
+    "AgentAppUninstallRehearsalParams",
+    "AgentAppUninstallRehearsalResponse",
+    "AgentAppUninstallRehearsalTarget",
+    "AgentAppUninstallParams",
+    "AgentAppUninstallResponse",
+    "AgentAppDeleteDataExecutionEvidence",
+    "AgentAppDeleteDataTargetEvidence",
+    "AgentAppDeleteDataPostDeleteResidualAudit",
     "AgentAppUiRuntimeStartParams",
     "AgentAppUiRuntimeStatusParams",
     "AgentAppUiRuntimeStopParams",
     "AgentAppUiRuntimeStatusResponse",
     "KnowledgeListPacksParams",
     "KnowledgeListPacksResponse",
+    "KnowledgeReadPackParams",
+    "KnowledgeReadPackResponse",
+    "KnowledgeImportSourceParams",
+    "KnowledgeImportSourceResponse",
+    "KnowledgeCompilePackParams",
+    "KnowledgeCompilePackResponse",
+    "KnowledgeSetDefaultPackParams",
+    "KnowledgeSetDefaultPackResponse",
+    "KnowledgeUpdatePackStatusParams",
+    "KnowledgeUpdatePackStatusResponse",
+    "KnowledgeResolveContextPackParams",
+    "KnowledgeResolveContextParams",
+    "KnowledgeContextResolutionResponse",
+    "KnowledgeValidateContextRunParams",
+    "KnowledgeValidateContextRunResponse",
     "AutomationSchedulerConfigReadResponse",
     "AutomationSchedulerConfigUpdateParams",
     "AutomationSchedulerConfigUpdateResponse",
@@ -81,6 +117,13 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "McpResourceListResponse",
     "ProjectMemoryReadParams",
     "ProjectMemoryReadResponse",
+    "UsageStatsRangeParams",
+    "UsageStatsSummary",
+    "UsageStatsReadResponse",
+    "UsageStatsModelUsage",
+    "UsageStatsModelRankingListResponse",
+    "UsageStatsDailyUsage",
+    "UsageStatsDailyTrendsListResponse",
     "ModelListParams",
     "ModelListResponse",
     "ModelPreferencesListResponse",
@@ -162,6 +205,10 @@ pub const METHOD_CAPABILITY_LIST: &str = "capability/list";
 pub const METHOD_ARTIFACT_READ: &str = "artifact/read";
 pub const METHOD_FILE_SYSTEM_LIST_DIRECTORY: &str = "fileSystem/listDirectory";
 pub const METHOD_FILE_SYSTEM_READ_FILE_PREVIEW: &str = "fileSystem/readFilePreview";
+pub const METHOD_FILE_SYSTEM_CREATE_FILE: &str = "fileSystem/createFile";
+pub const METHOD_FILE_SYSTEM_CREATE_DIRECTORY: &str = "fileSystem/createDirectory";
+pub const METHOD_FILE_SYSTEM_RENAME_FILE: &str = "fileSystem/renameFile";
+pub const METHOD_FILE_SYSTEM_DELETE_FILE: &str = "fileSystem/deleteFile";
 pub const METHOD_EVIDENCE_EXPORT: &str = "evidence/export";
 pub const METHOD_AGENT_SESSION_LIST: &str = "agentSession/list";
 pub const METHOD_AGENT_SESSION_UPDATE: &str = "agentSession/update";
@@ -177,11 +224,25 @@ pub const METHOD_SKILL_LIST: &str = "skill/list";
 pub const METHOD_SKILL_READ: &str = "skill/read";
 pub const METHOD_WORKSPACE_SKILL_BINDINGS_LIST: &str = "workspaceSkillBindings/list";
 pub const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST: &str = "workspaceRegisteredSkills/list";
+pub const METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT: &str = "agentAppLocalPackage/inspect";
+pub const METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD: &str = "agentAppPackage/fetchCloud";
+pub const METHOD_AGENT_APP_INSTALLED_SAVE: &str = "agentAppInstalled/save";
 pub const METHOD_AGENT_APP_INSTALLED_LIST: &str = "agentAppInstalled/list";
+pub const METHOD_AGENT_APP_INSTALLED_DISABLED_SET: &str = "agentAppInstalled/disabled/set";
+pub const METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL: &str =
+    "agentAppInstalled/uninstall/rehearsal";
+pub const METHOD_AGENT_APP_INSTALLED_UNINSTALL: &str = "agentAppInstalled/uninstall";
 pub const METHOD_AGENT_APP_UI_RUNTIME_START: &str = "agentAppUiRuntime/start";
 pub const METHOD_AGENT_APP_UI_RUNTIME_STATUS: &str = "agentAppUiRuntime/status";
 pub const METHOD_AGENT_APP_UI_RUNTIME_STOP: &str = "agentAppUiRuntime/stop";
 pub const METHOD_KNOWLEDGE_PACK_LIST: &str = "knowledgePack/list";
+pub const METHOD_KNOWLEDGE_PACK_READ: &str = "knowledgePack/read";
+pub const METHOD_KNOWLEDGE_SOURCE_IMPORT: &str = "knowledgePack/source/import";
+pub const METHOD_KNOWLEDGE_PACK_COMPILE: &str = "knowledgePack/compile";
+pub const METHOD_KNOWLEDGE_PACK_DEFAULT_SET: &str = "knowledgePack/default/set";
+pub const METHOD_KNOWLEDGE_PACK_STATUS_UPDATE: &str = "knowledgePack/status/update";
+pub const METHOD_KNOWLEDGE_CONTEXT_RESOLVE: &str = "knowledgeContext/resolve";
+pub const METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE: &str = "knowledgeContextRun/validate";
 pub const METHOD_AUTOMATION_SCHEDULER_CONFIG_READ: &str = "automationScheduler/config/read";
 pub const METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE: &str = "automationScheduler/config/update";
 pub const METHOD_AUTOMATION_SCHEDULER_STATUS: &str = "automationScheduler/status";
@@ -201,6 +262,9 @@ pub const METHOD_MCP_TOOL_LIST: &str = "mcpTool/list";
 pub const METHOD_MCP_PROMPT_LIST: &str = "mcpPrompt/list";
 pub const METHOD_MCP_RESOURCE_LIST: &str = "mcpResource/list";
 pub const METHOD_PROJECT_MEMORY_READ: &str = "projectMemory/read";
+pub const METHOD_USAGE_STATS_READ: &str = "usageStats/read";
+pub const METHOD_USAGE_STATS_MODEL_RANKING_LIST: &str = "usageStats/modelRanking/list";
+pub const METHOD_USAGE_STATS_DAILY_TRENDS_LIST: &str = "usageStats/dailyTrends/list";
 pub const METHOD_MODEL_LIST: &str = "model/list";
 pub const METHOD_MODEL_PREFERENCES_LIST: &str = "modelPreferences/list";
 pub const METHOD_MODEL_SYNC_STATE_READ: &str = "modelSyncState/read";
@@ -277,6 +341,22 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_FILE_SYSTEM_CREATE_FILE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_FILE_SYSTEM_RENAME_FILE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_FILE_SYSTEM_DELETE_FILE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_EVIDENCE_EXPORT,
         kind: AppServerMethodKind::Request,
     },
@@ -337,7 +417,31 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_INSTALLED_SAVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_AGENT_APP_INSTALLED_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_APP_INSTALLED_UNINSTALL,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -354,6 +458,34 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_KNOWLEDGE_PACK_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_KNOWLEDGE_PACK_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_KNOWLEDGE_SOURCE_IMPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_KNOWLEDGE_PACK_COMPILE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_KNOWLEDGE_PACK_DEFAULT_SET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -430,6 +562,18 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_PROJECT_MEMORY_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_USAGE_STATS_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -754,6 +898,37 @@ pub struct FileSystemReadFilePreviewParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_size: Option<usize>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemCreateFileParams {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemCreateDirectoryParams {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemRenameFileParams {
+    pub old_path: String,
+    pub new_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemDeleteFileParams {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recursive: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSystemMutationResponse {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1083,6 +1258,102 @@ pub struct WorkspaceRegisteredSkillsListResponse {
     pub skills: Vec<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppLocalPackageInspectParams {
+    pub app_dir: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppLocalPackageInspectResponse {
+    pub source_kind: String,
+    pub source_uri: String,
+    pub app_dir: String,
+    pub app_markdown: String,
+    pub manifest: serde_json::Value,
+    pub manifest_hash: String,
+    pub package_hash: String,
+    pub inspected_at: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppFetchCloudPackageParams {
+    pub descriptor: AgentAppCloudReleaseDescriptor,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppCloudReleaseDescriptor {
+    pub source_uri: String,
+    pub app_id: String,
+    pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_enablement_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel: Option<String>,
+    pub package_url: String,
+    pub package_hash: String,
+    pub manifest_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_ref: Option<String>,
+    pub loaded_at: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppPackageCacheEntry {
+    pub app_id: String,
+    pub identity: AgentAppPackageIdentity,
+    pub manifest_snapshot: serde_json::Value,
+    pub package_hash: String,
+    pub manifest_hash: String,
+    pub cache_path: String,
+    pub cached_at: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppPackageIdentity {
+    pub source_kind: String,
+    pub source_uri: String,
+    pub app_id: String,
+    pub app_version: String,
+    pub package_hash: String,
+    pub manifest_hash: String,
+    pub loaded_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_enablement_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppInstalledSaveParams {
+    pub state: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppInstalledDisabledSetParams {
+    pub app_id: String,
+    pub disabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAppInstalledListResponse {
@@ -1090,6 +1361,110 @@ pub struct AgentAppInstalledListResponse {
     pub states: Vec<serde_json::Value>,
     #[serde(default)]
     pub issues: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUninstallRehearsalParams {
+    pub app_id: String,
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUninstallRehearsalResponse {
+    pub app_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_hash: Option<String>,
+    pub mode: String,
+    pub generated_at: String,
+    pub deleted_target_count: usize,
+    pub retained_target_count: usize,
+    #[serde(default)]
+    pub targets: Vec<AgentAppUninstallRehearsalTarget>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUninstallRehearsalTarget {
+    pub kind: String,
+    pub value: String,
+    pub safe_to_delete: bool,
+    pub action: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUninstallParams {
+    pub app_id: String,
+    pub mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmation_phrase: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppUninstallResponse {
+    pub status: String,
+    pub rehearsal: AgentAppUninstallRehearsalResponse,
+    pub list: AgentAppInstalledListResponse,
+    pub removed_target_count: usize,
+    pub missing_target_count: usize,
+    #[serde(default)]
+    pub blocker_codes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delete_evidence: Option<AgentAppDeleteDataExecutionEvidence>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppDeleteDataExecutionEvidence {
+    pub status: String,
+    pub generated_at: String,
+    pub data_root: String,
+    #[serde(default)]
+    pub removed_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    #[serde(default)]
+    pub missing_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    #[serde(default)]
+    pub retained_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    #[serde(default)]
+    pub blocked_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed_target: Option<AgentAppDeleteDataTargetEvidence>,
+    #[serde(default)]
+    pub blocker_codes: Vec<String>,
+    pub post_delete_residual_audit: AgentAppDeleteDataPostDeleteResidualAudit,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppDeleteDataTargetEvidence {
+    pub kind: String,
+    pub value: String,
+    pub action: String,
+    pub reason: String,
+    pub status: String,
+    #[serde(default)]
+    pub blocker_codes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAppDeleteDataPostDeleteResidualAudit {
+    pub status: String,
+    pub checked_at: String,
+    pub checked_target_count: usize,
+    pub remaining_target_count: usize,
+    #[serde(default)]
+    pub remaining_targets: Vec<AgentAppDeleteDataTargetEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed_target: Option<AgentAppDeleteDataTargetEvidence>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1148,6 +1523,167 @@ pub struct KnowledgeListPacksResponse {
     pub root_path: String,
     #[serde(default)]
     pub packs: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeReadPackParams {
+    pub working_dir: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeReadPackResponse {
+    pub pack: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeImportSourceParams {
+    pub working_dir: String,
+    pub pack_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_file_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_text: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeImportSourceResponse {
+    pub pack: serde_json::Value,
+    pub source: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeCompilePackParams {
+    pub working_dir: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builder_runtime: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeCompilePackResponse {
+    pub pack: serde_json::Value,
+    pub selected_source_count: u32,
+    pub compiled_view: serde_json::Value,
+    pub run: serde_json::Value,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeSetDefaultPackParams {
+    pub working_dir: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeSetDefaultPackResponse {
+    pub default_pack_name: String,
+    pub default_marker_path: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeUpdatePackStatusParams {
+    pub working_dir: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeUpdatePackStatusResponse {
+    pub pack: serde_json::Value,
+    pub previous_status: String,
+    pub cleared_default: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeResolveContextPackParams {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeResolveContextParams {
+    pub working_dir: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub packs: Vec<KnowledgeResolveContextPackParams>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_chars: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation: Option<String>,
+    #[serde(default)]
+    pub write_run: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeContextResolutionResponse {
+    pub pack_name: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grounding: Option<String>,
+    #[serde(default)]
+    pub selected_views: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub selected_files: Vec<String>,
+    #[serde(default)]
+    pub source_anchors: Vec<String>,
+    #[serde(default)]
+    pub warnings: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub missing: Vec<String>,
+    pub token_estimate: u32,
+    pub fenced_context: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeValidateContextRunParams {
+    pub working_dir: String,
+    pub name: String,
+    pub run_path: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeValidateContextRunResponse {
+    pub valid: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub errors: Vec<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -1284,6 +1820,64 @@ pub struct ProjectMemoryReadParams {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMemoryReadResponse {
     pub memory: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageStatsRangeParams {
+    pub time_range: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageStatsSummary {
+    pub total_conversations: u32,
+    pub total_messages: u32,
+    pub total_tokens: u64,
+    pub total_time_minutes: u32,
+    pub monthly_conversations: u32,
+    pub monthly_messages: u32,
+    pub monthly_tokens: u64,
+    pub today_conversations: u32,
+    pub today_messages: u32,
+    pub today_tokens: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageStatsReadResponse {
+    pub stats: UsageStatsSummary,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageStatsModelUsage {
+    pub model: String,
+    pub conversations: u32,
+    pub tokens: u64,
+    pub percentage: f32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageStatsModelRankingListResponse {
+    #[serde(default)]
+    pub ranking: Vec<UsageStatsModelUsage>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageStatsDailyUsage {
+    pub date: String,
+    pub conversations: u32,
+    pub tokens: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageStatsDailyTrendsListResponse {
+    #[serde(default)]
+    pub trends: Vec<UsageStatsDailyUsage>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -2594,6 +3188,10 @@ mod tests {
                 METHOD_ARTIFACT_READ,
                 METHOD_FILE_SYSTEM_LIST_DIRECTORY,
                 METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+                METHOD_FILE_SYSTEM_CREATE_FILE,
+                METHOD_FILE_SYSTEM_CREATE_DIRECTORY,
+                METHOD_FILE_SYSTEM_RENAME_FILE,
+                METHOD_FILE_SYSTEM_DELETE_FILE,
                 METHOD_EVIDENCE_EXPORT,
                 METHOD_AGENT_SESSION_LIST,
                 METHOD_AGENT_SESSION_UPDATE,
@@ -2614,6 +3212,7 @@ mod tests {
                 METHOD_AGENT_APP_UI_RUNTIME_STATUS,
                 METHOD_AGENT_APP_UI_RUNTIME_STOP,
                 METHOD_KNOWLEDGE_PACK_LIST,
+                METHOD_KNOWLEDGE_PACK_READ,
                 METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
                 METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
                 METHOD_AUTOMATION_SCHEDULER_STATUS,

@@ -63,6 +63,32 @@ describe("logs API", () => {
     );
   });
 
+  it("日志读取遇到非数组或缺字段条目时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce([{ timestamp: "t", level: "info" }]);
+
+    await expect(getLogs()).rejects.toThrow(
+      "get_logs did not return log entries",
+    );
+    await expect(getPersistedLogsTail()).rejects.toThrow(
+      "get_persisted_logs_tail did not return log entries",
+    );
+  });
+
+  it("日志读取遇到错误 envelope 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      error: {
+        code: "COMMAND_UNSUPPORTED",
+        message: "not available",
+      },
+    });
+
+    await expect(getLogs()).rejects.toThrow(
+      "get_logs did not return log entries",
+    );
+  });
+
   it("日志清理遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {

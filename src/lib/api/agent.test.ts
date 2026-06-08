@@ -573,6 +573,7 @@ describe("Agent API 治理护栏", () => {
     mockSafeInvoke.mockResolvedValueOnce({
       sessionId: "session-runtime-replay-case",
       threadId: "thread-runtime-replay-case",
+      workspaceRoot: "/tmp/workspace",
       replayRelativeRoot:
         ".lime/harness/sessions/session-runtime-replay-case/replay",
       replayAbsoluteRoot:

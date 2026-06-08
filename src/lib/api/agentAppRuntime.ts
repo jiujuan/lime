@@ -16,13 +16,108 @@ async function invokeAgentAppRuntimeCommand<T>(
   command: string,
   request: unknown,
 ): Promise<T> {
-  const result = await safeInvoke(command, { request });
+  const result = await safeInvoke<unknown>(command, { request });
   assertNotDiagnosticFacade(
     command,
     result,
     "真实 Agent App runtime current 通道",
   );
   return result as T;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === "string";
+}
+
+function isTaskEvent(value: unknown): value is AgentAppRuntimeTaskEvent {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.eventType === "string" &&
+    typeof value.status === "string" &&
+    typeof value.message === "string" &&
+    isOptionalString(value.severity) &&
+    isOptionalString(value.turnId) &&
+    isOptionalString(value.requestId) &&
+    isOptionalString(value.toolName) &&
+    isOptionalString(value.evidenceRef) &&
+    isOptionalString(value.artifactRef) &&
+    isOptionalString(value.occurredAt)
+  );
+}
+
+function assertStartTaskResult(
+  command: string,
+  value: unknown,
+): asserts value is AgentAppRuntimeStartTaskResult {
+  if (
+    !isRecord(value) ||
+    typeof value.appId !== "string" ||
+    !isOptionalString(value.entryKey) ||
+    typeof value.taskId !== "string" ||
+    typeof value.traceId !== "string" ||
+    typeof value.taskKind !== "string" ||
+    typeof value.sessionId !== "string" ||
+    typeof value.turnId !== "string" ||
+    typeof value.eventName !== "string" ||
+    value.status !== "accepted" ||
+    typeof value.submittedAt !== "string"
+  ) {
+    throw new Error(`${command} did not return accepted task result`);
+  }
+}
+
+function assertCancelTaskResult(
+  command: string,
+  value: unknown,
+): asserts value is AgentAppRuntimeCancelTaskResult {
+  if (
+    !isRecord(value) ||
+    typeof value.appId !== "string" ||
+    typeof value.taskId !== "string" ||
+    typeof value.sessionId !== "string" ||
+    typeof value.cancelled !== "boolean" ||
+    (value.status !== "cancelled" && value.status !== "not_running")
+  ) {
+    throw new Error(`${command} did not return cancel task result`);
+  }
+}
+
+function assertTaskSnapshot(
+  command: string,
+  value: unknown,
+): asserts value is AgentAppRuntimeTaskSnapshot {
+  if (
+    !isRecord(value) ||
+    typeof value.appId !== "string" ||
+    typeof value.taskId !== "string" ||
+    typeof value.sessionId !== "string" ||
+    value.status !== "thread_read_available" ||
+    typeof value.taskStatus !== "string" ||
+    !Array.isArray(value.taskEvents) ||
+    !value.taskEvents.every(isTaskEvent) ||
+    value.threadRead === undefined
+  ) {
+    throw new Error(`${command} did not return task snapshot`);
+  }
+}
+
+function assertSubmitHostResponseResult(
+  command: string,
+  value: unknown,
+): asserts value is AgentAppRuntimeSubmitHostResponseResult {
+  if (
+    !isRecord(value) ||
+    typeof value.appId !== "string" ||
+    typeof value.taskId !== "string" ||
+    value.status !== "submitted"
+  ) {
+    throw new Error(`${command} did not return submitted host response result`);
+  }
 }
 
 export interface AgentAppRuntimeStartTaskRequest {
@@ -126,35 +221,35 @@ export interface AgentAppRuntimeSubmitHostResponseResult {
 export async function startAgentAppRuntimeTask(
   request: AgentAppRuntimeStartTaskRequest,
 ): Promise<AgentAppRuntimeStartTaskResult> {
-  return invokeAgentAppRuntimeCommand<AgentAppRuntimeStartTaskResult>(
-    AGENT_APP_RUNTIME_COMMANDS.startTask,
-    request,
-  );
+  const command = AGENT_APP_RUNTIME_COMMANDS.startTask;
+  const result = await invokeAgentAppRuntimeCommand<unknown>(command, request);
+  assertStartTaskResult(command, result);
+  return result;
 }
 
 export async function cancelAgentAppRuntimeTask(
   request: AgentAppRuntimeCancelTaskRequest,
 ): Promise<AgentAppRuntimeCancelTaskResult> {
-  return invokeAgentAppRuntimeCommand<AgentAppRuntimeCancelTaskResult>(
-    AGENT_APP_RUNTIME_COMMANDS.cancelTask,
-    request,
-  );
+  const command = AGENT_APP_RUNTIME_COMMANDS.cancelTask;
+  const result = await invokeAgentAppRuntimeCommand<unknown>(command, request);
+  assertCancelTaskResult(command, result);
+  return result;
 }
 
 export async function getAgentAppRuntimeTask(
   request: AgentAppRuntimeGetTaskRequest,
 ): Promise<AgentAppRuntimeTaskSnapshot> {
-  return invokeAgentAppRuntimeCommand<AgentAppRuntimeTaskSnapshot>(
-    AGENT_APP_RUNTIME_COMMANDS.getTask,
-    request,
-  );
+  const command = AGENT_APP_RUNTIME_COMMANDS.getTask;
+  const result = await invokeAgentAppRuntimeCommand<unknown>(command, request);
+  assertTaskSnapshot(command, result);
+  return result;
 }
 
 export async function submitAgentAppRuntimeHostResponse(
   request: AgentAppRuntimeSubmitHostResponseRequest,
 ): Promise<AgentAppRuntimeSubmitHostResponseResult> {
-  return invokeAgentAppRuntimeCommand<AgentAppRuntimeSubmitHostResponseResult>(
-    AGENT_APP_RUNTIME_COMMANDS.submitHostResponse,
-    request,
-  );
+  const command = AGENT_APP_RUNTIME_COMMANDS.submitHostResponse;
+  const result = await invokeAgentAppRuntimeCommand<unknown>(command, request);
+  assertSubmitHostResponseResult(command, result);
+  return result;
 }

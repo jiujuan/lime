@@ -26,7 +26,7 @@ function appServerClientMock(): AppServerSessionReadClient {
       },
       response: {
         id: 1,
-        result: {},
+        result: {} as never,
       },
       notifications: [],
       messages: [],
@@ -69,5 +69,62 @@ describe("appServerReadModelClient", () => {
     );
 
     expect(appServerClient.readSession).not.toHaveBeenCalled();
+  });
+
+  it("agentSession/read 返回假成功 envelope 时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        success: true,
+      } as never,
+      response: {
+        id: 1,
+        result: {} as never,
+      },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerReadModelClient({ appServerClient });
+
+    await expect(
+      client.getAgentRuntimeThreadRead("session-1"),
+    ).rejects.toThrow("agentSession/read did not return session read model");
+  });
+
+  it("agentSession/read 返回错误 turn 状态时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.readSession).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:02.000Z",
+        },
+        turns: [
+          {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "almost_done",
+          },
+        ],
+      } as never,
+      response: {
+        id: 1,
+        result: {} as never,
+      },
+      notifications: [],
+      messages: [],
+    });
+    const client = createAppServerReadModelClient({ appServerClient });
+
+    await expect(
+      client.getAgentRuntimeThreadRead("session-1"),
+    ).rejects.toThrow("agentSession/read did not return session read model");
   });
 });

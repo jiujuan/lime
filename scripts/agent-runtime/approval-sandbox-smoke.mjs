@@ -10,6 +10,12 @@ import {
   renderApprovalSandboxTranscriptLines,
 } from "../lib/agent-runtime-approval-sandbox-smoke-core.mjs";
 import {
+  createAgentSessionCurrent,
+  readAgentRuntimeThreadCurrent,
+  respondAgentSessionActionCurrent,
+  startAgentSessionTurnCurrent,
+} from "../lib/managed-objective-continuation-smoke-core.mjs";
+import {
   assertLiveProviderSmokeAllowed,
   liveProviderSmokeAllowed,
 } from "../lib/live-provider-smoke-gate.mjs";
@@ -485,9 +491,7 @@ async function waitForThreadRead(options, sessionId, predicate, label) {
   let lastSummary = null;
 
   while (Date.now() - startedAt < options.timeoutMs) {
-    const threadRead = await invoke(options, "agent_runtime_get_thread_read", {
-      sessionId,
-    });
+    const threadRead = await readAgentRuntimeThreadCurrent(options, sessionId);
     lastSummary = summarizeThreadRead(threadRead);
     if (predicate(threadRead, lastSummary)) {
       return { threadRead, summary: lastSummary };
@@ -532,11 +536,10 @@ async function runPermissionDecisionFlow(
   const confirmed = decision === "resolved";
   const responseLabel = confirmed ? "允许本次执行" : "拒绝";
   const submittedStrategy = "react";
-  const sessionId = await invoke(options, "agent_runtime_create_session", {
+  const sessionId = await createAgentSessionCurrent(options, {
     workspaceId,
-    name: `Agent QC approval ${decision} ${Date.now()}`,
+    title: `Agent QC approval ${decision} ${Date.now()}`,
     executionStrategy: submittedStrategy,
-    runStartHooks: false,
     metadata: {
       harness: {
         hiddenFromUserRecents: true,
@@ -565,17 +568,15 @@ async function runPermissionDecisionFlow(
     turnConfig.model_preference = providerPreference.modelPreference;
   }
 
-  await invoke(options, "agent_runtime_submit_turn", {
-    request: {
-      message:
-        "Agent QC runtime permission confirmation smoke：应在模型执行前创建真实权限确认请求。",
-      session_id: sessionId,
-      workspace_id: workspaceId,
-      event_name: eventName,
-      turn_id: turnId,
-      turn_config: turnConfig,
-      skip_pre_submit_resume: true,
-    },
+  await startAgentSessionTurnCurrent(options, {
+    message:
+      "Agent QC runtime permission confirmation smoke：应在模型执行前创建真实权限确认请求。",
+    sessionId,
+    workspaceId,
+    eventName,
+    turnId,
+    turnConfig,
+    skipPreSubmitResume: true,
   });
 
   const requested = await waitForThreadRead(
@@ -591,20 +592,18 @@ async function runPermissionDecisionFlow(
   const requestId = requested.summary.confirmationRequestId;
   assert(requestId, `${decision} flow 缺少 confirmationRequestId`);
 
-  await invoke(options, "agent_runtime_respond_action", {
-    request: {
+  await respondAgentSessionActionCurrent(options, {
+    sessionId,
+    requestId,
+    actionType: "elicitation",
+    confirmed,
+    response: JSON.stringify({ answer: responseLabel }),
+    userData: { answer: responseLabel },
+    eventName,
+    actionScope: {
       session_id: sessionId,
-      request_id: requestId,
-      action_type: "elicitation",
-      confirmed,
-      response: JSON.stringify({ answer: responseLabel }),
-      user_data: { answer: responseLabel },
-      event_name: eventName,
-      action_scope: {
-        session_id: sessionId,
-        thread_id: sessionId,
-        turn_id: turnId,
-      },
+      thread_id: sessionId,
+      turn_id: turnId,
     },
   });
 

@@ -14,13 +14,33 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
+function createMaterial(id: string) {
+  return {
+    id,
+    projectId: "project-1",
+    name: `素材 ${id}`,
+    type: "image" as const,
+    tags: [],
+    createdAt: 1,
+  };
+}
+
+function createMetadata(materialId: string) {
+  return {
+    materialId,
+    colors: ["#fff"],
+    createdAt: 1,
+    updatedAt: 2,
+  };
+}
+
 describe("galleryMaterials API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("应获取单个素材", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ id: "m1", type: "image" });
+    vi.mocked(safeInvoke).mockResolvedValueOnce(createMaterial("m1"));
 
     await expect(getGalleryMaterial("m1")).resolves.toEqual(
       expect.objectContaining({ id: "m1" }),
@@ -32,8 +52,8 @@ describe("galleryMaterials API", () => {
 
   it("应代理素材元数据写操作", async () => {
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ materialId: "m2" })
-      .mockResolvedValueOnce({ materialId: "m2" })
+      .mockResolvedValueOnce(createMetadata("m2"))
+      .mockResolvedValueOnce(createMetadata("m2"))
       .mockResolvedValueOnce(undefined);
 
     await expect(
@@ -53,9 +73,9 @@ describe("galleryMaterials API", () => {
 
   it("应代理不同维度的素材查询", async () => {
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([{ id: "img-1" }])
-      .mockResolvedValueOnce([{ id: "layout-1" }])
-      .mockResolvedValueOnce([{ id: "color-1" }]);
+      .mockResolvedValueOnce([createMaterial("img-1")])
+      .mockResolvedValueOnce([createMaterial("layout-1")])
+      .mockResolvedValueOnce([createMaterial("color-1")]);
 
     await expect(
       listGalleryMaterialsByImageCategory("project-1", "background"),
@@ -93,6 +113,55 @@ describe("galleryMaterials API", () => {
       listGalleryMaterialsByImageCategory("project-degraded"),
     ).rejects.toThrow(
       "list_gallery_materials_by_image_category 尚未接入真实图库材料 current 通道",
+    );
+  });
+
+  it("收到非图库素材形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ id: "m1", type: "image" });
+
+    await expect(getGalleryMaterial("m1")).rejects.toThrow(
+      "get_gallery_material did not return gallery material",
+    );
+  });
+
+  it("收到非图库元数据或 delete 假结果时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ materialId: "m2" })
+      .mockResolvedValueOnce({
+        materialId: "m2",
+        colors: [],
+        createdAt: 1,
+      })
+      .mockResolvedValueOnce({ success: true });
+
+    await expect(
+      createGalleryMetadata({
+        materialId: "m2",
+        colors: ["#fff"],
+      }),
+    ).rejects.toThrow(
+      "create_gallery_material_metadata did not return gallery material metadata",
+    );
+    await expect(
+      updateGalleryMetadata("m2", {
+        materialId: "m2",
+        colors: ["#000"],
+      }),
+    ).rejects.toThrow(
+      "update_gallery_material_metadata did not return gallery material metadata",
+    );
+    await expect(deleteGalleryMetadata("m2")).rejects.toThrow(
+      "delete_gallery_material_metadata did not return void result",
+    );
+  });
+
+  it("收到非图库素材列表形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce([{ id: "img-1" }]);
+
+    await expect(
+      listGalleryMaterialsByImageCategory("project-1"),
+    ).rejects.toThrow(
+      "list_gallery_materials_by_image_category did not return gallery materials",
     );
   });
 });

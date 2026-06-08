@@ -10,4 +10,13 @@ describe("mcpMocks", () => {
     expect(mcpMocks).not.toHaveProperty("mcp_list_prompts");
     expect(mcpMocks).not.toHaveProperty("mcp_list_resources");
   });
+
+  it("MCP 使用面不再注册 desktop-host 默认 mock", () => {
+    expect(mcpMocks).not.toHaveProperty("mcp_list_tools_for_context");
+    expect(mcpMocks).not.toHaveProperty("mcp_search_tools");
+    expect(mcpMocks).not.toHaveProperty("mcp_call_tool");
+    expect(mcpMocks).not.toHaveProperty("mcp_call_tool_with_caller");
+    expect(mcpMocks).not.toHaveProperty("mcp_get_prompt");
+    expect(mcpMocks).not.toHaveProperty("mcp_read_resource");
+  });
 });

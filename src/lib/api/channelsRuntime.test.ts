@@ -52,6 +52,28 @@ describe("channelsRuntime API", () => {
     );
   });
 
+  it("应校验渠道状态返回形态", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        channel: "wechat",
+        status: {
+          running_accounts: 0,
+          accounts: [],
+        },
+      })
+      .mockResolvedValueOnce({ success: true });
+
+    await expect(gatewayChannelStatus({ channel: "wechat" })).resolves.toEqual(
+      expect.objectContaining({
+        channel: "wechat",
+        status: expect.objectContaining({ running_accounts: 0 }),
+      }),
+    );
+    await expect(gatewayChannelStatus({ channel: "wechat" })).rejects.toThrow(
+      "gateway_channel_status 未返回有效渠道运行状态",
+    );
+  });
+
   it("渠道状态遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {
@@ -82,6 +104,34 @@ describe("channelsRuntime API", () => {
 
     await expect(wechatChannelListAccounts()).rejects.toThrow(
       "wechat_channel_list_accounts 尚未接入真实 Channels current 通道，收到 electron-empty-diagnostic 诊断返回。",
+    );
+  });
+
+  it("应校验微信账号列表返回形态", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce([
+        {
+          accountId: "wechat-default",
+          enabled: true,
+          hasToken: false,
+        },
+      ])
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce([
+        {
+          accountId: "wechat-default",
+          enabled: true,
+        },
+      ]);
+
+    await expect(wechatChannelListAccounts()).resolves.toEqual([
+      expect.objectContaining({ accountId: "wechat-default" }),
+    ]);
+    await expect(wechatChannelListAccounts()).rejects.toThrow(
+      "wechat_channel_list_accounts 未返回有效微信账号列表",
+    );
+    await expect(wechatChannelListAccounts()).rejects.toThrow(
+      "wechat_channel_list_accounts 未返回有效微信账号列表",
     );
   });
 

@@ -70,6 +70,7 @@ import {
   isPrimaryActionDisabled,
   isUiEntry,
   paginateAppCenterItems,
+  resolveAppIconSrc,
   type AppCenterItem,
   type AppCenterSourceFilter,
   type AppCenterSourceKind,
@@ -391,9 +392,6 @@ export function AgentAppsPage({
     if (!state) {
       return;
     }
-    toast.success(t("agentApp.apps.toast.installed"), {
-      description: resolveInstalledAgentAppDisplayName(state),
-    });
     setInstallReview(null);
     setMoreInfoOpen(false);
     dispatchAgentAppsChanged();
@@ -849,6 +847,11 @@ export function AgentAppsPage({
     if (!installReview) {
       return null;
     }
+    const reviewIconSrc = resolveAppIconSrc({
+      title: installReview.review.displayName,
+      installedState: installReview.state,
+      convertLocalFileSrc,
+    });
 
     return (
       <div
@@ -888,15 +891,28 @@ export function AgentAppsPage({
 
             <div className="mt-4 rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] p-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-base font-semibold text-[color:var(--lime-text-strong)]">
-                    {installReview.review.displayName}
-                  </p>
-                  <p className="mt-1 text-sm text-[color:var(--lime-text-muted)]">
-                    {t("agentApp.apps.center.detail.versionLine", {
-                      version: installReview.review.version,
-                    })}
-                  </p>
+                <div className="flex min-w-0 items-start gap-3">
+                  <div
+                    className="size-12 shrink-0 overflow-hidden rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)]"
+                    data-testid={`agent-apps-install-review-icon-${installReview.review.appId}`}
+                  >
+                    <img
+                      className="h-full w-full object-cover"
+                      src={reviewIconSrc}
+                      alt={installReview.review.displayName}
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold text-[color:var(--lime-text-strong)]">
+                      {installReview.review.displayName}
+                    </p>
+                    <p className="mt-1 text-sm text-[color:var(--lime-text-muted)]">
+                      {t("agentApp.apps.center.detail.versionLine", {
+                        version: installReview.review.version,
+                      })}
+                    </p>
+                  </div>
                 </div>
                 <span
                   className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${sourceStateClass(

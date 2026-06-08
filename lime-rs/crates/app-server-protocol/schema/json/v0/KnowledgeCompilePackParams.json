@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "builderRuntime": true,
+    "name": {
+      "type": "string"
+    },
+    "workingDir": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "workingDir"
+  ],
+  "title": "KnowledgeCompilePackParams",
+  "type": "object"
+}

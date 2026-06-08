@@ -151,15 +151,11 @@ describe("desktop-host/core invoke", () => {
     }
   });
 
-  it("默认项目 mock 应返回可规范化的工作区对象", async () => {
+  it("默认项目 mock 已退场并 fail closed", async () => {
     await expect(
       invokeMockOnly("get_or_create_default_project"),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        id: "workspace-default",
-        workspace_type: "general",
-        is_default: true,
-      }),
+    ).rejects.toThrow(
+      '未注册命令 "get_or_create_default_project"',
     );
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
@@ -292,174 +288,25 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("图层设计工程目录 mock 应支持保存与读取闭环", async () => {
-    const designJson = JSON.stringify({
-      schemaVersion: "2026-05-05.p1",
-      id: "mock-design",
-      title: "Mock 图层设计",
-      status: "draft",
-      canvas: {
-        width: 1080,
-        height: 1440,
-        backgroundColor: "#ffffff",
-      },
-      layers: [
-        {
-          id: "layer-title",
-          name: "主标题",
-          type: "text",
-          visible: true,
-          locked: false,
-          opacity: 1,
-          zIndex: 1,
-          transform: { x: 120, y: 160, width: 360, height: 96, rotation: 0 },
-          content: { text: "Smoke 标题" },
-        },
-      ],
-      assets: [],
-      editHistory: [],
-      createdAt: new Date(0).toISOString(),
-      updatedAt: new Date(0).toISOString(),
-    });
+  it("图层设计 desktop-host 默认 mock 已退场并 fail closed", async () => {
+    const removedLayeredDesignMockCommands = [
+      "save_layered_design_project_export",
+      "read_layered_design_project_export",
+      "recognize_layered_design_text",
+      "analyze_layered_design_flat_image",
+    ];
 
-    await expect(
-      invokeMockOnly("save_layered_design_project_export", {
-        request: {
-          projectRootPath: "/mock/workspace",
-          documentId: "mock-design",
-          title: "Mock 图层设计",
-          files: [
-            {
-              relativePath: "design.json",
-              mimeType: "application/json",
-              encoding: "utf8",
-              content: designJson,
-            },
-            {
-              relativePath: "assets/asset-subject.png",
-              mimeType: "image/png",
-              encoding: "base64",
-              content: "YXNzZXQ=",
-            },
-          ],
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        exportDirectoryRelativePath:
-          ".lime/layered-designs/mock-design.layered-design",
-        fileCount: 2,
-        assetCount: 1,
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("read_layered_design_project_export", {
-        request: {
-          projectRootPath: "/mock/workspace",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        exportDirectoryRelativePath:
-          ".lime/layered-designs/mock-design.layered-design",
-        designJson: expect.stringContaining('"layer-title"'),
-        fileCount: 2,
-        assetCount: 1,
-      }),
-    );
+    for (const command of removedLayeredDesignMockCommands) {
+      await expect(
+        invokeMockOnly(command, {
+          request: {
+            projectRootPath: "/mock/workspace",
+          },
+        }),
+      ).rejects.toThrow(`未注册命令 "${command}"`);
+    }
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("图层设计 OCR mock 应保持可回退但不伪造文字", async () => {
-    await expect(
-      invokeMockOnly("recognize_layered_design_text", {
-        request: {
-          imageSrc: "data:image/png;base64,ZmFrZQ==",
-          width: 320,
-          height: 120,
-          candidateId: "headline-candidate",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        supported: false,
-        engine: "mock-native-ocr",
-        blocks: [],
-      }),
-    );
-
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("图层设计工程目录 mock 应把远程引用资产计入缓存后的文件数", async () => {
-    await expect(
-      invokeMockOnly("save_layered_design_project_export", {
-        request: {
-          projectRootPath: "/mock/workspace",
-          documentId: "mock-remote-design",
-          title: "Mock 远程图层设计",
-          files: [
-            {
-              relativePath: "design.json",
-              mimeType: "application/json",
-              encoding: "utf8",
-              content:
-                '{"assets":[{"id":"remote-asset","src":"https://example.com/hero.png"}]}',
-            },
-            {
-              relativePath: "export-manifest.json",
-              mimeType: "application/json",
-              encoding: "utf8",
-              content:
-                '{"assets":[{"id":"remote-asset","source":"reference","originalSrc":"https://example.com/hero.png"}]}',
-            },
-            {
-              relativePath: "psd-like-manifest.json",
-              mimeType: "application/json",
-              encoding: "utf8",
-              content:
-                '{"projectionKind":"psd-like-layer-stack","quality":{"extractionQuality":{"level":"review"}}}',
-            },
-            {
-              relativePath: "preview.png",
-              mimeType: "image/png",
-              encoding: "base64",
-              content: "cHJldmlldy1wbmc=",
-            },
-          ],
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        exportDirectoryRelativePath:
-          ".lime/layered-designs/mock-remote-design.layered-design",
-        fileCount: 5,
-        assetCount: 1,
-        remoteReferenceAssetCount: 1,
-        cachedRemoteAssetCount: 1,
-        uncachedRemoteAssetCount: 0,
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("read_layered_design_project_export", {
-        request: {
-          projectRootPath: "/mock/workspace",
-          exportDirectoryRelativePath:
-            ".lime/layered-designs/mock-remote-design.layered-design",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        psdLikeManifestPath:
-          "/mock/workspace/.lime/layered-designs/mock-remote-design.layered-design/psd-like-manifest.json",
-        psdLikeManifestJson: expect.stringContaining(
-          '"projectionKind":"psd-like-layer-stack"',
-        ),
-      }),
-    );
   });
 
   it("Capability Draft mock 应对齐只读 HTTP gate 与 dry-run evidence", async () => {
@@ -1074,155 +921,29 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("知识库显式 mock 应保持导入后的列表与详情一致", async () => {
-    await expect(
-      invokeMockOnly("knowledge_list_packs", {
-        request: {
-          workingDir: "/tmp/lime-knowledge-e2e",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        packs: [],
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("knowledge_import_source", {
-        request: {
-          workingDir: "/tmp/lime-knowledge-e2e",
-          packName: "brand-product-demo",
-          description: "品牌产品知识包",
-          packType: "brand-product",
-          sourceFileName: "source.md",
-          sourceText: "产品面向内容团队，禁止编造价格。",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        pack: expect.objectContaining({
-          metadata: expect.objectContaining({
+  it("知识库 legacy 显式 mock 已退场", async () => {
+    for (const command of [
+      "knowledge_list_packs",
+      "knowledge_import_source",
+      "knowledge_get_pack",
+      "knowledge_update_pack_status",
+      "knowledge_resolve_context",
+      "knowledge_validate_context_run",
+      "knowledge_set_default_pack",
+      "knowledge_compile_pack",
+    ]) {
+      await expect(
+        invokeMockOnly(command, {
+          request: {
+            workingDir: "/tmp/lime-knowledge-e2e",
             name: "brand-product-demo",
-            description: "品牌产品知识包",
-            status: "needs-review",
-            type: "brand-product",
-            metadata: expect.objectContaining({
-              limeTemplate: "brand-product",
-            }),
-          }),
-        }),
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("knowledge_list_packs", {
-        request: {
-          workingDir: "/tmp/lime-knowledge-e2e",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        packs: expect.arrayContaining([
-          expect.objectContaining({
-            metadata: expect.objectContaining({
-              name: "brand-product-demo",
-              description: "品牌产品知识包",
-            }),
-          }),
-        ]),
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("knowledge_get_pack", {
-        request: {
-          workingDir: "/tmp/lime-knowledge-e2e",
-          name: "brand-product-demo",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          name: "brand-product-demo",
-          description: "品牌产品知识包",
-        }),
-        sources: expect.arrayContaining([
-          expect.objectContaining({
-            relativePath: "sources/source.md",
-            preview: "产品面向内容团队，禁止编造价格。",
-          }),
-        ]),
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("knowledge_update_pack_status", {
-        request: {
-          workingDir: "/tmp/lime-knowledge-e2e",
-          name: "brand-product-demo",
-          status: "ready",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        previousStatus: "needs-review",
-        clearedDefault: false,
-        pack: expect.objectContaining({
-          metadata: expect.objectContaining({
+            packName: "brand-product-demo",
             status: "ready",
-            trust: "user-confirmed",
-          }),
+            runPath: "runs/context-mock.json",
+          },
         }),
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("knowledge_resolve_context", {
-        request: {
-          workingDir: "/tmp/lime-knowledge-e2e",
-          name: "brand-product-demo",
-          task: "写产品介绍",
-          writeRun: true,
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        packName: "brand-product-demo",
-        selectedFiles: ["compiled/splits/brand-product-demo/应用指南.md"],
-        sourceAnchors: ["sources/source.md"],
-        warnings: [],
-        runId: expect.stringContaining("context-"),
-        runPath: expect.stringContaining("/runs/context-"),
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("knowledge_validate_context_run", {
-        request: {
-          workingDir: "/tmp/lime-knowledge-e2e",
-          name: "brand-product-demo",
-          runPath: "runs/context-mock.json",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        valid: true,
-        runId: "context-mock",
-      }),
-    );
-
-    await expect(
-      invokeMockOnly("knowledge_set_default_pack", {
-        request: {
-          workingDir: "/tmp/lime-knowledge-e2e",
-          name: "brand-product-demo",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        defaultPackName: "brand-product-demo",
-      }),
-    );
+      ).rejects.toThrow(`未注册命令 "${command}"`);
+    }
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
@@ -1362,7 +1083,7 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("review decision mock 应阻止 denied 权限确认保存为 accepted", async () => {
+  it("review decision 默认 mock 已退场并 fail closed", async () => {
     await expect(
       invokeMockOnly("agent_runtime_save_review_decision", {
         request: {
@@ -1372,105 +1093,8 @@ describe("desktop-host/core invoke", () => {
           risk_level: "low",
         },
       }),
-    ).rejects.toThrow("真实权限确认已被拒绝");
-
-    await expect(
-      invokeMockOnly("agent_runtime_save_review_decision", {
-        request: {
-          session_id: "mock-session",
-          decision_status: "rejected",
-          decision_summary: "权限确认已拒绝，拒绝本次交付。",
-          risk_level: "high",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        permission_confirmation_status: "denied",
-        decision: expect.objectContaining({
-          decision_status: "rejected",
-        }),
-      }),
-    );
-  });
-
-  it("review decision mock 应阻止未解决权限确认保存为 accepted", async () => {
-    await expect(
-      invokeMockOnly("agent_runtime_save_review_decision", {
-        request: {
-          session_id: "mock-session",
-          decision_status: "accepted",
-          decision_summary: "错误接受尚未发起审批的权限确认。",
-          risk_level: "low",
-          permission_status: "requires_confirmation",
-          permission_confirmation_status: "not_requested",
-          permission_confirmation_source: "declared_profile_only",
-        },
-      }),
-    ).rejects.toThrow("权限确认尚未解决");
-
-    await expect(
-      invokeMockOnly("agent_runtime_save_review_decision", {
-        request: {
-          session_id: "mock-session",
-          decision_status: "rejected",
-          decision_summary: "权限确认未解决，拒绝本次交付。",
-          risk_level: "high",
-          permission_status: "requires_confirmation",
-          permission_confirmation_status: "not_requested",
-          permission_confirmation_source: "declared_profile_only",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        permission_confirmation_status: "not_requested",
-        permission_confirmation_source: "declared_profile_only",
-        decision: expect.objectContaining({
-          decision_status: "rejected",
-        }),
-      }),
-    );
-  });
-
-  it("review decision mock 应阻止用户锁定能力缺口保存为 accepted", async () => {
-    await expect(
-      invokeMockOnly("agent_runtime_save_review_decision", {
-        request: {
-          session_id: "mock-session",
-          decision_status: "accepted",
-          decision_summary: "错误接受模型锁定能力缺口。",
-          risk_level: "low",
-          limit_status: "user_locked_capability_gap",
-          capability_gap: "browser_reasoning_candidate_missing",
-          permission_status: "not_required",
-          permission_confirmation_status: "resolved",
-        },
-      }),
-    ).rejects.toThrow("显式用户模型锁定");
-
-    await expect(
-      invokeMockOnly("agent_runtime_save_review_decision", {
-        request: {
-          session_id: "mock-session",
-          decision_status: "rejected",
-          decision_summary: "模型锁定能力缺口未解决，拒绝本次交付。",
-          risk_level: "high",
-          limit_status: "user_locked_capability_gap",
-          capability_gap: "browser_reasoning_candidate_missing",
-          permission_status: "not_required",
-          permission_confirmation_status: "resolved",
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        limit_status: "user_locked_capability_gap",
-        capability_gap: "browser_reasoning_candidate_missing",
-        user_locked_capability_summary: expect.stringContaining(
-          "显式用户模型锁定不满足当前 execution profile",
-        ),
-        decision: expect.objectContaining({
-          decision_status: "rejected",
-        }),
-      }),
+    ).rejects.toThrow(
+      "agent_runtime_save_review_decision 仍属于 P9 Agent Runtime review decision legacy residual",
     );
   });
 
@@ -1535,9 +1159,11 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("显式 mock 入口可返回默认工作区数据", async () => {
-    await expect(invokeMockOnly("workspace_get_projects_root")).resolves.toBe(
-      "/mock/workspace/projects",
+  it("显式 mock 入口可返回默认工作区数据已退场", async () => {
+    await expect(
+      invokeMockOnly("workspace_get_projects_root"),
+    ).rejects.toThrow(
+      '未注册命令 "workspace_get_projects_root"',
     );
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });

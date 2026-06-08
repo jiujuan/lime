@@ -33,9 +33,6 @@ pub async fn try_handle(
                 crate::commands::agent_app_cmd::agent_app_save_installed_state(request).await?,
             )?
         }
-        "agent_app_list_installed" => {
-            serde_json::to_value(crate::commands::agent_app_cmd::agent_app_list_installed().await?)?
-        }
         "agent_app_set_disabled" => {
             let request = parse_nested_arg(&args_or_default(args), "request")?;
             serde_json::to_value(

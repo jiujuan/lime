@@ -149,7 +149,9 @@ function getCloudAppIconCandidate(
     normalizeOptionalText(cloudApp.logoUrl) ??
     getPresentationString(cloudApp.presentation, ["iconUrl", "logoUrl"]) ??
     normalizeOptionalText(cloudApp.icon) ??
-    getPresentationString(cloudApp.presentation, ["icon"])
+    getPresentationString(cloudApp.presentation, ["icon"]) ??
+    normalizeOptionalText(cloudApp.logo) ??
+    getPresentationString(cloudApp.presentation, ["logo"])
   );
 }
 
@@ -165,11 +167,13 @@ function getInstalledAppIconCandidate(
       "iconUrl",
       "logoUrl",
       "icon",
+      "logo",
     ]) ??
     getPresentationString(state.manifest.presentation, [
       "iconUrl",
       "logoUrl",
       "icon",
+      "logo",
     ])
   );
 }

@@ -78,19 +78,180 @@ export interface SessionDetail {
   files: SessionFile[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function assertSessionMeta(
+  command: string,
+  value: unknown,
+): asserts value is SessionMeta {
+  if (
+    !isRecord(value) ||
+    typeof value.sessionId !== "string" ||
+    !isFiniteNumber(value.createdAt) ||
+    !isFiniteNumber(value.updatedAt) ||
+    !isFiniteNumber(value.fileCount) ||
+    !isFiniteNumber(value.totalSize)
+  ) {
+    throw new Error(`${command} did not return session metadata`);
+  }
+}
+
+function assertSessionFile(
+  command: string,
+  value: unknown,
+): asserts value is SessionFile {
+  if (
+    !isRecord(value) ||
+    typeof value.name !== "string" ||
+    typeof value.fileType !== "string" ||
+    !isFiniteNumber(value.size) ||
+    !isFiniteNumber(value.createdAt) ||
+    !isFiniteNumber(value.updatedAt)
+  ) {
+    throw new Error(`${command} did not return a session file`);
+  }
+}
+
+function assertSessionSummary(
+  command: string,
+  value: unknown,
+): asserts value is SessionSummary {
+  if (
+    !isRecord(value) ||
+    typeof value.sessionId !== "string" ||
+    !isFiniteNumber(value.createdAt) ||
+    !isFiniteNumber(value.updatedAt) ||
+    !isFiniteNumber(value.fileCount)
+  ) {
+    throw new Error(`${command} did not return a session summary`);
+  }
+}
+
+function assertSessionDetail(
+  command: string,
+  value: unknown,
+): asserts value is SessionDetail {
+  if (!isRecord(value)) {
+    throw new Error(`${command} did not return session detail`);
+  }
+  assertSessionMeta(command, value.meta);
+  if (!Array.isArray(value.files)) {
+    throw new Error(`${command} did not return session detail files`);
+  }
+  value.files.forEach((file, index) => {
+    assertSessionFile(`${command}.files[${index}]`, file);
+  });
+}
+
+function assertStringResult(command: string, value: unknown): asserts value is string {
+  if (typeof value !== "string") {
+    throw new Error(`${command} did not return a string`);
+  }
+}
+
+function assertBooleanResult(
+  command: string,
+  value: unknown,
+): asserts value is boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${command} did not return a boolean`);
+  }
+}
+
+function assertNumberResult(command: string, value: unknown): asserts value is number {
+  if (!isFiniteNumber(value)) {
+    throw new Error(`${command} did not return a number`);
+  }
+}
+
+function assertImportDocumentToSessionResult(
+  command: string,
+  value: unknown,
+): asserts value is [string, string] {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 2 ||
+    typeof value[0] !== "string" ||
+    typeof value[1] !== "string"
+  ) {
+    throw new Error(`${command} did not return imported document tuple`);
+  }
+}
+
+function assertSessionFilesCommandResult(
+  command: string,
+  value: unknown,
+): void {
+  switch (command) {
+    case "session_files_create":
+    case "session_files_get_or_create":
+    case "session_files_update_meta":
+      assertSessionMeta(command, value);
+      return;
+    case "session_files_exists":
+      assertBooleanResult(command, value);
+      return;
+    case "session_files_list":
+      if (!Array.isArray(value)) {
+        throw new Error(`${command} did not return session summaries`);
+      }
+      value.forEach((summary, index) => {
+        assertSessionSummary(`${command}[${index}]`, summary);
+      });
+      return;
+    case "session_files_get_detail":
+      assertSessionDetail(command, value);
+      return;
+    case "session_files_save_file":
+      assertSessionFile(command, value);
+      return;
+    case "session_files_read_file":
+    case "session_files_resolve_file_path":
+    case "upload_image_to_session":
+    case "read_image_from_session":
+    case "import_document":
+      assertStringResult(command, value);
+      return;
+    case "session_files_list_files":
+      if (!Array.isArray(value)) {
+        throw new Error(`${command} did not return session files`);
+      }
+      value.forEach((file, index) => {
+        assertSessionFile(`${command}[${index}]`, file);
+      });
+      return;
+    case "session_files_cleanup_expired":
+    case "session_files_cleanup_empty":
+      assertNumberResult(command, value);
+      return;
+    case "import_document_to_session":
+      assertImportDocumentToSessionResult(command, value);
+      return;
+    default:
+      return;
+  }
+}
+
 async function invokeSessionFilesCommand<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
   const result = args
-    ? await safeInvoke<T>(command, args)
-    : await safeInvoke<T>(command);
+    ? await safeInvoke<unknown>(command, args)
+    : await safeInvoke<unknown>(command);
   assertNotDiagnosticFacade(
     command,
     result,
     "真实 Session files current 通道",
   );
-  return result;
+  assertSessionFilesCommandResult(command, result);
+  return result as T;
 }
 
 // ============================================================================

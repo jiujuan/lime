@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   assertSmoke,
   invokeDevBridge,
+  readAgentRuntimeThreadCurrent,
   sleep,
   summarizeThreadRead,
   threadSettled,
@@ -68,7 +69,8 @@ async function invokeAppServerJsonRpc(
     },
     timeoutMs,
   );
-  const lines = Array.isArray(response?.lines) ? response.lines : [];
+  const responseLines = response?.result?.lines ?? response?.lines;
+  const lines = Array.isArray(responseLines) ? responseLines : [];
   for (const line of lines) {
     const text = typeof line === "string" ? line.trim() : "";
     if (!text) {
@@ -225,13 +227,7 @@ async function waitForRuntimeFixtureCompletion(
   let lastSnapshot = null;
 
   while (Date.now() - startedAt < options.timeoutMs) {
-    const threadRead = await invokeDevBridge(
-      options,
-      "agent_runtime_get_thread_read",
-      {
-        sessionId,
-      },
-    );
+    const threadRead = await readAgentRuntimeThreadCurrent(options, sessionId);
     lastSnapshot = {
       threadRead: summarizeThreadRead(threadRead),
       fixtureChatRequestCount: fixtureChatRequestCount(fixtureRequests),

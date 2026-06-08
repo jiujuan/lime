@@ -64,6 +64,19 @@ const buildImportRequestPayload = (
   description: request.description,
 });
 
+const assertMaterialResult = (
+  command: string,
+  material: unknown,
+  fallbackProjectId: string = "",
+): Material => {
+  assertNotDiagnosticFacade(command, material, "真实 Materials current 通道");
+  if (!material || typeof material !== "object") {
+    throw new Error(`${command} did not return a material object`);
+  }
+
+  return normalizeMaterial(material as RawMaterial, fallbackProjectId);
+};
+
 export function normalizeMaterial(
   material: RawMaterial,
   fallbackProjectId: string = "",
@@ -108,10 +121,21 @@ export async function listMaterials(
 }
 
 export async function getMaterialCount(projectId: string): Promise<number> {
-  return safeInvoke<number>("get_material_count", {
+  const count = await safeInvoke<number>("get_material_count", {
     projectId,
     project_id: projectId,
   });
+
+  assertNotDiagnosticFacade(
+    "get_material_count",
+    count,
+    "真实 Materials current 通道",
+  );
+  if (typeof count !== "number" || Number.isNaN(count)) {
+    throw new Error("get_material_count did not return a number");
+  }
+
+  return count;
 }
 
 export async function uploadMaterial(
@@ -120,15 +144,25 @@ export async function uploadMaterial(
   const material = await safeInvoke<RawMaterial>("upload_material", {
     req: buildUploadRequestPayload(request),
   });
-  return normalizeMaterial(material, request.projectId);
+  return assertMaterialResult("upload_material", material, request.projectId);
 }
 
 export async function importMaterialFromUrl(
   request: ImportMaterialFromUrlRequest,
 ): Promise<ImportedMaterialRef> {
-  return safeInvoke<ImportedMaterialRef>("import_material_from_url", {
+  const result = await safeInvoke<ImportedMaterialRef>("import_material_from_url", {
     req: buildImportRequestPayload(request),
   });
+  assertNotDiagnosticFacade(
+    "import_material_from_url",
+    result,
+    "真实 Materials current 通道",
+  );
+  if (!result || typeof result.id !== "string") {
+    throw new Error("import_material_from_url did not return an imported material id");
+  }
+
+  return result;
 }
 
 export async function updateMaterial(
@@ -139,13 +173,28 @@ export async function updateMaterial(
     id,
     update,
   });
-  return normalizeMaterial(material);
+  return assertMaterialResult("update_material", material);
 }
 
 export async function deleteMaterial(id: string): Promise<void> {
-  await safeInvoke<void>("delete_material", { id });
+  const result = await safeInvoke<unknown>("delete_material", { id });
+  assertNotDiagnosticFacade(
+    "delete_material",
+    result,
+    "真实 Materials current 通道",
+  );
 }
 
 export async function getMaterialContent(id: string): Promise<string> {
-  return safeInvoke<string>("get_material_content", { id });
+  const content = await safeInvoke<string>("get_material_content", { id });
+  assertNotDiagnosticFacade(
+    "get_material_content",
+    content,
+    "真实 Materials current 通道",
+  );
+  if (typeof content !== "string") {
+    throw new Error("get_material_content did not return content text");
+  }
+
+  return content;
 }

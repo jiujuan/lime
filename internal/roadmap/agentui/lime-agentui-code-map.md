@@ -2,7 +2,7 @@
 
 > 状态：代码事实地图
 > 更新时间：2026-04-30
-> 目标：把 AgentUI 相关前端、协议、Tauri command、Rust runtime、service、持久化入口分层，作为后续拆分和性能优化的定位图。
+> 目标：把 AgentUI 相关前端、协议、Electron Desktop Host / App Server command gateway、Rust runtime、service、持久化入口分层，作为后续拆分和性能优化的定位图。
 
 ## 1. 总览
 
@@ -11,16 +11,16 @@ flowchart TB
   UI[src/components/agent/chat UI]
   Hooks[src/components/agent/chat/hooks state + stream]
   Api[src/lib/api/agentRuntime + agentProtocol]
-  Tauri[lime-rs commands/aster_agent_cmd]
+  CommandGateway[Electron Desktop Host bridge / App Server JSON-RPC]
   AgentCrate[lime-rs/crates/agent runtime crate]
   Services[lime-rs/src/services]
   Store[(SQLite + .lime files)]
 
   UI --> Hooks
   Hooks --> Api
-  Api --> Tauri
-  Tauri --> AgentCrate
-  Tauri --> Services
+  Api --> CommandGateway
+  CommandGateway --> AgentCrate
+  CommandGateway --> Services
   AgentCrate --> Services
   Services --> Store
   AgentCrate --> Store
@@ -76,11 +76,12 @@ flowchart TB
 - `parseAgentEvent` 是兼容边界，不是鼓励继续新增 legacy 事件。
 - `historyLimit/historyOffset/historyBeforeMessageId` 是旧会话性能主接口，后续 pagination/virtualization 要继续沿用。
 
-## 5. Tauri Command 层
+## 5. Command Gateway 层
 
 | 文件 | 当前职责 | AgentUI 相关能力 |
 | --- | --- | --- |
-| `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | runtime Tauri command 主入口 | submit、interrupt、compact、resume、get session、thread read、file checkpoint、evidence/review export |
+| `src/lib/api/agentRuntime/*` + Electron Desktop Host / App Server JSON-RPC | AgentUI current command gateway | submit、interrupt、compact、resume、get session、thread read、file checkpoint、evidence/review export |
+| `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | legacy `agent_runtime_*` Rust command facade | 迁移期兼容入口，只允许委托 current runtime / service 事实源，不作为新增能力入口 |
 | `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | turn 执行主链 | 提前发 `runtime_status`、执行 provider/runtime/tool/hook/memory/artifact/auto compact |
 | `lime-rs/src/commands/aster_agent_cmd/session_runtime.rs` | session create/list/update/recent runtime context | sidebar/session summary 和 tab 管理基础 |
 | `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs` | subagent runtime | team/capsule 子代理状态基础 |

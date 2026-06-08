@@ -1,18 +1,9 @@
-use super::require_app_handle;
-use crate::connect::RelayRegistry;
+use super::{args_or_default, get_string_arg, parse_nested_arg, require_app_handle};
 use crate::dev_bridge::DevBridgeState;
 use serde_json::Value as JsonValue;
-use std::sync::Arc;
 use tauri::Manager;
 
 type DynError = Box<dyn std::error::Error>;
-
-async fn relay_registry(state: &DevBridgeState) -> Option<Arc<RelayRegistry>> {
-    let state_guard = state.connect_state.read().await;
-    state_guard
-        .as_ref()
-        .map(|connect_state| connect_state.registry.clone())
-}
 
 pub(super) async fn try_handle(
     state: &DevBridgeState,
@@ -75,24 +66,6 @@ pub(super) async fn try_handle(
                 )
                 .await?,
             )?
-        }
-        "list_relay_providers" => {
-            if let Some(registry) = relay_registry(state).await {
-                serde_json::to_value(registry.list())?
-            } else {
-                serde_json::json!([])
-            }
-        }
-        "refresh_relay_registry" => {
-            if let Some(registry) = relay_registry(state).await {
-                registry
-                    .load_from_remote()
-                    .await
-                    .map_err(|e| format!("刷新中转商注册表失败: {e}"))?;
-                serde_json::json!(registry.len())
-            } else {
-                return Err("Connect 模块未初始化".into());
-            }
         }
         _ => return Ok(None),
     };

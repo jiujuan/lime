@@ -47,19 +47,19 @@ pub(super) async fn try_handle(
                 .unwrap_or(false);
             let app_type: crate::models::app_type::AppType = app.parse().map_err(|e: String| e)?;
 
-            if let Some(db) = &state.db {
-                let skills = crate::commands::skill_cmd::resolve_skills_for_app(
-                    db,
-                    &state.skill_service,
-                    &app_type,
-                    refresh_remote,
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-                serde_json::to_value(skills)?
-            } else {
-                serde_json::json!([])
-            }
+            let db = state
+                .db
+                .as_ref()
+                .ok_or("DevBridge 缺少数据库连接，无法读取 Skill 列表")?;
+            let skills = crate::commands::skill_cmd::resolve_skills_for_app(
+                db,
+                &state.skill_service,
+                &app_type,
+                refresh_remote,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            serde_json::to_value(skills)?
         }
         "get_local_skills_for_app" => {
             let args = args_or_default(args);
@@ -69,22 +69,21 @@ pub(super) async fn try_handle(
                 .unwrap_or("lime")
                 .to_string();
 
-            if let Some(db) = &state.db {
-                let app_type: crate::models::app_type::AppType =
-                    app.parse().map_err(|e: String| e)?;
-                let installed_states = {
-                    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-                    crate::database::dao::skills::SkillDao::get_skills(&conn)
-                        .map_err(|e| format!("{e}"))?
-                };
-                let skills = state
-                    .skill_service
-                    .list_local_skills(&app_type, &installed_states)
-                    .map_err(|e| format!("{e}"))?;
-                serde_json::to_value(skills)?
-            } else {
-                serde_json::json!([])
-            }
+            let db = state
+                .db
+                .as_ref()
+                .ok_or("DevBridge 缺少数据库连接，无法读取本地 Skill 列表")?;
+            let app_type: crate::models::app_type::AppType = app.parse().map_err(|e: String| e)?;
+            let installed_states = {
+                let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
+                crate::database::dao::skills::SkillDao::get_skills(&conn)
+                    .map_err(|e| format!("{e}"))?
+            };
+            let skills = state
+                .skill_service
+                .list_local_skills(&app_type, &installed_states)
+                .map_err(|e| format!("{e}"))?;
+            serde_json::to_value(skills)?
         }
         "inspect_local_skill_for_app" => {
             let args = args_or_default(args);

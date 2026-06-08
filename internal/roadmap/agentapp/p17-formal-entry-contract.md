@@ -25,7 +25,7 @@ P16-H 已完成多 App repository、selected launcher、持久化 lifecycle、cl
 | 固定正式入口 | `agent-apps` 成为用户可见 App 管理和启动入口，不再依赖 Lab 心智解释核心流程。 |
 | 固定研发入口 | `agent-app-lab` 继续用于 fixture、smoke、cleanup rehearsal、flag-off 和实验断言。 |
 | 复用 current 主链 | P17 不新增第二套 installer、store、scanner、guard、runtime loader 或 cleanup 机制。 |
-| 明确能力边界 | App 只能通过 Capability SDK 使用 Lime 能力，不能 import Lime 内部模块或直接调用 Tauri command。 |
+| 明确能力边界 | App 只能通过 Capability SDK 使用 Lime 能力，不能 import Lime 内部模块或直接调用 legacy desktop facade。 |
 | 保持失败可清理 | disable、uninstall rehearsal、cleanup evidence、residual audit 和 flag-off 仍是正式入口前硬门槛。 |
 | 分离后续 gate | 真实 delete-data、public catalog、企业控制台和完整内容工厂业务系统分别另立计划。 |
 
@@ -175,7 +175,7 @@ flowchart TD
 | P17-US5 | 作为用户，我可以 disable / enable App。 | 状态持久化到 repository，刷新后不丢，disabled App 不可启动。 |
 | P17-US6 | 作为用户，我可以预览卸载和删除数据影响。 | P17 只输出 rehearsal evidence / residual audit，不执行真实 delete-data。 |
 | P17-US7 | 作为开发者，我仍能在 Lab 里跑 fixture 和 smoke。 | `agent-app-lab` 保留但不承担正式入口职责。 |
-| P17-US8 | 作为维护者，我能证明 App 没有绕过 SDK。 | `src/features/agent-app` 无直接 `safeInvoke` / `invoke` / raw Worker / Tauri command 扩散。 |
+| P17-US8 | 作为维护者，我能证明 App 没有绕过 SDK。 | `src/features/agent-app` 无直接 `safeInvoke` / `invoke` / raw Worker / legacy desktop facade 扩散。 |
 
 ## 分阶段计划
 
@@ -222,7 +222,7 @@ flowchart TD
 3. `agent-apps` 可在 Lab flag-off 后保持可见，`agent-app-lab` 在 flag-off 后不可见。
 4. 所有用户可见文案覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
 5. `src/features/agent-app` 不直接出现 `safeInvoke`、`invoke(`、`tauri::`、`generate_handler`、`new Worker`。
-6. 如修改 Tauri command / bridge，必须同步 frontend gateway、Rust registration、command catalog、mock priority / default mocks，并执行 `npm run test:contracts`。
+6. 如触碰 Electron Desktop Host IPC / App Server JSON-RPC / legacy desktop facade 命令边界，必须同步前端 gateway、治理目录册、mock priority / default mocks，并执行 `npm run test:contracts`；不得在 `lime-rs/src/commands/**` 新增业务逻辑。
 7. GUI 证据必须区分 Agent Apps formal smoke 与 Agent App Lab smoke；不能用 Lab 证据冒充正式入口可交付。
 
 ## 最小验证

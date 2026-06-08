@@ -18,6 +18,22 @@ export interface OemCloudOAuthCallbackBridgePayload {
   status?: string | null;
 }
 
+function assertOemCloudOAuthCallbackBridgeResponse(
+  value: unknown,
+): asserts value is OemCloudOAuthCallbackBridgeStartResponse {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    typeof (value as { callbackUrl?: unknown }).callbackUrl !== "string" ||
+    (value as { callbackUrl: string }).callbackUrl.trim().length === 0
+  ) {
+    throw new Error(
+      "start_oem_cloud_oauth_callback_bridge 未返回有效 OAuth 本机回调桥地址",
+    );
+  }
+}
+
 export async function openExternalUrlWithSystemBrowser(
   url: string,
 ): Promise<void> {
@@ -30,7 +46,7 @@ export async function openExternalUrlWithSystemBrowser(
 }
 
 export async function startOemCloudOAuthCallbackBridge(): Promise<OemCloudOAuthCallbackBridgeStartResponse> {
-  const result = await safeInvoke<OemCloudOAuthCallbackBridgeStartResponse>(
+  const result = await safeInvoke<unknown>(
     "start_oem_cloud_oauth_callback_bridge",
   );
   assertNotDiagnosticFacade(
@@ -38,5 +54,6 @@ export async function startOemCloudOAuthCallbackBridge(): Promise<OemCloudOAuthC
     result,
     "真实 OAuth 本机回调桥 current 通道",
   );
+  assertOemCloudOAuthCallbackBridgeResponse(result);
   return result;
 }

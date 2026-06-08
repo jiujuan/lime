@@ -27,10 +27,8 @@ function appServerClientMock(): AppServerSessionRpcClient {
 describe("agentRuntime sessionClient current App Server boundary", () => {
   it("session archive / restore / delete projection must use agentSession/update", async () => {
     const appServerClient = appServerClientMock();
-    const invokeCommand = vi.fn();
     const client = createSessionClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(
@@ -61,6 +59,6 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       sessionId: "session-deleted",
       archived: true,
     });
-    expect(invokeCommand).not.toHaveBeenCalled();
+    expect(appServerClient.request).not.toHaveBeenCalled();
   });
 });

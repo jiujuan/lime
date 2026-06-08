@@ -98,6 +98,36 @@ describe("layeredDesignAnalysis API", () => {
     );
   });
 
+  it("recognizeLayeredDesignText 应校验返回形态", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        supported: true,
+        engine: "mock-native-ocr",
+      })
+      .mockResolvedValueOnce({
+        supported: true,
+        engine: "mock-native-ocr",
+        blocks: [{ text: "标题", confidence: "high" }],
+      });
+
+    const request = {
+      imageSrc: "data:image/png;base64,ZmFrZQ==",
+      width: 640,
+      height: 180,
+    };
+
+    await expect(recognizeLayeredDesignText(request)).rejects.toThrow(
+      "recognize_layered_design_text 未返回有效图层文字识别结果",
+    );
+    await expect(recognizeLayeredDesignText(request)).rejects.toThrow(
+      "recognize_layered_design_text 未返回有效图层文字识别结果",
+    );
+    await expect(recognizeLayeredDesignText(request)).rejects.toThrow(
+      "recognize_layered_design_text 未返回有效图层文字识别结果",
+    );
+  });
+
   it("应通过 current Desktop Host 命令代理扁平图 structured analyzer", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       supported: true,
@@ -195,6 +225,38 @@ describe("layeredDesignAnalysis API", () => {
       }),
     ).rejects.toThrow(
       "analyze_layered_design_flat_image 尚未接入真实 Layered Design extraction current 通道",
+    );
+  });
+
+  it("analyzeLayeredDesignFlatImageNative 应校验返回形态", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        supported: true,
+        engine: "native_heuristic_analyzer",
+      })
+      .mockResolvedValueOnce({
+        supported: "yes",
+        engine: "native_heuristic_analyzer",
+      });
+
+    const request = {
+      image: {
+        src: "data:image/png;base64,ZmFrZQ==",
+        width: 900,
+        height: 1400,
+        mimeType: "image/png",
+      },
+    };
+
+    await expect(analyzeLayeredDesignFlatImageNative(request)).rejects.toThrow(
+      "analyze_layered_design_flat_image 未返回有效图层扁平图分析结果",
+    );
+    await expect(analyzeLayeredDesignFlatImageNative(request)).rejects.toThrow(
+      "analyze_layered_design_flat_image 未返回有效图层扁平图分析结果",
+    );
+    await expect(analyzeLayeredDesignFlatImageNative(request)).rejects.toThrow(
+      "analyze_layered_design_flat_image 未返回有效图层扁平图分析结果",
     );
   });
 });

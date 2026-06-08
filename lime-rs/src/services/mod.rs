@@ -29,6 +29,7 @@ pub mod conversation_statistics_service;
 pub mod environment_service;
 pub mod execution_tracker_service;
 pub mod file_browser_service;
+pub mod image_search_service;
 pub mod managed_objective_audit_service;
 pub mod memory_import_parser_service;
 pub mod memory_profile_prompt_service;

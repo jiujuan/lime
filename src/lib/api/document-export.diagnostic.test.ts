@@ -21,4 +21,17 @@ describe("document-export API diagnostic fail-closed", () => {
       "save_exported_document 尚未接入真实 Document Export current 通道",
     );
   });
+
+  it("保存导出文档收到 mock-like payload 或错误 envelope 时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ error: "failed" });
+
+    await expect(
+      saveExportedDocument("/tmp/report.md", "# Report"),
+    ).rejects.toThrow("save_exported_document did not return void result");
+    await expect(
+      saveExportedDocument("/tmp/report.md", "# Report"),
+    ).rejects.toThrow("save_exported_document did not return void result");
+  });
 });

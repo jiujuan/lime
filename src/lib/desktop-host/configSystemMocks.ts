@@ -111,160 +111,19 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
     return { success: true };
   },
 
-  get_openai_custom_status: () => ({
-    enabled: false,
-    has_api_key: false,
-    base_url: "",
-  }),
-  set_openai_custom_config: () => ({ success: true }),
-
-  get_claude_custom_status: () => ({
-    enabled: false,
-    has_api_key: false,
-    base_url: "",
-  }),
-  set_claude_custom_config: () => ({ success: true }),
-
-  check_api_compatibility: () => ({
-    provider: "",
-    overall_status: "ok",
-    checked_at: "",
-    results: [],
-    warnings: [],
-  }),
-
-  get_endpoint_providers: () => ({}),
-  set_endpoint_provider: () => ({ provider: "" }),
-
   get_experimental_config: () => ({
     webmcp: { enabled: false },
   }),
   save_experimental_config: () => ({}),
   validate_shortcut: () => true,
 
-  // Provider 相关
-  get_providers: () => [],
-  get_credentials: () => [],
   get_default_provider: () => "openai",
   set_default_provider: (args: any) => {
     const provider = args?.provider ?? args;
     logConfigSave({ default_provider: provider });
     return provider;
   },
-  get_available_models: () => [],
   get_hint_routes: () => [],
-  get_windows_startup_diagnostics: () => ({
-    platform: "mock-web",
-    app_data_dir: null,
-    legacy_lime_dir: null,
-    db_path: null,
-    webview2_version: null,
-    current_exe: null,
-    current_dir: null,
-    resource_dir: null,
-    home_dir: null,
-    shell_env: null,
-    comspec_env: null,
-    resolved_terminal_shell: null,
-    installation_kind_guess: null,
-    checks: [],
-    has_blocking_issues: false,
-    has_warnings: false,
-    summary_message: null,
-  }),
-
-  get_server_diagnostics: () => ({
-    generated_at: new Date().toISOString(),
-    running: false,
-    host: "127.0.0.1",
-    port: 8787,
-    telemetry_summary: {
-      total_requests: 0,
-      successful_requests: 0,
-      failed_requests: 0,
-      timeout_requests: 0,
-      success_rate: 0,
-      avg_latency_ms: 0,
-      min_latency_ms: null,
-      max_latency_ms: null,
-      total_input_tokens: 0,
-      total_output_tokens: 0,
-      total_tokens: 0,
-    },
-    capability_routing: {
-      filter_eval_total: 0,
-      filter_excluded_total: 0,
-      filter_excluded_tools_total: 0,
-      filter_excluded_vision_total: 0,
-      filter_excluded_context_total: 0,
-      provider_fallback_total: 0,
-      model_fallback_total: 0,
-      all_candidates_excluded_total: 0,
-    },
-    response_cache: {
-      config: {
-        enabled: true,
-        ttl_secs: 600,
-        max_entries: 200,
-        max_body_bytes: 1048576,
-        cacheable_status_codes: [200],
-      },
-      stats: {
-        size: 0,
-        hits: 0,
-        misses: 0,
-        evictions: 0,
-      },
-      hit_rate_percent: 0,
-    },
-    request_dedup: {
-      config: {
-        enabled: true,
-        ttl_secs: 30,
-        wait_timeout_ms: 15000,
-      },
-      stats: {
-        inflight_size: 0,
-        completed_size: 0,
-        check_new_total: 0,
-        check_in_progress_total: 0,
-        check_completed_total: 0,
-        wait_success_total: 0,
-        wait_timeout_total: 0,
-        wait_no_result_total: 0,
-        complete_total: 0,
-        remove_total: 0,
-      },
-      replay_rate_percent: 0,
-    },
-    idempotency: {
-      config: {
-        enabled: false,
-        ttl_secs: 86400,
-        header_name: "Idempotency-Key",
-      },
-      stats: {
-        entries_size: 0,
-        in_progress_size: 0,
-        completed_size: 0,
-        check_new_total: 0,
-        check_in_progress_total: 0,
-        check_completed_total: 0,
-        complete_total: 0,
-        remove_total: 0,
-      },
-      replay_rate_percent: 0,
-    },
-  }),
-  get_log_storage_diagnostics: () => ({
-    log_directory: "/tmp/lime/logs",
-    current_log_path: "/tmp/lime/logs/lime.log",
-    current_log_exists: true,
-    current_log_size_bytes: 1024,
-    in_memory_log_count: 0,
-    related_log_files: [],
-    raw_response_files: [],
-  }),
 
   subscribe_sysinfo: () => ({ success: true }),
   unsubscribe_sysinfo: () => ({ success: true }),
@@ -288,18 +147,7 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
   // Quick Filter 相关
   delete_quick_filter: () => ({ success: true }),
 
-  // Telemetry 相关
-  get_request_logs: () => ({ logs: [] }),
-  get_request_log_detail: () => ({ log: null }),
-  clear_request_logs: () => ({ success: true }),
   report_frontend_crash: () => ({ success: true }),
-  get_stats_summary: () => ({ summary: {} }),
-  get_stats_by_provider: () => ({ stats: [] }),
-  get_stats_by_model: () => ({ stats: [] }),
-  get_token_summary: () => ({ summary: {} }),
-  get_token_stats_by_provider: () => ({ stats: [] }),
-  get_token_stats_by_model: () => ({ stats: [] }),
-  get_token_stats_by_day: () => ({ stats: [] }),
 
   // Prompts 相关
   get_prompts: () => [],

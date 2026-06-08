@@ -269,6 +269,57 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
         NoopAppDataSource.list_knowledge_packs(params).await
     }
 
+    async fn read_knowledge_pack(
+        &self,
+        params: KnowledgeReadPackParams,
+    ) -> Result<KnowledgeReadPackResponse, RuntimeCoreError> {
+        NoopAppDataSource.read_knowledge_pack(params).await
+    }
+
+    async fn import_knowledge_source(
+        &self,
+        params: KnowledgeImportSourceParams,
+    ) -> Result<KnowledgeImportSourceResponse, RuntimeCoreError> {
+        NoopAppDataSource.import_knowledge_source(params).await
+    }
+
+    async fn compile_knowledge_pack(
+        &self,
+        request: lime_knowledge::KnowledgeCompilePackRequest,
+    ) -> Result<KnowledgeCompilePackResponse, RuntimeCoreError> {
+        NoopAppDataSource.compile_knowledge_pack(request).await
+    }
+
+    async fn set_default_knowledge_pack(
+        &self,
+        params: KnowledgeSetDefaultPackParams,
+    ) -> Result<KnowledgeSetDefaultPackResponse, RuntimeCoreError> {
+        NoopAppDataSource.set_default_knowledge_pack(params).await
+    }
+
+    async fn update_knowledge_pack_status(
+        &self,
+        params: KnowledgeUpdatePackStatusParams,
+    ) -> Result<KnowledgeUpdatePackStatusResponse, RuntimeCoreError> {
+        NoopAppDataSource.update_knowledge_pack_status(params).await
+    }
+
+    async fn resolve_knowledge_context(
+        &self,
+        params: KnowledgeResolveContextParams,
+    ) -> Result<KnowledgeContextResolutionResponse, RuntimeCoreError> {
+        NoopAppDataSource.resolve_knowledge_context(params).await
+    }
+
+    async fn validate_knowledge_context_run(
+        &self,
+        params: KnowledgeValidateContextRunParams,
+    ) -> Result<KnowledgeValidateContextRunResponse, RuntimeCoreError> {
+        NoopAppDataSource
+            .validate_knowledge_context_run(params)
+            .await
+    }
+
     async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError> {
         NoopAppDataSource.list_automation_jobs().await
     }
@@ -278,6 +329,31 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
         NoopAppDataSource.read_project_memory(params).await
+    }
+
+    async fn read_usage_stats(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsReadResponse, RuntimeCoreError> {
+        NoopAppDataSource.read_usage_stats(params).await
+    }
+
+    async fn list_usage_stats_model_ranking(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsModelRankingListResponse, RuntimeCoreError> {
+        NoopAppDataSource
+            .list_usage_stats_model_ranking(params)
+            .await
+    }
+
+    async fn list_usage_stats_daily_trends(
+        &self,
+        params: UsageStatsRangeParams,
+    ) -> Result<UsageStatsDailyTrendsListResponse, RuntimeCoreError> {
+        NoopAppDataSource
+            .list_usage_stats_daily_trends(params)
+            .await
     }
 
     async fn list_models(

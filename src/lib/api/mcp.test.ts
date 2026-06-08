@@ -75,4 +75,119 @@ describe("mcp", () => {
       expect(safeInvoke).toHaveBeenLastCalledWith(command);
     }
   });
+
+  it("MCP 使用命令应通过 API 网关传递参数", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce([
+        {
+          name: "mcp__docs__search_docs",
+          server_name: "docs",
+          description: "search",
+          input_schema: {},
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: "mcp__docs__search_docs",
+          server_name: "docs",
+          description: "search",
+          input_schema: {},
+        },
+      ])
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        is_error: false,
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "caller ok" }],
+        is_error: false,
+      })
+      .mockResolvedValueOnce({
+        description: "prompt",
+        messages: [{ role: "user", content: { type: "text", text: "hello" } }],
+      })
+      .mockResolvedValueOnce({
+        uri: "docs://readme",
+        mime_type: "text/plain",
+        text: "README",
+      });
+
+    await expect(
+      mcpApi.listToolsForContext("assistant", true),
+    ).resolves.toEqual([
+      {
+        name: "mcp__docs__search_docs",
+        server_name: "docs",
+        description: "search",
+        input_schema: {},
+      },
+    ]);
+    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_list_tools_for_context", {
+      caller: "assistant",
+      includeDeferred: true,
+    });
+
+    await expect(
+      mcpApi.searchTools("search", "tool_search", 5),
+    ).resolves.toEqual([
+      {
+        name: "mcp__docs__search_docs",
+        server_name: "docs",
+        description: "search",
+        input_schema: {},
+      },
+    ]);
+    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_search_tools", {
+      query: "search",
+      caller: "tool_search",
+      limit: 5,
+    });
+
+    await expect(
+      mcpApi.callTool("mcp__docs__search_docs", { q: "lime" }),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "ok" }],
+      is_error: false,
+    });
+    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_call_tool", {
+      toolName: "mcp__docs__search_docs",
+      arguments: { q: "lime" },
+    });
+
+    await expect(
+      mcpApi.callToolWithCaller(
+        "mcp__docs__search_docs",
+        { q: "lime" },
+        "assistant",
+      ),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "caller ok" }],
+      is_error: false,
+    });
+    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_call_tool_with_caller", {
+      toolName: "mcp__docs__search_docs",
+      arguments: { q: "lime" },
+      caller: "assistant",
+    });
+
+    await expect(
+      mcpApi.getPrompt("docs_summarize", { topic: "lime" }),
+    ).resolves.toEqual({
+      description: "prompt",
+      messages: [{ role: "user", content: { type: "text", text: "hello" } }],
+    });
+    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_get_prompt", {
+      name: "docs_summarize",
+      arguments: { topic: "lime" },
+    });
+
+    await expect(mcpApi.readResource("docs://readme")).resolves.toEqual({
+      uri: "docs://readme",
+      mime_type: "text/plain",
+      text: "README",
+    });
+    expect(safeInvoke).toHaveBeenLastCalledWith("mcp_read_resource", {
+      uri: "docs://readme",
+    });
+  });
 });

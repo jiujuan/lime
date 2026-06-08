@@ -67,7 +67,6 @@ export function createAgentRuntimeClient({
     ...createObjectiveClient({ invokeCommand: resolvedInvokeCommand }),
     ...createSessionClient({
       appServerClient,
-      invokeCommand: resolvedInvokeCommand,
     }),
     ...createSiteClient({ bridgeInvoke: resolvedBridgeInvoke }),
     ...createSubagentClient({ invokeCommand: resolvedInvokeCommand }),

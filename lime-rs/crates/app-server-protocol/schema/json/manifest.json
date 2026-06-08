@@ -140,11 +140,27 @@
     },
     {
       "kind": "request",
+      "method": "fileSystem/createDirectory"
+    },
+    {
+      "kind": "request",
+      "method": "fileSystem/createFile"
+    },
+    {
+      "kind": "request",
+      "method": "fileSystem/deleteFile"
+    },
+    {
+      "kind": "request",
       "method": "fileSystem/listDirectory"
     },
     {
       "kind": "request",
       "method": "fileSystem/readFilePreview"
+    },
+    {
+      "kind": "request",
+      "method": "fileSystem/renameFile"
     },
     {
       "kind": "request",
@@ -156,7 +172,35 @@
     },
     {
       "kind": "request",
+      "method": "knowledgeContext/resolve"
+    },
+    {
+      "kind": "request",
+      "method": "knowledgeContextRun/validate"
+    },
+    {
+      "kind": "request",
+      "method": "knowledgePack/compile"
+    },
+    {
+      "kind": "request",
+      "method": "knowledgePack/default/set"
+    },
+    {
+      "kind": "request",
       "method": "knowledgePack/list"
+    },
+    {
+      "kind": "request",
+      "method": "knowledgePack/read"
+    },
+    {
+      "kind": "request",
+      "method": "knowledgePack/source/import"
+    },
+    {
+      "kind": "request",
+      "method": "knowledgePack/status/update"
     },
     {
       "kind": "request",
@@ -292,6 +336,18 @@
     },
     {
       "kind": "request",
+      "method": "usageStats/dailyTrends/list"
+    },
+    {
+      "kind": "request",
+      "method": "usageStats/modelRanking/list"
+    },
+    {
+      "kind": "request",
+      "method": "usageStats/read"
+    },
+    {
+      "kind": "request",
       "method": "workspace/byPath/read"
     },
     {
@@ -416,15 +472,35 @@
       "EvidenceExportResponse",
       "EvidencePackArtifact",
       "EvidencePackSummary",
+      "FileSystemCreateDirectoryParams",
+      "FileSystemCreateFileParams",
+      "FileSystemDeleteFileParams",
       "FileSystemDirectoryListing",
       "FileSystemFileEntry",
       "FileSystemFilePreview",
       "FileSystemListDirectoryParams",
+      "FileSystemMutationResponse",
       "FileSystemReadFilePreviewParams",
+      "FileSystemRenameFileParams",
       "InitializeParams",
       "InitializeResponse",
+      "KnowledgeCompilePackParams",
+      "KnowledgeCompilePackResponse",
+      "KnowledgeContextResolutionResponse",
+      "KnowledgeImportSourceParams",
+      "KnowledgeImportSourceResponse",
       "KnowledgeListPacksParams",
       "KnowledgeListPacksResponse",
+      "KnowledgeReadPackParams",
+      "KnowledgeReadPackResponse",
+      "KnowledgeResolveContextPackParams",
+      "KnowledgeResolveContextParams",
+      "KnowledgeSetDefaultPackParams",
+      "KnowledgeSetDefaultPackResponse",
+      "KnowledgeUpdatePackStatusParams",
+      "KnowledgeUpdatePackStatusResponse",
+      "KnowledgeValidateContextRunParams",
+      "KnowledgeValidateContextRunResponse",
       "McpPromptListResponse",
       "McpResourceListResponse",
       "McpServerListResponse",
@@ -480,6 +556,13 @@
       "SkillListResponse",
       "SkillReadParams",
       "SkillReadResponse",
+      "UsageStatsDailyTrendsListResponse",
+      "UsageStatsDailyUsage",
+      "UsageStatsModelRankingListResponse",
+      "UsageStatsModelUsage",
+      "UsageStatsRangeParams",
+      "UsageStatsReadResponse",
+      "UsageStatsSummary",
       "WorkspaceEnsureParams",
       "WorkspaceEnsureReadyResponse",
       "WorkspaceListResponse",

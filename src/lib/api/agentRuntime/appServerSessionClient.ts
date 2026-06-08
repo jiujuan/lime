@@ -1,5 +1,6 @@
 import {
   AppServerClient,
+  type AppServerAgentSession,
   type AppServerAgentTurn,
   type AppServerAgentSessionReadParams,
   type AppServerAgentSessionReadResponse,
@@ -37,14 +38,14 @@ export type AppServerAgentSessionOverview = {
   sessionId: string;
   threadId?: string;
   title?: string;
-  model?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
   archivedAt?: string | null;
   workspaceId?: string;
   workingDir?: string;
   executionStrategy?: string;
-  messagesCount?: number;
+  messagesCount: number;
 };
 
 export type AppServerAgentSessionListResponse = {
@@ -77,6 +78,7 @@ export function createAppServerSessionClient({
         metadata: options?.metadata,
       }),
     });
+    assertAppServerAgentSession(response.result.session);
     return response.result.session.sessionId;
   }
 
@@ -88,6 +90,7 @@ export function createAppServerSessionClient({
         METHOD_AGENT_SESSION_LIST,
         appServerSessionListParamsFromOptions(options),
       );
+    assertAppServerAgentSessionListResponse(response.result);
     return response.result.sessions.map(appServerSessionOverviewToRuntimeInfo);
   }
 
@@ -98,6 +101,7 @@ export function createAppServerSessionClient({
     const response = await appServerClient.readSession(
       appServerSessionReadParamsFromOptions(sessionId, options),
     );
+    assertAppServerAgentSessionReadResponse(response.result);
     return (
       readSessionDetail(response.result) ??
       appServerSessionReadToRuntimeDetail(response.result)
@@ -118,6 +122,138 @@ export function createAppServerSessionClient({
     listAgentRuntimeSessions,
     updateAgentRuntimeSession,
   };
+}
+
+function assertAppServerAgentSession(
+  value: unknown,
+): asserts value is AppServerAgentSession {
+  if (!isAppServerAgentSession(value)) {
+    throw new Error("agentSession/start did not return an App Server session");
+  }
+}
+
+function assertAppServerAgentSessionListResponse(
+  value: unknown,
+): asserts value is AppServerAgentSessionListResponse {
+  if (!isAppServerAgentSessionListResponse(value)) {
+    throw new Error("agentSession/list did not return session list");
+  }
+}
+
+function assertAppServerAgentSessionReadResponse(
+  value: unknown,
+): asserts value is AppServerAgentSessionReadResponse {
+  if (!isAppServerAgentSessionReadResponse(value)) {
+    throw new Error("agentSession/read did not return session detail");
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isAppServerAgentSession(value: unknown): value is AppServerAgentSession {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.sessionId) &&
+    isNonEmptyString(value.threadId) &&
+    isNonEmptyString(value.appId) &&
+    optionalString(value.workspaceId) &&
+    isAppServerAgentSessionStatus(value.status) &&
+    isNonEmptyString(value.createdAt) &&
+    isNonEmptyString(value.updatedAt)
+  );
+}
+
+function isAppServerAgentSessionOverview(
+  value: unknown,
+): value is AppServerAgentSessionOverview {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.sessionId) &&
+    optionalString(value.threadId) &&
+    optionalString(value.title) &&
+    isString(value.model) &&
+    isNonEmptyString(value.createdAt) &&
+    isNonEmptyString(value.updatedAt) &&
+    (value.archivedAt === null || optionalString(value.archivedAt)) &&
+    optionalString(value.workspaceId) &&
+    optionalString(value.workingDir) &&
+    optionalString(value.executionStrategy) &&
+    isFiniteNumber(value.messagesCount)
+  );
+}
+
+function isAppServerAgentSessionListResponse(
+  value: unknown,
+): value is AppServerAgentSessionListResponse {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.sessions) &&
+    value.sessions.every(isAppServerAgentSessionOverview)
+  );
+}
+
+function isAppServerAgentSessionReadResponse(
+  value: unknown,
+): value is AppServerAgentSessionReadResponse {
+  return (
+    isRecord(value) &&
+    isAppServerAgentSession(value.session) &&
+    Array.isArray(value.turns) &&
+    value.turns.every(isAppServerAgentTurn)
+  );
+}
+
+function isAppServerAgentTurn(value: unknown): value is AppServerAgentTurn {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.turnId) &&
+    isNonEmptyString(value.sessionId) &&
+    isNonEmptyString(value.threadId) &&
+    isAppServerAgentTurnStatus(value.status) &&
+    optionalString(value.startedAt) &&
+    optionalString(value.completedAt)
+  );
+}
+
+function isAppServerAgentSessionStatus(value: unknown): boolean {
+  return (
+    value === "idle" ||
+    value === "running" ||
+    value === "waitingAction" ||
+    value === "completed" ||
+    value === "failed" ||
+    value === "canceled"
+  );
+}
+
+function isAppServerAgentTurnStatus(value: unknown): boolean {
+  return (
+    value === "accepted" ||
+    value === "queued" ||
+    value === "running" ||
+    value === "waitingAction" ||
+    value === "completed" ||
+    value === "failed" ||
+    value === "canceled"
+  );
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function optionalString(value: unknown): boolean {
+  return typeof value === "undefined" || typeof value === "string";
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function sessionBusinessObjectRef({

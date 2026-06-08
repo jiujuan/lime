@@ -19,8 +19,8 @@
 | 层 | 角色 | 输入 | 输出 | Owner |
 | --- | --- | --- | --- | --- |
 | Product Surface | 收集用户意图与业务状态 | Chat 输入、Claw `@` 命令、Agent App 表单、Automation job | surface request | Chat / Claw / Agent App / Automation |
-| Runtime Surface Adapter | 把 surface intent 适配为统一 runtime request | taskKind、capabilityId、app provenance、request metadata | AgentRuntime submit request | frontend gateway / Rust surface facade |
-| Runtime Control Plane | 接收、排队、中断、恢复 | submit/interrupt/resume/respond/export | accepted turn、queued turn、actions | Rust runtime command |
+| Runtime Surface Adapter | 把 surface intent 适配为统一 runtime request | taskKind、capabilityId、app provenance、request metadata | AgentRuntime submit request | frontend gateway / App Server surface |
+| Runtime Control Plane | 接收、排队、中断、恢复 | submit/interrupt/resume/respond/export | accepted turn、queued turn、actions | App Server RuntimeCore |
 | Execution Loop | 执行 agent turn | input snapshot、model config、tool inventory | model/tool/action events | Query Loop / runtime_turn |
 | Orchestration Facts | 记录 task、routing、permission、sandbox、process、subagent | execution loop 内部状态 | RuntimeEvent stream | AgentRuntime Profile |
 | Durable Read Models | 支撑恢复和 GUI 投影 | event log、runtime state | ThreadReadModel、TaskSnapshot | runtime store / repository |
@@ -187,7 +187,7 @@ GUI 与恢复入口。必须表达：
 | context owner refs | `turn_context`、`context_trace`、memory / compaction runtime metadata，后续收敛为 `context.*` facts |
 | policy owner refs | runtime permission/action/sandbox metadata，后续收敛为 `permission.*` / `action.*` facts |
 | GUI projection | Workspace / Harness current read model |
-| command contract | frontend gateway、Rust `generate_handler!`、catalog、mock |
+| command contract | frontend gateway、App Server / Electron Host / legacy facade boundary、catalog、mock |
 
 `agent_app_cmd.rs` 当前属于 Agent App 生命周期 owner，不是完整 AgentRuntime owner。`LIME_GATEWAY_*` / `OPENAI_BASE_URL` 注入只能视为低阶模型 executor 或开发期 fallback；完整 `lime.agent` / `lime.workflow` 必须进入 AgentRuntime Surface。
 
@@ -257,7 +257,7 @@ legacy state -> new parallel truth -> UI/evidence
 ## 9. 验证策略
 
 1. Schema fixture 校验：验证 Lime Profile fixtures。
-2. Command mapping 测试：验证 Tauri command / frontend gateway / mock / catalog 与 profile control plane 一致。
+2. Command mapping 测试：验证 Electron Desktop Host / App Server / legacy facade、frontend gateway、mock / catalog 与 profile control plane 一致。
 3. Event replay 测试：用 event stream 重建 ThreadReadModel。
 4. Evidence consistency 测试：确认 evidence/replay/review 读同一事实源。
 5. GUI smoke：确认 Workspace/Harness 展示 read model，而不是 UI-only truth。

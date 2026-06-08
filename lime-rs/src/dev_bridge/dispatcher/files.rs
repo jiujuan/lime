@@ -24,47 +24,6 @@ pub(super) async fn try_handle(
                     .map_err(|error| format!("保存会话文件失败: {error}"))?,
             )?
         }
-        "create_file" => {
-            let args = args_or_default(args);
-            let path = get_string_arg(&args, "path", "path")?;
-            serde_json::to_value(
-                crate::services::file_browser_service::create_file(path)
-                    .await
-                    .map_err(|error| format!("创建文件失败: {error}"))?,
-            )?
-        }
-        "create_directory" => {
-            let args = args_or_default(args);
-            let path = get_string_arg(&args, "path", "path")?;
-            serde_json::to_value(
-                crate::services::file_browser_service::create_directory(path)
-                    .await
-                    .map_err(|error| format!("创建目录失败: {error}"))?,
-            )?
-        }
-        "delete_file" => {
-            let args = args_or_default(args);
-            let path = get_string_arg(&args, "path", "path")?;
-            let recursive = args
-                .get("recursive")
-                .and_then(|value| value.as_bool())
-                .unwrap_or(false);
-            serde_json::to_value(
-                crate::services::file_browser_service::delete_file(path, recursive)
-                    .await
-                    .map_err(|error| format!("删除文件失败: {error}"))?,
-            )?
-        }
-        "rename_file" => {
-            let args = args_or_default(args);
-            let old_path = get_string_arg(&args, "old_path", "oldPath")?;
-            let new_path = get_string_arg(&args, "new_path", "newPath")?;
-            serde_json::to_value(
-                crate::services::file_browser_service::rename_file(old_path, new_path)
-                    .await
-                    .map_err(|error| format!("重命名文件失败: {error}"))?,
-            )?
-        }
         "get_file_name" => {
             let args = args_or_default(args);
             let path = get_string_arg(&args, "path", "path")?;

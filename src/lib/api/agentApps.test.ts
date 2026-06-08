@@ -4,6 +4,7 @@ import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory
 import { buildCloudReleasePackageIdentity } from "@/features/agent-app/install/cloudBootstrap";
 import { buildAgentAppPackageCacheEntry } from "@/features/agent-app/install/packageCache";
 import { buildWorkflowRuntimeCapabilityProfile } from "@/features/agent-app/runtime/workflowRuntimeCapabilityProfile";
+import type { ShellDescriptor } from "@/features/agent-app/shell";
 import type {
   AppManifest,
   CloudBootstrapApp,
@@ -14,14 +15,18 @@ import {
   installLocalAgentAppPackage,
   launchAgentAppShell,
   listInstalledAgentApps,
+  previewAgentAppUninstall,
   reviewCloudAgentAppRelease,
   reviewLocalAgentAppPackage,
+  saveInstalledAgentAppState,
   selectAgentAppDirectory,
   selectLocalAgentAppDirectory,
+  setAgentAppDisabled,
   getAgentAppUiRuntimeStatus,
   startAgentAppUiRuntime,
   stopAgentAppUiRuntime,
   submitAgentAppRegistrationCode,
+  uninstallAgentApp,
 } from "./agentApps";
 
 const LOCAL_APP_DIR = "/tmp/lime/content-factory-app";
@@ -71,6 +76,48 @@ function buildCloudApp(
     policyDefaults: {},
     toolAvailability: [],
     ...overrides,
+  };
+}
+
+function buildShellDescriptor(): ShellDescriptor {
+  return {
+    descriptorVersion: 1,
+    appId: "content-factory-app",
+    packageHash: PACKAGE_HASH,
+    manifestHash: MANIFEST_HASH,
+    installMode: "standalone",
+    runtimeProfile: {
+      runtimeId: "lime-runtime-local",
+      runtimeVersion: "0.8.0",
+      shellKind: "app_shell",
+      installMode: "standalone",
+    },
+    entry: {
+      entryKey: "dashboard",
+      kind: "page",
+      title: "首页",
+      route: "/dashboard",
+    },
+    isolation: {
+      packageMount: "read-only",
+      secrets: "refs-only",
+      sideEffects: "runtime-broker",
+      evidence: "runtime-provenance",
+      storageNamespace: "content-factory-app",
+    },
+    branding: {
+      name: "内容工厂",
+      windowTitle: "内容工厂",
+    },
+    packageIdentity: {
+      sourceKind: "local_folder",
+      sourceUri: LOCAL_APP_DIR,
+      appId: "content-factory-app",
+      appVersion: "0.8.0",
+      packageHash: PACKAGE_HASH,
+      manifestHash: MANIFEST_HASH,
+      loadedAt: "2026-05-15T00:00:00.000Z",
+    },
   };
 }
 
@@ -358,6 +405,39 @@ describe("agentApps API", () => {
     expect(safeInvoke).toHaveBeenCalledTimes(1);
   });
 
+  it("审查本地 Agent App 时 inspect 返回非 package inspection 应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(
+      reviewLocalAgentAppPackage({
+        appDir: LOCAL_APP_DIR,
+        profile: buildWorkflowRuntimeCapabilityProfile({
+          realAdapterEnabled: true,
+          uiRuntimeEnabled: true,
+          workerRuntimeEnabled: true,
+        }),
+      }),
+    ).rejects.toThrow("agent_app_inspect_local_package did not return appDir");
+    expect(safeInvoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("安装本地 Agent App 时 save installed state 返回非 state 应 fail closed", async () => {
+    const state = (
+      await reviewCloudAgentAppRelease({
+        app: buildCloudApp(),
+        packageManifest: contentFactoryFixture,
+      })
+    ).state;
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(saveInstalledAgentAppState({ state })).rejects.toThrow(
+      "agent_app_save_installed_state did not return appId",
+    );
+    expect(safeInvoke).toHaveBeenCalledWith("agent_app_save_installed_state", {
+      request: { state },
+    });
+  });
+
   it("审查 Cloud release 时缺少 verified package source 应阻断", async () => {
     await expect(
       reviewCloudAgentAppRelease({
@@ -371,6 +451,21 @@ describe("agentApps API", () => {
       }),
     ).rejects.toThrow("missing a verified package source");
     expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("审查 Cloud release 时 fetch package 返回非 cache entry 应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(
+      reviewCloudAgentAppRelease({
+        app: buildCloudApp(),
+        profile: buildWorkflowRuntimeCapabilityProfile({
+          realAdapterEnabled: true,
+          uiRuntimeEnabled: true,
+          workerRuntimeEnabled: true,
+        }),
+      }),
+    ).rejects.toThrow("agent_app_fetch_cloud_package did not return appId");
   });
 
   it("审查 Cloud release 时应通过集中命令 fetch package 并生成 review", async () => {
@@ -808,6 +903,67 @@ describe("agentApps API", () => {
     expect(safeInvoke).not.toHaveBeenCalledWith("agent_app_stop_ui_runtime");
   });
 
+  it("Agent App set disabled 返回无效 installed list 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      states: [
+        {
+          appId: "content-factory-app",
+          disabled: true,
+        },
+      ],
+      issues: [],
+    });
+
+    await expect(
+      setAgentAppDisabled({
+        appId: "content-factory-app",
+        disabled: true,
+      }),
+    ).rejects.toThrow("agent_app_set_disabled.states[0] did not return installMode");
+  });
+
+  it("Agent App uninstall rehearsal 返回非演练结果时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(
+      previewAgentAppUninstall({
+        appId: "content-factory-app",
+        mode: "keep-data",
+      }),
+    ).rejects.toThrow("agent_app_uninstall_rehearsal did not return appId");
+  });
+
+  it("Agent App uninstall 返回无效 installed list 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      status: "deleted",
+      rehearsal: {
+        appId: "content-factory-app",
+        packageHash: PACKAGE_HASH,
+        mode: "keep-data",
+        generatedAt: "2026-05-15T00:03:00.000Z",
+        deletedTargetCount: 0,
+        retainedTargetCount: 0,
+        targets: [],
+        warnings: [],
+      },
+      list: {
+        states: [{ success: true }],
+        issues: [],
+      },
+      removedTargetCount: 0,
+      missingTargetCount: 0,
+      blockerCodes: [],
+      deleteEvidence: null,
+    });
+
+    await expect(
+      uninstallAgentApp({
+        appId: "content-factory-app",
+        mode: "keep-data",
+      }),
+    ).rejects.toThrow("agent_app_uninstall.states[0] did not return appId");
+  });
+
   it("Agent App 宿主目录选择网关应走 current Desktop Host 命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValue({
       path: LOCAL_APP_DIR,
@@ -825,46 +981,29 @@ describe("agentApps API", () => {
     });
   });
 
+  it("Agent App 宿主目录选择缺少 cancelled 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      path: LOCAL_APP_DIR,
+    });
+
+    await expect(
+      selectAgentAppDirectory({ title: "选择应用目录" }),
+    ).rejects.toThrow("agent_app_select_directory did not return cancelled");
+  });
+
+  it("Agent App 宿主目录选择未取消但缺少 path 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValue({
+      path: null,
+      cancelled: false,
+    });
+
+    await expect(
+      selectAgentAppDirectory({ title: "选择应用目录" }),
+    ).rejects.toThrow("agent_app_select_directory did not return selected path");
+  });
+
   it("Agent App Shell launch 网关应通过 current 命令提交 descriptor", async () => {
-    const descriptor = {
-      descriptorVersion: 1,
-      appId: "content-factory-app",
-      packageHash: PACKAGE_HASH,
-      manifestHash: MANIFEST_HASH,
-      installMode: "standalone",
-      runtimeProfile: {
-        runtimeId: "lime-runtime-local",
-        runtimeVersion: "0.8.0",
-        shellKind: "app_shell",
-        installMode: "standalone",
-      },
-      entry: {
-        entryKey: "dashboard",
-        kind: "page",
-        title: "首页",
-        route: "/dashboard",
-      },
-      isolation: {
-        packageMount: "read-only",
-        secrets: "refs-only",
-        sideEffects: "runtime-broker",
-        evidence: "runtime-provenance",
-        storageNamespace: "content-factory-app",
-      },
-      branding: {
-        name: "内容工厂",
-        windowTitle: "内容工厂",
-      },
-      packageIdentity: {
-        sourceKind: "local_folder",
-        sourceUri: LOCAL_APP_DIR,
-        appId: "content-factory-app",
-        appVersion: "0.8.0",
-        packageHash: PACKAGE_HASH,
-        manifestHash: MANIFEST_HASH,
-        loadedAt: "2026-05-15T00:00:00.000Z",
-      },
-    } as const;
+    const descriptor = buildShellDescriptor();
     vi.mocked(safeInvoke).mockResolvedValue({
       appId: "content-factory-app",
       status: "launched",
@@ -883,5 +1022,30 @@ describe("agentApps API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("agent_app_launch_shell", {
       request: { descriptor },
     });
+  });
+
+  it("Agent App Shell launch blocked 结果不要求 launchedAt", async () => {
+    const descriptor = buildShellDescriptor();
+    vi.mocked(safeInvoke).mockResolvedValue({
+      appId: "content-factory-app",
+      status: "blocked",
+      devShell: true,
+      blockerCodes: ["INSTALLED_STATE_MISSING"],
+      message: "Agent App 未安装",
+    });
+
+    await expect(launchAgentAppShell({ descriptor })).resolves.toMatchObject({
+      status: "blocked",
+      blockerCodes: ["INSTALLED_STATE_MISSING"],
+    });
+  });
+
+  it("Agent App Shell launch 返回非 shell 结果时应 fail closed", async () => {
+    const descriptor = buildShellDescriptor();
+    vi.mocked(safeInvoke).mockResolvedValue({ success: true });
+
+    await expect(launchAgentAppShell({ descriptor })).rejects.toThrow(
+      "agent_app_launch_shell did not return status",
+    );
   });
 });

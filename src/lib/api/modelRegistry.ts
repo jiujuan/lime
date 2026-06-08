@@ -6,6 +6,7 @@
 
 import { AppServerClient } from "@/lib/api/appServer";
 import { safeInvoke } from "@/lib/dev-bridge";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import type {
   EnhancedModelMetadata,
   ModelSyncState,
@@ -45,6 +46,8 @@ type ModelProviderAliasReadAppServerResponse = {
 type ModelProviderAliasListAppServerResponse = {
   configs?: Record<string, ProviderAliasConfig> | null;
 };
+
+const MODEL_REGISTRY_CURRENT_SURFACE = "真实模型注册表 current 通道";
 
 async function requestModelRegistryAppServer<T>(
   method: string,
@@ -133,6 +136,71 @@ export function invalidateModelRegistryCache(): void {
   invalidateAliasConfigCache();
 }
 
+async function invokeModelRegistryCompatCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const result = args
+    ? await safeInvoke(command, args)
+    : await safeInvoke(command);
+  assertNotDiagnosticFacade(command, result, MODEL_REGISTRY_CURRENT_SURFACE);
+  return result as T;
+}
+
+function assertStringArray(command: string, value: unknown): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.some((item) => typeof item !== "string")
+  ) {
+    throw new Error(`${command} did not return a string array`);
+  }
+  return value;
+}
+
+function assertNumber(command: string, value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${command} did not return a finite number`);
+  }
+  return value;
+}
+
+function assertBoolean(command: string, value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${command} did not return a boolean`);
+  }
+  return value;
+}
+
+function assertVoidLike(command: string, value: unknown): void {
+  if (value == null) {
+    return;
+  }
+  if (
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 0
+  ) {
+    return;
+  }
+  throw new Error(`${command} did not return an empty result`);
+}
+
+function modelMatchesSearchQuery(
+  model: EnhancedModelMetadata,
+  normalizedQuery: string,
+): boolean {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return [
+    model.id,
+    model.display_name,
+    model.provider_id,
+    model.provider_name,
+  ].some((value) => value?.toLowerCase().includes(normalizedQuery));
+}
+
 /**
  * 获取所有模型
  */
@@ -166,7 +234,10 @@ export async function getModelRegistry(
  * 兼容旧模型注册表 provider_id 查询；本地模型目录已下线，后端返回空集合。
  */
 export async function getModelRegistryProviderIds(): Promise<string[]> {
-  return safeInvoke("get_model_registry_provider_ids");
+  const result = await invokeModelRegistryCompatCommand<unknown>(
+    "get_model_registry_provider_ids",
+  );
+  return assertStringArray("get_model_registry_provider_ids", result);
 }
 
 /**
@@ -174,7 +245,10 @@ export async function getModelRegistryProviderIds(): Promise<string[]> {
  * @returns 当前模型数量
  */
 export async function refreshModelRegistry(): Promise<number> {
-  const count = await safeInvoke<number>("refresh_model_registry");
+  const result = await invokeModelRegistryCompatCommand<unknown>(
+    "refresh_model_registry",
+  );
+  const count = assertNumber("refresh_model_registry", result);
   invalidateModelRegistryCache();
   return count;
 }
@@ -188,7 +262,18 @@ export async function searchModels(
   query: string,
   limit?: number,
 ): Promise<EnhancedModelMetadata[]> {
-  return safeInvoke("search_models", { query, limit });
+  const normalizedQuery = query.trim().toLowerCase();
+  const models = await getModelRegistry();
+  const filteredModels = models.filter((model) =>
+    modelMatchesSearchQuery(model, normalizedQuery),
+  );
+  const safeLimit =
+    typeof limit === "number" && Number.isFinite(limit)
+      ? Math.max(0, Math.floor(limit))
+      : undefined;
+  return typeof safeLimit === "number"
+    ? filteredModels.slice(0, safeLimit)
+    : filteredModels;
 }
 
 /**
@@ -214,7 +299,11 @@ export async function getModelPreferences(): Promise<UserModelPreference[]> {
  * @returns 新的收藏状态
  */
 export async function toggleModelFavorite(modelId: string): Promise<boolean> {
-  return safeInvoke("toggle_model_favorite", { modelId });
+  const result = await invokeModelRegistryCompatCommand<unknown>(
+    "toggle_model_favorite",
+    { modelId },
+  );
+  return assertBoolean("toggle_model_favorite", result);
 }
 
 /**
@@ -222,7 +311,10 @@ export async function toggleModelFavorite(modelId: string): Promise<boolean> {
  * @param modelId 模型 ID
  */
 export async function hideModel(modelId: string): Promise<void> {
-  return safeInvoke("hide_model", { modelId });
+  const result = await invokeModelRegistryCompatCommand<unknown>("hide_model", {
+    modelId,
+  });
+  assertVoidLike("hide_model", result);
 }
 
 /**
@@ -230,7 +322,11 @@ export async function hideModel(modelId: string): Promise<void> {
  * @param modelId 模型 ID
  */
 export async function recordModelUsage(modelId: string): Promise<void> {
-  return safeInvoke("record_model_usage", { modelId });
+  const result = await invokeModelRegistryCompatCommand<unknown>(
+    "record_model_usage",
+    { modelId },
+  );
+  assertVoidLike("record_model_usage", result);
 }
 
 /**

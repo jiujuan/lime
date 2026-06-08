@@ -762,6 +762,85 @@ describe("项目管理 API", () => {
         "content_stats 尚未接入",
       );
     });
+
+    it("legacy workspace/content/general workbench 命令收到错误返回形态时应 fail closed", async () => {
+      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+      await expect(
+        createProject({ name: "伪项目", rootPath: "/tmp/fake" }),
+      ).rejects.toThrow("workspace_create did not return workspace");
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce({ id: "project-1" });
+      await expect(updateProject("project-1", { name: "伪更新" })).rejects.toThrow(
+        "workspace_update did not return workspace",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+      await expect(deleteProject("project-1", true)).rejects.toThrow(
+        "workspace_delete did not return boolean result",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+      await expect(setDefaultProject("project-1")).rejects.toThrow(
+        "workspace_set_default did not return void result",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce({
+        id: "content-1",
+        project_id: "project-1",
+        title: "缺正文",
+        content_type: "chapter",
+        status: "draft",
+        order: 1,
+        word_count: 10,
+        created_at: 1,
+        updated_at: 2,
+      });
+      await expect(
+        createContent({ project_id: "project-1", title: "缺正文" }),
+      ).rejects.toThrow("content_create did not return content detail");
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+      await expect(getContent("content-1")).rejects.toThrow(
+        "content_get did not return content detail",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce({
+        content_id: "content-1",
+        current_version_id: "v1",
+        version_count: 1,
+        versions: [{ id: "v1", created_at: 1 }],
+      });
+      await expect(
+        getGeneralWorkbenchDocumentState("content-1"),
+      ).rejects.toThrow(
+        "content_get_general_workbench_document_state did not return general workbench document state",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce([{ id: "content-1" }]);
+      await expect(listContents("project-1")).rejects.toThrow(
+        "content_list did not return content list",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce(null);
+      await expect(updateContent("content-1", { title: "空更新" })).rejects.toThrow(
+        "content_update did not return content detail",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+      await expect(deleteContent("content-1")).rejects.toThrow(
+        "content_delete did not return boolean result",
+      );
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+      await expect(
+        reorderContents("project-1", ["content-1"]),
+      ).rejects.toThrow("content_reorder did not return void result");
+
+      vi.mocked(safeInvoke).mockResolvedValueOnce([1, "2", 3]);
+      await expect(getContentStats("project-1")).rejects.toThrow(
+        "content_stats did not return content stats",
+      );
+    });
   });
 
   describe("isUserProjectType", () => {

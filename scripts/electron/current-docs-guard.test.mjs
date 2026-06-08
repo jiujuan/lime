@@ -125,6 +125,28 @@ function expectNoPositiveCodexAppUiReference(content, label) {
   ).toEqual([]);
 }
 
+function expectNoLegacyAgentUiCommandGatewayReference(content, label) {
+  const forbiddenSnippets = [
+    "Tauri Commands agent_runtime_*",
+    "Tauri Command 层",
+    "Tauri command 主入口",
+    "RuntimeApi --> Tauri",
+    "Api --> Tauri",
+    "Tauri --> AgentCrate",
+    "Tauri --> Services",
+    "任何新增或修改 Tauri command 必须同步四侧",
+    "runtime command + DAO",
+    "Tauri command / bridge",
+    "协议、Tauri command",
+  ];
+
+  for (const snippet of forbiddenSnippets) {
+    expect(content, `${label} must not treat legacy Tauri as AgentUI current`).not.toContain(
+      snippet,
+    );
+  }
+}
+
 describe("Electron current testing docs guard", () => {
   it("does not recommend retired dev host as a current GUI startup path", () => {
     const requiredDocs = [
@@ -550,6 +572,40 @@ describe("Electron current testing docs guard", () => {
     const roadmap = readFile("internal/roadmap/appserver/README.md");
     expect(roadmap).toContain("Electron Desktop Host current 契约");
     expect(roadmap).not.toContain("Lime 前端切换到 Electron Desktop Host");
+  });
+
+  it("keeps AgentUI docs on Electron and App Server command gateway", () => {
+    const agentUiDocs = [
+      "internal/roadmap/agentui/README.md",
+      "internal/roadmap/agentui/lime-agentui-target-architecture.md",
+      "internal/roadmap/agentui/lime-agentui-code-map.md",
+      "internal/roadmap/agentui/lime-agentui-backend-coordination.md",
+      "internal/roadmap/agentui/lime-agentui-implementation-roadmap.md",
+      "internal/roadmap/agentui/conversation-projection-implementation-plan.md",
+    ];
+
+    for (const filePath of agentUiDocs) {
+      const content = readFile(filePath);
+      expect(content, filePath).toContain("App Server");
+      expectNoLegacyAgentUiCommandGatewayReference(content, filePath);
+    }
+
+    const targetArchitecture = readFile(
+      "internal/roadmap/agentui/lime-agentui-target-architecture.md",
+    );
+    expect(targetArchitecture).toContain(
+      "Electron Desktop Host bridge / App Server JSON-RPC",
+    );
+    expect(targetArchitecture).toContain("CommandGateway --> RuntimeQueue");
+
+    const codeMap = readFile(
+      "internal/roadmap/agentui/lime-agentui-code-map.md",
+    );
+    expect(codeMap).toContain("## 5. Command Gateway 层");
+    expect(codeMap).toContain(
+      "legacy `agent_runtime_*` Rust command facade",
+    );
+    expect(codeMap).toContain("不作为新增能力入口");
   });
 
   it("keeps i18n app metadata workflow on Electron Forge current sources", () => {

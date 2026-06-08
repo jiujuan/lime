@@ -1,4 +1,20 @@
+use crate::AgentAppCloudReleaseDescriptor;
+use crate::AgentAppDeleteDataExecutionEvidence;
+use crate::AgentAppDeleteDataPostDeleteResidualAudit;
+use crate::AgentAppDeleteDataTargetEvidence;
+use crate::AgentAppFetchCloudPackageParams;
+use crate::AgentAppInstalledDisabledSetParams;
 use crate::AgentAppInstalledListResponse;
+use crate::AgentAppInstalledSaveParams;
+use crate::AgentAppLocalPackageInspectParams;
+use crate::AgentAppLocalPackageInspectResponse;
+use crate::AgentAppPackageCacheEntry;
+use crate::AgentAppPackageIdentity;
+use crate::AgentAppUninstallParams;
+use crate::AgentAppUninstallRehearsalParams;
+use crate::AgentAppUninstallRehearsalResponse;
+use crate::AgentAppUninstallRehearsalTarget;
+use crate::AgentAppUninstallResponse;
 use crate::AgentAppUiRuntimeStartParams;
 use crate::AgentAppUiRuntimeStatusParams;
 use crate::AgentAppUiRuntimeStatusResponse;
@@ -72,11 +88,16 @@ use crate::EvidenceExportParams;
 use crate::EvidenceExportResponse;
 use crate::EvidencePackArtifact;
 use crate::EvidencePackSummary;
+use crate::FileSystemCreateDirectoryParams;
+use crate::FileSystemCreateFileParams;
+use crate::FileSystemDeleteFileParams;
 use crate::FileSystemDirectoryListing;
 use crate::FileSystemFileEntry;
 use crate::FileSystemFilePreview;
 use crate::FileSystemListDirectoryParams;
+use crate::FileSystemMutationResponse;
 use crate::FileSystemReadFilePreviewParams;
+use crate::FileSystemRenameFileParams;
 use crate::InitializeParams;
 use crate::InitializeResponse;
 use crate::JsonRpcError;
@@ -85,8 +106,23 @@ use crate::JsonRpcMessage;
 use crate::JsonRpcNotification;
 use crate::JsonRpcRequest;
 use crate::JsonRpcResponse;
+use crate::KnowledgeCompilePackParams;
+use crate::KnowledgeCompilePackResponse;
+use crate::KnowledgeContextResolutionResponse;
+use crate::KnowledgeImportSourceParams;
+use crate::KnowledgeImportSourceResponse;
 use crate::KnowledgeListPacksParams;
 use crate::KnowledgeListPacksResponse;
+use crate::KnowledgeReadPackParams;
+use crate::KnowledgeReadPackResponse;
+use crate::KnowledgeResolveContextPackParams;
+use crate::KnowledgeResolveContextParams;
+use crate::KnowledgeSetDefaultPackParams;
+use crate::KnowledgeSetDefaultPackResponse;
+use crate::KnowledgeUpdatePackStatusParams;
+use crate::KnowledgeUpdatePackStatusResponse;
+use crate::KnowledgeValidateContextRunParams;
+use crate::KnowledgeValidateContextRunResponse;
 use crate::McpPromptListResponse;
 use crate::McpResourceListResponse;
 use crate::McpServerListResponse;
@@ -143,6 +179,13 @@ use crate::ServerInfo;
 use crate::SkillListResponse;
 use crate::SkillReadParams;
 use crate::SkillReadResponse;
+use crate::UsageStatsDailyTrendsListResponse;
+use crate::UsageStatsDailyUsage;
+use crate::UsageStatsModelRankingListResponse;
+use crate::UsageStatsModelUsage;
+use crate::UsageStatsRangeParams;
+use crate::UsageStatsReadResponse;
+use crate::UsageStatsSummary;
 use crate::WorkspaceEnsureParams;
 use crate::WorkspaceEnsureReadyResponse;
 use crate::WorkspaceListResponse;
@@ -301,6 +344,11 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ArtifactReadResponse>("ArtifactReadResponse"),
         typed_schema::<FileSystemListDirectoryParams>("FileSystemListDirectoryParams"),
         typed_schema::<FileSystemReadFilePreviewParams>("FileSystemReadFilePreviewParams"),
+        typed_schema::<FileSystemCreateFileParams>("FileSystemCreateFileParams"),
+        typed_schema::<FileSystemCreateDirectoryParams>("FileSystemCreateDirectoryParams"),
+        typed_schema::<FileSystemRenameFileParams>("FileSystemRenameFileParams"),
+        typed_schema::<FileSystemDeleteFileParams>("FileSystemDeleteFileParams"),
+        typed_schema::<FileSystemMutationResponse>("FileSystemMutationResponse"),
         typed_schema::<FileSystemDirectoryListing>("FileSystemDirectoryListing"),
         typed_schema::<FileSystemFileEntry>("FileSystemFileEntry"),
         typed_schema::<FileSystemFilePreview>("FileSystemFilePreview"),
@@ -331,13 +379,46 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<WorkspaceRegisteredSkillsListResponse>(
             "WorkspaceRegisteredSkillsListResponse",
         ),
+        typed_schema::<AgentAppLocalPackageInspectParams>("AgentAppLocalPackageInspectParams"),
+        typed_schema::<AgentAppLocalPackageInspectResponse>("AgentAppLocalPackageInspectResponse"),
+        typed_schema::<AgentAppFetchCloudPackageParams>("AgentAppFetchCloudPackageParams"),
+        typed_schema::<AgentAppCloudReleaseDescriptor>("AgentAppCloudReleaseDescriptor"),
+        typed_schema::<AgentAppPackageCacheEntry>("AgentAppPackageCacheEntry"),
+        typed_schema::<AgentAppPackageIdentity>("AgentAppPackageIdentity"),
+        typed_schema::<AgentAppInstalledSaveParams>("AgentAppInstalledSaveParams"),
+        typed_schema::<AgentAppInstalledDisabledSetParams>("AgentAppInstalledDisabledSetParams"),
         typed_schema::<AgentAppInstalledListResponse>("AgentAppInstalledListResponse"),
+        typed_schema::<AgentAppUninstallRehearsalParams>("AgentAppUninstallRehearsalParams"),
+        typed_schema::<AgentAppUninstallRehearsalResponse>("AgentAppUninstallRehearsalResponse"),
+        typed_schema::<AgentAppUninstallRehearsalTarget>("AgentAppUninstallRehearsalTarget"),
+        typed_schema::<AgentAppUninstallParams>("AgentAppUninstallParams"),
+        typed_schema::<AgentAppUninstallResponse>("AgentAppUninstallResponse"),
+        typed_schema::<AgentAppDeleteDataExecutionEvidence>("AgentAppDeleteDataExecutionEvidence"),
+        typed_schema::<AgentAppDeleteDataTargetEvidence>("AgentAppDeleteDataTargetEvidence"),
+        typed_schema::<AgentAppDeleteDataPostDeleteResidualAudit>(
+            "AgentAppDeleteDataPostDeleteResidualAudit",
+        ),
         typed_schema::<AgentAppUiRuntimeStartParams>("AgentAppUiRuntimeStartParams"),
         typed_schema::<AgentAppUiRuntimeStatusParams>("AgentAppUiRuntimeStatusParams"),
         typed_schema::<AgentAppUiRuntimeStopParams>("AgentAppUiRuntimeStopParams"),
         typed_schema::<AgentAppUiRuntimeStatusResponse>("AgentAppUiRuntimeStatusResponse"),
         typed_schema::<KnowledgeListPacksParams>("KnowledgeListPacksParams"),
         typed_schema::<KnowledgeListPacksResponse>("KnowledgeListPacksResponse"),
+        typed_schema::<KnowledgeReadPackParams>("KnowledgeReadPackParams"),
+        typed_schema::<KnowledgeReadPackResponse>("KnowledgeReadPackResponse"),
+        typed_schema::<KnowledgeImportSourceParams>("KnowledgeImportSourceParams"),
+        typed_schema::<KnowledgeImportSourceResponse>("KnowledgeImportSourceResponse"),
+        typed_schema::<KnowledgeCompilePackParams>("KnowledgeCompilePackParams"),
+        typed_schema::<KnowledgeCompilePackResponse>("KnowledgeCompilePackResponse"),
+        typed_schema::<KnowledgeSetDefaultPackParams>("KnowledgeSetDefaultPackParams"),
+        typed_schema::<KnowledgeSetDefaultPackResponse>("KnowledgeSetDefaultPackResponse"),
+        typed_schema::<KnowledgeUpdatePackStatusParams>("KnowledgeUpdatePackStatusParams"),
+        typed_schema::<KnowledgeUpdatePackStatusResponse>("KnowledgeUpdatePackStatusResponse"),
+        typed_schema::<KnowledgeResolveContextPackParams>("KnowledgeResolveContextPackParams"),
+        typed_schema::<KnowledgeResolveContextParams>("KnowledgeResolveContextParams"),
+        typed_schema::<KnowledgeContextResolutionResponse>("KnowledgeContextResolutionResponse"),
+        typed_schema::<KnowledgeValidateContextRunParams>("KnowledgeValidateContextRunParams"),
+        typed_schema::<KnowledgeValidateContextRunResponse>("KnowledgeValidateContextRunResponse"),
         typed_schema::<AutomationSchedulerConfigReadResponse>(
             "AutomationSchedulerConfigReadResponse",
         ),
@@ -370,6 +451,13 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<McpResourceListResponse>("McpResourceListResponse"),
         typed_schema::<ProjectMemoryReadParams>("ProjectMemoryReadParams"),
         typed_schema::<ProjectMemoryReadResponse>("ProjectMemoryReadResponse"),
+        typed_schema::<UsageStatsRangeParams>("UsageStatsRangeParams"),
+        typed_schema::<UsageStatsSummary>("UsageStatsSummary"),
+        typed_schema::<UsageStatsReadResponse>("UsageStatsReadResponse"),
+        typed_schema::<UsageStatsModelUsage>("UsageStatsModelUsage"),
+        typed_schema::<UsageStatsModelRankingListResponse>("UsageStatsModelRankingListResponse"),
+        typed_schema::<UsageStatsDailyUsage>("UsageStatsDailyUsage"),
+        typed_schema::<UsageStatsDailyTrendsListResponse>("UsageStatsDailyTrendsListResponse"),
         typed_schema::<ModelListParams>("ModelListParams"),
         typed_schema::<ModelListResponse>("ModelListResponse"),
         typed_schema::<ModelPreferencesListResponse>("ModelPreferencesListResponse"),

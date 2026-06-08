@@ -1931,7 +1931,7 @@ export const capabilityDraftsApi = {
         { request },
       );
     if (!Array.isArray(drafts)) {
-      return [];
+      throw new Error("capability_draft_list did not return drafts");
     }
     return drafts.map(normalizeDraft);
   },

@@ -34,4 +34,17 @@ describe("frontendCrash API", () => {
       "report_frontend_crash 尚未接入真实前端崩溃诊断 current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
+
+  it("前端崩溃上报遇到 mock-like 或错误 envelope 时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ error: "failed" });
+
+    await expect(reportFrontendCrash({ message: "empty" })).rejects.toThrow(
+      "report_frontend_crash did not return frontend crash report result",
+    );
+    await expect(reportFrontendCrash({ message: "error" })).rejects.toThrow(
+      "report_frontend_crash did not return frontend crash report result",
+    );
+  });
 });

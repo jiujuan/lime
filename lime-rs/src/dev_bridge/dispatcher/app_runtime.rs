@@ -28,14 +28,6 @@ pub(super) async fn try_handle(
             crate::services::environment_service::apply_configured_environment(&config).await;
             serde_json::json!({ "success": true })
         }
-        "get_environment_preview" => {
-            let config_path = lime_core::config::ConfigManager::default_config_path();
-            let manager = lime_core::config::ConfigManager::load(&config_path)?;
-            let preview =
-                crate::services::environment_service::build_environment_preview(manager.config())
-                    .await;
-            serde_json::to_value(preview)?
-        }
         "get_server_diagnostics" => {
             let (status, capability_routing, response_cache, request_dedup, idempotency) = {
                 let server = state.server.read().await;

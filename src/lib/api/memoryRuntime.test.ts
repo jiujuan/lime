@@ -22,6 +22,29 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
+const statsResponse = {
+  total_entries: 1,
+  storage_used: 2,
+  memory_count: 3,
+};
+
+const overviewResponse = {
+  stats: statsResponse,
+  categories: [],
+  entries: [],
+};
+
+const autoIndexResponse = {
+  enabled: true,
+  root_dir: "/tmp/workspace/memory",
+  entrypoint: "MEMORY.md",
+  max_loaded_lines: 200,
+  entry_exists: true,
+  total_lines: 0,
+  preview_lines: [],
+  items: [],
+};
+
 describe("memoryRuntime API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,11 +54,7 @@ describe("memoryRuntime API", () => {
     vi.mocked(safeInvoke).mockImplementation(async (command) => {
       switch (command) {
         case "memory_runtime_get_stats":
-          return {
-            total_entries: 1,
-            storage_used: 2,
-            memory_count: 3,
-          };
+          return statsResponse;
         case "memory_runtime_request_analysis":
           return { analyzed_sessions: 1 };
         case "memory_runtime_cleanup":
@@ -47,11 +66,11 @@ describe("memoryRuntime API", () => {
         case "memory_runtime_prefetch_for_turn":
           return { session_id: "session-1", durable_memories: [] };
         case "memory_runtime_get_overview":
-          return { stats: {}, categories: [], entries: [] };
+          return overviewResponse;
         case "memory_get_effective_sources":
           return { sources: [] };
         case "memory_get_auto_index":
-          return { items: [] };
+          return autoIndexResponse;
         case "memory_scaffold_memdir":
           return { files: [], root_dir: "/tmp/workspace/memory" };
         case "memory_scaffold_runtime_agents_template":
@@ -175,7 +194,10 @@ describe("memoryRuntime API", () => {
     vi.mocked(safeInvoke).mockImplementation(async (command) => {
       switch (command) {
         case "memory_runtime_get_stats":
-          return { total_entries: 9 };
+          return {
+            ...statsResponse,
+            total_entries: 9,
+          };
         case "memory_runtime_request_analysis":
           return { analyzed_sessions: 3 };
         case "memory_runtime_cleanup":
@@ -187,11 +209,17 @@ describe("memoryRuntime API", () => {
         case "memory_runtime_prefetch_for_turn":
           return { session_id: "session-2", durable_memories: [] };
         case "memory_runtime_get_overview":
-          return { stats: {}, categories: [], entries: [] };
+          return {
+            ...overviewResponse,
+            stats: {
+              ...statsResponse,
+              total_entries: 9,
+            },
+          };
         case "memory_get_effective_sources":
           return { sources: [] };
         case "memory_get_auto_index":
-          return { items: [] };
+          return autoIndexResponse;
         case "memory_toggle_auto":
           return { enabled: true };
         case "memory_update_auto_note":
@@ -295,6 +323,23 @@ describe("memoryRuntime API", () => {
 
     await expect(getContextMemoryStats()).rejects.toThrow(
       "memory_runtime_get_stats 尚未接入真实 Memory runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("记忆运行时读命令遇到非 Memory Runtime 响应形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ stats: {}, categories: [], entries: [] })
+      .mockResolvedValueOnce({ items: [] });
+
+    await expect(getContextMemoryStats()).rejects.toThrow(
+      "memory_runtime_get_stats did not return memory stats",
+    );
+    await expect(getContextMemoryOverview()).rejects.toThrow(
+      "memory_runtime_get_overview did not return memory overview",
+    );
+    await expect(getContextMemoryAutoIndex()).rejects.toThrow(
+      "memory_get_auto_index did not return auto memory index",
     );
   });
 

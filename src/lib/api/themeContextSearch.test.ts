@@ -158,6 +158,139 @@ describe("themeContextSearch API", () => {
     expect(serialized).not.toContain("searchMode");
   });
 
+  it("read model 尚未水合时应使用同 turn 的 message.delta 输出", async () => {
+    const appServerClient = appServerClientMock();
+
+    appServerClient.readSession.mockResolvedValue({
+      id: 3,
+      result: {
+        session: {
+          sessionId: "__lime_theme_context_search__-session",
+          threadId: "thread-theme-context-search",
+          appId: "desktop",
+          workspaceId: "workspace-1",
+          status: "completed",
+          createdAt: "2026-06-08T00:00:00.000Z",
+          updatedAt: "2026-06-08T00:00:02.000Z",
+        },
+        turns: [],
+        detail: {
+          messages: [],
+        },
+      },
+      response: { id: 3, result: {} },
+      notifications: [],
+      messages: [],
+    });
+    appServerClient.startTurn.mockImplementation(async (params) => ({
+      id: 2,
+      result: {
+        turn: {
+          turnId: params.turnId,
+          sessionId: params.sessionId,
+          threadId: "thread-theme-context-search",
+          status: "completed",
+          startedAt: "2026-06-08T00:00:01.000Z",
+          completedAt: "2026-06-08T00:00:02.000Z",
+        },
+      },
+      response: { id: 2, result: {} },
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              type: "message.delta",
+              turnId: params.turnId,
+              payload: {
+                text: '{"title":"社媒趋势","summary":"社媒讨论正在升温",',
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              type: "message.delta",
+              turnId: params.turnId,
+              payload: {
+                text: '"citations":[{"title":"Example","url":"https://example.com"}]}',
+              },
+            },
+          },
+        },
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              type: "turn.completed",
+              turnId: params.turnId,
+              payload: {
+                attemptsSummary: "notifications completed",
+              },
+            },
+          },
+        },
+      ],
+      messages: [],
+    }));
+
+    const result = await searchThemeContextWithAppServer(
+      {
+        workspaceId: "workspace-1",
+        providerType: "openai-compatible",
+        model: "gpt-4.1-mini",
+        query: "社媒趋势",
+        mode: "social",
+      },
+      appServerClient,
+    );
+
+    expect(result.rawResponse).toContain("社媒趋势");
+    expect(result.attemptsSummary).toBe("notifications completed");
+  });
+
+  it("App Server 未返回 assistant 输出时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+
+    appServerClient.readSession.mockResolvedValue({
+      id: 3,
+      result: {
+        session: {
+          sessionId: "__lime_theme_context_search__-session",
+          threadId: "thread-theme-context-search",
+          appId: "desktop",
+          workspaceId: "workspace-1",
+          status: "completed",
+          createdAt: "2026-06-08T00:00:00.000Z",
+          updatedAt: "2026-06-08T00:00:02.000Z",
+        },
+        turns: [],
+        detail: {
+          messages: [],
+        },
+      },
+      response: { id: 3, result: {} },
+      notifications: [],
+      messages: [],
+    });
+
+    await expect(
+      searchThemeContextWithAppServer(
+        {
+          workspaceId: "workspace-1",
+          providerType: "openai-compatible",
+          model: "gpt-4.1-mini",
+          query: "国际新闻",
+          mode: "web",
+        },
+        appServerClient,
+      ),
+    ).rejects.toThrow("App Server 上下文搜索未返回 assistant 输出");
+    expect(appServerClient.readSession).toHaveBeenCalled();
+  });
+
   it("缺少模型配置时应 fail closed", async () => {
     const appServerClient = appServerClientMock();
 

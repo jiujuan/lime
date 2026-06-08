@@ -1,35 +1,5 @@
-import type { AppManifest, InstalledAgentAppState } from "@/features/agent-app/types";
 export declare const agentAppMocks: {
-    agent_app_inspect_local_package: (args: any) => Promise<{
-        sourceKind: string;
-        sourceUri: string;
-        appDir: string;
-        appMarkdown: string;
-        manifest: AppManifest;
-        manifestHash: string;
-        packageHash: string;
-        inspectedAt: string;
-    }>;
-    agent_app_fetch_cloud_package: (args: any) => Promise<import("@/features/agent-app/install/packageCache").AgentAppPackageCacheEntry>;
-    agent_app_save_installed_state: (args: any) => Promise<InstalledAgentAppState>;
     agent_app_list_installed: () => Promise<import("@/features/agent-app/install/installedAppState").InstalledAgentAppStateListResult>;
-    agent_app_set_disabled: (args: any) => Promise<import("@/features/agent-app/install/installedAppState").InstalledAgentAppStateListResult>;
-    agent_app_uninstall_rehearsal: (args: any) => Promise<{
-        appId: string;
-        packageHash: string;
-        mode: string;
-        generatedAt: string;
-        deletedTargetCount: number;
-        retainedTargetCount: number;
-        targets: {
-            kind: string;
-            value: string;
-            safeToDelete: boolean;
-            action: string;
-            reason: string;
-        }[];
-        warnings: string[];
-    }>;
     agent_app_uninstall: (args: any) => Promise<{
         status: string;
         rehearsal: {
@@ -71,11 +41,6 @@ export declare const agentAppMocks: {
                 failedTarget: Record<string, unknown> | null;
             };
         } | null;
-    }>;
-    agent_app_select_directory: () => Promise<{
-        path: null;
-        cancelled: boolean;
-        message: string;
     }>;
     agent_app_launch_shell: (args: any) => Promise<{
         appId: string;

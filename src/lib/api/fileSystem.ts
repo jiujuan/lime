@@ -1,17 +1,39 @@
 import { convertFileSrc } from "@/lib/desktop-host/core";
 import { safeInvoke } from "@/lib/dev-bridge";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
+import { assertNotDiagnosticFacade } from "./diagnosticFacade";
+
+const FILE_SHELL_CURRENT_SURFACE = "真实文件壳 current 通道";
 
 export async function revealPathInFinder(path: string): Promise<void> {
-  await safeInvoke("reveal_in_finder", { path });
+  const result = await safeInvoke("reveal_in_finder", { path });
+  assertNotDiagnosticFacade(
+    "reveal_in_finder",
+    result,
+    FILE_SHELL_CURRENT_SURFACE,
+  );
 }
 
 export async function openPathWithDefaultApp(path: string): Promise<void> {
-  await safeInvoke("open_with_default_app", { path });
+  const result = await safeInvoke("open_with_default_app", { path });
+  assertNotDiagnosticFacade(
+    "open_with_default_app",
+    result,
+    FILE_SHELL_CURRENT_SURFACE,
+  );
 }
 
 export async function getHomeDirectory(): Promise<string> {
-  return safeInvoke<string>("get_home_dir");
+  const result = await safeInvoke<string>("get_home_dir");
+  assertNotDiagnosticFacade(
+    "get_home_dir",
+    result,
+    FILE_SHELL_CURRENT_SURFACE,
+  );
+  if (typeof result !== "string" || !result.trim()) {
+    throw new Error("get_home_dir did not return a home directory");
+  }
+  return result;
 }
 
 export function convertLocalFileSrc(path: string): string {

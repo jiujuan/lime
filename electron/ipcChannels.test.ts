@@ -49,7 +49,7 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_api_key_providers")).toBe(false);
     expect(isElectronHostCommand("list_dir")).toBe(false);
     expect(isElectronHostCommand("read_file_preview_cmd")).toBe(false);
-    expect(isElectronHostCommand("list_executable_skills")).toBe(true);
+    expect(isElectronHostCommand("list_executable_skills")).toBe(false);
     expect(isElectronHostCommand("workspace_list")).toBe(true);
     expect(isElectronHostCommand("workspace_get_by_path")).toBe(true);
     expect(isElectronHostCommand("get_config")).toBe(true);
@@ -87,6 +87,18 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("unified_memory_stats")).toBe(true);
     expect(isElectronHostCommand("get_mcp_servers")).toBe(true);
     expect(isElectronHostCommand("mcp_list_servers_with_status")).toBe(true);
+    for (const command of [
+      "knowledge_list_packs",
+      "knowledge_get_pack",
+      "knowledge_import_source",
+      "knowledge_compile_pack",
+      "knowledge_set_default_pack",
+      "knowledge_update_pack_status",
+      "knowledge_resolve_context",
+      "knowledge_validate_context_run",
+    ]) {
+      expect(isElectronHostCommand(command)).toBe(false);
+    }
     expect(isElectronHostCommand("site_get_adapter_catalog_status")).toBe(true);
     expect(isElectronHostCommand("open_external_url")).toBe(true);
     expect(isElectronHostCommand("open_with_default_app")).toBe(true);
@@ -158,9 +170,6 @@ describe("electron/ipcChannels", () => {
       "get_models_by_tier",
       "get_models_for_provider",
       "get_provider_alias_config",
-      "get_skill_detail",
-      "knowledge_list_packs",
-      "list_executable_skills",
       "mcp_list_prompts",
       "mcp_list_resources",
       "mcp_list_servers_with_status",

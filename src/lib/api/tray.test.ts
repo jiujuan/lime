@@ -77,4 +77,20 @@ describe("tray API", () => {
       "sync_tray_model_shortcuts 尚未接入真实托盘 current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
+
+  it("托盘同步遇到 mock-like payload 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(
+      syncTrayModelShortcuts({
+        current_model_provider_type: "openai",
+        current_model_provider_label: "OpenAI",
+        current_model: "gpt-4.1",
+        current_theme_label: "默认主题",
+        quick_model_groups: [],
+      }),
+    ).rejects.toThrow(
+      "sync_tray_model_shortcuts did not return tray sync result",
+    );
+  });
 });

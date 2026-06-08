@@ -7,6 +7,11 @@ import {
   assertLiveProviderSmokeAllowed,
   liveProviderSmokeAllowed,
 } from "./lib/live-provider-smoke-gate.mjs";
+import {
+  createAgentSessionCurrent,
+  readAgentRuntimeThreadCurrent,
+  startAgentSessionTurnCurrent,
+} from "./lib/managed-objective-continuation-smoke-core.mjs";
 
 const DEFAULT_HEALTH_URL = "http://127.0.0.1:3030/health";
 const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";
@@ -429,9 +434,7 @@ async function waitForSampleSummary(options, sessionId) {
   let lastSummary = null;
 
   while (Date.now() - startedAt < options.timeoutMs) {
-    const threadRead = await invoke(options, "agent_runtime_get_thread_read", {
-      sessionId,
-    });
+    const threadRead = await readAgentRuntimeThreadCurrent(options, sessionId);
     lastSummary = summarizeThreadRead(threadRead);
     if (isTerminalSample(lastSummary)) {
       return lastSummary;
@@ -447,24 +450,28 @@ async function waitForSampleSummary(options, sessionId) {
 
 async function runSample(options, workspaceId, sampleIndex) {
   const stamp = `${Date.now()}-${process.pid}-${sampleIndex}`;
-  const sessionId = await invoke(options, "agent_runtime_create_session", {
+  const sessionId = await createAgentSessionCurrent(options, {
     workspaceId,
-    name: `AgentUI TTFT live sample ${options.mode} ${stamp}`,
-    runStartHooks: false,
+    title: `AgentUI TTFT live sample ${options.mode} ${stamp}`,
+    metadata: {
+      harness: {
+        hiddenFromUserRecents: true,
+        source: "sample:agentui-ttft-live",
+        mode: options.mode,
+      },
+    },
   });
   const turnId = `agentui-ttft-${options.mode}-${stamp}`;
   const eventName = `aster_stream_${sessionId}_${turnId}`;
 
-  await invoke(options, "agent_runtime_submit_turn", {
-    request: {
-      message: options.message,
-      session_id: sessionId,
-      workspace_id: workspaceId,
-      event_name: eventName,
-      turn_id: turnId,
-      turn_config: buildTurnConfig(options),
-      skip_pre_submit_resume: true,
-    },
+  await startAgentSessionTurnCurrent(options, {
+    message: options.message,
+    sessionId,
+    workspaceId,
+    eventName,
+    turnId,
+    turnConfig: buildTurnConfig(options),
+    skipPreSubmitResume: true,
   });
 
   const summary = await waitForSampleSummary(options, sessionId);

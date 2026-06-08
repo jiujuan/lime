@@ -67,4 +67,17 @@ describe("externalUrl API", () => {
       "start_oem_cloud_oauth_callback_bridge 尚未接入真实 OAuth 本机回调桥 current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
+
+  it("OAuth 本机回调桥应校验返回地址形态", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ callbackUrl: "" });
+
+    await expect(startOemCloudOAuthCallbackBridge()).rejects.toThrow(
+      "start_oem_cloud_oauth_callback_bridge 未返回有效 OAuth 本机回调桥地址",
+    );
+    await expect(startOemCloudOAuthCallbackBridge()).rejects.toThrow(
+      "start_oem_cloud_oauth_callback_bridge 未返回有效 OAuth 本机回调桥地址",
+    );
+  });
 });

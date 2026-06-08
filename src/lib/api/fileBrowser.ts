@@ -52,7 +52,12 @@ export interface FileManagerLocation {
 
 export type FileBrowserAppServerClient = Pick<
   AppServerClient,
-  "listDirectory" | "readFilePreview"
+  | "listDirectory"
+  | "readFilePreview"
+  | "createFile"
+  | "createDirectory"
+  | "renameFile"
+  | "deleteFile"
 >;
 
 function createFileBrowserAppServerClient(): FileBrowserAppServerClient {
@@ -121,23 +126,23 @@ export async function readFilePreview(
 }
 
 export async function createFileAtPath(path: string): Promise<void> {
-  await invokeFileBrowserCommand("create_file", { path });
+  await createFileBrowserAppServerClient().createFile({ path });
 }
 
 export async function createDirectoryAtPath(path: string): Promise<void> {
-  await invokeFileBrowserCommand("create_directory", { path });
+  await createFileBrowserAppServerClient().createDirectory({ path });
 }
 
 export async function renamePath(
   oldPath: string,
   newPath: string,
 ): Promise<void> {
-  await invokeFileBrowserCommand("rename_file", { oldPath, newPath });
+  await createFileBrowserAppServerClient().renameFile({ oldPath, newPath });
 }
 
 export async function deletePath(
   path: string,
   recursive: boolean,
 ): Promise<void> {
-  await invokeFileBrowserCommand("delete_file", { path, recursive });
+  await createFileBrowserAppServerClient().deleteFile({ path, recursive });
 }

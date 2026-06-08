@@ -21,6 +21,7 @@ import {
   siteSaveAdapterResult as saveSiteAdapterResultViaRuntime,
   siteSearchAdapters as searchSiteAdaptersViaRuntime,
 } from "@/lib/api/agentRuntime";
+import { assertNotDiagnosticFacade } from "@/lib/api/diagnosticFacade";
 import { safeInvoke } from "@/lib/dev-bridge";
 
 /**
@@ -778,7 +779,10 @@ export async function openChromeProfileWindow(
 export async function getChromeProfileSessions(): Promise<
   ChromeProfileSessionInfo[]
 > {
-  return safeInvoke<ChromeProfileSessionInfo[]>("get_chrome_profile_sessions");
+  const command = "get_chrome_profile_sessions";
+  const result = await safeInvoke<ChromeProfileSessionInfo[]>(command);
+  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  return result;
 }
 
 /**
@@ -866,16 +870,20 @@ export async function restoreBrowserProfile(id: string): Promise<boolean> {
  * 获取 ChromeBridge 端点信息（用于扩展配置）
  */
 export async function getChromeBridgeEndpointInfo(): Promise<ChromeBridgeEndpointInfo> {
-  return safeInvoke<ChromeBridgeEndpointInfo>(
-    "get_chrome_bridge_endpoint_info",
-  );
+  const command = "get_chrome_bridge_endpoint_info";
+  const result = await safeInvoke<ChromeBridgeEndpointInfo>(command);
+  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  return result;
 }
 
 /**
  * 获取 ChromeBridge 当前连接状态
  */
 export async function getChromeBridgeStatus(): Promise<ChromeBridgeStatusSnapshot> {
-  return safeInvoke<ChromeBridgeStatusSnapshot>("get_chrome_bridge_status");
+  const command = "get_chrome_bridge_status";
+  const result = await safeInvoke<ChromeBridgeStatusSnapshot>(command);
+  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  return result;
 }
 
 export async function disconnectBrowserConnectorSession(params?: {
@@ -989,7 +997,10 @@ export async function chromeBridgeExecuteCommand(
 }
 
 export async function getBrowserBackendPolicy(): Promise<BrowserBackendPolicy> {
-  return safeInvoke<BrowserBackendPolicy>("get_browser_backend_policy");
+  const command = "get_browser_backend_policy";
+  const result = await safeInvoke<BrowserBackendPolicy>(command);
+  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  return result;
 }
 
 export async function setBrowserBackendPolicy(
@@ -1001,9 +1012,10 @@ export async function setBrowserBackendPolicy(
 }
 
 export async function getBrowserBackendsStatus(): Promise<BrowserBackendsStatusSnapshot> {
-  return safeInvoke<BrowserBackendsStatusSnapshot>(
-    "get_browser_backends_status",
-  );
+  const command = "get_browser_backends_status";
+  const result = await safeInvoke<BrowserBackendsStatusSnapshot>(command);
+  assertNotDiagnosticFacade(command, result, "真实 Browser bridge current 通道");
+  return result;
 }
 
 export async function listCdpTargets(

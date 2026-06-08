@@ -45,6 +45,186 @@ async function invokeMemoryCrudCommand<T>(
   return result as T;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || isString(value);
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isRecordOrUndefined(value: unknown): boolean {
+  return value === undefined || isRecord(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isString);
+}
+
+function isRelationship(value: unknown): value is CharacterRelationship {
+  return (
+    isRecord(value) &&
+    isString(value.target_id) &&
+    isString(value.relationship_type) &&
+    isOptionalString(value.description)
+  );
+}
+
+function isCharacter(value: unknown): value is Character {
+  return (
+    isRecord(value) &&
+    isString(value.id) &&
+    isString(value.project_id) &&
+    isString(value.name) &&
+    isStringArray(value.aliases) &&
+    isOptionalString(value.description) &&
+    isOptionalString(value.personality) &&
+    isOptionalString(value.background) &&
+    isOptionalString(value.appearance) &&
+    Array.isArray(value.relationships) &&
+    value.relationships.every(isRelationship) &&
+    isOptionalString(value.avatar_url) &&
+    isBoolean(value.is_main) &&
+    isFiniteNumber(value.order) &&
+    isRecordOrUndefined(value.extra) &&
+    isString(value.created_at) &&
+    isString(value.updated_at)
+  );
+}
+
+function assertCharacter(value: unknown, command: string): Character {
+  if (!isCharacter(value)) {
+    throw new Error(`${command} did not return a character`);
+  }
+  return value;
+}
+
+function assertCharacterList(value: unknown, command: string): Character[] {
+  if (!Array.isArray(value) || !value.every(isCharacter)) {
+    throw new Error(`${command} did not return characters`);
+  }
+  return value;
+}
+
+function assertNullableCharacter(
+  value: unknown,
+  command: string,
+): Character | null {
+  if (value === null) {
+    return null;
+  }
+  return assertCharacter(value, command);
+}
+
+function isWorldBuilding(value: unknown): value is WorldBuilding {
+  return (
+    isRecord(value) &&
+    isString(value.project_id) &&
+    isString(value.description) &&
+    isOptionalString(value.era) &&
+    isOptionalString(value.locations) &&
+    isOptionalString(value.rules) &&
+    isRecordOrUndefined(value.extra) &&
+    isString(value.updated_at)
+  );
+}
+
+function assertWorldBuilding(value: unknown, command: string): WorldBuilding {
+  if (!isWorldBuilding(value)) {
+    throw new Error(`${command} did not return world building`);
+  }
+  return value;
+}
+
+function assertNullableWorldBuilding(
+  value: unknown,
+  command: string,
+): WorldBuilding | null {
+  if (value === null) {
+    return null;
+  }
+  return assertWorldBuilding(value, command);
+}
+
+function isOutlineNode(value: unknown): value is OutlineNode {
+  return (
+    isRecord(value) &&
+    isString(value.id) &&
+    isString(value.project_id) &&
+    isOptionalString(value.parent_id) &&
+    isString(value.title) &&
+    isOptionalString(value.content) &&
+    isOptionalString(value.content_id) &&
+    isFiniteNumber(value.order) &&
+    isBoolean(value.expanded) &&
+    isRecordOrUndefined(value.extra) &&
+    isString(value.created_at) &&
+    isString(value.updated_at)
+  );
+}
+
+function assertOutlineNode(value: unknown, command: string): OutlineNode {
+  if (!isOutlineNode(value)) {
+    throw new Error(`${command} did not return an outline node`);
+  }
+  return value;
+}
+
+function assertOutlineNodeList(value: unknown, command: string): OutlineNode[] {
+  if (!Array.isArray(value) || !value.every(isOutlineNode)) {
+    throw new Error(`${command} did not return outline nodes`);
+  }
+  return value;
+}
+
+function assertNullableOutlineNode(
+  value: unknown,
+  command: string,
+): OutlineNode | null {
+  if (value === null) {
+    return null;
+  }
+  return assertOutlineNode(value, command);
+}
+
+function assertBoolean(value: unknown, command: string): boolean {
+  if (!isBoolean(value)) {
+    throw new Error(`${command} did not return a boolean`);
+  }
+  return value;
+}
+
+function isProjectMemory(value: unknown): value is ProjectMemory {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.characters) &&
+    value.characters.every(isCharacter) &&
+    (value.world_building === undefined ||
+      isWorldBuilding(value.world_building)) &&
+    Array.isArray(value.outline) &&
+    value.outline.every(isOutlineNode)
+  );
+}
+
+function assertProjectMemory(value: unknown): ProjectMemory {
+  if (!isProjectMemory(value)) {
+    throw new Error("App Server projectMemory/read did not return valid memory");
+  }
+  return value;
+}
+
 // ==================== 类型定义 ====================
 
 /** 角色关系 */
@@ -172,24 +352,29 @@ export interface ProjectMemory {
 
 /** 获取角色列表 */
 export async function listCharacters(projectId: string): Promise<Character[]> {
-  return invokeMemoryCrudCommand<Character[]>("character_list", { projectId });
+  const result = await invokeMemoryCrudCommand<unknown>("character_list", {
+    projectId,
+  });
+  return assertCharacterList(result, "character_list");
 }
 
 /** 获取角色详情 */
 export async function getCharacter(id: string): Promise<Character | null> {
-  return invokeMemoryCrudCommand<Character | null>("character_get", { id });
+  const result = await invokeMemoryCrudCommand<unknown>("character_get", { id });
+  return assertNullableCharacter(result, "character_get");
 }
 
 /** 创建角色 */
 export async function createCharacter(
   request: CreateCharacterRequest,
 ): Promise<Character> {
-  const character = await invokeMemoryCrudCommand<Character>(
+  const result = await invokeMemoryCrudCommand<unknown>(
     "character_create",
     {
       request,
     },
   );
+  const character = assertCharacter(result, "character_create");
   clearProjectMemoryCache();
   return character;
 }
@@ -199,22 +384,24 @@ export async function updateCharacter(
   id: string,
   request: UpdateCharacterRequest,
 ): Promise<Character> {
-  const character = await invokeMemoryCrudCommand<Character>(
+  const result = await invokeMemoryCrudCommand<unknown>(
     "character_update",
     {
       id,
       request,
     },
   );
+  const character = assertCharacter(result, "character_update");
   clearProjectMemoryCache();
   return character;
 }
 
 /** 删除角色 */
 export async function deleteCharacter(id: string): Promise<boolean> {
-  const deleted = await invokeMemoryCrudCommand<boolean>("character_delete", {
+  const result = await invokeMemoryCrudCommand<unknown>("character_delete", {
     id,
   });
+  const deleted = assertBoolean(result, "character_delete");
   clearProjectMemoryCache();
   return deleted;
 }
@@ -225,9 +412,10 @@ export async function deleteCharacter(id: string): Promise<boolean> {
 export async function getWorldBuilding(
   projectId: string,
 ): Promise<WorldBuilding | null> {
-  return invokeMemoryCrudCommand<WorldBuilding | null>("world_building_get", {
+  const result = await invokeMemoryCrudCommand<unknown>("world_building_get", {
     projectId,
   });
+  return assertNullableWorldBuilding(result, "world_building_get");
 }
 
 /** 更新世界观 */
@@ -235,13 +423,14 @@ export async function updateWorldBuilding(
   projectId: string,
   request: UpdateWorldBuildingRequest,
 ): Promise<WorldBuilding> {
-  const worldBuilding = await invokeMemoryCrudCommand<WorldBuilding>(
+  const result = await invokeMemoryCrudCommand<unknown>(
     "world_building_update",
     {
       projectId,
       request,
     },
   );
+  const worldBuilding = assertWorldBuilding(result, "world_building_update");
   clearProjectMemoryCache();
   return worldBuilding;
 }
@@ -252,28 +441,31 @@ export async function updateWorldBuilding(
 export async function listOutlineNodes(
   projectId: string,
 ): Promise<OutlineNode[]> {
-  return invokeMemoryCrudCommand<OutlineNode[]>("outline_node_list", {
+  const result = await invokeMemoryCrudCommand<unknown>("outline_node_list", {
     projectId,
   });
+  return assertOutlineNodeList(result, "outline_node_list");
 }
 
 /** 获取大纲节点详情 */
 export async function getOutlineNode(id: string): Promise<OutlineNode | null> {
-  return invokeMemoryCrudCommand<OutlineNode | null>("outline_node_get", {
+  const result = await invokeMemoryCrudCommand<unknown>("outline_node_get", {
     id,
   });
+  return assertNullableOutlineNode(result, "outline_node_get");
 }
 
 /** 创建大纲节点 */
 export async function createOutlineNode(
   request: CreateOutlineNodeRequest,
 ): Promise<OutlineNode> {
-  const node = await invokeMemoryCrudCommand<OutlineNode>(
+  const result = await invokeMemoryCrudCommand<unknown>(
     "outline_node_create",
     {
       request,
     },
   );
+  const node = assertOutlineNode(result, "outline_node_create");
   clearProjectMemoryCache();
   return node;
 }
@@ -283,22 +475,24 @@ export async function updateOutlineNode(
   id: string,
   request: UpdateOutlineNodeRequest,
 ): Promise<OutlineNode> {
-  const node = await invokeMemoryCrudCommand<OutlineNode>(
+  const result = await invokeMemoryCrudCommand<unknown>(
     "outline_node_update",
     {
       id,
       request,
     },
   );
+  const node = assertOutlineNode(result, "outline_node_update");
   clearProjectMemoryCache();
   return node;
 }
 
 /** 删除大纲节点 */
 export async function deleteOutlineNode(id: string): Promise<boolean> {
-  const deleted = await invokeMemoryCrudCommand<boolean>("outline_node_delete", {
+  const result = await invokeMemoryCrudCommand<unknown>("outline_node_delete", {
     id,
   });
+  const deleted = assertBoolean(result, "outline_node_delete");
   clearProjectMemoryCache();
   return deleted;
 }
@@ -369,19 +563,20 @@ export async function getProjectMemory(
     if (!memory) {
       throw new Error("App Server projectMemory/read did not return memory");
     }
+    const validatedMemory = assertProjectMemory(memory);
     settled = true;
     logAgentDebug("AgentApi", "projectMemoryGet.success", {
-      charactersCount: memory.characters.length,
+      charactersCount: validatedMemory.characters.length,
       durationMs: Date.now() - startedAt,
-      hasWorldBuilding: Boolean(memory.world_building),
-      outlineCount: memory.outline.length,
+      hasWorldBuilding: Boolean(validatedMemory.world_building),
+      outlineCount: validatedMemory.outline.length,
       projectId: normalizedProjectId,
     });
     projectMemoryCache.set(normalizedProjectId, {
       loadedAt: Date.now(),
-      memory,
+      memory: validatedMemory,
     });
-    return memory;
+    return validatedMemory;
   })();
   projectMemoryInflight.set(normalizedProjectId, request);
 

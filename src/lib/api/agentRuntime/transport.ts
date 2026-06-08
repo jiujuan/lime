@@ -20,6 +20,25 @@ export interface AgentRuntimeCommandTransportDeps extends AgentRuntimeTransportD
   bridgeInvoke?: AgentRuntimeBridgeInvoke;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertNotMockLikeEnvelope(command: string, value: unknown): void {
+  if (!isRecord(value)) {
+    return;
+  }
+
+  if (isRecord(value.error)) {
+    throw new Error(`${command} returned an error envelope`);
+  }
+
+  const keys = Object.keys(value);
+  if (keys.length === 1 && value.success === true) {
+    throw new Error(`${command} returned a mock-like success envelope`);
+  }
+}
+
 export function createAgentRuntimeBridgeInvoke({
   invoke = safeInvoke,
 }: AgentRuntimeTransportDeps = {}): AgentRuntimeBridgeInvoke {
@@ -36,6 +55,7 @@ export function createAgentRuntimeBridgeInvoke({
       result,
       "真实 Agent Runtime current 通道",
     );
+    assertNotMockLikeEnvelope(command, result);
     return result;
   };
 }
@@ -62,6 +82,7 @@ export function createAgentRuntimeCommandInvoke({
       result,
       "真实 Agent Runtime current 通道",
     );
+    assertNotMockLikeEnvelope(command, result);
     return result;
   };
 }

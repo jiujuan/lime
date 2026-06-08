@@ -15,8 +15,11 @@ import {
   updateCharacter,
   updateOutlineNode,
   updateWorldBuilding,
+  type Character,
+  type OutlineNode,
   type ProjectMemory,
   type ProjectMemoryAppServerClient,
+  type WorldBuilding,
 } from "./memory";
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -46,6 +49,61 @@ function createProjectMemoryClient(
   };
 }
 
+function createCharacterFixture(
+  overrides: Partial<Character> = {},
+): Character {
+  return {
+    id: "c1",
+    project_id: "project-1",
+    name: "角色1",
+    aliases: [],
+    description: "角色描述",
+    relationships: [],
+    is_main: false,
+    order: 1,
+    created_at: "2026-06-08T00:00:00.000Z",
+    updated_at: "2026-06-08T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function createWorldBuildingFixture(
+  overrides: Partial<WorldBuilding> = {},
+): WorldBuilding {
+  return {
+    project_id: "project-1",
+    description: "世界观",
+    updated_at: "2026-06-08T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function createOutlineNodeFixture(
+  overrides: Partial<OutlineNode> = {},
+): OutlineNode {
+  return {
+    id: "n1",
+    project_id: "project-1",
+    title: "第一章",
+    order: 1,
+    expanded: true,
+    created_at: "2026-06-08T00:00:00.000Z",
+    updated_at: "2026-06-08T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function createProjectMemoryFixture(
+  overrides: Partial<ProjectMemory> = {},
+): ProjectMemory {
+  return {
+    characters: [createCharacterFixture()],
+    world_building: createWorldBuildingFixture(),
+    outline: [createOutlineNodeFixture()],
+    ...overrides,
+  };
+}
+
 describe("memory API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -53,10 +111,14 @@ describe("memory API", () => {
 
   it("应代理角色 CRUD 命令", async () => {
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([{ id: "c1", name: "角色1" }])
-      .mockResolvedValueOnce({ id: "c1", name: "角色1" })
-      .mockResolvedValueOnce({ id: "c2", name: "角色2" })
-      .mockResolvedValueOnce({ id: "c2", name: "角色2-更新" })
+      .mockResolvedValueOnce([createCharacterFixture()])
+      .mockResolvedValueOnce(createCharacterFixture())
+      .mockResolvedValueOnce(
+        createCharacterFixture({ id: "c2", name: "角色2" }),
+      )
+      .mockResolvedValueOnce(
+        createCharacterFixture({ id: "c2", name: "角色2-更新" }),
+      )
       .mockResolvedValueOnce(true);
 
     await expect(listCharacters("project-1")).resolves.toEqual([
@@ -93,11 +155,10 @@ describe("memory API", () => {
 
   it("应代理世界观命令", async () => {
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ project_id: "project-1", description: "世界观" })
-      .mockResolvedValueOnce({
-        project_id: "project-1",
-        description: "更新后的世界观",
-      });
+      .mockResolvedValueOnce(createWorldBuildingFixture())
+      .mockResolvedValueOnce(
+        createWorldBuildingFixture({ description: "更新后的世界观" }),
+      );
 
     await expect(getWorldBuilding("project-1")).resolves.toEqual(
       expect.objectContaining({ description: "世界观" }),
@@ -118,15 +179,21 @@ describe("memory API", () => {
   });
 
   it("应代理大纲与项目记忆命令", async () => {
-    const appServerClient = createProjectMemoryClient({
-      characters: [],
-      outline: [],
-    });
+    const projectMemory = createProjectMemoryFixture();
+    const appServerClient = createProjectMemoryClient(projectMemory);
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([{ id: "n1", title: "第一章", order: 1 }])
-      .mockResolvedValueOnce({ id: "n1", title: "第一章", order: 1 })
-      .mockResolvedValueOnce({ id: "n2", title: "第二章", order: 2 })
-      .mockResolvedValueOnce({ id: "n2", title: "第二章-修订", order: 2 })
+      .mockResolvedValueOnce([createOutlineNodeFixture()])
+      .mockResolvedValueOnce(createOutlineNodeFixture())
+      .mockResolvedValueOnce(
+        createOutlineNodeFixture({ id: "n2", title: "第二章", order: 2 }),
+      )
+      .mockResolvedValueOnce(
+        createOutlineNodeFixture({
+          id: "n2",
+          title: "第二章-修订",
+          order: 2,
+        }),
+      )
       .mockResolvedValueOnce(true);
 
     await expect(listOutlineNodes("project-1")).resolves.toEqual([
@@ -144,9 +211,7 @@ describe("memory API", () => {
     await expect(deleteOutlineNode("n2")).resolves.toBe(true);
     await expect(
       getProjectMemory("project-1", { appServerClient }),
-    ).resolves.toEqual(
-      expect.objectContaining({ characters: [], outline: [] }),
-    );
+    ).resolves.toEqual(projectMemory);
 
     expect(safeInvoke).toHaveBeenNthCalledWith(1, "outline_node_list", {
       projectId: "project-1",
@@ -197,6 +262,36 @@ describe("memory API", () => {
     ]);
   });
 
+  it("角色、世界观与大纲 CRUD 收到错误形态时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce([{ id: "c1", name: "角色1" }])
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce(
+        createOutlineNodeFixture({ expanded: undefined as never }),
+      )
+      .mockResolvedValueOnce({ ok: true });
+
+    await expect(listCharacters("project-1")).rejects.toThrow(
+      "character_list did not return characters",
+    );
+    await expect(getWorldBuilding("project-1")).rejects.toThrow(
+      "world_building_get did not return world building",
+    );
+    await expect(getOutlineNode("n1")).rejects.toThrow(
+      "outline_node_get did not return an outline node",
+    );
+    await expect(deleteOutlineNode("n1")).rejects.toThrow(
+      "outline_node_delete did not return a boolean",
+    );
+
+    expect(vi.mocked(safeInvoke).mock.calls.map(([cmd]) => cmd)).toEqual([
+      "character_list",
+      "world_building_get",
+      "outline_node_get",
+      "outline_node_delete",
+    ]);
+  });
+
   it("并发读取同一项目记忆时应复用同一个 projectMemory/read", async () => {
     const deferred = createDeferred<{
       result: {
@@ -221,37 +316,28 @@ describe("memory API", () => {
 
     deferred.resolve({
       result: {
-        memory: {
-          characters: [],
-          outline: [],
-        },
+        memory: createProjectMemoryFixture({ world_building: undefined }),
       },
     });
 
     await expect(Promise.all([first, second])).resolves.toEqual([
-      { characters: [], outline: [] },
-      { characters: [], outline: [] },
+      createProjectMemoryFixture({ world_building: undefined }),
+      createProjectMemoryFixture({ world_building: undefined }),
     ]);
   });
 
   it("短时间重复读取同一项目记忆时应命中本地缓存", async () => {
-    const appServerClient = createProjectMemoryClient({
-      characters: [],
-      outline: [],
+    const projectMemory = createProjectMemoryFixture({
+      world_building: undefined,
     });
+    const appServerClient = createProjectMemoryClient(projectMemory);
 
     await expect(
       getProjectMemory("project-memory-cache", { appServerClient }),
-    ).resolves.toEqual({
-      characters: [],
-      outline: [],
-    });
+    ).resolves.toEqual(projectMemory);
     await expect(
       getProjectMemory("project-memory-cache", { appServerClient }),
-    ).resolves.toEqual({
-      characters: [],
-      outline: [],
-    });
+    ).resolves.toEqual(projectMemory);
 
     expect(appServerClient.request).toHaveBeenCalledTimes(1);
     expect(safeInvoke).not.toHaveBeenCalledWith(
@@ -261,10 +347,7 @@ describe("memory API", () => {
   });
 
   it("项目记忆读取缺少 projectId 时应 fail closed", async () => {
-    const appServerClient = createProjectMemoryClient({
-      characters: [],
-      outline: [],
-    });
+    const appServerClient = createProjectMemoryClient(createProjectMemoryFixture());
 
     await expect(getProjectMemory("   ", { appServerClient })).rejects.toThrow(
       "projectId is required to read App Server project memory",
@@ -286,6 +369,25 @@ describe("memory API", () => {
 
     expect(appServerClient.request).toHaveBeenCalledWith("projectMemory/read", {
       projectId: "project-memory-empty",
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "project_memory_get",
+      expect.anything(),
+    );
+  });
+
+  it("App Server 返回半截项目记忆时不应缓存或回退 legacy project_memory_get", async () => {
+    const appServerClient = createProjectMemoryClient({
+      characters: [{ id: "c1", name: "半截角色" } as never],
+      outline: [],
+    });
+
+    await expect(
+      getProjectMemory("project-memory-invalid", { appServerClient }),
+    ).rejects.toThrow("App Server projectMemory/read did not return valid memory");
+
+    expect(appServerClient.request).toHaveBeenCalledWith("projectMemory/read", {
+      projectId: "project-memory-invalid",
     });
     expect(safeInvoke).not.toHaveBeenCalledWith(
       "project_memory_get",

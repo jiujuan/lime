@@ -3,33 +3,6 @@
 //! 纯逻辑已迁移到 `lime-services` crate，
 //! 本模块仅保留 Tauri 命令封装。
 
-pub use lime_services::file_browser_service::{list_directory, read_file_preview};
-pub use lime_services::file_browser_service::{DirectoryListing, FileEntry, FilePreview};
-
-/// Tauri 命令：创建新文件
-#[tauri::command]
-pub async fn create_file(path: String) -> Result<(), String> {
-    lime_services::file_browser_service::create_file(path).await
-}
-
-/// Tauri 命令：创建新目录
-#[tauri::command]
-pub async fn create_directory(path: String) -> Result<(), String> {
-    lime_services::file_browser_service::create_directory(path).await
-}
-
-/// Tauri 命令：删除文件或目录
-#[tauri::command]
-pub async fn delete_file(path: String, recursive: bool) -> Result<(), String> {
-    lime_services::file_browser_service::delete_file(path, recursive).await
-}
-
-/// Tauri 命令：重命名文件或目录
-#[tauri::command]
-pub async fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
-    lime_services::file_browser_service::rename_file(old_path, new_path).await
-}
-
 /// Tauri 命令：复制文件名到剪贴板（返回文件名供前端处理）
 #[tauri::command]
 pub async fn get_file_name(path: String) -> Result<String, String> {

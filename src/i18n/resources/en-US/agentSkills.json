@@ -747,6 +747,7 @@
   "skills.workspace.marketplace.error.requestFailed": "Request failed ({{status}})",
   "skills.workspace.marketplace.error.skillNameRequired": "Skill name is required",
   "skills.workspace.marketplace.error.invalidBundle": "The official skill bundle is invalid",
+  "skills.workspace.marketplace.error.invalidResponse": "The official skill marketplace response is invalid",
   "skills.workspace.marketplace.detail.version": "Version {{version}}",
   "skills.workspace.marketplace.detail.deliverable": "Deliverable",
   "skills.workspace.marketplace.detail.package": "Package",

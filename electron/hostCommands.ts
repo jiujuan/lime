@@ -1,3 +1,4 @@
+/* global Buffer, process */
 import { app, shell } from "./electronRuntime";
 import {
   AppServerRequestError,
@@ -15,7 +16,6 @@ import {
   METHOD_AGENT_SESSION_UPDATE,
   METHOD_CAPABILITY_LIST,
   METHOD_EVIDENCE_EXPORT,
-  METHOD_KNOWLEDGE_PACK_LIST,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PREFERENCES_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
@@ -30,7 +30,9 @@ import {
   METHOD_MCP_TOOL_LIST,
   METHOD_PROJECT_MEMORY_READ,
   METHOD_SKILL_LIST,
-  METHOD_SKILL_READ,
+  METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
+  METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+  METHOD_USAGE_STATS_READ,
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
@@ -58,7 +60,6 @@ import {
   type CapabilityDescriptor,
   type CapabilityListResponse,
   type EvidenceExportResponse,
-  type KnowledgeListPacksResponse,
   type ModelListResponse,
   type ModelPreferencesListResponse,
   type ModelProviderAliasListResponse,
@@ -73,7 +74,10 @@ import {
   type McpToolListResponse,
   type ProjectMemoryReadResponse,
   type SkillListResponse,
-  type SkillReadResponse,
+  type UsageStatsDailyTrendsListResponse,
+  type UsageStatsModelRankingListResponse,
+  type UsageStatsRangeParams,
+  type UsageStatsReadResponse,
   type WorkspaceEnsureReadyResponse,
   type WorkspaceListResponse,
   type WorkspaceProjectPathResolveResponse,
@@ -99,6 +103,9 @@ type FileManagerLocationCandidate = Omit<FileManagerLocation, "path"> & {
   path: string | null;
 };
 type ElectronKnownPathName = "home" | "desktop" | "documents" | "downloads";
+type UsageStatsSummaryWire = UsageStatsReadResponse["stats"];
+type UsageStatsModelUsageWire = UsageStatsModelRankingListResponse["ranking"][number];
+type UsageStatsDailyUsageWire = UsageStatsDailyTrendsListResponse["trends"][number];
 
 const CONFIG_FILE = "config.json";
 const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT = "oem-cloud-oauth-callback";
@@ -233,18 +240,14 @@ export class ElectronHostCommands {
         return await this.#ensureDefaultWorkspaceReady();
       case "workspace_ensure_ready":
         return await this.#ensureWorkspaceReady(args);
-      case "list_executable_skills":
-        return await this.#listExecutableSkills();
       case "get_local_skills_for_app":
         return await this.#listLocalSkillsForApp(args);
-      case "get_skill_detail":
-        return await this.#readSkillDetail(args);
       case "get_usage_stats":
-        return this.#getUsageStats();
+        return await this.#getUsageStats(args);
       case "get_model_usage_ranking":
-        return this.#emptyDiagnosticList("get_model_usage_ranking");
+        return await this.#getModelUsageRanking(args);
       case "get_daily_usage_trends":
-        return this.#emptyDiagnosticList("get_daily_usage_trends");
+        return await this.#getDailyUsageTrends(args);
       case "get_voice_input_config":
         return this.#getVoiceInputConfig();
       case "get_voice_shortcut_runtime_status":
@@ -313,8 +316,6 @@ export class ElectronHostCommands {
         return await this.#cancelAgentAppRuntimeTask(args);
       case "agent_app_runtime_submit_host_response":
         return await this.#submitAgentAppRuntimeHostResponse(args);
-      case "knowledge_list_packs":
-        return await this.#listKnowledgePacks(args);
       case "report_frontend_debug_log":
         this.#reportFrontendDebugLog(args);
         return null;
@@ -1221,14 +1222,6 @@ export class ElectronHostCommands {
     return response.providers;
   }
 
-  async #listModelProviderCatalog(): Promise<unknown[]> {
-    const response =
-      await this.#appServerRequest<ModelProviderCatalogListResponse>(
-        METHOD_MODEL_PROVIDER_CATALOG_LIST,
-      );
-    return response.providers;
-  }
-
   async #listModels(params: AppServerParams = {}): Promise<unknown[]> {
     const response = await this.#appServerRequest<ModelListResponse>(
       METHOD_MODEL_LIST,
@@ -1468,12 +1461,6 @@ export class ElectronHostCommands {
     return response.result;
   }
 
-  async #listExecutableSkills(): Promise<unknown[]> {
-    const response =
-      await this.#appServerRequest<SkillListResponse>(METHOD_SKILL_LIST);
-    return response.skills;
-  }
-
   async #listLocalSkillsForApp(args: HostArgs): Promise<unknown[]> {
     const request = readRequest(args);
     const appName = readString(request, "app") ?? "lime";
@@ -1483,23 +1470,6 @@ export class ElectronHostCommands {
     const response =
       await this.#appServerRequest<SkillListResponse>(METHOD_SKILL_LIST);
     return response.skills.map(skillToLocalSkill);
-  }
-
-  async #readSkillDetail(args: HostArgs): Promise<unknown> {
-    const request = readRequest(args);
-    const skillName =
-      readString(request, "skillName") ??
-      readString(request, "skill_name") ??
-      readString(args, "skillName") ??
-      readString(args, "skill_name");
-    if (!skillName) {
-      throw new Error("get_skill_detail requires skillName");
-    }
-    const response = await this.#appServerRequest<SkillReadResponse>(
-      METHOD_SKILL_READ,
-      { skillName },
-    );
-    return response.skill;
   }
 
   async #listWorkspaceSkillBindings(args: HostArgs): Promise<unknown> {
@@ -1534,42 +1504,30 @@ export class ElectronHostCommands {
     );
   }
 
-  async #listKnowledgePacks(args: HostArgs): Promise<unknown> {
-    const request = readRequest(args);
-    const workingDir =
-      readString(request, "workingDir") ??
-      readString(request, "working_dir") ??
-      readString(args, "workingDir") ??
-      readString(args, "working_dir");
-    if (!workingDir) {
-      throw new Error("knowledge_list_packs requires workingDir");
-    }
-    return await this.#appServerRequest<KnowledgeListPacksResponse>(
-      METHOD_KNOWLEDGE_PACK_LIST,
-      {
-        workingDir,
-        includeArchived:
-          readBoolean(request, "includeArchived") ??
-          readBoolean(request, "include_archived") ??
-          false,
-      },
+  async #getUsageStats(args: HostArgs): Promise<Record<string, unknown>> {
+    const response = await this.#appServerRequest<UsageStatsReadResponse>(
+      METHOD_USAGE_STATS_READ,
+      readUsageStatsParams(args),
     );
+    return toLegacyUsageStats(response.stats);
   }
 
-  #getUsageStats(): Record<string, unknown> {
-    return {
-      total_conversations: 0,
-      total_messages: 0,
-      total_tokens: 0,
-      total_time_minutes: 0,
-      monthly_conversations: 0,
-      monthly_messages: 0,
-      monthly_tokens: 0,
-      today_conversations: 0,
-      today_messages: 0,
-      today_tokens: 0,
-      diagnostic: this.#diagnosticMeta("get_usage_stats"),
-    };
+  async #getModelUsageRanking(args: HostArgs): Promise<unknown[]> {
+    const response =
+      await this.#appServerRequest<UsageStatsModelRankingListResponse>(
+        METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+        readUsageStatsParams(args),
+      );
+    return response.ranking.map(toLegacyModelUsage);
+  }
+
+  async #getDailyUsageTrends(args: HostArgs): Promise<unknown[]> {
+    const response =
+      await this.#appServerRequest<UsageStatsDailyTrendsListResponse>(
+        METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
+        readUsageStatsParams(args),
+      );
+    return response.trends.map(toLegacyDailyUsage);
   }
 
   #getVoiceInputConfig(): Record<string, unknown> {
@@ -1892,12 +1850,6 @@ export class ElectronHostCommands {
     return { success: true };
   }
 
-  #throwMissingAppServerMethod(command: string): never {
-    throw new Error(
-      `${command} has no Electron current adapter because no App Server JSON-RPC method is defined for it yet. Electron Host must not return synthetic empty data.`,
-    );
-  }
-
   #reportFrontendDebugLog(args: HostArgs): void {
     const report = readRecord(args, "report");
     const level = readString(report, "level") ?? "info";
@@ -1932,6 +1884,55 @@ function readRecord(
 
 function readRequest(value: unknown): Record<string, unknown> {
   return readRecord(value, "request") ?? toRecord(value) ?? {};
+}
+
+function readUsageStatsParams(args: HostArgs): UsageStatsRangeParams {
+  const request = readRequest(args);
+  const timeRange =
+    readString(request, "timeRange") ??
+    readString(request, "time_range") ??
+    readString(args, "timeRange") ??
+    readString(args, "time_range") ??
+    "month";
+  return { timeRange };
+}
+
+function toLegacyUsageStats(
+  stats: UsageStatsSummaryWire,
+): Record<string, unknown> {
+  return {
+    total_conversations: stats.totalConversations,
+    total_messages: stats.totalMessages,
+    total_tokens: stats.totalTokens,
+    total_time_minutes: stats.totalTimeMinutes,
+    monthly_conversations: stats.monthlyConversations,
+    monthly_messages: stats.monthlyMessages,
+    monthly_tokens: stats.monthlyTokens,
+    today_conversations: stats.todayConversations,
+    today_messages: stats.todayMessages,
+    today_tokens: stats.todayTokens,
+  };
+}
+
+function toLegacyModelUsage(
+  item: UsageStatsModelUsageWire,
+): Record<string, unknown> {
+  return {
+    model: item.model,
+    conversations: item.conversations,
+    tokens: item.tokens,
+    percentage: item.percentage,
+  };
+}
+
+function toLegacyDailyUsage(
+  item: UsageStatsDailyUsageWire,
+): Record<string, unknown> {
+  return {
+    date: item.date,
+    conversations: item.conversations,
+    tokens: item.tokens,
+  };
 }
 
 function readArray(value: unknown, key: string): unknown[] | undefined {

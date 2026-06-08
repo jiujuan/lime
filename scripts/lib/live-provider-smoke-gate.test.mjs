@@ -340,8 +340,10 @@ describe("live-provider-smoke-gate", () => {
   });
 
   it("知识包 E2E 编译默认必须关闭 Builder Runtime 或显式要求 live 授权", () => {
+    const knowledgeCompilePattern =
+      /"knowledgePack\/compile"|"knowledge_compile_pack"/;
     const violations = listSmokeScripts()
-      .filter(({ content }) => content.includes('"knowledge_compile_pack"'))
+      .filter(({ content }) => knowledgeCompilePattern.test(content))
       .filter(({ content }) => {
         const hasLiveGate = content.includes("assertLiveProviderSmokeAllowed(");
         const explicitlyDisablesBuilderRuntime =

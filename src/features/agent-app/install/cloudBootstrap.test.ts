@@ -35,6 +35,10 @@ function buildPayload(overrides: Record<string, unknown> = {}) {
         appId: "content-factory-app",
         displayName: "内容工厂",
         version: "0.3.0",
+        logo: "https://assets.limecloud.example/content-factory-logo.png",
+        presentation: {
+          logo: "https://assets.limecloud.example/content-factory-presentation-logo.png",
+        },
         releaseId: "release_001",
         tenantId: "tenant-123",
         tenantEnablementRef: "enablement_001",
@@ -81,6 +85,10 @@ describe("Cloud Bootstrap payload P5.1", () => {
       signatureRef: "sigstore:content-factory-app@0.3.0",
       licenseState: "active",
       enabled: true,
+      logo: "https://assets.limecloud.example/content-factory-logo.png",
+      presentation: {
+        logo: "https://assets.limecloud.example/content-factory-presentation-logo.png",
+      },
       defaultEntries: ["dashboard", "knowledge"],
       capabilityRequirements: {
         "lime.ui": "^0.3.0",

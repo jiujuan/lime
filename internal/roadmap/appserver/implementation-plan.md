@@ -1,7 +1,7 @@
 # App Server 分阶段实施计划
 
 > 状态：current planning source
-> 更新时间：2026-06-06
+> 更新时间：2026-06-08
 > 作用：把 App Server 从路线图推进到可执行的工程阶段，支持渐进式替换和多独立 App 复用。
 
 ## 1. 实施原则
@@ -12,6 +12,7 @@
 4. App Server 和 legacy desktop facade 必须共享 RuntimeCore。
 5. 旧 command glue 只能作为 compat facade，不继续长业务逻辑。
 6. 新 App 只能走 App Server Client，不直接链接 Lime 内部实现。
+7. `lime-rs/src/commands/**` 是旧 Tauri command wrapper 清理区，不再承接新的业务逻辑、API adapter、runtime 分支或领域服务实现。
 
 ## 2. 阶段总览
 
@@ -27,6 +28,8 @@
 | P7 | Tool / Action / Artifact / Evidence | action/respond、tool events、artifact/evidence API | 审批、artifact、evidence 事件同源。 |
 | P8 | 多 App 复用 | capability discovery、client isolation、本地 socket 评估 | 第二个独立 App 不新增 runtime 实现即可接入。 |
 | P9 | 退场审计 | legacy desktop glue 分类、守卫、删除计划 | 旧 runtime glue 有退出条件和扫描守卫。 |
+
+阶段推进时不得把 `lime-rs/src/commands/**` 当成新阶段产物目录。P3 / P4 / P7 的后端能力进入 App Server crates、RuntimeCore、ExecutionBackend 和 services；P5 的桌面壳能力进入 Electron Desktop Host bridge。legacy desktop command 只允许作为迁移期委托，且每条保留项必须有退出条件。
 
 ## 3. P0：文档和协议冻结
 
@@ -139,6 +142,7 @@
 6. fixture 覆盖 request / response / notification。
 7. standalone `app-server` 只能启动 host-independent backend。
 8. legacy desktop Aster host 只能通过 host bridge 注入，不进入 protocol / router / standalone CLI。
+9. 不新增或恢复 `lime-rs/src/commands/**` 中的 App Server JSON-RPC command wrapper。
 
 ## 7. P6：content-studio 试点
 
@@ -216,6 +220,7 @@
 2. 给 compat / deprecated 路径写退出条件。
 3. 补治理扫描，禁止新 runtime 逻辑落回 command glue。
 4. 删除无入口 adapter。
+5. 按命令族删除或迁出 `lime-rs/src/commands/**` 剩余 wrapper；不得新增 stub 或平行 compat 实现。
 
 退出条件：
 
@@ -223,6 +228,7 @@
 2. 新 App 只通过 App Server Client。
 3. App Server 协议成为新增 Agent 能力的默认入口。
 4. 治理报告能发现回流。
+5. `lime-rs/src/commands/**` 只剩明确带退出条件的薄委托，或已经按领域迁出 / 删除。
 
 ## 11. 验证计划
 

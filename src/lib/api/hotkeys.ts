@@ -38,5 +38,16 @@ export async function getHotkeyRuntimeStatus(): Promise<HotkeyRuntimeStatus> {
 }
 
 export async function validateShortcut(shortcut: string): Promise<boolean> {
-  return safeInvoke("validate_shortcut", { shortcutStr: shortcut });
+  const result = await safeInvoke("validate_shortcut", {
+    shortcutStr: shortcut,
+  });
+  assertNotDiagnosticFacade(
+    "validate_shortcut",
+    result,
+    "真实快捷键校验 current 通道",
+  );
+  if (typeof result !== "boolean") {
+    throw new Error("validate_shortcut did not return a boolean");
+  }
+  return result;
 }

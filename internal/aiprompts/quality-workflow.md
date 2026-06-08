@@ -56,6 +56,8 @@
 
 生产不能 mock，只有测试才 mock。`src/lib/desktop-host/` 中的 mock、`mockPriorityCommands`、`defaultMocks`、`invokeMockOnly`、`explicitMockFallback` 和 App Server mock backend 只允许用于 `*.test.*`、测试夹具、契约守卫或专门声明为测试的 smoke 场景；GUI smoke、业务 E2E、Electron Host 和 App Server sidecar 生产路径必须真实连通，失败时直接暴露错误。
 
+`lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。质量检查不能把该目录当成新增 Rust 后端能力或桌面壳能力的落点；新增后端能力必须进入 App Server crates / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host。涉及该目录的测试只允许作为 cleanup guard，证明旧 wrapper 已删除、已迁出或没有回流，不能作为 GUI current 可交付证据。
+
 新增或迁移测试时按下面顺序处理：
 
 1. 新 Agent / runtime / host integration / 跨 App 复用能力，优先补 App Server protocol / server / npm client / Electron host 测试。
@@ -229,6 +231,8 @@ Electron 打包 / 发布 / updater metadata 的 current 事实源固定为 `forg
 - `internal/roadmap/appserver/release-updater.md`
 
 旧 builder 配置 / CLI、自定义 Windows installer maker 与旧 YAML / blockmap updater metadata 属于 `dead`，不得继续作为 current 文档、CI、质量任务、i18n app metadata evidence 或守卫输入。运行时更新链路以 `electron/updateHost.ts` + Electron 内置 `autoUpdater` 为 current；Windows installer 以 Forge Squirrel 为 current，必须产出 `RELEASES` / `.nupkg` / Setup，macOS updater metadata 以 Forge ZIP maker 的 `RELEASES.json` 为 current。
+
+旧 Rust / Tauri updater command 面已经删除，质量检查不能再把 `lime-rs/src/commands/update_cmd.rs`、`commands::update_cmd::*` runner 注册、`UpdateInstallSessionState` 或 Rust 后台更新检查任务当作 fallback 或可修补对象。若 updater 行为失败，按 Electron Desktop Host / Forge / feed current 链路补实现和验证；不要在 `lime-rs/src/commands/` 新增 updater stub 或 compat wrapper。
 
 `scripts/` 根目录是冻结的历史入口区。新增可执行脚本默认必须放到 `scripts/<domain>/`、`scripts/lib/` 或所属 package；只有公开稳定入口且无法归入领域子目录时才允许新增根目录例外。涉及脚本目录、脚本入口或新增脚本时，必须同步检查：
 

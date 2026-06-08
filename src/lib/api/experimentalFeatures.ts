@@ -9,14 +9,28 @@ export type {
 } from "./experimentalFeatureTypes";
 export { DEFAULT_EXPERIMENTAL_FEATURES } from "./experimentalFeatureTypes";
 
+function isExperimentalFeatures(value: unknown): value is ExperimentalFeatures {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const config = value as Partial<ExperimentalFeatures>;
+  return (
+    Boolean(config.webmcp) &&
+    typeof config.webmcp === "object" &&
+    typeof config.webmcp.enabled === "boolean"
+  );
+}
+
 export async function getExperimentalConfig(): Promise<ExperimentalFeatures> {
-  const result =
-    await safeInvoke<ExperimentalFeatures>("get_experimental_config");
+  const result = await safeInvoke<unknown>("get_experimental_config");
   assertNotDiagnosticFacade(
     "get_experimental_config",
     result,
     "真实 Experimental config current 通道",
   );
+  if (!isExperimentalFeatures(result)) {
+    throw new Error("get_experimental_config did not return experimental config");
+  }
   return result;
 }
 

@@ -1,5 +1,4 @@
-import { safeInvoke } from "@/lib/dev-bridge";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
+import { createAppServerClient } from "./appServer";
 
 export interface UsageStatsResponse {
   total_conversations: number;
@@ -27,35 +26,92 @@ export interface DailyUsage {
   tokens: number;
 }
 
-async function invokeUsageStatsCommand<T>(
-  command: string,
-  args: Record<string, unknown>,
-): Promise<T> {
-  const result = await safeInvoke(command, args);
-  assertNotDiagnosticFacade(command, result, "真实 Usage Stats current 通道");
-  return result as T;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 export async function getUsageStats(
   timeRange: string,
 ): Promise<UsageStatsResponse> {
-  return invokeUsageStatsCommand<UsageStatsResponse>("get_usage_stats", {
-    timeRange,
-  });
+  const result = (
+    await createAppServerClient().readUsageStats({ timeRange })
+  ).result.stats;
+  if (
+    !isRecord(result) ||
+    !isNumber(result.totalConversations) ||
+    !isNumber(result.totalMessages) ||
+    !isNumber(result.totalTokens) ||
+    !isNumber(result.totalTimeMinutes) ||
+    !isNumber(result.monthlyConversations) ||
+    !isNumber(result.monthlyMessages) ||
+    !isNumber(result.monthlyTokens) ||
+    !isNumber(result.todayConversations) ||
+    !isNumber(result.todayMessages) ||
+    !isNumber(result.todayTokens)
+  ) {
+    throw new Error("get_usage_stats 未返回有效使用统计数据");
+  }
+  return {
+    total_conversations: result.totalConversations,
+    total_messages: result.totalMessages,
+    total_tokens: result.totalTokens,
+    total_time_minutes: result.totalTimeMinutes,
+    monthly_conversations: result.monthlyConversations,
+    monthly_messages: result.monthlyMessages,
+    monthly_tokens: result.monthlyTokens,
+    today_conversations: result.todayConversations,
+    today_messages: result.todayMessages,
+    today_tokens: result.todayTokens,
+  };
 }
 
 export async function getModelUsageRanking(
   timeRange: string,
 ): Promise<ModelUsage[]> {
-  return invokeUsageStatsCommand<ModelUsage[]>("get_model_usage_ranking", {
-    timeRange,
-  });
+  const result = (
+    await createAppServerClient().listUsageStatsModelRanking({ timeRange })
+  ).result.ranking;
+  if (
+    !Array.isArray(result) ||
+    result.some(
+      (item) =>
+        !isRecord(item) ||
+        !isString(item.model) ||
+        !isNumber(item.conversations) ||
+        !isNumber(item.tokens) ||
+        !isNumber(item.percentage),
+    )
+  ) {
+    throw new Error("get_model_usage_ranking 未返回有效模型使用排行");
+  }
+  return result as ModelUsage[];
 }
 
 export async function getDailyUsageTrends(
   timeRange: string,
 ): Promise<DailyUsage[]> {
-  return invokeUsageStatsCommand<DailyUsage[]>("get_daily_usage_trends", {
-    timeRange,
-  });
+  const result = (
+    await createAppServerClient().listUsageStatsDailyTrends({ timeRange })
+  ).result.trends;
+  if (
+    !Array.isArray(result) ||
+    result.some(
+      (item) =>
+        !isRecord(item) ||
+        !isString(item.date) ||
+        !isNumber(item.conversations) ||
+        !isNumber(item.tokens),
+    )
+  ) {
+    throw new Error("get_daily_usage_trends 未返回有效每日使用趋势");
+  }
+  return result as DailyUsage[];
 }

@@ -1,7 +1,7 @@
 # App Server / Electron 测试迁移口径
 
 > 状态：current testing source
-> 更新时间：2026-06-06
+> 更新时间：2026-06-08
 > 作用：定义 Tauri GUI 退场后，测试用例如何迁到 Electron Desktop Host + App Server JSON-RPC current。
 
 ## 1. 结论
@@ -19,6 +19,7 @@
 1. 用 Tauri GUI smoke 证明 Desktop current 可交付。
 2. 新增测试继续把 production artifact build 称为 `Tauri build`。
 3. 新 Agent / runtime 测试绕过 App Server JSON-RPC，直接压到 legacy command glue。
+4. 为了让旧测试通过，在 `lime-rs/src/commands/**` 新增 stub、compat wrapper、mock fallback 或业务逻辑。
 
 ## 2. 当前测试事实源
 
@@ -36,6 +37,7 @@
 | `current`                     | `scripts/lib/agent-qc-report-core.test.ts`                      | 验证 Agent QC package script fixture 中的 `verify:gui-smoke` 指向 `smoke:electron`，不再把旧 `scripts/verify-gui-smoke.mjs` 当 current 证据。 |
 | `current`                     | `scripts/lib/gui-smoke-run-lock.test.mjs`                       | 验证 GUI smoke run lock owner fixture 使用 `npm run smoke:electron`，不再把旧脚本路径写进 current owner metadata。                            |
 | `current`                     | `scripts/verify-gui-smoke.mjs`                                  | 保留旧文件名作为兼容入口，但直接委托 `npm run smoke:electron`，直接执行也只验证 Electron Desktop Host。                                       |
+| `compat cleanup guard`        | `src/lib/governance/rustCommandsCurrentBoundary.test.ts`         | 锁定 `lime-rs/src/commands/**` 只能作为旧 wrapper 清理区，防止 in-process bridge / runtime 新实现回流到 Tauri command。                      |
 | `deprecated guard`            | `scripts/standalone-deprecated-artifact-adapter-guard.test.mjs` | 验证旧 standalone artifact adapter 默认 blocked，且不回流 current release evidence / GUI 证据。                                               |
 | `deprecated artifact adapter` | `scripts/lib/agent-app-standalone-native-*.test.mjs`            | 只允许证明 standalone artifact adapter fail-closed，不作为 current 发布链证据。                                                               |
 | `dead guard`                  | `scripts/electron/current-entrypoints.test.mjs`                 | 验证 root Tauri GUI app entry files 已删除，不能重新作为 Desktop current 或 deprecated runner 入口回流。                                      |
@@ -78,6 +80,8 @@ npm run test:contracts
 
 旧 `agent_runtime_*` 测试只证明 Desktop compat adapter 委托，不再作为新增业务逻辑的主要证据。
 
+`lime-rs/src/commands/**` 相关测试只允许作为 cleanup guard：证明旧 wrapper 已删除、已迁出、只做薄委托或没有回流。新增 Agent / runtime / workspace / artifact / evidence / Knowledge / MCP 能力的正向测试必须覆盖 App Server protocol / RuntimeCore / client / Electron Host current 链路；新增桌面壳能力的正向测试必须覆盖 Electron main / preload / desktop-host API。不能把 legacy Rust command 注册测试当作 GUI current 可交付证据。
+
 ## 4. 下一批迁移
 
 优先处理：
@@ -91,6 +95,7 @@ npm run test:contracts
 1. `src/lib/governance/legacySurfaceCatalog.json` 当前也在并行进程 staged 写集，本轮不覆盖；后续需要补脚本级 surface，覆盖 legacy smoke / artifact adapter，并限制 allowed paths 只允许 dead guard、deprecated guard 与历史说明。
 2. 只剩历史命名的 package materializer 只能作为 deprecated adapter 依赖，不得重新进入 current release 证据。
 3. Rust crate 内依赖 host state 的 Aster backend 测试，等 RuntimeCore / ExecutionBackend 解耦后再迁。
+4. `lime-rs/src/commands/**` 的剩余 wrapper 清理按命令族分批推进；等待 App Server / Electron Host current 覆盖后删除，不再为它们补新正向用例。
 
 ## 5. 当前验证证据
 

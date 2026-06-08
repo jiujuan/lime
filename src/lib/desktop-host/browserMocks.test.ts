@@ -1,0 +1,69 @@
+import { describe, expect, it } from "vitest";
+import { browserMocks } from "./browserMocks";
+
+describe("browserMocks", () => {
+  it("不再注册 Browser / CDP / Profile / Connector / Site Adapter 默认 mock", () => {
+    const browserCommands = [
+      "list_browser_environment_presets_cmd",
+      "save_browser_environment_preset_cmd",
+      "archive_browser_environment_preset_cmd",
+      "restore_browser_environment_preset_cmd",
+      "list_browser_profiles_cmd",
+      "save_browser_profile_cmd",
+      "archive_browser_profile_cmd",
+      "restore_browser_profile_cmd",
+      "launch_browser_session",
+      "get_chrome_profile_sessions",
+      "close_chrome_profile_session",
+      "cleanup_gui_smoke_chrome_profiles",
+      "open_browser_runtime_debugger_window",
+      "close_browser_runtime_debugger_window",
+      "open_chrome_profile_window",
+      "get_chrome_bridge_endpoint_info",
+      "get_chrome_bridge_status",
+      "disconnect_browser_connector_session",
+      "get_browser_connector_settings_cmd",
+      "set_browser_connector_install_root_cmd",
+      "set_browser_connector_enabled_cmd",
+      "set_system_connector_enabled_cmd",
+      "set_browser_action_capability_enabled_cmd",
+      "get_browser_connector_install_status_cmd",
+      "install_browser_connector_extension_cmd",
+      "open_browser_extensions_page_cmd",
+      "open_browser_remote_debugging_page_cmd",
+      "open_browser_connector_guide_window",
+      "chrome_bridge_execute_command",
+      "get_browser_backend_policy",
+      "set_browser_backend_policy",
+      "get_browser_backends_status",
+      "list_cdp_targets",
+      "open_cdp_session",
+      "close_cdp_session",
+      "start_browser_stream",
+      "stop_browser_stream",
+      "get_browser_session_state",
+      "take_over_browser_session",
+      "release_browser_session",
+      "resume_browser_session",
+      "get_browser_event_buffer",
+      "browser_execute_action",
+      "get_browser_action_audit_logs",
+      "site_list_adapters",
+      "site_recommend_adapters",
+      "site_search_adapters",
+      "site_get_adapter_info",
+      "site_get_adapter_launch_readiness",
+      "site_get_adapter_catalog_status",
+      "site_apply_adapter_catalog_bootstrap",
+      "site_import_adapter_yaml_bundle",
+      "site_clear_adapter_catalog_cache",
+      "site_run_adapter",
+      "site_debug_run_adapter",
+      "site_save_adapter_result",
+    ];
+
+    for (const command of browserCommands) {
+      expect(browserMocks).not.toHaveProperty(command);
+    }
+  });
+});

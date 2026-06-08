@@ -234,14 +234,14 @@ AgentRuntimeProfileEvent / ThreadReadModel / EvidenceSummary
 
 ## 8.2 2026-05-10 Board/team 直接写回命令边界审计
 
-- 已审计 current 命令边界：`src/lib/api`、`lime-rs/src/app/runner.rs`、`agentCommandCatalog.json`、`mockPriorityCommands.ts` 与 `defaultMocks` 均没有可复用的 board/team 直接写回命令；`TaskCreate/TaskList/TaskGet/TaskUpdate` 当前是 aster runtime tool / inventory，不是 Tauri bridge command。
+- 已审计 current 命令边界：`src/lib/api`、App Server / Electron Desktop Host 命令边界、`agentCommandCatalog.json`、`mockPriorityCommands.ts` 与 `defaultMocks` 均没有可复用的 board/team 直接写回命令；`TaskCreate/TaskList/TaskGet/TaskUpdate` 当前是 aster runtime tool / inventory，不是 legacy desktop facade command。
 - 已确认真实可写事实源仍是 `TaskUpdateTool`：它通过 `resolve_task_board_state` / `persist_task_board_state` 读写 session task board，并在 owner 变化时输出 `ownerChange` / `owner_change` metadata；Agent UI 只消费该结构化 metadata 派生 `work_board` assign/reassign。
-- 已明确不新增临时 UI 本地写回或平行 Tauri command。若未来要做无 prompt direct board/team write-back，必须先新增 current command 或 shared task board service，并同步前端网关、Rust 注册、治理目录册、DevBridge priority mock 与 default mock，同时解决 runtime `shared_task_list_storage` 与 session `extension_data` 的一致性。
+- 已明确不新增临时 UI 本地写回或平行 legacy desktop command。若未来要做无 prompt direct board/team write-back，必须先新增 App Server current method 或 shared task board service，并同步前端网关、Electron / App Server 命令边界、治理目录册与测试 mock，同时解决 runtime `shared_task_list_storage` 与 session `extension_data` 的一致性。
 - 因此 v0.6 标准对齐口径调整为：`work_board` / reassignment 的合规 baseline 是 `Team Workbench selector -> TaskUpdate prompt/runtime turn -> TaskUpdateTool owner_change source -> Agent UI projection`；无 prompt 直接写回归入 future product command boundary，不再作为本轮 projection 对齐阻塞项。
 
 ## 8.3 2026-05-10 Playwright E2E 与真实 child context 复验
 
-- 已补浏览器 DevBridge subagent control 命令族：`agent_runtime_spawn_subagent`、`agent_runtime_send_subagent_input`、`agent_runtime_wait_subagents`、`agent_runtime_resume_subagent`、`agent_runtime_close_subagent` 已接入 dispatcher 与 HTTP cooldown bypass，契约仍落在现有 `agent_runtime_*` current 主链，不新增 Tauri command。
+- 已补浏览器 DevBridge subagent control 命令族：`agent_runtime_spawn_subagent`、`agent_runtime_send_subagent_input`、`agent_runtime_wait_subagents`、`agent_runtime_resume_subagent`、`agent_runtime_close_subagent` 已接入 dispatcher 与 HTTP cooldown bypass，契约仍落在现有 `agent_runtime_*` current 主链；后续不得在 `lime-rs/src/commands/**` 追加新业务逻辑。
 - 已补 session store limited history 空会话探测：`get_runtime_session_detail_with_history_page` 不再因为 persisted empty fast path 跳过 runtime overlay / subagent context；`agent_runtime_get_session(parent, { historyLimit })` 能返回 `child_subagent_sessions`，空 child detail 也能返回 `subagent_parent_context`。
 - Playwright E2E 复验已覆盖：普通会话 tab 不显示 `AgentUI N` 内部 badge；Team Workbench `Agent UI v0.6 / 10 events`、10 个 surface、三类 lane、`工作台操作视图`、`Surface 专门视图`、Harness AgentUI 投影、真实 child context 与 console `0 error / 0 warning` 均有证据。
 - 证据索引：`internal/exec-plans/agentui-playwright-e2e-2026-05-10.md`；截图与 JSON 位于 `internal/exec-plans/evidence/agentui-e2e-2026-05-10/09-session-store-subagent-context.json`、`09-team-workbench-real-child-context-after-session-store-fix.png`、`10-transcript-open-detail-real-child-focus-context.png`、`10-console-errors-final-real-child-focus.txt`。

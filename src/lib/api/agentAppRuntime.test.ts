@@ -201,4 +201,79 @@ describe("agentAppRuntime api", () => {
       AGENT_APP_RUNTIME_COMMANDS.submitHostResponse,
     ]);
   });
+
+  it("runtime task facade 遇到非 runtime 响应形状时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        sessionId: "session-1",
+        status: "cancelled",
+      })
+      .mockResolvedValueOnce({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        sessionId: "session-1",
+        status: "thread_read_available",
+        taskStatus: "running",
+        taskEvents: [
+          {
+            id: "event-1",
+            status: "running",
+            message: "任务正在执行",
+          },
+        ],
+        threadRead: {},
+      })
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      });
+
+    await expect(
+      startAgentAppRuntimeTask({
+        appId: "content-factory-app",
+        workspaceId: "workspace-1",
+        taskKind: "content_factory.copy.generate",
+      }),
+    ).rejects.toThrow(
+      "agent_app_runtime_start_task did not return accepted task result",
+    );
+
+    await expect(
+      cancelAgentAppRuntimeTask({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        sessionId: "session-1",
+      }),
+    ).rejects.toThrow(
+      "agent_app_runtime_cancel_task did not return cancel task result",
+    );
+
+    await expect(
+      getAgentAppRuntimeTask({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        sessionId: "session-1",
+      }),
+    ).rejects.toThrow("agent_app_runtime_get_task did not return task snapshot");
+
+    await expect(
+      submitAgentAppRuntimeHostResponse({
+        appId: "content-factory-app",
+        taskId: "task-1",
+        runtimeRequest: {
+          session_id: "session-1",
+          request_id: "request-1",
+          action_type: "tool_confirmation",
+          confirmed: true,
+        },
+      }),
+    ).rejects.toThrow(
+      "agent_app_runtime_submit_host_response did not return submitted host response result",
+    );
+  });
 });
