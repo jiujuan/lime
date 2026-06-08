@@ -3,6 +3,12 @@ use crate::RuntimeCore;
 use crate::RuntimeCoreError;
 use crate::RuntimeHostContext;
 use app_server_protocol::error_codes;
+use app_server_protocol::AgentAppFetchCloudPackageParams;
+use app_server_protocol::AgentAppInstalledDisabledSetParams;
+use app_server_protocol::AgentAppInstalledSaveParams;
+use app_server_protocol::AgentAppLocalPackageInspectParams;
+use app_server_protocol::AgentAppUninstallParams;
+use app_server_protocol::AgentAppUninstallRehearsalParams;
 use app_server_protocol::AgentAppUiRuntimeStartParams;
 use app_server_protocol::AgentAppUiRuntimeStatusParams;
 use app_server_protocol::AgentAppUiRuntimeStopParams;
@@ -266,7 +272,24 @@ impl RequestProcessor {
             METHOD_WORKSPACE_REGISTERED_SKILLS_LIST => {
                 self.handle_workspace_registered_skills_list(params).await
             }
+            METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT => {
+                self.handle_agent_app_local_package_inspect(params).await
+            }
+            METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD => {
+                self.handle_agent_app_package_fetch_cloud(params).await
+            }
+            METHOD_AGENT_APP_INSTALLED_SAVE => self.handle_agent_app_installed_save(params).await,
             METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list().await,
+            METHOD_AGENT_APP_INSTALLED_DISABLED_SET => {
+                self.handle_agent_app_installed_disabled_set(params).await
+            }
+            METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL => {
+                self.handle_agent_app_installed_uninstall_rehearsal(params)
+                    .await
+            }
+            METHOD_AGENT_APP_INSTALLED_UNINSTALL => {
+                self.handle_agent_app_installed_uninstall(params).await
+            }
             METHOD_AGENT_APP_UI_RUNTIME_START => {
                 self.handle_agent_app_ui_runtime_start(params).await
             }
@@ -631,6 +654,90 @@ impl RequestProcessor {
         let response = self
             .runtime
             .list_agent_app_installed()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_local_package_inspect(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppLocalPackageInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_agent_app_local_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_package_fetch_cloud(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppFetchCloudPackageParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .fetch_agent_app_cloud_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_installed_save(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppInstalledSaveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .save_agent_app_installed(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_installed_disabled_set(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppInstalledDisabledSetParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .set_agent_app_installed_disabled(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_installed_uninstall_rehearsal(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppUninstallRehearsalParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .preview_agent_app_uninstall(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_agent_app_installed_uninstall(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentAppUninstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .uninstall_agent_app(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

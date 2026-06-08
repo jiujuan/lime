@@ -1,6 +1,22 @@
 use crate::AppDataSource;
 use crate::RuntimeCoreError;
+use app_server_protocol::AgentAppCloudReleaseDescriptor;
+use app_server_protocol::AgentAppDeleteDataExecutionEvidence;
+use app_server_protocol::AgentAppDeleteDataPostDeleteResidualAudit;
+use app_server_protocol::AgentAppDeleteDataTargetEvidence;
+use app_server_protocol::AgentAppFetchCloudPackageParams;
+use app_server_protocol::AgentAppInstalledDisabledSetParams;
 use app_server_protocol::AgentAppInstalledListResponse;
+use app_server_protocol::AgentAppInstalledSaveParams;
+use app_server_protocol::AgentAppLocalPackageInspectParams;
+use app_server_protocol::AgentAppLocalPackageInspectResponse;
+use app_server_protocol::AgentAppPackageCacheEntry;
+use app_server_protocol::AgentAppPackageIdentity;
+use app_server_protocol::AgentAppUninstallParams;
+use app_server_protocol::AgentAppUninstallRehearsalParams;
+use app_server_protocol::AgentAppUninstallRehearsalResponse;
+use app_server_protocol::AgentAppUninstallRehearsalTarget;
+use app_server_protocol::AgentAppUninstallResponse;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionListResponse;
@@ -177,11 +193,17 @@ use serde::Deserialize;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
+use sha2::Digest;
+use sha2::Sha256;
 use std::fs;
+use std::io;
+use std::io::Cursor;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use url::Url;
 use uuid::Uuid;
+use zip::ZipArchive;
 
 const CURRENT_TIMELINE_LIST_MAX_LIMIT: usize = 1_000;
 const CURRENT_TIMELINE_HISTORY_DEFAULT_LIMIT: usize = 320;
@@ -191,6 +213,20 @@ const LEGACY_DEFAULT_WORKSPACE_ID: &str = "workspace-default";
 const DEFAULT_PROJECT_NAME: &str = "默认项目";
 const AGENT_APP_DATA_DIR: &str = "agent-apps";
 const INSTALLED_AGENT_APP_STATE_SCHEMA_VERSION: u64 = 1;
+const AGENT_APP_ARRAY_LAYER_FILES: &[(&str, &str)] = &[
+    ("app.entries.yaml", "entries"),
+    ("app.permissions.yaml", "permissions"),
+];
+const AGENT_APP_VALUE_LAYER_FILES: &[(&str, &str, &str)] = &[
+    ("app.capabilities.yaml", "capabilities", "capabilityConfig"),
+    ("app.errors.yaml", "errors", "errors"),
+    ("app.i18n.yaml", "i18n", "i18n"),
+    ("app.signature.yaml", "signature", "signature"),
+    ("app.runtime.yaml", "agentRuntime", "agentRuntime"),
+    ("app.install.yaml", "install", "install"),
+    ("evals/readiness.yaml", "readiness", "readiness"),
+    ("evals/health.yaml", "health", "health"),
+];
 
 pub struct LocalAppDataSource {
     db: DbConnection,
@@ -537,6 +573,48 @@ impl AppDataSource for LocalAppDataSource {
         &self,
     ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
         list_agent_app_installed_state().map_err(data_error)
+    }
+
+    async fn inspect_agent_app_local_package(
+        &self,
+        params: AgentAppLocalPackageInspectParams,
+    ) -> Result<AgentAppLocalPackageInspectResponse, RuntimeCoreError> {
+        inspect_agent_app_local_package(params).map_err(data_error)
+    }
+
+    async fn fetch_agent_app_cloud_package(
+        &self,
+        params: AgentAppFetchCloudPackageParams,
+    ) -> Result<AgentAppPackageCacheEntry, RuntimeCoreError> {
+        fetch_agent_app_cloud_package(params).await.map_err(data_error)
+    }
+
+    async fn save_agent_app_installed(
+        &self,
+        params: AgentAppInstalledSaveParams,
+    ) -> Result<Value, RuntimeCoreError> {
+        save_agent_app_installed_state(params).map_err(data_error)
+    }
+
+    async fn set_agent_app_installed_disabled(
+        &self,
+        params: AgentAppInstalledDisabledSetParams,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        set_agent_app_installed_disabled(params).map_err(data_error)
+    }
+
+    async fn preview_agent_app_uninstall(
+        &self,
+        params: AgentAppUninstallRehearsalParams,
+    ) -> Result<AgentAppUninstallRehearsalResponse, RuntimeCoreError> {
+        build_agent_app_uninstall_rehearsal(params.app_id, params.mode).map_err(data_error)
+    }
+
+    async fn uninstall_agent_app(
+        &self,
+        params: AgentAppUninstallParams,
+    ) -> Result<AgentAppUninstallResponse, RuntimeCoreError> {
+        uninstall_agent_app(params).map_err(data_error)
     }
 
     async fn list_knowledge_packs(

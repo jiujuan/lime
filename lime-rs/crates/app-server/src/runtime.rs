@@ -1020,6 +1020,62 @@ impl AppDataSource for NoopAppDataSource {
         Ok(AgentAppInstalledListResponse::default())
     }
 
+    async fn inspect_agent_app_local_package(
+        &self,
+        _params: AgentAppLocalPackageInspectParams,
+    ) -> Result<AgentAppLocalPackageInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppLocalPackage/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn fetch_agent_app_cloud_package(
+        &self,
+        _params: AgentAppFetchCloudPackageParams,
+    ) -> Result<AgentAppPackageCacheEntry, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppPackage/fetchCloud is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn save_agent_app_installed(
+        &self,
+        _params: AgentAppInstalledSaveParams,
+    ) -> Result<serde_json::Value, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppInstalled/save is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn set_agent_app_installed_disabled(
+        &self,
+        _params: AgentAppInstalledDisabledSetParams,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppInstalled/disabled/set is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn preview_agent_app_uninstall(
+        &self,
+        _params: AgentAppUninstallRehearsalParams,
+    ) -> Result<AgentAppUninstallRehearsalResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppInstalled/uninstall/rehearsal is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn uninstall_agent_app(
+        &self,
+        _params: AgentAppUninstallParams,
+    ) -> Result<AgentAppUninstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentAppInstalled/uninstall is not available without an app data source".to_string(),
+        ))
+    }
+
     async fn list_knowledge_packs(
         &self,
         _params: KnowledgeListPacksParams,
@@ -2123,6 +2179,56 @@ impl RuntimeCore {
         &self,
     ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
         self.app_data_source.list_agent_app_installed().await
+    }
+
+    pub async fn inspect_agent_app_local_package(
+        &self,
+        params: AgentAppLocalPackageInspectParams,
+    ) -> Result<AgentAppLocalPackageInspectResponse, RuntimeCoreError> {
+        self.app_data_source
+            .inspect_agent_app_local_package(params)
+            .await
+    }
+
+    pub async fn fetch_agent_app_cloud_package(
+        &self,
+        params: AgentAppFetchCloudPackageParams,
+    ) -> Result<AgentAppPackageCacheEntry, RuntimeCoreError> {
+        self.app_data_source
+            .fetch_agent_app_cloud_package(params)
+            .await
+    }
+
+    pub async fn save_agent_app_installed(
+        &self,
+        params: AgentAppInstalledSaveParams,
+    ) -> Result<serde_json::Value, RuntimeCoreError> {
+        self.app_data_source.save_agent_app_installed(params).await
+    }
+
+    pub async fn set_agent_app_installed_disabled(
+        &self,
+        params: AgentAppInstalledDisabledSetParams,
+    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .set_agent_app_installed_disabled(params)
+            .await
+    }
+
+    pub async fn preview_agent_app_uninstall(
+        &self,
+        params: AgentAppUninstallRehearsalParams,
+    ) -> Result<AgentAppUninstallRehearsalResponse, RuntimeCoreError> {
+        self.app_data_source
+            .preview_agent_app_uninstall(params)
+            .await
+    }
+
+    pub async fn uninstall_agent_app(
+        &self,
+        params: AgentAppUninstallParams,
+    ) -> Result<AgentAppUninstallResponse, RuntimeCoreError> {
+        self.app_data_source.uninstall_agent_app(params).await
     }
 
     pub async fn start_agent_app_ui_runtime(

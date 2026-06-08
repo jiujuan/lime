@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const REPO_ROOT = process.cwd();
 const RUST_COMMANDS_ROOT = "lime-rs/src/commands";
 
+// 删除下列任一旧 stub 文件时，必须同步从这个集合移除，保持该集合只收缩不扩张。
 const ALLOWED_DEPRECATED_COMMAND_STUB_FILES = new Set([
   "lime-rs/src/commands/a2ui_form_cmd.rs",
   "lime-rs/src/commands/companion_cmd.rs",
