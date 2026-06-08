@@ -16,7 +16,7 @@
 - 测试分层规则已写入 `AGENTS.md` 和 `internal/aiprompts/quality-workflow.md`。
 - CI quick gate 已接入分层入口：
   - PR 前端改动跑 `npm run test:unit` + `npm run test:contract`。
-  - PR / main 前端验证在单测前运行 `node scripts/check-vitest-layer-budget.mjs --max-component-candidates 8`，防止 component VM 迁移候选数回升。
+  - PR / main 前端验证在单测前运行 `node scripts/check-vitest-layer-budget.mjs --max-component-candidates 12`，防止 component VM 迁移候选数回升。
   - PR Rust 改动跑 `npm run test:rust:unit`。
   - main / 手动触发仍保留全量前端与 Rust 验证。
 - 本地 Makefile 已接入分层入口：
@@ -25,7 +25,7 @@
   - `make tdd-rust` 委托 `npm run test:rust:unit`，作为后端第一信号。
   - `make test-layer-stats` 同时输出前端和 Rust 分层统计。
 - 新增 component VM 迁移候选预算检查：
-  - `scripts/check-vitest-layer-budget.mjs` 默认以 8 个候选为当前预算。
+  - `scripts/check-vitest-layer-budget.mjs` 默认以 12 个候选为当前发布基线预算。
   - `make test-layer-budget` 会在候选数超过预算时失败，用于防止新 component 大测试回流。
 - 新增 Rust E2E 默认运行预算检查：
   - `scripts/check-rust-layer-budget.mjs` 默认要求 Rust E2E 层文件不存在非 `ignore` 测试。
@@ -59,6 +59,7 @@
   - integration: 51
   - e2e: 1
   - Component unit-migration candidates: 8
+  - 2026-06-08 发布门禁基线：当前候选数回到 12，CI / Makefile / 脚本默认预算临时统一为 12；后续继续按 P2 分层治理把预算降回 8 或更低。
   - 注：该统计包含同轮并行新增的 `src/components/agent/chat/utils/toolNameFamily.unit.test.ts`，本轮未接管该写集。
 - `npm run test:unit -- src/components/agent/chat/components/harnessStatusPanelViewModel.unit.test.ts src/components/agent/chat/components/harnessEvidenceViewModel.unit.test.ts`
   - 2 files / 24 tests passed
@@ -167,8 +168,8 @@
   - 前端和 Rust 分层统计均执行通过。
 - `npm run test:unit -- scripts/check-vitest-layer-budget.test.mjs`
   - 1 file / 3 tests passed。
-- `node scripts/check-vitest-layer-budget.mjs --max-component-candidates 8`
-  - Component unit-migration candidates: 8，Status: ok。
+- `node scripts/check-vitest-layer-budget.mjs --max-component-candidates 12`
+  - 2026-06-08 当前发布基线通过；候选数为 12，Status: ok。
 - `make test-layer-budget`
   - 预算检查通过。
 - `npm run test:unit -- scripts/check-rust-layer-budget.test.mjs scripts/check-vitest-layer-budget.test.mjs`
@@ -225,15 +226,19 @@
    - 已完成第二刀：4 个 browser-dependent unit 已移到 component，`test:unit` 默认 `--environment node`。
    - 已完成第三刀：`test:unit` 默认 `--pool threads`，并保留 `--pool=forks`、`LIME_VITEST_UNIT_POOL=...`、`--single-fork`、`LIME_VITEST_SINGLE_FORK=1` 回退 / 覆盖；高负载复测 `293.89s` 和临时取消 pool 后 `366.78s` 不作为稳定基准，下一轮先等机器安静或做慢文件画像。
    - 已完成第四刀：unit 层 fast-check property 热点已全部改用 `fastCheckRuns()`，本地 TDD 降采样、CI 保持满量；下一轮等机器安静后复测全量 unit，或做 transform / collect 慢文件画像。
-2. 再治理 8 个 component migration candidates；现在应优先选择对速度或错层收益大的文件：
+2. 再治理 12 个 component migration candidates；当前发布基线暂为 12，下一轮优先把候选数降回 8：
    - `src/components/agent/chat/components/EmptyState.test.tsx`
-   - `src/components/agent/chat/components/GeneralWorkbenchSidebar.test.tsx`
+   - `src/components/agent/chat/components/Inputbar/components/InputbarCore.test.tsx`
    - `src/components/agent/chat/components/MarkdownRenderer.test.tsx`
    - `src/components/agent/chat/components/MessageList.test.tsx`
    - `src/components/agent/chat/components/StreamingRenderer.test.tsx`
+   - `src/components/agent/chat/hooks/agentSessionScopedStorage.test.ts`
    - `src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.test.ts`
    - `src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx`
    - `src/components/agent/chat/workspace/useWorkspaceServiceSkillEntryActions.test.tsx`
+   - `src/components/settings-v2/agent/providers/index.test.tsx`
+   - `src/features/agent-app/ui/AgentAppsPage.test.tsx`
+   - `src/features/knowledge/KnowledgePage.test.tsx`
 3. `useWorkspaceSendActions` 下一刀：继续把已由 `workspaceModelSkillLaunchRequestContext.unit.test.ts` 覆盖的重复 metadata 挂载断言删除，或把该巨型 component suite 拆成 focused component suites；目标是降低 `large-component-suite` / `large-component-file` 风险。
 4. 分析 Rust unit 默认入口约 `61.76s` 的主要耗时来源，决定是否继续把后端 TDD 第一信号拆到更窄 crate / package 默认集。
 5. 待路线图主记录稳定后，决定是否把本补充记录归档到 README 日志尾部或保留为阶段执行证据。

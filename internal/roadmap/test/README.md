@@ -16,29 +16,29 @@
 
 ## 分层定义
 
-| 层级 | 命令 | 覆盖范围 | 本地 TDD 默认 |
-| --- | --- | --- | --- |
-| Unit | `npm run test:unit` | 纯函数、parser、formatter、projection、presentation、selector、View Model 状态转换 | 是 |
-| Component | `npm run test:component` | React/jsdom 组件与 hook 渲染、事件接线、关键 UI 断言 | 按 UI 改动定向跑 |
-| Contract | `npm run test:contract` | `safeInvoke`、DevBridge、Tauri mock、command catalog、schema 契约 | 按命令/桥接改动跑 |
-| Integration | `npm run test:integration` | 文件系统、子进程、本地 fixture server、多模块脚本流程 | CI 或本地按需 |
-| E2E | `npm run test:e2e` | Vitest 内显式 E2E / smoke / live-gated 测试；真实产品主路径仍以 GUI smoke / Playwright 为准 | 默认不进 TDD |
-| Frontend All | `npm run test:frontend:all` | 现有前端 Vitest 全量兼容入口 | 交付前/CI |
-| Layer Stats | `npm run test:layers:stats` | 按同一分类事实源输出分层统计、默认可运行数和 live-gated 数 | 统计 / 治理 |
-| Rust | `npm run test:rust` | Rust workspace 测试 | Rust 改动定向后再全量 |
-| GUI Smoke / E2E | `npm run verify:gui-smoke` | Tauri 壳、DevBridge、Workspace、主产品路径 | GUI 主路径改动/交付前 |
+| 层级            | 命令                        | 覆盖范围                                                                                    | 本地 TDD 默认         |
+| --------------- | --------------------------- | ------------------------------------------------------------------------------------------- | --------------------- |
+| Unit            | `npm run test:unit`         | 纯函数、parser、formatter、projection、presentation、selector、View Model 状态转换          | 是                    |
+| Component       | `npm run test:component`    | React/jsdom 组件与 hook 渲染、事件接线、关键 UI 断言                                        | 按 UI 改动定向跑      |
+| Contract        | `npm run test:contract`     | `safeInvoke`、DevBridge、Tauri mock、command catalog、schema 契约                           | 按命令/桥接改动跑     |
+| Integration     | `npm run test:integration`  | 文件系统、子进程、本地 fixture server、多模块脚本流程                                       | CI 或本地按需         |
+| E2E             | `npm run test:e2e`          | Vitest 内显式 E2E / smoke / live-gated 测试；真实产品主路径仍以 GUI smoke / Playwright 为准 | 默认不进 TDD          |
+| Frontend All    | `npm run test:frontend:all` | 现有前端 Vitest 全量兼容入口                                                                | 交付前/CI             |
+| Layer Stats     | `npm run test:layers:stats` | 按同一分类事实源输出分层统计、默认可运行数和 live-gated 数                                  | 统计 / 治理           |
+| Rust            | `npm run test:rust`         | Rust workspace 测试                                                                         | Rust 改动定向后再全量 |
+| GUI Smoke / E2E | `npm run verify:gui-smoke`  | Tauri 壳、DevBridge、Workspace、主产品路径                                                  | GUI 主路径改动/交付前 |
 
 ## 治理后统计
 
 最后统计时间：2026-06-03。
 
-| 范围 | 命令 | 文件 / 用例 | 实测耗时 | 备注 |
-| --- | --- | --- | --- | --- |
-| 前端分层统计 | `npm run test:layers:stats` | Vitest 总 `1012` 个文件；默认可运行 `1011`；live-gated `1` | 统计脚本级 | 同一事实源来自 `scripts/lib/vitest-layer-classifier.mjs`；unit `485`、component `397`，component VM 迁移候选当前 `8` 个；当前工作树含并行新增的 `toolNameFamily.unit.test.ts` |
-| 前端 Unit | `npm run test:unit` | 最近有效默认复测 `483` 个文件，`2851` 个 case | `161.62s`（通过） | 本地 / AI TDD 默认第一轮信号保持绿色；unit runner 默认 Node + threads pool，`--single-fork` / `--pool=forks` 可回退；高负载下的 `293.89s` / `366.78s` 只作为环境噪声记录，不作为稳定基准 |
-| 前端全量 Vitest | `npm run test:frontend:all` | 默认可运行 `891` 个文件；最近完整跑完 `63/63` 批次 | 约 `306.95s` | 交付前 / CI 全量入口；runner 不输出聚合 case 总数 |
-| 前端 Integration 定向 | `npm run test:integration -- src/lib/layered-design/export.integration.test.ts` | `1` 个文件，`16` 个 case | `29.83s`（通过） | `layered-design` ZIP / PSD 导出属于重二进制打包验证，已移出 unit |
-| Rust Unit | `npm run test:rust:unit` | `1551` passed，`1` ignored | `61.76s` wall | 后端 TDD 默认第一轮信号；另有 `make tdd-rust-filter FILTER=...` 做单测试名定向回路 |
+| 范围                  | 命令                                                                            | 文件 / 用例                                                | 实测耗时          | 备注                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 前端分层统计          | `npm run test:layers:stats`                                                     | Vitest 总 `1012` 个文件；默认可运行 `1011`；live-gated `1` | 统计脚本级        | 同一事实源来自 `scripts/lib/vitest-layer-classifier.mjs`；unit `485`、component `397`，component VM 迁移候选当前发布基线为 `12` 个；后续继续降回 `8` 或更低                              |
+| 前端 Unit             | `npm run test:unit`                                                             | 最近有效默认复测 `483` 个文件，`2851` 个 case              | `161.62s`（通过） | 本地 / AI TDD 默认第一轮信号保持绿色；unit runner 默认 Node + threads pool，`--single-fork` / `--pool=forks` 可回退；高负载下的 `293.89s` / `366.78s` 只作为环境噪声记录，不作为稳定基准 |
+| 前端全量 Vitest       | `npm run test:frontend:all`                                                     | 默认可运行 `891` 个文件；最近完整跑完 `63/63` 批次         | 约 `306.95s`      | 交付前 / CI 全量入口；runner 不输出聚合 case 总数                                                                                                                                        |
+| 前端 Integration 定向 | `npm run test:integration -- src/lib/layered-design/export.integration.test.ts` | `1` 个文件，`16` 个 case                                   | `29.83s`（通过）  | `layered-design` ZIP / PSD 导出属于重二进制打包验证，已移出 unit                                                                                                                         |
+| Rust Unit             | `npm run test:rust:unit`                                                        | `1551` passed，`1` ignored                                 | `61.76s` wall     | 后端 TDD 默认第一轮信号；另有 `make tdd-rust-filter FILTER=...` 做单测试名定向回路                                                                                                       |
 
 ### 2026-06-03 速度优先恢复点
 
@@ -71,18 +71,18 @@
 下一次重启优先级：
 
 1. **先稳基准**：工作树和机器负载安静后复跑一次 `/usr/bin/time -p npm run test:unit`，确认默认 Node + threads + 本地 fast-check 降采样后的稳定耗时；如果仍明显慢于 `138.63s`，优先做 transform / collect 慢文件画像，而不是继续试错 pool 默认。
-2. **再治理候选数**：剩余 8 个 component migration candidates 仍是下一优先级；优先继续 `useWorkspaceSendActions.test.tsx`，把已由 `workspaceModelSkillLaunchRequestContext.unit.test.ts` 覆盖的重复 metadata 挂载断言删除或拆成 focused component suites。
+2. **再治理候选数**：当前发布基线剩余 12 个 component migration candidates 仍是下一优先级；优先继续 `useWorkspaceSendActions.test.tsx`，把已由 `workspaceModelSkillLaunchRequestContext.unit.test.ts` 覆盖的重复 metadata 挂载断言删除或拆成 focused component suites，先降回 `8`。
 3. **最后看 Rust**：`npm run test:rust:unit` 当前约 `61.76s`，后端后续优化重点应是定向 crate / filter 回路，而不是先全量重构 Rust 测试。
 
 前端 Vitest 当前分层：
 
-| 层级 | 文件数 | 默认可运行 | Live-gated |
-| --- | ---: | ---: | ---: |
-| Unit | `485` | `485` | `0` |
-| Component | `397` | `397` | `0` |
-| Contract | `78` | `78` | `0` |
-| Integration | `51` | `51` | `0` |
-| E2E | `1` | `0` | `1` |
+| 层级        | 文件数 | 默认可运行 | Live-gated |
+| ----------- | -----: | ---------: | ---------: |
+| Unit        |  `485` |      `485` |        `0` |
+| Component   |  `397` |      `397` |        `0` |
+| Contract    |   `78` |       `78` |        `0` |
+| Integration |   `51` |       `51` |        `0` |
+| E2E         |    `1` |        `0` |        `1` |
 
 ## 前端 View Model 策略
 

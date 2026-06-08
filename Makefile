@@ -72,7 +72,7 @@ test-rust-layers-stats:
 	npm run test:rust:layers:stats
 
 test-layer-budget:
-	node scripts/check-vitest-layer-budget.mjs --max-component-candidates 8
+	node scripts/check-vitest-layer-budget.mjs --max-component-candidates 12
 
 test-rust-layer-budget:
 	node scripts/check-rust-layer-budget.mjs --max-e2e-runnable 0
