@@ -9,6 +9,8 @@ import forgeConfig, {
   updateFeedLabel,
   updateFeedUrl,
   windowsSigningOptions,
+  windowsSquirrelRemoteReleasesOptions,
+  windowsSquirrelRemoteReleasesUrl,
 } from "../../forge.config.mjs";
 
 describe("Electron Forge config", () => {
@@ -131,7 +133,6 @@ describe("Electron Forge config", () => {
       exe: "Lime.exe",
       name: "lime",
       noMsi: true,
-      remoteReleases: "https://updates.example/lime/stable/win32-x64",
       setupExe: "Lime-9.8.7 Setup.exe",
       setupIcon: "lime-rs/icons/icon.ico",
     });
@@ -169,6 +170,39 @@ describe("Electron Forge config", () => {
         platform: "win32",
       }),
     ).toEqual({});
+  });
+
+  it("keeps Windows Squirrel remote release sync opt-in", () => {
+    const env = {
+      LIME_ELECTRON_UPDATES_URL: "https://feed.example/win32-x64/",
+      LIME_UPDATES_BASE_URL: "https://updates.example/",
+      LIME_WINDOWS_SQUIRREL_REMOTE_RELEASES_URL:
+        " https://updates.example/lime/stable/win32-x64/ ",
+    };
+
+    expect(windowsSquirrelRemoteReleasesUrl({ env: {} })).toBeUndefined();
+    expect(windowsSquirrelRemoteReleasesUrl({ env })).toBe(
+      "https://updates.example/lime/stable/win32-x64",
+    );
+    expect(windowsSquirrelRemoteReleasesOptions({ env })).toEqual({
+      remoteReleases: "https://updates.example/lime/stable/win32-x64",
+    });
+    expect(
+      squirrelConfig("x64", {
+        env: { LIME_ELECTRON_UPDATES_URL: "https://feed.example/win32-x64/" },
+        packageVersion: "9.8.7",
+        platform: "win32",
+      }),
+    ).not.toHaveProperty("remoteReleases");
+    expect(
+      squirrelConfig("x64", {
+        env,
+        packageVersion: "9.8.7",
+        platform: "win32",
+      }),
+    ).toMatchObject({
+      remoteReleases: "https://updates.example/lime/stable/win32-x64",
+    });
   });
 
   it("keeps required packaged app inputs while ignoring repository-only sources", () => {

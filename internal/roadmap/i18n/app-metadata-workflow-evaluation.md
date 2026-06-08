@@ -20,7 +20,7 @@
 - `internal/roadmap/i18n/app-metadata-translation-scope.json` 已定义 installer / app metadata 的最小 ownership 与字段分类：`forge.config.mjs#productName`、`appId` 与 deep-link scheme 属于稳定品牌 / 标识字段，`package.json#description` 属于多语言发布前需要处理的 translatable 字段。
 - `internal/roadmap/i18n/evidence/app-metadata-locale-build-manifest.json` 已把 scope 转成 build-time locale manifest；当前 `workflowStatus=ready`，10 个 metadata entry 中 1 个 localized entry、3 个 stable entry、6 个 source-only entry，missing field 与 required localized missing 均为 `0`。
 - `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 已增加 metadata field coverage 与 manifest readiness：当前审计到 `10` 个真实 app / installer metadata 字段，全部纳入 scope，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`，且 `appMetadataLocaleBuildManifestReady=true`、`hasInstallerLocalizationWorkflow=true`。
-- `lime-rs/` 下仍被 git 跟踪的旧宿主配置文件只允许作为 deprecated cleanup candidate 讨论；它们不是 current app metadata、installer、release、updater、签名或版本同步事实源。
+- 旧 Tauri 宿主配置文件已按 `dead` release / metadata surface 下线；它们不是 current app metadata、installer、release、updater、签名或版本同步事实源，也不能作为 i18n evidence 输入回流。
 
 ## 结论
 

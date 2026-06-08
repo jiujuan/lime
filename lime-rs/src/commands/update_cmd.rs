@@ -10,20 +10,12 @@ use lime_services::update_check_service::{
     UpdateCheckService, UpdateCheckServiceState, UpdateInfo,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 const DAY_SECONDS: u64 = 24 * 3600;
-const UPDATE_CHECK_CACHE_TTL_SECS: u64 = 10 * 60;
 const FALLBACK_RELEASES_URL: &str = "https://github.com/limecloud/lime/releases";
-const DEFAULT_UPDATE_MANIFEST_URL: &str = "https://updates.limecloud.com/lime/stable/latest.json";
 pub const UPDATE_INSTALL_SESSION_EVENT: &str = "app-update://session";
-
-/// 编译期注入 updater manifest 地址；未配置时使用 Cloudflare R2 稳定清单。
-const COMPILED_UPDATER_ENDPOINT: Option<&str> = option_env!("LIME_UPDATER_ENDPOINT");
 
 /// 更新检查配置（前端可见）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,31 +164,6 @@ impl UpdateInstallSessionState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct UpdateCheckCache {
-    latest: Option<String>,
-    download_url: Option<String>,
-    release_notes: Option<String>,
-    pub_date: Option<String>,
-    last_checked_unix: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct StaticUpdateManifest {
-    version: String,
-    #[serde(default)]
-    notes: Option<String>,
-    #[serde(default)]
-    pub_date: Option<String>,
-    platforms: HashMap<String, StaticUpdatePlatform>,
-}
-
-#[derive(Debug, Deserialize)]
-struct StaticUpdatePlatform {
-    url: String,
-    signature: Option<String>,
-}
-
 fn rate_percent(numerator: u64, denominator: u64) -> f64 {
     if denominator == 0 {
         return 0.0;
@@ -265,73 +232,11 @@ where
     session
 }
 
-fn updater_manifest_url() -> &'static str {
-    COMPILED_UPDATER_ENDPOINT
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(DEFAULT_UPDATE_MANIFEST_URL)
-}
-
 fn release_tag_url(version: &str) -> String {
     format!(
         "https://github.com/limecloud/lime/releases/tag/v{}",
         version.trim_start_matches('v')
     )
-}
-
-fn current_platform_key() -> Option<&'static str> {
-    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    {
-        return Some("windows-x86_64");
-    }
-
-    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
-    {
-        return Some("windows-aarch64");
-    }
-
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    {
-        return Some("darwin-x86_64");
-    }
-
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    {
-        return Some("darwin-aarch64");
-    }
-
-    #[allow(unreachable_code)]
-    None
-}
-
-fn get_update_check_cache_path() -> PathBuf {
-    let base_dir = dirs::cache_dir()
-        .or_else(dirs::config_dir)
-        .unwrap_or_else(|| PathBuf::from("."));
-
-    base_dir.join("lime").join("update-check-cache.json")
-}
-
-fn is_update_cache_fresh(cache: &UpdateCheckCache, now_unix: u64, ttl_secs: u64) -> bool {
-    if cache.latest.is_none() {
-        return false;
-    }
-
-    now_unix.saturating_sub(cache.last_checked_unix) < ttl_secs
-}
-
-fn load_update_check_cache(path: &PathBuf) -> Option<UpdateCheckCache> {
-    let content = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str::<UpdateCheckCache>(&content).ok()
-}
-
-fn save_update_check_cache(path: &PathBuf, cache: &UpdateCheckCache) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-
-    let content = serde_json::to_string(cache).map_err(|e| e.to_string())?;
-    std::fs::write(path, content).map_err(|e| e.to_string())
 }
 
 fn build_update_info(
@@ -368,23 +273,6 @@ fn build_update_info(
     }
 }
 
-fn build_update_info_from_cache_or_default(
-    cache: Option<&UpdateCheckCache>,
-    error: Option<String>,
-) -> UpdateInfo {
-    if let Some(cached) = cache {
-        return build_update_info(
-            cached.latest.clone(),
-            cached.release_notes.clone(),
-            cached.pub_date.clone(),
-            cached.download_url.clone(),
-            error,
-        );
-    }
-
-    build_update_info(None, None, None, None, error)
-}
-
 fn build_version_check_result(info: UpdateInfo) -> VersionCheckResult {
     VersionCheckResult {
         current: info.current_version,
@@ -398,128 +286,18 @@ fn build_version_check_result(info: UpdateInfo) -> VersionCheckResult {
     }
 }
 
-fn manifest_to_cache(manifest: &StaticUpdateManifest, checked_at: u64) -> UpdateCheckCache {
-    UpdateCheckCache {
-        latest: Some(manifest.version.trim_start_matches('v').to_string()),
-        download_url: manifest_platform_download_url(manifest)
-            .or_else(|| Some(release_tag_url(&manifest.version))),
-        release_notes: manifest.notes.clone(),
-        pub_date: manifest.pub_date.clone(),
-        last_checked_unix: checked_at,
-    }
-}
-
-fn manifest_platform_download_url(manifest: &StaticUpdateManifest) -> Option<String> {
-    current_platform_key()
-        .and_then(|platform_key| manifest.platforms.get(platform_key))
-        .filter(|platform| {
-            !platform.url.trim().is_empty()
-                && platform
-                    .signature
-                    .as_deref()
-                    .is_some_and(|signature| !signature.trim().is_empty())
-        })
-        .map(|platform| platform.url.trim())
-        .filter(|url| !url.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-fn build_update_info_from_manifest(manifest: StaticUpdateManifest) -> UpdateInfo {
-    let latest_version = manifest.version.trim_start_matches('v').to_string();
-    let download_url = manifest_platform_download_url(&manifest);
-    let platform_error = match current_platform_key() {
-        Some(platform_key)
-            if manifest
-                .platforms
-                .get(platform_key)
-                .is_some_and(|platform| {
-                    !platform.url.trim().is_empty()
-                        && platform
-                            .signature
-                            .as_deref()
-                            .is_some_and(|signature| !signature.trim().is_empty())
-                }) =>
-        {
-            None
-        }
-        Some(platform_key) if manifest.platforms.contains_key(platform_key) => Some(format!(
-            "已检测到新版本，但当前平台 {} 的更新包地址或签名为空，请前往发布页手动下载",
-            platform_key
-        )),
-        Some(platform_key) => Some(format!(
-            "已检测到新版本，但当前平台 {} 暂无安装包，请前往发布页手动下载",
-            platform_key
-        )),
-        None => Some("当前平台暂不支持应用内升级，请前往发布页手动下载".to_string()),
-    };
-
+fn legacy_electron_updater_info() -> UpdateInfo {
     build_update_info(
-        Some(latest_version),
-        manifest.notes,
-        manifest.pub_date,
-        download_url,
-        platform_error,
+        None,
+        Some("自动更新由 Electron Desktop Host 通过 Forge RELEASES.json / RELEASES 处理。".to_string()),
+        None,
+        Some(FALLBACK_RELEASES_URL.to_string()),
+        Some("旧 Rust 升级器已下线；请使用 Electron Desktop Host 自动更新，或前往发布页手动下载最新版".to_string()),
     )
 }
 
 async fn fetch_update_info() -> UpdateInfo {
-    let now_unix = current_unix_timestamp();
-    let cache_path = get_update_check_cache_path();
-    let cached = load_update_check_cache(&cache_path);
-
-    if let Some(cache) = &cached {
-        if is_update_cache_fresh(cache, now_unix, UPDATE_CHECK_CACHE_TTL_SECS) {
-            return build_update_info_from_cache_or_default(cached.as_ref(), None);
-        }
-    }
-
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-    {
-        Ok(client) => client,
-        Err(error) => {
-            return build_update_info_from_cache_or_default(
-                cached.as_ref(),
-                Some(format!("创建更新检查客户端失败，已回退本地缓存: {error}")),
-            );
-        }
-    };
-
-    match client
-        .get(updater_manifest_url())
-        .header("User-Agent", "Lime")
-        .send()
-        .await
-    {
-        Ok(response) => {
-            if !response.status().is_success() {
-                return build_update_info_from_cache_or_default(
-                    cached.as_ref(),
-                    Some(format!(
-                        "更新清单请求失败（HTTP {}），已回退本地缓存",
-                        response.status()
-                    )),
-                );
-            }
-
-            match response.json::<StaticUpdateManifest>().await {
-                Ok(manifest) => {
-                    let cache = manifest_to_cache(&manifest, now_unix);
-                    let _ = save_update_check_cache(&cache_path, &cache);
-                    build_update_info_from_manifest(manifest)
-                }
-                Err(error) => build_update_info_from_cache_or_default(
-                    cached.as_ref(),
-                    Some(format!("解析更新清单失败，已回退本地缓存: {error}")),
-                ),
-            }
-        }
-        Err(error) => build_update_info_from_cache_or_default(
-            cached.as_ref(),
-            Some(format!("请求更新清单失败，已回退本地缓存: {error}")),
-        ),
-    }
+    legacy_electron_updater_info()
 }
 
 async fn perform_update_check(update_service: &UpdateCheckServiceState) -> UpdateInfo {
@@ -1022,112 +800,24 @@ pub async fn start_background_update_check(
 mod tests {
     use super::*;
 
-    fn next_patch_version_tag() -> String {
-        let version_core = env!("CARGO_PKG_VERSION")
-            .split(['-', '+'])
-            .next()
-            .unwrap_or(env!("CARGO_PKG_VERSION"));
-        let mut parts = version_core
-            .split('.')
-            .map(|segment| segment.parse::<u64>().expect("版本段必须为数字"))
-            .collect::<Vec<_>>();
-        assert!(
-            parts.len() == 3,
-            "当前包版本应为三段式 semver，实际为 {}",
-            version_core
-        );
-        parts[2] += 1;
-        format!("v{}.{}.{}", parts[0], parts[1], parts[2])
-    }
-
     #[test]
-    fn test_is_update_cache_fresh() {
-        let cache = UpdateCheckCache {
-            latest: Some("0.92.0".to_string()),
-            download_url: Some(release_tag_url("0.92.0")),
-            release_notes: Some("notes".to_string()),
-            pub_date: Some("2026-03-21T00:00:00Z".to_string()),
-            last_checked_unix: 100,
-        };
+    fn test_legacy_update_info_points_to_electron_updater_fallback() {
+        let info = legacy_electron_updater_info();
+        let serialized = serde_json::to_string(&info).expect("应能序列化更新信息");
 
-        assert!(is_update_cache_fresh(&cache, 150, 60));
-        assert!(!is_update_cache_fresh(&cache, 170, 60));
-
-        let cache_without_latest = UpdateCheckCache {
-            latest: None,
-            ..cache
-        };
-        assert!(!is_update_cache_fresh(&cache_without_latest, 120, 60));
-    }
-
-    #[test]
-    fn test_build_update_info_from_manifest() {
-        let next_version_tag = next_patch_version_tag();
-        let next_version = next_version_tag.trim_start_matches('v').to_string();
-        let platform_url = "https://updates.limecloud.com/lime/stable/v9.9.9/lime.app.tar.gz";
-        let manifest = StaticUpdateManifest {
-            version: next_version_tag,
-            notes: Some("bug fixes".to_string()),
-            pub_date: Some("2026-03-21T00:00:00Z".to_string()),
-            platforms: HashMap::from([(
-                current_platform_key()
-                    .unwrap_or("windows-x86_64")
-                    .to_string(),
-                StaticUpdatePlatform {
-                    url: platform_url.to_string(),
-                    signature: Some("sig".to_string()),
-                },
-            )]),
-        };
-
-        let info = build_update_info_from_manifest(manifest);
-        assert_eq!(info.latest_version.as_deref(), Some(next_version.as_str()));
-        assert!(info.has_update);
-        if current_platform_key().is_some() {
-            assert_eq!(info.download_url.as_deref(), Some(platform_url));
-            assert_eq!(info.error, None);
-        } else {
-            assert_eq!(
-                info.download_url.as_deref(),
-                Some(release_tag_url(&next_version).as_str())
-            );
-            assert!(info
-                .error
-                .as_deref()
-                .is_some_and(|message| message.contains("暂不支持")));
-        }
-    }
-
-    #[test]
-    fn test_build_update_info_from_manifest_requires_signature() {
-        let Some(platform_key) = current_platform_key() else {
-            return;
-        };
-        let manifest = StaticUpdateManifest {
-            version: next_patch_version_tag(),
-            notes: None,
-            pub_date: None,
-            platforms: HashMap::from([(
-                platform_key.to_string(),
-                StaticUpdatePlatform {
-                    url: "https://updates.limecloud.com/lime/stable/v9.9.9/lime.app.tar.gz"
-                        .to_string(),
-                    signature: None,
-                },
-            )]),
-        };
-
-        let info = build_update_info_from_manifest(manifest);
-        assert!(info.has_update);
-        let expected_release_url =
-            release_tag_url(info.latest_version.as_deref().expect("应存在最新版本"));
+        assert!(!info.has_update);
+        assert_eq!(info.download_url.as_deref(), Some(FALLBACK_RELEASES_URL));
         assert_eq!(
-            info.download_url.as_deref(),
-            Some(expected_release_url.as_str())
+            info.release_notes_url.as_deref(),
+            Some(FALLBACK_RELEASES_URL)
         );
         assert!(info
             .error
             .as_deref()
-            .is_some_and(|message| message.contains("更新包地址或签名为空")));
+            .is_some_and(|message| message.contains("Electron Desktop Host")));
+        assert!(serialized.contains("RELEASES.json"));
+        assert!(serialized.contains("RELEASES"));
+        assert!(!serialized.contains("latest.json"));
+        assert!(!serialized.contains(".app.tar.gz"));
     }
 }

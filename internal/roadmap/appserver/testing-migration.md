@@ -36,8 +36,8 @@
 | `current`                     | `scripts/lib/agent-qc-report-core.test.ts`                      | 验证 Agent QC package script fixture 中的 `verify:gui-smoke` 指向 `smoke:electron`，不再把旧 `scripts/verify-gui-smoke.mjs` 当 current 证据。 |
 | `current`                     | `scripts/lib/gui-smoke-run-lock.test.mjs`                       | 验证 GUI smoke run lock owner fixture 使用 `npm run smoke:electron`，不再把旧脚本路径写进 current owner metadata。                            |
 | `current`                     | `scripts/verify-gui-smoke.mjs`                                  | 保留旧文件名作为兼容入口，但直接委托 `npm run smoke:electron`，直接执行也只验证 Electron Desktop Host。                                       |
-| `deprecated guard`            | `scripts/standalone-deprecated-artifact-adapter-guard.test.mjs` | 验证旧 standalone artifact adapter 默认 blocked，且不回流 current release evidence / GUI 证据。                                              |
-| `deprecated artifact adapter` | `scripts/lib/agent-app-standalone-native-*.test.mjs`            | 只允许证明 standalone artifact adapter fail-closed，不作为 current 发布链证据。                                                              |
+| `deprecated guard`            | `scripts/standalone-deprecated-artifact-adapter-guard.test.mjs` | 验证旧 standalone artifact adapter 默认 blocked，且不回流 current release evidence / GUI 证据。                                               |
+| `deprecated artifact adapter` | `scripts/lib/agent-app-standalone-native-*.test.mjs`            | 只允许证明 standalone artifact adapter fail-closed，不作为 current 发布链证据。                                                               |
 | `dead guard`                  | `scripts/electron/current-entrypoints.test.mjs`                 | 验证 root Tauri GUI app entry files 已删除，不能重新作为 Desktop current 或 deprecated runner 入口回流。                                      |
 
 ## 3. 迁移规则
@@ -405,6 +405,6 @@ git diff --check -- "scripts/electron/current-entrypoints.test.mjs" "internal/ro
 
 这组证据证明：
 
-1. `lime-rs/tauri.windows.conf.json` 只允许作为 `dead cleanup candidate` 暂存，不能回流 package scripts、Electron Forge、CI、Electron host 或版本一致性检查。
+1. `lime-rs/tauri.windows.conf.json` 已按 `dead` Windows 旧宿主配置删除，不能回流 package scripts、Electron Forge、CI、Electron host、版本一致性检查或 i18n app metadata evidence。
 2. `scripts/electron/current-entrypoints.test.mjs` 已把该 Windows 旧宿主配置加入 retired build input 禁止词，并扫描 Electron current build / release / CI / host 文件。
-3. 物理删除该文件属于文件删除动作，需要按危险操作确认后再执行；删除后同一守卫应继续通过。
+3. `scripts/electron/release-workflow-guard.mjs` 同步阻止旧 Tauri / NSIS 配置文件实体回流；后续只允许 Forge Squirrel 与 `RELEASES` / `.nupkg` / Setup 作为 Windows current release surface。

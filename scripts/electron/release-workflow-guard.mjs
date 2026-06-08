@@ -448,7 +448,9 @@ function listRepositoryFiles(root) {
   return files.sort();
 }
 
-function assertNoRetiredPackagingFiles(repositoryRoot = DEFAULT_REPOSITORY_ROOT) {
+function assertNoRetiredPackagingFiles(
+  repositoryRoot = DEFAULT_REPOSITORY_ROOT,
+) {
   const root = path.resolve(repositoryRoot);
   const retiredFiles = listRepositoryFiles(root).filter((filePath) =>
     RETIRED_PACKAGING_FILE_PATTERNS.some((pattern) => pattern.test(filePath)),
@@ -476,7 +478,6 @@ function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
     '["win32"]',
     "macUpdateManifestBaseUrl",
     'updateFeedUrl("darwin", arch',
-    'updateFeedUrl("win32", arch',
     "RELEASE_OUTPUT_DIR",
     "LIME_ELECTRON_FORGE_OUT_DIR",
     "dist-electron/app-server.release.json",
@@ -533,9 +534,19 @@ function assertForgeConfig(forgeConfigPath = DEFAULT_FORGE_CONFIG_PATH) {
     "Setup.exe",
     "setupIcon",
     "lime-rs/icons/icon.ico",
+    "windowsSquirrelRemoteReleasesUrl",
+    "windowsSquirrelRemoteReleasesOptions",
+    "LIME_WINDOWS_SQUIRREL_REMOTE_RELEASES_URL",
+    "...windowsSquirrelRemoteReleasesOptions(options)",
     "...windowsSigningOptions(options)",
   ]) {
     assertIncludes(forgeConfig, required, "Forge Windows Squirrel config");
+  }
+
+  if (forgeConfig.includes('remoteReleases: updateFeedUrl("win32"')) {
+    throw new Error(
+      "Forge Windows Squirrel config must not use runtime update feed as remoteReleases",
+    );
   }
 }
 

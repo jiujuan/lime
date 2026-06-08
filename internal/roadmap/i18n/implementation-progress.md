@@ -280,7 +280,7 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n/i18n-app-metadata-workflow-report.ts` 与测试 `scripts/i18n/i18n-app-metadata-workflow-report.test.ts`，把 `package.json`、`lime-rs/Cargo.toml`、`lime-rs/tauri.conf.json`、`lime-rs/tauri.conf.headless.json` 与 `lime-rs/capabilities/agent-app-shell.json` 的 app / installer 元数据事实源做成可重复 inventory 报告。
+- 新增 `scripts/i18n/i18n-app-metadata-workflow-report.ts` 与测试 `scripts/i18n/i18n-app-metadata-workflow-report.test.ts`，把 `package.json`、`lime-rs/Cargo.toml`、`forge.config.mjs` 与 `lime-rs/capabilities/agent-app-shell.json` 的 app / installer 元数据事实源做成可重复 inventory 报告。
 - 通过 `npm run i18n:app-metadata-report -- --format json --output "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 落盘库存报告，确认当前这些元数据仍是单语事实源，没有独立 installer 翻译工作流。
 - 新增 `internal/roadmap/i18n/app-metadata-workflow-evaluation.md`，把 installer / app metadata 的边界判断、建议工作流和重新评估条件写成可引用的 roadmap 工件。
 - 报告结论保持不变：app / installer 元数据现在只有单一文本事实源，没有 `zh-CN / en-US` 之类的专门翻译链路；如果后续要做，必须先定义 source locale、metadata ownership 和发布约束，再补 workflow。
@@ -1017,7 +1017,7 @@ benchmark 摘要：
 本轮继续完成：
 
 - `scripts/quality-task-planner.mjs` 将发布材料 / 官网文档 / 帮助文档事实源变更映射到 `i18n:release-docs-report:json` 推荐命令；docs-only 变更仍跳过代码校验，但会保留 evidence 刷新建议。
-- installer / app metadata 相关的 `package.json`、`lime-rs/Cargo.toml`、`tauri.conf*.json` 与 `agent-app-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
+- installer / app metadata 相关的 `package.json`、`lime-rs/Cargo.toml`、`forge.config.mjs` 与 `agent-app-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
 - RTL 方向基础与 readiness inventory 审计过的设置页、侧栏、Workspace、弹窗和 Knowledge 主路径 surface 变更，会推荐刷新 `rtl-readiness-inventory.json`；布局敏感 surface 同时推荐 `npm run i18n:rtl-smoke`。
 - `scripts/local-ci.mjs` 调整 docs-only 摘要输出顺序，确保 docs-only 仍跳过本地代码校验，但不会吞掉 P4 evidence 推荐命令。
 
@@ -1181,7 +1181,7 @@ benchmark 摘要：
 本轮继续完成：
 
 - `scripts/i18n/i18n-app-metadata-workflow-report.ts` 新增 `metadataFieldCoverage`，把真实 app / installer metadata 字段与 `app-metadata-translation-scope.json` 做双向比对：真实字段未入 scope 会进入 `unscopedMetadataFields`，scope 引用失效字段会进入 `missingScopedFields`。
-- `internal/roadmap/i18n/app-metadata-translation-scope.json` 补入 `lime-rs/tauri.conf.json#bundle.fileAssociations[0].name`，将 Skill Package 文件关联类型名归为稳定品牌字段，避免 file association 只审计 description 而漏掉 name。
+- `internal/roadmap/i18n/app-metadata-translation-scope.json` 已收敛到 `forge.config.mjs` 的 Electron Forge app metadata 字段，旧 Tauri file association 不再作为 app / installer metadata scope 输入。
 - 刷新 `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前审计字段 `11` 个，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`；`hasInstallerLocalizationWorkflow` 仍为 `false`，不误判为多语言 installer workflow 已完成。
 - `internal/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步说明：在 `generatedMetadataAllowed=false` 期间，不新增平行 locale 配置，只用 scope + inventory 管住发布元数据漂移。
 

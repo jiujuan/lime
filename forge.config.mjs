@@ -173,6 +173,23 @@ function windowsSigningOptions({
   };
 }
 
+function windowsSquirrelRemoteReleasesUrl({ env = process.env } = {}) {
+  const remoteReleasesUrl =
+    env.LIME_WINDOWS_SQUIRREL_REMOTE_RELEASES_URL?.trim();
+  if (!remoteReleasesUrl) {
+    return undefined;
+  }
+  return remoteReleasesUrl.replace(/\/+$/, "");
+}
+
+function windowsSquirrelRemoteReleasesOptions(options = {}) {
+  const remoteReleases = windowsSquirrelRemoteReleasesUrl(options);
+  if (!remoteReleases) {
+    return {};
+  }
+  return { remoteReleases };
+}
+
 function squirrelConfig(arch = process.arch, options = {}) {
   const packageVersion = options.packageVersion || PACKAGE_VERSION;
   return {
@@ -180,9 +197,9 @@ function squirrelConfig(arch = process.arch, options = {}) {
     exe: `${PRODUCT_NAME}.exe`,
     name: SQUIRREL_PACKAGE_NAME,
     noMsi: true,
-    remoteReleases: updateFeedUrl("win32", arch, options),
     setupExe: `${PRODUCT_NAME}-${packageVersion} Setup.exe`,
     setupIcon: "lime-rs/icons/icon.ico",
+    ...windowsSquirrelRemoteReleasesOptions(options),
     ...windowsSigningOptions(options),
   };
 }
@@ -197,6 +214,8 @@ export {
   updateFeedLabel,
   updateFeedUrl,
   windowsSigningOptions,
+  windowsSquirrelRemoteReleasesOptions,
+  windowsSquirrelRemoteReleasesUrl,
 };
 
 export default {

@@ -165,6 +165,20 @@ describe("Electron release workflow guard", () => {
     );
   });
 
+  it("rejects Windows Squirrel remote release sync from runtime feed", () => {
+    const forgeConfig = fs.readFileSync("forge.config.mjs", "utf8");
+    const forgeConfigPath = tempForgeConfigPath(
+      forgeConfig.replace(
+        "    setupExe: `${PRODUCT_NAME}-${packageVersion} Setup.exe`,",
+        '    remoteReleases: updateFeedUrl("win32", arch, options),\n    setupExe: `${PRODUCT_NAME}-${packageVersion} Setup.exe`,',
+      ),
+    );
+
+    expect(() => validateReleaseWorkflow({ forgeConfigPath })).toThrow(
+      /must not use runtime update feed as remoteReleases/,
+    );
+  });
+
   it("rejects macOS branding after signing and notarization", () => {
     const forgeConfig = fs.readFileSync("forge.config.mjs", "utf8");
     const forgeConfigPath = tempForgeConfigPath(

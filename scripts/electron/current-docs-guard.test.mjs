@@ -368,6 +368,9 @@ describe("Electron current testing docs guard", () => {
     expect(releaseUpdater).toContain(
       "LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD",
     );
+    expect(releaseUpdater).toContain(
+      "LIME_WINDOWS_SQUIRREL_REMOTE_RELEASES_URL",
+    );
     expect(releaseUpdater).toContain("可选但成对");
     expect(releaseUpdater).toContain("unsigned Forge Squirrel installer");
     expect(releaseUpdater).toContain("app-server.release.json");
@@ -394,6 +397,7 @@ describe("Electron current testing docs guard", () => {
     expect(forgeConfig).toContain("certificateFile");
     expect(forgeConfig).toContain("certificatePassword");
     expect(forgeConfig).toContain("LIME_WINDOWS_SIGNING_CERTIFICATE_FILE");
+    expect(forgeConfig).toContain("LIME_WINDOWS_SQUIRREL_REMOTE_RELEASES_URL");
 
     const updateHost = readFile("electron/updateHost.ts");
     expect(updateHost).toContain('import { app, autoUpdater } from "electron"');
@@ -548,10 +552,11 @@ describe("Electron current testing docs guard", () => {
     expect(evaluation).toContain("forge.config.mjs");
     expect(evaluation).toContain("当前 Electron 发布元数据事实源");
     expect(evaluation).toContain("Electron Forge / 平台发布链路");
-    expect(evaluation).toContain("deprecated cleanup candidate");
+    expect(evaluation).toContain("已按 `dead` release / metadata surface 下线");
     expect(evaluation).toContain(
       "不是 current app metadata、installer、release、updater、签名或版本同步事实源",
     );
+    expect(evaluation).toContain("不能作为 i18n evidence 输入回流");
     expect(evaluation).not.toContain("Tauri file association");
     expect(evaluation).not.toContain("真实 Tauri");
     expect(evaluation).not.toContain("手工复制多份 Tauri 配置");

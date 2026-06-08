@@ -125,7 +125,7 @@ Windows 发布签名由 release workflow 按“可选但成对”规则启用，
 | `WINDOWS_SIGNING_CERTIFICATE_PASSWORD` | `LIME_WINDOWS_SIGNING_CERTIFICATE_PASSWORD`      | Squirrel signing certificate 密码                                                    |
 | release workflow                       | `LIME_ELECTRON_SIGN=1`                           | Windows 构建允许签名；只有两项 Windows secret 都存在时才传入 Squirrel signing config |
 
-Windows 当前通过 `npx electron-forge make --platform win32 --arch x64 --targets squirrel` 生成 Squirrel installer；两项 Windows signing secret 都存在时，`forge.config.mjs` 将 `certificateFile` / `certificatePassword` 传给 `@electron-forge/maker-squirrel`。如果两项 secret 都未配置，release workflow 继续生成 unsigned Forge Squirrel installer；如果只配置其中一项，则 fail-fast，避免半配置签名在 make 阶段才失败。
+Windows 当前通过 `npx electron-forge make --platform win32 --arch x64 --targets squirrel` 生成 Squirrel installer；两项 Windows signing secret 都存在时，`forge.config.mjs` 将 `certificateFile` / `certificatePassword` 传给 `@electron-forge/maker-squirrel`。如果两项 secret 都未配置，release workflow 继续生成 unsigned Forge Squirrel installer；如果只配置其中一项，则 fail-fast，避免半配置签名在 make 阶段才失败。Windows Squirrel 的 `remoteReleases` 同步只允许通过 `LIME_WINDOWS_SQUIRREL_REMOTE_RELEASES_URL` 显式启用，默认 release make 不从 `LIME_ELECTRON_UPDATES_URL` 拉取线上 `RELEASES`，避免首发或空 feed 返回 404 时阻断安装包生成。
 
 macOS ZIP / `RELEASES.json` 的本地确定性验证使用：
 
