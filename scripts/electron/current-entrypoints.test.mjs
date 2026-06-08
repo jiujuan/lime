@@ -216,7 +216,7 @@ describe("Electron current package entrypoints", () => {
     }
 
     const runtime = readFile("electron/electronRuntime.ts");
-    expect(runtime).toContain('createRequire(import.meta.url)');
+    expect(runtime).toContain("createRequire(import.meta.url)");
     expect(runtime).toContain('requireElectron("electron")');
     expectNoElectronRuntimeEsmImport(runtime, "electron/electronRuntime.ts");
   });
@@ -258,6 +258,8 @@ describe("Electron current package entrypoints", () => {
 
     expect(buildRenderer).toContain("LIME_ELECTRON_RENDERER");
     expect(smokeBuildRenderer).toContain("LIME_ELECTRON_RENDERER");
+    expect(smokeBuildRenderer).toContain("--max-old-space-size=8192");
+    expect(smokeBuildRenderer).toContain("NODE_OPTIONS");
     expect(viteConfig).toContain("base:");
     expect(viteConfig).toContain('isElectronRenderer ? "./" : undefined');
   });
