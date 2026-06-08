@@ -71,6 +71,42 @@ describe("desktop-host/core 未注册 mock command", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
+  it("Prompt 管理默认 mock 被清理后不再伪造成功", async () => {
+    for (const command of [
+      "get_prompts",
+      "upsert_prompt",
+      "add_prompt",
+      "update_prompt",
+      "delete_prompt",
+      "enable_prompt",
+      "import_prompt_from_file",
+      "get_current_prompt_file_content",
+      "auto_import_prompt",
+    ]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("窗口尺寸默认 mock 被清理后不再伪造成功", async () => {
+    for (const command of [
+      "get_window_size_options",
+      "set_window_size_by_option",
+      "resize_for_flow_monitor",
+      "restore_window_size",
+      "toggle_window_size",
+    ]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
   it("测试显式注册的 mock command 仍可使用", async () => {
     mockCommand("test_only_current_fixture", () => ({ ok: true }));
 

@@ -1269,7 +1269,6 @@ pub fn run() {
             commands::browser_profile_cmd::restore_browser_profile_cmd,
             commands::browser_profile_cmd::launch_browser_profile_runtime_assist_cmd,
             // Sysinfo commands
-            crate::services::sysinfo_service::get_sysinfo,
             crate::services::sysinfo_service::subscribe_sysinfo,
             crate::services::sysinfo_service::unsubscribe_sysinfo,
             // File browser commands

@@ -116,11 +116,17 @@ use app_server_protocol::McpPromptListResponse;
 use app_server_protocol::McpResourceListResponse;
 use app_server_protocol::McpResourceReadParams;
 use app_server_protocol::McpResourceReadResponse;
+use app_server_protocol::McpServerCreateParams;
+use app_server_protocol::McpServerDeleteParams;
+use app_server_protocol::McpServerEnabledSetParams;
+use app_server_protocol::McpServerImportFromAppParams;
+use app_server_protocol::McpServerImportFromAppResponse;
 use app_server_protocol::McpServerLifecycleResponse;
 use app_server_protocol::McpServerListResponse;
 use app_server_protocol::McpServerStartParams;
 use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::McpServerStopParams;
+use app_server_protocol::McpServerUpdateParams;
 use app_server_protocol::McpToolCallParams;
 use app_server_protocol::McpToolCallResponse;
 use app_server_protocol::McpToolCallWithCallerParams;
@@ -495,6 +501,59 @@ pub trait AppDataSource: Send + Sync {
     ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
         Err(RuntimeCoreError::Backend(
             "mcpServerStatus/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_mcp_server(
+        &self,
+        _params: McpServerCreateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_mcp_server(
+        &self,
+        _params: McpServerUpdateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_mcp_server(
+        &self,
+        _params: McpServerDeleteParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn set_mcp_server_enabled(
+        &self,
+        _params: McpServerEnabledSetParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/enabled/set is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn import_mcp_servers_from_app(
+        &self,
+        _params: McpServerImportFromAppParams,
+    ) -> Result<McpServerImportFromAppResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/importFromApp is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn sync_all_mcp_servers_to_live(
+        &self,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/syncAllToLive is not available without an app data source".to_string(),
         ))
     }
 
@@ -1271,6 +1330,59 @@ impl AppDataSource for NoopAppDataSource {
         &self,
     ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
         Ok(McpServerStatusListResponse::default())
+    }
+
+    async fn create_mcp_server(
+        &self,
+        _params: McpServerCreateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/create requires a current app data source".to_string(),
+        ))
+    }
+
+    async fn update_mcp_server(
+        &self,
+        _params: McpServerUpdateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/update requires a current app data source".to_string(),
+        ))
+    }
+
+    async fn delete_mcp_server(
+        &self,
+        _params: McpServerDeleteParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/delete requires a current app data source".to_string(),
+        ))
+    }
+
+    async fn set_mcp_server_enabled(
+        &self,
+        _params: McpServerEnabledSetParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/enabled/set requires a current app data source".to_string(),
+        ))
+    }
+
+    async fn import_mcp_servers_from_app(
+        &self,
+        _params: McpServerImportFromAppParams,
+    ) -> Result<McpServerImportFromAppResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/importFromApp requires a current app data source".to_string(),
+        ))
+    }
+
+    async fn sync_all_mcp_servers_to_live(
+        &self,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mcpServer/syncAllToLive requires a current app data source".to_string(),
+        ))
     }
 
     async fn start_mcp_server(
@@ -2708,6 +2820,47 @@ impl RuntimeCore {
         &self,
     ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
         self.app_data_source.list_mcp_servers_with_status().await
+    }
+
+    pub async fn create_mcp_server(
+        &self,
+        params: McpServerCreateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        self.app_data_source.create_mcp_server(params).await
+    }
+
+    pub async fn update_mcp_server(
+        &self,
+        params: McpServerUpdateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        self.app_data_source.update_mcp_server(params).await
+    }
+
+    pub async fn delete_mcp_server(
+        &self,
+        params: McpServerDeleteParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        self.app_data_source.delete_mcp_server(params).await
+    }
+
+    pub async fn set_mcp_server_enabled(
+        &self,
+        params: McpServerEnabledSetParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        self.app_data_source.set_mcp_server_enabled(params).await
+    }
+
+    pub async fn import_mcp_servers_from_app(
+        &self,
+        params: McpServerImportFromAppParams,
+    ) -> Result<McpServerImportFromAppResponse, RuntimeCoreError> {
+        self.app_data_source.import_mcp_servers_from_app(params).await
+    }
+
+    pub async fn sync_all_mcp_servers_to_live(
+        &self,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        self.app_data_source.sync_all_mcp_servers_to_live().await
     }
 
     pub async fn start_mcp_server(

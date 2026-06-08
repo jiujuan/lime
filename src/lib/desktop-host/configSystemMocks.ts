@@ -146,12 +146,6 @@ export const configSystemMocks: Record<string, (args?: any) => any> = {
   // Quick Filter 相关
   delete_quick_filter: () => ({ success: true }),
 
-  get_window_size_options: () => ({ options: [] }),
-  set_window_size_by_option: () => ({}),
-  resize_for_flow_monitor: () => ({}),
-  restore_window_size: () => ({}),
-  toggle_window_size: () => ({}),
-
   // Machine ID 相关
   get_current_machine_id: () => ({ machine_id: "" }),
   set_machine_id: () => ({ success: true }),

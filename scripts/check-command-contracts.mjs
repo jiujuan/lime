@@ -146,6 +146,7 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "get_stats_by_model",
   "get_stats_by_provider",
   "get_stats_summary",
+  "get_sysinfo",
   "get_token_stats_by_day",
   "get_token_stats_by_model",
   "get_token_stats_by_provider",

@@ -81,4 +81,18 @@ describe("configSystemMocks", () => {
       expect(configSystemMocks).not.toHaveProperty(command);
     }
   });
+
+  it("不应保留已无生产入口的窗口尺寸默认 mock", () => {
+    const retiredWindowSizeCommands = [
+      "get_window_size_options",
+      "set_window_size_by_option",
+      "resize_for_flow_monitor",
+      "restore_window_size",
+      "toggle_window_size",
+    ];
+
+    for (const command of retiredWindowSizeCommands) {
+      expect(configSystemMocks).not.toHaveProperty(command);
+    }
+  });
 });

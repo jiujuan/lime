@@ -186,7 +186,7 @@ git diff --cached --name-only
 - 2026-06-08 main TW-Q0-SHARED-HEATMAP 只读复核
   - 写集：`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
   - 只读结论：当前 `runner.rs`、`commandPolicy.ts`、`agentCommandCatalog.json`、`scripts/check-command-contracts.mjs` 仍是共享脏写集；多数可疑 Rust command 删除都需要同步这些事实源，不适合作为无人协调的快删项。
-  - 低引用候选：`fetch_provider_models_from_api` 已由 TW-Q2-MODEL-FETCH-HELPER-WRAPPER 删除；`start_telegram_remote`、`stop_telegram_remote`、`get_telegram_remote_status` 已由 TW-Q2-TELEGRAM-REMOTE-WRAPPER 删除；`update_last_check_timestamp`、`get_sysinfo` 仍仅被 `runner.rs` 直接引用。
+  - 低引用候选：`fetch_provider_models_from_api` 已由 TW-Q2-MODEL-FETCH-HELPER-WRAPPER 删除；`start_telegram_remote`、`stop_telegram_remote`、`get_telegram_remote_status` 已由 TW-Q2-TELEGRAM-REMOTE-WRAPPER 删除；`get_sysinfo` 已由 TW-Q2-SYSINFO-GET-FACADE 删除；`update_last_check_timestamp` 仍仅被 `runner.rs` 直接引用。
   - 结论：后续进程若要继续快清，应优先选新的未脏守卫 / 文档切片，或等待共享写集释放后再处理低引用 command。
   - 状态：ready_for_review
 
@@ -960,6 +960,14 @@ npm run smoke:agent-session-history-electron-fixture -- --timeout-ms 180000
   - 守卫结果：`scripts/check-command-contracts.mjs` 已把 `fetch_provider_models_from_api` 登记到 retired provider facade guard；`rustCommandsCurrentBoundary.test.ts` 已把 `model_registry_cmd.rs` 副作用预算从 28 下调到 26；`tauri-wrapper-command-inventory.md` 已标记该 helper 只剩 retired guard。
   - 验证结果：`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/commands/model_registry_cmd.rs"` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；`node scripts/check-command-contracts.mjs` 通过；`npx vitest run "src/lib/governance/rustCommandsCurrentBoundary.test.ts" --silent=passed-only --disableConsoleIntercept` 通过；`npx prettier --check "scripts/check-command-contracts.mjs" "src/lib/governance/rustCommandsCurrentBoundary.test.ts" "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md" "internal/exec-plans/tauri-wrapper-command-inventory.md"` 通过；`npm run test:contracts` 通过；`git diff --check` 通过。
   - 剩余阻塞：`model_registry_cmd.rs` 仍保留多条 Model Registry compat 命令；后续应按 `modelProvider*` / `model/list` App Server current 覆盖情况逐条撤，不在 `lime-rs/src/commands/**` 新增模型读取 helper。
+
+- 2026-06-08 Codex TW-Q2-SYSINFO-GET-FACADE 完成
+  - 写集：`lime-rs/src/app/runner.rs`、`lime-rs/src/services/sysinfo_service.rs`、`scripts/check-command-contracts.mjs`、`internal/exec-plans/tauri-wrapper-command-inventory.md`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 清理结果：`removed-from-runner` / `facade-deleted`；零入口 `get_sysinfo` 已从 Tauri `generate_handler!` 注册和 `sysinfo_service.rs` 删除。仍有 mock / 事件消费线索的 `subscribe_sysinfo`、`unsubscribe_sysinfo` 保留，不与本刀混删。
+  - 旧入口搜索：`rg -n "get_sysinfo|subscribe_sysinfo|unsubscribe_sysinfo" "lime-rs/src" "src" "electron" "packages" "scripts" "internal/exec-plans" --glob "!lime-rs/target/**"` 显示 `get_sysinfo` 只剩 `scripts/check-command-contracts.mjs` retired guard 和执行计划 / inventory 记录；订阅命令仍只在 runner、sysinfo bridge 与测试 mock 中。
+  - 守卫结果：`scripts/check-command-contracts.mjs` 已登记 `get_sysinfo` retired Tauri 回流守卫；`tauri-wrapper-command-inventory.md` 已标记该 facade 只剩 retired guard。
+  - 验证结果：`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/app/runner.rs" "lime-rs/src/services/sysinfo_service.rs"` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；`node scripts/check-command-contracts.mjs` 通过；`npx prettier --check "scripts/check-command-contracts.mjs" "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md" "internal/exec-plans/tauri-wrapper-command-inventory.md"` 通过；`npm run test:contracts` 通过；`git diff --check` 通过。
+  - 剩余阻塞：`subscribe_sysinfo` / `unsubscribe_sysinfo` 仍是独立事件订阅面；后续如果要下线需先确认 Terminal Sysinfo 旧 UI 与事件消费已完全删除，不能因 `get_sysinfo` 零入口而一并清掉。
 
 - 2026-06-08 Codex TW-Q4C-COMPANION-WRAPPER 完成
   - 写集：`lime-rs/src/app/runner.rs`、`lime-rs/src/commands/mod.rs`、`lime-rs/src/commands/companion_cmd.rs`、`scripts/check-command-contracts.mjs`、`src/lib/governance/rustCommandsCurrentBoundary.test.ts`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`

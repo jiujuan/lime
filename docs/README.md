@@ -28,7 +28,7 @@
 - 测试与质量资料：`../internal/test/`、`../internal/tests/`、`../internal/testing/`
 - 研究、PRD、技术专题：`../internal/research/`、`../internal/prd/`、`../internal/tech/`
 - Electron 打包 / 发布 / updater 规则：`../AGENTS.md`、`../internal/aiprompts/quality-workflow.md`、`../internal/roadmap/appserver/release-updater.md`；current 打包事实源是 `forge.config.mjs` 与 Electron Forge。
-- Rust command 清理规则：`../AGENTS.md`、`../internal/aiprompts/commands.md`、`../internal/roadmap/appserver/README.md`；`lime-rs/src/commands/**` 是旧 Tauri wrapper 清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。
+- Rust command 清理规则：`../AGENTS.md`、`../internal/aiprompts/commands.md`、`../internal/roadmap/appserver/README.md`；`lime-rs/src/commands/**` 是旧 Tauri wrapper 清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。新增 Rust 后端能力进入 App Server / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host；旧 wrapper 删不动只能登记 blocker，不能保留 fail-closed stub、tombstone 或 thin facade 当完成态。
 
 ## 维护规则
 

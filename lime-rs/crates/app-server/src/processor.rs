@@ -57,8 +57,13 @@ use app_server_protocol::KnowledgeUpdatePackStatusParams;
 use app_server_protocol::KnowledgeValidateContextRunParams;
 use app_server_protocol::McpPromptGetParams;
 use app_server_protocol::McpResourceReadParams;
+use app_server_protocol::McpServerCreateParams;
+use app_server_protocol::McpServerDeleteParams;
+use app_server_protocol::McpServerEnabledSetParams;
+use app_server_protocol::McpServerImportFromAppParams;
 use app_server_protocol::McpServerStartParams;
 use app_server_protocol::McpServerStopParams;
+use app_server_protocol::McpServerUpdateParams;
 use app_server_protocol::McpToolCallParams;
 use app_server_protocol::McpToolCallWithCallerParams;
 use app_server_protocol::McpToolListForContextParams;
@@ -153,10 +158,16 @@ use app_server_protocol::METHOD_MCP_PROMPT_GET;
 use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
 use app_server_protocol::METHOD_MCP_RESOURCE_READ;
+use app_server_protocol::METHOD_MCP_SERVER_CREATE;
+use app_server_protocol::METHOD_MCP_SERVER_DELETE;
+use app_server_protocol::METHOD_MCP_SERVER_ENABLED_SET;
+use app_server_protocol::METHOD_MCP_SERVER_IMPORT_FROM_APP;
 use app_server_protocol::METHOD_MCP_SERVER_LIST;
+use app_server_protocol::METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE;
 use app_server_protocol::METHOD_MCP_SERVER_START;
 use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
 use app_server_protocol::METHOD_MCP_SERVER_STOP;
+use app_server_protocol::METHOD_MCP_SERVER_UPDATE;
 use app_server_protocol::METHOD_MCP_TOOL_CALL;
 use app_server_protocol::METHOD_MCP_TOOL_CALL_WITH_CALLER;
 use app_server_protocol::METHOD_MCP_TOOL_LIST;
@@ -363,6 +374,16 @@ impl RequestProcessor {
             }
             METHOD_MCP_SERVER_LIST => self.handle_mcp_server_list().await,
             METHOD_MCP_SERVER_STATUS_LIST => self.handle_mcp_server_status_list().await,
+            METHOD_MCP_SERVER_CREATE => self.handle_mcp_server_create(params).await,
+            METHOD_MCP_SERVER_UPDATE => self.handle_mcp_server_update(params).await,
+            METHOD_MCP_SERVER_DELETE => self.handle_mcp_server_delete(params).await,
+            METHOD_MCP_SERVER_ENABLED_SET => self.handle_mcp_server_enabled_set(params).await,
+            METHOD_MCP_SERVER_IMPORT_FROM_APP => {
+                self.handle_mcp_server_import_from_app(params).await
+            }
+            METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => {
+                self.handle_mcp_server_sync_all_to_live().await
+            }
             METHOD_MCP_SERVER_START => self.handle_mcp_server_start(params).await,
             METHOD_MCP_SERVER_STOP => self.handle_mcp_server_stop(params).await,
             METHOD_MCP_TOOL_LIST => self.handle_mcp_tool_list().await,
@@ -1145,6 +1166,86 @@ impl RequestProcessor {
         let response = self
             .runtime
             .list_mcp_servers_with_status()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpServerCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_mcp_server(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpServerUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_mcp_server(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpServerDeleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_mcp_server(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_enabled_set(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpServerEnabledSetParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .set_mcp_server_enabled(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_import_from_app(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: McpServerImportFromAppParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .import_mcp_servers_from_app(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_mcp_server_sync_all_to_live(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .sync_all_mcp_servers_to_live()
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

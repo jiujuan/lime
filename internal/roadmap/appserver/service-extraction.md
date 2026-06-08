@@ -9,11 +9,11 @@
 1. 先抽公共 RuntimeCore，不先改产品入口。
 2. 先定义 backend-neutral 合同，再迁 Aster 主链。
 3. Aster 只是第一个 `ExecutionBackend`，不能把 Aster DTO 直接抬成公共 DTO。
-4. legacy desktop facade 只允许在迁移期保留参数适配、事件转发和错误映射；不得落回 `lime-rs/src/commands/**` 扩写。
+4. legacy desktop facade 只允许在迁移期保留参数适配、事件转发和错误映射；不得落回 `lime-rs/src/commands/**` 扩写，也不得把该目录里的 thin facade / stub 当作完成态。
 5. App Server 和 legacy desktop facade 必须调用同一个 RuntimeCore。
 6. 服务层不能依赖 retired desktop host app handle、event emitter 或 state container。
 7. 事件 sink、路径、凭证、workspace、policy 都通过 trait / context 注入。
-8. `lime-rs/src/commands/**` 是旧 Tauri command wrapper 清理区，不再承接新的业务逻辑、API adapter、runtime 分支或领域服务实现。
+8. `lime-rs/src/commands/**` 是旧 Tauri command wrapper 清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。
 
 ## 2. 当前候选事实源
 
@@ -26,7 +26,7 @@
 | `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` | `compat cleanup reference` | Aster backend 历史实现参考，只能用于迁出逻辑；不再作为公共 core 或新 runtime 落点。 |
 | `lime-rs/src/commands/aster_agent_cmd/tool_runtime/*` | `compat cleanup reference` | Aster tool execution 历史参考，事件需迁到公共 tool facts；不再新增 tool 业务逻辑。 |
 | `lime-rs/src/commands/aster_agent_cmd/command_api/*` | `compat cleanup reference` | legacy desktop command DTO / facade 历史参考；迁出到 RuntimeCore / App Server 后撤注册并删除，不在该目录继续保留委托 facade。 |
-| `lime-rs/src/commands/**` | `compat cleanup` | 旧 Tauri wrapper 清理区；只允许迁出核心逻辑、撤注册和删除；删不动登记 blocker。新增后端能力进入 App Server crates / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host。 |
+| `lime-rs/src/commands/**` | `compat cleanup` | 旧 Tauri wrapper 清理区；只允许迁出核心逻辑、撤注册、机械编译修复和删除；删不动登记 blocker，不保留 stub / compat wrapper / thin facade。新增后端能力进入 App Server crates / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host。 |
 | 前端 `safeInvoke` / `invoke` agent runtime API | `compat client` | Lime Desktop 迁移期继续保留，但可改为 app-server client。 |
 | `app-server-protocol` | `current target` | 定义 wire DTO 和 schema。 |
 | `app-server` crate 家族 | `current target` | 参考 codex-rs 分层命名，提供 protocol / transport / server / client / daemon / test-client。 |

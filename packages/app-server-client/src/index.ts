@@ -99,10 +99,16 @@ import {
   METHOD_MCP_PROMPT_GET,
   METHOD_MCP_RESOURCE_LIST,
   METHOD_MCP_RESOURCE_READ,
+  METHOD_MCP_SERVER_CREATE,
+  METHOD_MCP_SERVER_DELETE,
+  METHOD_MCP_SERVER_ENABLED_SET,
+  METHOD_MCP_SERVER_IMPORT_FROM_APP,
   METHOD_MCP_SERVER_LIST,
+  METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
   METHOD_MCP_SERVER_START,
   METHOD_MCP_SERVER_STATUS_LIST,
   METHOD_MCP_SERVER_STOP,
+  METHOD_MCP_SERVER_UPDATE,
   METHOD_MCP_TOOL_CALL,
   METHOD_MCP_TOOL_CALL_WITH_CALLER,
   METHOD_MCP_TOOL_LIST,
@@ -266,11 +272,17 @@ import {
   type McpResourceListResponse,
   type McpResourceReadParams,
   type McpResourceReadResponse,
+  type McpServerCreateParams,
+  type McpServerDeleteParams,
+  type McpServerEnabledSetParams,
+  type McpServerImportFromAppParams,
+  type McpServerImportFromAppResponse,
   type McpServerListResponse,
   type McpServerLifecycleResponse,
   type McpServerStartParams,
   type McpServerStatusListResponse,
   type McpServerStopParams,
+  type McpServerUpdateParams,
   type McpToolCallParams,
   type McpToolCallResponse,
   type McpToolCallWithCallerParams,
@@ -728,6 +740,32 @@ export class AppServerClient {
 
   listMcpServersWithStatus(): JsonRpcRequest {
     return this.request(METHOD_MCP_SERVER_STATUS_LIST, {});
+  }
+
+  createMcpServer(params: McpServerCreateParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_CREATE, params);
+  }
+
+  updateMcpServer(params: McpServerUpdateParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_UPDATE, params);
+  }
+
+  deleteMcpServer(params: McpServerDeleteParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_DELETE, params);
+  }
+
+  setMcpServerEnabled(params: McpServerEnabledSetParams): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_ENABLED_SET, params);
+  }
+
+  importMcpServersFromApp(
+    params: McpServerImportFromAppParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_IMPORT_FROM_APP, params);
+  }
+
+  syncAllMcpServersToLive(): JsonRpcRequest {
+    return this.request(METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, {});
   }
 
   startMcpServer(params: McpServerStartParams): JsonRpcRequest {
@@ -1540,6 +1578,71 @@ export class AppServerConnection {
     return await this.request<McpServerStatusListResponse>(
       this.client.listMcpServersWithStatus(),
       METHOD_MCP_SERVER_STATUS_LIST,
+      options,
+    );
+  }
+
+  async createMcpServer(
+    params: McpServerCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerListResponse>> {
+    return await this.request<McpServerListResponse>(
+      this.client.createMcpServer(params),
+      METHOD_MCP_SERVER_CREATE,
+      options,
+    );
+  }
+
+  async updateMcpServer(
+    params: McpServerUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerListResponse>> {
+    return await this.request<McpServerListResponse>(
+      this.client.updateMcpServer(params),
+      METHOD_MCP_SERVER_UPDATE,
+      options,
+    );
+  }
+
+  async deleteMcpServer(
+    params: McpServerDeleteParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerListResponse>> {
+    return await this.request<McpServerListResponse>(
+      this.client.deleteMcpServer(params),
+      METHOD_MCP_SERVER_DELETE,
+      options,
+    );
+  }
+
+  async setMcpServerEnabled(
+    params: McpServerEnabledSetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerListResponse>> {
+    return await this.request<McpServerListResponse>(
+      this.client.setMcpServerEnabled(params),
+      METHOD_MCP_SERVER_ENABLED_SET,
+      options,
+    );
+  }
+
+  async importMcpServersFromApp(
+    params: McpServerImportFromAppParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerImportFromAppResponse>> {
+    return await this.request<McpServerImportFromAppResponse>(
+      this.client.importMcpServersFromApp(params),
+      METHOD_MCP_SERVER_IMPORT_FROM_APP,
+      options,
+    );
+  }
+
+  async syncAllMcpServersToLive(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<McpServerListResponse>> {
+    return await this.request<McpServerListResponse>(
+      this.client.syncAllMcpServersToLive(),
+      METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
       options,
     );
   }

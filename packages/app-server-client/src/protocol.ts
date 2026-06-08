@@ -76,6 +76,13 @@ export const METHOD_AUTOMATION_SCHEDULE_VALIDATE =
   "automationSchedule/validate";
 export const METHOD_MCP_SERVER_LIST = "mcpServer/list";
 export const METHOD_MCP_SERVER_STATUS_LIST = "mcpServerStatus/list";
+export const METHOD_MCP_SERVER_CREATE = "mcpServer/create";
+export const METHOD_MCP_SERVER_UPDATE = "mcpServer/update";
+export const METHOD_MCP_SERVER_DELETE = "mcpServer/delete";
+export const METHOD_MCP_SERVER_ENABLED_SET = "mcpServer/enabled/set";
+export const METHOD_MCP_SERVER_IMPORT_FROM_APP = "mcpServer/importFromApp";
+export const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE =
+  "mcpServer/syncAllToLive";
 export const METHOD_MCP_SERVER_START = "mcpServer/start";
 export const METHOD_MCP_SERVER_STOP = "mcpServer/stop";
 export const METHOD_MCP_TOOL_LIST = "mcpTool/list";
@@ -206,6 +213,12 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AUTOMATION_SCHEDULE_VALIDATE, kind: "request" },
   { method: METHOD_MCP_SERVER_LIST, kind: "request" },
   { method: METHOD_MCP_SERVER_STATUS_LIST, kind: "request" },
+  { method: METHOD_MCP_SERVER_CREATE, kind: "request" },
+  { method: METHOD_MCP_SERVER_UPDATE, kind: "request" },
+  { method: METHOD_MCP_SERVER_DELETE, kind: "request" },
+  { method: METHOD_MCP_SERVER_ENABLED_SET, kind: "request" },
+  { method: METHOD_MCP_SERVER_IMPORT_FROM_APP, kind: "request" },
+  { method: METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, kind: "request" },
   { method: METHOD_MCP_SERVER_START, kind: "request" },
   { method: METHOD_MCP_SERVER_STOP, kind: "request" },
   { method: METHOD_MCP_TOOL_LIST, kind: "request" },
@@ -1152,6 +1165,33 @@ export type McpServerListResponse = {
 };
 
 export type McpServerStatusListResponse = {
+  servers: unknown[];
+};
+
+export type McpServerCreateParams = {
+  server: unknown;
+};
+
+export type McpServerUpdateParams = {
+  server: unknown;
+};
+
+export type McpServerDeleteParams = {
+  id: string;
+};
+
+export type McpServerEnabledSetParams = {
+  id: string;
+  appType: string;
+  enabled: boolean;
+};
+
+export type McpServerImportFromAppParams = {
+  appType: string;
+};
+
+export type McpServerImportFromAppResponse = {
+  importedCount: number;
   servers: unknown[];
 };
 

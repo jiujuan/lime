@@ -79,11 +79,17 @@ use app_server_protocol::McpPromptMessage;
 use app_server_protocol::McpResourceListResponse;
 use app_server_protocol::McpResourceReadParams;
 use app_server_protocol::McpResourceReadResponse;
+use app_server_protocol::McpServerCreateParams;
+use app_server_protocol::McpServerDeleteParams;
+use app_server_protocol::McpServerEnabledSetParams;
+use app_server_protocol::McpServerImportFromAppParams;
+use app_server_protocol::McpServerImportFromAppResponse;
 use app_server_protocol::McpServerLifecycleResponse;
 use app_server_protocol::McpServerListResponse;
 use app_server_protocol::McpServerStartParams;
 use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::McpServerStopParams;
+use app_server_protocol::McpServerUpdateParams;
 use app_server_protocol::McpToolCallParams;
 use app_server_protocol::McpToolCallResponse;
 use app_server_protocol::McpToolCallWithCallerParams;
@@ -186,6 +192,7 @@ use lime_core::database::dao::automation_job::AutomationJobDao;
 use lime_core::database::system_providers::get_system_providers;
 use lime_core::database::system_providers::SystemProviderDef;
 use lime_core::database::DbConnection;
+use lime_core::models::McpServer;
 use lime_core::models::model_registry::ModelTier;
 use lime_mcp::McpClientManager;
 use lime_mcp::McpError;
@@ -848,6 +855,61 @@ impl AppDataSource for LocalAppDataSource {
             }));
         }
         Ok(McpServerStatusListResponse { servers: result })
+    }
+
+    async fn create_mcp_server(
+        &self,
+        params: McpServerCreateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        let server = mcp_server_from_value(params.server)?;
+        McpService::add(&self.db, server).map_err(data_error)?;
+        self.list_mcp_servers().await
+    }
+
+    async fn update_mcp_server(
+        &self,
+        params: McpServerUpdateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        let server = mcp_server_from_value(params.server)?;
+        McpService::update(&self.db, server).map_err(data_error)?;
+        self.list_mcp_servers().await
+    }
+
+    async fn delete_mcp_server(
+        &self,
+        params: McpServerDeleteParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        McpService::delete(&self.db, &params.id).map_err(data_error)?;
+        self.list_mcp_servers().await
+    }
+
+    async fn set_mcp_server_enabled(
+        &self,
+        params: McpServerEnabledSetParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        McpService::toggle_enabled(&self.db, &params.id, &params.app_type, params.enabled)
+            .map_err(data_error)?;
+        self.list_mcp_servers().await
+    }
+
+    async fn import_mcp_servers_from_app(
+        &self,
+        params: McpServerImportFromAppParams,
+    ) -> Result<McpServerImportFromAppResponse, RuntimeCoreError> {
+        let imported_count =
+            McpService::import_from_app(&self.db, &params.app_type).map_err(data_error)?;
+        let servers = self.list_mcp_servers().await?.servers;
+        Ok(McpServerImportFromAppResponse {
+            imported_count,
+            servers,
+        })
+    }
+
+    async fn sync_all_mcp_servers_to_live(
+        &self,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        McpService::sync_all_to_live(&self.db).map_err(data_error)?;
+        self.list_mcp_servers().await
     }
 
     async fn start_mcp_server(
@@ -3031,6 +3093,10 @@ fn parse_mcp_server_config(config_value: &Value) -> McpServerConfig {
             .and_then(|value| value.as_u64())
             .unwrap_or(30),
     })
+}
+
+fn mcp_server_from_value(value: Value) -> Result<McpServer, RuntimeCoreError> {
+    serde_json::from_value(value).map_err(data_error)
 }
 
 fn mcp_error(error: McpError) -> RuntimeCoreError {

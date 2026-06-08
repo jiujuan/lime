@@ -10,12 +10,6 @@ use tauri::{AppHandle, Emitter};
 pub use lime_services::sysinfo_service::{get_sysinfo_service, SysinfoEmitter};
 pub use lime_services::sysinfo_service::{SysinfoData, SysinfoService};
 
-/// Tauri 命令：获取当前系统信息
-#[tauri::command]
-pub async fn get_sysinfo() -> Result<SysinfoData, String> {
-    lime_services::sysinfo_service::get_sysinfo().await
-}
-
 /// Tauri 命令：开始订阅系统信息
 /// 每秒向前端发送 sysinfo 事件
 #[tauri::command]

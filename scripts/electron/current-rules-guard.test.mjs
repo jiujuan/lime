@@ -26,6 +26,8 @@ function expectRustCommandsCleanupRule(content, label) {
   expect(content, label).toContain("lime-rs/src/commands/**");
   expect(content, label).toMatch(/旧 (?:Tauri )?(?:command )?wrapper (?:删除)?清理|清理区/);
   expect(content, label).toMatch(/不再承接|不得.*新增|不再落|不能.*新增|新增 stub|新增业务逻辑/);
+  expect(content, label).toMatch(/App Server|RuntimeCore|services|Electron Desktop Host/);
+  expect(content, label).toMatch(/stub|compat wrapper|thin facade|退场 stub|fail-closed stub|tombstone|blocker|撤注册|删除/);
 }
 
 function retiredHostPackageName() {
@@ -88,6 +90,7 @@ describe("Electron current repository rules guard", () => {
       readFile("internal/aiprompts/commands.md"),
       "internal/aiprompts/commands.md",
     );
+    expectRustCommandsCleanupRule(readFile("internal/README.md"), "internal/README.md");
   });
 
   it("keeps App Server roadmap aware that Rust commands are cleanup-only", () => {
@@ -98,6 +101,19 @@ describe("Electron current repository rules guard", () => {
       "internal/roadmap/appserver/service-extraction.md",
       "internal/roadmap/appserver/testing-migration.md",
       "internal/roadmap/appserver/implementation-plan.md",
+    ];
+
+    for (const filePath of docs) {
+      expectRustCommandsCleanupRule(readFile(filePath), filePath);
+    }
+  });
+
+  it("keeps execution plan entrypoints aware that Rust commands are cleanup-only", () => {
+    const docs = [
+      "internal/exec-plans/README.md",
+      "internal/exec-plans/production-command-current-migration-plan.md",
+      "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md",
+      "internal/exec-plans/tauri-wrapper-command-inventory.md",
     ];
 
     for (const filePath of docs) {
