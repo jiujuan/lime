@@ -1087,9 +1087,9 @@ benchmark 摘要：
 
 - 新增 `internal/roadmap/i18n/app-metadata-translation-scope.json`，把 installer / app metadata 字段拆成 translatable、stable brand / identifier 与 source-only 三类；当前 `generatedMetadataAllowed=false`，避免在发布链路未设计前生成平行配置。
 - `scripts/i18n/i18n-app-metadata-workflow-report.ts` 已读取 metadata scope，并在 inventory 中输出 scope item 数、可翻译字段数、稳定字段数、source-only 字段数、owner、source locale、target locales 与 workflow status。
-- 刷新 `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前 scope 共 `10` 项，其中 translatable 字段 `2` 项、stable 字段 `6` 项、source-only 字段 `2` 项；installer localization workflow 仍为 `false`。
+- 刷新 `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前 scope 共 `10` 项，其中 translatable 字段 `1` 项、stable 字段 `3` 项、source-only 字段 `6` 项；build-time locale manifest workflow 为 `ready`，真实 Electron Forge / installer 配置仍不自动改写。
 - `scripts/quality-task-planner.mjs` 已把 metadata scope 纳入 P4 app metadata evidence 推荐范围；单独改 scope manifest 时保持 docs-only，但推荐刷新 `app-metadata-workflow-inventory.json`。
-- `internal/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步记录：这一步只建立可机器读取的 ownership / scope，不改真实安装器或 Tauri 配置。
+- `internal/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步记录：这一步只建立可机器读取的 ownership / scope，不改真实 Electron Forge / installer 配置。
 
 验证：
 
@@ -1182,7 +1182,7 @@ benchmark 摘要：
 
 - `scripts/i18n/i18n-app-metadata-workflow-report.ts` 新增 `metadataFieldCoverage`，把真实 app / installer metadata 字段与 `app-metadata-translation-scope.json` 做双向比对：真实字段未入 scope 会进入 `unscopedMetadataFields`，scope 引用失效字段会进入 `missingScopedFields`。
 - `internal/roadmap/i18n/app-metadata-translation-scope.json` 已收敛到 `forge.config.mjs` 的 Electron Forge app metadata 字段，旧 Tauri file association 不再作为 app / installer metadata scope 输入。
-- 刷新 `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前审计字段 `11` 个，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`；`hasInstallerLocalizationWorkflow` 仍为 `false`，不误判为多语言 installer workflow 已完成。
+- 刷新 `internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json` 后，当前审计字段 `10` 个，`metadataUnscopedFieldCount=0`、`metadataMissingScopedFieldCount=0`；`hasInstallerLocalizationWorkflow=true` 仅表示 build-time manifest workflow ready，不表示真实平台 installer metadata 会按 locale 生成。
 - `internal/roadmap/i18n/app-metadata-workflow-evaluation.md` 已同步说明：在 `generatedMetadataAllowed=false` 期间，不新增平行 locale 配置，只用 scope + inventory 管住发布元数据漂移。
 
 验证：
