@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -13,9 +14,44 @@ const clientDistPath = path.join(
   "dist",
   "index.js",
 );
-const { PROTOCOL_VERSION, platformKey, sha256File } = await import(
-  pathToFileURL(clientDistPath).href
-);
+const { PROTOCOL_VERSION, platformKey, sha256File } = await loadClientHelpers();
+
+async function loadClientHelpers() {
+  try {
+    return await import(pathToFileURL(clientDistPath).href);
+  } catch (error) {
+    if (error?.code !== "ERR_MODULE_NOT_FOUND") {
+      throw error;
+    }
+    return {
+      PROTOCOL_VERSION: "appserver.v0",
+      platformKey: fallbackPlatformKey,
+      sha256File: fallbackSha256File,
+    };
+  }
+}
+
+function fallbackPlatformKey(platform = process.platform, arch = process.arch) {
+  if (platform === "win32") {
+    return "win32-x64";
+  }
+  if (platform === "darwin" && arch === "arm64") {
+    return "darwin-arm64";
+  }
+  if (platform === "darwin") {
+    return "darwin-x64";
+  }
+  if (platform === "linux") {
+    return "linux-x64";
+  }
+  return `${platform}-${arch}`;
+}
+
+async function fallbackSha256File(filePath) {
+  return createHash("sha256")
+    .update(await fs.promises.readFile(filePath))
+    .digest("hex");
+}
 
 function parseArgs(argv) {
   const args = {};

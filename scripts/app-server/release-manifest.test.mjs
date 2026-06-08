@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION } from "../../packages/app-server-client/dist/index.js";
+import { PROTOCOL_VERSION } from "../../packages/app-server-client/src/protocol";
 import {
   buildAppServerReleaseManifest,
   parseArgs,
