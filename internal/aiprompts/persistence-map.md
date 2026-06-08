@@ -12,6 +12,8 @@
 
 `runtime_turn ArtifactSnapshot -> AgentTimeline FileArtifact -> artifact_document_service sidecar versions -> SessionDetail / AgentRuntimeThreadReadModel / agent_runtime_* -> evidence / replay`
 
+路径边界：`agent_runtime_*` 文件快照命令名可以作为迁移期读取 surface，但 `lime-rs/src/commands/**` 不是新增持久化实现目录。本文提到的 `aster_agent_cmd/dto.rs` 只作为现有读模型锚点；新增 file checkpoint、artifact sidecar、export / replay 持久化逻辑应进入 services、App Server / RuntimeCore 或 `lime-rs/crates/agent`，旧 command wrapper 迁出后撤注册并删除。
+
 含义如下：
 
 1. `RuntimeAgentEvent::ArtifactSnapshot` 是运行时写入文件快照的唯一事件入口
@@ -105,6 +107,6 @@
 
 - `runtime_file_checkpoint_service`
 - `AgentRuntimeThreadReadModel.file_checkpoint_summary`
-- `agent_runtime_*file_checkpoint*` 命令边界
+- App Server / `agent_runtime_*file_checkpoint*` 命令边界
 
 而不是再开平级旁路。

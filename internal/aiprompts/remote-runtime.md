@@ -39,12 +39,14 @@
 
 **后续新增 remote 能力时，只允许接到 `消息渠道 runtime` 或 `浏览器连接器 / ChromeBridge` 这两条 current ingress；不允许再造第三条并列 remote runtime。**
 
+补充迁移边界：本页保留的 `lime-rs/src/commands/*_cmd.rs` 只用于定位旧 Tauri wrapper 或迁移期命令面，不表示 `lime-rs/src/commands/**` 仍是 remote runtime 的实现目录。新增 remote control plane、agent/browser runtime 或跨 App remote 能力应进入 App Server / RuntimeCore / services；桌面壳、浏览器窗口、CDP 和系统打开能力进入 Electron Desktop Host。旧 wrapper 只允许迁出、撤注册、删除，删不动时登记 blocker。
+
 ## 代码入口地图
 
 ### 1. `消息渠道 runtime`
 
 - `src/lib/api/channelsRuntime.ts`
-- `lime-rs/src/commands/gateway_channel_cmd.rs`
+- `gateway_channel_*` / `gateway_tunnel_*` 命令面（旧 `gateway_channel_cmd.rs` 只作为 cleanup reference）
 - `lime_gateway::{telegram, feishu, discord, wechat}`
 
 当前这里负责：
@@ -63,10 +65,9 @@
 ### 2. `浏览器连接器 / ChromeBridge`
 
 - `src/lib/webview-api.ts`
-- `lime-rs/src/commands/browser_connector_cmd.rs`
+- 浏览器连接器命令面（旧 `browser_connector_cmd.rs` 只作为 cleanup reference）
 - `lime-rs/src/services/browser_connector_service.rs`
-- `lime-rs/src/commands/webview_cmd.rs`
-- `lime-rs/src/commands/browser_runtime_cmd.rs`
+- Webview / browser runtime 命令面（旧 `webview_cmd.rs`、`browser_runtime_cmd.rs` 只作为 cleanup reference）
 
 当前这里负责：
 
@@ -78,8 +79,8 @@
 固定规则：
 
 - 浏览器侧 remote transport 统一收口到 `webview-api.ts`
-- `browser_connector_cmd.rs` 只负责设置与安装入口
-- 真正的 session / backend / remote debugging 状态继续由 `webview_cmd.rs`、`browser_runtime_cmd.rs` 暴露
+- 浏览器连接器设置与安装入口继续通过现有命令 surface 暴露；旧 `browser_connector_cmd.rs` 只作为 cleanup reference
+- session / backend / remote debugging 状态继续由 Webview / browser runtime surface 暴露；旧 `webview_cmd.rs`、`browser_runtime_cmd.rs` 只作为 cleanup reference
 
 ### 3. 已删除的本地 Gateway 兼容壳
 
@@ -121,7 +122,7 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 固定规则：
 
 - 它当前没有前端主入口
-- 多渠道 current 主链已经迁到 `gateway_channel_cmd.rs`
+- 多渠道 current 主链已经迁到 `gateway_channel_*` / `gateway_tunnel_*` 命令面；旧 `gateway_channel_cmd.rs` 只作为 cleanup reference
 - 后续只允许迁移、收口或下线，不再继续扩功能
 
 ## current / compat / deprecated / dead
@@ -129,14 +130,10 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 ### `current`
 
 - `src/lib/api/channelsRuntime.ts`
-- `lime-rs/src/commands/gateway_channel_cmd.rs`
 - `gateway_tunnel_*`
 - `lime_gateway::{telegram, feishu, discord, wechat}`
 - `src/lib/webview-api.ts`
-- `lime-rs/src/commands/browser_connector_cmd.rs`
 - `lime-rs/src/services/browser_connector_service.rs`
-- `lime-rs/src/commands/webview_cmd.rs`
-- `lime-rs/src/commands/browser_runtime_cmd.rs`
 - `internal/aiprompts/remote-runtime.md`
 
 这些路径共同构成当前 remote 主链：
@@ -147,16 +144,22 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 
 ### `compat`
 
+- `lime-rs/src/commands/gateway_channel_cmd.rs`
+- `lime-rs/src/commands/browser_connector_cmd.rs`
+- `lime-rs/src/commands/webview_cmd.rs`
+- `lime-rs/src/commands/browser_runtime_cmd.rs`
 - `lime-rs/src/dev_bridge.rs`
 - `lime-rs/src/dev_bridge/*`
 - `src/lib/dev-bridge/*`
 
 保留原因：
 
+- 这些旧 command wrapper 仍可能承接迁移期命令面，但不能再拥有 remote runtime 业务事实。
 - `DevBridge` 仍是浏览器开发模式的必要桥接层
 
 退出条件：
 
+- remote 能力迁到 App Server / services / Electron Desktop Host 后，撤旧 runner / dispatcher / catalog / mock 注册并删除对应 wrapper；删不动时登记 blocker。
 - `DevBridge` 继续只做开发态桥接，不再承担产品 remote 叙事
 
 ### `deprecated`

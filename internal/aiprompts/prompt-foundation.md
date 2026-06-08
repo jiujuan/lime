@@ -13,6 +13,8 @@
 
 > 后续所有基础 Prompt、system prompt、subagent prompt、plan prompt、augmentation 顺序与 diagnostics 判断，统一向 `runtime_turn.rs -> prompt_context.rs / prompt services -> TurnInputEnvelope -> aster PromptManager / embedded prompts` 这一条 current 主链收敛。
 
+路径边界：`runtime_turn.rs`、`prompt_context.rs` 目前仍位于 `lime-rs/src/commands/aster_agent_cmd/**`，只能作为现有行为锚点和迁移来源。新增 Prompt 能力、augmentation stage、diagnostics 或 provider prompt 组装逻辑应进入 App Server / RuntimeCore / prompt services / `lime-rs/crates/agent`，不能继续在 `lime-rs/src/commands/**` 新增业务逻辑、compat wrapper 或退场 stub。
+
 ## Current 主链总览
 
 ```text
@@ -154,8 +156,8 @@ FastChat 固定顺序：
 
 以下路径是当前唯一允许继续演进的基础 Prompt 事实源：
 
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `lime-rs/src/commands/aster_agent_cmd/prompt_context.rs`
+- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 现有行为锚点；新逻辑迁向 RuntimeCore / prompt services
+- `lime-rs/src/commands/aster_agent_cmd/prompt_context.rs` 现有行为锚点；新逻辑迁向 RuntimeCore / prompt services
 - `lime-rs/src/services/memory_profile_prompt_service.rs`
 - `lime-rs/src/services/artifact_prompt_service.rs`
 - `lime-rs/src/services/web_search_prompt_service.rs`

@@ -53,7 +53,7 @@ lime/
 │   │   ├── app-server* # App Server protocol / server / client / transport current crates
 │   │   └── agent       # RuntimeCore 当前参考 crate，后续继续拆公共模型与服务
 │   └── src/
-│       ├── commands/    # legacy desktop facade 命令，仅用于兼容迁移
+│       ├── commands/    # 旧 Tauri wrapper 删除清理区，不再承接新实现
 │       ├── providers/   # Provider 实现
 │       ├── services/    # 业务服务
 │       ├── converter/   # 协议转换
@@ -62,73 +62,75 @@ lime/
 └── docs/                # 文档
 ```
 
+`lime-rs/src/commands/**` 只作为旧 Tauri command wrapper 的迁移参考和删除清理区。下文若为了定位历史实现而列出 `*_cmd.rs`，只表示当前命令名或旧实现锚点仍需要治理，不表示这个目录可以继续承接新业务逻辑、API adapter、runtime 分支、领域服务、compat wrapper 或退场 stub。新增 Rust 后端能力必须进入 App Server crates / RuntimeCore / services；窗口、托盘、Dock、updater、shell、deep link 等桌面壳能力进入 Electron Desktop Host。
+
 ## 架构分层
 
 ### 产品层
 
-| 模块 | 说明 |
-|------|------|
-| `workspace/` | 工作区与项目边界，承载文件、会话与配置上下文 |
-| `components/agent/` | Agent 对话主入口，负责会话、流式事件与交互 |
-| `components/workspace/` + `lib/workspace/` | 共享工作区、画布联动、上下文 Harness 与编排兼容能力 |
-| `skills/` | 技能加载、标准校验与经验编排能力；统一遵循 `skill-standard.md` |
-| `lib/artifact/` | Artifact 解析、状态与轻量渲染器 |
-| `memory / personas` | 项目记忆与人设沉淀 |
+| 模块                                       | 说明                                                           |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `workspace/`                               | 工作区与项目边界，承载文件、会话与配置上下文                   |
+| `components/agent/`                        | Agent 对话主入口，负责会话、流式事件与交互                     |
+| `components/workspace/` + `lib/workspace/` | 共享工作区、画布联动、上下文 Harness 与编排兼容能力            |
+| `skills/`                                  | 技能加载、标准校验与经验编排能力；统一遵循 `skill-standard.md` |
+| `lib/artifact/`                            | Artifact 解析、状态与轻量渲染器                                |
+| `memory / personas`                        | 项目记忆与人设沉淀                                             |
 
 ### 能力层
 
-| 模块 | 说明 |
-|------|------|
-| `src/features/browser-runtime/` | 浏览器协助运行时与调试工作区 |
-| `终端能力（已移除）` | 不属于当前能力层；仅在治理文档中保留退役说明与历史检索语义 |
-| `lime-rs/src/services/automation_service/` + `lime-rs/src/app/scheduler_service.rs` | 自动化任务、后台轮询与兼容调度触发壳 |
-| `lime-rs/src/plugin/` | 插件系统 |
-| `lime-rs/src/services/mcp_service.rs` | MCP 服务器与工具管理 |
-| `lime-rs/src/commands/gateway_channel_cmd.rs` | 多渠道远程入口、Webhook/Tunnel 与渠道运行时 |
-| `lime-rs/src/commands/browser_connector_cmd.rs` + `lime-rs/src/commands/webview_cmd.rs` | 浏览器连接器、ChromeBridge 与远程浏览器接入 |
-| `lime-rs/src/commands/telegram_remote_cmd.rs` + `lime-rs/src/dev_bridge.rs` | 单通道旧入口与开发桥兼容支撑 |
+| 模块                                                                                | 说明                                                                                                         |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `src/features/browser-runtime/`                                                     | 浏览器协助运行时与调试工作区                                                                                 |
+| `终端能力（已移除）`                                                                | 不属于当前能力层；仅在治理文档中保留退役说明与历史检索语义                                                   |
+| `lime-rs/src/services/automation_service/` + `lime-rs/src/app/scheduler_service.rs` | 自动化任务、后台轮询与兼容调度触发壳                                                                         |
+| `lime-rs/src/plugin/`                                                               | 插件系统                                                                                                     |
+| `lime-rs/src/services/mcp_service.rs`                                               | MCP 服务器与工具管理                                                                                         |
+| `gateway_channel_*` / `gateway_tunnel_*` 命令面                                     | 多渠道远程入口、Webhook/Tunnel 与渠道运行时；旧 `gateway_channel_cmd.rs` 只作为清理参考                      |
+| 浏览器连接器 / ChromeBridge 命令面                                                  | 浏览器连接器、ChromeBridge 与远程浏览器接入；旧 `browser_connector_cmd.rs` / `webview_cmd.rs` 只作为清理参考 |
+| `telegram_remote_cmd.rs` + `lime-rs/src/dev_bridge.rs`                              | 单通道旧入口与开发桥兼容支撑；只能迁移、收口或删除                                                           |
 
 ### 基础设施层
 
-| 模块 | 说明 |
-|------|------|
-| `lime-rs/crates/app-server*` | App Server protocol / server / client / transport current crates，承接跨 App JSON-RPC 事实源 |
-| `lime-rs/crates/agent` | RuntimeCore 当前参考 crate，承接 session / thread / turn / event 等公共 facts 的拆分方向 |
-| `lime-rs/src/agent/` | Aster execution backend 的历史实现参考；只作为 ExecutionBackend 迁移来源，不再是公共 runtime owner |
-| `providers/` | LLM Provider API 实现与协议兼容 |
-| `services/` | 业务服务层 |
-| `converter/` | 协议转换与兼容层 |
-| `server/` | HTTP API 服务器 |
-| `api_key_provider` | API Key Provider 配置与凭证选择 |
-| `flow_monitor/` | 流量监控 |
-| `database/` | 数据持久化与 DAO |
+| 模块                         | 说明                                                                                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `lime-rs/crates/app-server*` | App Server protocol / server / client / transport current crates，承接跨 App JSON-RPC 事实源       |
+| `lime-rs/crates/agent`       | RuntimeCore 当前参考 crate，承接 session / thread / turn / event 等公共 facts 的拆分方向           |
+| `lime-rs/src/agent/`         | Aster execution backend 的历史实现参考；只作为 ExecutionBackend 迁移来源，不再是公共 runtime owner |
+| `providers/`                 | LLM Provider API 实现与协议兼容                                                                    |
+| `services/`                  | 业务服务层                                                                                         |
+| `converter/`                 | 协议转换与兼容层                                                                                   |
+| `server/`                    | HTTP API 服务器                                                                                    |
+| `api_key_provider`           | API Key Provider 配置与凭证选择                                                                    |
+| `flow_monitor/`              | 流量监控                                                                                           |
+| `database/`                  | 数据持久化与 DAO                                                                                   |
 
 ## 核心模块视图
 
 ### 后端（`lime-rs/src/`）
 
-| 模块 | 说明 |
-|------|------|
-| `agent/` | Aster execution backend 迁移参考、会话历史与状态读模型装配 |
-| `skills/` | Skills 标准集成、动态加载与执行回调 |
-| `providers/` | 多 Provider 认证与请求发送 |
-| `services/` | 心跳、浏览器窗口、MCP 等业务服务 |
-| `converter/` | 协议兼容与转换 |
-| `server/` | HTTP Server 与 REST 能力 |
-| `terminal/` | 已移除；不要恢复旧终端/PTTY 模块 |
-| `plugin/` | 插件加载与运行时 |
-| `voice/` | 语音输入输出与 ASR 流程 |
+| 模块         | 说明                                                       |
+| ------------ | ---------------------------------------------------------- |
+| `agent/`     | Aster execution backend 迁移参考、会话历史与状态读模型装配 |
+| `skills/`    | Skills 标准集成、动态加载与执行回调                        |
+| `providers/` | 多 Provider 认证与请求发送                                 |
+| `services/`  | 心跳、浏览器窗口、MCP 等业务服务                           |
+| `converter/` | 协议兼容与转换                                             |
+| `server/`    | HTTP Server 与 REST 能力                                   |
+| `terminal/`  | 已移除；不要恢复旧终端/PTTY 模块                           |
+| `plugin/`    | 插件加载与运行时                                           |
+| `voice/`     | 语音输入输出与 ASR 流程                                    |
 
 ### 前端（`src/`）
 
-| 模块 | 说明 |
-|------|------|
-| `components/` | 主 UI 组件与共享工作区 |
-| `features/` | 浏览器运行时等较独立特性域 |
-| `hooks/` | 业务逻辑 Hooks |
-| `lib/api/` | Desktop host / App Server API 与运行时封装 |
-| `lib/artifact/` | Artifact 状态与解析 |
-| `pages/` | 独立窗口与页面入口 |
+| 模块            | 说明                                       |
+| --------------- | ------------------------------------------ |
+| `components/`   | 主 UI 组件与共享工作区                     |
+| `features/`     | 浏览器运行时等较独立特性域                 |
+| `hooks/`        | 业务逻辑 Hooks                             |
+| `lib/api/`      | Desktop host / App Server API 与运行时封装 |
+| `lib/artifact/` | Artifact 状态与解析                        |
+| `pages/`        | 独立窗口与页面入口                         |
 
 补充约束：
 
@@ -200,44 +202,53 @@ lime/
 ## 关键特性
 
 ### 1. Workspace 驱动
+
 - Workspace 既是文件边界，也是 context 边界和配置边界
 - 项目、会话、记忆、风格和 Artifact 围绕同一工作区组织
 
 ### 2. Skills 驱动
+
 - Skills 是经验交互、流程编排与领域方法沉淀的核心单元
 - Skills 可封装 prompt、references、scripts、assets 与调用规则
 - Agent 运行时可动态加载、自动发现与调用 Skills
 
 ### 3. MCP 标准能力层
+
 - 基于 MCP 管理 tools、resources、prompts 与读取边界
 - 为 Agent 提供标准化能力发现、调用与上下文共享方式
 
 ### 4. Claw 渠道协作
+
 - 支持 Telegram / Feishu / Discord 等渠道运行时
 - 支持远程触发、异步协作、消息回流与外部入口接入
 
 ### 5. Agent Runtime
+
 - Runtime facts 由 App Server / RuntimeCore 拥有；Aster 只是第一个 `ExecutionBackend`
 - 支持会话、流式事件、工具调用与多模型配置
 - 支持任务接力、会话持续化、步骤可观测与长期运行
 
 ### 6. Artifact First
+
 - 输出不止是聊天文本，还包括文档、草稿、脚本、版本链与画布产物
 - `write_file`、画布联动与主题工作流负责把过程沉淀成交付物
 
 ### 7. 多 Provider 与兼容层
+
 - Provider 配置统一走 API Key Provider / configured providers
 - 模型注册表、协议兼容与 HTTP Server 作为底层支撑
 - Prompt Cache 等运行时能力按 ProviderType 判断；`anthropic-compatible` 只表示 Anthropic wire format 兼容，不等于自动 Prompt Cache 能力
 - 旧凭证池、OAuth 与本地 CLI credential runtime 已退役；Antigravity 仅保留协议转换器能力
 
 ### 8. 本地优先与可扩展
+
 - 桌面应用、本地工作区、插件与外部工具扩展
 - 允许在不改变产品主形态的前提下向更多执行环境延展
 
 ## 文档索引
 
 ### 产品与工作台
+
 - [workspace.md](workspace.md) - Workspace 边界与工作区设计
 - [memory-compaction.md](memory-compaction.md) - 记忆来源链、会话记忆、持久记忆与会话压缩主链
 - [state-history-telemetry.md](state-history-telemetry.md) - session/thread/request/evidence/history 的状态读模型主链
@@ -247,17 +258,20 @@ lime/
 - [aster-integration.md](aster-integration.md) - Agent Runtime 集成
 
 ### 基础设施
+
 - [providers.md](providers.md) - Provider 系统
 - [credential-pool.md](credential-pool.md) - 凭证池退役说明
 - [converter.md](converter.md) - 协议转换
 - [server.md](server.md) - HTTP 服务器
 
 ### 前端与公共模块
+
 - [components.md](components.md) - 组件系统
 - [hooks.md](hooks.md) - React Hooks
 - [lib.md](lib.md) - 工具库
 
 ### 配置、服务与数据
+
 - [commands.md](commands.md) - Electron Desktop Host bridge / App Server / legacy facade 命令边界
 - [command-runtime.md](command-runtime.md) - 命令运行时、`@` / `/`、轻卡与 viewer 实施规则
 - [site-adapter-standard.md](site-adapter-standard.md) - 站点适配器标准与外部来源接入边界

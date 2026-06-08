@@ -52,6 +52,8 @@
 
 **后续新增长时执行能力时，只允许落成 `agent turn`、`subagent turn` 或 `automation job` 三类之一；不允许再造第四类 runtime taxonomy。**
 
+补充迁移边界：`agent_runtime_*`、`automation_*`、`execution_run_*` 这类命令名可以作为迁移期 surface，但 `lime-rs/src/commands/**` 不是新的 taxonomy、coordinator 或 runtime 实现目录。本文列出的 `aster_agent_cmd/**`、`automation_cmd.rs`、`execution_run_cmd.rs` 只作为现有行为锚点和清理参考；新增长时执行、子代理、自动化或执行摘要能力应进入 RuntimeCore / services / App Server protocol，旧 wrapper 迁出后撤注册并删除。
+
 补充边界：
 
 [Codex `/goal`](../research/codex-goal/README.md) 这类 persistent objective / continuation loop 只能作为“目标推进控制层”理解，不能成为第四类执行实体。若 Lime 后续实现 `Managed Objective`：
@@ -114,7 +116,7 @@
 ### 3. `automation job`
 
 - `lime-rs/src/services/automation_service/mod.rs`
-- `lime-rs/src/commands/automation_cmd.rs`
+- `automation_*` 命令 surface（旧 `automation_cmd.rs` 只作为 cleanup reference）
 - `src/lib/api/automation.ts`
 
 当前这里负责：
@@ -135,7 +137,7 @@
 
 - `lime-rs/src/services/execution_tracker_service.rs`
 - `lime-rs/crates/core/src/database/dao/agent_run.rs`
-- `lime-rs/src/commands/execution_run_cmd.rs`
+- `execution_run_*` 命令 surface（旧 `execution_run_cmd.rs` 只作为 cleanup reference）
 
 当前这里负责：
 
@@ -174,7 +176,7 @@
 
 - `internal/aiprompts/task-agent-taxonomy.md`
 - `internal/aiprompts/query-loop.md`
-- `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs`
+- `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs` 现有行为锚点；新协作 runtime 逻辑迁向 RuntimeCore / services
 - `lime-rs/src/services/automation_service/*`
 - `lime-rs/src/services/execution_tracker_service.rs`
 - `agent_runs`

@@ -54,6 +54,10 @@
 6. **证据链是主链的下游消费，不是旁路真相**
    `thread_read / evidence / replay / review` 只能复用主回合产生的 runtime facts，不能反向定义 Query Loop 真相。
 
+### Rust 命令目录迁移边界
+
+`agent_runtime_*` 等命令名在迁移期仍可作为前端网关 surface，但 `lime-rs/src/commands/**` 不是新的 Query Loop 实现目录。本文列出的 `runtime_turn.rs`、`tool_runtime.rs`、`command_api/runtime_api.rs` 等路径是现有行为锚点和迁移来源；新增运行时能力应进入 App Server JSON-RPC、RuntimeCore、ExecutionBackend、services 或 `lime-rs/crates/agent`。当核心逻辑迁出后，旧 wrapper 应撤 runner / DevBridge / catalog / mock 注册并删除；不得在 `commands/**` 新增 compat wrapper、退场 stub 或平行 runtime 分支。
+
 ### Managed Objective / `/goal` 类能力边界
 
 [Codex `/goal`](../research/codex-goal/README.md) 证明了 “persistent objective -> idle continuation turn” 可以由 runtime 管理，但 Lime 不能因此新增第二条 Query Loop。
@@ -231,10 +235,10 @@
 ### `current`
 
 - `agent_runtime_submit_turn`
-- `runtime_turn.rs`
+- `runtime_turn.rs` 现有行为锚点；新核心逻辑迁向 RuntimeCore / services
 - `TurnInputEnvelope`
 - `runtime_queue.rs`
-- `tool_runtime.rs`
+- `tool_runtime.rs` 现有行为锚点；新工具治理逻辑迁向 RuntimeCore / services
 - `agent_runtime_get_session / get_thread_read`
 - `agent_runtime_compact_session`
 - `lime-rs/src/commands/aster_agent_cmd/action_runtime.rs::agent_runtime_respond_action`
@@ -246,12 +250,11 @@
 
 - `internal/roadmap/lime-aster-codex-alignment-roadmap.md`
 - `lime-rs/src/commands/agent_cmd.rs::agent_generate_title`
-- `lime-rs/src/commands/persona_cmd.rs::generate_persona`
 
 这份历史档案与专用命令仍可保留各自职责，但不再承担 Query Loop 唯一事实源职责。
-这两条命令属于专用一次性会话能力：允许显式拼自己的临时 `SessionConfig`，但不能参与 submit turn、runtime queue 或 evidence 真相定义。
-它们允许为本地 auxiliary session 附带最小 `lime_runtime` metadata，用于记录 `task_profile / routing_decision / cost_state` 一类辅助任务分类事实；必要时也可以把该 auxiliary session 的 `execution_runtime` 诊断快照回传到命令结果，但这份快照只服务该一次性会话自己的诊断与可观测性，不进入 current Query Loop 的 thread / turn 真相。
-当前命令层允许保留的原始执行面只剩这 3 处：`action_runtime` 属于 current 恢复链，`agent_generate_title` 与 `persona_cmd` 属于受控 compat 一次性命令。旧 `aster_agent_theme_context_search` 已下线，主题上下文搜索 current 事实源是 `src/lib/api/themeContextSearch.ts -> App Server agentSession/start + agentSession/turn/start + agentSession/read`。
+`agent_generate_title` 属于专用一次性会话能力：允许显式拼自己的临时 `SessionConfig`，但不能参与 submit turn、runtime queue 或 evidence 真相定义。
+它允许为本地 auxiliary session 附带最小 `lime_runtime` metadata，用于记录 `task_profile / routing_decision / cost_state` 一类辅助任务分类事实；必要时也可以把该 auxiliary session 的 `execution_runtime` 诊断快照回传到命令结果，但这份快照只服务该一次性会话自己的诊断与可观测性，不进入 current Query Loop 的 thread / turn 真相。
+当前命令层允许保留的原始执行面只剩 `action_runtime` current 恢复链与 `agent_generate_title` 受控 compat 一次性命令。旧 `persona_cmd` wrapper 已删除；persona 生成语义若继续保留，应通过 runtime auxiliary service / App Server current 边界承接。旧 `aster_agent_theme_context_search` 已下线，主题上下文搜索 current 事实源是 `src/lib/api/themeContextSearch.ts -> App Server agentSession/start + agentSession/turn/start + agentSession/read`。
 
 ### `dead`
 

@@ -42,6 +42,8 @@
 
 **后续新增记忆或压缩能力时，只允许接到 `memory_runtime_*`、`unified_memory_*` 和 `agent_runtime_compact_session` 这组 current 边界；不允许再造并列记忆真相。**
 
+补充迁移边界：`memory_runtime_*`、`unified_memory_*`、`agent_runtime_compact_session` 是 current 命令语义，但 `lime-rs/src/commands/**` 不是新记忆实现目录。本文列出的 `memory_management_cmd.rs`、`unified_memory_cmd.rs`、`memory_search_cmd.rs` 和 `aster_agent_cmd/**` 是现有迁移锚点；新增记忆来源、durable recall、compaction、Team Memory 或 prompt prefetch 能力应进入 App Server / RuntimeCore / services / `lime-rs/crates/agent`，旧 wrapper 迁出后撤注册并删除。
+
 ## 代码入口地图
 
 ### 1. 来源链与自动记忆 control plane
@@ -116,7 +118,7 @@
 - 自动沉淀与手动压缩都属于同一条 Query Loop 下游主链。
 - `agent_runtime_compact_session` 只能视为上下文治理动作，不能被包装成第二套独立记忆系统。
 - compaction control turn 允许只保留 `thread_id / turn_id` 这组最小 `SessionConfig`；它不参与常规 turn prompt / tool / turn_context snapshot 组包，因此不构成第二事实源。
-- 如果一个功能要影响“这轮 prompt 最终用了哪些记忆”，先改 `runtime_turn.rs` 与 `memory_management_cmd.rs`，不要在 UI 层旁路拼装。
+- 如果一个功能要影响“这轮 prompt 最终用了哪些记忆”，先改 RuntimeCore / services 与现有 current 命令 surface；若相关逻辑仍在 `runtime_turn.rs` 或 `memory_management_cmd.rs`，优先迁出核心逻辑，不要在 UI 层旁路拼装，也不要继续扩写 `commands/**`。
 
 ### 4. 持久记忆 current surface
 
@@ -167,7 +169,7 @@
 
 - `internal/aiprompts/memory-compaction.md`
 - `src/lib/api/memoryRuntime.ts`
-- `lime-rs/src/commands/memory_management_cmd.rs`
+- `lime-rs/src/commands/memory_management_cmd.rs` 现有迁移锚点；新来源链逻辑迁向 services / RuntimeCore
 - `lime-rs/src/services/memory_source_resolver_service.rs`
 - `lime-rs/src/services/auto_memory_service.rs`
 - `lime-rs/src/services/runtime_agents_template_service.rs`
@@ -175,8 +177,8 @@
 - `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
 - `lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs` 的 `compact_session`
 - `src/lib/api/unifiedMemory.ts`
-- `lime-rs/src/commands/unified_memory_cmd.rs`
-- `lime-rs/src/commands/memory_search_cmd.rs`
+- `lime-rs/src/commands/unified_memory_cmd.rs` 现有迁移锚点；新 durable memory 逻辑迁向 services / App Server
+- `lime-rs/src/commands/memory_search_cmd.rs` 现有迁移锚点；新搜索逻辑迁向 services / App Server
 - `src/components/memory/MemoryPage.tsx`
 - `src/components/settings-v2/general/memory/index.tsx`
 - `src/components/agent/chat/components/AgentThreadMemoryPrefetchPreview.tsx`

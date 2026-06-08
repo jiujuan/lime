@@ -43,6 +43,8 @@
 
 **后续新增状态、历史或遥测能力时，只允许接到 `SessionDetail -> AgentRuntimeThreadReadModel -> RequestLog -> export/history` 这组 current 边界；不允许再造并列状态真相。**
 
+补充迁移边界：`agent_runtime_get_session`、`agent_runtime_get_thread_read`、`agent_runtime_export_*` 等命令名仍是 current 读模型 / 导出 surface，但 `lime-rs/src/commands/**` 不是新增状态、历史或遥测实现目录。本文提到的 `aster_agent_cmd/**` 只作为现有行为锚点和迁移来源；新增状态投影、request telemetry、evidence / replay / review 能力应进入 App Server / RuntimeCore / services / `lime-rs/crates/agent`。旧 telemetry Tauri wrapper 已删除，不得恢复 stub 或 compat wrapper。
+
 补充边界：
 
 [Codex `/goal`](../research/codex-goal/README.md) 这类目标续跑模式如果在 Lime 演进为 `Managed Objective`，其状态投影也必须消费 `SessionDetail / AgentRuntimeThreadReadModel / evidence pack`。不得让 objective UI、automation job、review/handoff 各自重建“目标是否完成”的第二套真相。
@@ -209,7 +211,6 @@
 - `internal/roadmap/lime-aster-codex-alignment-roadmap.md`
 - `internal/roadmap/reliability/README.md`
 - `internal/roadmap/reliability/*`
-- `lime-rs/src/commands/telemetry_cmd.rs`
 
 保留原因：
 
@@ -238,9 +239,9 @@
 
 ### `dead`
 
-当前没有新增确认可立即删除的 `dead` 实现文件。
+- `lime-rs/src/commands/telemetry_cmd.rs`
 
-这轮主问题是并行计划和旧语义残留，而不是零引用代码；后续若 `reliability` 专项文档或旧报表分支完全失去入口，再单独转为 `dead`。
+旧 request log / stats / token stats Tauri wrapper 已删除；如果后续需要用户可见统计，只能补 App Server current method / Electron Host current bridge 或下线入口，不能在 `lime-rs/src/commands/**` 恢复 telemetry wrapper / stub。后续若 `reliability` 专项文档或旧报表分支完全失去入口，再单独转为 `dead`。
 
 ## 最低验证要求
 

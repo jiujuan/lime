@@ -11,7 +11,7 @@
 4. **新旧并存问题先看治理文档** - 避免在 compat / deprecated 路径上继续长新表面
 5. **新增命名不要加品牌前缀** - 新程序、目录、crate/package、Electron IPC channel、App Server 方法、API 网关、类型、模块和脚本默认使用领域名，不要加 `Lime` / `lime_` / `lime-`；只有对外品牌、历史兼容或生态固定命名才例外，并在计划里说明
 6. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力先落到 `app-server` crates、JSON-RPC 协议、client 与 RuntimeCore；Electron 只作为 Desktop Host bridge，负责 IPC 和桌面壳能力，不是第二套后端或业务 adapter；`agent_runtime_*` / Aster 旧命令只作为 Lime Desktop 兼容 facade
-7. **`lime-rs/src/commands/**` 只做旧 wrapper 清理** - 该目录不再承接新的业务逻辑、API adapter、runtime 分支或领域服务实现；新增后端能力进 App Server crates / RuntimeCore / services，桌面壳能力进 Electron Desktop Host
+7. **`lime-rs/src/commands/**` 只做旧 wrapper 清理\*\* - 该目录不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub；新增后端能力进 App Server crates / RuntimeCore / services，桌面壳能力进 Electron Desktop Host
 
 ## 按场景导航
 
@@ -80,7 +80,7 @@
 - **改 FileArtifact / artifact sidecar / versions / file checkpoint / evidence 中的文件快照**：先读 `persistence-map.md`
 - **改 session detail / thread read / requestTelemetry / evidence / history-record**：先读 `state-history-telemetry.md`
 - **改 Electron IPC / App Server / Bridge / mock / legacy desktop facade**：先读 `commands.md`，再看 `quality-workflow.md`
-- **碰到 `lime-rs/src/commands/**`**：默认只做旧 Tauri wrapper 删除清理、撤注册后的机械编译修复或 blocker 登记；不要在该目录新增实现。先读 `commands.md`、`governance.md`、`../exec-plans/tauri-wrapper-quick-cleanup-queue.md` 和 `../exec-plans/tauri-wrapper-command-inventory.md`
+- **碰到 `lime-rs/src/commands/**`**：默认只做旧 Tauri wrapper 删除清理、撤注册后的机械编译修复或 blocker 登记；不要在该目录新增实现、compat wrapper 或退场 stub。先读 `commands.md`、`governance.md`、`../exec-plans/tauri-wrapper-quick-cleanup-queue.md`和`../exec-plans/tauri-wrapper-command-inventory.md`
 - **改 `@` / `/` / 轻卡 / viewer / ServiceSkill 场景**：先读 `command-runtime.md`
 - **改 Claw 技能 / Service Skill / 统一 Skills 标准**：先读 `skill-standard.md`
 - **改站点适配器 / 导入外部 adapter**：先读 `site-adapter-standard.md`，再看 `web-browser-scene-skill.md` 与 `quality-workflow.md`

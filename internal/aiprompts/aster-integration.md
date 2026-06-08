@@ -12,6 +12,7 @@ Lime 已完整集成 aster-rust 框架。Provider 配置桥接已收敛到 API K
 - Lime 只负责事件映射、数据库投影和 UI 派生，不再伪造核心 runtime item。
 - 会话删除统一收口到存储边界；命令层和 Dev Bridge 不应直接调用 `AgentDao::delete_session`。
 - 需要恢复运行态时，优先从 Aster runtime 恢复，再映射到 Lime timeline。
+- `lime-rs/src/commands/aster_agent_cmd/**` 只作为现有 Aster legacy desktop facade 与迁移参考；新 runtime、host integration、跨 App 复用能力必须进入 App Server JSON-RPC、RuntimeCore、ExecutionBackend 或 services，不能继续在 `lime-rs/src/commands/**` 扩写。
 
 **后端模块** (`lime-rs/src/agent/`):
 
@@ -20,7 +21,7 @@ Lime 已完整集成 aster-rust 框架。Provider 配置桥接已收敛到 API K
 - `event_converter.rs` - 事件转换器
 - `credential_bridge.rs` - API Key Provider 桥接
 
-**legacy adapter 命令** (`lime-rs/src/commands/aster_agent_cmd.rs`):
+**legacy desktop facade / cleanup reference** (`lime-rs/src/commands/aster_agent_cmd.rs`):
 
 - `aster_agent_init` - 初始化 Agent
 - `aster_agent_configure_provider` - 手动配置 Provider
@@ -29,6 +30,8 @@ Lime 已完整集成 aster-rust 框架。Provider 配置桥接已收敛到 API K
 - `agent_runtime_interrupt_turn` - 统一中断 turn
 - `agent_runtime_create/list/get/update/delete_session` - 统一会话管理
 - `agent_runtime_respond_action` - 统一响应工具确认 / ask / elicitation
+
+这些命令名可以作为迁移期 API surface 被前端网关消费，但文件所在的 `commands/**` 目录不是新实现落点。迁出核心逻辑后应撤 runner / DevBridge / catalog / mock 注册并删除旧 wrapper；删不动时登记 blocker 和退出条件。
 
 ## 架构
 
@@ -78,13 +81,13 @@ Lime 已完整集成 aster-rust 框架。Provider 配置桥接已收敛到 API K
 
 ### 支持的凭证类型映射
 
-| Lime 凭证类型         | Aster Provider |
-| -------------------------- | -------------- |
-| OpenAIKey                  | openai         |
-| ClaudeKey / AnthropicKey   | anthropic      |
-| GeminiApiKey               | google         |
-| VertexKey                  | gcpvertexai    |
-| Codex API Key              | codex          |
+| Lime 凭证类型            | Aster Provider |
+| ------------------------ | -------------- |
+| OpenAIKey                | openai         |
+| ClaudeKey / AnthropicKey | anthropic      |
+| GeminiApiKey             | google         |
+| VertexKey                | gcpvertexai    |
+| Codex API Key            | codex          |
 
 Kiro / Gemini OAuth / Codex OAuth / Claude OAuth / Antigravity OAuth 均已退役，不再作为 Aster Provider 配置来源。
 
