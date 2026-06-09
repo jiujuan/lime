@@ -6,8 +6,8 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
-describe("imageSearch API diagnostic fail-closed", () => {
-  it("Pixabay 搜索收到 diagnostic facade 时应 fail closed", async () => {
+describe("imageSearch API retired facade fail-closed", () => {
+  it("Pixabay 搜索不应再调用旧 diagnostic/native facade", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {
         command: "search_pixabay_images",
@@ -21,12 +21,12 @@ describe("imageSearch API diagnostic fail-closed", () => {
         page: 1,
         perPage: 20,
       }),
-    ).rejects.toThrow(
-      "search_pixabay_images 尚未接入真实 Image Search current 通道",
-    );
+    ).rejects.toThrow("旧 Tauri in-process command 已退役");
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("Web 图片搜索收到 diagnostic facade 时应 fail closed", async () => {
+  it("Web 图片搜索不应再调用旧 diagnostic/native facade", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {
         command: "search_web_images",
@@ -40,8 +40,8 @@ describe("imageSearch API diagnostic fail-closed", () => {
         page: 1,
         perPage: 20,
       }),
-    ).rejects.toThrow(
-      "search_web_images 尚未接入真实 Image Search current 通道",
-    );
+    ).rejects.toThrow("旧 Tauri in-process command 已退役");
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 });

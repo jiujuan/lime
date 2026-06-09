@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "SessionFileEntry": {
+      "properties": {
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "fileType": {
+          "type": "string"
+        },
+        "metadata": true,
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "createdAt",
+        "fileType",
+        "name",
+        "size",
+        "updatedAt"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "file": {
+      "$ref": "#/$defs/SessionFileEntry"
+    }
+  },
+  "required": [
+    "file"
+  ],
+  "title": "SessionFileEntryResponse",
+  "type": "object"
+}

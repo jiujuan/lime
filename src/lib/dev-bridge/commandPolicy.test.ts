@@ -26,6 +26,7 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("agent_runtime_submit_turn")).toBe(true);
     expect(isBridgeTruthCommand("workspace_list")).toBe(true);
     expect(isBridgeTruthCommand("get_model_registry")).toBe(true);
+    expect(isBridgeTruthCommand("get_model_registry_provider_ids")).toBe(false);
     expect(isBridgeTruthCommand("agent_app_list_installed")).toBe(false);
     expect(isBridgeTruthCommand("agent_app_launch_shell")).toBe(false);
     expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(false);
@@ -125,6 +126,42 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("agent_runtime_wait_subagents")).toBe(false);
     expect(isBridgeTruthCommand("agent_runtime_resume_subagent")).toBe(false);
     expect(isBridgeTruthCommand("agent_runtime_close_subagent")).toBe(false);
+    expect(isBridgeTruthCommand("voice_models_download")).toBe(false);
+    expect(shouldDisallowMockFallbackCommand("voice_models_download")).toBe(
+      true,
+    );
+    expect(isBridgeTruthCommand("voice_models_delete")).toBe(false);
+    expect(shouldDisallowMockFallbackCommand("voice_models_delete")).toBe(true);
+    expect(isBridgeTruthCommand("voice_models_test_transcribe_file")).toBe(
+      false,
+    );
+    expect(
+      shouldDisallowMockFallbackCommand("voice_models_test_transcribe_file"),
+    ).toBe(false);
+    expect(isBridgeTruthCommand("voice_models_set_default")).toBe(false);
+    expect(shouldDisallowMockFallbackCommand("voice_models_set_default")).toBe(
+      false,
+    );
+    expect(isBridgeTruthCommand("open_system_settings_url")).toBe(false);
+    expect(shouldDisallowMockFallbackCommand("open_system_settings_url")).toBe(
+      true,
+    );
+  });
+
+  it("P6 Session files 旧写读链已退役，不再作为 DevBridge policy surface", () => {
+    for (const command of [
+      "session_files_get_or_create",
+      "session_files_update_meta",
+      "session_files_save_file",
+      "session_files_read_file",
+      "session_files_resolve_file_path",
+      "session_files_delete_file",
+      "session_files_list_files",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
+      expect(isOptionalLegacyUxCommand(command)).toBe(false);
+    }
   });
 
   it("P9 process / Aster residual 已退役，不再作为 DevBridge policy surface", () => {
@@ -417,6 +454,22 @@ describe("commandPolicy", () => {
               id: "file-write",
               method: "fileSystem/createFile",
               params: { path: "/tmp/demo.txt" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "voice-model-test",
+              method: "voiceModel/testTranscribeFile",
+              params: {
+                model_id: "sensevoice-small-int8-2024-07-17",
+                file_path: "/tmp/interview.wav",
+              },
             }),
           ],
         },

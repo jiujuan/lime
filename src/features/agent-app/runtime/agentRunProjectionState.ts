@@ -1,9 +1,12 @@
+import type { AgentUiProjectionState } from "@limecloud/agent-ui-contracts";
+import { projectAgentUiState } from "@limecloud/agent-runtime-projection";
+
 import {
-  buildAgentAppAgentUiProjectionEvents,
+  buildAgentAppStandardRuntimeEvents,
   type AgentAppAgentUiProjectionBridgeOptions,
 } from "./agentUiProjectionBridge";
 import {
-  buildAgentAppRunProjectionViewModel,
+  buildAgentAppRunProjectionViewModelFromStandardState,
   type AgentAppRunProjectionViewModel,
 } from "./agentUiProjectionViewModel";
 
@@ -15,13 +18,22 @@ export function buildAgentRunProjectionViewModelFromState(
   state: unknown,
   options: AgentRunProjectionStateOptions = {},
 ): AgentAppRunProjectionViewModel {
+  return buildAgentAppRunProjectionViewModelFromStandardState(
+    buildAgentRunStandardProjectionStateFromState(state, options),
+  );
+}
+
+export function buildAgentRunStandardProjectionStateFromState(
+  state: unknown,
+  options: AgentRunProjectionStateOptions = {},
+): AgentUiProjectionState {
   const context = buildProjectionBridgeContext(state, options);
   const events = collectAgentRunProjectionSourceEvents(state);
-  const projectionEvents = buildAgentAppAgentUiProjectionEvents({
+  const executionEvents = buildAgentAppStandardRuntimeEvents({
     ...context,
     events,
   });
-  return buildAgentAppRunProjectionViewModel(projectionEvents);
+  return projectAgentUiState({ executionEvents });
 }
 
 export function collectAgentRunProjectionSourceEvents(state: unknown): unknown[] {

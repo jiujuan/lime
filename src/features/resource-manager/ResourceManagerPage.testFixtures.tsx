@@ -7,6 +7,7 @@ import { getResourceManagerSessionStorageKey } from "./resourceManagerSession";
 import type { ResourceManagerSession } from "./types";
 
 const hoistedMocks = vi.hoisted(() => ({
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(),
   mockOpenPathWithDefaultApp: vi.fn(),
   mockReadFilePreview: vi.fn(),
   mockRevealPathInFinder: vi.fn(),
@@ -14,10 +15,16 @@ const hoistedMocks = vi.hoisted(() => ({
 
 export const act = reactAct;
 export const {
+  mockOpenExternalUrlWithSystemBrowser,
   mockOpenPathWithDefaultApp,
   mockReadFilePreview,
   mockRevealPathInFinder,
 } = hoistedMocks;
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser:
+    hoistedMocks.mockOpenExternalUrlWithSystemBrowser,
+}));
 
 vi.mock("@/lib/api/fileSystem", () => ({
   convertLocalFileSrc: (path: string) => `asset://${path}`,
@@ -80,6 +87,7 @@ export function resetResourceManagerPageTest() {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
+  mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
   mockReadFilePreview.mockResolvedValue({
     path: "/tmp/demo.txt",
     content: "来自文件的文本",

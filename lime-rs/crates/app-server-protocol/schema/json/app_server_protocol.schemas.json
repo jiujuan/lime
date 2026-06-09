@@ -8287,6 +8287,1065 @@
       "title": "FileSystemRenameFileParams",
       "type": "object"
     },
+    "GalleryMaterial": {
+      "$defs": {
+        "GalleryMaterialMetadata": {
+          "properties": {
+            "colorSchemeJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "colors": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "elementCount": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "fabricJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "height": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "iconCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "iconStyle": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "imageCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "layoutCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "materialId": {
+              "type": "string"
+            },
+            "mood": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "preview": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "thumbnail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "width": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "materialId",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "filePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "fileSize": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GalleryMaterialMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mimeType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "createdAt",
+        "id",
+        "name",
+        "projectId",
+        "type"
+      ],
+      "title": "GalleryMaterial",
+      "type": "object"
+    },
+    "GalleryMaterialDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "GalleryMaterialDeleteResponse",
+      "type": "object"
+    },
+    "GalleryMaterialFilterParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "category": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "mood": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "title": "GalleryMaterialFilterParams",
+      "type": "object"
+    },
+    "GalleryMaterialListResponse": {
+      "$defs": {
+        "GalleryMaterial": {
+          "properties": {
+            "content": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "filePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "fileSize": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/GalleryMaterialMetadata"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "mimeType": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "tags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "createdAt",
+            "id",
+            "name",
+            "projectId",
+            "type"
+          ],
+          "type": "object"
+        },
+        "GalleryMaterialMetadata": {
+          "properties": {
+            "colorSchemeJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "colors": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "elementCount": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "fabricJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "height": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "iconCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "iconStyle": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "imageCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "layoutCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "materialId": {
+              "type": "string"
+            },
+            "mood": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "preview": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "thumbnail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "width": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "materialId",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "materials": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GalleryMaterial"
+          },
+          "type": "array"
+        }
+      },
+      "title": "GalleryMaterialListResponse",
+      "type": "object"
+    },
+    "GalleryMaterialLookupParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "materialId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "materialId"
+      ],
+      "title": "GalleryMaterialLookupParams",
+      "type": "object"
+    },
+    "GalleryMaterialMetadata": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "colorSchemeJson": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "colors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "elementCount": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "fabricJson": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "height": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "iconCategory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "iconStyle": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "imageCategory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "layoutCategory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "materialId": {
+          "type": "string"
+        },
+        "mood": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "preview": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "thumbnail": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "width": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "createdAt",
+        "materialId",
+        "updatedAt"
+      ],
+      "title": "GalleryMaterialMetadata",
+      "type": "object"
+    },
+    "GalleryMaterialMetadataCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "colorSchemeJson": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "colors": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "elementCount": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "fabricJson": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "height": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "iconCategory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "iconStyle": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "imageCategory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "layoutCategory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "materialId": {
+          "type": "string"
+        },
+        "mood": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "preview": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "thumbnail": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "width": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "materialId"
+      ],
+      "title": "GalleryMaterialMetadataCreateParams",
+      "type": "object"
+    },
+    "GalleryMaterialMetadataResponse": {
+      "$defs": {
+        "GalleryMaterialMetadata": {
+          "properties": {
+            "colorSchemeJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "colors": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "elementCount": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "fabricJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "height": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "iconCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "iconStyle": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "imageCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "layoutCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "materialId": {
+              "type": "string"
+            },
+            "mood": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "preview": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "thumbnail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "width": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "materialId",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GalleryMaterialMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "GalleryMaterialMetadataResponse",
+      "type": "object"
+    },
+    "GalleryMaterialMetadataUpdateParams": {
+      "$defs": {
+        "GalleryMaterialMetadataCreateParams": {
+          "properties": {
+            "colorSchemeJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "colors": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "elementCount": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "fabricJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "height": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "iconCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "iconStyle": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "imageCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "layoutCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "materialId": {
+              "type": "string"
+            },
+            "mood": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "preview": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "thumbnail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "width": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "materialId"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "materialId": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/GalleryMaterialMetadataCreateParams"
+        }
+      },
+      "required": [
+        "materialId",
+        "metadata"
+      ],
+      "title": "GalleryMaterialMetadataUpdateParams",
+      "type": "object"
+    },
+    "GalleryMaterialResponse": {
+      "$defs": {
+        "GalleryMaterial": {
+          "properties": {
+            "content": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "filePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "fileSize": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/GalleryMaterialMetadata"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "mimeType": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "tags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "createdAt",
+            "id",
+            "name",
+            "projectId",
+            "type"
+          ],
+          "type": "object"
+        },
+        "GalleryMaterialMetadata": {
+          "properties": {
+            "colorSchemeJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "colors": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "elementCount": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "fabricJson": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "height": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "iconCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "iconStyle": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "imageCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "layoutCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "materialId": {
+              "type": "string"
+            },
+            "mood": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "preview": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "thumbnail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "width": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "materialId",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "material": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GalleryMaterial"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "GalleryMaterialResponse",
+      "type": "object"
+    },
     "GatewayChannelStartParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -11569,6 +12628,172 @@
       "title": "MediaTaskArtifactResponse",
       "type": "object"
     },
+    "MediaTaskArtifactVideoCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "aspectRatio": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "cameraFixed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "contentId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "duration": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "endImageUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "entrySource": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "generateAudio": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "imageUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modality": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modalityContractKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "outputPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectRootPath": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rawText": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestedTarget": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requiredCapabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resolution": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "routingSlot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runtimeContract": true,
+        "seed": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "projectRootPath",
+        "prompt"
+      ],
+      "title": "MediaTaskArtifactVideoCreateParams",
+      "type": "object"
+    },
     "ModelListParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -12309,6 +13534,527 @@
       "title": "PlatformInfo",
       "type": "object"
     },
+    "ProjectMaterial": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "filePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "fileSize": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "createdAt",
+        "id",
+        "name",
+        "projectId",
+        "type"
+      ],
+      "title": "ProjectMaterial",
+      "type": "object"
+    },
+    "ProjectMaterialContentResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "ProjectMaterialContentResponse",
+      "type": "object"
+    },
+    "ProjectMaterialCountResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "count": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "count"
+      ],
+      "title": "ProjectMaterialCountResponse",
+      "type": "object"
+    },
+    "ProjectMaterialDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProjectMaterialDeleteResponse",
+      "type": "object"
+    },
+    "ProjectMaterialFilter": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "searchQuery": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "type": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "ProjectMaterialFilter",
+      "type": "object"
+    },
+    "ProjectMaterialImportFromUrlParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "projectId",
+        "type",
+        "url"
+      ],
+      "title": "ProjectMaterialImportFromUrlParams",
+      "type": "object"
+    },
+    "ProjectMaterialListParams": {
+      "$defs": {
+        "ProjectMaterialFilter": {
+          "properties": {
+            "searchQuery": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "type": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectMaterialFilter"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "projectId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "title": "ProjectMaterialListParams",
+      "type": "object"
+    },
+    "ProjectMaterialListResponse": {
+      "$defs": {
+        "ProjectMaterial": {
+          "properties": {
+            "content": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "filePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "fileSize": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "mimeType": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "tags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "createdAt",
+            "id",
+            "name",
+            "projectId",
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "materials": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProjectMaterial"
+          },
+          "type": "array"
+        }
+      },
+      "title": "ProjectMaterialListResponse",
+      "type": "object"
+    },
+    "ProjectMaterialLookupParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ProjectMaterialLookupParams",
+      "type": "object"
+    },
+    "ProjectMaterialResponse": {
+      "$defs": {
+        "ProjectMaterial": {
+          "properties": {
+            "content": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "filePath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "fileSize": {
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "mimeType": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "tags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "createdAt",
+            "id",
+            "name",
+            "projectId",
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "material": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectMaterial"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ProjectMaterialResponse",
+      "type": "object"
+    },
+    "ProjectMaterialUpdate": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "title": "ProjectMaterialUpdate",
+      "type": "object"
+    },
+    "ProjectMaterialUpdateParams": {
+      "$defs": {
+        "ProjectMaterialUpdate": {
+          "properties": {
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "name": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "update": {
+          "$ref": "#/$defs/ProjectMaterialUpdate"
+        }
+      },
+      "required": [
+        "id",
+        "update"
+      ],
+      "title": "ProjectMaterialUpdateParams",
+      "type": "object"
+    },
+    "ProjectMaterialUploadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "filePath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "projectId",
+        "type"
+      ],
+      "title": "ProjectMaterialUploadParams",
+      "type": "object"
+    },
     "ProjectMemoryReadParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -12728,6 +14474,368 @@
       "title": "ServerInfo",
       "type": "object"
     },
+    "SessionFileEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "fileType": {
+          "type": "string"
+        },
+        "metadata": true,
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "createdAt",
+        "fileType",
+        "name",
+        "size",
+        "updatedAt"
+      ],
+      "title": "SessionFileEntry",
+      "type": "object"
+    },
+    "SessionFileEntryResponse": {
+      "$defs": {
+        "SessionFileEntry": {
+          "properties": {
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "fileType": {
+              "type": "string"
+            },
+            "metadata": true,
+            "name": {
+              "type": "string"
+            },
+            "size": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "updatedAt": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "createdAt",
+            "fileType",
+            "name",
+            "size",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/SessionFileEntry"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "title": "SessionFileEntryResponse",
+      "type": "object"
+    },
+    "SessionFileGetOrCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "SessionFileGetOrCreateParams",
+      "type": "object"
+    },
+    "SessionFileIdParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "fileName": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fileName",
+        "sessionId"
+      ],
+      "title": "SessionFileIdParams",
+      "type": "object"
+    },
+    "SessionFileListResponse": {
+      "$defs": {
+        "SessionFileEntry": {
+          "properties": {
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "fileType": {
+              "type": "string"
+            },
+            "metadata": true,
+            "name": {
+              "type": "string"
+            },
+            "size": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "updatedAt": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "createdAt",
+            "fileType",
+            "name",
+            "size",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "files": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SessionFileEntry"
+          },
+          "type": "array"
+        }
+      },
+      "title": "SessionFileListResponse",
+      "type": "object"
+    },
+    "SessionFileMeta": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "creationMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "fileCount": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "theme": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "totalSize": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "createdAt",
+        "fileCount",
+        "sessionId",
+        "totalSize",
+        "updatedAt"
+      ],
+      "title": "SessionFileMeta",
+      "type": "object"
+    },
+    "SessionFileMetaResponse": {
+      "$defs": {
+        "SessionFileMeta": {
+          "properties": {
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "creationMode": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "fileCount": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "theme": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "totalSize": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "updatedAt": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "createdAt",
+            "fileCount",
+            "sessionId",
+            "totalSize",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "meta": {
+          "$ref": "#/$defs/SessionFileMeta"
+        }
+      },
+      "required": [
+        "meta"
+      ],
+      "title": "SessionFileMetaResponse",
+      "type": "object"
+    },
+    "SessionFileMutationResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SessionFileMutationResponse",
+      "type": "object"
+    },
+    "SessionFileReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "SessionFileReadResponse",
+      "type": "object"
+    },
+    "SessionFileResolvePathResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "SessionFileResolvePathResponse",
+      "type": "object"
+    },
+    "SessionFileSaveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "fileName": {
+          "type": "string"
+        },
+        "metadata": true,
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "fileName",
+        "sessionId"
+      ],
+      "title": "SessionFileSaveParams",
+      "type": "object"
+    },
+    "SessionFileUpdateMetaParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "creationMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "theme": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "SessionFileUpdateMetaParams",
+      "type": "object"
+    },
     "SkillDownloadInstallParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -12945,6 +15053,13 @@
         "refreshRemote": {
           "default": false,
           "type": "boolean"
+        },
+        "scope": {
+          "default": null,
+          "type": [
+            "null",
+            "string"
+          ]
         }
       },
       "required": [
@@ -13510,6 +15625,1619 @@
       "title": "SupportBundleExportResponse",
       "type": "object"
     },
+    "UnifiedMemory": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryMetadata": {
+          "properties": {
+            "access_count": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "confidence": {
+              "format": "float",
+              "type": "number"
+            },
+            "embedding": {
+              "default": null,
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "importance": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "last_accessed_at": {
+              "default": null,
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/UnifiedMemorySource"
+            }
+          },
+          "required": [
+            "access_count",
+            "confidence",
+            "importance",
+            "source"
+          ],
+          "type": "object"
+        },
+        "UnifiedMemorySource": {
+          "enum": [
+            "auto_extracted",
+            "imported",
+            "manual"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryType": {
+          "enum": [
+            "conversation",
+            "project"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        },
+        "category": {
+          "$ref": "#/$defs/UnifiedMemoryCategory"
+        },
+        "content": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "memory_type": {
+          "$ref": "#/$defs/UnifiedMemoryType"
+        },
+        "metadata": {
+          "$ref": "#/$defs/UnifiedMemoryMetadata"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "archived",
+        "category",
+        "content",
+        "created_at",
+        "id",
+        "memory_type",
+        "metadata",
+        "session_id",
+        "summary",
+        "title",
+        "updated_at"
+      ],
+      "title": "UnifiedMemory",
+      "type": "object"
+    },
+    "UnifiedMemoryAnalysisResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "analyzed_messages": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "analyzed_sessions": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "deduplicated_entries": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "generated_entries": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "analyzed_messages",
+        "analyzed_sessions",
+        "deduplicated_entries",
+        "generated_entries"
+      ],
+      "title": "UnifiedMemoryAnalysisResponse",
+      "type": "object"
+    },
+    "UnifiedMemoryAnalyzeParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "from_timestamp": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "to_timestamp": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "UnifiedMemoryAnalyzeParams",
+      "type": "object"
+    },
+    "UnifiedMemoryCategory": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "activity",
+        "context",
+        "experience",
+        "identity",
+        "preference"
+      ],
+      "title": "UnifiedMemoryCategory",
+      "type": "string"
+    },
+    "UnifiedMemoryCategoryCount": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/UnifiedMemoryCategory"
+        },
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "category",
+        "count"
+      ],
+      "title": "UnifiedMemoryCategoryCount",
+      "type": "object"
+    },
+    "UnifiedMemoryCreateParams": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryCreateRequest": {
+          "properties": {
+            "category": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnifiedMemoryCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "confidence": {
+              "format": "float",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "content": {
+              "type": "string"
+            },
+            "importance": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "session_id",
+            "summary",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/UnifiedMemoryCreateRequest"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "title": "UnifiedMemoryCreateParams",
+      "type": "object"
+    },
+    "UnifiedMemoryCreateRequest": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "format": "float",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "content": {
+          "type": "string"
+        },
+        "importance": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "session_id",
+        "summary",
+        "title"
+      ],
+      "title": "UnifiedMemoryCreateRequest",
+      "type": "object"
+    },
+    "UnifiedMemoryDeleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "UnifiedMemoryDeleteParams",
+      "type": "object"
+    },
+    "UnifiedMemoryDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "UnifiedMemoryDeleteResponse",
+      "type": "object"
+    },
+    "UnifiedMemoryGetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "UnifiedMemoryGetParams",
+      "type": "object"
+    },
+    "UnifiedMemoryGetResponse": {
+      "$defs": {
+        "UnifiedMemory": {
+          "properties": {
+            "archived": {
+              "type": "boolean"
+            },
+            "category": {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            "content": {
+              "type": "string"
+            },
+            "created_at": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "memory_type": {
+              "$ref": "#/$defs/UnifiedMemoryType"
+            },
+            "metadata": {
+              "$ref": "#/$defs/UnifiedMemoryMetadata"
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "tags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "archived",
+            "category",
+            "content",
+            "created_at",
+            "id",
+            "memory_type",
+            "metadata",
+            "session_id",
+            "summary",
+            "title",
+            "updated_at"
+          ],
+          "type": "object"
+        },
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryMetadata": {
+          "properties": {
+            "access_count": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "confidence": {
+              "format": "float",
+              "type": "number"
+            },
+            "embedding": {
+              "default": null,
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "importance": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "last_accessed_at": {
+              "default": null,
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/UnifiedMemorySource"
+            }
+          },
+          "required": [
+            "access_count",
+            "confidence",
+            "importance",
+            "source"
+          ],
+          "type": "object"
+        },
+        "UnifiedMemorySource": {
+          "enum": [
+            "auto_extracted",
+            "imported",
+            "manual"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryType": {
+          "enum": [
+            "conversation",
+            "project"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "memory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnifiedMemory"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "UnifiedMemoryGetResponse",
+      "type": "object"
+    },
+    "UnifiedMemoryHybridSearchOptions": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keyword_weight": {
+          "format": "float",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min_similarity": {
+          "format": "float",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "query": {
+          "type": "string"
+        },
+        "semantic_weight": {
+          "format": "float",
+          "type": "number"
+        }
+      },
+      "required": [
+        "query",
+        "semantic_weight"
+      ],
+      "title": "UnifiedMemoryHybridSearchOptions",
+      "type": "object"
+    },
+    "UnifiedMemoryHybridSearchParams": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryHybridSearchOptions": {
+          "properties": {
+            "category": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnifiedMemoryCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "keyword_weight": {
+              "format": "float",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "limit": {
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "min_similarity": {
+              "format": "float",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "query": {
+              "type": "string"
+            },
+            "semantic_weight": {
+              "format": "float",
+              "type": "number"
+            }
+          },
+          "required": [
+            "query",
+            "semantic_weight"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "options": {
+          "$ref": "#/$defs/UnifiedMemoryHybridSearchOptions"
+        }
+      },
+      "required": [
+        "options"
+      ],
+      "title": "UnifiedMemoryHybridSearchParams",
+      "type": "object"
+    },
+    "UnifiedMemoryListFilters": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryType": {
+          "enum": [
+            "conversation",
+            "project"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "archived": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnifiedMemoryType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "offset": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "order": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sort_by": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "UnifiedMemoryListFilters",
+      "type": "object"
+    },
+    "UnifiedMemoryListParams": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryListFilters": {
+          "properties": {
+            "archived": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "category": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnifiedMemoryCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "limit": {
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "memory_type": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnifiedMemoryType"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "offset": {
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "order": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "session_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sort_by": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "UnifiedMemoryType": {
+          "enum": [
+            "conversation",
+            "project"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "filters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnifiedMemoryListFilters"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "UnifiedMemoryListParams",
+      "type": "object"
+    },
+    "UnifiedMemoryListResponse": {
+      "$defs": {
+        "UnifiedMemory": {
+          "properties": {
+            "archived": {
+              "type": "boolean"
+            },
+            "category": {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            "content": {
+              "type": "string"
+            },
+            "created_at": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "memory_type": {
+              "$ref": "#/$defs/UnifiedMemoryType"
+            },
+            "metadata": {
+              "$ref": "#/$defs/UnifiedMemoryMetadata"
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "tags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "archived",
+            "category",
+            "content",
+            "created_at",
+            "id",
+            "memory_type",
+            "metadata",
+            "session_id",
+            "summary",
+            "title",
+            "updated_at"
+          ],
+          "type": "object"
+        },
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryMetadata": {
+          "properties": {
+            "access_count": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "confidence": {
+              "format": "float",
+              "type": "number"
+            },
+            "embedding": {
+              "default": null,
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "importance": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "last_accessed_at": {
+              "default": null,
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/UnifiedMemorySource"
+            }
+          },
+          "required": [
+            "access_count",
+            "confidence",
+            "importance",
+            "source"
+          ],
+          "type": "object"
+        },
+        "UnifiedMemorySource": {
+          "enum": [
+            "auto_extracted",
+            "imported",
+            "manual"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryType": {
+          "enum": [
+            "conversation",
+            "project"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "memories": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/UnifiedMemory"
+          },
+          "type": "array"
+        }
+      },
+      "title": "UnifiedMemoryListResponse",
+      "type": "object"
+    },
+    "UnifiedMemoryMetadata": {
+      "$defs": {
+        "UnifiedMemorySource": {
+          "enum": [
+            "auto_extracted",
+            "imported",
+            "manual"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "access_count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "confidence": {
+          "format": "float",
+          "type": "number"
+        },
+        "embedding": {
+          "default": null,
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "importance": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "last_accessed_at": {
+          "default": null,
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/UnifiedMemorySource"
+        }
+      },
+      "required": [
+        "access_count",
+        "confidence",
+        "importance",
+        "source"
+      ],
+      "title": "UnifiedMemoryMetadata",
+      "type": "object"
+    },
+    "UnifiedMemorySearchParams": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "UnifiedMemorySearchParams",
+      "type": "object"
+    },
+    "UnifiedMemorySemanticSearchOptions": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min_similarity": {
+          "format": "float",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "UnifiedMemorySemanticSearchOptions",
+      "type": "object"
+    },
+    "UnifiedMemorySemanticSearchParams": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemorySemanticSearchOptions": {
+          "properties": {
+            "category": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UnifiedMemoryCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "limit": {
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "min_similarity": {
+              "format": "float",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "options": {
+          "$ref": "#/$defs/UnifiedMemorySemanticSearchOptions"
+        }
+      },
+      "required": [
+        "options"
+      ],
+      "title": "UnifiedMemorySemanticSearchParams",
+      "type": "object"
+    },
+    "UnifiedMemorySource": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "auto_extracted",
+        "imported",
+        "manual"
+      ],
+      "title": "UnifiedMemorySource",
+      "type": "string"
+    },
+    "UnifiedMemoryStatsResponse": {
+      "$defs": {
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryCategoryCount": {
+          "properties": {
+            "category": {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            "count": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "category",
+            "count"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "categories": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/UnifiedMemoryCategoryCount"
+          },
+          "type": "array"
+        },
+        "memory_count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "storage_used": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_entries": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "memory_count",
+        "storage_used",
+        "total_entries"
+      ],
+      "title": "UnifiedMemoryStatsResponse",
+      "type": "object"
+    },
+    "UnifiedMemoryType": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "conversation",
+        "project"
+      ],
+      "title": "UnifiedMemoryType",
+      "type": "string"
+    },
+    "UnifiedMemoryUpdateParams": {
+      "$defs": {
+        "UnifiedMemoryUpdateRequest": {
+          "properties": {
+            "confidence": {
+              "format": "float",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "content": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "importance": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "summary": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/UnifiedMemoryUpdateRequest"
+        }
+      },
+      "required": [
+        "id",
+        "request"
+      ],
+      "title": "UnifiedMemoryUpdateParams",
+      "type": "object"
+    },
+    "UnifiedMemoryUpdateRequest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "confidence": {
+          "format": "float",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "importance": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "UnifiedMemoryUpdateRequest",
+      "type": "object"
+    },
+    "UnifiedMemoryWriteResponse": {
+      "$defs": {
+        "UnifiedMemory": {
+          "properties": {
+            "archived": {
+              "type": "boolean"
+            },
+            "category": {
+              "$ref": "#/$defs/UnifiedMemoryCategory"
+            },
+            "content": {
+              "type": "string"
+            },
+            "created_at": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "memory_type": {
+              "$ref": "#/$defs/UnifiedMemoryType"
+            },
+            "metadata": {
+              "$ref": "#/$defs/UnifiedMemoryMetadata"
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "tags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            },
+            "updated_at": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "archived",
+            "category",
+            "content",
+            "created_at",
+            "id",
+            "memory_type",
+            "metadata",
+            "session_id",
+            "summary",
+            "title",
+            "updated_at"
+          ],
+          "type": "object"
+        },
+        "UnifiedMemoryCategory": {
+          "enum": [
+            "activity",
+            "context",
+            "experience",
+            "identity",
+            "preference"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryMetadata": {
+          "properties": {
+            "access_count": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "confidence": {
+              "format": "float",
+              "type": "number"
+            },
+            "embedding": {
+              "default": null,
+              "items": {
+                "format": "float",
+                "type": "number"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "importance": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "last_accessed_at": {
+              "default": null,
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/UnifiedMemorySource"
+            }
+          },
+          "required": [
+            "access_count",
+            "confidence",
+            "importance",
+            "source"
+          ],
+          "type": "object"
+        },
+        "UnifiedMemorySource": {
+          "enum": [
+            "auto_extracted",
+            "imported",
+            "manual"
+          ],
+          "type": "string"
+        },
+        "UnifiedMemoryType": {
+          "enum": [
+            "conversation",
+            "project"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "memory": {
+          "$ref": "#/$defs/UnifiedMemory"
+        }
+      },
+      "required": [
+        "memory"
+      ],
+      "title": "UnifiedMemoryWriteResponse",
+      "type": "object"
+    },
     "UsageStatsDailyTrendsListResponse": {
       "$defs": {
         "UsageStatsDailyUsage": {
@@ -13810,6 +17538,1728 @@
         "totalTokens"
       ],
       "title": "UsageStatsSummary",
+      "type": "object"
+    },
+    "VoiceAsrBaiduConfig": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "api_key": {
+          "type": "string"
+        },
+        "secret_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "api_key",
+        "secret_key"
+      ],
+      "title": "VoiceAsrBaiduConfig",
+      "type": "object"
+    },
+    "VoiceAsrCredential": {
+      "$defs": {
+        "VoiceAsrBaiduConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "secret_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "secret_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrOpenAiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "proxy_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "api_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrProviderType": {
+          "enum": [
+            "baidu",
+            "openai",
+            "sense_voice_local",
+            "whisper_local",
+            "xunfei"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrSenseVoiceLocalConfig": {
+          "properties": {
+            "model_dir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "model_id": {
+              "default": "sensevoice-small-int8-2024-07-17",
+              "type": "string"
+            },
+            "num_threads": {
+              "default": 4,
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "use_itn": {
+              "default": true,
+              "type": "boolean"
+            },
+            "vad_model_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperLocalConfig": {
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/VoiceAsrWhisperModelSize",
+              "default": "base"
+            },
+            "model_path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperModelSize": {
+          "enum": [
+            "base",
+            "medium",
+            "small",
+            "tiny"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrXunfeiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "api_secret": {
+              "type": "string"
+            },
+            "app_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "api_secret",
+            "app_id"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "baidu_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrBaiduConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "is_default": {
+          "default": false,
+          "type": "boolean"
+        },
+        "language": {
+          "default": "zh",
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "openai_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrOpenAiConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider": {
+          "$ref": "#/$defs/VoiceAsrProviderType"
+        },
+        "sensevoice_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrSenseVoiceLocalConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "whisper_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrWhisperLocalConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "xunfei_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrXunfeiConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "provider"
+      ],
+      "title": "VoiceAsrCredential",
+      "type": "object"
+    },
+    "VoiceAsrCredentialCreateParams": {
+      "$defs": {
+        "VoiceAsrBaiduConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "secret_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "secret_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrOpenAiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "proxy_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "api_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrProviderType": {
+          "enum": [
+            "baidu",
+            "openai",
+            "sense_voice_local",
+            "whisper_local",
+            "xunfei"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrSenseVoiceLocalConfig": {
+          "properties": {
+            "model_dir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "model_id": {
+              "default": "sensevoice-small-int8-2024-07-17",
+              "type": "string"
+            },
+            "num_threads": {
+              "default": 4,
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "use_itn": {
+              "default": true,
+              "type": "boolean"
+            },
+            "vad_model_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperLocalConfig": {
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/VoiceAsrWhisperModelSize",
+              "default": "base"
+            },
+            "model_path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperModelSize": {
+          "enum": [
+            "base",
+            "medium",
+            "small",
+            "tiny"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrXunfeiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "api_secret": {
+              "type": "string"
+            },
+            "app_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "api_secret",
+            "app_id"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "baidu_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrBaiduConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "is_default": {
+          "default": false,
+          "type": "boolean"
+        },
+        "language": {
+          "default": "zh",
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "openai_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrOpenAiConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider": {
+          "$ref": "#/$defs/VoiceAsrProviderType"
+        },
+        "sensevoice_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrSenseVoiceLocalConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "whisper_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrWhisperLocalConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "xunfei_config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceAsrXunfeiConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "VoiceAsrCredentialCreateParams",
+      "type": "object"
+    },
+    "VoiceAsrCredentialIdParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "VoiceAsrCredentialIdParams",
+      "type": "object"
+    },
+    "VoiceAsrCredentialListResponse": {
+      "$defs": {
+        "VoiceAsrBaiduConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "secret_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "secret_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrCredential": {
+          "properties": {
+            "baidu_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrBaiduConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "disabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "is_default": {
+              "default": false,
+              "type": "boolean"
+            },
+            "language": {
+              "default": "zh",
+              "type": "string"
+            },
+            "name": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "openai_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrOpenAiConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "provider": {
+              "$ref": "#/$defs/VoiceAsrProviderType"
+            },
+            "sensevoice_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrSenseVoiceLocalConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "whisper_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrWhisperLocalConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "xunfei_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrXunfeiConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "provider"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrOpenAiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "proxy_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "api_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrProviderType": {
+          "enum": [
+            "baidu",
+            "openai",
+            "sense_voice_local",
+            "whisper_local",
+            "xunfei"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrSenseVoiceLocalConfig": {
+          "properties": {
+            "model_dir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "model_id": {
+              "default": "sensevoice-small-int8-2024-07-17",
+              "type": "string"
+            },
+            "num_threads": {
+              "default": 4,
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "use_itn": {
+              "default": true,
+              "type": "boolean"
+            },
+            "vad_model_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperLocalConfig": {
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/VoiceAsrWhisperModelSize",
+              "default": "base"
+            },
+            "model_path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperModelSize": {
+          "enum": [
+            "base",
+            "medium",
+            "small",
+            "tiny"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrXunfeiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "api_secret": {
+              "type": "string"
+            },
+            "app_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "api_secret",
+            "app_id"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "credentials": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VoiceAsrCredential"
+          },
+          "type": "array"
+        }
+      },
+      "title": "VoiceAsrCredentialListResponse",
+      "type": "object"
+    },
+    "VoiceAsrCredentialMutationResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "VoiceAsrCredentialMutationResponse",
+      "type": "object"
+    },
+    "VoiceAsrCredentialTestResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "message",
+        "success"
+      ],
+      "title": "VoiceAsrCredentialTestResponse",
+      "type": "object"
+    },
+    "VoiceAsrCredentialUpdateParams": {
+      "$defs": {
+        "VoiceAsrBaiduConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "secret_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "secret_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrCredential": {
+          "properties": {
+            "baidu_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrBaiduConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "disabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "is_default": {
+              "default": false,
+              "type": "boolean"
+            },
+            "language": {
+              "default": "zh",
+              "type": "string"
+            },
+            "name": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "openai_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrOpenAiConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "provider": {
+              "$ref": "#/$defs/VoiceAsrProviderType"
+            },
+            "sensevoice_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrSenseVoiceLocalConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "whisper_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrWhisperLocalConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "xunfei_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrXunfeiConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "provider"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrOpenAiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "proxy_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "api_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrProviderType": {
+          "enum": [
+            "baidu",
+            "openai",
+            "sense_voice_local",
+            "whisper_local",
+            "xunfei"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrSenseVoiceLocalConfig": {
+          "properties": {
+            "model_dir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "model_id": {
+              "default": "sensevoice-small-int8-2024-07-17",
+              "type": "string"
+            },
+            "num_threads": {
+              "default": 4,
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "use_itn": {
+              "default": true,
+              "type": "boolean"
+            },
+            "vad_model_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperLocalConfig": {
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/VoiceAsrWhisperModelSize",
+              "default": "base"
+            },
+            "model_path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperModelSize": {
+          "enum": [
+            "base",
+            "medium",
+            "small",
+            "tiny"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrXunfeiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "api_secret": {
+              "type": "string"
+            },
+            "app_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "api_secret",
+            "app_id"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "credential": {
+          "$ref": "#/$defs/VoiceAsrCredential"
+        }
+      },
+      "required": [
+        "credential"
+      ],
+      "title": "VoiceAsrCredentialUpdateParams",
+      "type": "object"
+    },
+    "VoiceAsrCredentialWriteResponse": {
+      "$defs": {
+        "VoiceAsrBaiduConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "secret_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "secret_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrCredential": {
+          "properties": {
+            "baidu_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrBaiduConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "disabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "is_default": {
+              "default": false,
+              "type": "boolean"
+            },
+            "language": {
+              "default": "zh",
+              "type": "string"
+            },
+            "name": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "openai_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrOpenAiConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "provider": {
+              "$ref": "#/$defs/VoiceAsrProviderType"
+            },
+            "sensevoice_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrSenseVoiceLocalConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "whisper_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrWhisperLocalConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "xunfei_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrXunfeiConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "provider"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrOpenAiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "proxy_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "api_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrProviderType": {
+          "enum": [
+            "baidu",
+            "openai",
+            "sense_voice_local",
+            "whisper_local",
+            "xunfei"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrSenseVoiceLocalConfig": {
+          "properties": {
+            "model_dir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "model_id": {
+              "default": "sensevoice-small-int8-2024-07-17",
+              "type": "string"
+            },
+            "num_threads": {
+              "default": 4,
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "use_itn": {
+              "default": true,
+              "type": "boolean"
+            },
+            "vad_model_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperLocalConfig": {
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/VoiceAsrWhisperModelSize",
+              "default": "base"
+            },
+            "model_path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperModelSize": {
+          "enum": [
+            "base",
+            "medium",
+            "small",
+            "tiny"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrXunfeiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "api_secret": {
+              "type": "string"
+            },
+            "app_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "api_secret",
+            "app_id"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "credential": {
+          "$ref": "#/$defs/VoiceAsrCredential"
+        }
+      },
+      "required": [
+        "credential"
+      ],
+      "title": "VoiceAsrCredentialWriteResponse",
+      "type": "object"
+    },
+    "VoiceAsrOpenAiConfig": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "api_key": {
+          "type": "string"
+        },
+        "base_url": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "proxy_url": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "api_key"
+      ],
+      "title": "VoiceAsrOpenAiConfig",
+      "type": "object"
+    },
+    "VoiceAsrProviderType": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "baidu",
+        "openai",
+        "sense_voice_local",
+        "whisper_local",
+        "xunfei"
+      ],
+      "title": "VoiceAsrProviderType",
+      "type": "string"
+    },
+    "VoiceAsrSenseVoiceLocalConfig": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "model_dir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model_id": {
+          "default": "sensevoice-small-int8-2024-07-17",
+          "type": "string"
+        },
+        "num_threads": {
+          "default": 4,
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "use_itn": {
+          "default": true,
+          "type": "boolean"
+        },
+        "vad_model_id": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "VoiceAsrSenseVoiceLocalConfig",
+      "type": "object"
+    },
+    "VoiceAsrWhisperLocalConfig": {
+      "$defs": {
+        "VoiceAsrWhisperModelSize": {
+          "enum": [
+            "base",
+            "medium",
+            "small",
+            "tiny"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/VoiceAsrWhisperModelSize",
+          "default": "base"
+        },
+        "model_path": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "VoiceAsrWhisperLocalConfig",
+      "type": "object"
+    },
+    "VoiceAsrWhisperModelSize": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "base",
+        "medium",
+        "small",
+        "tiny"
+      ],
+      "title": "VoiceAsrWhisperModelSize",
+      "type": "string"
+    },
+    "VoiceAsrXunfeiConfig": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "api_key": {
+          "type": "string"
+        },
+        "api_secret": {
+          "type": "string"
+        },
+        "app_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "api_key",
+        "api_secret",
+        "app_id"
+      ],
+      "title": "VoiceAsrXunfeiConfig",
+      "type": "object"
+    },
+    "VoiceInstruction": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "icon": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "is_preset": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "shortcut": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "prompt"
+      ],
+      "title": "VoiceInstruction",
+      "type": "object"
+    },
+    "VoiceInstructionIdParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "VoiceInstructionIdParams",
+      "type": "object"
+    },
+    "VoiceInstructionListResponse": {
+      "$defs": {
+        "VoiceInstruction": {
+          "properties": {
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "icon": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "is_preset": {
+              "default": false,
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "shortcut": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "prompt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "instructions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VoiceInstruction"
+          },
+          "type": "array"
+        }
+      },
+      "title": "VoiceInstructionListResponse",
+      "type": "object"
+    },
+    "VoiceInstructionMutationResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "VoiceInstructionMutationResponse",
+      "type": "object"
+    },
+    "VoiceInstructionSaveParams": {
+      "$defs": {
+        "VoiceInstruction": {
+          "properties": {
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "icon": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "is_preset": {
+              "default": false,
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "shortcut": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "prompt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "instruction": {
+          "$ref": "#/$defs/VoiceInstruction"
+        }
+      },
+      "required": [
+        "instruction"
+      ],
+      "title": "VoiceInstructionSaveParams",
+      "type": "object"
+    },
+    "VoiceModelDefaultSetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "install_dir": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "install_dir",
+        "model_id"
+      ],
+      "title": "VoiceModelDefaultSetParams",
+      "type": "object"
+    },
+    "VoiceModelDefaultSetResponse": {
+      "$defs": {
+        "VoiceAsrBaiduConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "secret_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "secret_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrCredential": {
+          "properties": {
+            "baidu_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrBaiduConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "disabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "is_default": {
+              "default": false,
+              "type": "boolean"
+            },
+            "language": {
+              "default": "zh",
+              "type": "string"
+            },
+            "name": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "openai_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrOpenAiConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "provider": {
+              "$ref": "#/$defs/VoiceAsrProviderType"
+            },
+            "sensevoice_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrSenseVoiceLocalConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "whisper_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrWhisperLocalConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "xunfei_config": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VoiceAsrXunfeiConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "provider"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrOpenAiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "proxy_url": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "api_key"
+          ],
+          "type": "object"
+        },
+        "VoiceAsrProviderType": {
+          "enum": [
+            "baidu",
+            "openai",
+            "sense_voice_local",
+            "whisper_local",
+            "xunfei"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrSenseVoiceLocalConfig": {
+          "properties": {
+            "model_dir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "model_id": {
+              "default": "sensevoice-small-int8-2024-07-17",
+              "type": "string"
+            },
+            "num_threads": {
+              "default": 4,
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "use_itn": {
+              "default": true,
+              "type": "boolean"
+            },
+            "vad_model_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperLocalConfig": {
+          "properties": {
+            "model": {
+              "$ref": "#/$defs/VoiceAsrWhisperModelSize",
+              "default": "base"
+            },
+            "model_path": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "VoiceAsrWhisperModelSize": {
+          "enum": [
+            "base",
+            "medium",
+            "small",
+            "tiny"
+          ],
+          "type": "string"
+        },
+        "VoiceAsrXunfeiConfig": {
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "api_secret": {
+              "type": "string"
+            },
+            "app_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "api_key",
+            "api_secret",
+            "app_id"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "credential": {
+          "$ref": "#/$defs/VoiceAsrCredential"
+        }
+      },
+      "required": [
+        "credential"
+      ],
+      "title": "VoiceModelDefaultSetResponse",
+      "type": "object"
+    },
+    "VoiceModelTestTranscribeFileParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "file_path": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_path",
+        "model_id"
+      ],
+      "title": "VoiceModelTestTranscribeFileParams",
+      "type": "object"
+    },
+    "VoiceModelTestTranscribeFileResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "duration_secs": {
+          "format": "float",
+          "type": "number"
+        },
+        "language": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sample_rate": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration_secs",
+        "sample_rate",
+        "text"
+      ],
+      "title": "VoiceModelTestTranscribeFileResponse",
       "type": "object"
     },
     "WechatChannelAccountListResponse": {
@@ -14591,6 +20041,14 @@
               "fileSystem/listDirectory",
               "fileSystem/readFilePreview",
               "fileSystem/renameFile",
+              "galleryMaterial/get",
+              "galleryMaterial/listByImageCategory",
+              "galleryMaterial/listByLayoutCategory",
+              "galleryMaterial/listByMood",
+              "galleryMaterialMetadata/create",
+              "galleryMaterialMetadata/delete",
+              "galleryMaterialMetadata/get",
+              "galleryMaterialMetadata/update",
               "gatewayChannel/start",
               "gatewayChannel/status",
               "gatewayChannel/stop",
@@ -14641,6 +20099,7 @@
               "mediaTaskArtifact/get",
               "mediaTaskArtifact/image/create",
               "mediaTaskArtifact/list",
+              "mediaTaskArtifact/video/create",
               "model/list",
               "modelPreferences/list",
               "modelProvider/catalog/list",
@@ -14666,7 +20125,22 @@
               "modelProviderUiState/read",
               "modelProviderUiState/write",
               "modelSyncState/read",
+              "projectMaterial/content",
+              "projectMaterial/count",
+              "projectMaterial/delete",
+              "projectMaterial/get",
+              "projectMaterial/importFromUrl",
+              "projectMaterial/list",
+              "projectMaterial/update",
+              "projectMaterial/upload",
               "projectMemory/read",
+              "sessionFile/delete",
+              "sessionFile/getOrCreate",
+              "sessionFile/list",
+              "sessionFile/read",
+              "sessionFile/resolvePath",
+              "sessionFile/save",
+              "sessionFile/updateMeta",
               "skill/list",
               "skill/read",
               "skillCache/refresh",
@@ -14690,9 +20164,30 @@
               "skillRepository/list",
               "skillRepository/save",
               "telegramChannel/probe",
+              "unifiedMemory/analyze",
+              "unifiedMemory/create",
+              "unifiedMemory/delete",
+              "unifiedMemory/get",
+              "unifiedMemory/hybridSearch",
+              "unifiedMemory/list",
+              "unifiedMemory/search",
+              "unifiedMemory/semanticSearch",
+              "unifiedMemory/stats",
+              "unifiedMemory/update",
               "usageStats/dailyTrends/list",
               "usageStats/modelRanking/list",
               "usageStats/read",
+              "voiceAsrCredential/create",
+              "voiceAsrCredential/default/set",
+              "voiceAsrCredential/delete",
+              "voiceAsrCredential/list",
+              "voiceAsrCredential/test",
+              "voiceAsrCredential/update",
+              "voiceInstruction/delete",
+              "voiceInstruction/list",
+              "voiceInstruction/save",
+              "voiceModel/default/set",
+              "voiceModel/testTranscribeFile",
               "wechatChannel/account/remove",
               "wechatChannel/accounts/list",
               "wechatChannel/login/start",

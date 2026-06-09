@@ -1,13 +1,13 @@
 # @limecloud/agent-runtime-ui
 
-`@limecloud/agent-runtime-ui` 是 Lime Cloud 系列应用共享的 Agent Runtime React UI primitives。它提供 Claw-style 会话流、运行事实栏、action / evidence / artifact 卡片等组件。
+`@limecloud/agent-runtime-ui` 是 Lime Cloud 系列应用共享的 Agent Runtime React UI primitives。它面向标准 `AgentUiProjectionState`，提供消息部件、过程时间线、执行图、运行事实栏、action / evidence / artifact 卡片等组件。
 
-这个包是 UI 渲染层，不直接调用 JSON-RPC，不依赖 Electron，不绑定 Lime 或 content-studio 的业务 store。宿主应用负责后端交互、session 持久化、业务对象和页面布局。
+这个包是 UI 渲染层，不直接调用 JSON-RPC，不依赖 Electron，不绑定任何宿主应用的业务 store。宿主应用负责后端交互、session 持久化、业务对象和页面布局。
 
 ## Installation
 
 ```bash
-npm install @limecloud/agent-runtime-ui @limecloud/agent-runtime-projection
+npm install @limecloud/agent-ui-contracts @limecloud/agent-runtime-ui @limecloud/agent-runtime-projection
 ```
 
 React 是 peer dependency：
@@ -23,6 +23,10 @@ React 是 peer dependency：
 
 这个包负责：
 
+- 渲染 `AgentUiProjectionState` 标准 UI surface。
+- 渲染 `UIMessageParts` 消息部件。
+- 渲染 `ProcessTimeline` 过程时间线。
+- 渲染 `ExecutionGraph` 执行图。
 - 渲染 Agent 消息时间线。
 - 渲染运行事实摘要。
 - 渲染 action、evidence、artifact、tool 等 runtime facts。
@@ -39,31 +43,23 @@ React 是 peer dependency：
 ## Usage
 
 ```tsx
-import { AgentTimeline, RuntimeFactsPanel } from "@limecloud/agent-runtime-ui";
-import { projectAgentRuntimeReadModel } from "@limecloud/agent-runtime-projection";
+import { AgentUiProjectionView } from "@limecloud/agent-runtime-ui";
+import { projectAgentUiState } from "@limecloud/agent-runtime-projection";
 
-const readModel = projectAgentRuntimeReadModel({
+const state = projectAgentUiState({
   executionEvents: session.executionEvents,
   sourceCount: session.sourceSnapshots.length,
 });
 
 export function AgentPanel() {
   return (
-    <section>
-      <div className="agent-session-flow">
-        <AgentTimeline messages={session.messages} />
-      </div>
-
-      <aside className="agent-session-sidecar">
-        <RuntimeFactsPanel
-          readModel={readModel}
-          onResolveAction={(event, action) => {
-            // 宿主应用决定打开哪个业务模块或发送哪个 action response。
-            console.log(event.id, action.decision);
-          }}
-        />
-      </aside>
-    </section>
+    <AgentUiProjectionView
+      state={state}
+      onResolveAction={(event, action) => {
+        // 宿主应用决定打开哪个业务模块或发送哪个 action response。
+        console.log(event.id, action.decision);
+      }}
+    />
   );
 }
 ```
@@ -71,6 +67,12 @@ export function AgentPanel() {
 ## Components
 
 - `AgentTimeline`
+- `AgentUiProjectionView`
+- `UIMessagePartsView`
+- `ProcessTimelineView`
+- `ExecutionGraphView`
+- `ToolGroup`
+- `ActionRequiredList`
 - `RuntimeFactsPanel`
 - `RuntimeFactsSummary`
 - `RuntimeEventList`
@@ -78,6 +80,23 @@ export function AgentPanel() {
 - `ActionCard`
 - `EvidenceCard`
 - `ArtifactCard`
+
+## Source Layout
+
+实现必须按职责拆分，`src/index.ts` 只能做 barrel exports：
+
+```text
+src/types.ts           -> 公共 props / callback / message 类型
+src/labels.ts          -> 默认 label、status 和 meta formatter
+src/messages.tsx       -> AgentTimeline / UIMessagePartsView
+src/processTimeline.tsx -> ProcessTimelineView
+src/executionGraph.tsx -> ExecutionGraphView
+src/runtimeFacts.tsx   -> RuntimeFactsPanel / RuntimeFactCard / action/tool lists
+src/projectionView.tsx -> AgentUiProjectionView 标准组合入口
+src/index.ts           -> barrel exports only
+```
+
+新增 primitive 必须落在对应职责文件，或先新增职责明确的小模块；不得把实现重新合并回 `src/index.ts`。
 
 ## CSS Contract
 
@@ -93,15 +112,26 @@ export function AgentPanel() {
 - `agent-turn-head`
 - `agent-turn-model`
 - `agent-turn-details`
+- `agent-message-parts`
+- `agent-message-part`
 - `agent-empty-session`
 - `agent-runtime-event`
 - `agent-runtime-summary`
+- `agent-process-timeline`
+- `agent-process-entry`
 - `agent-execution-events`
+- `agent-tool-group`
+- `agent-action-required-list`
+- `agent-execution-graph`
+- `agent-execution-node`
 - `agent-event-surface`
 - `agent-event-action`
 - `agent-session-artifact`
+- `agent-ui-projection` class name
+- `agent-ui-main`
+- `agent-ui-sidecar`
 
-content-studio 当前复用这些 class names 以承接既有 `agent-session.css`。
+这些 class names 是包级 CSS contract。宿主应用可以用自己的设计系统实现样式，不应把样式文件或页面壳反向变成包依赖。
 
 ## Backend Integration
 
@@ -111,10 +141,13 @@ content-studio 当前复用这些 class names 以承接既有 `agent-session.css
 App Server JSON-RPC
   -> host app service/store
   -> executionEvents
+  -> @limecloud/agent-ui-contracts
   -> @limecloud/agent-runtime-projection
   -> @limecloud/agent-runtime-ui
   -> host app action resolver
 ```
+
+新页面默认使用 `projectAgentUiState(...) -> AgentUiProjectionView`。如果宿主只需要旧事实栏，可以继续使用 `projectAgentRuntimeReadModel(...) -> RuntimeFactsPanel`；这属于兼容入口，不是新增 surface 的默认路径。
 
 `onResolveAction` 只返回用户意图，不直接处理后端：
 
@@ -129,7 +162,7 @@ App Server JSON-RPC
 />
 ```
 
-`RuntimeFactsPanel` 只渲染宿主传入的 read model，不会订阅 JSON-RPC，也不会判断某个 artifact 是否已经被业务层物化。content-studio 这类宿主如果已经把 App Server `artifact.snapshot` 写成 Prompt 草稿，应在进入 `@limecloud/agent-runtime-projection` 前去掉上游快照事件，只保留本地草稿的 `artifact.changed`。这样右侧事实栏展示的是可继续编辑、可应用的业务交付物，而不是后端中间事件。
+`RuntimeFactsPanel` 只渲染宿主传入的 read model，不会订阅 JSON-RPC，也不会判断某个 artifact 是否已经被业务层物化。宿主如果已经把 App Server `artifact.snapshot` 写成业务产物，应在进入 `@limecloud/agent-runtime-projection` 前去掉上游快照事件，只保留本地业务产物的 `artifact.changed`。这样右侧事实栏展示的是可继续编辑、可应用的交付物，而不是后端中间事件。
 
 ## Development
 

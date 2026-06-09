@@ -19,7 +19,7 @@ const {
   exportAgentRuntimeReviewDecisionTemplateMock,
   saveAgentRuntimeReviewDecisionMock,
   prefetchContextMemoryForTurnMock,
-  mockShellOpen,
+  mockOpenExternalUrlWithSystemBrowser,
   mockToast,
 } = vi.hoisted(() => ({
   exportAgentRuntimeAnalysisHandoffMock: vi.fn(),
@@ -29,7 +29,7 @@ const {
   exportAgentRuntimeReviewDecisionTemplateMock: vi.fn(),
   saveAgentRuntimeReviewDecisionMock: vi.fn(),
   prefetchContextMemoryForTurnMock: vi.fn(),
-  mockShellOpen: vi.fn().mockResolvedValue(undefined),
+  mockOpenExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
   mockToast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -47,7 +47,7 @@ export function getHarnessPanelTestMocks() {
     exportAgentRuntimeReviewDecisionTemplateMock,
     saveAgentRuntimeReviewDecisionMock,
     prefetchContextMemoryForTurnMock,
-    mockShellOpen,
+    mockOpenExternalUrlWithSystemBrowser,
     mockToast,
   };
 }
@@ -72,8 +72,8 @@ vi.mock("sonner", () => ({
   toast: mockToast,
 }));
 
-vi.mock("@/lib/desktop-host/plugin-shell", () => ({
-  open: mockShellOpen,
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
 }));
 
 vi.mock("react-syntax-highlighter", () => ({

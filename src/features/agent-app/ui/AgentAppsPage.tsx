@@ -1576,7 +1576,9 @@ export function AgentAppsPage({
                           type="button"
                           className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                           disabled={!selected.disabled || Boolean(busyAction)}
-                          onClick={() => void handleSetDisabled(selected, false)}
+                          onClick={() =>
+                            void handleSetDisabled(selected, false)
+                          }
                           data-testid="agent-apps-enable"
                         >
                           <CheckCircle2 size={16} />
@@ -1684,14 +1686,33 @@ export function AgentAppsPage({
                                   )}
                                 </p>
                                 {deleteDataExecutionBlocked ? (
-                                  <p
-                                    className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                                  <div
+                                    className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
                                     data-testid="agent-apps-delete-data-current-phase-gate"
                                   >
-                                    {t(
-                                      "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly",
-                                    )}
-                                  </p>
+                                    <p className="text-xs text-amber-800">
+                                      {t(
+                                        "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly",
+                                      )}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                      disabled={Boolean(busyAction)}
+                                      onClick={() =>
+                                        void handlePreviewUninstall(
+                                          selected,
+                                          "keep-data",
+                                        )
+                                      }
+                                      data-testid="agent-apps-uninstall-switch-keep-data"
+                                    >
+                                      <Archive size={14} />
+                                      {t(
+                                        "agentApp.apps.action.uninstallKeepData",
+                                      )}
+                                    </button>
+                                  </div>
                                 ) : null}
                               </div>
                               <div className="rounded-lg border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2">

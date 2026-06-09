@@ -16,6 +16,8 @@ Current scope:
 - supervise sidecar crash, startup failure, and restart with deterministic backoff;
 - route `agentSession/event` notifications into app-owned renderer state;
 - use `AppServerConnection` for typed `agentSession/*` request / response flows.
+- use `AgentRuntimeClient` as the standard facade for runtime turn, action,
+  thread read, evidence export, and event subscription flows.
 
 Session archive semantics:
 
@@ -53,7 +55,7 @@ eventRouter.subscribe((event) => {
 });
 
 const session = await connection.startSession({
-  appId: "content-studio",
+  appId: "host-app",
   workspaceId: workspace.id,
   businessObjectRef: {
     kind: "document",
@@ -82,6 +84,45 @@ void (async () => {
 })();
 ```
 
+Agent runtime SDK facade:
+
+```ts
+import { createAgentRuntimeClient } from "app-server-client";
+
+const runtime = createAgentRuntimeClient(connection, {
+  request: { timeoutMs: 120_000 },
+});
+
+runtime.subscribeEvents((event) => {
+  mainWindow.webContents.send("agent:event", event);
+});
+
+await runtime.startTurn({
+  sessionId: session.result.session.sessionId,
+  input: { text: "整理资料并生成草稿" },
+  runtimeOptions: { stream: true, eventName: "agentSession/event" },
+});
+
+const thread = await runtime.readThread({
+  sessionId: session.result.session.sessionId,
+});
+
+await runtime.exportEvidence({
+  sessionId: thread.result.session.sessionId,
+  includeEvents: true,
+});
+```
+
+`AgentRuntimeClient` is a facade over the current App Server JSON-RPC methods.
+`readThread` intentionally maps to `agentSession/read`; this package does not
+invent a separate task read protocol. Apps that need task projections should
+derive them from the returned session, turns, and runtime events until App
+Server exposes a dedicated current method.
+
 This package does not import Lime Rust crates, Tauri commands, Aster DTOs, or
 renderer UI code. Electron apps should use it from main / preload boundaries and
 project events into their own renderer state.
+
+Sidecar `backendMode: "mock"` is test-only. Production hosts must use `runtime`,
+`external`, or fail closed; they must not treat the mock backend as a fallback
+for Agent Runtime, evidence export, or renderer UI flows.

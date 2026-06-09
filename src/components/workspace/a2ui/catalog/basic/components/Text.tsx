@@ -1,4 +1,8 @@
 import { cn } from "@/lib/utils";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { TextComponent } from "../../../types";
@@ -73,17 +77,28 @@ const A2UI_MARKDOWN_COMPONENTS: Components = {
     <strong className="font-semibold">{children}</strong>
   ),
   em: ({ children }) => <em className="italic">{children}</em>,
-  a: ({ children, href, ...props }) => (
-    <a
-      {...props}
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="break-all text-[color:var(--lime-brand-strong)] underline underline-offset-2 transition-opacity hover:opacity-80"
-    >
-      {children}
-    </a>
-  ),
+  a: ({ children, href, ...props }) => {
+    const rel = resolveHttpExternalHref(href)
+      ? "noreferrer noopener"
+      : undefined;
+
+    return (
+      <a
+        {...props}
+        href={href}
+        rel={rel}
+        onAuxClick={(event) => {
+          interceptHttpExternalLinkClick(event, href);
+        }}
+        onClick={(event) => {
+          interceptHttpExternalLinkClick(event, href);
+        }}
+        className="break-all text-[color:var(--lime-brand-strong)] underline underline-offset-2 transition-opacity hover:opacity-80"
+      >
+        {children}
+      </a>
+    );
+  },
   blockquote: ({ children }) => (
     <blockquote className="m-0 border-l-2 border-slate-200 pl-2 text-[color:var(--lime-text-muted)]">
       {children}

@@ -3,7 +3,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import type { SkillRepo } from "@/lib/api/skills";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { RepoManagerPanel } from "./RepoManagerPanel";
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
+}));
 
 interface Mounted {
   container: HTMLDivElement;
@@ -130,6 +135,32 @@ describe("RepoManagerPanel", () => {
     expect(window.alert).toHaveBeenCalledWith(
       "Enter the repository owner and name",
     );
+  });
+
+  it("应通过 externalUrl current 网关打开 GitHub 仓库链接", async () => {
+    const { container } = renderPanel([
+      {
+        owner: "lime",
+        name: "skills",
+        branch: "main",
+        enabled: true,
+      },
+    ]);
+
+    const windowOpenSpy = vi.spyOn(window, "open");
+    const githubButton = container.querySelector(
+      "button[title='View on GitHub']",
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      githubButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(openExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://github.com/lime/skills",
+    );
+    expect(windowOpenSpy).not.toHaveBeenCalled();
   });
 
   it("应提交裁剪后的仓库配置并本地化失败提示", async () => {

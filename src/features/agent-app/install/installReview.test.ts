@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { currentAgentAppHostRuntimeVersion } from "../readiness/hostCapabilityProfile";
 import type { CloudBootstrapApp, InstalledAgentAppState } from "../types";
 import { buildCloudAgentAppSourceState } from "./installReview";
 
@@ -48,7 +49,7 @@ function buildInstalledState(): InstalledAgentAppState {
     runtimeProfileSummary: {
       installMode: "in_lime",
       shellKind: "desktop",
-      runtimeVersion: "0.8.0",
+      runtimeVersion: currentAgentAppHostRuntimeVersion,
       checkedAt: "2026-05-15T00:00:00.000Z",
     },
     setup: {} as InstalledAgentAppState["setup"],

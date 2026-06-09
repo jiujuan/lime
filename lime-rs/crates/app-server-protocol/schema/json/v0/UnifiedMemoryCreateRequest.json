@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "UnifiedMemoryCategory": {
+      "enum": [
+        "activity",
+        "context",
+        "experience",
+        "identity",
+        "preference"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "category": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UnifiedMemoryCategory"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "confidence": {
+      "format": "float",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "content": {
+      "type": "string"
+    },
+    "importance": {
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "content",
+    "session_id",
+    "summary",
+    "title"
+  ],
+  "title": "UnifiedMemoryCreateRequest",
+  "type": "object"
+}

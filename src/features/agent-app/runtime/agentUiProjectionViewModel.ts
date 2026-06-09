@@ -1,7 +1,68 @@
 import type {
-  AgentUiProjectionEvent,
-  AgentUiRuntimeStatus,
-} from "@/components/agent/chat/projection/agentUiEventProjection";
+  AgentRuntimeEventProjection,
+  AgentRuntimeExecutionEvent,
+  AgentUiProjectionState,
+} from "@limecloud/agent-ui-contracts";
+
+export type AgentAppRunProjectionRuntimeStatus =
+  | "idle"
+  | "queued"
+  | "submitted"
+  | "accepted"
+  | "preparing"
+  | "running"
+  | "waiting"
+  | "needs_input"
+  | "plan_ready"
+  | "completed"
+  | "failed"
+  | "aborted"
+  | "cancelled"
+  | "closed"
+  | "not_found"
+  | "unknown"
+  | string;
+
+export type AgentAppRunProjectionSourceControl =
+  | "approve"
+  | "reject"
+  | "answer"
+  | "edit"
+  | "retry"
+  | "interrupt"
+  | "stop"
+  | "none"
+  | string;
+
+export interface AgentAppRunProjectionSourceRefs {
+  artifactIds?: string[];
+  artifactPaths?: string[];
+  rawEventRef?: string;
+}
+
+export interface AgentAppRunProjectionSourceEvent {
+  type: string;
+  sequence?: number;
+  timestamp?: string;
+  sessionId?: string;
+  threadId?: string;
+  runId?: string;
+  turnId?: string;
+  messageId?: string;
+  taskId?: string;
+  toolCallId?: string;
+  actionId?: string;
+  artifactId?: string;
+  evidenceId?: string;
+  diagnosticId?: string;
+  runtimeStatus?: AgentAppRunProjectionRuntimeStatus;
+  latestTurnStatus?: AgentAppRunProjectionRuntimeStatus;
+  surface?: string;
+  control?: AgentAppRunProjectionSourceControl;
+  payload?: Record<string, unknown>;
+  refs?: AgentAppRunProjectionSourceRefs;
+  rawEventRef?: string;
+}
 
 export type AgentAppRunProjectionPartKind =
   | "status"
@@ -27,20 +88,20 @@ export type AgentAppRunProjectionLabel =
   | "diagnostic";
 
 export type AgentAppRunProjectionActionControl = Exclude<
-  NonNullable<AgentUiProjectionEvent["control"]>,
+  AgentAppRunProjectionSourceControl,
   "none"
 >;
 
 export interface AgentAppRunProjectionPart {
   id: string;
   kind: AgentAppRunProjectionPartKind;
-  type: AgentUiProjectionEvent["type"];
+  type: string;
   sequence: number;
   label: AgentAppRunProjectionLabel;
   displayName?: string;
   preview?: string;
-  runtimeStatus?: AgentUiRuntimeStatus;
-  surface?: AgentUiProjectionEvent["surface"];
+  runtimeStatus?: AgentAppRunProjectionRuntimeStatus;
+  surface?: string;
   collapsedByDefault: boolean;
   toolCallId?: string;
   actionId?: string;
@@ -68,25 +129,25 @@ export interface AgentAppRunProjectionArtifact {
   label: "artifact";
   preview?: string;
   ref?: string;
-  status?: AgentUiRuntimeStatus;
+  status?: AgentAppRunProjectionRuntimeStatus;
 }
 
 export interface AgentAppRunProjectionEvidence {
   evidenceId: string;
   label: "evidence";
   preview?: string;
-  status?: AgentUiRuntimeStatus;
+  status?: AgentAppRunProjectionRuntimeStatus;
 }
 
 export interface AgentAppRunProjectionDiagnostic {
   diagnosticId: string;
   label: "diagnostic";
   preview?: string;
-  status?: AgentUiRuntimeStatus;
+  status?: AgentAppRunProjectionRuntimeStatus;
 }
 
 export interface AgentAppRunProjectionTaskSummary {
-  latestRuntimeStatus: AgentUiRuntimeStatus | "unknown";
+  latestRuntimeStatus: AgentAppRunProjectionRuntimeStatus | "unknown";
   terminal: boolean;
   collapsedByDefault: boolean;
   pendingActionCount: number;
@@ -118,7 +179,7 @@ export interface AgentAppRunProjectionViewModel {
 }
 
 export function buildAgentAppRunProjectionViewModel(
-  events: AgentUiProjectionEvent[],
+  events: AgentAppRunProjectionSourceEvent[],
 ): AgentAppRunProjectionViewModel {
   const orderedEvents = [...events].sort(compareProjectionEvents);
   const orderedParts = buildOrderedProjectionParts(orderedEvents);
@@ -152,9 +213,107 @@ export function buildAgentAppRunProjectionViewModel(
   };
 }
 
+export function buildAgentAppRunProjectionViewModelFromStandardState<
+  TEvent extends AgentRuntimeExecutionEvent,
+>(state: AgentUiProjectionState<TEvent>): AgentAppRunProjectionViewModel {
+  return buildAgentAppRunProjectionViewModel(
+    state.readModel.events.map(standardRuntimeProjectionToSourceEvent),
+  );
+}
+
+function standardRuntimeProjectionToSourceEvent<TEvent extends AgentRuntimeExecutionEvent>(
+  projection: AgentRuntimeEventProjection<TEvent>,
+  index: number,
+): AgentAppRunProjectionSourceEvent {
+  const event = projection.source;
+  const payload = event.payload ?? {};
+  return {
+    type: standardProjectionType(projection),
+    sequence: event.sequence ?? index + 1,
+    timestamp: event.createdAt,
+    sessionId: stringValue(payload.sessionId) ?? event.runtimeId,
+    threadId: stringValue(payload.threadId) ?? event.threadId,
+    runId: event.runId,
+    turnId: event.turnId,
+    taskId: event.taskId,
+    toolCallId: event.toolCallId,
+    actionId: event.actionId,
+    artifactId: event.artifactId ?? event.artifactRefs?.[0],
+    evidenceId: event.evidenceId ?? event.evidenceRefs?.[0],
+    diagnosticId: event.traceId ?? event.id,
+    runtimeStatus: agentAppRuntimeStatusFromStandardEvent(event),
+    latestTurnStatus: agentAppRuntimeStatusFromStandardEvent(event),
+    surface: stringValue(payload.surface) ?? projection.surface,
+    control: stringValue(payload.control),
+    refs: {
+      artifactIds: nonEmptyStrings(event.artifactRefs),
+      artifactPaths: nonEmptyStrings([
+        stringValue(payload.artifactRef),
+        ...(event.artifactRefs ?? []),
+      ]),
+      rawEventRef: event.refIds?.[0],
+    },
+    rawEventRef: event.refIds?.[0] ?? event.id,
+    payload: {
+      ...payload,
+      actionType:
+        stringValue(payload.actionType) ??
+        stringValue(payload.actionKind) ??
+        projection.actionKind,
+      controls: Array.isArray(payload.controls) ? payload.controls : undefined,
+      eventType: event.eventClass,
+      metricName: stringValue(payload.metricName) ?? event.eventClass,
+      preview: projection.detail ?? event.detail ?? event.title,
+      providerName: stringValue(payload.providerName),
+      modelName: stringValue(payload.modelName) ?? event.model,
+      toolName: stringValue(payload.toolName) ?? event.title,
+      usage: recordPayloadValue(payload, "usage"),
+      cost: recordPayloadValue(payload, "cost"),
+    },
+  };
+}
+
+function standardProjectionType(
+  projection: AgentRuntimeEventProjection,
+): string {
+  const payloadType = stringValue(projection.source.payload?.projectionType);
+  if (payloadType) {
+    return payloadType;
+  }
+  const eventClass = projection.source.eventClass ?? "";
+  if (eventClass === "model.delta") return "text.delta";
+  if (eventClass === "model.completed") return "text.final";
+  if (eventClass.startsWith("reasoning.")) return "reasoning.delta";
+  if (eventClass === "tool.started") return "tool.started";
+  if (eventClass === "tool.result") return "tool.result";
+  if (eventClass === "tool.failed") return "tool.failed";
+  if (eventClass === "action.required") return "action.required";
+  if (eventClass === "action.resolved") return "action.resolved";
+  if (eventClass === "artifact.changed") return "artifact.created";
+  if (eventClass === "evidence.changed") return "evidence.changed";
+  if (eventClass === "runtime.error") return "diagnostic.changed";
+  if (eventClass === "snapshot.updated") return "metric.changed";
+  if (eventClass === "turn.completed") return "run.finished";
+  if (eventClass === "turn.failed") return "run.failed";
+  return "run.status";
+}
+
+function agentAppRuntimeStatusFromStandardEvent(
+  event: AgentRuntimeExecutionEvent,
+): AgentAppRunProjectionRuntimeStatus {
+  if (event.eventClass === "action.required") return "needs_input";
+  if (event.eventClass === "action.resolved") return "completed";
+  if (event.status === "completed") return "completed";
+  if (event.status === "failed") return "failed";
+  if (event.status === "blocked") return "needs_input";
+  if (event.status === "running") return "running";
+  if (event.status === "pending") return "queued";
+  return "unknown";
+}
+
 function compareProjectionEvents(
-  left: AgentUiProjectionEvent,
-  right: AgentUiProjectionEvent,
+  left: AgentAppRunProjectionSourceEvent,
+  right: AgentAppRunProjectionSourceEvent,
 ): number {
   const leftSequence = left.sequence ?? Number.MAX_SAFE_INTEGER;
   const rightSequence = right.sequence ?? Number.MAX_SAFE_INTEGER;
@@ -164,7 +323,7 @@ function compareProjectionEvents(
   return stableEventId(left).localeCompare(stableEventId(right));
 }
 
-function buildProjectionPart(event: AgentUiProjectionEvent): AgentAppRunProjectionPart {
+function buildProjectionPart(event: AgentAppRunProjectionSourceEvent): AgentAppRunProjectionPart {
   const kind = partKindForEvent(event);
   const runtimeStatus = event.runtimeStatus ?? event.latestTurnStatus;
   const label = labelForEvent(event, kind);
@@ -187,7 +346,7 @@ function buildProjectionPart(event: AgentUiProjectionEvent): AgentAppRunProjecti
 }
 
 function buildOrderedProjectionParts(
-  events: AgentUiProjectionEvent[],
+  events: AgentAppRunProjectionSourceEvent[],
 ): AgentAppRunProjectionPart[] {
   const parts: AgentAppRunProjectionPart[] = [];
   const groupedParts = new Map<string, AgentAppRunProjectionPart>();
@@ -229,7 +388,7 @@ function buildOrderedProjectionParts(
 }
 
 function projectionPartGroupKey(
-  event: AgentUiProjectionEvent,
+  event: AgentAppRunProjectionSourceEvent,
   kind: AgentAppRunProjectionPartKind,
 ): string | null {
   if (kind === "reasoning" && event.type === "reasoning.delta") {
@@ -248,7 +407,7 @@ function projectionPartGroupKey(
   return null;
 }
 
-function projectionScopeKey(event: AgentUiProjectionEvent): string {
+function projectionScopeKey(event: AgentAppRunProjectionSourceEvent): string {
   return [
     event.sessionId,
     event.threadId,
@@ -279,9 +438,9 @@ function mergeProjectionPreview(
 }
 
 function shouldCollapsePartByDefault(
-  event: AgentUiProjectionEvent,
+  event: AgentAppRunProjectionSourceEvent,
   kind: AgentAppRunProjectionPartKind,
-  runtimeStatus?: AgentUiRuntimeStatus,
+  runtimeStatus?: AgentAppRunProjectionRuntimeStatus,
 ): boolean {
   if (kind === "text") {
     return false;
@@ -299,7 +458,7 @@ function shouldCollapsePartByDefault(
 }
 
 function partKindForEvent(
-  event: AgentUiProjectionEvent,
+  event: AgentAppRunProjectionSourceEvent,
 ): AgentAppRunProjectionPartKind {
   if (event.type.startsWith("text.")) {
     return "text";
@@ -329,7 +488,7 @@ function partKindForEvent(
 }
 
 function labelForEvent(
-  event: AgentUiProjectionEvent,
+  event: AgentAppRunProjectionSourceEvent,
   kind: AgentAppRunProjectionPartKind,
 ): AgentAppRunProjectionLabel {
   switch (kind) {
@@ -358,7 +517,7 @@ function labelForEvent(
 }
 
 function buildActionIndex(
-  events: AgentUiProjectionEvent[],
+  events: AgentAppRunProjectionSourceEvent[],
 ): AgentAppRunProjectionAction[] {
   const actions = new Map<string, AgentAppRunProjectionAction>();
   for (const event of events) {
@@ -386,7 +545,7 @@ function buildActionIndex(
 }
 
 function normalizeActionControls(
-  event: AgentUiProjectionEvent,
+  event: AgentAppRunProjectionSourceEvent,
 ): AgentAppRunProjectionActionControl[] {
   const payloadControls = event.payload?.controls;
   const controls = Array.isArray(payloadControls)
@@ -416,7 +575,7 @@ function isActionControl(
 }
 
 function buildArtifactIndex(
-  events: AgentUiProjectionEvent[],
+  events: AgentAppRunProjectionSourceEvent[],
 ): AgentAppRunProjectionArtifact[] {
   const artifacts = new Map<string, AgentAppRunProjectionArtifact>();
   for (const event of events) {
@@ -436,7 +595,7 @@ function buildArtifactIndex(
 }
 
 function buildEvidenceIndex(
-  events: AgentUiProjectionEvent[],
+  events: AgentAppRunProjectionSourceEvent[],
 ): AgentAppRunProjectionEvidence[] {
   const evidence = new Map<string, AgentAppRunProjectionEvidence>();
   for (const event of events) {
@@ -455,7 +614,7 @@ function buildEvidenceIndex(
 }
 
 function buildDiagnosticIndex(
-  events: AgentUiProjectionEvent[],
+  events: AgentAppRunProjectionSourceEvent[],
 ): AgentAppRunProjectionDiagnostic[] {
   const diagnostics = new Map<string, AgentAppRunProjectionDiagnostic>();
   for (const event of events) {
@@ -474,7 +633,7 @@ function buildDiagnosticIndex(
 }
 
 function buildMetricSummary(
-  events: AgentUiProjectionEvent[],
+  events: AgentAppRunProjectionSourceEvent[],
 ): AgentAppRunProjectionMetrics {
   const metrics: AgentAppRunProjectionMetrics = {};
   for (const event of events) {
@@ -507,8 +666,8 @@ function buildMetricSummary(
 }
 
 function collectText(
-  events: AgentUiProjectionEvent[],
-  type: AgentUiProjectionEvent["type"],
+  events: AgentAppRunProjectionSourceEvent[],
+  type: string,
 ): string {
   return events
     .filter((event) => event.type === type)
@@ -518,8 +677,8 @@ function collectText(
 }
 
 function resolveLatestRuntimeStatus(
-  events: AgentUiProjectionEvent[],
-): AgentUiRuntimeStatus | "unknown" {
+  events: AgentAppRunProjectionSourceEvent[],
+): AgentAppRunProjectionRuntimeStatus | "unknown" {
   for (const event of [...events].reverse()) {
     const status = event.runtimeStatus ?? event.latestTurnStatus;
     if (status) {
@@ -529,11 +688,11 @@ function resolveLatestRuntimeStatus(
   return "unknown";
 }
 
-function isTerminalStatus(status: AgentUiRuntimeStatus | "unknown"): boolean {
+function isTerminalStatus(status: AgentAppRunProjectionRuntimeStatus | "unknown"): boolean {
   return ["completed", "failed", "cancelled", "aborted", "closed"].includes(status);
 }
 
-function previewForEvent(event: AgentUiProjectionEvent): string | undefined {
+function previewForEvent(event: AgentAppRunProjectionSourceEvent): string | undefined {
   return (
     readPayloadString(event, "preview") ??
     readPayloadString(event, "status") ??
@@ -542,7 +701,7 @@ function previewForEvent(event: AgentUiProjectionEvent): string | undefined {
 }
 
 function readPayloadString(
-  event: AgentUiProjectionEvent,
+  event: AgentAppRunProjectionSourceEvent,
   key: string,
 ): string | undefined {
   const value = event.payload?.[key];
@@ -611,7 +770,7 @@ function mergeStreamText(current: string, next: string): string {
   return `${current}${needsSpace ? " " : ""}${next}`;
 }
 
-function stableEventId(event: AgentUiProjectionEvent): string {
+function stableEventId(event: AgentAppRunProjectionSourceEvent): string {
   return [
     event.rawEventRef,
     event.type,
@@ -623,6 +782,17 @@ function stableEventId(event: AgentUiProjectionEvent): string {
   ]
     .filter((value) => value !== undefined && value !== null && `${value}`.trim())
     .join(":");
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function nonEmptyStrings(values: Array<string | undefined> | undefined): string[] | undefined {
+  const items = values?.filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  return items?.length ? items : undefined;
 }
 
 function uniqueCount(values: Array<string | undefined>): number {

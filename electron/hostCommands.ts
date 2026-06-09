@@ -74,7 +74,19 @@ import {
   type WorkspaceReadResponse,
   type WorkspaceSkillBindingsListResponse,
 } from "app-server-client";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  copyFile,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import type { ElectronAppServerHost } from "./appServerHost";
@@ -176,12 +188,40 @@ type AgentAppShellLaunchResult = {
   };
   launchedAt: string;
 };
+type VoiceModelCatalogRecord = {
+  id: string;
+  sizeBytes?: number;
+  downloadUrl: string;
+  vadDownloadUrl: string;
+  checksumSha256?: string | null;
+};
+type DownloadProgressCallback = (
+  downloadedBytes: number,
+  totalBytes: number | null,
+) => void;
 
 const CONFIG_FILE = "config.json";
 const LAYERED_DESIGN_EXPORT_ROOT = ".lime/layered-designs";
 const MAX_LAYERED_DESIGN_EXPORT_FILES = 512;
 const MAX_REMOTE_LAYERED_DESIGN_ASSET_BYTES = 10 * 1024 * 1024;
 const REMOTE_LAYERED_DESIGN_ASSET_TIMEOUT_MS = 8000;
+const SENSEVOICE_MODEL_ID = "sensevoice-small-int8-2024-07-17";
+const SILERO_VAD_MODEL_ID = "silero-vad-onnx";
+const VOICE_MODEL_ARCHIVE_DOWNLOAD_PATH =
+  "voice/sensevoice-small-int8-2024-07-17/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2";
+const VOICE_MODEL_ARCHIVE_FILE =
+  "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2";
+const VOICE_MODEL_VAD_DOWNLOAD_PATH = "voice/silero-vad-onnx/silero_vad.onnx";
+const DEFAULT_VOICE_MODEL_ASSET_BASE_URL =
+  "https://pub-fa568bd8496349bcafe04091e2b02e1e.r2.dev";
+const DEFAULT_VOICE_MODEL_BYTES = 163_002_883;
+const DEFAULT_VOICE_MODEL_ARCHIVE_SHA256 =
+  "7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e";
+const VOICE_MODEL_ONNX_FILE = "model.int8.onnx";
+const VOICE_MODEL_TOKENS_FILE = "tokens.txt";
+const VOICE_MODEL_VAD_FILE = "silero_vad.onnx";
+const VOICE_MODEL_MANIFEST_FILE = "lime-model.json";
+const VOICE_MODEL_DOWNLOAD_PROGRESS_EVENT = "voice-model-download-progress";
 const RESERVED_SHORTCUT_REASON =
   "快捷键与系统输入法切换冲突，请换成包含字母或数字的组合，例如 CommandOrControl+Shift+V";
 const RESERVED_SHORTCUTS = [
@@ -277,6 +317,8 @@ export class ElectronHostCommands {
         return await this.#saveExperimentalConfig(args);
       case "open_external_url":
         return await this.#openExternalUrl(args);
+      case "open_system_settings_url":
+        return await this.#openSystemSettingsUrl(args);
       case "reveal_in_finder":
         return this.#revealInFinder(args);
       case "open_with_default_app":
@@ -351,10 +393,6 @@ export class ElectronHostCommands {
         return await this.#readWorkspace(args);
       case "workspace_get_by_path":
         return await this.#readWorkspaceByPath(args);
-      case "workspace_set_default":
-        throw new Error(
-          "workspace_set_default is not available in the Electron App Server adapter",
-        );
       case "workspace_get_projects_root":
         return await this.#readWorkspaceProjectsRoot();
       case "workspace_resolve_project_path":
@@ -369,20 +407,16 @@ export class ElectronHostCommands {
         return await this.#getVoiceShortcutRuntimeStatus();
       case "validate_shortcut":
         return this.#validateShortcut(args);
-      case "get_asr_credentials":
-        return this.#getAsrCredentials();
-      case "list_audio_devices":
-        return this.#emptyDiagnosticList("list_audio_devices");
-      case "get_voice_instructions":
-        return this.#getVoiceInstructions();
       case "voice_models_list_catalog":
-        return this.#emptyDiagnosticList("voice_models_list_catalog");
+        return this.#listVoiceModelCatalog();
       case "voice_models_get_install_state":
-        return this.#getVoiceModelInstallState(args);
+        return await this.#getVoiceModelInstallState(args);
+      case "voice_models_download":
+        return await this.#downloadVoiceModel(args);
+      case "voice_models_delete":
+        return await this.#deleteVoiceModel(args);
       case "get_environment_preview":
         return await this.#getEnvironmentPreview();
-      case "unified_memory_stats":
-        return this.#getUnifiedMemoryStats();
       case "get_skill_package_file_association_status":
         return this.#getSkillPackageFileAssociationStatus();
       case "set_skill_package_file_association_default":
@@ -443,6 +477,14 @@ export class ElectronHostCommands {
     const request = readRequest(args);
     const url = readRequiredString(request, "url");
     const normalizedUrl = normalizeExternalUrl(url);
+    await shell.openExternal(normalizedUrl);
+    return {};
+  }
+
+  async #openSystemSettingsUrl(args: HostArgs): Promise<Record<string, never>> {
+    const request = readRequest(args);
+    const url = readRequiredString(request, "url");
+    const normalizedUrl = normalizeSystemSettingsUrl(url);
     await shell.openExternal(normalizedUrl);
     return {};
   }
@@ -1883,54 +1925,268 @@ export class ElectronHostCommands {
     return true;
   }
 
-  #getAsrCredentials(): Array<Record<string, unknown>> {
-    return this.#emptyDiagnosticList("get_asr_credentials");
-  }
-
-  #getVoiceInstructions(): Array<Record<string, unknown>> {
+  #listVoiceModelCatalog(): Array<Record<string, unknown>> {
+    const assetBaseUrl =
+      normalizeString(process.env.LIME_VOICE_MODEL_ASSET_BASE_URL) ??
+      normalizeString(process.env.VOICE_MODEL_ASSET_BASE_URL) ??
+      normalizeString(process.env.SERVER_VOICE_MODEL_ASSET_BASE_URL) ??
+      DEFAULT_VOICE_MODEL_ASSET_BASE_URL;
     return [
       {
-        id: "default",
-        name: "默认润色",
-        prompt: "{{text}}",
-        is_preset: true,
-      },
-      {
-        id: "translate_en",
-        name: "翻译为英文",
-        prompt: "{{text}}",
-        is_preset: true,
-      },
-      {
-        id: "raw",
-        name: "原始输出",
-        prompt: "{{text}}",
-        is_preset: true,
+        id: SENSEVOICE_MODEL_ID,
+        name: "SenseVoice Small INT8",
+        provider: "FunAudioLLM / sherpa-onnx",
+        description:
+          "本地离线 ASR，支持中文、英文、日文、韩文和粤语；模型按需下载到用户数据目录。",
+        version: "2024-07-17",
+        languages: ["zh", "en", "ja", "ko", "yue"],
+        size_bytes: DEFAULT_VOICE_MODEL_BYTES,
+        download_url: joinUrl(assetBaseUrl, VOICE_MODEL_ARCHIVE_DOWNLOAD_PATH),
+        vad_model_id: SILERO_VAD_MODEL_ID,
+        vad_download_url: joinUrl(assetBaseUrl, VOICE_MODEL_VAD_DOWNLOAD_PATH),
+        runtime: "sherpa-onnx",
+        bundled: false,
+        checksum_sha256: DEFAULT_VOICE_MODEL_ARCHIVE_SHA256,
       },
     ];
   }
 
-  #getVoiceModelInstallState(args: HostArgs): Record<string, unknown> {
+  async #getVoiceModelInstallState(
+    args: HostArgs,
+  ): Promise<Record<string, unknown>> {
+    const modelId = this.#readVoiceModelId(args);
+    const installDir = this.#voiceModelInstallDir(modelId);
+    const modelFile = path.join(installDir, VOICE_MODEL_ONNX_FILE);
+    const tokensFile = path.join(installDir, VOICE_MODEL_TOKENS_FILE);
+    const vadFile = path.join(installDir, VOICE_MODEL_VAD_FILE);
+    const requiredFiles = [
+      [VOICE_MODEL_ONNX_FILE, modelFile],
+      [VOICE_MODEL_TOKENS_FILE, tokensFile],
+      [VOICE_MODEL_VAD_FILE, vadFile],
+    ] as const;
+    const missingFiles: string[] = [];
+    for (const [name, filePath] of requiredFiles) {
+      if (!(await pathExists(filePath))) {
+        missingFiles.push(name);
+      }
+    }
+    const installedBytes = await directorySize(installDir);
+    const manifest = await readJsonFile(
+      path.join(installDir, VOICE_MODEL_MANIFEST_FILE),
+    );
+    const installed = missingFiles.length === 0;
+    return {
+      model_id: modelId,
+      installed,
+      installing: false,
+      install_dir: installDir,
+      model_file: installed ? modelFile : null,
+      tokens_file: installed ? tokensFile : null,
+      vad_file: installed ? vadFile : null,
+      installed_bytes: installedBytes,
+      last_verified_at: readNumber(manifest, "installed_at") ?? null,
+      missing_files: missingFiles,
+      default_credential_id: null,
+    };
+  }
+
+  async #downloadVoiceModel(args: HostArgs): Promise<Record<string, unknown>> {
+    const modelId = this.#readVoiceModelId(args);
+    const catalog = this.#readVoiceModelCatalogRecord(args, modelId);
+    const tempRoot = path.join(
+      this.#voiceModelDownloadsDir(),
+      `${modelId}-${Date.now()}`,
+    );
+    const extractDir = path.join(tempRoot, "extract");
+    const stagingDir = path.join(tempRoot, "staging");
+    const archivePath = path.join(tempRoot, VOICE_MODEL_ARCHIVE_FILE);
+    const installDir = this.#voiceModelInstallDir(modelId);
+
+    const expectedArchiveBytes =
+      catalog.sizeBytes && catalog.sizeBytes > 0 ? catalog.sizeBytes : null;
+    this.#emitVoiceModelDownloadProgress(
+      modelId,
+      "preparing",
+      0,
+      expectedArchiveBytes,
+      0,
+      "准备下载模型",
+    );
+
+    try {
+      await mkdir(extractDir, { recursive: true });
+      const archiveSha256 = await downloadFileToPath(
+        catalog.downloadUrl,
+        archivePath,
+        (downloadedBytes, totalBytes) => {
+          const total = totalBytes ?? expectedArchiveBytes;
+          this.#emitVoiceModelDownloadProgress(
+            modelId,
+            "archive",
+            downloadedBytes,
+            total,
+            0.9 * progressRatio(downloadedBytes, total),
+            "正在下载模型包",
+          );
+        },
+      );
+      verifyOptionalSha256(archiveSha256, catalog.checksumSha256);
+
+      this.#emitVoiceModelDownloadProgress(
+        modelId,
+        "extracting",
+        0,
+        null,
+        0.92,
+        "正在校验并解压",
+      );
+      await extractTarBz2(archivePath, extractDir);
+      const modelSourceDir = await findVoiceModelSourceDir(extractDir);
+      await mkdir(stagingDir, { recursive: true });
+      await copyFile(
+        path.join(modelSourceDir, VOICE_MODEL_ONNX_FILE),
+        path.join(stagingDir, VOICE_MODEL_ONNX_FILE),
+      );
+      await copyFile(
+        path.join(modelSourceDir, VOICE_MODEL_TOKENS_FILE),
+        path.join(stagingDir, VOICE_MODEL_TOKENS_FILE),
+      );
+
+      await downloadFileToPath(
+        catalog.vadDownloadUrl,
+        path.join(stagingDir, VOICE_MODEL_VAD_FILE),
+        (downloadedBytes, totalBytes) => {
+          this.#emitVoiceModelDownloadProgress(
+            modelId,
+            "vad",
+            downloadedBytes,
+            totalBytes,
+            0.92 + 0.05 * progressRatio(downloadedBytes, totalBytes),
+            "正在下载 VAD",
+          );
+        },
+      );
+
+      await writeFile(
+        path.join(stagingDir, VOICE_MODEL_MANIFEST_FILE),
+        JSON.stringify(
+          {
+            model_id: modelId,
+            installed_at: Math.floor(Date.now() / 1000),
+            source_url: catalog.downloadUrl,
+            vad_url: catalog.vadDownloadUrl,
+            archive_sha256: archiveSha256,
+            checksum_verified: Boolean(catalog.checksumSha256),
+            checksum_note: catalog.checksumSha256
+              ? "后端目录提供 sha256，已完成归档内容校验"
+              : "后端目录未提供 sha256，当前记录下载内容摘要但不声明已完成可信校验",
+          },
+          null,
+          2,
+        ),
+      );
+      this.#emitVoiceModelDownloadProgress(
+        modelId,
+        "installing",
+        0,
+        null,
+        0.98,
+        "正在安装",
+      );
+      await rm(installDir, { recursive: true, force: true });
+      await mkdir(path.dirname(installDir), { recursive: true });
+      await rename(stagingDir, installDir);
+      this.#emitVoiceModelDownloadProgress(
+        modelId,
+        "done",
+        0,
+        null,
+        1,
+        "安装完成",
+      );
+      return { state: await this.#getVoiceModelInstallState({ modelId }) };
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  }
+
+  async #deleteVoiceModel(args: HostArgs): Promise<Record<string, unknown>> {
+    const modelId = this.#readVoiceModelId(args);
+    await rm(this.#voiceModelInstallDir(modelId), {
+      recursive: true,
+      force: true,
+    });
+    return await this.#getVoiceModelInstallState({ modelId });
+  }
+
+  #readVoiceModelId(args: HostArgs): string {
     const request = readRequest(args);
     const modelId =
       readString(request, "modelId") ??
       readString(request, "model_id") ??
-      "sensevoice-small-int8-2024-07-17";
-    const installDir = path.join(this.#userDataDir, "models", "voice", modelId);
+      SENSEVOICE_MODEL_ID;
+    if (modelId !== SENSEVOICE_MODEL_ID) {
+      throw new Error(`Unsupported voice model: ${modelId}`);
+    }
+    return modelId;
+  }
+
+  #readVoiceModelCatalogRecord(
+    args: HostArgs,
+    modelId: string,
+  ): VoiceModelCatalogRecord {
+    const request = readRequest(args);
+    const rawCatalog =
+      readRecord(request, "catalogEntry") ??
+      readRecord(request, "catalog_entry") ??
+      this.#listVoiceModelCatalog()[0];
+    const id = readString(rawCatalog, "id") ?? modelId;
+    if (id !== modelId) {
+      throw new Error(
+        `语音模型目录 ID 不匹配: expected=${modelId}, actual=${id}`,
+      );
+    }
+    const downloadUrl = readString(rawCatalog, "download_url");
+    const vadDownloadUrl = readString(rawCatalog, "vad_download_url");
+    if (!downloadUrl) {
+      throw new Error("SenseVoice Small 归档下载地址未配置");
+    }
+    if (!vadDownloadUrl) {
+      throw new Error("Silero VAD 下载地址未配置");
+    }
     return {
-      model_id: modelId,
-      installed: false,
-      installing: false,
-      install_dir: installDir,
-      model_file: null,
-      tokens_file: null,
-      vad_file: null,
-      installed_bytes: 0,
-      last_verified_at: Math.floor(Date.now() / 1000),
-      missing_files: ["model.int8.onnx", "tokens.txt", "silero_vad.onnx"],
-      default_credential_id: null,
-      diagnostic: this.#diagnosticMeta("voice_models_get_install_state"),
+      id,
+      sizeBytes: readNumber(rawCatalog, "size_bytes") ?? undefined,
+      downloadUrl,
+      vadDownloadUrl,
+      checksumSha256: readString(rawCatalog, "checksum_sha256"),
     };
+  }
+
+  #emitVoiceModelDownloadProgress(
+    modelId: string,
+    phase: string,
+    downloadedBytes: number,
+    totalBytes: number | null,
+    overallProgress: number,
+    message: string,
+  ): void {
+    this.#emit(VOICE_MODEL_DOWNLOAD_PROGRESS_EVENT, {
+      model_id: modelId,
+      phase,
+      downloaded_bytes: downloadedBytes,
+      total_bytes: totalBytes,
+      overall_progress: clampRatio(overallProgress),
+      message,
+    });
+  }
+
+  #voiceModelInstallDir(modelId: string): string {
+    return path.join(this.#userDataDir, "models", "voice", modelId);
+  }
+
+  #voiceModelDownloadsDir(): string {
+    return path.join(this.#userDataDir, "models", "voice", ".downloads");
   }
 
   async #getEnvironmentPreview(): Promise<Record<string, unknown>> {
@@ -1971,22 +2227,6 @@ export class ElectronHostCommands {
       },
       entries,
       diagnostic: this.#diagnosticMeta("get_environment_preview"),
-    };
-  }
-
-  #getUnifiedMemoryStats(): Record<string, unknown> {
-    return {
-      total_entries: 0,
-      storage_used: 0,
-      memory_count: 0,
-      categories: [
-        { category: "identity", count: 0 },
-        { category: "context", count: 0 },
-        { category: "preference", count: 0 },
-        { category: "experience", count: 0 },
-        { category: "activity", count: 0 },
-      ],
-      diagnostic: this.#diagnosticMeta("unified_memory_stats"),
     };
   }
 
@@ -2323,6 +2563,196 @@ function readString(value: unknown, key: string): string | null {
   }
   const next = (value as Record<string, unknown>)[key];
   return typeof next === "string" && next.trim() ? next.trim() : null;
+}
+
+function normalizeString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function joinUrl(baseUrl: string, relativePath: string): string {
+  return `${baseUrl.replace(/\/+$/u, "")}/${relativePath.replace(/^\/+/u, "")}`;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await stat(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function directorySize(directoryPath: string): Promise<number> {
+  let total = 0;
+  let entries;
+  try {
+    entries = await readdir(directoryPath, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+
+  for (const entry of entries) {
+    const entryPath = path.join(directoryPath, entry.name);
+    if (entry.isDirectory()) {
+      total += await directorySize(entryPath);
+      continue;
+    }
+    if (entry.isFile()) {
+      total += (await stat(entryPath)).size;
+    }
+  }
+  return total;
+}
+
+async function downloadFileToPath(
+  url: string,
+  targetPath: string,
+  onProgress: DownloadProgressCallback,
+): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new Error(`下载语音模型文件失败 ${url}: ${response.status}`);
+  }
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  const file = await open(targetPath, "w");
+  const hash = createHash("sha256");
+  const totalBytes = readContentLength(response);
+  let downloadedBytes = 0;
+  try {
+    const reader = response.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      const chunk = Buffer.from(value);
+      downloadedBytes += chunk.byteLength;
+      hash.update(chunk);
+      await file.write(chunk);
+      onProgress(downloadedBytes, totalBytes);
+    }
+  } finally {
+    await file.close();
+  }
+  return hash.digest("hex");
+}
+
+function readContentLength(response: Response): number | null {
+  const raw = response.headers.get("content-length");
+  if (!raw) {
+    return null;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function verifyOptionalSha256(
+  actual: string,
+  expected: string | null | undefined,
+): void {
+  const normalized = expected?.trim();
+  if (!normalized) {
+    return;
+  }
+  if (actual.toLowerCase() !== normalized.toLowerCase()) {
+    throw new Error(
+      `模型归档 sha256 校验失败: expected=${normalized}, actual=${actual}`,
+    );
+  }
+}
+
+async function extractTarBz2(
+  archivePath: string,
+  extractDir: string,
+): Promise<void> {
+  await mkdir(extractDir, { recursive: true });
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("tar", ["-xjf", archivePath, "-C", extractDir], {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      reject(new Error(`系统 tar 解压语音模型失败: ${error.message}`));
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          `系统 tar 解压语音模型失败: ${stderr.trim() || `exit ${code}`}`,
+        ),
+      );
+    });
+  });
+}
+
+async function findVoiceModelSourceDir(rootDir: string): Promise<string> {
+  const candidates: string[] = [];
+  await collectVoiceModelSourceDirs(rootDir, candidates);
+  if (candidates.length === 0) {
+    throw new Error("模型归档缺少 model.int8.onnx / tokens.txt");
+  }
+  return candidates[0];
+}
+
+async function collectVoiceModelSourceDirs(
+  directoryPath: string,
+  candidates: string[],
+): Promise<void> {
+  const modelPath = path.join(directoryPath, VOICE_MODEL_ONNX_FILE);
+  const tokensPath = path.join(directoryPath, VOICE_MODEL_TOKENS_FILE);
+  if ((await pathExists(modelPath)) && (await pathExists(tokensPath))) {
+    candidates.push(directoryPath);
+    return;
+  }
+  let entries;
+  try {
+    entries = await readdir(directoryPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      await collectVoiceModelSourceDirs(
+        path.join(directoryPath, entry.name),
+        candidates,
+      );
+    }
+  }
+}
+
+function progressRatio(
+  downloadedBytes: number,
+  totalBytes: number | null,
+): number {
+  if (!totalBytes || totalBytes <= 0) {
+    return 0;
+  }
+  return clampRatio(downloadedBytes / totalBytes);
+}
+
+function clampRatio(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.min(1, Math.max(0, value));
+}
+
+async function readJsonFile(
+  filePath: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const content = await readFile(filePath, "utf8");
+    const parsed = JSON.parse(content) as unknown;
+    return toRecord(parsed) ?? {};
+  } catch {
+    return {};
+  }
 }
 
 function assertValidShortcut(shortcut: string | null): void {
@@ -3662,6 +4092,26 @@ function normalizeExternalUrl(input: string): string {
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("外部链接只支持 http/https 地址");
+  }
+  return parsed.toString();
+}
+
+function normalizeSystemSettingsUrl(input: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(input.trim());
+  } catch (error) {
+    throw new Error(
+      `系统设置链接格式无效: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (
+    parsed.protocol !== "x-apple.systempreferences:" &&
+    parsed.protocol !== "ms-settings:"
+  ) {
+    throw new Error(
+      "系统设置链接只支持 x-apple.systempreferences 或 ms-settings scheme",
+    );
   }
   return parsed.toString();
 }

@@ -13,12 +13,12 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
-import { open } from "@/lib/desktop-host/plugin-shell";
 import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 
 type SearchEngine = "google" | "xiaohongshu";
 type WebSearchProvider =
@@ -650,10 +650,9 @@ export function WebSearchSettings() {
 
   const openExternalUrl = async (url: string) => {
     try {
-      await open(url);
+      await openExternalUrlWithSystemBrowser(url);
     } catch (error) {
       console.error("打开外部链接失败:", error);
-      window.open(url, "_blank");
     }
   };
 

@@ -1,25 +1,50 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import {
-  cleanupEmpty,
-  cleanupExpired,
-  createSession,
   deleteFile,
-  deleteSession,
   getOrCreateSession,
-  getSessionDetail,
   importDocument,
-  importDocumentToSession,
   listFiles,
-  listSessions,
   readFile,
-  readImageFromSession,
   resolveFilePath,
   saveFile,
-  sessionExists,
   updateSessionMeta,
-  uploadImageToSession,
 } from "./session-files";
+
+const {
+  appServerDeleteSessionFileMock,
+  appServerGetOrCreateSessionFileMock,
+  appServerListSessionFilesMock,
+  appServerReadFilePreviewMock,
+  appServerReadSessionFileMock,
+  appServerResolveSessionFilePathMock,
+  appServerSaveSessionFileMock,
+  appServerUpdateSessionFileMetaMock,
+} = vi.hoisted(() => ({
+  appServerDeleteSessionFileMock: vi.fn(),
+  appServerGetOrCreateSessionFileMock: vi.fn(),
+  appServerListSessionFilesMock: vi.fn(),
+  appServerReadFilePreviewMock: vi.fn(),
+  appServerReadSessionFileMock: vi.fn(),
+  appServerResolveSessionFilePathMock: vi.fn(),
+  appServerSaveSessionFileMock: vi.fn(),
+  appServerUpdateSessionFileMetaMock: vi.fn(),
+}));
+
+vi.mock("@/lib/api/appServer", () => ({
+  createAppServerClient: vi.fn(() => ({
+    deleteSessionFile: appServerDeleteSessionFileMock,
+    getOrCreateSessionFile: appServerGetOrCreateSessionFileMock,
+    listSessionFiles: appServerListSessionFilesMock,
+    readSessionFile: appServerReadSessionFileMock,
+    resolveSessionFilePath: appServerResolveSessionFilePathMock,
+    saveSessionFile: appServerSaveSessionFileMock,
+    updateSessionFileMeta: appServerUpdateSessionFileMetaMock,
+  })),
+  AppServerClient: vi.fn(() => ({
+    readFilePreview: appServerReadFilePreviewMock,
+  })),
+}));
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
@@ -30,204 +55,177 @@ describe("session-files API", () => {
     vi.clearAllMocks();
   });
 
-  it("createSession 应代理到 session_files_create", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      sessionId: "session-1",
-      createdAt: 1_700_000_000_000,
-      updatedAt: 1_700_000_000_000,
-      fileCount: 0,
-      totalSize: 0,
-    });
-
-    await expect(createSession("session-1")).resolves.toEqual(
-      expect.objectContaining({
-        sessionId: "session-1",
-        fileCount: 0,
-      }),
-    );
-    expect(safeInvoke).toHaveBeenCalledWith("session_files_create", {
-      sessionId: "session-1",
-    });
-  });
-
-  it("cleanupEmpty 应支持无参数命令", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(2);
-
-    await expect(cleanupEmpty()).resolves.toBe(2);
-    expect(safeInvoke).toHaveBeenCalledWith("session_files_cleanup_empty");
-  });
-
-  it("listFiles / readFile / resolveFilePath 应保持原命令参数", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([
-        {
-          name: "article.md",
-          fileType: "markdown",
-          size: 64,
-          createdAt: 1_700_000_000_000,
-          updatedAt: 1_700_000_000_000,
+  it("session-scoped 写读链走 App Server sessionFile current 方法", async () => {
+    appServerGetOrCreateSessionFileMock.mockResolvedValueOnce({
+      result: {
+        meta: {
+          sessionId: "session-1",
+          createdAt: 1,
+          updatedAt: 2,
+          fileCount: 0,
+          totalSize: 0,
         },
-      ])
-      .mockResolvedValueOnce("# title")
-      .mockResolvedValueOnce("/tmp/session-1/article.md");
+      },
+    });
+    appServerUpdateSessionFileMetaMock.mockResolvedValueOnce({
+      result: {
+        meta: {
+          sessionId: "session-1",
+          title: "新会话",
+          theme: "article",
+          createdAt: 1,
+          updatedAt: 3,
+          fileCount: 0,
+          totalSize: 0,
+        },
+      },
+    });
+    appServerListSessionFilesMock.mockResolvedValueOnce({
+      result: { files: [{ name: "article.md", fileType: "document" }] },
+    });
+    appServerReadSessionFileMock.mockResolvedValueOnce({
+      result: { content: "# title" },
+    });
+    appServerResolveSessionFilePathMock.mockResolvedValueOnce({
+      result: { path: "/tmp/session-1/files/article.md" },
+    });
+    appServerSaveSessionFileMock.mockResolvedValueOnce({
+      result: { file: { name: "article.md", fileType: "document" } },
+    });
+    appServerDeleteSessionFileMock.mockResolvedValueOnce({ result: {} });
 
+    await expect(getOrCreateSession("session-1")).resolves.toMatchObject({
+      sessionId: "session-1",
+      fileCount: 0,
+    });
+    await expect(
+      updateSessionMeta("session-1", {
+        title: "新会话",
+        theme: "article",
+      }),
+    ).resolves.toMatchObject({
+      sessionId: "session-1",
+      title: "新会话",
+      theme: "article",
+    });
     await expect(listFiles("session-1")).resolves.toEqual([
-      expect.objectContaining({ name: "article.md" }),
+      { name: "article.md", fileType: "document" },
     ]);
     await expect(readFile("session-1", "article.md")).resolves.toBe("# title");
     await expect(resolveFilePath("session-1", "article.md")).resolves.toBe(
-      "/tmp/session-1/article.md",
+      "/tmp/session-1/files/article.md",
+    );
+    await expect(
+      saveFile("session-1", "article.md", "# title", { kind: "draft" }),
+    ).resolves.toEqual({ name: "article.md", fileType: "document" });
+    await expect(deleteFile("session-1", "article.md")).resolves.toBe(
+      undefined,
     );
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "session_files_list_files", {
+    expect(appServerGetOrCreateSessionFileMock).toHaveBeenCalledWith({
       sessionId: "session-1",
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "session_files_read_file", {
+    expect(appServerUpdateSessionFileMetaMock).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      title: "新会话",
+      theme: "article",
+    });
+    expect(appServerListSessionFilesMock).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
+    expect(appServerReadSessionFileMock).toHaveBeenCalledWith({
       sessionId: "session-1",
       fileName: "article.md",
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(
-      3,
-      "session_files_resolve_file_path",
-      {
-        sessionId: "session-1",
-        fileName: "article.md",
-      },
-    );
+    expect(appServerResolveSessionFilePathMock).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      fileName: "article.md",
+    });
+    expect(appServerSaveSessionFileMock).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      fileName: "article.md",
+      content: "# title",
+      metadata: { kind: "draft" },
+    });
+    expect(appServerDeleteSessionFileMock).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      fileName: "article.md",
+    });
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("image / document helper 应代理到旧命令名", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce("images/cover.png")
-      .mockResolvedValueOnce("document text")
-      .mockResolvedValueOnce(["document text", "doc.md"]);
+  it("Document Import 走 App Server file preview，不再调用旧导入命令", async () => {
+    appServerReadFilePreviewMock.mockResolvedValueOnce({
+      result: {
+        path: "/tmp/doc.md",
+        content: "document text",
+        isBinary: false,
+        size: 13,
+        error: null,
+      },
+    });
 
-    await expect(
-      uploadImageToSession("session-1", "/tmp/cover.png"),
-    ).resolves.toBe("images/cover.png");
     await expect(importDocument("/tmp/doc.md")).resolves.toBe("document text");
-    await expect(
-      importDocumentToSession("session-1", "/tmp/doc.md"),
-    ).resolves.toEqual(["document text", "doc.md"]);
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "upload_image_to_session", {
-      sessionId: "session-1",
-      filePath: "/tmp/cover.png",
+    expect(appServerReadFilePreviewMock).toHaveBeenCalledWith({
+      path: "/tmp/doc.md",
+      maxSize: 2 * 1024 * 1024,
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "import_document", {
-      filePath: "/tmp/doc.md",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(
-      3,
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "import_document",
+      expect.anything(),
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
       "import_document_to_session",
-      {
-        sessionId: "session-1",
-        filePath: "/tmp/doc.md",
-      },
+      expect.anything(),
     );
   });
 
-  it("deleteSession / deleteFile 应只接受 void 返回", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({});
-
-    await expect(deleteSession("session-1")).resolves.toBeUndefined();
-    await expect(deleteFile("session-1", "article.md")).resolves.toBeUndefined();
-    await expect(deleteSession("session-2")).rejects.toThrow(
-      "session_files_delete did not return void result",
-    );
-    await expect(deleteFile("session-2", "draft.md")).rejects.toThrow(
-      "session_files_delete_file did not return void result",
-    );
-
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "session_files_delete", {
-      sessionId: "session-1",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "session_files_delete_file", {
-      sessionId: "session-1",
-      fileName: "article.md",
-    });
-  });
-
-  it("遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "session_files_read_file",
-        source: "electron-host-diagnostic",
+  it("Document Import 对 App Server file preview 非文本形态 fail closed", async () => {
+    appServerReadFilePreviewMock.mockResolvedValueOnce({
+      result: {
+        path: "/tmp/doc.md",
+        content: undefined,
+        isBinary: false,
+        size: 0,
+        error: null,
       },
     });
 
-    await expect(readFile("session-1", "article.md")).rejects.toThrow(
-      "session_files_read_file 尚未接入真实 Session files current 通道",
-    );
-  });
-
-  it("遇到非 Session files 返回形态时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce([{ success: true }])
-      .mockResolvedValueOnce({
-        meta: {
-          sessionId: "session-1",
-          createdAt: 1_700_000_000_000,
-          updatedAt: 1_700_000_000_000,
-          fileCount: 1,
-          totalSize: 64,
-        },
-        files: [{ success: true }],
-      })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce(["document text"])
-      .mockResolvedValueOnce({ success: true });
-
-    await expect(sessionExists("session-1")).rejects.toThrow(
-      "session_files_exists did not return a boolean",
-    );
-    await expect(getOrCreateSession("session-1")).rejects.toThrow(
-      "session_files_get_or_create did not return session metadata",
-    );
-    await expect(listSessions()).rejects.toThrow(
-      "session_files_list[0] did not return a session summary",
-    );
-    await expect(getSessionDetail("session-1")).rejects.toThrow(
-      "session_files_get_detail.files[0] did not return a session file",
-    );
-    await expect(
-      updateSessionMeta("session-1", { title: "新会话" }),
-    ).rejects.toThrow(
-      "session_files_update_meta did not return session metadata",
-    );
-    await expect(
-      saveFile("session-1", "article.md", "# title"),
-    ).rejects.toThrow("session_files_save_file did not return a session file");
-    await expect(resolveFilePath("session-1", "article.md")).rejects.toThrow(
-      "session_files_resolve_file_path did not return a string",
-    );
-    await expect(cleanupExpired(30)).rejects.toThrow(
-      "session_files_cleanup_expired did not return a number",
-    );
-    await expect(readImageFromSession("session-1", "cover.png")).rejects.toThrow(
-      "read_image_from_session did not return a string",
-    );
     await expect(importDocument("/tmp/doc.md")).rejects.toThrow(
-      "import_document did not return a string",
+      "fileSystem/readFilePreview did not return document text",
     );
-    await expect(
-      importDocumentToSession("session-1", "/tmp/doc.md"),
-    ).rejects.toThrow(
-      "import_document_to_session did not return imported document tuple",
+  });
+
+  it("Document Import 对 App Server file preview 错误与二进制文件 fail closed", async () => {
+    appServerReadFilePreviewMock
+      .mockResolvedValueOnce({
+        result: {
+          path: "/tmp/doc.md",
+          content: null,
+          isBinary: false,
+          size: 0,
+          error: "too large",
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          path: "/tmp/image.png",
+          content: null,
+          isBinary: true,
+          size: 8,
+          error: null,
+        },
+      });
+
+    await expect(importDocument("/tmp/doc.md")).rejects.toThrow("too large");
+    await expect(importDocument("/tmp/image.png")).rejects.toThrow(
+      "当前文稿导入只支持文本文件",
     );
-    await expect(cleanupEmpty()).rejects.toThrow(
-      "session_files_cleanup_empty did not return a number",
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "import_document",
+      expect.anything(),
     );
   });
 });

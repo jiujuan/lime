@@ -1,9 +1,4 @@
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-} from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -29,12 +24,7 @@ const FORBIDDEN_DIRECT_COMMAND_BRIDGE_IMPORTS = new Set([
   "safeInvoke",
 ]);
 
-const ALLOWED_LEGACY_SUPPORTS_COMMAND_GATES = new Map<string, Set<string>>([
-  [
-    "src/components/memory/MemoryPage.tsx",
-    new Set(["unified_memory_list"]),
-  ],
-]);
+const ALLOWED_LEGACY_SUPPORTS_COMMAND_GATES = new Map<string, Set<string>>();
 
 function collectSourceFiles(dir: string): string[] {
   if (!existsSync(dir)) {
@@ -97,9 +87,9 @@ describe("production UI command current boundary", () => {
 
   it("组件、Hook 与 feature island 不应直接导入命令桥或 mock helper", () => {
     const offenders = readProductionUiSources().flatMap(({ path, source }) => {
-      const namedImportOffenders = [...source.matchAll(
-        DEV_BRIDGE_NAMED_IMPORT_PATTERN,
-      )].flatMap((match) =>
+      const namedImportOffenders = [
+        ...source.matchAll(DEV_BRIDGE_NAMED_IMPORT_PATTERN),
+      ].flatMap((match) =>
         importedNames(match[1])
           .filter((name) => FORBIDDEN_DIRECT_COMMAND_BRIDGE_IMPORTS.has(name))
           .map((name) => `${path}: ${name}`),

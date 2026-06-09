@@ -37,6 +37,20 @@ describe("sidebarSessionFormatting", () => {
     );
   });
 
+  it("兼容 App Server current 返回的毫秒级会话时间戳", () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
+
+    expect(
+      formatSidebarSessionMeta(
+        buildSession({
+          created_at: NOW_MS - 2 * 60 * 1000,
+          updated_at: NOW_MS - 2 * 60 * 1000,
+        }),
+        { locale: "zh-CN" },
+      ),
+    ).toBe("2分钟前");
+  });
+
   it("归档状态允许组件用 namespace 文案组合 meta", () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
 
@@ -51,6 +65,22 @@ describe("sidebarSessionFormatting", () => {
         },
       ),
     ).toBe("Archived 3h ago");
+  });
+
+  it("归档时间同样兼容毫秒级时间戳", () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
+
+    expect(
+      formatSidebarSessionMeta(
+        buildSession({
+          archived_at: NOW_MS - 3 * 60 * 60 * 1000,
+        }),
+        {
+          formatArchived: (time) => `归档 ${time}`,
+          locale: "zh-CN",
+        },
+      ),
+    ).toBe("归档 3小时前");
   });
 
   it("空标题使用调用方传入的本地化兜底", () => {

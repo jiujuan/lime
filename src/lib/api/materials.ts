@@ -1,5 +1,16 @@
-import { safeInvoke } from "@/lib/dev-bridge";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
+import {
+  APP_SERVER_METHOD_PROJECT_MATERIAL_CONTENT,
+  APP_SERVER_METHOD_PROJECT_MATERIAL_COUNT,
+  APP_SERVER_METHOD_PROJECT_MATERIAL_DELETE,
+  APP_SERVER_METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL,
+  APP_SERVER_METHOD_PROJECT_MATERIAL_LIST,
+  APP_SERVER_METHOD_PROJECT_MATERIAL_UPDATE,
+  APP_SERVER_METHOD_PROJECT_MATERIAL_UPLOAD,
+  createAppServerClient,
+  type AppServerProjectMaterial,
+  type AppServerProjectMaterialImportFromUrlParams,
+  type AppServerProjectMaterialUploadParams,
+} from "./appServer";
 import type {
   Material,
   MaterialFilter,
@@ -8,7 +19,8 @@ import type {
   UploadMaterialRequest,
 } from "@/types/material";
 
-type RawMaterial = Partial<Material> & {
+type RawMaterial = Partial<Omit<Material, "type">> & {
+  type?: string;
   material_type?: string;
   project_id?: string;
   file_path?: string;
@@ -40,13 +52,11 @@ const normalizeTimestampMs = (value?: number): number => {
 
 const buildUploadRequestPayload = (
   request: UploadMaterialRequest,
-): Record<string, unknown> => ({
+): AppServerProjectMaterialUploadParams => ({
   projectId: request.projectId,
-  project_id: request.projectId,
   name: request.name,
   type: request.type,
   filePath: request.filePath,
-  file_path: request.filePath,
   content: request.content,
   tags: request.tags ?? [],
   description: request.description,
@@ -54,9 +64,8 @@ const buildUploadRequestPayload = (
 
 const buildImportRequestPayload = (
   request: ImportMaterialFromUrlRequest,
-): Record<string, unknown> => ({
+): AppServerProjectMaterialImportFromUrlParams => ({
   projectId: request.projectId,
-  project_id: request.projectId,
   name: request.name,
   type: request.type,
   url: request.url,
@@ -69,7 +78,6 @@ const assertMaterialResult = (
   material: unknown,
   fallbackProjectId: string = "",
 ): Material => {
-  assertNotDiagnosticFacade(command, material, "真实 Materials current 通道");
   if (!material || typeof material !== "object") {
     throw new Error(`${command} did not return a material object`);
   }
@@ -78,7 +86,7 @@ const assertMaterialResult = (
 };
 
 export function normalizeMaterial(
-  material: RawMaterial,
+  material: RawMaterial | AppServerProjectMaterial,
   fallbackProjectId: string = "",
 ): Material {
   return {
@@ -102,37 +110,31 @@ export async function listMaterials(
   projectId: string,
   filter?: MaterialFilter | null,
 ): Promise<Material[]> {
-  const materials = await safeInvoke<RawMaterial[]>("list_materials", {
+  const response = await createAppServerClient().listProjectMaterials({
     projectId,
-    project_id: projectId,
     filter: filter ?? null,
   });
+  const materials = response.result.materials;
 
-  assertNotDiagnosticFacade(
-    "list_materials",
-    materials,
-    "真实 Materials current 通道",
-  );
   if (!Array.isArray(materials)) {
-    throw new Error("list_materials did not return a materials array");
+    throw new Error(
+      `${APP_SERVER_METHOD_PROJECT_MATERIAL_LIST} did not return a materials array`,
+    );
   }
 
   return materials.map((material) => normalizeMaterial(material, projectId));
 }
 
 export async function getMaterialCount(projectId: string): Promise<number> {
-  const count = await safeInvoke<number>("get_material_count", {
+  const response = await createAppServerClient().countProjectMaterials({
     projectId,
-    project_id: projectId,
   });
+  const count = response.result.count;
 
-  assertNotDiagnosticFacade(
-    "get_material_count",
-    count,
-    "真实 Materials current 通道",
-  );
   if (typeof count !== "number" || Number.isNaN(count)) {
-    throw new Error("get_material_count did not return a number");
+    throw new Error(
+      `${APP_SERVER_METHOD_PROJECT_MATERIAL_COUNT} did not return a number`,
+    );
   }
 
   return count;
@@ -141,62 +143,71 @@ export async function getMaterialCount(projectId: string): Promise<number> {
 export async function uploadMaterial(
   request: UploadMaterialRequest,
 ): Promise<Material> {
-  const material = await safeInvoke<RawMaterial>("upload_material", {
-    req: buildUploadRequestPayload(request),
-  });
-  return assertMaterialResult("upload_material", material, request.projectId);
+  const response = await createAppServerClient().uploadProjectMaterial(
+    buildUploadRequestPayload(request),
+  );
+  return assertMaterialResult(
+    APP_SERVER_METHOD_PROJECT_MATERIAL_UPLOAD,
+    response.result.material,
+    request.projectId,
+  );
 }
 
 export async function importMaterialFromUrl(
   request: ImportMaterialFromUrlRequest,
 ): Promise<ImportedMaterialRef> {
-  const result = await safeInvoke<ImportedMaterialRef>("import_material_from_url", {
-    req: buildImportRequestPayload(request),
-  });
-  assertNotDiagnosticFacade(
-    "import_material_from_url",
-    result,
-    "真实 Materials current 通道",
+  const response = await createAppServerClient().importProjectMaterialFromUrl(
+    buildImportRequestPayload(request),
   );
-  if (!result || typeof result.id !== "string") {
-    throw new Error("import_material_from_url did not return an imported material id");
+  const material = response.result.material;
+  if (!material || typeof material.id !== "string") {
+    throw new Error(
+      `${APP_SERVER_METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL} did not return an imported material id`,
+    );
   }
 
-  return result;
+  return { id: material.id };
 }
 
 export async function updateMaterial(
   id: string,
   update: MaterialUpdate,
 ): Promise<Material> {
-  const material = await safeInvoke<RawMaterial>("update_material", {
+  const response = await createAppServerClient().updateProjectMaterial({
     id,
     update,
   });
-  return assertMaterialResult("update_material", material);
+  return assertMaterialResult(
+    APP_SERVER_METHOD_PROJECT_MATERIAL_UPDATE,
+    response.result.material,
+  );
 }
 
 export async function deleteMaterial(id: string): Promise<void> {
-  const result = await safeInvoke<unknown>("delete_material", { id });
-  assertNotDiagnosticFacade(
-    "delete_material",
-    result,
-    "真实 Materials current 通道",
-  );
-  if (result !== null && result !== undefined) {
-    throw new Error("delete_material did not return void");
+  const response = await createAppServerClient().deleteProjectMaterial({ id });
+  const result = response.result;
+  if (
+    result !== null &&
+    result !== undefined &&
+    (typeof result !== "object" ||
+      Array.isArray(result) ||
+      Object.keys(result).length > 0)
+  ) {
+    throw new Error(
+      `${APP_SERVER_METHOD_PROJECT_MATERIAL_DELETE} did not return void`,
+    );
   }
 }
 
 export async function getMaterialContent(id: string): Promise<string> {
-  const content = await safeInvoke<string>("get_material_content", { id });
-  assertNotDiagnosticFacade(
-    "get_material_content",
-    content,
-    "真实 Materials current 通道",
-  );
+  const response = await createAppServerClient().readProjectMaterialContent({
+    id,
+  });
+  const content = response.result.content;
   if (typeof content !== "string") {
-    throw new Error("get_material_content did not return content text");
+    throw new Error(
+      `${APP_SERVER_METHOD_PROJECT_MATERIAL_CONTENT} did not return content text`,
+    );
   }
 
   return content;

@@ -160,23 +160,13 @@ export async function openExternalUrl(
   options: OpenExternalUrlOptions = {},
 ): Promise<void> {
   if (hasHostDesktopBridge()) {
-    let nativeOpenError: unknown = null;
     try {
       await openExternalUrlWithSystemBrowser(url);
       options.browserTarget?.close();
       return;
     } catch (error) {
-      nativeOpenError = error;
-    }
-
-    try {
-      const { open } = await import("@/lib/desktop-host/plugin-shell");
-      await open(url);
       options.browserTarget?.close();
-      return;
-    } catch (error) {
-      options.browserTarget?.close();
-      throw buildOpenExternalUrlError(nativeOpenError ?? error, options.copy);
+      throw buildOpenExternalUrlError(error, options.copy);
     }
   }
 
@@ -582,9 +572,7 @@ function subscribeOauthCallbackBridge(
       })
       .catch((error) => {
         onError(
-          error instanceof Error
-            ? error
-            : new Error("OAuth 本地回调同步失败"),
+          error instanceof Error ? error : new Error("OAuth 本地回调同步失败"),
         );
       });
   };

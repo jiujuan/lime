@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
 import { toast } from "sonner";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import {
   summarizeAgentUiProjectionEvents,
   type AgentUiProjectionTranslation,
@@ -36,15 +36,7 @@ export type { HarnessFilePreviewResult } from "./useHarnessPreviewDialog";
 export type { HarnessFileChangeReviewSummary } from "./useHarnessFileReviewState";
 
 async function openExternalUrl(url: string): Promise<void> {
-  try {
-    await openExternal(url);
-  } catch {
-    if (typeof window !== "undefined" && typeof window.open === "function") {
-      window.open(url, "_blank");
-      return;
-    }
-    throw new Error("当前环境不支持打开外部链接");
-  }
+  await openExternalUrlWithSystemBrowser(url);
 }
 
 export function HarnessStatusPanel({
@@ -108,11 +100,8 @@ export function HarnessStatusPanel({
     toolInventoryLoading,
   });
   const fileReviewState = useHarnessFileReviewState(harnessState);
-  const {
-    hasToolInventorySection,
-    runtimeToolTotal,
-    runtimeToolVisibleTotal,
-  } = toolInventoryModel;
+  const { hasToolInventorySection, runtimeToolTotal, runtimeToolVisibleTotal } =
+    toolInventoryModel;
   const {
     fileChangeReviewEntries,
     fileChangeReviewSummary,

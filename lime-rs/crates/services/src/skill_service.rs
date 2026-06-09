@@ -112,6 +112,12 @@ struct CatalogSkillRoot {
     path: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalSkillCatalogScope {
+    All,
+    User,
+}
+
 pub struct SkillService {
     client: Client,
     repo_cache: RwLock<HashMap<RepoCacheKey, RepoCacheEntry>>,
@@ -153,14 +159,23 @@ impl SkillService {
     }
 
     fn get_catalog_roots(app_type: &AppType) -> Result<Vec<CatalogSkillRoot>> {
+        Self::get_catalog_roots_for_scope(app_type, LocalSkillCatalogScope::All)
+    }
+
+    fn get_catalog_roots_for_scope(
+        app_type: &AppType,
+        scope: LocalSkillCatalogScope,
+    ) -> Result<Vec<CatalogSkillRoot>> {
         match app_type {
             AppType::Lime => {
                 let mut roots = Vec::new();
-                for project_dir in app_paths::resolve_lime_project_skill_roots() {
-                    roots.push(CatalogSkillRoot {
-                        source: SkillCatalogSource::Project,
-                        path: project_dir,
-                    });
+                if matches!(scope, LocalSkillCatalogScope::All) {
+                    for project_dir in app_paths::resolve_lime_project_skill_roots() {
+                        roots.push(CatalogSkillRoot {
+                            source: SkillCatalogSource::Project,
+                            path: project_dir,
+                        });
+                    }
                 }
                 for user_dir in app_paths::resolve_lime_user_skill_roots() {
                     roots.push(CatalogSkillRoot {
@@ -186,8 +201,21 @@ impl SkillService {
         app_type: &AppType,
         _installed_states: &HashMap<String, SkillState>,
     ) -> Result<Vec<Skill>> {
+        self.list_local_skills_with_scope(
+            app_type,
+            _installed_states,
+            LocalSkillCatalogScope::All,
+        )
+    }
+
+    pub fn list_local_skills_with_scope(
+        &self,
+        app_type: &AppType,
+        _installed_states: &HashMap<String, SkillState>,
+        scope: LocalSkillCatalogScope,
+    ) -> Result<Vec<Skill>> {
         let mut all_skills: HashMap<String, Skill> = HashMap::new();
-        let roots = Self::get_catalog_roots(app_type)?;
+        let roots = Self::get_catalog_roots_for_scope(app_type, scope)?;
         self.collect_local_skills(app_type, &roots, &mut all_skills)?;
 
         let mut skills: Vec<Skill> = all_skills.into_values().collect();
@@ -1475,7 +1503,7 @@ impl SkillService {
 
 #[cfg(test)]
 mod tests {
-    use super::{CatalogSkillRoot, SkillService};
+    use super::{CatalogSkillRoot, LocalSkillCatalogScope, SkillService};
     use lime_core::models::{AppType, SkillCatalogSource};
     use std::collections::HashMap;
     use std::io::{Cursor, Write};
@@ -1788,6 +1816,19 @@ metadata:
         let skill = all_skills.get("local:shared-skill").unwrap();
         assert_eq!(skill.name, "Project Skill");
         assert_eq!(skill.catalog_source, SkillCatalogSource::Project);
+    }
+
+    #[test]
+    fn user_scope_catalog_roots_should_exclude_project_roots() {
+        let roots = SkillService::get_catalog_roots_for_scope(
+            &AppType::Lime,
+            LocalSkillCatalogScope::User,
+        )
+        .expect("resolve user skill roots");
+
+        assert!(roots
+            .iter()
+            .all(|root| root.source == SkillCatalogSource::User));
     }
 
     #[test]

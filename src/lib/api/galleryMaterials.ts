@@ -1,4 +1,13 @@
-import { safeInvoke } from "@/lib/dev-bridge";
+import {
+  APP_SERVER_METHOD_GALLERY_MATERIAL_GET,
+  APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
+  APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
+  APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_MOOD,
+  APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_CREATE,
+  APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_DELETE,
+  APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_UPDATE,
+  createAppServerClient,
+} from "./appServer";
 import type {
   ColorMood,
   CreateGalleryMetadataRequest,
@@ -8,27 +17,8 @@ import type {
   LayoutCategory,
 } from "@/types/gallery-material";
 
-interface DiagnosticFacadeMeta {
-  category?: string;
-  source?: string;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
-}
-
-function getDiagnosticFacadeMeta(value: unknown): DiagnosticFacadeMeta | null {
-  const ownDiagnostic =
-    isRecord(value) && isRecord(value.diagnostic) ? value.diagnostic : null;
-  const arrayDiagnosticValue = Array.isArray(value)
-    ? (value as unknown[] & { __diagnostic?: unknown }).__diagnostic
-    : null;
-  const arrayDiagnostic = isRecord(arrayDiagnosticValue)
-    ? arrayDiagnosticValue
-    : null;
-  const diagnostic = ownDiagnostic ?? arrayDiagnostic;
-
-  return diagnostic ? (diagnostic as DiagnosticFacadeMeta) : null;
 }
 
 function assertNotErrorEnvelope(command: string, value: unknown): void {
@@ -41,20 +31,17 @@ function assertNotErrorEnvelope(command: string, value: unknown): void {
   }
 }
 
-async function invokeGalleryCommand<T>(
+function unwrapResponseField<T>(
   command: string,
-  args: Record<string, unknown>,
-): Promise<T> {
-  const result = await safeInvoke<unknown>(command, args);
-  const diagnostic = getDiagnosticFacadeMeta(result);
-  if (diagnostic) {
-    const source = diagnostic.source || diagnostic.category || "diagnostic";
-    throw new Error(
-      `${command} 尚未接入真实图库材料 current 通道，收到 ${source} 诊断返回。`,
-    );
+  response: unknown,
+  field: string,
+): T {
+  assertNotErrorEnvelope(command, response);
+  if (!isRecord(response) || !(field in response)) {
+    throw new Error(`${command} did not return ${field}`);
   }
+  const result = response[field];
   assertNotErrorEnvelope(command, result);
-
   return result as T;
 }
 
@@ -62,17 +49,16 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
-function isOptionalFiniteNumber(
-  value: unknown,
-): value is number | undefined {
+function isOptionalFiniteNumber(value: unknown): value is number | undefined {
   return (
-    value === undefined ||
-    (typeof value === "number" && Number.isFinite(value))
+    value === undefined || (typeof value === "number" && Number.isFinite(value))
   );
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isGalleryMaterialMetadata(
@@ -143,7 +129,11 @@ function assertGalleryMaterialList(
 }
 
 function assertVoidResult(command: string, value: unknown): void {
-  if (value !== undefined && value !== null) {
+  if (
+    value !== undefined &&
+    value !== null &&
+    (!isRecord(value) || Object.keys(value).length > 0)
+  ) {
     throw new Error(`${command} did not return void result`);
   }
 }
@@ -151,10 +141,16 @@ function assertVoidResult(command: string, value: unknown): void {
 export async function getGalleryMaterial(
   materialId: string,
 ): Promise<GalleryMaterial | null> {
-  const command = "get_gallery_material";
-  const result = await invokeGalleryCommand<unknown>(command, {
+  const command = APP_SERVER_METHOD_GALLERY_MATERIAL_GET;
+  const response = await createAppServerClient().getGalleryMaterial({
     materialId,
   });
+  assertNotErrorEnvelope(command, response.result);
+  const result =
+    isRecord(response.result) && "material" in response.result
+      ? response.result.material
+      : null;
+  assertNotErrorEnvelope(command, result);
   assertGalleryMaterialOrNull(command, result);
   return result;
 }
@@ -162,10 +158,14 @@ export async function getGalleryMaterial(
 export async function createGalleryMetadata(
   request: CreateGalleryMetadataRequest,
 ): Promise<GalleryMaterialMetadata> {
-  const command = "create_gallery_material_metadata";
-  const result = await invokeGalleryCommand<unknown>(command, {
-    req: request,
-  });
+  const command = APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_CREATE;
+  const response =
+    await createAppServerClient().createGalleryMaterialMetadata(request);
+  const result = unwrapResponseField<unknown>(
+    command,
+    response.result,
+    "metadata",
+  );
   assertGalleryMaterialMetadata(command, result);
   return result;
 }
@@ -174,32 +174,43 @@ export async function updateGalleryMetadata(
   materialId: string,
   request: CreateGalleryMetadataRequest,
 ): Promise<GalleryMaterialMetadata> {
-  const command = "update_gallery_material_metadata";
-  const result = await invokeGalleryCommand<unknown>(command, {
+  const command = APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_UPDATE;
+  const response = await createAppServerClient().updateGalleryMaterialMetadata({
     materialId,
-    req: request,
+    metadata: { ...request, materialId },
   });
+  const result = unwrapResponseField<unknown>(
+    command,
+    response.result,
+    "metadata",
+  );
   assertGalleryMaterialMetadata(command, result);
   return result;
 }
 
 export async function deleteGalleryMetadata(materialId: string): Promise<void> {
-  const command = "delete_gallery_material_metadata";
-  const result = await invokeGalleryCommand<unknown>(command, {
+  const command = APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_DELETE;
+  const response = await createAppServerClient().deleteGalleryMaterialMetadata({
     materialId,
   });
-  assertVoidResult(command, result);
+  assertVoidResult(command, response.result);
 }
 
 export async function listGalleryMaterialsByImageCategory(
   projectId: string,
   category?: ImageCategory | null,
 ): Promise<GalleryMaterial[]> {
-  const command = "list_gallery_materials_by_image_category";
-  const result = await invokeGalleryCommand<unknown>(command, {
-    projectId,
-    category: category ?? null,
-  });
+  const command = APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY;
+  const response =
+    await createAppServerClient().listGalleryMaterialsByImageCategory({
+      projectId,
+      category: category ?? null,
+    });
+  const result = unwrapResponseField<unknown>(
+    command,
+    response.result,
+    "materials",
+  );
   assertGalleryMaterialList(command, result);
   return result;
 }
@@ -208,11 +219,17 @@ export async function listGalleryMaterialsByLayoutCategory(
   projectId: string,
   category?: LayoutCategory | null,
 ): Promise<GalleryMaterial[]> {
-  const command = "list_gallery_materials_by_layout_category";
-  const result = await invokeGalleryCommand<unknown>(command, {
-    projectId,
-    category: category ?? null,
-  });
+  const command = APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY;
+  const response =
+    await createAppServerClient().listGalleryMaterialsByLayoutCategory({
+      projectId,
+      category: category ?? null,
+    });
+  const result = unwrapResponseField<unknown>(
+    command,
+    response.result,
+    "materials",
+  );
   assertGalleryMaterialList(command, result);
   return result;
 }
@@ -221,11 +238,16 @@ export async function listGalleryMaterialsByMood(
   projectId: string,
   mood?: ColorMood | null,
 ): Promise<GalleryMaterial[]> {
-  const command = "list_gallery_materials_by_mood";
-  const result = await invokeGalleryCommand<unknown>(command, {
+  const command = APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_MOOD;
+  const response = await createAppServerClient().listGalleryMaterialsByMood({
     projectId,
     mood: mood ?? null,
   });
+  const result = unwrapResponseField<unknown>(
+    command,
+    response.result,
+    "materials",
+  );
   assertGalleryMaterialList(command, result);
   return result;
 }

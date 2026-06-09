@@ -11,10 +11,11 @@ import {
 const {
   mockCloseAgentRuntimeSubagent,
   mockInputbar,
+  mockToast,
 } = getIndexTestMocks();
 
 describe("AgentChatPage 停止 Team 协作", () => {
-  it("点击停止时应一并暂停仍在运行或排队的 Team 子会话", async () => {
+  it("点击停止时只停止主输出，迁移期不再调用旧子任务控制 facade", async () => {
     const stopSendingMock = vi.fn(async () => undefined);
 
     installMockAgentChatUnifiedState(
@@ -81,12 +82,8 @@ describe("AgentChatPage 停止 Team 协作", () => {
     await flushEffects();
 
     expect(stopSendingMock).toHaveBeenCalledTimes(1);
-    expect(mockCloseAgentRuntimeSubagent).toHaveBeenCalledTimes(2);
-    expect(mockCloseAgentRuntimeSubagent).toHaveBeenNthCalledWith(1, {
-      id: "child-session-running",
-    });
-    expect(mockCloseAgentRuntimeSubagent).toHaveBeenNthCalledWith(2, {
-      id: "child-session-queued",
-    });
+    expect(mockCloseAgentRuntimeSubagent).not.toHaveBeenCalled();
+    expect(mockToast.info).toHaveBeenCalledTimes(1);
+    expect(mockToast.info.mock.calls[0]?.[0]).toBeTypeOf("string");
   });
 });

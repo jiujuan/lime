@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "auto_extracted",
+    "imported",
+    "manual"
+  ],
+  "title": "UnifiedMemorySource",
+  "type": "string"
+}

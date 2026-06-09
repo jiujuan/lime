@@ -230,17 +230,17 @@ describe("mockPriorityCommands", () => {
     ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("get_model_registry_provider_ids"),
-    ).toBe(true);
+    ).toBe(false);
     expect(shouldPreferMockInBrowser("session_files_save_file")).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("session_files_save_file")).toBe(
-      true,
+      false,
     );
     expect(shouldDisallowMockFallbackInBrowser("read_file_preview_cmd")).toBe(
       false,
     );
     expect(
       shouldDisallowMockFallbackInBrowser("session_files_resolve_file_path"),
-    ).toBe(true);
+    ).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("list_dir")).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("get_file_manager_locations"),
@@ -252,7 +252,7 @@ describe("mockPriorityCommands", () => {
     expect(shouldDisallowMockFallbackInBrowser("open_with_default_app")).toBe(
       false,
     );
-    expect(shouldDisallowMockFallbackInBrowser("upload_material")).toBe(true);
+    expect(shouldDisallowMockFallbackInBrowser("upload_material")).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser(
         "create_image_generation_task_artifact",
@@ -274,6 +274,9 @@ describe("mockPriorityCommands", () => {
     expect(shouldDisallowMockFallbackInBrowser("voice_models_download")).toBe(
       true,
     );
+    expect(
+      shouldDisallowMockFallbackInBrowser("voice_models_test_transcribe_file"),
+    ).toBe(false);
   });
 
   it("Skill 管理旧 facade 退役后不再进入浏览器 mock fallback 策略", () => {

@@ -1,3 +1,5 @@
+import type { MouseEvent } from "react";
+
 /**
  * @file Connect 确认弹窗组件
  * @description 显示中转商信息和脱敏 API Key，让用户确认添加
@@ -17,6 +19,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { maskApiKey } from "@/lib/utils/apiKeyMask";
 import type { RelayInfo, ConnectError } from "@/hooks/useDeepLink";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 
 /**
  * ConnectConfirmDialog 组件属性
@@ -49,6 +55,17 @@ export interface ConnectConfirmDialogProps {
  * _Requirements: 6.1, 6.2_
  */
 function VerifiedProviderInfo({ relay }: { relay: RelayInfo }) {
+  const homepageHref = relay.links.homepage;
+  const homepageRel = resolveHttpExternalHref(homepageHref)
+    ? "noreferrer noopener"
+    : undefined;
+  const handleHomepageClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    interceptHttpExternalLinkClick(event, homepageHref);
+  };
+  const handleHomepageAuxClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    interceptHttpExternalLinkClick(event, homepageHref);
+  };
+
   return (
     <div className="flex items-center gap-4 rounded-xl border border-emerald-200 bg-[linear-gradient(135deg,rgba(240,253,250,0.98)_0%,rgba(224,242,254,0.95)_100%)] p-4">
       {/* Logo */}
@@ -84,11 +101,12 @@ function VerifiedProviderInfo({ relay }: { relay: RelayInfo }) {
         <p className="text-sm text-gray-600 mt-1 line-clamp-2">
           {relay.description}
         </p>
-        {relay.links.homepage && (
+        {homepageHref && (
           <a
-            href={relay.links.homepage}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={homepageHref}
+            rel={homepageRel}
+            onAuxClick={handleHomepageAuxClick}
+            onClick={handleHomepageClick}
             className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-800 hover:underline"
           >
             访问官网

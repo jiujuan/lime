@@ -545,14 +545,14 @@ describe("legacySurfaceCatalog", () => {
 
   it("应将旧海报素材命令与 helper 收敛到图库主链", () => {
     expect(agentCommandCatalog.deprecatedCommandReplacements).toMatchObject({
-      create_poster_metadata: "create_gallery_material_metadata",
-      get_poster_metadata: "get_gallery_material_metadata",
-      get_poster_material: "get_gallery_material",
-      update_poster_metadata: "update_gallery_material_metadata",
-      delete_poster_metadata: "delete_gallery_material_metadata",
-      list_by_image_category: "list_gallery_materials_by_image_category",
-      list_by_layout_category: "list_gallery_materials_by_layout_category",
-      list_by_mood: "list_gallery_materials_by_mood",
+      create_poster_metadata: "galleryMaterialMetadata/create",
+      get_poster_metadata: "galleryMaterialMetadata/get",
+      get_poster_material: "galleryMaterial/get",
+      update_poster_metadata: "galleryMaterialMetadata/update",
+      delete_poster_metadata: "galleryMaterialMetadata/delete",
+      list_by_image_category: "galleryMaterial/listByImageCategory",
+      list_by_layout_category: "galleryMaterial/listByLayoutCategory",
+      list_by_mood: "galleryMaterial/listByMood",
     });
     expect(agentCommandCatalog.deprecatedHelperReplacements).toMatchObject({
       getPosterMaterial: "getGalleryMaterial",

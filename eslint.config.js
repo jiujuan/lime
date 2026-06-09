@@ -802,12 +802,6 @@ const contextMemoryCommandSelectors = [
 
 const asrProviderCommandSelectors = [
   "list_audio_devices",
-  "get_asr_credentials",
-  "add_asr_credential",
-  "update_asr_credential",
-  "delete_asr_credential",
-  "set_default_asr_credential",
-  "test_asr_credential",
   "get_voice_input_config",
   "save_voice_input_config",
   "get_voice_instructions",

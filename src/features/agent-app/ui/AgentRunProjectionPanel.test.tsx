@@ -3,6 +3,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { buildAgentAppAgentUiProjectionEvents } from "../runtime/agentUiProjectionBridge";
+import {
+  buildAgentRunStandardProjectionStateFromState,
+} from "../runtime/agentRunProjectionState";
 import { buildAgentAppRunProjectionViewModel } from "../runtime/agentUiProjectionViewModel";
 import {
   AgentRunProjectionPanel,
@@ -68,10 +71,19 @@ function renderPanel(
     events,
   });
   const view = buildAgentAppRunProjectionViewModel(projectionEvents);
+  const standardState = buildAgentRunStandardProjectionStateFromState({
+    taskId: "task-panel",
+    taskEvents: events,
+  });
 
   act(() => {
     root.render(
-      <AgentRunProjectionPanel view={view} labels={labels} {...props} />,
+      <AgentRunProjectionPanel
+        view={view}
+        standardState={standardState}
+        labels={labels}
+        {...props}
+      />,
     );
   });
 
@@ -117,6 +129,15 @@ describe("AgentRunProjectionPanel", () => {
     expect(container.textContent).toContain("Skill");
     expect(container.textContent).toContain("成稿输出");
     expect(container.textContent).toContain("工具");
+    expect(
+      container.querySelector("[data-testid='agent-run-standard-projection']"),
+    ).not.toBeNull();
+    expect(container.querySelector(".agent-ui-projection")).not.toBeNull();
+    expect(container.querySelector(".agent-ui-main")).not.toBeNull();
+    expect(container.querySelector(".agent-ui-sidecar")).not.toBeNull();
+    expect(container.querySelector(".agent-message-parts")).not.toBeNull();
+    expect(container.querySelector(".agent-process-timeline")).not.toBeNull();
+    expect(container.querySelector(".agent-execution-graph")).not.toBeNull();
     const details = Array.from(container.querySelectorAll("details"));
     expect(details.map((detail) => detail.open)).toEqual([true, true, true]);
   });
@@ -342,6 +363,47 @@ describe("AgentRunProjectionPanel", () => {
       actionId: "approval-1",
       taskId: "task-panel",
       control: "reject",
+    });
+  });
+
+  it("标准 AgentUiProjectionView action 也回到宿主 action callback", () => {
+    let submitted:
+      | { actionId: string; taskId?: string; control: string }
+      | null = null;
+    const container = renderPanel(
+      [
+        {
+          id: "approval-required",
+          eventType: "task:reviewRequested",
+          status: "pending",
+          requestId: "approval-1",
+          message: "需要确认发布范围",
+        },
+      ],
+      {
+        onAction: (action, control) => {
+          submitted = {
+            actionId: action.actionId,
+            taskId: action.taskId,
+            control,
+          };
+        },
+      },
+    );
+
+    const standardActionButton = container.querySelector(".agent-event-action");
+
+    expect(standardActionButton?.textContent).toBe("处理");
+    act(() => {
+      standardActionButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(submitted).toEqual({
+      actionId: "approval-1",
+      taskId: "task-panel",
+      control: "approve",
     });
   });
 

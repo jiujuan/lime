@@ -247,6 +247,20 @@ function normalizeStringList(value: string[] | null | undefined): string[] {
     : [];
 }
 
+function isLocalManagedSkill(skill: Skill): boolean {
+  if (skill.catalogSource === "project") {
+    return false;
+  }
+  if (skill.catalogSource === "remote") {
+    return false;
+  }
+  return !(
+    skill.catalogSource === undefined &&
+    skill.repoOwner &&
+    skill.repoName
+  );
+}
+
 function normalizeOptionalPath(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -398,6 +412,15 @@ function assertSkillRepositoryListResult(
   }
 }
 
+function assertSkillListResult(
+  command: string,
+  value: unknown,
+): asserts value is { skills: Skill[] } {
+  if (!isRecord(value) || !Array.isArray(value.skills)) {
+    throw new Error(`${command} did not return skills`);
+  }
+}
+
 function assertInstalledSkillDirectoriesResult(
   command: string,
   value: unknown,
@@ -450,26 +473,30 @@ function isSkillPackageFileAssociationApplyResult(
 
 export const skillsApi = {
   async getLocal(app: AppType = "lime"): Promise<Skill[]> {
-    const skills = await invokeSkillsCommand<Skill[]>(
-      "get_local_skills_for_app",
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_MANAGEMENT_LIST,
       {
         app,
-      },
+        refreshRemote: false,
+        scope: "user",
+      } satisfies SkillManagementListParams,
     );
-    return normalizeSkills(skills);
+    assertSkillListResult(METHOD_SKILL_MANAGEMENT_LIST, result);
+    return normalizeSkills(result.skills).filter(isLocalManagedSkill);
   },
 
   async getAll(
     app: AppType = "lime",
     options?: { refreshRemote?: boolean },
   ): Promise<Skill[]> {
-    const result = await requestSkillAppServer<{ skills: Skill[] }>(
+    const result = await requestSkillAppServer<unknown>(
       METHOD_SKILL_MANAGEMENT_LIST,
       {
         app,
         refreshRemote: options?.refreshRemote ?? false,
       } satisfies SkillManagementListParams,
     );
+    assertSkillListResult(METHOD_SKILL_MANAGEMENT_LIST, result);
     return normalizeSkills(result.skills);
   },
 
@@ -487,10 +514,7 @@ export const skillsApi = {
       METHOD_SKILL_MANAGEMENT_UNINSTALL,
       { app, directory } satisfies SkillManagementUninstallParams,
     );
-    assertSkillManagementWriteResult(
-      METHOD_SKILL_MANAGEMENT_UNINSTALL,
-      result,
-    );
+    assertSkillManagementWriteResult(METHOD_SKILL_MANAGEMENT_UNINSTALL, result);
     return true;
   },
 
@@ -593,7 +617,13 @@ export const skillsApi = {
     app: AppType = "lime",
   ): Promise<boolean> {
     const normalizedDirectory = directory.trim();
-    const skill = (await this.getLocal(app)).find(
+    const skills = await invokeSkillsCommand<Skill[]>(
+      "get_local_skills_for_app",
+      {
+        app,
+      },
+    );
+    const skill = normalizeSkills(skills).find(
       (item) => item.directory === normalizedDirectory,
     );
     const localDirectoryPath = normalizeOptionalPath(skill?.localDirectoryPath);
@@ -796,7 +826,10 @@ export const skillsApi = {
         downloadUrl: request.downloadUrl,
       } satisfies SkillDownloadInstallParams,
     );
-    assertSkillMarketplaceInstallResult(METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL, result);
+    assertSkillMarketplaceInstallResult(
+      METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL,
+      result,
+    );
     return {
       ...result,
       inspection: normalizeInspection(result.inspection),

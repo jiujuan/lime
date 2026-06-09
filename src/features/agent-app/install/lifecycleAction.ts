@@ -9,7 +9,10 @@ import {
   type AgentAppCleanupResidualAuditSummary,
 } from "./cleanupResidualAudit";
 
-export type AgentAppLifecycleActionKind = "disable" | "enable" | "uninstall-rehearsal";
+export type AgentAppLifecycleActionKind =
+  | "disable"
+  | "enable"
+  | "uninstall-rehearsal";
 export type AgentAppLifecycleActionStatus = "ready" | "noop" | "blocked";
 export type AgentAppLifecycleCompletionEffect =
   | "set-disabled"
@@ -39,8 +42,7 @@ export interface AgentAppLifecycleToggleDescriptor extends AgentAppLifecycleActi
   };
 }
 
-export interface AgentAppLifecycleUninstallRehearsalDescriptor
-  extends AgentAppLifecycleActionBase {
+export interface AgentAppLifecycleUninstallRehearsalDescriptor extends AgentAppLifecycleActionBase {
   action: "uninstall-rehearsal";
   mode: AgentAppCleanupRehearsalStrategy;
   realDeleteAllowed: false;
@@ -172,26 +174,30 @@ export function buildAgentAppLifecycleUninstallRehearsalDescriptor(params: {
   };
 }
 
-export function buildAgentAppLifecycleActionDescriptor(params:
-  | {
-      state: InstalledAgentAppState;
-      action: "disable" | "enable";
-      generatedAt?: string;
-    }
-  | {
-      state: InstalledAgentAppState;
-      action: "uninstall-rehearsal";
-      cleanupPlan: AppCleanupPlan;
-      mode: AgentAppCleanupRehearsalStrategy;
-      generatedAt?: string;
-    }): AgentAppLifecycleActionDescriptor {
+export function buildAgentAppLifecycleActionDescriptor(
+  params:
+    | {
+        state: InstalledAgentAppState;
+        action: "disable" | "enable";
+        generatedAt?: string;
+      }
+    | {
+        state: InstalledAgentAppState;
+        action: "uninstall-rehearsal";
+        cleanupPlan: AppCleanupPlan;
+        mode: AgentAppCleanupRehearsalStrategy;
+        generatedAt?: string;
+      },
+): AgentAppLifecycleActionDescriptor {
   if (params.action === "uninstall-rehearsal") {
     return buildAgentAppLifecycleUninstallRehearsalDescriptor(params);
   }
   return buildAgentAppLifecycleToggleDescriptor(params);
 }
 
-export function buildAgentAppLifecycleLaunchGate(state: InstalledAgentAppState):
+export function buildAgentAppLifecycleLaunchGate(
+  state: InstalledAgentAppState,
+):
   | {
       allowed: true;
       appId: string;

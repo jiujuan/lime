@@ -1,30 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockHasDesktopHostInvokeCapability, mockWebviewWindow, mockGetByLabel } =
-  vi.hoisted(() => {
-    const ctor = vi.fn().mockImplementation(function (
-      this: {
-        label: string;
-        options: Record<string, unknown>;
-        once: (event: string, handler: () => void) => Promise<() => void>;
-      },
-      label: string,
-      options: Record<string, unknown>,
-    ) {
-      this.label = label;
-      this.options = options;
-      this.once = vi.fn((_event: string, handler: () => void) => {
-        handler();
-        return Promise.resolve(() => undefined);
-      });
+const {
+  mockHasDesktopHostInvokeCapability,
+  mockWebviewWindow,
+  mockGetByLabel,
+} = vi.hoisted(() => {
+  const ctor = vi.fn().mockImplementation(function (
+    this: {
+      label: string;
+      options: Record<string, unknown>;
+      once: (event: string, handler: () => void) => Promise<() => void>;
+    },
+    label: string,
+    options: Record<string, unknown>,
+  ) {
+    this.label = label;
+    this.options = options;
+    this.once = vi.fn((_event: string, handler: () => void) => {
+      handler();
+      return Promise.resolve(() => undefined);
     });
-
-    return {
-      mockHasDesktopHostInvokeCapability: vi.fn(),
-      mockWebviewWindow: ctor,
-      mockGetByLabel: vi.fn(),
-    };
   });
+
+  return {
+    mockHasDesktopHostInvokeCapability: vi.fn(),
+    mockWebviewWindow: ctor,
+    mockGetByLabel: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/desktop-runtime", () => ({
   hasDesktopHostInvokeCapability: mockHasDesktopHostInvokeCapability,
@@ -131,5 +134,22 @@ describe("openResourceManager", () => {
     expect(existingWindow.show).toHaveBeenCalledTimes(1);
     expect(existingWindow.setFocus).toHaveBeenCalledTimes(1);
     expect(mockWebviewWindow).not.toHaveBeenCalled();
+  });
+
+  it("Desktop Host 独立窗口失败时应抛错且不回退 window.open", async () => {
+    mockHasDesktopHostInvokeCapability.mockReturnValue(true);
+    mockWebviewWindow.mockImplementationOnce(() => {
+      throw new Error("window bridge unavailable");
+    });
+
+    await expect(
+      openResourceManager({
+        items: [{ src: "https://example.com/a.png", kind: "image" }],
+      }),
+    ).rejects.toThrow(
+      "Desktop Host 独立资源管理器窗口打开失败：window bridge unavailable",
+    );
+
+    expect(window.open).not.toHaveBeenCalled();
   });
 });

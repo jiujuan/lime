@@ -155,6 +155,9 @@ describe("EmptyStateComposerPanel", () => {
       planEnabled: false,
       subagentEnabled: false,
     });
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement).value,
+    ).toBe("");
   });
 
   it("发送准备中应禁用首页发送入口并展示忙碌态", () => {

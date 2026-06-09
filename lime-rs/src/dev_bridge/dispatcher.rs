@@ -7,12 +7,9 @@ mod browser;
 mod content;
 mod files;
 mod logs;
-mod memory;
 mod memory_runtime;
 mod models;
-mod project_resources;
 mod skills;
-mod voice;
 mod workspace;
 
 use crate::dev_bridge::DevBridgeState;
@@ -89,10 +86,6 @@ pub async fn handle_command(
         return Ok(result);
     }
 
-    if let Some(result) = voice::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
     if let Some(result) = browser::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
@@ -117,14 +110,6 @@ pub async fn handle_command(
         return Ok(result);
     }
 
-    if let Some(result) = project_resources::try_handle(state, cmd, args.as_ref())? {
-        return Ok(result);
-    }
-
-    if let Some(result) = memory::try_handle(state, cmd, args.as_ref())? {
-        return Ok(result);
-    }
-
     if let Some(result) = skills::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
@@ -145,7 +130,6 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
     use tokio::sync::RwLock;
-    use uuid::Uuid;
 
     fn make_test_db() -> crate::database::DbConnection {
         let conn = Connection::open_in_memory().unwrap();
@@ -306,15 +290,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_files_save_file_command_is_bridged() {
+    async fn session_files_save_file_command_is_retired() {
         let state = make_test_state();
-        let session_id = format!("devbridge-session-{}", Uuid::new_v4());
-
-        let value = handle_command(
+        let error = handle_command(
             &state,
             "session_files_save_file",
             Some(serde_json::json!({
-                "sessionId": session_id,
+                "sessionId": "devbridge-session-retired",
                 "fileName": "notes/outline.md",
                 "content": "# 三国群像",
                 "metadata": {
@@ -323,76 +305,37 @@ mod tests {
             })),
         )
         .await
-        .unwrap();
+        .expect_err("retired session files command should be unknown");
 
-        assert_eq!(value["name"], "notes/outline.md");
-        assert_eq!(value["fileType"], "document");
-        assert_eq!(value["metadata"]["source"], "workspace-inline");
-
-        let storage = crate::session_files::SessionFileStorage::new().unwrap();
-        let saved = storage
-            .read_file(&session_id, "notes/outline.md")
-            .expect("saved file should be readable");
-        assert_eq!(saved, "# 三国群像");
-
-        let _ = storage.delete_session(&session_id);
+        assert!(error.to_string().contains("[DevBridge] 未知命令"));
     }
 
     #[tokio::test]
-    async fn session_files_resolve_file_path_command_is_bridged() {
+    async fn session_files_resolve_file_path_command_is_retired() {
         let state = make_test_state();
-        let session_id = format!("devbridge-session-{}", Uuid::new_v4());
-        let storage = crate::session_files::SessionFileStorage::new().unwrap();
-
-        storage
-            .save_file(&session_id, "notes/outline.md", "三国群像分镜")
-            .unwrap();
-
-        let value = handle_command(
+        let error = handle_command(
             &state,
             "session_files_resolve_file_path",
             Some(serde_json::json!({
-                "sessionId": session_id,
+                "sessionId": "devbridge-session-retired",
                 "fileName": "notes/outline.md"
             })),
         )
         .await
-        .unwrap();
+        .expect_err("retired session files command should be unknown");
 
-        let resolved_path = value.as_str().unwrap();
-        assert!(resolved_path.ends_with("notes/outline.md"));
-        assert!(std::path::Path::new(resolved_path).exists());
-
-        let _ = storage.delete_session(&session_id);
+        assert!(error.to_string().contains("[DevBridge] 未知命令"));
     }
 
     #[tokio::test]
-    async fn upload_material_command_is_bridged() {
+    async fn upload_material_command_is_retired() {
         let state = make_test_state();
-        let temp_dir = TempDir::new().unwrap();
-        let root_path = temp_dir.path().join("material-project");
-
-        let workspace_value = handle_command(
-            &state,
-            "workspace_create",
-            Some(serde_json::json!({
-                "request": {
-                    "name": "素材项目",
-                    "rootPath": root_path.to_string_lossy().to_string(),
-                    "workspaceType": "general"
-                }
-            })),
-        )
-        .await
-        .unwrap();
-        let workspace_id = workspace_value["id"].as_str().unwrap().to_string();
-
-        let value = handle_command(
+        let error = handle_command(
             &state,
             "upload_material",
             Some(serde_json::json!({
                 "req": {
-                    "projectId": workspace_id,
+                    "projectId": "project-1",
                     "name": "三国人物设定.txt",
                     "type": "text",
                     "content": "刘备、关羽、张飞、诸葛亮、曹操、孙权"
@@ -400,12 +343,9 @@ mod tests {
             })),
         )
         .await
-        .unwrap();
+        .expect_err("retired material command should be unknown");
 
-        assert_eq!(value["name"], "三国人物设定.txt");
-        assert_eq!(value["type"], "text");
-        assert_eq!(value["content"], "刘备、关羽、张飞、诸葛亮、曹操、孙权");
-        assert!(value["id"].as_str().is_some());
+        assert!(error.to_string().contains("[DevBridge] 未知命令"));
     }
 
     #[tokio::test]

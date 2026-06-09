@@ -14,7 +14,7 @@ const {
   mockListenUpdateInstallSession,
   mockRecordUpdateNotificationAction,
   mockRemindUpdateLater,
-  mockShellOpen,
+  mockOpenExternalUrlWithSystemBrowser,
   mockStartUpdateInstallSession,
 } = vi.hoisted(() => ({
   mockCloseUpdateWindow: vi.fn(async () => undefined),
@@ -25,9 +25,9 @@ const {
     startDragging: vi.fn(async () => undefined),
   })),
   mockListenUpdateInstallSession: vi.fn(),
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(async () => undefined),
   mockRecordUpdateNotificationAction: vi.fn(async () => undefined),
   mockRemindUpdateLater: vi.fn(async () => undefined),
-  mockShellOpen: vi.fn(async () => undefined),
   mockStartUpdateInstallSession: vi.fn(),
 }));
 
@@ -35,8 +35,8 @@ vi.mock("@/lib/desktop-host/window", () => ({
   getCurrentWindow: mockGetCurrentWindow,
 }));
 
-vi.mock("@/lib/desktop-host/plugin-shell", () => ({
-  open: mockShellOpen,
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
 }));
 
 vi.mock("@/lib/api/appUpdate", () => ({
@@ -151,6 +151,7 @@ beforeEach(async () => {
     }),
   );
   mockListenUpdateInstallSession.mockResolvedValue(vi.fn());
+  mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
   mockStartUpdateInstallSession.mockResolvedValue(createInstallSession());
 });
 
@@ -249,5 +250,31 @@ describe("UpdateNotificationPage", () => {
     expect(container.querySelector('[role="progressbar"]')).toBeInstanceOf(
       HTMLDivElement,
     );
+  });
+
+  it("启动更新安装失败时应通过 current 外链网关打开下载地址且不回退 window.open", async () => {
+    mockStartUpdateInstallSession.mockRejectedValueOnce(
+      new Error("install session unavailable"),
+    );
+    const windowOpenSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    const container = await renderUpdateNotification(
+      "/update-notification?current=1.0.0&latest=1.2.0&download_url=https%3A%2F%2Fexample.com%2Frelease",
+    );
+
+    await act(async () => {
+      findButtonByText(container, "Update now").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockRecordUpdateNotificationAction).toHaveBeenCalledWith(
+      "update_now",
+    );
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://example.com/release",
+    );
+    expect(windowOpenSpy).not.toHaveBeenCalled();
   });
 });

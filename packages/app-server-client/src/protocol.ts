@@ -51,6 +51,13 @@ export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =
   "agentSession/fileCheckpoint/diff";
 export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE =
   "agentSession/fileCheckpoint/restore";
+export const METHOD_SESSION_FILE_GET_OR_CREATE = "sessionFile/getOrCreate";
+export const METHOD_SESSION_FILE_UPDATE_META = "sessionFile/updateMeta";
+export const METHOD_SESSION_FILE_SAVE = "sessionFile/save";
+export const METHOD_SESSION_FILE_READ = "sessionFile/read";
+export const METHOD_SESSION_FILE_RESOLVE_PATH = "sessionFile/resolvePath";
+export const METHOD_SESSION_FILE_DELETE = "sessionFile/delete";
+export const METHOD_SESSION_FILE_LIST = "sessionFile/list";
 export const METHOD_WORKSPACE_LIST = "workspace/list";
 export const METHOD_WORKSPACE_READ = "workspace/read";
 export const METHOD_WORKSPACE_BY_PATH_READ = "workspace/byPath/read";
@@ -74,8 +81,7 @@ export const METHOD_SKILL_INSTALLED_DIRECTORIES_LIST =
   "skillInstalledDirectories/list";
 export const METHOD_SKILL_LOCAL_INSPECT = "skillLocal/inspect";
 export const METHOD_SKILL_LOCAL_DETAIL_INSPECT = "skillLocal/detail/inspect";
-export const METHOD_SKILL_LOCAL_SCAFFOLD_CREATE =
-  "skillLocal/scaffold/create";
+export const METHOD_SKILL_LOCAL_SCAFFOLD_CREATE = "skillLocal/scaffold/create";
 export const METHOD_SKILL_LOCAL_IMPORT = "skillLocal/import";
 export const METHOD_SKILL_LOCAL_RENAME = "skillLocal/rename";
 export const METHOD_SKILL_REMOTE_INSPECT = "skillRemote/inspect";
@@ -84,7 +90,8 @@ export const METHOD_SKILL_PACKAGE_LOCAL_INSTALL = "skillPackage/local/install";
 export const METHOD_SKILL_PACKAGE_LOCAL_REPLACE = "skillPackage/local/replace";
 export const METHOD_SKILL_PACKAGE_EXPORT = "skillPackage/export";
 export const METHOD_SKILL_MARKETPLACE_INSTALL = "skillMarketplace/install";
-export const METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL = "skillPackage/download/install";
+export const METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL =
+  "skillPackage/download/install";
 export const METHOD_WORKSPACE_SKILL_BINDINGS_LIST =
   "workspaceSkillBindings/list";
 export const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST =
@@ -151,6 +158,17 @@ export const METHOD_MCP_PROMPT_GET = "mcpPrompt/get";
 export const METHOD_MCP_RESOURCE_LIST = "mcpResource/list";
 export const METHOD_MCP_RESOURCE_READ = "mcpResource/read";
 export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
+export const METHOD_UNIFIED_MEMORY_LIST = "unifiedMemory/list";
+export const METHOD_UNIFIED_MEMORY_GET = "unifiedMemory/get";
+export const METHOD_UNIFIED_MEMORY_CREATE = "unifiedMemory/create";
+export const METHOD_UNIFIED_MEMORY_UPDATE = "unifiedMemory/update";
+export const METHOD_UNIFIED_MEMORY_DELETE = "unifiedMemory/delete";
+export const METHOD_UNIFIED_MEMORY_SEARCH = "unifiedMemory/search";
+export const METHOD_UNIFIED_MEMORY_STATS = "unifiedMemory/stats";
+export const METHOD_UNIFIED_MEMORY_ANALYZE = "unifiedMemory/analyze";
+export const METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH =
+  "unifiedMemory/semanticSearch";
+export const METHOD_UNIFIED_MEMORY_HYBRID_SEARCH = "unifiedMemory/hybridSearch";
 export const METHOD_LOG_LIST = "log/list";
 export const METHOD_LOG_PERSISTED_TAIL = "log/persistedTail";
 export const METHOD_LOG_CLEAR = "log/clear";
@@ -172,8 +190,7 @@ export const METHOD_DISCORD_CHANNEL_PROBE = "discordChannel/probe";
 export const METHOD_WECHAT_CHANNEL_PROBE = "wechatChannel/probe";
 export const METHOD_WECHAT_CHANNEL_LOGIN_START = "wechatChannel/login/start";
 export const METHOD_WECHAT_CHANNEL_LOGIN_WAIT = "wechatChannel/login/wait";
-export const METHOD_WECHAT_CHANNEL_ACCOUNT_LIST =
-  "wechatChannel/accounts/list";
+export const METHOD_WECHAT_CHANNEL_ACCOUNT_LIST = "wechatChannel/accounts/list";
 export const METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE =
   "wechatChannel/account/remove";
 export const METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET =
@@ -194,11 +211,50 @@ export const METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE =
   "mediaTaskArtifact/image/create";
 export const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE =
   "mediaTaskArtifact/audio/create";
+export const METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE =
+  "mediaTaskArtifact/video/create";
 export const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE =
   "mediaTaskArtifact/audio/complete";
 export const METHOD_MEDIA_TASK_ARTIFACT_GET = "mediaTaskArtifact/get";
 export const METHOD_MEDIA_TASK_ARTIFACT_LIST = "mediaTaskArtifact/list";
 export const METHOD_MEDIA_TASK_ARTIFACT_CANCEL = "mediaTaskArtifact/cancel";
+export const METHOD_GALLERY_MATERIAL_GET = "galleryMaterial/get";
+export const METHOD_GALLERY_MATERIAL_METADATA_CREATE =
+  "galleryMaterialMetadata/create";
+export const METHOD_GALLERY_MATERIAL_METADATA_GET =
+  "galleryMaterialMetadata/get";
+export const METHOD_GALLERY_MATERIAL_METADATA_UPDATE =
+  "galleryMaterialMetadata/update";
+export const METHOD_GALLERY_MATERIAL_METADATA_DELETE =
+  "galleryMaterialMetadata/delete";
+export const METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY =
+  "galleryMaterial/listByImageCategory";
+export const METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY =
+  "galleryMaterial/listByLayoutCategory";
+export const METHOD_GALLERY_MATERIAL_LIST_BY_MOOD =
+  "galleryMaterial/listByMood";
+export const METHOD_PROJECT_MATERIAL_LIST = "projectMaterial/list";
+export const METHOD_PROJECT_MATERIAL_GET = "projectMaterial/get";
+export const METHOD_PROJECT_MATERIAL_COUNT = "projectMaterial/count";
+export const METHOD_PROJECT_MATERIAL_UPLOAD = "projectMaterial/upload";
+export const METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL =
+  "projectMaterial/importFromUrl";
+export const METHOD_PROJECT_MATERIAL_UPDATE = "projectMaterial/update";
+export const METHOD_PROJECT_MATERIAL_DELETE = "projectMaterial/delete";
+export const METHOD_PROJECT_MATERIAL_CONTENT = "projectMaterial/content";
+export const METHOD_VOICE_ASR_CREDENTIAL_LIST = "voiceAsrCredential/list";
+export const METHOD_VOICE_ASR_CREDENTIAL_CREATE = "voiceAsrCredential/create";
+export const METHOD_VOICE_ASR_CREDENTIAL_UPDATE = "voiceAsrCredential/update";
+export const METHOD_VOICE_ASR_CREDENTIAL_DELETE = "voiceAsrCredential/delete";
+export const METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET =
+  "voiceAsrCredential/default/set";
+export const METHOD_VOICE_ASR_CREDENTIAL_TEST = "voiceAsrCredential/test";
+export const METHOD_VOICE_INSTRUCTION_LIST = "voiceInstruction/list";
+export const METHOD_VOICE_INSTRUCTION_SAVE = "voiceInstruction/save";
+export const METHOD_VOICE_INSTRUCTION_DELETE = "voiceInstruction/delete";
+export const METHOD_VOICE_MODEL_DEFAULT_SET = "voiceModel/default/set";
+export const METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE =
+  "voiceModel/testTranscribeFile";
 export const METHOD_USAGE_STATS_READ = "usageStats/read";
 export const METHOD_USAGE_STATS_MODEL_RANKING_LIST =
   "usageStats/modelRanking/list";
@@ -294,6 +350,13 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET, kind: "request" },
   { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF, kind: "request" },
   { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, kind: "request" },
+  { method: METHOD_SESSION_FILE_GET_OR_CREATE, kind: "request" },
+  { method: METHOD_SESSION_FILE_UPDATE_META, kind: "request" },
+  { method: METHOD_SESSION_FILE_SAVE, kind: "request" },
+  { method: METHOD_SESSION_FILE_READ, kind: "request" },
+  { method: METHOD_SESSION_FILE_RESOLVE_PATH, kind: "request" },
+  { method: METHOD_SESSION_FILE_DELETE, kind: "request" },
+  { method: METHOD_SESSION_FILE_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_READ, kind: "request" },
   { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
@@ -402,6 +465,16 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
   { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
   { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_LIST, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_GET, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_CREATE, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_UPDATE, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_DELETE, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_SEARCH, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_STATS, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_ANALYZE, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH, kind: "request" },
+  { method: METHOD_UNIFIED_MEMORY_HYBRID_SEARCH, kind: "request" },
   { method: METHOD_LOG_LIST, kind: "request" },
   { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
   { method: METHOD_LOG_CLEAR, kind: "request" },
@@ -412,10 +485,38 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
+  { method: METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_GET, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_LIST, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_CANCEL, kind: "request" },
+  { method: METHOD_GALLERY_MATERIAL_GET, kind: "request" },
+  { method: METHOD_GALLERY_MATERIAL_METADATA_CREATE, kind: "request" },
+  { method: METHOD_GALLERY_MATERIAL_METADATA_GET, kind: "request" },
+  { method: METHOD_GALLERY_MATERIAL_METADATA_UPDATE, kind: "request" },
+  { method: METHOD_GALLERY_MATERIAL_METADATA_DELETE, kind: "request" },
+  { method: METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY, kind: "request" },
+  { method: METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY, kind: "request" },
+  { method: METHOD_GALLERY_MATERIAL_LIST_BY_MOOD, kind: "request" },
+  { method: METHOD_PROJECT_MATERIAL_LIST, kind: "request" },
+  { method: METHOD_PROJECT_MATERIAL_GET, kind: "request" },
+  { method: METHOD_PROJECT_MATERIAL_COUNT, kind: "request" },
+  { method: METHOD_PROJECT_MATERIAL_UPLOAD, kind: "request" },
+  { method: METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL, kind: "request" },
+  { method: METHOD_PROJECT_MATERIAL_UPDATE, kind: "request" },
+  { method: METHOD_PROJECT_MATERIAL_DELETE, kind: "request" },
+  { method: METHOD_PROJECT_MATERIAL_CONTENT, kind: "request" },
+  { method: METHOD_VOICE_ASR_CREDENTIAL_LIST, kind: "request" },
+  { method: METHOD_VOICE_ASR_CREDENTIAL_CREATE, kind: "request" },
+  { method: METHOD_VOICE_ASR_CREDENTIAL_UPDATE, kind: "request" },
+  { method: METHOD_VOICE_ASR_CREDENTIAL_DELETE, kind: "request" },
+  { method: METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET, kind: "request" },
+  { method: METHOD_VOICE_ASR_CREDENTIAL_TEST, kind: "request" },
+  { method: METHOD_VOICE_INSTRUCTION_LIST, kind: "request" },
+  { method: METHOD_VOICE_INSTRUCTION_SAVE, kind: "request" },
+  { method: METHOD_VOICE_INSTRUCTION_DELETE, kind: "request" },
+  { method: METHOD_VOICE_MODEL_DEFAULT_SET, kind: "request" },
+  { method: METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE, kind: "request" },
   { method: METHOD_USAGE_STATS_READ, kind: "request" },
   { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
   { method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST, kind: "request" },
@@ -1272,6 +1373,71 @@ export type AgentSessionFileCheckpointRestoreResponse = {
   restoredAt: string;
 };
 
+export type SessionFileIdParams = {
+  sessionId: string;
+  fileName: string;
+};
+
+export type SessionFileGetOrCreateParams = {
+  sessionId: string;
+};
+
+export type SessionFileUpdateMetaParams = {
+  sessionId: string;
+  title?: string;
+  theme?: string;
+  creationMode?: string;
+};
+
+export type SessionFileSaveParams = {
+  sessionId: string;
+  fileName: string;
+  content: string;
+  metadata?: Record<string, unknown> | unknown;
+};
+
+export type SessionFileMeta = {
+  sessionId: string;
+  title?: string;
+  theme?: string;
+  creationMode?: string;
+  createdAt: number;
+  updatedAt: number;
+  fileCount: number;
+  totalSize: number;
+};
+
+export type SessionFileEntry = {
+  name: string;
+  fileType: string;
+  metadata?: Record<string, unknown> | unknown;
+  size: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type SessionFileMetaResponse = {
+  meta: SessionFileMeta;
+};
+
+export type SessionFileEntryResponse = {
+  file: SessionFileEntry;
+};
+
+export type SessionFileReadResponse = {
+  content: string;
+};
+
+export type SessionFileResolvePathResponse = {
+  path: string;
+};
+
+export type SessionFileListResponse = {
+  files: SessionFileEntry[];
+};
+
+export type SessionFileMutationResponse = Record<string, never>;
+
 export type WorkspaceReadParams = {
   id: string;
 };
@@ -1324,6 +1490,7 @@ export type SkillReadResponse = {
 export type SkillManagementListParams = {
   app: string;
   refreshRemote?: boolean;
+  scope?: "all" | "local" | "user";
 };
 
 export type SkillManagementInstallParams = {
@@ -1902,6 +2069,36 @@ export type MediaTaskArtifactAudioCreateParams = {
   outputPath?: string;
 };
 
+export type MediaTaskArtifactVideoCreateParams = {
+  projectRootPath: string;
+  prompt: string;
+  title?: string;
+  rawText?: string;
+  aspectRatio?: string;
+  resolution?: string;
+  duration?: number;
+  imageUrl?: string;
+  endImageUrl?: string;
+  seed?: number;
+  generateAudio?: boolean;
+  cameraFixed?: boolean;
+  providerId?: string;
+  model?: string;
+  sessionId?: string;
+  threadId?: string;
+  turnId?: string;
+  projectId?: string;
+  contentId?: string;
+  entrySource?: string;
+  modalityContractKey?: string;
+  modality?: string;
+  requiredCapabilities?: string[];
+  routingSlot?: string;
+  runtimeContract?: unknown;
+  requestedTarget?: string;
+  outputPath?: string;
+};
+
 export type MediaTaskArtifactAudioCompleteParams = {
   projectRootPath: string;
   taskRef: string;
@@ -1961,6 +2158,286 @@ export type MediaTaskArtifactListResponse = {
   total: number;
   modality_runtime_contracts: unknown;
   tasks: MediaTaskArtifactResponse[];
+};
+
+export type GalleryMaterialMetadata = {
+  materialId: string;
+  imageCategory?: string;
+  width?: number;
+  height?: number;
+  thumbnail?: string;
+  colors: string[];
+  iconStyle?: string;
+  iconCategory?: string;
+  colorSchemeJson?: string;
+  mood?: string;
+  layoutCategory?: string;
+  elementCount?: number;
+  preview?: string;
+  fabricJson?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GalleryMaterial = {
+  id: string;
+  projectId: string;
+  name: string;
+  type: string;
+  filePath?: string;
+  fileSize?: number;
+  mimeType?: string;
+  content?: string;
+  tags: string[];
+  description?: string;
+  createdAt: number;
+  metadata?: GalleryMaterialMetadata;
+};
+
+export type GalleryMaterialMetadataCreateParams = {
+  materialId: string;
+  imageCategory?: string;
+  width?: number;
+  height?: number;
+  thumbnail?: string;
+  colors?: string[];
+  iconStyle?: string;
+  iconCategory?: string;
+  colorSchemeJson?: string;
+  mood?: string;
+  layoutCategory?: string;
+  elementCount?: number;
+  preview?: string;
+  fabricJson?: string;
+};
+
+export type GalleryMaterialLookupParams = {
+  materialId: string;
+};
+
+export type GalleryMaterialMetadataUpdateParams = {
+  materialId: string;
+  metadata: GalleryMaterialMetadataCreateParams;
+};
+
+export type GalleryMaterialFilterParams = {
+  projectId: string;
+  category?: string | null;
+  mood?: string | null;
+};
+
+export type GalleryMaterialResponse = {
+  material?: GalleryMaterial | null;
+};
+
+export type GalleryMaterialMetadataResponse = {
+  metadata?: GalleryMaterialMetadata | null;
+};
+
+export type GalleryMaterialListResponse = {
+  materials: GalleryMaterial[];
+};
+
+export type GalleryMaterialDeleteResponse = Record<string, never>;
+
+export type ProjectMaterial = {
+  id: string;
+  projectId: string;
+  name: string;
+  type: string;
+  filePath?: string;
+  fileSize?: number;
+  mimeType?: string;
+  content?: string;
+  tags: string[];
+  description?: string;
+  createdAt: number;
+};
+
+export type ProjectMaterialFilter = {
+  type?: string;
+  tags?: string[];
+  searchQuery?: string;
+};
+
+export type ProjectMaterialListParams = {
+  projectId: string;
+  filter?: ProjectMaterialFilter | null;
+};
+
+export type ProjectMaterialLookupParams = {
+  id: string;
+};
+
+export type ProjectMaterialUploadParams = {
+  projectId: string;
+  name: string;
+  type: string;
+  filePath?: string;
+  content?: string;
+  tags?: string[];
+  description?: string;
+};
+
+export type ProjectMaterialImportFromUrlParams = {
+  projectId: string;
+  name: string;
+  type: string;
+  url: string;
+  tags?: string[];
+  description?: string;
+};
+
+export type ProjectMaterialUpdate = {
+  name?: string;
+  tags?: string[];
+  description?: string;
+};
+
+export type ProjectMaterialUpdateParams = {
+  id: string;
+  update: ProjectMaterialUpdate;
+};
+
+export type ProjectMaterialListResponse = {
+  materials: ProjectMaterial[];
+};
+
+export type ProjectMaterialResponse = {
+  material?: ProjectMaterial | null;
+};
+
+export type ProjectMaterialCountResponse = {
+  count: number;
+};
+
+export type ProjectMaterialContentResponse = {
+  content: string;
+};
+
+export type ProjectMaterialDeleteResponse = Record<string, never>;
+
+export type VoiceAsrProviderType =
+  | "whisper_local"
+  | "sense_voice_local"
+  | "xunfei"
+  | "baidu"
+  | "openai";
+
+export type VoiceAsrWhisperModelSize = "tiny" | "base" | "small" | "medium";
+
+export type VoiceAsrWhisperLocalConfig = {
+  model: VoiceAsrWhisperModelSize;
+  model_path?: string;
+};
+
+export type VoiceAsrSenseVoiceLocalConfig = {
+  model_id: string;
+  model_dir?: string;
+  use_itn: boolean;
+  num_threads: number;
+  vad_model_id?: string;
+};
+
+export type VoiceAsrXunfeiConfig = {
+  app_id: string;
+  api_key: string;
+  api_secret: string;
+};
+
+export type VoiceAsrBaiduConfig = {
+  api_key: string;
+  secret_key: string;
+};
+
+export type VoiceAsrOpenAiConfig = {
+  api_key: string;
+  base_url?: string;
+  proxy_url?: string;
+};
+
+export type VoiceAsrCredential = {
+  id: string;
+  provider: VoiceAsrProviderType;
+  name?: string;
+  is_default: boolean;
+  disabled: boolean;
+  language: string;
+  whisper_config?: VoiceAsrWhisperLocalConfig;
+  sensevoice_config?: VoiceAsrSenseVoiceLocalConfig;
+  xunfei_config?: VoiceAsrXunfeiConfig;
+  baidu_config?: VoiceAsrBaiduConfig;
+  openai_config?: VoiceAsrOpenAiConfig;
+};
+
+export type VoiceAsrCredentialCreateParams = Omit<VoiceAsrCredential, "id">;
+
+export type VoiceAsrCredentialUpdateParams = {
+  credential: VoiceAsrCredential;
+};
+
+export type VoiceAsrCredentialIdParams = {
+  id: string;
+};
+
+export type VoiceAsrCredentialListResponse = {
+  credentials: VoiceAsrCredential[];
+};
+
+export type VoiceAsrCredentialWriteResponse = {
+  credential: VoiceAsrCredential;
+};
+
+export type VoiceAsrCredentialMutationResponse = Record<string, never>;
+
+export type VoiceAsrCredentialTestResponse = {
+  success: boolean;
+  message: string;
+};
+
+export type VoiceInstruction = {
+  id: string;
+  name: string;
+  description?: string;
+  prompt: string;
+  shortcut?: string;
+  is_preset: boolean;
+  icon?: string;
+};
+
+export type VoiceInstructionSaveParams = {
+  instruction: VoiceInstruction;
+};
+
+export type VoiceInstructionIdParams = {
+  id: string;
+};
+
+export type VoiceInstructionListResponse = {
+  instructions: VoiceInstruction[];
+};
+
+export type VoiceInstructionMutationResponse = Record<string, never>;
+
+export type VoiceModelDefaultSetParams = {
+  model_id: string;
+  install_dir: string;
+};
+
+export type VoiceModelDefaultSetResponse = {
+  credential: VoiceAsrCredential;
+};
+
+export type VoiceModelTestTranscribeFileParams = {
+  model_id: string;
+  file_path: string;
+};
+
+export type VoiceModelTestTranscribeFileResponse = {
+  text: string;
+  duration_secs: number;
+  sample_rate: number;
+  language?: string;
 };
 
 export type WorkspaceRegisteredSkillsListParams = {
@@ -2481,6 +2958,161 @@ export type ProjectMemoryReadParams = {
 
 export type ProjectMemoryReadResponse = {
   memory: unknown;
+};
+
+export type UnifiedMemoryType = "conversation" | "project";
+
+export type UnifiedMemoryCategory =
+  | "identity"
+  | "context"
+  | "preference"
+  | "experience"
+  | "activity";
+
+export type UnifiedMemorySource = "auto_extracted" | "manual" | "imported";
+
+export type UnifiedMemoryMetadata = {
+  confidence: number;
+  importance: number;
+  access_count: number;
+  last_accessed_at: number | null;
+  source: UnifiedMemorySource;
+  embedding: number[] | null;
+};
+
+export type UnifiedMemory = {
+  id: string;
+  session_id: string;
+  memory_type: UnifiedMemoryType;
+  category: UnifiedMemoryCategory;
+  title: string;
+  content: string;
+  summary: string;
+  tags: string[];
+  metadata: UnifiedMemoryMetadata;
+  created_at: number;
+  updated_at: number;
+  archived: boolean;
+};
+
+export type UnifiedMemoryListFilters = {
+  session_id?: string;
+  memory_type?: UnifiedMemoryType;
+  category?: UnifiedMemoryCategory;
+  archived?: boolean;
+  sort_by?: string;
+  order?: string;
+  offset?: number;
+  limit?: number;
+};
+
+export type UnifiedMemoryListParams = {
+  filters?: UnifiedMemoryListFilters | null;
+};
+
+export type UnifiedMemoryListResponse = {
+  memories: UnifiedMemory[];
+};
+
+export type UnifiedMemoryGetParams = {
+  id: string;
+};
+
+export type UnifiedMemoryGetResponse = {
+  memory: UnifiedMemory | null;
+};
+
+export type UnifiedMemoryCreateRequest = {
+  session_id: string;
+  title: string;
+  content: string;
+  summary: string;
+  category?: UnifiedMemoryCategory;
+  tags?: string[];
+  confidence?: number;
+  importance?: number;
+};
+
+export type UnifiedMemoryCreateParams = {
+  request: UnifiedMemoryCreateRequest;
+};
+
+export type UnifiedMemoryUpdateRequest = {
+  title?: string;
+  content?: string;
+  summary?: string;
+  tags?: string[];
+  confidence?: number;
+  importance?: number;
+};
+
+export type UnifiedMemoryUpdateParams = {
+  id: string;
+  request: UnifiedMemoryUpdateRequest;
+};
+
+export type UnifiedMemoryWriteResponse = {
+  memory: UnifiedMemory;
+};
+
+export type UnifiedMemoryDeleteParams = {
+  id: string;
+};
+
+export type UnifiedMemoryDeleteResponse = {
+  deleted: boolean;
+};
+
+export type UnifiedMemorySearchParams = {
+  query: string;
+  category?: UnifiedMemoryCategory;
+  limit?: number;
+};
+
+export type UnifiedMemoryAnalyzeParams = {
+  from_timestamp?: number;
+  to_timestamp?: number;
+};
+
+export type UnifiedMemoryAnalysisResponse = {
+  analyzed_sessions: number;
+  analyzed_messages: number;
+  generated_entries: number;
+  deduplicated_entries: number;
+};
+
+export type UnifiedMemorySemanticSearchOptions = {
+  query: string;
+  category?: UnifiedMemoryCategory;
+  min_similarity?: number;
+  limit?: number;
+};
+
+export type UnifiedMemorySemanticSearchParams = {
+  options: UnifiedMemorySemanticSearchOptions;
+};
+
+export type UnifiedMemoryHybridSearchOptions = {
+  query: string;
+  category?: UnifiedMemoryCategory;
+  semantic_weight: number;
+  keyword_weight?: number;
+  min_similarity?: number;
+  limit?: number;
+};
+
+export type UnifiedMemoryHybridSearchParams = {
+  options: UnifiedMemoryHybridSearchOptions;
+};
+
+export type UnifiedMemoryStatsResponse = {
+  total_entries: number;
+  storage_used: number;
+  memory_count: number;
+  categories: Array<{
+    category: UnifiedMemoryCategory;
+    count: number;
+  }>;
 };
 
 export type UsageStatsRangeParams = {

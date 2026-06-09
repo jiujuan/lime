@@ -169,6 +169,7 @@ describe("useWorkspaceVideoTaskActionRuntime", () => {
     });
 
     const harness = renderHook({
+      projectRootPath: "/workspace",
       projectId: "project-video-1",
       contentId: "content-video-1",
       setChatMessages,
@@ -188,9 +189,11 @@ describe("useWorkspaceVideoTaskActionRuntime", () => {
 
     expect(mockGetTask).toHaveBeenCalledWith("task-video-old", {
       refreshStatus: false,
+      projectRootPath: "/workspace",
     });
     expect(mockCreateTask).toHaveBeenCalledWith({
       projectId: "project-video-1",
+      projectRootPath: "/workspace",
       providerId: "doubao",
       model: "seedance-1-5-pro-251215",
       prompt: "新品发布会短视频",
@@ -229,6 +232,7 @@ describe("useWorkspaceVideoTaskActionRuntime", () => {
     });
 
     const harness = renderHook({
+      projectRootPath: "/workspace",
       projectId: "project-video-1",
       contentId: "content-video-1",
       setChatMessages,
@@ -246,7 +250,9 @@ describe("useWorkspaceVideoTaskActionRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(mockCancelTask).toHaveBeenCalledWith("task-video-running");
+    expect(mockCancelTask).toHaveBeenCalledWith("task-video-running", {
+      projectRootPath: "/workspace",
+    });
     expect(messages[0]?.taskPreview).toMatchObject({
       kind: "video_generate",
       taskId: "task-video-running",

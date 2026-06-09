@@ -194,20 +194,12 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("通用工作台执行状态 mock 应返回空闲态", async () => {
+  it("通用工作台执行状态 mock 已退场并 fail closed", async () => {
     await expect(
       invokeMockOnly("execution_run_get_general_workbench_state", {
         sessionId: "session-mock",
       }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        run_state: "idle",
-        current_gate_key: "idle",
-        queue_items: [],
-        latest_terminal: null,
-        recent_terminals: [],
-      }),
-    );
+    ).rejects.toThrow('未注册命令 "execution_run_get_general_workbench_state"');
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
@@ -425,9 +417,7 @@ describe("desktop-host/core invoke", () => {
           risk_level: "low",
         },
       }),
-    ).rejects.toThrow(
-      '未注册命令 "agent_runtime_save_review_decision"',
-    );
+    ).rejects.toThrow('未注册命令 "agent_runtime_save_review_decision"');
   });
 
   it("工具库存显式 mock 应按 workbench + browser surface 补齐当前工具面", async () => {

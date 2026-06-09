@@ -11,6 +11,7 @@ const {
   mockTestConnection,
   mockTestChat,
   mockFetchProviderModelsAuto,
+  mockOpenExternalUrlWithSystemBrowser,
 } = vi.hoisted(() => ({
   mockUseApiKeyProvider: vi.fn(),
   mockUseModelRegistry: vi.fn(),
@@ -18,6 +19,7 @@ const {
   mockTestConnection: vi.fn(),
   mockTestChat: vi.fn(),
   mockFetchProviderModelsAuto: vi.fn(),
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(),
 }));
 
 vi.mock("@/hooks/useApiKeyProvider", () => ({
@@ -44,6 +46,11 @@ vi.mock("@/lib/api/modelRegistry", () => ({
     models: unknown[];
     error: string | null;
   }) => result.source,
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: (...args: unknown[]) =>
+    mockOpenExternalUrlWithSystemBrowser(...args),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -214,9 +221,18 @@ async function submitCustomProviderDraft({
   model: string;
 }) {
   await act(async () => {
-    setInputValue(findByTestId<HTMLInputElement>("model-provider-name-input"), name);
-    setInputValue(findByTestId<HTMLInputElement>("model-api-host-input"), apiHost);
-    setInputValue(findByTestId<HTMLInputElement>("model-api-key-input"), apiKey);
+    setInputValue(
+      findByTestId<HTMLInputElement>("model-provider-name-input"),
+      name,
+    );
+    setInputValue(
+      findByTestId<HTMLInputElement>("model-api-host-input"),
+      apiHost,
+    );
+    setInputValue(
+      findByTestId<HTMLInputElement>("model-api-key-input"),
+      apiKey,
+    );
     setInputValue(findByTestId<HTMLInputElement>("model-draft-input"), model);
   });
   await clickByTestId("model-draft-add-button");
@@ -265,6 +281,7 @@ beforeEach(() => {
     models: [{ id: "deepseek-chat" }],
     error: null,
   });
+  mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -289,12 +306,12 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
 
     expect(maybeByTestId(container, "provider-list")).toBeNull();
     expect(maybeByTestId(container, "enabled-model-list")).not.toBeNull();
-    expect(maybeByTestId(container, "api-key-provider-section")?.className).toContain(
-      "min-h-0",
-    );
-    expect(maybeByTestId(container, "api-key-provider-detail")?.className).toContain(
-      "min-h-0",
-    );
+    expect(
+      maybeByTestId(container, "api-key-provider-section")?.className,
+    ).toContain("min-h-0");
+    expect(
+      maybeByTestId(container, "api-key-provider-detail")?.className,
+    ).toContain("min-h-0");
     expect(maybeByTestId(container, "enabled-model-list")?.className).toContain(
       "overflow-hidden",
     );
@@ -366,7 +383,9 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     await flushEffects();
 
     await act(async () => {
-      findByTestId<HTMLButtonElement>("provider-setting-test-chat-stub").click();
+      findByTestId<HTMLButtonElement>(
+        "provider-setting-test-chat-stub",
+      ).click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -466,6 +485,47 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(container.textContent ?? "").toContain("deepseek-v4-flash");
   });
 
+  it("添加流程的 API Key 获取链接应走 Desktop Host 外链网关", async () => {
+    createHookState();
+    const container = renderSection();
+
+    await act(async () => {
+      findByTestId<HTMLButtonElement>("add-model-button").click();
+      await flushEffects(4);
+    });
+
+    await act(async () => {
+      findByTestId<HTMLButtonElement>(
+        "model-catalog-category-overseas",
+      ).click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      maybeTemplateCard(container, "kimi-code-subscription")?.click();
+      await Promise.resolve();
+    });
+
+    const link = findByTestId<HTMLAnchorElement>("provider-api-key-link");
+    expect(link.getAttribute("href")).toBe("https://www.kimi.com/code");
+    expect(link.getAttribute("target")).toBeNull();
+    expect(link.getAttribute("rel")).toBe("noreferrer noopener");
+
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      link.dispatchEvent(clickEvent);
+      await Promise.resolve();
+    });
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://www.kimi.com/code",
+    );
+  });
+
   it("系统 Provider 删除配置应清空模型、删除本地 Key 并停用入口", async () => {
     const hookState = createHookState();
     renderSection();
@@ -528,9 +588,9 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(container.textContent ?? "").not.toContain(
       "Z.AI Coding Plan（海外）",
     );
-    expect(
-      maybeByTestId(container, "model-add-catalog")?.className,
-    ).toContain("overflow-y-auto");
+    expect(maybeByTestId(container, "model-add-catalog")?.className).toContain(
+      "overflow-y-auto",
+    );
 
     await act(async () => {
       maybeTemplateCard(container, "glm-cn-coding-plan")?.click();
@@ -603,7 +663,9 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(text).toContain("MiniMax Coding Plan（海外）");
     expect(text).toContain("Alibaba Coding Plan（海外）");
     expect(text).not.toContain("GLM Coding Plan（国内）");
-    expect(maybeTemplateCard(container, "kimi-code-subscription")).not.toBeNull();
+    expect(
+      maybeTemplateCard(container, "kimi-code-subscription"),
+    ).not.toBeNull();
     const zaiTemplateCard = maybeTemplateCard(container, "zai-coding-plan");
     expect(zaiTemplateCard).not.toBeNull();
     const zaiReadableText = collectReadableText(zaiTemplateCard!);

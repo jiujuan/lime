@@ -1,5 +1,6 @@
 import { act } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { WorkspaceRegisteredSkillRecord } from "@/lib/api/capabilityDrafts";
 import {
   clickMenuItem,
   findButton,
@@ -134,29 +135,111 @@ describe("SkillsWorkspacePage", () => {
     );
   });
 
-  it("用户安装页应挂载已保存技能面板并读取 workspace skill binding readiness", async () => {
+  it("用户安装页首屏不等待已保存技能面板", () => {
     const { container } = renderPage({ initialView: "installed" });
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
+    expect(container.textContent).toContain("写作助手");
+    expect(mocks.getOrCreateDefaultProject).not.toHaveBeenCalled();
+    expect(mocks.listRegisteredSkills).not.toHaveBeenCalled();
+    expect(mocks.listWorkspaceSkillBindings).not.toHaveBeenCalled();
     expect(
       container.querySelector(
         '[data-testid="workspace-registered-skills-panel"]',
       ),
-    ).toBeTruthy();
-    expect(mocks.getOrCreateDefaultProject).toHaveBeenCalledTimes(1);
-    expect(mocks.listRegisteredSkills).toHaveBeenCalledWith({
-      workspaceRoot: "/Users/demo/Lime/default-workspace",
-    });
-    expect(mocks.listWorkspaceSkillBindings).toHaveBeenCalledWith({
-      workspaceRoot: "/Users/demo/Lime/default-workspace",
-      caller: "assistant",
-      workbench: true,
-    });
+    ).toBeNull();
+  });
+
+  it("用户安装页没有已保存技能时不显示已保存技能空面板，但后台读取 workspace skill binding readiness", async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderPage({ initialView: "installed" });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(
+        container.querySelector(
+          '[data-testid="workspace-registered-skills-panel"]',
+        ),
+      ).toBeNull();
+      expect(container.textContent).not.toContain("当前项目还没有已保存技能");
+      expect(mocks.getOrCreateDefaultProject).toHaveBeenCalledTimes(1);
+      expect(mocks.listRegisteredSkills).toHaveBeenCalledWith({
+        workspaceRoot: "/Users/demo/Lime/default-workspace",
+      });
+      expect(mocks.listWorkspaceSkillBindings).toHaveBeenCalledWith({
+        workspaceRoot: "/Users/demo/Lime/default-workspace",
+        caller: "assistant",
+        workbench: true,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("用户安装页有已保存技能时显示已保存技能面板", async () => {
+    const savedSkill: WorkspaceRegisteredSkillRecord = {
+      key: "workspace:writer-agent",
+      name: "项目写作技能",
+      description: "保存到当前项目的写作技能。",
+      directory: "writer-agent",
+      registeredSkillDirectory:
+        "/Users/demo/Lime/default-workspace/.agents/skills/writer-agent",
+      registration: {
+        registrationId: "capreg-writer-agent",
+        registeredAt: "2026-06-01T08:00:00.000Z",
+        skillDirectory: "writer-agent",
+        registeredSkillDirectory:
+          "/Users/demo/Lime/default-workspace/.agents/skills/writer-agent",
+        sourceDraftId: "capdraft-writer-agent",
+        sourceVerificationReportId: null,
+        generatedFileCount: 1,
+        permissionSummary: [],
+        verificationGates: [],
+        approvalRequests: [],
+      },
+      permissionSummary: [],
+      metadata: {},
+      allowedTools: [],
+      resourceSummary: {
+        hasScripts: false,
+        hasReferences: false,
+        hasAssets: false,
+      },
+      standardCompliance: {
+        isStandard: true,
+        validationErrors: [],
+        deprecatedFields: [],
+      },
+      launchEnabled: false,
+      runtimeGate: "等待手动启用",
+    };
+    vi.useFakeTimers();
+    mocks.listRegisteredSkills.mockResolvedValueOnce([savedSkill]);
+    try {
+      const { container } = renderPage({ initialView: "installed" });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(
+        container.querySelector(
+          '[data-testid="workspace-registered-skills-panel"]',
+        ),
+      ).toBeTruthy();
+      expect(container.textContent).toContain("已保存技能");
+      expect(container.textContent).toContain("项目写作技能");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("内置页点击详情应读取并展示对应 SKILL.md", async () => {

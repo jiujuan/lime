@@ -13,6 +13,7 @@ import {
   createThreadClient,
   projectAppServerAgentEventPayload,
   type AgentRuntimeAppServerClient,
+  type AgentRuntimeLifecycleClient,
 } from "./threadClient";
 import type { AgentRuntimeCommandInvoke } from "./transport";
 import type {
@@ -206,6 +207,79 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       notifications: [],
     }),
   };
+}
+
+function standardRuntimeClientMock(): AgentRuntimeLifecycleClient {
+  return {
+    startTurn: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [],
+    }),
+    cancelTurn: vi.fn().mockResolvedValue({
+      id: 2,
+      result: {},
+      response: { id: 2, result: {} },
+      messages: [],
+      notifications: [],
+    }),
+    respondAction: vi.fn().mockResolvedValue({
+      id: 3,
+      result: {},
+      response: { id: 3, result: {} },
+      messages: [],
+      notifications: [],
+    }),
+    readThread: vi.fn().mockResolvedValue({
+      id: 4,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+      },
+      response: {
+        id: 4,
+        result: {
+          session: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            appId: "agent-chat",
+            status: "idle",
+            createdAt: "2026-06-06T00:00:00.000Z",
+            updatedAt: "2026-06-06T00:00:00.000Z",
+          },
+          turns: [],
+        },
+      },
+      messages: [],
+      notifications: [],
+    }),
+  } as AgentRuntimeLifecycleClient;
 }
 
 const appServerCheckpointSummary = {
@@ -638,6 +712,86 @@ describe("agentRuntime threadClient", () => {
       queueIfBusy: true,
       skipPreSubmitResume: true,
     });
+    expect(invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("turn lifecycle 注入标准 runtime client 后应委托 facade，不直接调用 renderer App Server lifecycle", async () => {
+    const appServerClient = appServerClientMock();
+    const standardRuntimeClient = standardRuntimeClientMock();
+    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
+    const client = createThreadClient({
+      appServerClient,
+      standardRuntimeClient,
+      invokeCommand,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.submitAgentRuntimeTurn({
+        message: "生成草稿",
+        session_id: "session-1",
+        event_name: "agentSession/event/session-1",
+        turn_id: "turn-1",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      client.interruptAgentRuntimeTurn({
+        session_id: "session-1",
+        turn_id: "turn-1",
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      client.respondAgentRuntimeAction({
+        session_id: "session-1",
+        request_id: "request-1",
+        action_type: "ask_user",
+        confirmed: true,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(client.getAgentRuntimeThreadRead(" session-1 ")).resolves.toEqual(
+      expect.objectContaining({
+        thread_id: "thread-1",
+        status: "idle",
+      }),
+    );
+
+    expect(standardRuntimeClient.startTurn).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      turnId: "turn-1",
+      input: {
+        text: "生成草稿",
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName: "agentSession/event/session-1",
+        hostOptions: {
+          asterChatRequest: {
+            message: "生成草稿",
+            session_id: "session-1",
+            event_name: "agentSession/event/session-1",
+            workspace_id: "",
+            turn_id: "turn-1",
+          },
+        },
+      },
+    });
+    expect(standardRuntimeClient.cancelTurn).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      turnId: "turn-1",
+    });
+    expect(standardRuntimeClient.respondAction).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      requestId: "request-1",
+      actionType: "ask_user",
+      confirmed: true,
+    });
+    expect(standardRuntimeClient.readThread).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
+    expect(appServerClient.startTurn).not.toHaveBeenCalled();
+    expect(appServerClient.cancelTurn).not.toHaveBeenCalled();
+    expect(appServerClient.respondAction).not.toHaveBeenCalled();
+    expect(appServerClient.readSession).not.toHaveBeenCalled();
     expect(invokeCommand).not.toHaveBeenCalled();
   });
 

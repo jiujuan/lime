@@ -96,19 +96,23 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 
 - `lime-rs/src/dev_bridge.rs`
 - `lime-rs/src/dev_bridge/*`
-- `src/lib/dev-bridge/*`
+- `src/lib/dev-bridge/safeInvoke.ts`
+- `src/lib/dev-bridge/http-client.ts`
+- `src/lib/dev-bridge/commandPolicy.ts`
 
 当前这里负责：
 
-1. 仅在 `debug_assertions` 下提供 `3030` HTTP 桥
-2. 让浏览器 dev server 调用现有 Desktop Host / App Server 命令，legacy adapter 只作为兼容兜底
-3. 为浏览器开发模式提供事件流和本地后端接通能力
+1. Rust `lime-rs/src/dev_bridge.rs` 仅在 `debug_assertions` 下提供旧 `3030` HTTP 桥
+2. Rust `lime-rs/src/dev_bridge/dispatcher/**` 只作为旧 Tauri command facade 的迁移来源和清理对象
+3. 前端 `src/lib/dev-bridge/safeInvoke.ts` / `http-client.ts` 仍是 renderer 进入 Electron Desktop Host / App Server JSON-RPC 的 current 传输、可用性探测、事件监听和错误追踪边界
+4. 前端 `src/lib/dev-bridge/commandPolicy.ts` 只承接旧命令 truth / no-mock fallback 的迁移期分类，不是 remote runtime 事实源
 
 固定规则：
 
 - `DevBridge` 是 debug-only 开发桥，不是产品 remote runtime
-- 它可以桥接 current 命令，但不能反向定义 current remote taxonomy
-- 后续只允许继续做开发态适配与调试支撑
+- Rust DevBridge 可以作为旧命令清理参考，但不能反向定义 current remote taxonomy
+- 前端 `src/lib/dev-bridge/**` 不能按整目录退场；清理时只按命令组收缩 `commandPolicy`、mock fallback、旧 smoke 和 retired guard，保留 current renderer bridge
+- 后续只允许继续做开发态适配、调试支撑和 current bridge 传输治理，不允许在 legacy dispatcher 上新增业务逻辑
 
 ### 5. `telegram_remote_cmd`
 
@@ -134,6 +138,9 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 - `lime_gateway::{telegram, feishu, discord, wechat}`
 - `src/lib/webview-api.ts`
 - `lime-rs/src/services/browser_connector_service.rs`
+- `src/lib/dev-bridge/safeInvoke.ts`
+- `src/lib/dev-bridge/http-client.ts`
+- `app_server_handle_json_lines`
 - `internal/aiprompts/remote-runtime.md`
 
 这些路径共同构成当前 remote 主链：
@@ -150,17 +157,19 @@ OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `d
 - `lime-rs/src/commands/browser_runtime_cmd.rs`
 - `lime-rs/src/dev_bridge.rs`
 - `lime-rs/src/dev_bridge/*`
-- `src/lib/dev-bridge/*`
+- `src/lib/dev-bridge/commandPolicy.ts` 中的旧命令 truth / no-mock fallback
 
 保留原因：
 
 - 这些旧 command wrapper 仍可能承接迁移期命令面，但不能再拥有 remote runtime 业务事实。
-- `DevBridge` 仍是浏览器开发模式的必要桥接层
+- Rust DevBridge 仍是浏览器开发模式历史桥接层，后续只能按命令组退场。
+- 前端 `commandPolicy.ts` 只作为迁移期 fail-closed 分类，不能继续承接 production truth 或 mock fallback。
 
 退出条件：
 
 - remote 能力迁到 App Server / services / Electron Desktop Host 后，撤旧 runner / dispatcher / catalog / mock 注册并删除对应 wrapper；删不动时登记 blocker。
-- `DevBridge` 继续只做开发态桥接，不再承担产品 remote 叙事
+- Rust DevBridge 继续只做开发态桥接参考，不再承担产品 remote 叙事。
+- 已迁旧命令必须从前端 `commandPolicy.ts`、`mockPriorityCommands.ts`、desktop-host mock、旧 smoke 和 catalog 撤出；删不动且跨组长期存在的 residual 回挂 `CCD-012`。
 
 ### `deprecated`
 

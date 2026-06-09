@@ -98,15 +98,6 @@ function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
     ];
 
     return {
-      execution_run_get_general_workbench_state: () => ({
-        run_state: "idle",
-        current_gate_key: "idle",
-        queue_items: [],
-        latest_terminal: null,
-        recent_terminals: [],
-        updated_at: new Date(0).toISOString(),
-      }),
-
       ...companion.companionMocks,
       ...knowledge.knowledgeMocks,
       ...skillForge.skillForgeMocks,

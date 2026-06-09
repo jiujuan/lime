@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "analyzed_messages": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "analyzed_sessions": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "deduplicated_entries": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "generated_entries": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "analyzed_messages",
+    "analyzed_sessions",
+    "deduplicated_entries",
+    "generated_entries"
+  ],
+  "title": "UnifiedMemoryAnalysisResponse",
+  "type": "object"
+}

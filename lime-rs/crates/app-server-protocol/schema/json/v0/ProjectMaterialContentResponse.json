@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "content": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "content"
+  ],
+  "title": "ProjectMaterialContentResponse",
+  "type": "object"
+}

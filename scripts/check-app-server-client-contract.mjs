@@ -5,11 +5,34 @@ import path from "node:path";
 import process from "node:process";
 
 const repoRoot = process.cwd();
+const normalizeContractSnippet = (value) => value.replace(/\s+/gu, "");
+function collectRustFiles(relativeDir) {
+  const absoluteDir = path.join(repoRoot, relativeDir);
+  return fs
+    .readdirSync(absoluteDir, { withFileTypes: true })
+    .flatMap((entry) => {
+      const relativePath = `${relativeDir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        return collectRustFiles(relativePath);
+      }
+      return entry.isFile() && entry.name.endsWith(".rs") ? [relativePath] : [];
+    })
+    .sort();
+}
+
+const protocolV0ModuleFiles = collectRustFiles(
+  "lime-rs/crates/app-server-protocol/src/protocol/v0",
+);
+const schemaExportModuleFiles = collectRustFiles(
+  "lime-rs/crates/app-server-protocol/src/schema_export",
+);
 const rustProtocolFiles = [
   "lime-rs/crates/app-server-protocol/src/lib.rs",
   "lime-rs/crates/app-server-protocol/src/jsonrpc_lite.rs",
   "lime-rs/crates/app-server-protocol/src/protocol/v0.rs",
+  ...protocolV0ModuleFiles,
   "lime-rs/crates/app-server-protocol/src/schema_export.rs",
+  ...schemaExportModuleFiles,
   "lime-rs/crates/app-server-protocol/src/schema_fixtures.rs",
 ];
 const retiredDesktopHostTopic = ["ta", "uri"].join("");
@@ -25,6 +48,27 @@ const retiredAsterRuntimeCoreBuilder = [
   "aster",
   "runtime_core",
 ].join("_");
+const retiredTreeProjectionNames = [
+  ["View", "Tree"].join(""),
+  ["View", "tree"].join(""),
+  ["view", "tree"].join(""),
+];
+const canonicalAgentUiPackages = [
+  "@limecloud/agent-runtime-client",
+  "@limecloud/agent-ui-contracts",
+  "@limecloud/agent-runtime-projection",
+  "@limecloud/agent-runtime-ui",
+];
+const retiredAgentUiPackageNames = [
+  "@limecloud/agent-ui-projection",
+  "@limecloud/agent-ui-react",
+];
+const agentUiPackageNamingGuardFiles = [
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+  "vite.config.ts",
+];
 const legacySessionCompatCommandSpecs = [
   { command: "agent_runtime_create_session", key: "createSession" },
   { command: "agent_runtime_list_sessions", key: "listSessions" },
@@ -356,7 +400,7 @@ const checks = [
       "pub event_name: Option<String>",
       "pub action_scope: Option<AgentSessionActionScope>",
       "pub struct AgentSessionActionRespondResponse",
-      "method: METHOD_AGENT_SESSION_ACTION_RESPOND",
+      "method!(METHOD_AGENT_SESSION_ACTION_RESPOND, Request)",
       "agent_session_action_respond_request_matches_protocol_fixture_shape",
     ],
   },
@@ -370,7 +414,7 @@ const checks = [
       "pub struct AgentSessionReplayedActionRequired",
       "pub struct AgentSessionActionReplayResponse",
       "pub action: Option<AgentSessionReplayedActionRequired>",
-      "method: METHOD_AGENT_SESSION_ACTION_REPLAY",
+      "method!(METHOD_AGENT_SESSION_ACTION_REPLAY, Request)",
       "agent_session_action_replay_request_matches_protocol_fixture_shape",
     ],
   },
@@ -393,7 +437,7 @@ const checks = [
       "pub metadata: Option<serde_json::Value>",
       "pub struct ArtifactReadResponse",
       "pub artifacts: Vec<ArtifactSummary>",
-      "method: METHOD_ARTIFACT_READ",
+      "method!(METHOD_ARTIFACT_READ, Request)",
       "artifact_read_request_matches_protocol_fixture_shape",
       "artifact_summary_content_status_matches_protocol_fixture_shape",
     ],
@@ -416,10 +460,10 @@ const checks = [
       "pub struct FileSystemDeleteFileParams",
       "pub recursive: Option<bool>",
       "pub struct FileSystemMutationResponse",
-      "method: METHOD_FILE_SYSTEM_CREATE_FILE",
-      "method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY",
-      "method: METHOD_FILE_SYSTEM_RENAME_FILE",
-      "method: METHOD_FILE_SYSTEM_DELETE_FILE",
+      "method!(METHOD_FILE_SYSTEM_CREATE_FILE, Request)",
+      "method!(METHOD_FILE_SYSTEM_CREATE_DIRECTORY, Request)",
+      "method!(METHOD_FILE_SYSTEM_RENAME_FILE, Request)",
+      "method!(METHOD_FILE_SYSTEM_DELETE_FILE, Request)",
       "app_server_method_catalog_keeps_request_and_notification_methods_together",
     ],
   },
@@ -447,7 +491,7 @@ const checks = [
       "pub completion_audit_summary: Option<serde_json::Value>",
       "pub struct EvidencePackArtifact",
       "pub relative_path: String",
-      "method: METHOD_EVIDENCE_EXPORT",
+      "method!(METHOD_EVIDENCE_EXPORT, Request)",
       "evidence_export_request_matches_protocol_fixture_shape",
       "evidence_export_response_matches_protocol_fixture_shape",
     ],
@@ -832,7 +876,11 @@ const checks = [
   },
   {
     name: "Standalone App Server local data source implements workspace and skill surfaces",
-    file: "lime-rs/crates/app-server/src/local_data_source.rs",
+    files: [
+      "lime-rs/crates/app-server/src/local_data_source.rs",
+      "lime-rs/crates/app-server/src/local_data_source/workspaces.rs",
+      "lime-rs/crates/app-server/src/local_data_source/skills/workspace.rs",
+    ],
     snippets: [
       "pub struct LocalAppDataSource",
       "impl AppDataSource for LocalAppDataSource",
@@ -853,10 +901,15 @@ const checks = [
   },
   {
     name: "Standalone App Server local data source preserves current session list archive filters",
-    file: "lime-rs/crates/app-server/src/local_data_source.rs",
+    files: [
+      "lime-rs/crates/app-server/src/local_data_source.rs",
+      "lime-rs/crates/app-server/src/local_data_source/current_timeline.rs",
+      "lime-rs/crates/app-server/src/local_data_source/tests.rs",
+      "lime-rs/crates/app-server/src/local_data_source/workspaces.rs",
+    ],
     snippets: [
       "async fn list_current_timeline_sessions(",
-      "let workspace_id = normalize_workspace_filter(params.workspace_id.as_deref());",
+      "let workspace_id = workspaces::normalize_workspace_filter(params.workspace_id.as_deref());",
       "let include_archived = params.include_archived.unwrap_or(false);",
       "let archived_only = params.archived_only.unwrap_or(false);",
       "query_current_timeline_session_overviews(",
@@ -949,14 +1002,14 @@ const checks = [
       "pub project_id: String",
       "pub struct ProjectMemoryReadResponse",
       "pub memory: serde_json::Value",
-      "method: METHOD_AGENT_APP_INSTALLED_LIST",
-      "method: METHOD_AGENT_APP_UI_RUNTIME_START",
-      "method: METHOD_AGENT_APP_UI_RUNTIME_STATUS",
-      "method: METHOD_AGENT_APP_UI_RUNTIME_STOP",
-      "method: METHOD_KNOWLEDGE_PACK_LIST",
-      "method: METHOD_KNOWLEDGE_PACK_READ",
-      "method: METHOD_AUTOMATION_JOB_LIST",
-      "method: METHOD_PROJECT_MEMORY_READ",
+      "method!(METHOD_AGENT_APP_INSTALLED_LIST, Request)",
+      "method!(METHOD_AGENT_APP_UI_RUNTIME_START, Request)",
+      "method!(METHOD_AGENT_APP_UI_RUNTIME_STATUS, Request)",
+      "method!(METHOD_AGENT_APP_UI_RUNTIME_STOP, Request)",
+      "method!(METHOD_KNOWLEDGE_PACK_LIST, Request)",
+      "method!(METHOD_KNOWLEDGE_PACK_READ, Request)",
+      "method!(METHOD_AUTOMATION_JOB_LIST, Request)",
+      "method!(METHOD_PROJECT_MEMORY_READ, Request)",
       "AgentAppInstalledListResponse",
       "AgentAppUiRuntimeStartParams",
       "AgentAppUiRuntimeStatusParams",
@@ -976,6 +1029,8 @@ const checks = [
     files: [
       "lime-rs/crates/app-server/src/runtime.rs",
       "lime-rs/crates/app-server/src/local_data_source.rs",
+      "lime-rs/crates/app-server/src/local_data_source/automation.rs",
+      "lime-rs/crates/app-server/src/local_data_source/knowledge.rs",
     ],
     snippets: [
       "async fn list_agent_app_installed(",
@@ -2803,6 +2858,7 @@ const checks = [
     files: [
       "lime-rs/crates/app-server/src/lib.rs",
       "lime-rs/crates/app-server/src/runtime_backend.rs",
+      "lime-rs/crates/app-server/src/runtime_backend/tests.rs",
     ],
     snippets: [
       "mod runtime_backend;",
@@ -3315,6 +3371,38 @@ const checks = [
     absentSnippets: ['export const METHOD_CAPABILITY_LIST = "capability/list"'],
   },
   {
+    name: "Media task artifact video create is wired through App Server current clients",
+    files: [
+      "packages/app-server-client/src/protocol.ts",
+      "packages/app-server-client/src/index.ts",
+      "src/lib/api/appServer.ts",
+      "src/lib/api/mediaTasks.ts",
+      "src/lib/api/videoGeneration.ts",
+      "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
+      "lime-rs/crates/app-server-protocol/src/protocol/v0/media.rs",
+      "lime-rs/crates/app-server/src/processor.rs",
+      "lime-rs/crates/app-server/src/runtime.rs",
+      "lime-rs/crates/app-server/src/media_task.rs",
+    ],
+    snippets: [
+      "mediaTaskArtifact/video/create",
+      "METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE",
+      "MediaTaskArtifactVideoCreateParams",
+      "createVideoMediaTaskArtifact",
+      "createVideoGenerationTaskArtifact",
+      "create_video_media_task_artifact",
+      "create_video_generation_task_artifact",
+      "MediaTaskType::VideoGenerate",
+      "video_generation_model",
+    ],
+    absentSnippets: [
+      '"create_video_generation_task"',
+      '"get_video_generation_task"',
+      '"list_video_generation_tasks"',
+      '"cancel_video_generation_task"',
+    ],
+  },
+  {
     name: "TypeScript protocol exposes typed agentSession/action/respond contract",
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
@@ -3536,14 +3624,16 @@ const checks = [
       "exportReplayCase(params: AgentSessionReplayCaseExportParams): JsonRpcRequest",
       "exportAnalysisHandoff(",
       "exportReviewDecisionTemplate(",
-      "saveReviewDecision(params: AgentSessionReviewDecisionSaveParams): JsonRpcRequest",
       "this.client.exportReplayCase(params)",
       "this.client.exportAnalysisHandoff(params)",
       "this.client.exportReviewDecisionTemplate(params)",
       "this.client.saveReviewDecision(params)",
       "Promise<AppServerRequestResult<AgentSessionReplayCaseExportResponse>>",
-      "Promise<AppServerRequestResult<AgentSessionAnalysisHandoffExportResponse>>",
       "Promise<\n    AppServerRequestResult<AgentSessionReviewDecisionTemplateExportResponse>",
+    ],
+    normalizedSnippets: [
+      "saveReviewDecision(params: AgentSessionReviewDecisionSaveParams,): JsonRpcRequest",
+      "Promise<AppServerRequestResult<AgentSessionAnalysisHandoffExportResponse>>",
     ],
   },
   {
@@ -3618,8 +3708,10 @@ const checks = [
       "this.client.clearAgentSessionObjective(params)",
       "Promise<AppServerRequestResult<AgentSessionObjectiveReadResponse>>",
       "Promise<AppServerRequestResult<AgentSessionObjectiveSetResponse>>",
-      "Promise<AppServerRequestResult<AgentSessionObjectiveStatusUpdateResponse>>",
       "Promise<AppServerRequestResult<AgentSessionObjectiveClearResponse>>",
+    ],
+    normalizedSnippets: [
+      "Promise<AppServerRequestResult<AgentSessionObjectiveStatusUpdateResponse>>",
     ],
   },
   {
@@ -4395,18 +4487,227 @@ const checks = [
     ],
   },
   {
-    name: "Renderer Agent Runtime thread read uses App Server read-model facade",
+    name: "Renderer Agent Runtime thread lifecycle uses standard AgentRuntimeClient facade",
     file: "src/lib/api/agentRuntime/threadClient.ts",
     snippets: [
-      "createAppServerReadModelClient",
-      "const appServerReadModelClient = createAppServerReadModelClient({",
+      'import type { AgentRuntimeClient as StandardAgentRuntimeClient } from "@limecloud/agent-runtime-client"',
+      "export type AgentRuntimeLifecycleClient = Pick<",
+      '"startTurn" | "cancelTurn" | "respondAction" | "readThread"',
+      "standardRuntimeClient?: AgentRuntimeLifecycleClient",
+      "createAppServerAgentRuntimeLifecycleClient(appServerClient)",
       "async function getAgentRuntimeThreadRead(",
       "assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable)",
-      "appServerReadModelClient.getAgentRuntimeThreadRead(sessionId)",
+      "standardRuntimeClient.readThread({",
+      "return projectAppServerSessionReadResult(response.result)",
     ],
     absentSnippets: [
       "AGENT_RUNTIME_COMMANDS.getThreadRead",
       '"agent_runtime_get_thread_read"',
+    ],
+  },
+  {
+    name: "Renderer Agent UI projection store delegates event selectors to standard projection package",
+    file: "src/components/agent/chat/projection/conversationProjectionStore.ts",
+    snippets: [
+      'from "@limecloud/agent-runtime-projection"',
+      "type ConversationAgentUiProjectionSlice = AgentUiProjectionEventStoreState",
+      "createEmptyAgentUiProjectionEventStoreState()",
+      "indexAgentUiProjectionEvents(nextEvents)",
+      "selectAgentUiProjectionEventsForScopeFromStore(state.agentUi, filter)",
+      "selectLatestAgentUiProjectionEventForArtifactFromStore(",
+    ],
+    absentSnippets: [
+      "function hasAgentUiProjectionScopeFilter",
+      "function matchesAgentUiProjectionScopeValue",
+      "function matchesAgentUiProjectionScope(",
+      "function normalizeAgentUiRunKey",
+    ],
+  },
+  {
+    name: "Renderer Agent UI projection summary delegates host-neutral selectors to standard projection package",
+    file: "src/components/agent/chat/projection/agentUiProjectionSummary.ts",
+    snippets: [
+      'from "@limecloud/agent-runtime-projection"',
+      "summarizeAgentUiTeamWorkbenchSurfaceLanesBase",
+      "summarizeAgentUiTeamWorkbenchSurfacesBase",
+      "findLatestAgentUiProjectionEventForArtifact",
+      "summarizeAgentUiProjectionEvents",
+      "summarizeAgentUiTeamWorkbenchProjectionEvents",
+    ],
+    absentSnippets: [
+      "export const AGENT_UI_ACTION_EVENT_TYPES = new Set",
+      "export const AGENT_UI_TASK_EVENT_TYPES = new Set",
+      "export const AGENT_UI_ARTIFACT_EVENT_TYPES = new Set",
+      "export const AGENT_UI_DIAGNOSTIC_EVENT_TYPES = new Set",
+      "export const AGENT_UI_EVIDENCE_EVENT_TYPES = new Set",
+      "export const AGENT_UI_TEAM_WORKBENCH_SURFACES = new Set",
+      "export const AGENT_UI_NOTABLE_EVENT_TYPES = new Set",
+      "export function summarizeAgentUiProjectionEvents(",
+      "export function summarizeAgentUiTeamWorkbenchProjectionEvents(",
+      "export function findLatestAgentUiProjectionEventForArtifact(",
+      "function normalizeLookupKey",
+    ],
+  },
+  {
+    name: "Agent Runtime projection package keeps index as barrel exports",
+    files: [
+      "packages/agent-runtime-projection/src/index.ts",
+      "packages/agent-runtime-projection/src/index.js",
+      "packages/agent-runtime-projection/src/index.d.ts",
+    ],
+    snippets: [
+      'from "./contracts.js"',
+      'export * from "./eventStore.js"',
+      'export * from "./normalization.js"',
+      'export * from "./refs.js"',
+      'export * from "./routing.js"',
+      'export * from "./runtimeFacts.js"',
+      'export * from "./summary.js"',
+      'export * from "./readModel.js"',
+      'export * from "./uiState.js"',
+    ],
+    absentSnippets: [
+      "function ",
+      "interface ",
+      "const ",
+      "import ",
+      "@limecloud/agent-ui-contracts",
+    ],
+  },
+  {
+    name: "Agent Runtime projection package keeps host-neutral modules split by responsibility",
+    files: [
+      "packages/agent-runtime-projection/src/contracts.ts",
+      "packages/agent-runtime-projection/src/eventStore.ts",
+      "packages/agent-runtime-projection/src/normalization.ts",
+      "packages/agent-runtime-projection/src/refs.ts",
+      "packages/agent-runtime-projection/src/routing.ts",
+      "packages/agent-runtime-projection/src/runtimeFacts.ts",
+      "packages/agent-runtime-projection/src/summary.ts",
+      "packages/agent-runtime-projection/src/readModel.ts",
+      "packages/agent-runtime-projection/src/uiState.ts",
+    ],
+    snippets: [
+      'from "@limecloud/agent-ui-contracts"',
+      "AgentUiProjectionEventStoreState",
+      "definedString",
+      "extractArtifactRefs",
+      "buildRoutingDecisionPayload",
+      "inferAgentUiRuntimeEntity",
+      "summarizeAgentUiProjectionEvents",
+      "projectAgentRuntimeReadModel",
+      "projectAgentUiState",
+    ],
+    absentSnippets: [
+      'from "@/',
+      'from "src/',
+      'from "../../src',
+      'from "../../../src',
+      "React",
+      "safeInvoke",
+      "mockPriorityCommands",
+      "defaultMocks",
+      "invokeMockOnly",
+      "EventSource",
+      "new WebSocket",
+      "fetch(",
+      "XMLHttpRequest",
+    ],
+  },
+  {
+    name: "Agent Runtime UI package keeps index as barrel exports",
+    file: "packages/agent-runtime-ui/src/index.ts",
+    snippets: [
+      'export type * from "./types.js"',
+      'export * from "./messages.js"',
+      'export * from "./processTimeline.js"',
+      'export * from "./executionGraph.js"',
+      'export * from "./runtimeFacts.js"',
+      'export * from "./projectionView.js"',
+    ],
+    absentSnippets: [
+      "function ",
+      "interface ",
+      "const ",
+      "import ",
+      "@limecloud/agent-ui-contracts",
+      "safeInvoke",
+      "mockPriorityCommands",
+      "defaultMocks",
+      "invokeMockOnly",
+    ],
+  },
+  {
+    name: "Agent Runtime UI package keeps React primitives split by responsibility",
+    files: [
+      "packages/agent-runtime-ui/src/types.ts",
+      "packages/agent-runtime-ui/src/labels.ts",
+      "packages/agent-runtime-ui/src/messages.tsx",
+      "packages/agent-runtime-ui/src/processTimeline.tsx",
+      "packages/agent-runtime-ui/src/executionGraph.tsx",
+      "packages/agent-runtime-ui/src/runtimeFacts.tsx",
+      "packages/agent-runtime-ui/src/projectionView.tsx",
+    ],
+    snippets: [
+      "AgentTimelineProps",
+      "defaultMessageTitle",
+      "UIMessagePartsView",
+      "ProcessTimelineView",
+      "ExecutionGraphView",
+      "RuntimeFactCard",
+      "AgentUiProjectionView",
+    ],
+    absentSnippets: [
+      'from "@/',
+      'from "src/',
+      'from "../../src',
+      'from "../../../src',
+      "safeInvoke",
+      "mockPriorityCommands",
+      "defaultMocks",
+      "invokeMockOnly",
+      "EventSource",
+      "new WebSocket",
+      "fetch(",
+      "XMLHttpRequest",
+    ],
+  },
+  {
+    name: "Agent UI Runtime standard document is the current package and host integration fact source",
+    files: [
+      "internal/aiprompts/agent-ui-runtime-standard.md",
+      "internal/aiprompts/README.md",
+      "internal/aiprompts/agent-protocol-standards-map.md",
+      "internal/prd/next/implementation-roadmap.md",
+      "packages/agent-runtime-projection/README.md",
+    ],
+    snippets: [
+      "agent-ui-runtime-standard.md",
+      "@limecloud/agent-runtime-client",
+      "@limecloud/agent-ui-contracts",
+      "@limecloud/agent-runtime-projection",
+      "@limecloud/agent-runtime-ui",
+      "Standard Package Layering",
+      "Source Layout",
+      "src/normalization.ts",
+      "src/refs.ts",
+      "src/routing.ts",
+      "src/runtimeFacts.ts",
+      "AgentRuntimeClient -> projectAgentUiState -> AgentUiProjectionView",
+      "主聊天 projection 迁移分类",
+      "projection package `index` 只能做 barrel exports",
+      "barrel exports only",
+      "src/components/agent/chat/projection/**",
+      "agentUiEventProjection.ts",
+      "conversationProjectionStore.ts",
+      "agentUiProjectionSummary.ts",
+      "不得新增第二套 runtime fact source",
+    ],
+    absentSnippets: [
+      ...retiredTreeProjectionNames,
+      "直接套用外部 SDK",
+      "新增 Agent Runtime 能力可以落到 legacy desktop facade",
+      "主聊天目录可以重新实现标准 projection selector",
     ],
   },
   {
@@ -4644,10 +4945,11 @@ const checks = [
     name: "Renderer Agent Runtime client factory prevents lifecycle and queue bridgeInvoke fallback",
     file: "src/lib/api/agentRuntime/clientFactory.test.ts",
     snippets: [
-      "queue/session control 应走 App Server current，retired site adapter 仍 fail-closed",
+      "queue/session control 应走 App Server current，且不再暴露 retired site adapter surface",
       "queue/session control 不应回退到 legacy bridgeInvoke",
       "appServerClient.resumeAgentSessionThread",
-      "site_list_adapters is retired until Site Adapter moves to App Server current methods",
+      'expect(client).not.toHaveProperty("siteListAdapters")',
+      'expect(client).not.toHaveProperty("siteRunAdapter")',
       "expect(invoke).not.toHaveBeenCalled()",
       "turn lifecycle 应走 App Server client，不复用 legacy bridgeInvoke",
       "evidence pack export 应走 App Server client，不复用 legacy bridgeInvoke",
@@ -5069,6 +5371,23 @@ const checks = [
     ],
   },
   {
+    name: "Social Workbench smoke uses App Server current session read model",
+    file: "scripts/social-workbench-e2e-smoke.mjs",
+    snippets: [
+      'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
+      'const METHOD_AGENT_SESSION_READ = "agentSession/read"',
+      "async function readAgentSession(sessionId)",
+      "function projectWorkbenchState(sessionRead, limit)",
+      "function projectRunDetail(sessionRead, runId)",
+      "await invokeAppServerJsonRpc(METHOD_AGENT_SESSION_READ",
+      "agentSession/read 未能投影运行详情",
+    ],
+    absentSnippets: [
+      '"execution_run_get_theme_workbench_state"',
+      '"execution_run_get"',
+    ],
+  },
+  {
     name: "Electron Desktop Host records Connect deep links from startup and second-instance args",
     file: "electron/main.ts",
     snippets: [
@@ -5217,9 +5536,9 @@ const checks = [
       'const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update"',
       'const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start"',
       'const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =',
+      "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =",
       '"agentSession/fileCheckpoint/list"',
-      'const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =',
+      "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =",
       '"agentSession/fileCheckpoint/diff"',
       'const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export"',
       "async function invokeAppServer(",
@@ -5819,7 +6138,7 @@ const checks = [
     file: "packages/app-server-client/tests/client.test.mjs",
     snippets: [
       "DEFAULT_STANDALONE_BACKEND_MODE",
-      "uses codex style stdio sidecar launch args",
+      "uses agent-style stdio sidecar launch args",
       "assert.equal(config.backendMode, DEFAULT_STANDALONE_BACKEND_MODE)",
       '"--stdio"',
       '"--backend"',
@@ -6147,6 +6466,14 @@ for (const check of checks) {
       );
     }
   }
+  const normalizedContent = normalizeContractSnippet(content);
+  for (const snippet of check.normalizedSnippets ?? []) {
+    if (!normalizedContent.includes(normalizeContractSnippet(snippet))) {
+      failures.push(
+        `${check.name}: missing normalized ${JSON.stringify(snippet)} in ${location}`,
+      );
+    }
+  }
   for (const snippet of check.absentSnippets ?? []) {
     if (content.includes(snippet)) {
       failures.push(
@@ -6174,6 +6501,7 @@ checkRetiredSkillExecutionSurfaceFiles();
 checkMcpRuntimeCurrentContracts();
 checkKnowledgeBuilderRuntimeCurrentContracts();
 checkRetiredAppServerAgentBackendCrate();
+checkAgentUiPackageCanonicalNaming();
 
 if (failures.length > 0) {
   console.error("[app-server-client-contract] failed");
@@ -6183,12 +6511,47 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[app-server-client-contract] ok (${checks.length + 5} checks)`);
+console.log(`[app-server-client-contract] ok (${checks.length + 6} checks)`);
+
+function checkAgentUiPackageCanonicalNaming() {
+  const packageManifestFiles = fs
+    .readdirSync(path.join(repoRoot, "packages"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `packages/${entry.name}/package.json`)
+    .filter((relativePath) => fs.existsSync(path.join(repoRoot, relativePath)));
+
+  const files = [...agentUiPackageNamingGuardFiles, ...packageManifestFiles];
+  const contentByFile = new Map(
+    files.map((relativePath) => [
+      relativePath,
+      fs.readFileSync(path.join(repoRoot, relativePath), "utf8"),
+    ]),
+  );
+
+  const combinedContent = Array.from(contentByFile.values()).join("\n");
+  for (const packageName of canonicalAgentUiPackages) {
+    if (!combinedContent.includes(packageName)) {
+      failures.push(
+        `Agent UI package canonical naming: missing canonical package ${packageName}`,
+      );
+    }
+  }
+
+  for (const [relativePath, content] of contentByFile.entries()) {
+    for (const packageName of retiredAgentUiPackageNames) {
+      if (content.includes(packageName)) {
+        failures.push(
+          `Agent UI package canonical naming: ${relativePath} must not reference retired package name ${packageName}`,
+        );
+      }
+    }
+  }
+}
 
 function checkMcpRuntimeCurrentContracts() {
   const requiredByFile = new Map([
     [
-      "lime-rs/crates/app-server-protocol/src/protocol/v0.rs",
+      "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
       [
         'pub const METHOD_MCP_SERVER_CREATE: &str = "mcpServer/create"',
         'pub const METHOD_MCP_SERVER_UPDATE: &str = "mcpServer/update"',
@@ -6204,6 +6567,11 @@ function checkMcpRuntimeCurrentContracts() {
         'pub const METHOD_MCP_TOOL_CALL_WITH_CALLER: &str = "mcpTool/callWithCaller"',
         'pub const METHOD_MCP_PROMPT_GET: &str = "mcpPrompt/get"',
         'pub const METHOD_MCP_RESOURCE_READ: &str = "mcpResource/read"',
+      ],
+    ],
+    [
+      "lime-rs/crates/app-server-protocol/src/protocol/v0/mcp.rs",
+      [
         "pub struct McpServerCreateParams",
         "pub struct McpServerUpdateParams",
         "pub struct McpServerDeleteParams",
@@ -6242,22 +6610,25 @@ function checkMcpRuntimeCurrentContracts() {
       ],
     ],
     [
-      "lime-rs/crates/app-server/src/local_data_source.rs",
+      [
+        "lime-rs/crates/app-server/src/local_data_source.rs",
+        "lime-rs/crates/app-server/src/local_data_source/mcp.rs",
+      ],
       [
         "mcp_manager: McpManagerState",
         "McpClientManager::new(None)",
-        "async fn create_mcp_server(",
-        "McpService::add(&self.db, server)",
-        "async fn update_mcp_server(",
-        "McpService::update(&self.db, server)",
-        "async fn delete_mcp_server(",
-        "McpService::delete(&self.db, &params.id)",
-        "async fn set_mcp_server_enabled(",
+        "fn create_mcp_server(",
+        "McpService::add(db, server)",
+        "fn update_mcp_server(",
+        "McpService::update(db, server)",
+        "fn delete_mcp_server(",
+        "McpService::delete(db, &params.id)",
+        "fn set_mcp_server_enabled(",
         "McpService::toggle_enabled(",
-        "async fn import_mcp_servers_from_app(",
-        "McpService::import_from_app(&self.db, &params.app_type)",
-        "async fn sync_all_mcp_servers_to_live(",
-        "McpService::sync_all_to_live(&self.db)",
+        "fn import_mcp_servers_from_app(",
+        "McpService::import_from_app(db, &params.app_type)",
+        "fn sync_all_mcp_servers_to_live(",
+        "McpService::sync_all_to_live(db)",
         "async fn call_mcp_tool(",
         "async fn call_mcp_tool_with_caller(",
         ".call_tool(&params.tool_name, params.arguments)",
@@ -6388,13 +6759,17 @@ function checkMcpRuntimeCurrentContracts() {
   ]);
 
   for (const [relativePath, snippets] of requiredByFile.entries()) {
-    const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+    const paths = Array.isArray(relativePath) ? relativePath : [relativePath];
+    const content = paths
+      .map((item) => fs.readFileSync(path.join(repoRoot, item), "utf8"))
+      .join("\n");
+    const location = paths.join(", ");
     for (const snippet of snippets) {
       if (!content.includes(snippet)) {
         failures.push(
           `MCP runtime current contract: missing ${JSON.stringify(
             snippet,
-          )} in ${relativePath}`,
+          )} in ${location}`,
         );
       }
     }

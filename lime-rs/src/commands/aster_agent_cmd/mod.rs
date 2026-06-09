@@ -24,11 +24,10 @@ use crate::agent_tools::catalog::{
     WorkspaceToolSurface, LIME_CREATE_BROADCAST_TASK_TOOL_NAME, LIME_CREATE_COVER_TASK_TOOL_NAME,
     LIME_CREATE_IMAGE_TASK_TOOL_NAME, LIME_CREATE_RESOURCE_SEARCH_TASK_TOOL_NAME,
     LIME_CREATE_TRANSCRIPTION_TASK_TOOL_NAME, LIME_CREATE_TYPESETTING_TASK_TOOL_NAME,
-    LIME_CREATE_URL_PARSE_TASK_TOOL_NAME, LIME_CREATE_VIDEO_TASK_TOOL_NAME,
-    LIME_SEARCH_WEB_IMAGES_TOOL_NAME, LIME_SITE_INFO_TOOL_NAME, LIME_SITE_LIST_TOOL_NAME,
-    LIME_SITE_RECOMMEND_TOOL_NAME, LIME_SITE_RUN_TOOL_NAME, LIME_SITE_SEARCH_TOOL_NAME,
-    LIST_MCP_RESOURCES_TOOL_NAME, READ_MCP_RESOURCE_TOOL_NAME, SOCIAL_IMAGE_TOOL_NAME,
-    TOOL_SEARCH_TOOL_NAME,
+    LIME_CREATE_URL_PARSE_TASK_TOOL_NAME, LIME_SEARCH_WEB_IMAGES_TOOL_NAME, LIME_SITE_INFO_TOOL_NAME,
+    LIME_SITE_LIST_TOOL_NAME, LIME_SITE_RECOMMEND_TOOL_NAME, LIME_SITE_RUN_TOOL_NAME,
+    LIME_SITE_SEARCH_TOOL_NAME, LIST_MCP_RESOURCES_TOOL_NAME, READ_MCP_RESOURCE_TOOL_NAME,
+    SOCIAL_IMAGE_TOOL_NAME, TOOL_SEARCH_TOOL_NAME,
 };
 #[cfg(test)]
 use crate::agent_tools::execution::build_workspace_shell_allow_pattern;
@@ -116,9 +115,6 @@ use lime_agent::{
 };
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::mcp_service::McpService;
-use lime_services::video_generation_service::{
-    CreateVideoGenerationRequest, VideoGenerationService,
-};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -465,7 +461,8 @@ pub(crate) use form_skill_launch::{
 };
 pub(crate) use image_skill_launch::{
     append_image_skill_launch_session_permissions, merge_system_prompt_with_image_skill_launch,
-    prepare_image_skill_launch_request_metadata, prune_image_skill_launch_detour_tools_from_registry,
+    prepare_image_skill_launch_request_metadata,
+    prune_image_skill_launch_detour_tools_from_registry,
 };
 pub(crate) use mcp_bridge::{ensure_lime_mcp_servers_running, inject_mcp_extensions};
 pub(crate) use pdf_read_skill_launch::{

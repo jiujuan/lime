@@ -85,7 +85,9 @@ function expectStringLiteralsAbsent(source: string, literals: string[]): void {
 }
 
 function readAgentCommandCatalog(): Record<string, unknown> {
-  return JSON.parse(readRepoFile("src/lib/governance/agentCommandCatalog.json"));
+  return JSON.parse(
+    readRepoFile("src/lib/governance/agentCommandCatalog.json"),
+  );
 }
 
 function expectCatalogSurfaceAbsent(
@@ -117,9 +119,14 @@ describe("skillsApi current App Server boundary", () => {
     const clientProtocolSource = readRepoFile(
       "packages/app-server-client/src/protocol.ts",
     );
-    const rustProtocolSource = readRepoFile(
-      "lime-rs/crates/app-server-protocol/src/protocol/v0.rs",
-    );
+    const rustProtocolSource = [
+      readRepoFile(
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
+      ),
+      readRepoFile(
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/skills.rs",
+      ),
+    ].join("\n");
     const catalog = readAgentCommandCatalog();
 
     for (const method of CURRENT_SKILL_MANAGEMENT_METHODS) {

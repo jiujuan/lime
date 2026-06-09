@@ -74,6 +74,7 @@ import {
   getVisibleInstalledLocalSkills,
   getVisibleSkillStoreItems,
   getVisibleUserInstalledSkills,
+  isMarketplaceSkillInstalledAsLocalSkill,
   splitFeaturedSkillStoreItems,
   type SkillsWorkspaceView,
   type SkillStoreItem,
@@ -616,6 +617,7 @@ export function SkillsWorkspacePage({
   } = useOfficialSkillMarketplace();
   const {
     skills: localSkills = [],
+    loading: localSkillsLoading,
     error: localSkillsError,
     refresh: refreshLocalSkills,
     uninstall: uninstallLocalSkill,
@@ -674,6 +676,8 @@ export function SkillsWorkspacePage({
   >(null);
   const [selectingLocalSkillPackage, setSelectingLocalSkillPackage] =
     useState(false);
+  const [registeredSkillsPanelReady, setRegisteredSkillsPanelReady] =
+    useState(false);
   const [defaultProjectState, setDefaultProjectState] = useState<{
     id: string | null;
     rootPath: string | null;
@@ -691,6 +695,10 @@ export function SkillsWorkspacePage({
   ] = useState<string | null>(null);
   const [optimisticInstalledSkill, setOptimisticInstalledSkill] =
     useState<Skill | null>(null);
+  const [
+    optimisticallyHiddenSkillDirectories,
+    setOptimisticallyHiddenSkillDirectories,
+  ] = useState<Set<string>>(() => new Set());
   const [consumedScaffoldRequestKey, setConsumedScaffoldRequestKey] = useState<
     number | null
   >(null);
@@ -703,15 +711,41 @@ export function SkillsWorkspacePage({
     () => buildInstalledLocalSkills(localSkills, optimisticInstalledSkill),
     [localSkills, optimisticInstalledSkill],
   );
-  const localSkillByDirectory = useMemo(() => {
-    const result = new Map<string, Skill>();
-    for (const skill of installedLocalSkills) {
-      if (skill.directory) {
-        result.set(skill.directory, skill);
-      }
+  useEffect(() => {
+    if (optimisticallyHiddenSkillDirectories.size === 0) {
+      return;
     }
-    return result;
-  }, [installedLocalSkills]);
+
+    setOptimisticallyHiddenSkillDirectories((previous) => {
+      const next = new Set(
+        [...previous].filter((directory) =>
+          localSkills.some((skill) => skill.directory === directory),
+        ),
+      );
+      return next.size === previous.size ? previous : next;
+    });
+  }, [localSkills, optimisticallyHiddenSkillDirectories]);
+  const activeInstalledLocalSkills = useMemo(
+    () =>
+      installedLocalSkills.filter(
+        (skill) => !optimisticallyHiddenSkillDirectories.has(skill.directory),
+      ),
+    [installedLocalSkills, optimisticallyHiddenSkillDirectories],
+  );
+  const findInstalledMarketplaceLocalSkill = useCallback(
+    (item: SkillStoreItem): Skill | undefined => {
+      if (item.source !== "official") {
+        return undefined;
+      }
+      return activeInstalledLocalSkills.find((localSkill) =>
+        isMarketplaceSkillInstalledAsLocalSkill({
+          marketplaceSkill: item.skill,
+          localSkill,
+        }),
+      );
+    },
+    [activeInstalledLocalSkills],
+  );
   const serviceSkillRecommendationBuckets = useMemo(
     () =>
       buildServiceSkillRecommendationBuckets(serviceSkills, {
@@ -759,10 +793,24 @@ export function SkillsWorkspacePage({
   }, [pageParams?.initialView]);
 
   useEffect(() => {
+    if (activeView !== "installed" || localSkillsLoading) {
+      setRegisteredSkillsPanelReady(false);
+      return;
+    }
+
+    setRegisteredSkillsPanelReady(false);
+    const timer = window.setTimeout(() => {
+      setRegisteredSkillsPanelReady(true);
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [activeView, localSkillsLoading]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadDefaultProject = async () => {
-      if (activeView !== "installed") {
+      if (activeView !== "installed" || !registeredSkillsPanelReady) {
         setDefaultProjectState({
           id: null,
           rootPath: null,
@@ -806,7 +854,7 @@ export function SkillsWorkspacePage({
     return () => {
       cancelled = true;
     };
-  }, [activeView]);
+  }, [activeView, registeredSkillsPanelReady]);
 
   useEffect(() => {
     const requestKey = pageParams?.initialScaffoldRequestKey ?? null;
@@ -869,14 +917,14 @@ export function SkillsWorkspacePage({
   const visibleInstalledLocalSkills = useMemo(
     () =>
       getVisibleInstalledLocalSkills({
-        installedLocalSkills,
+        installedLocalSkills: activeInstalledLocalSkills,
         searchQuery,
         highlightedInstalledSkillDirectory,
         copy: installedSkillPresentationCopy,
       }),
     [
+      activeInstalledLocalSkills,
       highlightedInstalledSkillDirectory,
-      installedLocalSkills,
       installedSkillPresentationCopy,
       searchQuery,
     ],
@@ -961,6 +1009,11 @@ export function SkillsWorkspacePage({
       }
 
       setUninstallingSkillDirectory(skill.directory);
+      setOptimisticallyHiddenSkillDirectories((previous) => {
+        const next = new Set(previous);
+        next.add(skill.directory);
+        return next;
+      });
       try {
         await uninstallLocalSkill(skill.directory);
         if (optimisticInstalledSkill?.directory === skill.directory) {
@@ -985,6 +1038,14 @@ export function SkillsWorkspacePage({
           }),
         );
       } catch (error) {
+        setOptimisticallyHiddenSkillDirectories((previous) => {
+          if (!previous.has(skill.directory)) {
+            return previous;
+          }
+          const next = new Set(previous);
+          next.delete(skill.directory);
+          return next;
+        });
         toast.error(
           t("skills.workspace.installedSkill.uninstallFailed", {
             message: error instanceof Error ? error.message : String(error),
@@ -1221,7 +1282,7 @@ export function SkillsWorkspacePage({
         return "installing";
       }
 
-      const localSkill = localSkillByDirectory.get(item.skill.name);
+      const localSkill = findInstalledMarketplaceLocalSkill(item);
       if (!localSkill) {
         return "not_installed";
       }
@@ -1235,7 +1296,7 @@ export function SkillsWorkspacePage({
     },
     [
       installingMarketplaceSkillName,
-      localSkillByDirectory,
+      findInstalledMarketplaceLocalSkill,
       uninstallingSkillDirectory,
     ],
   );
@@ -1271,7 +1332,32 @@ export function SkillsWorkspacePage({
           item.skill.name,
           "lime",
         );
+        setOptimisticallyHiddenSkillDirectories((previous) => {
+          if (!previous.has(result.directory)) {
+            return previous;
+          }
+          const next = new Set(previous);
+          next.delete(result.directory);
+          return next;
+        });
+        setOptimisticInstalledSkill({
+          key: `local:${result.directory}`,
+          name: item.skill.title,
+          description: item.skill.summary,
+          directory: result.directory,
+          installed: true,
+          sourceKind: "other",
+          catalogSource: "user",
+          license: result.inspection.license,
+          compatibility: result.inspection.compatibility,
+          metadata: result.inspection.metadata,
+          allowedTools: result.inspection.allowedTools,
+          resourceSummary: result.inspection.resourceSummary,
+          standardCompliance: result.inspection.standardCompliance,
+        });
         await refreshLocalSkills();
+        setActiveView("installed");
+        setSearchQuery("");
         setHighlightedInstalledSkillDirectory(result.directory);
         toast.success(
           t("skills.workspace.marketplace.installSuccess", {
@@ -1299,7 +1385,7 @@ export function SkillsWorkspacePage({
         return;
       }
 
-      const localSkill = localSkillByDirectory.get(item.skill.name);
+      const localSkill = findInstalledMarketplaceLocalSkill(item);
       if (localSkill && (state === "installed" || state === "builtin")) {
         handleInstalledSkillSelect(localSkill);
         return;
@@ -1313,7 +1399,7 @@ export function SkillsWorkspacePage({
       handleInstalledSkillSelect,
       handleMarketplaceSkillInstall,
       handleServiceSkillSelect,
-      localSkillByDirectory,
+      findInstalledMarketplaceLocalSkill,
       resolveMarketplaceSkillActionState,
     ],
   );
@@ -1323,13 +1409,13 @@ export function SkillsWorkspacePage({
       if (item.source !== "official") {
         return;
       }
-      const localSkill = localSkillByDirectory.get(item.skill.name);
+      const localSkill = findInstalledMarketplaceLocalSkill(item);
       if (!localSkill || localSkill.sourceKind === "builtin") {
         return;
       }
       void handleUninstallLocalSkill(localSkill);
     },
-    [handleUninstallLocalSkill, localSkillByDirectory],
+    [findInstalledMarketplaceLocalSkill, handleUninstallLocalSkill],
   );
 
   const handleSkillAutoLoadChange = useCallback(
@@ -1360,6 +1446,14 @@ export function SkillsWorkspacePage({
         ? buildSkillScaffoldReplayText(pageParams.initialScaffoldDraft)
         : undefined;
 
+      setOptimisticallyHiddenSkillDirectories((previous) => {
+        if (!previous.has(skill.directory)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.delete(skill.directory);
+        return next;
+      });
       setOptimisticInstalledSkill(skill);
       try {
         await refreshLocalSkills();
@@ -1436,6 +1530,14 @@ export function SkillsWorkspacePage({
 
   const handleLocalSkillPackageInstalled = useCallback(
     async (directory: string) => {
+      setOptimisticallyHiddenSkillDirectories((previous) => {
+        if (!previous.has(directory)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.delete(directory);
+        return next;
+      });
       try {
         await refreshLocalSkills();
       } catch (error) {
@@ -1549,11 +1651,11 @@ export function SkillsWorkspacePage({
       return null;
     }
     return (
-      installedLocalSkills.find(
+      activeInstalledLocalSkills.find(
         (skill) => skill.directory === detailInstalledSkillDirectory,
       ) ?? null
     );
-  }, [detailInstalledSkillDirectory, installedLocalSkills]);
+  }, [activeInstalledLocalSkills, detailInstalledSkillDirectory]);
 
   useEffect(() => {
     if (!detailStoreItem) {
@@ -1835,8 +1937,7 @@ export function SkillsWorkspacePage({
       setSelectedMarketplaceSkillName(skill.name);
       setDetailMarketplaceSkillName(skill.name);
     };
-    const localSkill =
-      item.source === "official" ? localSkillByDirectory.get(skill.name) : null;
+    const localSkill = findInstalledMarketplaceLocalSkill(item) ?? null;
     const canUninstall =
       item.source === "official" &&
       Boolean(localSkill) &&
@@ -2292,6 +2393,7 @@ export function SkillsWorkspacePage({
                   workspaceId={defaultProjectState.id}
                   projectPending={defaultProjectState.pending}
                   projectError={defaultProjectState.error}
+                  hideWhenEmpty
                 />
 
                 <div>
@@ -2303,7 +2405,7 @@ export function SkillsWorkspacePage({
                   </p>
                 </div>
                 {visibleUserInstalledSkills.length > 0 ? (
-                  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <div className="overflow-visible rounded-lg border border-slate-200 bg-white">
                     {visibleUserInstalledSkills.map((skill) => {
                       const isHighlighted =
                         skill.directory === highlightedInstalledSkillDirectory;
@@ -2645,9 +2747,8 @@ export function SkillsWorkspacePage({
                 {(() => {
                   const actionState =
                     resolveMarketplaceSkillActionState(detailStoreItem);
-                  const localSkill = localSkillByDirectory.get(
-                    detailStoreItem.skill.name,
-                  );
+                  const localSkill =
+                    findInstalledMarketplaceLocalSkill(detailStoreItem);
                   const canUninstall =
                     detailStoreItem.source === "official" &&
                     Boolean(localSkill) &&

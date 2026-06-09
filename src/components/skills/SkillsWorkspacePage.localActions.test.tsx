@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   clickMenuItem,
   findButton,
+  findLocalSkillRow,
   openLocalSkillMenu,
   mocks,
   renderPage,
@@ -13,6 +14,12 @@ describe("SkillsWorkspacePage local actions", () => {
   useSkillsWorkspacePageTestLifecycle();
 
   it("用户安装页点击卸载只卸载技能，不跳转会话", async () => {
+    let resolveUninstall: (() => void) | undefined;
+    mocks.uninstallLocalSkill.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveUninstall = resolve;
+      }),
+    );
     const { container, onNavigate } = renderPage();
 
     act(() => {
@@ -21,12 +28,43 @@ describe("SkillsWorkspacePage local actions", () => {
     openLocalSkillMenu(container);
     await act(async () => {
       clickMenuItem(container, "卸载");
-      await Promise.resolve();
+    });
+
+    expect(findLocalSkillRow(container, "writer")).toBeUndefined();
+
+    await act(async () => {
+      resolveUninstall?.();
       await Promise.resolve();
     });
 
     expect(mocks.uninstallLocalSkill).toHaveBeenCalledWith("writer");
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("用户安装页不展示项目保存技能，用户技能菜单保留卸载", () => {
+    mocks.localSkills = [
+      ...mocks.localSkills,
+      {
+        key: "project:article-image-cheatsheet",
+        name: "article-image-cheatsheet",
+        description: "项目保存技能",
+        directory: "article-image-cheatsheet",
+        installed: true,
+        sourceKind: "other",
+        catalogSource: "project",
+      },
+    ];
+    const { container } = renderPage();
+
+    act(() => {
+      findButton(container, "用户安装")?.click();
+    });
+
+    expect(
+      findLocalSkillRow(container, "article-image-cheatsheet"),
+    ).toBeUndefined();
+    openLocalSkillMenu(container, "writer");
+    expect(container.textContent).toContain("卸载");
   });
 
   it("用户安装页点击导出应打包为 .skills 安装包", async () => {

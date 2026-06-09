@@ -7,6 +7,13 @@
     "refreshRemote": {
       "default": false,
       "type": "boolean"
+    },
+    "scope": {
+      "default": null,
+      "type": [
+        "null",
+        "string"
+      ]
     }
   },
   "required": [

@@ -185,6 +185,65 @@ describe("Agent App manifest P0", () => {
     });
   });
 
+  it("应接受 v0.10 manifest 并保留当前安装契约", () => {
+    const normalized = normalizeManifest(
+      parseManifest({
+        manifestVersion: "0.10.0",
+        name: "Content Factory App",
+        displayName: "内容工厂",
+        version: "0.10.0",
+        requires: {
+          sdk: "@lime/app-sdk@^0.10.0",
+          capabilities: [
+            "lime.agent",
+            "lime.connectors",
+            "lime.terminal",
+          ],
+        },
+        entries: [{ key: "dashboard", kind: "page" }],
+        install: {
+          modes: ["in_lime", "standalone", "runtime_backed"],
+          runtime: {
+            minVersion: "0.10.0",
+            distribution: {
+              standalone: {
+                embedRuntime: true,
+                shell: "lime-app-shell",
+              },
+              runtimeBacked: {
+                requires: "lime-runtime",
+                minVersion: "0.10.0",
+              },
+            },
+          },
+          standalone: {
+            shell: "lime-app-shell",
+            bundleId: "ai.limecloud.contentfactory",
+            platforms: ["macos", "windows"],
+          },
+          runtimeBacked: {
+            requires: "lime-runtime",
+            minVersion: "0.10.0",
+          },
+        },
+      }),
+    );
+
+    expect(normalized.manifestVersion).toBe("0.10");
+    expect(normalized.requires.sdk).toBe("@lime/app-sdk@^0.10.0");
+    expect(normalized.requires.capabilities).toMatchObject({
+      "lime.agent": "*",
+      "lime.connectors": "*",
+      "lime.terminal": "*",
+    });
+    expect(normalized.install.runtime.minVersion).toBe("0.10.0");
+    expect(normalized.install.supportedModes).toEqual([
+      "in_lime",
+      "standalone",
+      "runtime_backed",
+    ]);
+  });
+
   it("应按 v0.5 分层 manifest 文件合并发现面和治理配置", () => {
     const manifest = mergeLayeredManifest(
       {

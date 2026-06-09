@@ -40,24 +40,17 @@ pub(super) async fn ensure_host_backed_config_tool_registered(
         return Ok(());
     }
 
-    let read_app = app.clone();
     let write_app = app.clone();
     registry.register(Box::new(ConfigTool::new().with_voice_enabled_callbacks(
         Arc::new(move || {
-            let _read_app = read_app.clone();
             Box::pin(async move {
-                let config = crate::voice::commands::get_voice_input_config().await?;
+                let config = crate::voice::config::load_voice_config()?;
                 Ok(config.enabled)
             })
         }),
         Arc::new(move |enabled| {
             let write_app = write_app.clone();
-            Box::pin(async move {
-                let mut config = crate::voice::commands::get_voice_input_config().await?;
-                config.enabled = enabled;
-                crate::voice::commands::save_voice_input_config(write_app, config.clone()).await?;
-                Ok(config.enabled)
-            })
+            Box::pin(async move { crate::voice::set_voice_input_enabled(&write_app, enabled) })
         }),
     )));
 

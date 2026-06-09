@@ -6,22 +6,11 @@
  * @module lib/webview-api
  */
 
-import {
-  siteApplyAdapterCatalogBootstrap as applySiteAdapterCatalogBootstrapViaRuntime,
-  siteClearAdapterCatalogCache as clearSiteAdapterCatalogCacheViaRuntime,
-  siteDebugRunAdapter as debugRunSiteAdapterViaRuntime,
-  siteGetAdapterCatalogStatus as getSiteAdapterCatalogStatusViaRuntime,
-  siteGetAdapterInfo as getSiteAdapterInfoViaRuntime,
-  siteGetAdapterLaunchReadiness as getSiteAdapterLaunchReadinessViaRuntime,
-  siteImportAdapterYamlBundle as importSiteAdapterYamlBundleViaRuntime,
-  siteListAdapters as listSiteAdaptersViaRuntime,
-  siteRecommendAdapters as recommendSiteAdaptersViaRuntime,
-  siteRunAdapter as runSiteAdapterViaRuntime,
-  siteSaveAdapterResult as saveSiteAdapterResultViaRuntime,
-  siteSearchAdapters as searchSiteAdaptersViaRuntime,
-} from "@/lib/api/agentRuntime";
+import { createSiteClient } from "@/lib/api/agentRuntime/siteClient";
 import { assertNotDiagnosticFacade } from "@/lib/api/diagnosticFacade";
 import { safeInvoke } from "@/lib/dev-bridge";
+
+const retiredSiteClient = createSiteClient();
 
 /**
  * 启动外部 Chrome Profile 的请求参数
@@ -717,7 +706,9 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isOptionalNullableString(value: unknown): boolean {
@@ -738,7 +729,8 @@ function isChromeProfileSessionInfo(
   return (
     isRecord(value) &&
     typeof value.profile_key === "string" &&
-    (value.browser_source === "system" || value.browser_source === "playwright") &&
+    (value.browser_source === "system" ||
+      value.browser_source === "playwright") &&
     typeof value.browser_path === "string" &&
     typeof value.profile_dir === "string" &&
     isFiniteNumber(value.remote_debugging_port) &&
@@ -945,9 +937,7 @@ function assertBrowserConnectorInstallStatus(
   }
 }
 
-function isBrowserBackendPolicy(
-  value: unknown,
-): value is BrowserBackendPolicy {
+function isBrowserBackendPolicy(value: unknown): value is BrowserBackendPolicy {
   return (
     isRecord(value) &&
     Array.isArray(value.priority) &&
@@ -1378,69 +1368,69 @@ export async function browserExecuteAction(
 }
 
 export async function siteListAdapters(): Promise<SiteAdapterDefinition[]> {
-  return listSiteAdaptersViaRuntime();
+  return retiredSiteClient.siteListAdapters();
 }
 
 export async function siteRecommendAdapters(
   limit?: number,
 ): Promise<SiteAdapterRecommendation[]> {
-  return recommendSiteAdaptersViaRuntime(limit);
+  return retiredSiteClient.siteRecommendAdapters(limit);
 }
 
 export async function siteSearchAdapters(
   query: string,
 ): Promise<SiteAdapterDefinition[]> {
-  return searchSiteAdaptersViaRuntime(query);
+  return retiredSiteClient.siteSearchAdapters(query);
 }
 
 export async function siteGetAdapterInfo(
   name: string,
 ): Promise<SiteAdapterDefinition> {
-  return getSiteAdapterInfoViaRuntime(name);
+  return retiredSiteClient.siteGetAdapterInfo(name);
 }
 
 export async function siteGetAdapterLaunchReadiness(
   request: SiteAdapterLaunchReadinessRequest,
 ): Promise<SiteAdapterLaunchReadinessResult> {
-  return getSiteAdapterLaunchReadinessViaRuntime(request);
+  return retiredSiteClient.siteGetAdapterLaunchReadiness(request);
 }
 
 export async function siteGetAdapterCatalogStatus(): Promise<SiteAdapterCatalogStatus> {
-  return getSiteAdapterCatalogStatusViaRuntime();
+  return retiredSiteClient.siteGetAdapterCatalogStatus();
 }
 
 export async function siteApplyAdapterCatalogBootstrap(
   payload: unknown,
 ): Promise<SiteAdapterCatalogStatus> {
-  return applySiteAdapterCatalogBootstrapViaRuntime(payload);
+  return retiredSiteClient.siteApplyAdapterCatalogBootstrap(payload);
 }
 
 export async function siteClearAdapterCatalogCache(): Promise<SiteAdapterCatalogStatus> {
-  return clearSiteAdapterCatalogCacheViaRuntime();
+  return retiredSiteClient.siteClearAdapterCatalogCache();
 }
 
 export async function siteImportAdapterYamlBundle(
   request: SiteAdapterImportYamlBundleRequest,
 ): Promise<SiteAdapterImportResult> {
-  return importSiteAdapterYamlBundleViaRuntime(request);
+  return retiredSiteClient.siteImportAdapterYamlBundle(request);
 }
 
 export async function siteRunAdapter(
   request: RunSiteAdapterRequest,
 ): Promise<SiteAdapterRunResult> {
-  return runSiteAdapterViaRuntime(request);
+  return retiredSiteClient.siteRunAdapter(request);
 }
 
 export async function siteDebugRunAdapter(
   request: RunSiteAdapterRequest,
 ): Promise<SiteAdapterRunResult> {
-  return debugRunSiteAdapterViaRuntime(request);
+  return retiredSiteClient.siteDebugRunAdapter(request);
 }
 
 export async function siteSaveAdapterResult(
   request: SaveSiteAdapterResultRequest,
 ): Promise<SavedSiteAdapterContent> {
-  return saveSiteAdapterResultViaRuntime(request);
+  return retiredSiteClient.siteSaveAdapterResult(request);
 }
 
 export async function getBrowserRuntimeAuditLogs(

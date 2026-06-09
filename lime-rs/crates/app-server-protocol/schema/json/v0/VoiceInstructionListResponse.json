@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "VoiceInstruction": {
+      "properties": {
+        "description": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "icon": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "is_preset": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "shortcut": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "prompt"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "instructions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/VoiceInstruction"
+      },
+      "type": "array"
+    }
+  },
+  "title": "VoiceInstructionListResponse",
+  "type": "object"
+}

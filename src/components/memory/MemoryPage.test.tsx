@@ -251,7 +251,7 @@ describe("MemoryPage", () => {
     expect(detailText).not.toContain("Agent");
   });
 
-  it("安装版未支持记忆列表命令时不应显示 Electron Host 内部错误", async () => {
+  it("安装版不应再用旧记忆列表命令 gate 阻断 current 网关", async () => {
     window.electronAPI = {
       invoke: vi.fn(),
       supportsCommand: (command: string) => command !== "unified_memory_list",
@@ -269,10 +269,10 @@ describe("MemoryPage", () => {
     await flushPageEffects();
 
     const bodyText = document.body.textContent ?? "";
-    expect(mockListUnifiedMemories).not.toHaveBeenCalled();
+    expect(mockListUnifiedMemories).toHaveBeenCalledWith({ limit: 120 });
     expect(mockGetUnifiedMemoryStats).toHaveBeenCalledTimes(1);
     expect(mockGetConfig).toHaveBeenCalledTimes(1);
-    expect(bodyText).toContain("当前筛选下没有可展示的记忆。");
+    expect(bodyText).toContain("夏日短视频语气");
     expect(bodyText).not.toContain("[Electron]");
     expect(bodyText).not.toContain("Desktop Host");
     expect(bodyText).not.toContain("unified_memory_list");
@@ -300,7 +300,9 @@ describe("MemoryPage", () => {
       document.body.querySelector('[data-testid="memory-library-list"]'),
     ).toBeNull();
     expect(bodyText).toContain("日常记忆");
-    expect(bodyText).toContain("查看 Lime 是否能检索已确认的项目资料和长期偏好");
+    expect(bodyText).toContain(
+      "查看 Lime 是否能检索已确认的项目资料和长期偏好",
+    );
     expect(bodyText).not.toContain("本地 ONNX（all-MiniLM-L6-v2）");
 
     await act(async () => {

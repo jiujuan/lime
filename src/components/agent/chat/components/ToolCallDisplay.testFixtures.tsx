@@ -5,8 +5,8 @@ import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import { ToolCallDisplay, ToolCallList } from "./ToolCallDisplay";
 
-vi.mock("@/lib/desktop-host/plugin-shell", () => ({
-  open: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
 }));
 
 interface RenderResult {

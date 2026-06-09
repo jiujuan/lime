@@ -134,7 +134,9 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 function isStringList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isOptionalString(value: unknown): boolean {
@@ -143,6 +145,10 @@ function isOptionalString(value: unknown): boolean {
 
 function isOptionalStringList(value: unknown): boolean {
   return value === undefined || isStringList(value);
+}
+
+function isMarketplaceSuccessCode(code: number): boolean {
+  return code === 0 || code === 200;
 }
 
 function isOptionalStringRecord(value: unknown): boolean {
@@ -261,8 +267,7 @@ function assertMarketplaceVisualAsset(value: unknown): void {
 function assertResourceSummary(value: unknown): void {
   if (
     !isRecord(value) ||
-    (value.hasScripts !== undefined &&
-      typeof value.hasScripts !== "boolean") ||
+    (value.hasScripts !== undefined && typeof value.hasScripts !== "boolean") ||
     (value.hasReferences !== undefined &&
       typeof value.hasReferences !== "boolean") ||
     (value.hasAssets !== undefined && typeof value.hasAssets !== "boolean")
@@ -308,7 +313,7 @@ function assertMarketplaceItem(value: unknown): void {
     !value.id.trim() ||
     typeof value.name !== "string" ||
     !value.name.trim() ||
-    !isStringList(value.aliases) ||
+    !isOptionalStringList(value.aliases) ||
     typeof value.title !== "string" ||
     !value.title.trim() ||
     typeof value.summary !== "string" ||
@@ -422,7 +427,7 @@ function assertMarketplaceBundle(value: unknown): void {
     !value.manifestVersion.trim() ||
     typeof value.name !== "string" ||
     !value.name.trim() ||
-    !isStringList(value.aliases) ||
+    !isOptionalStringList(value.aliases) ||
     typeof value.version !== "string" ||
     typeof value.contentHash !== "string" ||
     !Array.isArray(value.files) ||
@@ -484,7 +489,7 @@ function assertMarketplaceEnvelope(
     throw new Error(tMarketplaceError("invalidResponse"));
   }
 
-  if (payload.code !== 0) {
+  if (!isMarketplaceSuccessCode(payload.code)) {
     throw new Error(
       readEnvelopeMessage(payload) || tMarketplaceError("invalidResponse"),
     );

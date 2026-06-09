@@ -17,7 +17,7 @@ import {
   type MouseEvent,
 } from "react";
 import { getCurrentWindow } from "@/lib/desktop-host/window";
-import { open as shellOpen } from "@/lib/desktop-host/plugin-shell";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import {
   closeUpdateWindow,
   dismissUpdateNotification,
@@ -240,9 +240,9 @@ export function UpdateNotificationPage() {
       console.error("启动更新安装失败:", error);
       if (downloadUrl) {
         try {
-          await shellOpen(downloadUrl);
-        } catch {
-          window.open(downloadUrl, "_blank");
+          await openExternalUrlWithSystemBrowser(downloadUrl);
+        } catch (openError) {
+          console.error("打开更新下载链接失败:", openError);
         }
       }
     }

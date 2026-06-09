@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "createdAt": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "creationMode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "fileCount": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "theme": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "totalSize": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "updatedAt": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "createdAt",
+    "fileCount",
+    "sessionId",
+    "totalSize",
+    "updatedAt"
+  ],
+  "title": "SessionFileMeta",
+  "type": "object"
+}

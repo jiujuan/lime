@@ -1528,6 +1528,36 @@ export interface CreateAudioGenerationTaskArtifactRequest {
   outputPath?: string;
 }
 
+export interface CreateVideoGenerationTaskArtifactRequest {
+  projectRootPath: string;
+  prompt: string;
+  title?: string;
+  rawText?: string;
+  aspectRatio?: string;
+  resolution?: string;
+  duration?: number;
+  imageUrl?: string;
+  endImageUrl?: string;
+  seed?: number;
+  generateAudio?: boolean;
+  cameraFixed?: boolean;
+  providerId?: string;
+  model?: string;
+  sessionId?: string;
+  threadId?: string;
+  turnId?: string;
+  projectId?: string;
+  contentId?: string;
+  entrySource?: string;
+  modalityContractKey?: "video_generation";
+  modality?: "video";
+  requiredCapabilities?: string[];
+  routingSlot?: "video_generation_model";
+  runtimeContract?: Record<string, unknown>;
+  requestedTarget?: "video";
+  outputPath?: string;
+}
+
 export interface CompleteAudioGenerationTaskArtifactRequest {
   projectRootPath: string;
   taskRef: string;

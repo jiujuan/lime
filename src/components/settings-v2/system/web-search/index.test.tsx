@@ -7,16 +7,16 @@ const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
   mockSaveConfig: vi.fn(),
 }));
-const { mockOpen } = vi.hoisted(() => ({
-  mockOpen: vi.fn(),
+const { mockOpenExternalUrlWithSystemBrowser } = vi.hoisted(() => ({
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(),
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
 }));
-vi.mock("@/lib/desktop-host/plugin-shell", () => ({
-  open: mockOpen,
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
 }));
 
 import { WebSearchSettings } from ".";
@@ -174,7 +174,7 @@ beforeEach(async () => {
     },
   });
   mockSaveConfig.mockResolvedValue(undefined);
-  mockOpen.mockResolvedValue(undefined);
+  mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -542,7 +542,9 @@ describe("WebSearchSettings", () => {
       await flushEffects();
     });
 
-    expect(mockOpen).toHaveBeenCalledWith("https://www.pexels.com/api/new/");
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://www.pexels.com/api/new/",
+    );
   });
 
   it("点击 Tavily 申请按钮应打开官方页面", async () => {
@@ -556,7 +558,36 @@ describe("WebSearchSettings", () => {
       await flushEffects();
     });
 
-    expect(mockOpen).toHaveBeenCalledWith("https://app.tavily.com/");
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://app.tavily.com/",
+    );
+  });
+
+  it("外链打开失败时不回退 window.open 旁路", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
+    mockOpenExternalUrlWithSystemBrowser.mockRejectedValueOnce(
+      new Error("host unavailable"),
+    );
+    const container = renderComponent();
+    await flushEffects();
+    await flushEffects();
+
+    await switchTab(container, "Provider Credentials");
+    await act(async () => {
+      findButton(container, "Apply for Tavily Key").click();
+      await flushEffects();
+    });
+
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://app.tavily.com/",
+    );
+    expect(windowOpen).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
+    windowOpen.mockRestore();
   });
 
   it("点击 Pixabay 申请按钮应打开官方页面", async () => {
@@ -570,7 +601,7 @@ describe("WebSearchSettings", () => {
       await flushEffects();
     });
 
-    expect(mockOpen).toHaveBeenCalledWith(
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
       "https://pixabay.com/accounts/register/",
     );
   });
@@ -586,7 +617,7 @@ describe("WebSearchSettings", () => {
       await flushEffects();
     });
 
-    expect(mockOpen).toHaveBeenCalledWith(
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
       "https://portal.azure.com/#create/Microsoft.CognitiveServicesBingSearch-v7",
     );
   });
@@ -602,7 +633,7 @@ describe("WebSearchSettings", () => {
       await flushEffects();
     });
 
-    expect(mockOpen).toHaveBeenCalledWith(
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
       "https://console.cloud.google.com/apis/library/customsearch.googleapis.com",
     );
   });
@@ -618,7 +649,7 @@ describe("WebSearchSettings", () => {
       await flushEffects();
     });
 
-    expect(mockOpen).toHaveBeenCalledWith(
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
       "https://programmablesearchengine.google.com/",
     );
   });

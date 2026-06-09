@@ -3,6 +3,7 @@ import {
   createAgentRuntimeClient,
   type AgentRuntimeAppServerClient,
 } from "./clientFactory";
+import type { AgentRuntimeLifecycleClient } from "./threadClient";
 
 const appServerCheckpointSummary = {
   checkpointId: "checkpoint-1",
@@ -629,8 +630,58 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
   };
 }
 
+function standardRuntimeClientMock(): AgentRuntimeLifecycleClient {
+  return {
+    startTurn: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: { id: 1, result: {} },
+      messages: [],
+      notifications: [],
+    }),
+    cancelTurn: vi.fn().mockResolvedValue({
+      id: 2,
+      result: {},
+      response: { id: 2, result: {} },
+      messages: [],
+      notifications: [],
+    }),
+    respondAction: vi.fn().mockResolvedValue({
+      id: 3,
+      result: {},
+      response: { id: 3, result: {} },
+      messages: [],
+      notifications: [],
+    }),
+    readThread: vi.fn().mockResolvedValue({
+      id: 4,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+      },
+      response: { id: 4, result: {} },
+      messages: [],
+      notifications: [],
+    }),
+  } as AgentRuntimeLifecycleClient;
+}
+
 describe("agentRuntime clientFactory", () => {
-  it("传入 invoke 时 queue/session control 应走 App Server current，retired site adapter 仍 fail-closed", async () => {
+  it("传入 invoke 时 queue/session control 应走 App Server current，且不再暴露 retired site adapter surface", async () => {
     const invoke = vi.fn();
     const appServerClient = appServerClientMock();
     const client = createAgentRuntimeClient({ invoke, appServerClient });
@@ -640,9 +691,10 @@ describe("agentRuntime clientFactory", () => {
         session_id: "session-1",
       }),
     ).resolves.toBe(true);
-    await expect(client.siteListAdapters()).rejects.toThrow(
-      "site_list_adapters is retired until Site Adapter moves to App Server current methods",
-    );
+    expect(client).not.toHaveProperty("siteListAdapters");
+    expect(client).not.toHaveProperty("siteRunAdapter");
+    expect(client).not.toHaveProperty("spawnAgentRuntimeSubagent");
+    expect(client).not.toHaveProperty("waitAgentRuntimeSubagents");
 
     expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -857,6 +909,57 @@ describe("agentRuntime clientFactory", () => {
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
 
+  it("turn lifecycle 可由标准 runtime client facade 注入，聚合工厂不直连旧命令", async () => {
+    const appServerClient = appServerClientMock();
+    const standardRuntimeClient = standardRuntimeClientMock();
+    const bridgeInvoke = vi.fn();
+    const client = createAgentRuntimeClient({
+      appServerClient,
+      standardRuntimeClient,
+      bridgeInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.submitAgentRuntimeTurn({
+        message: "继续",
+        session_id: "session-1",
+        event_name: "event-1",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      client.getAgentRuntimeThreadRead("session-1"),
+    ).resolves.toMatchObject({
+      thread_id: "thread-1",
+      status: "idle",
+    });
+
+    expect(standardRuntimeClient.startTurn).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      input: {
+        text: "继续",
+      },
+      runtimeOptions: {
+        stream: true,
+        eventName: "event-1",
+        hostOptions: {
+          asterChatRequest: {
+            message: "继续",
+            session_id: "session-1",
+            event_name: "event-1",
+            workspace_id: "",
+          },
+        },
+      },
+    });
+    expect(standardRuntimeClient.readThread).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
+    expect(appServerClient.startTurn).not.toHaveBeenCalled();
+    expect(appServerClient.readSession).not.toHaveBeenCalled();
+    expect(bridgeInvoke).not.toHaveBeenCalled();
+  });
+
   it("file checkpoint 应走 App Server client，不复用 legacy bridgeInvoke", async () => {
     const appServerClient = appServerClientMock();
     const bridgeInvoke = vi.fn();
@@ -873,11 +976,11 @@ describe("agentRuntime clientFactory", () => {
       checkpoint_count: 1,
     });
 
-    expect(appServerClient.listAgentSessionFileCheckpoints).toHaveBeenCalledWith(
-      {
-        sessionId: "session-1",
-      },
-    );
+    expect(
+      appServerClient.listAgentSessionFileCheckpoints,
+    ).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
 

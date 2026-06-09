@@ -14,6 +14,7 @@ import { test } from "vitest";
 import {
   APP_SERVER_METHODS,
   AppServerAgentEventRouter,
+  AppServerAgentRuntimeClient,
   AppServerSidecarLifecycle,
   DEFAULT_LISTEN_URL,
   DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME,
@@ -23,6 +24,7 @@ import {
   AppServerClient,
   AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
+  createAgentRuntimeClient,
   METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
   METHOD_AGENT_APP_INSTALLED_LIST,
   METHOD_AGENT_APP_INSTALLED_SAVE,
@@ -106,6 +108,22 @@ import {
   METHOD_GATEWAY_TUNNEL_STATUS,
   METHOD_GATEWAY_TUNNEL_STOP,
   METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL,
+  METHOD_GALLERY_MATERIAL_GET,
+  METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
+  METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
+  METHOD_GALLERY_MATERIAL_LIST_BY_MOOD,
+  METHOD_GALLERY_MATERIAL_METADATA_CREATE,
+  METHOD_GALLERY_MATERIAL_METADATA_DELETE,
+  METHOD_GALLERY_MATERIAL_METADATA_GET,
+  METHOD_GALLERY_MATERIAL_METADATA_UPDATE,
+  METHOD_PROJECT_MATERIAL_CONTENT,
+  METHOD_PROJECT_MATERIAL_COUNT,
+  METHOD_PROJECT_MATERIAL_DELETE,
+  METHOD_PROJECT_MATERIAL_GET,
+  METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL,
+  METHOD_PROJECT_MATERIAL_LIST,
+  METHOD_PROJECT_MATERIAL_UPDATE,
+  METHOD_PROJECT_MATERIAL_UPLOAD,
   METHOD_TELEGRAM_CHANNEL_PROBE,
   METHOD_INITIALIZED,
   METHOD_INITIALIZE,
@@ -162,6 +180,23 @@ import {
   METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
   METHOD_MCP_TOOL_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
+  METHOD_UNIFIED_MEMORY_ANALYZE,
+  METHOD_UNIFIED_MEMORY_CREATE,
+  METHOD_UNIFIED_MEMORY_DELETE,
+  METHOD_UNIFIED_MEMORY_GET,
+  METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
+  METHOD_UNIFIED_MEMORY_LIST,
+  METHOD_UNIFIED_MEMORY_SEARCH,
+  METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
+  METHOD_UNIFIED_MEMORY_STATS,
+  METHOD_UNIFIED_MEMORY_UPDATE,
+  METHOD_SESSION_FILE_DELETE,
+  METHOD_SESSION_FILE_GET_OR_CREATE,
+  METHOD_SESSION_FILE_LIST,
+  METHOD_SESSION_FILE_READ,
+  METHOD_SESSION_FILE_RESOLVE_PATH,
+  METHOD_SESSION_FILE_SAVE,
+  METHOD_SESSION_FILE_UPDATE_META,
   METHOD_LOG_CLEAR,
   METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR,
   METHOD_LOG_LIST,
@@ -172,6 +207,7 @@ import {
   METHOD_MEDIA_TASK_ARTIFACT_GET,
   METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   METHOD_MEDIA_TASK_ARTIFACT_LIST,
+  METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
   PROTOCOL_VERSION,
   METHOD_SKILL_CACHE_REFRESH,
   METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
@@ -198,6 +234,17 @@ import {
   METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
   METHOD_USAGE_STATS_MODEL_RANKING_LIST,
   METHOD_USAGE_STATS_READ,
+  METHOD_VOICE_ASR_CREDENTIAL_CREATE,
+  METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET,
+  METHOD_VOICE_ASR_CREDENTIAL_DELETE,
+  METHOD_VOICE_ASR_CREDENTIAL_LIST,
+  METHOD_VOICE_ASR_CREDENTIAL_TEST,
+  METHOD_VOICE_ASR_CREDENTIAL_UPDATE,
+  METHOD_VOICE_INSTRUCTION_DELETE,
+  METHOD_VOICE_INSTRUCTION_LIST,
+  METHOD_VOICE_INSTRUCTION_SAVE,
+  METHOD_VOICE_MODEL_DEFAULT_SET,
+  METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
   METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
   METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
   METHOD_WECHAT_CHANNEL_LOGIN_START,
@@ -255,6 +302,7 @@ const repoRoot = join(
   "..",
   "..",
 );
+const SIDECAR_TEST_TIMEOUT_MS = 5_000;
 
 test("builds initialize and caller supplied session start requests", () => {
   const client = new AppServerClient();
@@ -578,6 +626,93 @@ test("builds agent session file checkpoint requests with current App Server meth
   });
 });
 
+test("builds session file requests with current App Server methods", () => {
+  const client = new AppServerClient();
+
+  const getOrCreate = client.getOrCreateSessionFile({
+    sessionId: "sess_1",
+  });
+  const updateMeta = client.updateSessionFileMeta({
+    sessionId: "sess_1",
+    title: "文章草稿",
+    theme: "article",
+    creationMode: "fast",
+  });
+  const save = client.saveSessionFile({
+    sessionId: "sess_1",
+    fileName: "draft/article.md",
+    content: "# title",
+    metadata: { kind: "draft" },
+  });
+  const read = client.readSessionFile({
+    sessionId: "sess_1",
+    fileName: "draft/article.md",
+  });
+  const resolvePath = client.resolveSessionFilePath({
+    sessionId: "sess_1",
+    fileName: "draft/article.md",
+  });
+  const deleteFile = client.deleteSessionFile({
+    sessionId: "sess_1",
+    fileName: "draft/article.md",
+  });
+  const list = client.listSessionFiles({
+    sessionId: "sess_1",
+  });
+
+  assert.equal(getOrCreate.id, 1);
+  assert.equal(getOrCreate.method, METHOD_SESSION_FILE_GET_OR_CREATE);
+  assert.deepEqual(getOrCreate.params, { sessionId: "sess_1" });
+  assert.equal(updateMeta.id, 2);
+  assert.equal(updateMeta.method, METHOD_SESSION_FILE_UPDATE_META);
+  assert.deepEqual(updateMeta.params, {
+    sessionId: "sess_1",
+    title: "文章草稿",
+    theme: "article",
+    creationMode: "fast",
+  });
+  assert.equal(save.id, 3);
+  assert.equal(save.method, METHOD_SESSION_FILE_SAVE);
+  assert.deepEqual(save.params, {
+    sessionId: "sess_1",
+    fileName: "draft/article.md",
+    content: "# title",
+    metadata: { kind: "draft" },
+  });
+  assert.equal(read.id, 4);
+  assert.equal(read.method, METHOD_SESSION_FILE_READ);
+  assert.deepEqual(read.params, {
+    sessionId: "sess_1",
+    fileName: "draft/article.md",
+  });
+  assert.equal(resolvePath.id, 5);
+  assert.equal(resolvePath.method, METHOD_SESSION_FILE_RESOLVE_PATH);
+  assert.deepEqual(resolvePath.params, {
+    sessionId: "sess_1",
+    fileName: "draft/article.md",
+  });
+  assert.equal(deleteFile.id, 6);
+  assert.equal(deleteFile.method, METHOD_SESSION_FILE_DELETE);
+  assert.deepEqual(deleteFile.params, {
+    sessionId: "sess_1",
+    fileName: "draft/article.md",
+  });
+  assert.equal(list.id, 7);
+  assert.equal(list.method, METHOD_SESSION_FILE_LIST);
+  assert.deepEqual(list.params, { sessionId: "sess_1" });
+  for (const method of [
+    METHOD_SESSION_FILE_GET_OR_CREATE,
+    METHOD_SESSION_FILE_UPDATE_META,
+    METHOD_SESSION_FILE_SAVE,
+    METHOD_SESSION_FILE_READ,
+    METHOD_SESSION_FILE_RESOLVE_PATH,
+    METHOD_SESSION_FILE_DELETE,
+    METHOD_SESSION_FILE_LIST,
+  ]) {
+    assert.equal(isAppServerRequestMethod(method), true);
+  }
+});
+
 test("builds app data surface requests with current methods", () => {
   const client = new AppServerClient();
 
@@ -833,6 +968,59 @@ test("builds app data surface requests with current methods", () => {
     projectRootPath: "/workspace",
     taskRef: "task-image-1",
   });
+  const voiceAsrCredentials = client.listVoiceAsrCredentials();
+  const createdVoiceAsrCredential = client.createVoiceAsrCredential({
+    provider: "sense_voice_local",
+    is_default: true,
+    disabled: false,
+    language: "auto",
+    sensevoice_config: {
+      model_id: "sensevoice-small-int8-2024-07-17",
+      use_itn: true,
+      num_threads: 4,
+    },
+  });
+  const updatedVoiceAsrCredential = client.updateVoiceAsrCredential({
+    credential: {
+      id: "cred-1",
+      provider: "openai",
+      is_default: false,
+      disabled: false,
+      language: "zh-CN",
+      openai_config: {
+        api_key: "sk-test",
+      },
+    },
+  });
+  const deletedVoiceAsrCredential = client.deleteVoiceAsrCredential({
+    id: "cred-1",
+  });
+  const defaultVoiceAsrCredential = client.setDefaultVoiceAsrCredential({
+    id: "cred-1",
+  });
+  const testedVoiceAsrCredential = client.testVoiceAsrCredential({
+    id: "cred-1",
+  });
+  const voiceInstructions = client.listVoiceInstructions();
+  const savedVoiceInstruction = client.saveVoiceInstruction({
+    instruction: {
+      id: "instruction-1",
+      name: "会议纪要",
+      prompt: "请整理讲话内容",
+      is_preset: false,
+    },
+  });
+  const deletedVoiceInstruction = client.deleteVoiceInstruction({
+    id: "instruction-1",
+  });
+  const defaultVoiceModel = client.setDefaultVoiceModel({
+    model_id: "sensevoice-small-int8-2024-07-17",
+    install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+  });
+  const testedVoiceModelFile = client.testTranscribeVoiceModelFile({
+    model_id: "sensevoice-small-int8-2024-07-17",
+    file_path: "/tmp/interview.wav",
+  });
 
   assert.equal(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
   assert.deepEqual(installed.params, {});
@@ -1049,7 +1237,10 @@ test("builds app data surface requests with current methods", () => {
     METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR,
   );
   assert.deepEqual(clearedDiagnosticHistory.params, {});
-  assert.equal(logStorageDiagnostics.method, METHOD_DIAGNOSTICS_LOG_STORAGE_READ);
+  assert.equal(
+    logStorageDiagnostics.method,
+    METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
+  );
   assert.deepEqual(logStorageDiagnostics.params, {});
   assert.equal(supportBundle.method, METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT);
   assert.deepEqual(supportBundle.params, {});
@@ -1083,10 +1274,7 @@ test("builds app data surface requests with current methods", () => {
     baseUrl: "http://127.0.0.1:8080",
     botType: "ilink",
   });
-  assert.equal(
-    wechatChannelLoginWait.method,
-    METHOD_WECHAT_CHANNEL_LOGIN_WAIT,
-  );
+  assert.equal(wechatChannelLoginWait.method, METHOD_WECHAT_CHANNEL_LOGIN_WAIT);
   assert.deepEqual(wechatChannelLoginWait.params, {
     sessionKey: "login-session-1",
     timeoutMs: 60000,
@@ -1150,19 +1338,13 @@ test("builds app data surface requests with current methods", () => {
     webhookPath: "/feishu/default",
     persist: true,
   });
-  assert.equal(
-    imageMediaTask.method,
-    METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
-  );
+  assert.equal(imageMediaTask.method, METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE);
   assert.deepEqual(imageMediaTask.params, {
     projectRootPath: "/workspace",
     prompt: "未来感青柠实验室",
     mode: "generate",
   });
-  assert.equal(
-    audioMediaTask.method,
-    METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
-  );
+  assert.equal(audioMediaTask.method, METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE);
   assert.deepEqual(audioMediaTask.params, {
     projectRootPath: "/workspace",
     sourceText: "请生成温暖旁白",
@@ -1192,6 +1374,80 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(cancelledMediaTask.params, {
     projectRootPath: "/workspace",
     taskRef: "task-image-1",
+  });
+  assert.equal(voiceAsrCredentials.method, METHOD_VOICE_ASR_CREDENTIAL_LIST);
+  assert.deepEqual(voiceAsrCredentials.params, {});
+  assert.equal(
+    createdVoiceAsrCredential.method,
+    METHOD_VOICE_ASR_CREDENTIAL_CREATE,
+  );
+  assert.deepEqual(createdVoiceAsrCredential.params, {
+    provider: "sense_voice_local",
+    is_default: true,
+    disabled: false,
+    language: "auto",
+    sensevoice_config: {
+      model_id: "sensevoice-small-int8-2024-07-17",
+      use_itn: true,
+      num_threads: 4,
+    },
+  });
+  assert.equal(
+    updatedVoiceAsrCredential.method,
+    METHOD_VOICE_ASR_CREDENTIAL_UPDATE,
+  );
+  assert.deepEqual(updatedVoiceAsrCredential.params, {
+    credential: {
+      id: "cred-1",
+      provider: "openai",
+      is_default: false,
+      disabled: false,
+      language: "zh-CN",
+      openai_config: {
+        api_key: "sk-test",
+      },
+    },
+  });
+  assert.equal(
+    deletedVoiceAsrCredential.method,
+    METHOD_VOICE_ASR_CREDENTIAL_DELETE,
+  );
+  assert.deepEqual(deletedVoiceAsrCredential.params, { id: "cred-1" });
+  assert.equal(
+    defaultVoiceAsrCredential.method,
+    METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET,
+  );
+  assert.deepEqual(defaultVoiceAsrCredential.params, { id: "cred-1" });
+  assert.equal(
+    testedVoiceAsrCredential.method,
+    METHOD_VOICE_ASR_CREDENTIAL_TEST,
+  );
+  assert.deepEqual(testedVoiceAsrCredential.params, { id: "cred-1" });
+  assert.equal(voiceInstructions.method, METHOD_VOICE_INSTRUCTION_LIST);
+  assert.deepEqual(voiceInstructions.params, {});
+  assert.equal(savedVoiceInstruction.method, METHOD_VOICE_INSTRUCTION_SAVE);
+  assert.deepEqual(savedVoiceInstruction.params, {
+    instruction: {
+      id: "instruction-1",
+      name: "会议纪要",
+      prompt: "请整理讲话内容",
+      is_preset: false,
+    },
+  });
+  assert.equal(deletedVoiceInstruction.method, METHOD_VOICE_INSTRUCTION_DELETE);
+  assert.deepEqual(deletedVoiceInstruction.params, { id: "instruction-1" });
+  assert.equal(defaultVoiceModel.method, METHOD_VOICE_MODEL_DEFAULT_SET);
+  assert.deepEqual(defaultVoiceModel.params, {
+    model_id: "sensevoice-small-int8-2024-07-17",
+    install_dir: "/mock/lime/models/voice/sensevoice-small-int8-2024-07-17",
+  });
+  assert.equal(
+    testedVoiceModelFile.method,
+    METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
+  );
+  assert.deepEqual(testedVoiceModelFile.params, {
+    model_id: "sensevoice-small-int8-2024-07-17",
+    file_path: "/tmp/interview.wav",
   });
   for (const legacyMethod of [
     "get_automation_scheduler_config",
@@ -1491,6 +1747,13 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET, kind: "request" },
     { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF, kind: "request" },
     { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, kind: "request" },
+    { method: METHOD_SESSION_FILE_GET_OR_CREATE, kind: "request" },
+    { method: METHOD_SESSION_FILE_UPDATE_META, kind: "request" },
+    { method: METHOD_SESSION_FILE_SAVE, kind: "request" },
+    { method: METHOD_SESSION_FILE_READ, kind: "request" },
+    { method: METHOD_SESSION_FILE_RESOLVE_PATH, kind: "request" },
+    { method: METHOD_SESSION_FILE_DELETE, kind: "request" },
+    { method: METHOD_SESSION_FILE_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_READ, kind: "request" },
     { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
@@ -1596,6 +1859,16 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
     { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
     { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_LIST, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_GET, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_CREATE, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_UPDATE, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_DELETE, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_SEARCH, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_STATS, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_ANALYZE, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH, kind: "request" },
+    { method: METHOD_UNIFIED_MEMORY_HYBRID_SEARCH, kind: "request" },
     { method: METHOD_LOG_LIST, kind: "request" },
     { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
     { method: METHOD_LOG_CLEAR, kind: "request" },
@@ -1606,10 +1879,44 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
+    { method: METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_GET, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_LIST, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_CANCEL, kind: "request" },
+    { method: METHOD_GALLERY_MATERIAL_GET, kind: "request" },
+    { method: METHOD_GALLERY_MATERIAL_METADATA_CREATE, kind: "request" },
+    { method: METHOD_GALLERY_MATERIAL_METADATA_GET, kind: "request" },
+    { method: METHOD_GALLERY_MATERIAL_METADATA_UPDATE, kind: "request" },
+    { method: METHOD_GALLERY_MATERIAL_METADATA_DELETE, kind: "request" },
+    {
+      method: METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
+      kind: "request",
+    },
+    {
+      method: METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
+      kind: "request",
+    },
+    { method: METHOD_GALLERY_MATERIAL_LIST_BY_MOOD, kind: "request" },
+    { method: METHOD_PROJECT_MATERIAL_LIST, kind: "request" },
+    { method: METHOD_PROJECT_MATERIAL_GET, kind: "request" },
+    { method: METHOD_PROJECT_MATERIAL_COUNT, kind: "request" },
+    { method: METHOD_PROJECT_MATERIAL_UPLOAD, kind: "request" },
+    { method: METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL, kind: "request" },
+    { method: METHOD_PROJECT_MATERIAL_UPDATE, kind: "request" },
+    { method: METHOD_PROJECT_MATERIAL_DELETE, kind: "request" },
+    { method: METHOD_PROJECT_MATERIAL_CONTENT, kind: "request" },
+    { method: METHOD_VOICE_ASR_CREDENTIAL_LIST, kind: "request" },
+    { method: METHOD_VOICE_ASR_CREDENTIAL_CREATE, kind: "request" },
+    { method: METHOD_VOICE_ASR_CREDENTIAL_UPDATE, kind: "request" },
+    { method: METHOD_VOICE_ASR_CREDENTIAL_DELETE, kind: "request" },
+    { method: METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET, kind: "request" },
+    { method: METHOD_VOICE_ASR_CREDENTIAL_TEST, kind: "request" },
+    { method: METHOD_VOICE_INSTRUCTION_LIST, kind: "request" },
+    { method: METHOD_VOICE_INSTRUCTION_SAVE, kind: "request" },
+    { method: METHOD_VOICE_INSTRUCTION_DELETE, kind: "request" },
+    { method: METHOD_VOICE_MODEL_DEFAULT_SET, kind: "request" },
+    { method: METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE, kind: "request" },
     { method: METHOD_USAGE_STATS_READ, kind: "request" },
     { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
     { method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST, kind: "request" },
@@ -1848,6 +2155,14 @@ test("exports app-server method catalog with request and notification kinds", ()
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_CONNECT_CALLBACK_SEND), true);
+  assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_SAVE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_DELETE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_VOICE_MODEL_DEFAULT_SET), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_AGENT_SESSION_ACTION_RESPOND),
@@ -1994,6 +2309,152 @@ test("connection wraps request response flow and keeps async notifications", asy
   assert.equal(result.notifications.length, 1);
   assert.equal(result.notifications[0].method, METHOD_AGENT_SESSION_EVENT);
   assert.equal(result.notifications[0].params.event.payload.text, "delta");
+});
+
+test("agent runtime client facade delegates to current App Server session methods", async () => {
+  const sent = [];
+  const inbound = [
+    {
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          status: "accepted",
+        },
+      },
+    },
+    {
+      id: 2,
+      result: {
+        session: {
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          appId: "content-studio",
+          status: "running",
+          createdAt: "2026-06-04T00:00:00Z",
+          updatedAt: "2026-06-04T00:00:01Z",
+        },
+        turns: [],
+      },
+    },
+    {
+      id: 3,
+      result: {},
+    },
+    {
+      id: 4,
+      result: {},
+    },
+    {
+      id: 5,
+      result: {
+        session: {
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          appId: "content-studio",
+          status: "completed",
+          createdAt: "2026-06-04T00:00:00Z",
+          updatedAt: "2026-06-04T00:00:02Z",
+        },
+        turns: [],
+        events: [],
+        artifacts: [],
+        exportedAt: "2026-06-04T00:00:03Z",
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error("empty transport");
+      }
+      return message;
+    },
+  });
+  const runtime = createAgentRuntimeClient(connection);
+
+  const start = await runtime.startTurn({
+    sessionId: "sess_external",
+    input: { text: "写草稿" },
+  });
+  const read = await runtime.readThread({
+    sessionId: "sess_external",
+  });
+  await runtime.respondAction({
+    sessionId: "sess_external",
+    requestId: "action-1",
+    actionType: "ask_user",
+    confirmed: true,
+    response: "继续",
+  });
+  await runtime.cancelTurn({
+    sessionId: "sess_external",
+    turnId: "turn-1",
+  });
+  const evidence = await runtime.exportEvidence({
+    sessionId: "sess_external",
+    includeEvents: true,
+  });
+
+  assert.deepEqual(
+    sent.map((message) => message.method),
+    [
+      METHOD_AGENT_SESSION_TURN_START,
+      METHOD_AGENT_SESSION_READ,
+      METHOD_AGENT_SESSION_ACTION_RESPOND,
+      METHOD_AGENT_SESSION_TURN_CANCEL,
+      METHOD_EVIDENCE_EXPORT,
+    ],
+  );
+  assert.equal(start.result.turn.turnId, "turn-1");
+  assert.equal(read.result.session.sessionId, "sess_external");
+  assert.equal(evidence.result.exportedAt, "2026-06-04T00:00:03Z");
+});
+
+test("agent runtime client facade subscribes to agent session event notifications", async () => {
+  const notification = {
+    method: METHOD_AGENT_SESSION_EVENT,
+    params: {
+      event: {
+        eventId: "evt-1",
+        sequence: 1,
+        sessionId: "sess_external",
+        turnId: "turn-1",
+        type: "message.delta",
+        timestamp: "2026-06-04T00:00:00Z",
+        payload: { text: "delta" },
+      },
+    },
+  };
+  const runtime = new AppServerAgentRuntimeClient(
+    new AppServerConnection({
+      send() {},
+      async nextMessage() {
+        return notification;
+      },
+    }),
+  );
+  const received = [];
+  const subscription = runtime.subscribeEvents((event, message) => {
+    received.push({ event, message });
+  });
+
+  const dispatched = await runtime.dispatchEvent(notification);
+  const next = await runtime.nextEvent();
+  subscription.unsubscribe();
+  await runtime.dispatchEvent(notification);
+
+  assert.equal(dispatched, true);
+  assert.equal(next.params.event.payload.text, "delta");
+  assert.equal(received.length, 2);
+  assert.equal(received[0].event.eventId, "evt-1");
+  assert.equal(received[0].message.method, METHOD_AGENT_SESSION_EVENT);
 });
 
 test("connection request errors preserve streamed notifications and response context", async () => {
@@ -3181,7 +3642,7 @@ test("encodes one JSON-RPC message per line", () => {
   assert.throws(() => decodeMessage("  "), /empty JSON-RPC line/);
 });
 
-test("uses codex style stdio sidecar launch args", () => {
+test("uses agent-style stdio sidecar launch args", () => {
   const config = stdioSidecar("/tmp/app-server");
 
   assert.equal(config.listenUrl, DEFAULT_LISTEN_URL);
@@ -3584,25 +4045,23 @@ test("resolves sidecar config from release manifest file", async () => {
   }
 });
 
-test(
-  "starts packaged sidecar lifecycle from resources manifest",
-  async () => {
-    const dir = await mkdtemp(join(tmpdir(), "app-server-client-packaged-"));
-    const resourcesPath = join(dir, "resources");
-    const platform = platformKey();
-    const packagedDir = join(resourcesPath, "app-server", platform);
-    const packagedBinaryPath = join(packagedDir, sidecarBinaryName());
-    const fakeSidecar = join(dir, "fake-packaged-sidecar.mjs");
-    const manifestPath = defaultReleaseManifestPath(resourcesPath);
-    let lifecycle;
+test("starts packaged sidecar lifecycle from resources manifest", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "app-server-client-packaged-"));
+  const resourcesPath = join(dir, "resources");
+  const platform = platformKey();
+  const packagedDir = join(resourcesPath, "app-server", platform);
+  const packagedBinaryPath = join(packagedDir, sidecarBinaryName());
+  const fakeSidecar = join(dir, "fake-packaged-sidecar.mjs");
+  const manifestPath = defaultReleaseManifestPath(resourcesPath);
+  let lifecycle;
 
-    try {
-      await mkdir(packagedDir, { recursive: true });
-      await copyFile(process.execPath, packagedBinaryPath);
-      await chmod(packagedBinaryPath, 0o755).catch(() => undefined);
-      await writeFile(
-        fakeSidecar,
-        `
+  try {
+    await mkdir(packagedDir, { recursive: true });
+    await copyFile(process.execPath, packagedBinaryPath);
+    await chmod(packagedBinaryPath, 0o755).catch(() => undefined);
+    await writeFile(
+      fakeSidecar,
+      `
         import { createInterface } from 'node:readline';
 
         const lines = createInterface({ input: process.stdin });
@@ -3644,61 +4103,59 @@ test(
           }
         });
       `,
-      );
-      await writeFile(
-        manifestPath,
-        JSON.stringify({
-          version: "1.58.0",
-          protocolVersion: PROTOCOL_VERSION,
-          artifacts: [
-            {
-              platform,
-              url: `file://${packagedBinaryPath}`,
-              sha256: await sha256File(packagedBinaryPath),
-            },
-          ],
-        }),
-      );
-
-      assert.equal(
-        defaultReleaseManifestPath(resourcesPath),
-        join(resourcesPath, DEFAULT_RELEASE_MANIFEST_NAME),
-      );
-      const started = await startPackagedAppServerSidecar(
-        {
-          clientInfo: {
-            name: "content_studio",
-            version: "0.1.0",
+    );
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        version: "1.58.0",
+        protocolVersion: PROTOCOL_VERSION,
+        artifacts: [
+          {
+            platform,
+            url: `file://${packagedBinaryPath}`,
+            sha256: await sha256File(packagedBinaryPath),
           },
-        },
-        {
-          resourcesPath,
-          args: [fakeSidecar],
-          initializeTimeoutMs: 1_000,
-        },
-      );
-      lifecycle = started.lifecycle;
+        ],
+      }),
+    );
 
-      assert.equal(started.resolved.binaryPathSource, "resources");
-      assert.equal(started.resolved.config.binaryPath, packagedBinaryPath);
-      assert.equal(
-        started.resolved.config.backendMode,
-        DEFAULT_STANDALONE_BACKEND_MODE,
-      );
-      assert.equal(
-        started.connected.initializeResponse.serverInfo.protocolVersion,
-        PROTOCOL_VERSION,
-      );
-      await waitFor(() =>
-        started.connected.sidecar.stderrLines.includes("initialized-packaged"),
-      );
-    } finally {
-      await lifecycle?.stop().catch(() => undefined);
-      await rm(dir, { recursive: true, force: true });
-    }
-  },
-  10_000,
-);
+    assert.equal(
+      defaultReleaseManifestPath(resourcesPath),
+      join(resourcesPath, DEFAULT_RELEASE_MANIFEST_NAME),
+    );
+    const started = await startPackagedAppServerSidecar(
+      {
+        clientInfo: {
+          name: "content_studio",
+          version: "0.1.0",
+        },
+      },
+      {
+        resourcesPath,
+        args: [fakeSidecar],
+        initializeTimeoutMs: 1_000,
+      },
+    );
+    lifecycle = started.lifecycle;
+
+    assert.equal(started.resolved.binaryPathSource, "resources");
+    assert.equal(started.resolved.config.binaryPath, packagedBinaryPath);
+    assert.equal(
+      started.resolved.config.backendMode,
+      DEFAULT_STANDALONE_BACKEND_MODE,
+    );
+    assert.equal(
+      started.connected.initializeResponse.serverInfo.protocolVersion,
+      PROTOCOL_VERSION,
+    );
+    await waitFor(() =>
+      started.connected.sidecar.stderrLines.includes("initialized-packaged"),
+    );
+  } finally {
+    await lifecycle?.stop().catch(() => undefined);
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test("verifies release artifact sha256 before sidecar launch", async () => {
   const dir = await mkdtemp(join(tmpdir(), "app-server-client-"));
@@ -3898,13 +4355,16 @@ test("spawns stdio sidecar and exchanges JSON-RPC lines", async () => {
         }),
       );
 
-      const response = await sidecar.nextMessage(1_000);
+      const response = await sidecar.nextMessage(SIDECAR_TEST_TIMEOUT_MS);
       assert.equal(response.id, 1);
       assert.deepEqual(response.result, {
         method: "initialize",
         ok: true,
       });
-      await waitFor(() => sidecar.stderrLines.includes("fake-sidecar-ready"));
+      await waitFor(
+        () => sidecar.stderrLines.includes("fake-sidecar-ready"),
+        SIDECAR_TEST_TIMEOUT_MS,
+      );
     } finally {
       await sidecar.close();
     }
@@ -3974,7 +4434,7 @@ test("connects sidecar with initialize and initialized handshake", async () => {
       },
       {
         args: [fakeSidecar],
-        initializeTimeoutMs: 1_000,
+        initializeTimeoutMs: SIDECAR_TEST_TIMEOUT_MS,
       },
     );
 
@@ -3983,8 +4443,9 @@ test("connects sidecar with initialize and initialized handshake", async () => {
         connected.initializeResponse.serverInfo.protocolVersion,
         PROTOCOL_VERSION,
       );
-      await waitFor(() =>
-        connected.sidecar.stderrLines.includes("initialized-received"),
+      await waitFor(
+        () => connected.sidecar.stderrLines.includes("initialized-received"),
+        SIDECAR_TEST_TIMEOUT_MS,
       );
 
       connected.sidecar.send(
@@ -3992,7 +4453,9 @@ test("connects sidecar with initialize and initialized handshake", async () => {
           appId: "content-studio",
         }),
       );
-      const response = await connected.sidecar.nextMessage(1_000);
+      const response = await connected.sidecar.nextMessage(
+        SIDECAR_TEST_TIMEOUT_MS,
+      );
       assert.equal(response.id, 2);
       assert.deepEqual(response.result, {
         method: "agentSession/start",
@@ -4085,7 +4548,7 @@ test("sidecar lifecycle restarts once after crash", async () => {
       },
       {
         args: [fakeSidecar],
-        initializeTimeoutMs: 1_000,
+        initializeTimeoutMs: SIDECAR_TEST_TIMEOUT_MS,
         restartPolicy: {
           maxAttempts: 1,
           initialDelayMs: 0,
@@ -4106,7 +4569,7 @@ test("sidecar lifecycle restarts once after crash", async () => {
     await lifecycle.start();
     await waitFor(
       () => scheduled.length === 1 && restarted.length === 1,
-      2_000,
+      SIDECAR_TEST_TIMEOUT_MS,
     );
 
     assert.equal(exited[0].code, 42);
@@ -4184,7 +4647,7 @@ test("sidecar lifecycle retries initial handshake failure", async () => {
       },
       {
         args: [fakeSidecar, counterPath],
-        initializeTimeoutMs: 1_000,
+        initializeTimeoutMs: SIDECAR_TEST_TIMEOUT_MS,
         restartPolicy: {
           maxAttempts: 1,
           initialDelayMs: 0,

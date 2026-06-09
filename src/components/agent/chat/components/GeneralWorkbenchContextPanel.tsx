@@ -26,6 +26,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDate } from "@/i18n/format";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 import { cn } from "@/lib/utils";
 import type {
   GeneralWorkbenchContextBudget,
@@ -599,16 +603,11 @@ function GeneralWorkbenchContextPanelComponent({
               selectedSearchResult.citations.length > 0 ? (
                 <div className={CONTEXT_DETAIL_SOURCE_LIST_CLASSNAME}>
                   {selectedSearchResult.citations.map((citation) => (
-                    <a
+                    <CitationLink
                       key={`${selectedSearchResult.id}-${citation.url}`}
-                      href={citation.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={CONTEXT_DETAIL_SOURCE_ITEM_CLASSNAME}
-                    >
-                      <ExternalLink size={11} />
-                      <span>{citation.title}</span>
-                    </a>
+                      title={citation.title}
+                      url={citation.url}
+                    />
                   ))}
                 </div>
               ) : (
@@ -962,6 +961,29 @@ function GeneralWorkbenchContextPanelComponent({
         </div>
       ) : null}
     </>
+  );
+}
+
+function CitationLink({ title, url }: { title: string; url: string }) {
+  const linkRel = resolveHttpExternalHref(url)
+    ? "noreferrer noopener"
+    : undefined;
+
+  return (
+    <a
+      href={url}
+      rel={linkRel}
+      onAuxClick={(event) => {
+        interceptHttpExternalLinkClick(event, url);
+      }}
+      onClick={(event) => {
+        interceptHttpExternalLinkClick(event, url);
+      }}
+      className={CONTEXT_DETAIL_SOURCE_ITEM_CLASSNAME}
+    >
+      <ExternalLink size={11} />
+      <span>{title}</span>
+    </a>
   );
 }
 

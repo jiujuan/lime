@@ -63,6 +63,34 @@ export default defineConfig(({ command, mode }) => {
             "./packages/app-server-client/src/index.ts",
           ),
         },
+        {
+          find: "@limecloud/agent-runtime-client",
+          replacement: path.resolve(
+            __dirname,
+            "./packages/agent-runtime-client/src/index.ts",
+          ),
+        },
+        {
+          find: "@limecloud/agent-ui-contracts",
+          replacement: path.resolve(
+            __dirname,
+            "./packages/agent-ui-contracts/src/index.ts",
+          ),
+        },
+        {
+          find: "@limecloud/agent-runtime-projection",
+          replacement: path.resolve(
+            __dirname,
+            "./packages/agent-runtime-projection/src/index.ts",
+          ),
+        },
+        {
+          find: "@limecloud/agent-runtime-ui",
+          replacement: path.resolve(
+            __dirname,
+            "./packages/agent-runtime-ui/src/index.ts",
+          ),
+        },
       ],
     },
     optimizeDeps: {

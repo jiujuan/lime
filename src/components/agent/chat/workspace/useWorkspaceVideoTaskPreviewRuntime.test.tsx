@@ -114,6 +114,7 @@ describe("useWorkspaceVideoTaskPreviewRuntime", () => {
     });
 
     const harness = renderHook({
+      projectRootPath: "/workspace",
       messages,
       setChatMessages,
     });
@@ -125,6 +126,7 @@ describe("useWorkspaceVideoTaskPreviewRuntime", () => {
 
     expect(mockGetTask).toHaveBeenCalledWith("task-video-1", {
       refreshStatus: true,
+      projectRootPath: "/workspace",
     });
     expect(messages[0]?.taskPreview).toMatchObject({
       kind: "video_generate",

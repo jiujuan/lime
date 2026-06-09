@@ -496,6 +496,8 @@ export function AgentChatWorkspace({
     useState(false);
   const shouldBootstrapCanvasOnEntry =
     Boolean(contentId) && isSpecializedWorkbenchTheme(normalizedEntryTheme);
+  const shouldKeepNewTaskHomeSessionRestoreDisabled =
+    agentEntry === "new-task" && !contentId;
 
   // 内容创作相关状态
   const [activeTheme, setActiveTheme] = useState<string>(normalizedEntryTheme);
@@ -538,6 +540,8 @@ export function AgentChatWorkspace({
   } = useWorkspaceProjectSelection({
     externalProjectId,
     initialSessionId,
+    keepNewChatSessionRestoreDisabled:
+      shouldKeepNewTaskHomeSessionRestoreDisabled,
     newChatAt,
   });
   const taskCenterWorkspaceId = normalizeProjectId(projectId);
@@ -5860,6 +5864,7 @@ export function AgentChatWorkspace({
     updateCurrentImageWorkbenchState,
   });
   useWorkspaceVideoTaskPreviewRuntime({
+    projectRootPath: project?.rootPath || null,
     messages,
     setChatMessages,
   });
@@ -5874,6 +5879,7 @@ export function AgentChatWorkspace({
     setChatMessages,
   });
   useWorkspaceVideoTaskActionRuntime({
+    projectRootPath: project?.rootPath || null,
     projectId,
     contentId,
     setChatMessages,
@@ -6604,6 +6610,7 @@ export function AgentChatWorkspace({
       const images = payload.images ?? [];
       const sendOptions = payload.sendOptions;
       const normalizedText = text.trim();
+      setInput("");
       const activeDraftTabId =
         activeTaskCenterDraftTabIdRef.current ||
         (agentEntry === "claw" && shouldRenderTaskCenterEmbeddedHome

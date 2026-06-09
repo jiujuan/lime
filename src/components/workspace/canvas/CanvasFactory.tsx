@@ -179,6 +179,7 @@ export const CanvasFactory: React.FC<CanvasFactoryProps> = memo(
           onStateChange={onStateChange as (s: VideoCanvasState) => void}
           onBackHome={resolvedBackHome}
           onClose={onClose}
+          projectRootPath={projectRootPath}
           projectId={projectId}
           contentId={contentId}
         />

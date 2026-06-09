@@ -9,6 +9,7 @@ import {
 const VIDEO_TASK_POLL_INTERVAL_MS = 3000;
 
 interface UseWorkspaceVideoTaskPreviewRuntimeParams {
+  projectRootPath?: string | null;
   messages: Message[];
   setChatMessages: Dispatch<SetStateAction<Message[]>>;
 }
@@ -46,14 +47,17 @@ function collectTrackedTaskIds(messages: Message[]): string[] {
 }
 
 export function useWorkspaceVideoTaskPreviewRuntime({
+  projectRootPath,
   messages,
   setChatMessages,
 }: UseWorkspaceVideoTaskPreviewRuntimeParams) {
   const messagesRef = useRef(messages);
+  const projectRootPathRef = useRef(projectRootPath);
 
   useEffect(() => {
     messagesRef.current = messages;
-  }, [messages]);
+    projectRootPathRef.current = projectRootPath;
+  }, [messages, projectRootPath]);
 
   useEffect(() => {
     let disposed = false;
@@ -73,7 +77,10 @@ export function useWorkspaceVideoTaskPreviewRuntime({
       try {
         const tasks = await Promise.all(
           taskIds.map((taskId) =>
-            videoGenerationApi.getTask(taskId, { refreshStatus: true }),
+            videoGenerationApi.getTask(taskId, {
+              refreshStatus: true,
+              projectRootPath: projectRootPathRef.current || undefined,
+            }),
           ),
         );
         if (disposed) {

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "file_path": {
+      "type": "string"
+    },
+    "model_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "file_path",
+    "model_id"
+  ],
+  "title": "VoiceModelTestTranscribeFileParams",
+  "type": "object"
+}

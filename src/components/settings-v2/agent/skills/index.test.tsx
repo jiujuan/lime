@@ -3,12 +3,19 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
+const { mockOpenExternalUrlWithSystemBrowser } = vi.hoisted(() => ({
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(),
+}));
+
 vi.mock("@/components/skills/SkillsPage", () => ({
   SkillsPage: ({ hideHeader }: { hideHeader?: boolean }) => (
     <div data-testid="skills-page">
       SkillsPage hideHeader={String(Boolean(hideHeader))}
     </div>
   ),
+}));
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
 }));
 
 import { ExtensionsSettings } from ".";
@@ -42,6 +49,7 @@ beforeEach(async () => {
 
   vi.clearAllMocks();
   await changeLimeLocale("en-US");
+  mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -77,5 +85,33 @@ describe("ExtensionsSettings", () => {
     );
     expect(helpTrigger).toBeInstanceOf(HTMLButtonElement);
     expect(text).not.toContain("settings.agent.skills.advancedEntry");
+  });
+
+  it("反馈链接应走 Desktop Host 外链网关", async () => {
+    const container = renderComponent();
+    const link = Array.from(container.querySelectorAll("a")).find((anchor) =>
+      anchor.textContent?.includes("Issue Feedback"),
+    );
+
+    expect(link).toBeInstanceOf(HTMLAnchorElement);
+    expect(link?.getAttribute("href")).toBe(
+      "https://github.com/aiclientproxy/lime/issues",
+    );
+    expect(link?.getAttribute("target")).toBeNull();
+    expect(link?.getAttribute("rel")).toBe("noreferrer noopener");
+
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      link?.dispatchEvent(clickEvent);
+      await Promise.resolve();
+    });
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://github.com/aiclientproxy/lime/issues",
+    );
   });
 });

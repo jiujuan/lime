@@ -1,0 +1,28 @@
+{
+  "$defs": {
+    "VoiceAsrWhisperModelSize": {
+      "enum": [
+        "base",
+        "medium",
+        "small",
+        "tiny"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "model": {
+      "$ref": "#/$defs/VoiceAsrWhisperModelSize",
+      "default": "base"
+    },
+    "model_path": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "VoiceAsrWhisperLocalConfig",
+  "type": "object"
+}

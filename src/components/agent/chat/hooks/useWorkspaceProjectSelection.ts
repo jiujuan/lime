@@ -22,6 +22,7 @@ interface UseWorkspaceProjectSelectionOptions {
   externalProjectId?: string | null;
   initialSessionId?: string | null;
   newChatAt?: number;
+  keepNewChatSessionRestoreDisabled?: boolean;
   storageKey?: string;
 }
 
@@ -39,6 +40,7 @@ export function useWorkspaceProjectSelection(
   const {
     externalProjectId,
     initialSessionId,
+    keepNewChatSessionRestoreDisabled = false,
     newChatAt,
     storageKey = LAST_PROJECT_ID_KEY,
   } = options;
@@ -113,7 +115,9 @@ export function useWorkspaceProjectSelection(
       handledNewChatRequestRef.current === incomingNewChatRequestKey);
   const shouldDisableSessionRestore =
     hasExplicitInitialSession ||
-    (incomingNewChatRequestKey !== null && !hasHandledIncomingNewChatRequest);
+    (incomingNewChatRequestKey !== null &&
+      (keepNewChatSessionRestoreDisabled ||
+        !hasHandledIncomingNewChatRequest));
   const projectId =
     normalizedExternalProjectId ?? internalProjectId ?? undefined;
   const projectSelectionSource: WorkspaceProjectSelectionSource =

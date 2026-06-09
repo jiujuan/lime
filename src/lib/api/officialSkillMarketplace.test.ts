@@ -35,14 +35,13 @@ describe("officialSkillMarketplace", () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(
       mockJsonResponse({
-        code: 0,
-        message: "ok",
+        code: 200,
+        message: "success",
         data: {
           items: [
             {
               id: "official:analysis",
               name: "analysis",
-              aliases: ["data-analysis", ""],
               title: "数据分析",
               summary: "整理数据并输出结论。",
               category: "数据",
@@ -82,7 +81,7 @@ describe("officialSkillMarketplace", () => {
       expect.objectContaining({
         id: "official:analysis",
         name: "analysis",
-        aliases: ["data-analysis"],
+        aliases: [],
         title: "数据分析",
         bundle: expect.objectContaining({
           resourceSummary: {
@@ -104,12 +103,11 @@ describe("officialSkillMarketplace", () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(
       mockJsonResponse({
-        code: 0,
-        message: "ok",
+        code: 200,
+        message: "success",
         data: {
           manifestVersion: "agentskills.v1",
           name: "analysis",
-          aliases: ["data-analysis"],
           version: "2026.05",
           contentHash: "sha256:bundle",
           fileCount: 1,
@@ -125,10 +123,12 @@ describe("officialSkillMarketplace", () => {
       }),
     );
 
-    await expect(getOfficialSkillMarketplaceBundle("analysis")).resolves.toEqual({
+    await expect(
+      getOfficialSkillMarketplaceBundle("analysis"),
+    ).resolves.toEqual({
       manifestVersion: "agentskills.v1",
       name: "analysis",
-      aliases: ["data-analysis"],
+      aliases: [],
       version: "2026.05",
       contentHash: "sha256:bundle",
       fileCount: 1,
@@ -144,6 +144,77 @@ describe("officialSkillMarketplace", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "https://lime-api.limeai.run/api/v1/public/service-skills/marketplace/analysis/bundle",
       expect.any(Object),
+    );
+  });
+
+  it("安装官方技能时应接受当前控制面 bundle 形态并进入 App Server 安装网关", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        code: 200,
+        message: "success",
+        data: {
+          manifestVersion: "agentskills.v1",
+          name: "analysis",
+          version: "2026.05",
+          contentHash: "sha256:bundle",
+          fileCount: 1,
+          files: [
+            {
+              path: "SKILL.md",
+              content: "# Analysis",
+              encoding: "utf-8",
+              sha256: "sha256:file",
+            },
+          ],
+        },
+      }),
+    );
+    skillsApiMock.installMarketplaceBundle.mockResolvedValueOnce({
+      directory: "analysis",
+      inspection: {
+        content: "# Analysis",
+        metadata: {},
+        allowedTools: [],
+        resourceSummary: {
+          hasScripts: false,
+          hasReferences: false,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      },
+    });
+
+    await expect(installOfficialMarketplaceSkill("analysis")).resolves.toEqual(
+      expect.objectContaining({ directory: "analysis" }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://lime-api.limeai.run/api/v1/public/service-skills/marketplace/analysis/bundle",
+      expect.any(Object),
+    );
+    expect(skillsApiMock.installMarketplaceBundle).toHaveBeenCalledWith(
+      {
+        manifestVersion: "agentskills.v1",
+        name: "analysis",
+        aliases: [],
+        version: "2026.05",
+        contentHash: "sha256:bundle",
+        fileCount: 1,
+        files: [
+          {
+            path: "SKILL.md",
+            content: "# Analysis",
+            encoding: "utf-8",
+            sha256: "sha256:file",
+          },
+        ],
+      },
+      "lime",
     );
   });
 

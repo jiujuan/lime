@@ -1,12 +1,17 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import {
   ARTIFACT_DOCUMENT_SCHEMA_VERSION,
   type ArtifactDocumentV1,
 } from "@/lib/artifact-document";
 import { ArtifactDocumentRenderer } from "./ArtifactDocumentRenderer";
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: vi.fn(),
+}));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
@@ -93,6 +98,7 @@ beforeEach(async () => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   await changeLimeLocale("en-US");
+  vi.mocked(openExternalUrlWithSystemBrowser).mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -109,6 +115,7 @@ afterEach(async () => {
   }
 
   await changeLimeLocale("zh-CN");
+  vi.clearAllMocks();
 });
 
 describe("ArtifactDocumentRenderer", () => {
@@ -152,5 +159,42 @@ describe("ArtifactDocumentRenderer", () => {
       "The model could not generate a structured document, so the original content is shown below.",
     );
     expect(text).not.toContain("模型未能生成结构化文档");
+  });
+
+  it("citation 与 source appendix 的 http/https 链接应交给系统浏览器 current 网关", async () => {
+    const container = renderArtifactDocument({
+      blocks: [
+        {
+          id: "citation",
+          type: "citation_list",
+          items: [{ sourceId: "source-1" }],
+        },
+      ],
+    });
+    const links = Array.from(container.querySelectorAll("a")).filter(
+      (link) =>
+        link.getAttribute("href") === "https://example.com/release-notes",
+    );
+
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link.getAttribute("target")).toBeNull();
+      expect(link.getAttribute("rel")).toBe("noreferrer noopener");
+    }
+
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+
+    await act(async () => {
+      links[0]?.dispatchEvent(clickEvent);
+      await Promise.resolve();
+    });
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(openExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://example.com/release-notes",
+    );
   });
 });

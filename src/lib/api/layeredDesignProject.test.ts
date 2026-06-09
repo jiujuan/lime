@@ -17,7 +17,8 @@ describe("layeredDesignProject API", () => {
   it("saveLayeredDesignProjectExport 应代理到 project export 命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       projectRootPath: "/workspace",
-      exportDirectoryPath: "/workspace/.lime/layered-designs/doc.layered-design",
+      exportDirectoryPath:
+        "/workspace/.lime/layered-designs/doc.layered-design",
       exportDirectoryRelativePath: ".lime/layered-designs/doc.layered-design",
       designPath:
         "/workspace/.lime/layered-designs/doc.layered-design/design.json",
@@ -106,7 +107,8 @@ describe("layeredDesignProject API", () => {
   it("saveLayeredDesignProjectExport 收到带 error 的伪导出结果时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       projectRootPath: "/workspace",
-      exportDirectoryPath: "/workspace/.lime/layered-designs/doc.layered-design",
+      exportDirectoryPath:
+        "/workspace/.lime/layered-designs/doc.layered-design",
       exportDirectoryRelativePath: ".lime/layered-designs/doc.layered-design",
       designPath:
         "/workspace/.lime/layered-designs/doc.layered-design/design.json",
@@ -137,7 +139,8 @@ describe("layeredDesignProject API", () => {
   it("readLayeredDesignProjectExport 应代理到 project export 命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       projectRootPath: "/workspace",
-      exportDirectoryPath: "/workspace/.lime/layered-designs/doc.layered-design",
+      exportDirectoryPath:
+        "/workspace/.lime/layered-designs/doc.layered-design",
       exportDirectoryRelativePath: ".lime/layered-designs/doc.layered-design",
       designPath:
         "/workspace/.lime/layered-designs/doc.layered-design/design.json",
@@ -210,7 +213,8 @@ describe("layeredDesignProject API", () => {
   it("readLayeredDesignProjectExport 收到带 error 的伪工程文档时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       projectRootPath: "/workspace",
-      exportDirectoryPath: "/workspace/.lime/layered-designs/doc.layered-design",
+      exportDirectoryPath:
+        "/workspace/.lime/layered-designs/doc.layered-design",
       exportDirectoryRelativePath: ".lime/layered-designs/doc.layered-design",
       designPath:
         "/workspace/.lime/layered-designs/doc.layered-design/design.json",

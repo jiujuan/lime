@@ -10,7 +10,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as sessionFilesApi from "@/lib/api/session-files";
 import type { SessionFile, SessionMeta } from "@/lib/api/session-files";
-import { areOptionalLegacyUxCommandsAvailable } from "@/lib/dev-bridge/commandPolicy";
 
 export interface UseSessionFilesOptions {
   /** 会话 ID */
@@ -75,7 +74,7 @@ export function useSessionFiles(
       setFiles([]);
       return;
     }
-    if (!isSessionFilesAutoInitAvailable()) {
+    if (!isSessionFilesCurrentAvailable()) {
       currentSessionId.current = sessionId;
       setMeta(null);
       setFiles([]);
@@ -266,9 +265,6 @@ export function useSessionFiles(
   };
 }
 
-function isSessionFilesAutoInitAvailable(): boolean {
-  return areOptionalLegacyUxCommandsAvailable([
-    "session_files_get_or_create",
-    "session_files_list_files",
-  ]);
+function isSessionFilesCurrentAvailable(): boolean {
+  return true;
 }

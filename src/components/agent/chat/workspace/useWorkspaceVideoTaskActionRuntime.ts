@@ -19,6 +19,7 @@ import {
 } from "./videoTaskPreviewState";
 
 interface UseWorkspaceVideoTaskActionRuntimeParams {
+  projectRootPath?: string | null;
   projectId?: string | null;
   contentId?: string | null;
   setChatMessages: Dispatch<SetStateAction<Message[]>>;
@@ -125,6 +126,7 @@ function updateVideoPreviewByTaskId(
 }
 
 export function useWorkspaceVideoTaskActionRuntime({
+  projectRootPath,
   projectId,
   contentId,
   setChatMessages,
@@ -139,6 +141,7 @@ export function useWorkspaceVideoTaskActionRuntime({
 
       const originalTask = await videoGenerationApi.getTask(normalizedTaskId, {
         refreshStatus: false,
+        projectRootPath: projectRootPath || undefined,
       });
       if (!originalTask) {
         toast.error("未找到原视频任务，暂时无法重新生成");
@@ -170,7 +173,10 @@ export function useWorkspaceVideoTaskActionRuntime({
       }
 
       try {
-        const created = await videoGenerationApi.createTask(retryRequest);
+        const created = await videoGenerationApi.createTask({
+          ...retryRequest,
+          projectRootPath: projectRootPath || undefined,
+        });
         setChatMessages((previous) =>
           updateVideoPreviewByTaskId(previous, normalizedTaskId, (preview) => ({
             ...preview,
@@ -196,7 +202,7 @@ export function useWorkspaceVideoTaskActionRuntime({
         return false;
       }
     },
-    [setChatMessages],
+    [projectRootPath, setChatMessages],
   );
 
   const handleCancelVideoTask = useCallback(
@@ -208,8 +214,12 @@ export function useWorkspaceVideoTaskActionRuntime({
       }
 
       try {
-        const cancelledTask =
-          await videoGenerationApi.cancelTask(normalizedTaskId);
+        const cancelledTask = await videoGenerationApi.cancelTask(
+          normalizedTaskId,
+          {
+            projectRootPath: projectRootPath || undefined,
+          },
+        );
         if (cancelledTask) {
           setChatMessages((previous) =>
             updateVideoPreviewByTaskId(previous, normalizedTaskId, (preview) =>
@@ -226,7 +236,7 @@ export function useWorkspaceVideoTaskActionRuntime({
         return false;
       }
     },
-    [setChatMessages],
+    [projectRootPath, setChatMessages],
   );
 
   useEffect(() => {

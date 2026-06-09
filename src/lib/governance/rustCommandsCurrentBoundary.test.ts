@@ -173,12 +173,8 @@ const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
   ["lime-rs/src/commands/browser_profile_cmd.rs", 26],
   ["lime-rs/src/commands/browser_runtime_cmd.rs", 48],
   ["lime-rs/src/commands/content_cmd.rs", 26],
-  ["lime-rs/src/commands/execution_run_cmd.rs", 16],
-  ["lime-rs/src/commands/gallery_material_cmd.rs", 27],
   ["lime-rs/src/commands/gateway_tunnel_cmd.rs", 40],
-  ["lime-rs/src/commands/layered_design_cmd.rs", 41],
   ["lime-rs/src/commands/machine_id_cmd.rs", 27],
-  ["lime-rs/src/commands/material_cmd.rs", 38],
   ["lime-rs/src/commands/memory_cmd.rs", 42],
   ["lime-rs/src/commands/memory_feedback_cmd.rs", 8],
   ["lime-rs/src/commands/memory_management_cmd.rs", 48],
@@ -186,7 +182,6 @@ const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
   ["lime-rs/src/commands/modality_runtime_contracts.rs", 2],
   ["lime-rs/src/commands/model_registry_cmd.rs", 26],
   ["lime-rs/src/commands/security_perf_cmd.rs", 2],
-  ["lime-rs/src/commands/session_files_cmd.rs", 28],
   ["lime-rs/src/commands/skill_cmd.rs", 228],
   ["lime-rs/src/commands/unified_memory_cmd.rs", 50],
   ["lime-rs/src/commands/video_generation_cmd.rs", 18],
@@ -338,6 +333,76 @@ describe("rust commands current boundary", () => {
     }
   });
 
+  it("Gallery material 旧 Tauri wrapper 不应恢复", () => {
+    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
+    const retiredGalleryMaterialCommands = [
+      "create_gallery_material_metadata",
+      "get_gallery_material_metadata",
+      "get_gallery_material",
+      "list_gallery_materials_by_image_category",
+      "list_gallery_materials_by_layout_category",
+      "list_gallery_materials_by_mood",
+      "update_gallery_material_metadata",
+      "delete_gallery_material_metadata",
+    ];
+
+    expect(commandsModSource).not.toContain("gallery_material_cmd");
+    expectStandaloneIdentifiersAbsent(
+      runnerSource,
+      retiredGalleryMaterialCommands,
+    );
+    expect(
+      existsSync(
+        join(REPO_ROOT, "lime-rs/src/commands/gallery_material_cmd.rs"),
+      ),
+    ).toBe(false);
+  });
+
+  it("Layered Design 旧 Tauri wrapper 不应恢复", () => {
+    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
+    const retiredLayeredDesignCommands = [
+      "save_layered_design_project_export",
+      "read_layered_design_project_export",
+      "recognize_layered_design_text",
+      "analyze_layered_design_flat_image",
+    ];
+
+    expect(commandsModSource).not.toContain("layered_design_cmd");
+    expectStandaloneIdentifiersAbsent(
+      runnerSource,
+      retiredLayeredDesignCommands,
+    );
+    expect(
+      existsSync(
+        join(REPO_ROOT, "lime-rs/src/commands/layered_design_cmd.rs"),
+      ),
+    ).toBe(false);
+  });
+
+  it("Execution run 旧 Tauri wrapper 不应恢复", () => {
+    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
+    const retiredExecutionRunCommands = [
+      "execution_run_list",
+      "execution_run_get",
+      "execution_run_get_general_workbench_state",
+      "execution_run_list_general_workbench_history",
+    ];
+
+    expect(commandsModSource).not.toContain("execution_run_cmd");
+    expectStandaloneIdentifiersAbsent(
+      runnerSource,
+      retiredExecutionRunCommands,
+    );
+    expect(
+      existsSync(
+        join(REPO_ROOT, "lime-rs/src/commands/execution_run_cmd.rs"),
+      ),
+    ).toBe(false);
+  });
+
   it("Channels/WeChat 旧 Tauri wrapper 文件不应恢复", () => {
     const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
     const retiredChannelWrappers = [
@@ -361,9 +426,7 @@ describe("rust commands current boundary", () => {
     expect(modelsDispatcherSource).not.toContain(
       '"get_model_registry_provider_ids"',
     );
-    expect(modelsDispatcherSource).not.toContain(
-      "claude-sonnet-4-20250514",
-    );
+    expect(modelsDispatcherSource).not.toContain("claude-sonnet-4-20250514");
     expect(modelsDispatcherSource).toContain('"refresh_model_registry"');
   });
 

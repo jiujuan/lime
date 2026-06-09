@@ -460,9 +460,12 @@ describe("agentApps API", () => {
     await expect(saveInstalledAgentAppState({ state })).rejects.toThrow(
       "agentAppInstalled/save did not return appId",
     );
-    expect(appServerRequestMock).toHaveBeenCalledWith("agentAppInstalled/save", {
-      state,
-    });
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/save",
+      {
+        state,
+      },
+    );
     expect(safeInvoke).not.toHaveBeenCalledWith(
       "agent_app_save_installed_state",
       expect.anything(),
@@ -539,15 +542,18 @@ describe("agentApps API", () => {
         canReview: true,
       },
     });
-    expect(appServerRequestMock).toHaveBeenCalledWith("agentAppPackage/fetchCloud", {
-      descriptor: expect.objectContaining({
-        appId: "content-factory-app",
-        packageUrl:
-          "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
-        packageHash: PACKAGE_HASH,
-        manifestHash: MANIFEST_HASH,
-      }),
-    });
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppPackage/fetchCloud",
+      {
+        descriptor: expect.objectContaining({
+          appId: "content-factory-app",
+          packageUrl:
+            "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+          packageHash: PACKAGE_HASH,
+          manifestHash: MANIFEST_HASH,
+        }),
+      },
+    );
     expect(safeInvoke).not.toHaveBeenCalledWith(
       "agent_app_fetch_cloud_package",
       expect.anything(),
@@ -1160,7 +1166,9 @@ describe("agentApps API", () => {
 
     await expect(
       selectAgentAppDirectory({ title: "选择应用目录" }),
-    ).rejects.toThrow("agent_app_select_directory did not return selected path");
+    ).rejects.toThrow(
+      "agent_app_select_directory did not return selected path",
+    );
   });
 
   it("Agent App Shell launch 网关应通过 current 命令提交 descriptor", async () => {

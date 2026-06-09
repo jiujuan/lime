@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "api_key": {
+      "type": "string"
+    },
+    "api_secret": {
+      "type": "string"
+    },
+    "app_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "api_key",
+    "api_secret",
+    "app_id"
+  ],
+  "title": "VoiceAsrXunfeiConfig",
+  "type": "object"
+}

@@ -5,6 +5,7 @@ import {
 import {
   act,
   cleanupResourceManagerPageTest,
+  mockOpenExternalUrlWithSystemBrowser,
   mockOpenPathWithDefaultApp,
   mockRevealPathInFinder,
   renderPage,
@@ -226,11 +227,54 @@ describe("ResourceManagerPage actions", () => {
       await Promise.resolve();
     });
 
-    expect(window.open).toHaveBeenCalledWith(
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
       "https://example.com/source",
-      "_blank",
-      "noopener,noreferrer",
     );
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it("原文外链打开失败时不回退 window.open 旁路", async () => {
+    mockOpenExternalUrlWithSystemBrowser.mockRejectedValueOnce(
+      new Error("open_external_url unavailable"),
+    );
+
+    const container = renderPage({
+      id: "session-project-origin-failure",
+      initialIndex: 0,
+      createdAt: Date.now(),
+      items: [
+        {
+          id: "md-1",
+          kind: "markdown",
+          content: "# 项目文稿",
+          title: "项目文稿",
+          sourceContext: {
+            kind: "project_resource",
+            projectId: "project-1",
+            contentId: "content-1",
+            originUrl: "https://example.com/source",
+            sourcePage: "resources",
+          },
+        },
+      ],
+    });
+
+    const moreButton = container.querySelector('button[aria-label="更多操作"]');
+    act(() => {
+      moreButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const originButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("阅读原文"),
+    );
+    await act(async () => {
+      originButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://example.com/source",
+    );
+    expect(window.open).not.toHaveBeenCalled();
   });
 
   it("应在顶部详情按钮中展示资源 Inspector 与业务来源", () => {

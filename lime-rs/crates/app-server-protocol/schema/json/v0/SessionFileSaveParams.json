@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "content": {
+      "type": "string"
+    },
+    "fileName": {
+      "type": "string"
+    },
+    "metadata": true,
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "content",
+    "fileName",
+    "sessionId"
+  ],
+  "title": "SessionFileSaveParams",
+  "type": "object"
+}

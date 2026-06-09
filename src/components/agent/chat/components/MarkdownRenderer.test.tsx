@@ -6,6 +6,10 @@ import "@/i18n/config";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import * as fileBrowserModule from "@/lib/api/fileBrowser";
+import {
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 const mockConvertLocalFileSrc = vi.fn((path: string) => `asset://${path}`);
@@ -111,6 +115,11 @@ vi.mock("@/lib/api/externalUrl", () => ({
   openExternalUrlWithSystemBrowser: vi.fn(),
 }));
 
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability: vi.fn(),
+  hasDesktopHostRuntimeMarkers: vi.fn(),
+}));
+
 interface MountedHarness {
   container: HTMLDivElement;
   root: Root;
@@ -136,6 +145,8 @@ beforeEach(async () => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
   await changeLimeLocale("zh-CN");
   vi.mocked(openExternalUrlWithSystemBrowser).mockResolvedValue(undefined);
+  vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+  vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -478,6 +489,131 @@ describe("MarkdownRenderer", () => {
     );
   });
 
+  it("http/https 图片点击应交给系统浏览器 current 网关", async () => {
+    const originalWindowOpen = window.open;
+    const windowOpen = vi.fn();
+    window.open = windowOpen as unknown as typeof window.open;
+
+    try {
+      const container = render("![远程图](https://cdn.example.com/hero.png)");
+      const image = container.querySelector("img");
+
+      expect(image).not.toBeNull();
+
+      const clickEvent = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      await act(async () => {
+        image?.dispatchEvent(clickEvent);
+        await Promise.resolve();
+      });
+
+      expect(clickEvent.defaultPrevented).toBe(true);
+      expect(openExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+        "https://cdn.example.com/hero.png",
+      );
+      expect(windowOpen).not.toHaveBeenCalled();
+    } finally {
+      window.open = originalWindowOpen;
+    }
+  });
+
+  it("Desktop Host 下 base64 图片点击不应回退 window.open", () => {
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(true);
+    const originalWindowOpen = window.open;
+    const windowOpen = vi.fn();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    window.open = windowOpen as unknown as typeof window.open;
+
+    try {
+      const container = render("![示例图](data:image/png;base64,ZmFrZQ==)");
+      const image = container.querySelector("img");
+
+      expect(image).not.toBeNull();
+
+      image?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+      expect(windowOpen).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[MarkdownRenderer] Desktop Host image preview cannot fall back to browser window",
+        "data:image/png;base64,ZmFrZQ==",
+      );
+    } finally {
+      window.open = originalWindowOpen;
+      consoleError.mockRestore();
+    }
+  });
+
+  it("Desktop Host 下本地图片点击不应回退 window.open", () => {
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
+    const originalWindowOpen = window.open;
+    const windowOpen = vi.fn();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    window.open = windowOpen as unknown as typeof window.open;
+
+    try {
+      const container = render("![配图](images/hero.png)", {
+        baseFilePath:
+          "/Users/coso/.proxycast/projects/default/exports/x-article/google/index.md",
+      });
+      const image = container.querySelector("img");
+      const clickEvent = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      expect(image).not.toBeNull();
+
+      image?.dispatchEvent(clickEvent);
+
+      expect(clickEvent.defaultPrevented).toBe(true);
+      expect(windowOpen).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[MarkdownRenderer] Desktop Host image preview cannot fall back to browser window",
+        "asset:///Users/coso/.proxycast/projects/default/exports/x-article/google/images/hero.png",
+      );
+    } finally {
+      window.open = originalWindowOpen;
+      consoleError.mockRestore();
+    }
+  });
+
+  it("非 Desktop Host 下本地图片点击保留浏览器预览", () => {
+    const originalWindowOpen = window.open;
+    const windowOpen = vi.fn();
+    window.open = windowOpen as unknown as typeof window.open;
+
+    try {
+      const container = render("![配图](images/hero.png)", {
+        baseFilePath:
+          "/Users/coso/.proxycast/projects/default/exports/x-article/google/index.md",
+      });
+      const image = container.querySelector("img");
+      const clickEvent = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      expect(image).not.toBeNull();
+
+      image?.dispatchEvent(clickEvent);
+
+      expect(clickEvent.defaultPrevented).toBe(false);
+      expect(windowOpen).toHaveBeenCalledWith(
+        "asset:///Users/coso/.proxycast/projects/default/exports/x-article/google/images/hero.png",
+        "_blank",
+      );
+    } finally {
+      window.open = originalWindowOpen;
+    }
+  });
+
   it("应归一化 ./ 和 ../ 相对图片路径并保留查询串", () => {
     const container = render(
       "![配图](./images/../images/hero.png?raw=1#preview)",
@@ -561,7 +697,9 @@ describe("MarkdownRenderer", () => {
       "##结论`/Users/coso/.yansu-agent` 是 **Yansu Agent 桌面/本地代理应用的数据目录**，不是普通项目目录。它包含：- 本地可执行依赖：`bin/`、`git/`、`opencli/`- 本地 AI/识别模型：`models/`、`sherpa/`- 活动记录与截图：`activity/`、`activity.db`---##目录体积分布主要占用如下：| 路径 | 大小 | 判断 ||---|---:|---|| `activity/` | **974M** | 最大头，主要是截图快照 || `models/` | **729M** | 本地 ONNX 模型 || `sherpa/` | **229M** | 语音识别/音频相关模型 |最值得关注的是：```text/Users/coso/.yansu-agent/activity/snapshots/2026-05-26973M/Users/coso/.yansu-agent/models/gliner-pii-base/model.onnx634M```---##关键发现###1. `activity/` 是最大空间来源";
 
     const container = render(content);
-    const headings = container.querySelectorAll("[data-markdown-heading-level]");
+    const headings = container.querySelectorAll(
+      "[data-markdown-heading-level]",
+    );
     const table = container.querySelector(
       '[data-testid="markdown-table-scroll"] table',
     );
@@ -590,7 +728,9 @@ describe("MarkdownRenderer", () => {
 
     const container = render(content);
     const orderedItems = container.querySelectorAll("ol > li");
-    const headings = container.querySelectorAll("[data-markdown-heading-level]");
+    const headings = container.querySelectorAll(
+      "[data-markdown-heading-level]",
+    );
     const bulletItems = container.querySelectorAll("ul > li");
 
     expect(orderedItems).toHaveLength(3);
@@ -610,7 +750,9 @@ describe("MarkdownRenderer", () => {
       "## 今日简报**时间口径：2026 年 6 月 2 日；主要依据可核实来源。---## 一、地缘政治- 第一条事件 来源：[Source A](https://example.com/a)- 第二条事件**观察重点：*局势变化仍需继续关注。---## 任意小节1. 第一项2. 第二项3. 第三项";
 
     const container = render(content);
-    const headings = container.querySelectorAll("[data-markdown-heading-level]");
+    const headings = container.querySelectorAll(
+      "[data-markdown-heading-level]",
+    );
     const paragraphs = container.querySelectorAll("p");
     const links = container.querySelectorAll("a");
     const orderedItems = container.querySelectorAll("ol > li");
@@ -719,19 +861,14 @@ describe("MarkdownRenderer", () => {
   });
 
   it("任意标题后的无编号首项和后续编号应按结构恢复", () => {
-    const content =
-      "## 任意标题\n\n第一项内容2. 第二项内容3. 第三项内容";
+    const content = "## 任意标题\n\n第一项内容2. 第二项内容3. 第三项内容";
 
     const container = render(content);
     const listItems = Array.from(container.querySelectorAll("li")).map(
       (item) => item.textContent,
     );
 
-    expect(listItems).toEqual([
-      "第一项内容",
-      "第二项内容",
-      "第三项内容",
-    ]);
+    expect(listItems).toEqual(["第一项内容", "第二项内容", "第三项内容"]);
     expect(container.textContent).not.toContain("内容2.");
     expect(container.textContent).not.toContain("内容3.");
   });

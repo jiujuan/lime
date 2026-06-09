@@ -11,6 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ProviderIcon } from "@/icons/providers";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 import { cn } from "@/lib/utils";
 import {
   apiKeyProviderApi,
@@ -1657,6 +1661,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
 
   const apiKeyRequired =
     providerApiKeyRequired || isApiKeyRequired(formState.type);
+  const apiKeyHref = template.apiKeyUrl;
+  const apiKeyRel = resolveHttpExternalHref(apiKeyHref)
+    ? "noreferrer noopener"
+    : undefined;
 
   return (
     <div
@@ -1710,11 +1718,16 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               </p>
             </div>
           </div>
-          {template.apiKeyUrl ? (
+          {apiKeyHref ? (
             <a
-              href={template.apiKeyUrl}
-              target="_blank"
-              rel="noreferrer"
+              href={apiKeyHref}
+              rel={apiKeyRel}
+              onAuxClick={(event) => {
+                interceptHttpExternalLinkClick(event, apiKeyHref);
+              }}
+              onClick={(event) => {
+                interceptHttpExternalLinkClick(event, apiKeyHref);
+              }}
               className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-800"
               data-testid="provider-api-key-link"
             >

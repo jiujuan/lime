@@ -6,7 +6,10 @@ import { parseManifest } from "../manifest/parseManifest";
 import { projectApp } from "../projection/projectApp";
 import type { AgentAppSetupState, HostCapabilityProfile } from "../types";
 import { checkReadiness } from "./checkReadiness";
-import { p0HostCapabilityProfile } from "./hostCapabilityProfile";
+import {
+  currentAgentAppHostRuntimeVersion,
+  p0HostCapabilityProfile,
+} from "./hostCapabilityProfile";
 
 function buildProjection() {
   const manifest = parseManifest(contentFactoryFixture);
@@ -201,6 +204,40 @@ describe("Agent App readiness P0", () => {
     );
   });
 
+  it("应接受 v0.10 manifest 和 install runtime 作为当前 Host 标准", () => {
+    const rawManifest = parseManifest({
+      manifestVersion: "0.10.0",
+      name: "content-factory-app",
+      version: "0.10.0",
+      requires: {
+        sdk: "@lime/app-sdk@^0.10.0",
+        capabilities: ["lime.agent", "lime.connectors", "lime.terminal"],
+      },
+      entries: [{ key: "dashboard", kind: "page" }],
+      install: {
+        modes: ["in_lime", "standalone", "runtime_backed"],
+        runtime: { minVersion: currentAgentAppHostRuntimeVersion },
+        standalone: { shell: "lime-app-shell" },
+        runtimeBacked: {
+          requires: "lime-runtime",
+          minVersion: currentAgentAppHostRuntimeVersion,
+        },
+      },
+    });
+    const manifest = normalizeManifest(rawManifest);
+    const identity = buildPackageIdentity({ manifest: rawManifest });
+    const projection = projectApp({ manifest, identity });
+    const readiness = checkReadiness({ manifest, projection });
+
+    expect(manifest.manifestVersion).toBe("0.10");
+    expect(readiness.blockers.map((issue) => issue.code)).not.toEqual(
+      expect.arrayContaining([
+        "MANIFEST_VERSION_UNSUPPORTED",
+        "RUNTIME_VERSION_UNSUPPORTED",
+      ]),
+    );
+  });
+
   it("preferred install mode 不满足 runtime 版本时应阻断 readiness", () => {
     const rawManifest = parseManifest({
       manifestVersion: "0.8.0",
@@ -209,7 +246,7 @@ describe("Agent App readiness P0", () => {
       entries: [{ key: "dashboard", kind: "page" }],
       install: {
         modes: ["standalone"],
-        runtime: { minVersion: "0.9.0" },
+        runtime: { minVersion: "9.0.0" },
         standalone: { shell: "lime-app-shell" },
       },
     });

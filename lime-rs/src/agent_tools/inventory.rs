@@ -1,8 +1,8 @@
 use crate::agent_tools::catalog::{
     mcp_extension_runtime_name, tool_catalog_entries_for_surface, tool_catalog_entry,
-    workspace_default_allowed_tool_names, ToolCapability, ToolLifecycle, ToolPermissionPlane,
-    ToolSourceKind, ToolSurfaceProfile, WorkspaceToolSurface, BROWSER_RUNTIME_TOOL_PREFIX,
-    LIST_MCP_RESOURCES_TOOL_NAME, READ_MCP_RESOURCE_TOOL_NAME,
+    workspace_default_allowed_tool_names, ToolCapability, ToolCatalogEntry, ToolLifecycle,
+    ToolPermissionPlane, ToolSourceKind, ToolSurfaceProfile, WorkspaceToolSurface,
+    BROWSER_RUNTIME_TOOL_PREFIX, LIST_MCP_RESOURCES_TOOL_NAME, READ_MCP_RESOURCE_TOOL_NAME,
 };
 use crate::agent_tools::execution::{
     resolve_tool_execution_policy_resolution, ToolExecutionPolicySource,
@@ -73,6 +73,10 @@ fn resource_helper_visibility_allowed(tool_name: &str, resources_supported: bool
         tool_name,
         LIST_MCP_RESOURCES_TOOL_NAME | READ_MCP_RESOURCE_TOOL_NAME
     ) || resources_supported
+}
+
+fn catalog_runtime_visibility_allowed(entry: Option<&ToolCatalogEntry>) -> bool {
+    entry.is_none_or(|item| item.lifecycle == ToolLifecycle::Current)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -476,6 +480,7 @@ fn build_registry_inventory(
             let caller_allowed = tool_matches_caller(&metadata, Some(caller));
             let visible_in_context = caller_allowed
                 && resource_helper_visibility_allowed(&definition.name, resource_helpers_supported)
+                && catalog_runtime_visibility_allowed(catalog_entry)
                 && tool_visible_in_context(&metadata, false);
             let catalog_execution_policy = catalog_entry.map(|entry| {
                 resolve_tool_execution_policy_resolution(entry.name, execution_policy_input)
@@ -1204,6 +1209,56 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn test_build_tool_inventory_hides_deprecated_catalog_registry_tools() {
+        let inventory = build_tool_inventory(AgentToolInventoryBuildInput {
+            surface: WorkspaceToolSurface::workbench(),
+            caller: "assistant".to_string(),
+            agent_initialized: true,
+            warnings: Vec::new(),
+            persisted_execution_policy: None,
+            request_metadata: None,
+            mcp_server_names: Vec::new(),
+            mcp_tools: Vec::new(),
+            registry_definitions: vec![definition(
+                "lime_create_video_generation_task",
+                "legacy video task facade",
+                json!({ "type": "object" }),
+            )],
+            resource_helpers_supported: false,
+            current_surface_tool_names: Vec::new(),
+            extension_configs: Vec::new(),
+            visible_extension_tools: Vec::new(),
+            searchable_extension_tools: Vec::new(),
+        });
+
+        assert!(!inventory
+            .default_allowed_tools
+            .contains(&"lime_create_video_generation_task".to_string()));
+
+        let registry_tool = inventory
+            .registry_tools
+            .iter()
+            .find(|entry| entry.name == "lime_create_video_generation_task")
+            .expect("deprecated video tool should stay inventoried for governance");
+        assert_eq!(
+            registry_tool.catalog_lifecycle,
+            Some(ToolLifecycle::Deprecated)
+        );
+        assert!(!registry_tool.visible_in_context);
+
+        let runtime_tool = inventory
+            .runtime_tools
+            .iter()
+            .find(|entry| entry.name == "lime_create_video_generation_task")
+            .expect("deprecated video runtime tool should stay inventoried");
+        assert_eq!(
+            runtime_tool.catalog_lifecycle,
+            Some(ToolLifecycle::Deprecated)
+        );
+        assert!(!runtime_tool.visible_in_context);
     }
 
     #[test]

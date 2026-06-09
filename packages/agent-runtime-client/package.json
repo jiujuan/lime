@@ -1,0 +1,44 @@
+{
+  "name": "@limecloud/agent-runtime-client",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Standard Agent Runtime client facade over the current App Server JSON-RPC runtime surface.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/limecloud/lime.git",
+    "directory": "packages/agent-runtime-client"
+  },
+  "homepage": "https://github.com/limecloud/lime/tree/main/packages/agent-runtime-client#readme",
+  "bugs": {
+    "url": "https://github.com/limecloud/lime/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "npm run build && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "app-server-client": "1.64.0"
+  },
+  "sideEffects": false
+}

@@ -20,7 +20,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { getConfig } from "@/lib/api/appConfig";
 import { MemorySettings } from "@/components/settings-v2/general/memory";
-import { getElectronHostBridge } from "@/lib/electron-host";
 import {
   getUnifiedMemoryStats,
   listUnifiedMemories,
@@ -288,15 +287,6 @@ function resolveMemorySourceKey(memory: MemoryViewModel): string {
   return memory.source;
 }
 
-function isUnifiedMemoryListCommandAvailable(): boolean {
-  const bridge = getElectronHostBridge();
-  return (
-    !bridge ||
-    !bridge.supportsCommand ||
-    bridge.supportsCommand("unified_memory_list")
-  );
-}
-
 export function MemoryPage({ pageParams }: MemoryPageProps) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.resolvedLanguage || i18n.language || "zh-CN";
@@ -323,12 +313,9 @@ export function MemoryPage({ pageParams }: MemoryPageProps) {
       setLoading(true);
       setError(null);
       try {
-        const memoryListPromise = isUnifiedMemoryListCommandAvailable()
-          ? listUnifiedMemories({ limit: 120 })
-          : Promise.resolve<UnifiedMemory[]>([]);
         const [nextStats, nextMemories, nextConfig] = await Promise.all([
           getUnifiedMemoryStats().catch(() => null),
-          memoryListPromise,
+          listUnifiedMemories({ limit: 120 }),
           getConfig().catch(() => null),
         ]);
         if (disposed) {

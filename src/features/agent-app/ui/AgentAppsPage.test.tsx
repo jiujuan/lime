@@ -837,6 +837,13 @@ describe("AgentAppsPage", () => {
         '[data-testid="agent-apps-delete-data-confirmation-status"]',
       )?.textContent,
     ).toContain("agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly");
+    const switchKeepDataButton = container.querySelector(
+      '[data-testid="agent-apps-uninstall-switch-keep-data"]',
+    ) as HTMLButtonElement | null;
+    expect(switchKeepDataButton?.disabled).toBe(false);
+    expect(switchKeepDataButton?.textContent).toContain(
+      "agentApp.apps.action.uninstallKeepData",
+    );
     const readyConfirmButton = container.querySelector(
       '[data-testid="agent-apps-uninstall-confirm"]',
     ) as HTMLButtonElement | null;
@@ -856,11 +863,8 @@ describe("AgentAppsPage", () => {
       "agentApp.apps.center.status.installed",
     );
 
-    const keepDataButton = container.querySelector(
-      '[data-testid="agent-apps-uninstall-keep-data"]',
-    ) as HTMLButtonElement | null;
     await act(async () => {
-      keepDataButton?.click();
+      switchKeepDataButton?.click();
       await Promise.resolve();
     });
     await flush();

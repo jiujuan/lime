@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { p0HostCapabilityProfile } from "../readiness/hostCapabilityProfile";
+import {
+  currentAgentAppHostRuntimeVersion,
+  p0HostCapabilityProfile,
+} from "../readiness/hostCapabilityProfile";
 import {
   buildLimeRuntimeProfileForPreview,
   buildLimeRuntimeProfileFromHostProfile,
@@ -25,8 +28,8 @@ describe("Agent App v2 LimeRuntimeProfile", () => {
     });
 
     expect(profile).toMatchObject({
-      runtimeId: "content-factory-app:standalone:0.8.0",
-      runtimeVersion: "0.8.0",
+      runtimeId: `content-factory-app:standalone:${currentAgentAppHostRuntimeVersion}`,
+      runtimeVersion: currentAgentAppHostRuntimeVersion,
       shellKind: "app_shell",
       installMode: "standalone",
       policy: {
@@ -54,7 +57,7 @@ describe("Agent App v2 LimeRuntimeProfile", () => {
     });
     const summary = summarizeRuntimeProfile(profile);
 
-    expect(summary.runtimeVersion).toBe("0.8.0");
+    expect(summary.runtimeVersion).toBe(currentAgentAppHostRuntimeVersion);
     expect(summary.availableCapabilityCount + summary.unavailableCapabilityCount).toBe(
       Object.keys(profile.capabilities).length,
     );
@@ -70,7 +73,7 @@ describe("Agent App v2 LimeRuntimeProfile", () => {
     });
 
     expect(profile).toMatchObject({
-      runtimeId: "content-factory-app:in_lime:0.8.0",
+      runtimeId: `content-factory-app:in_lime:${currentAgentAppHostRuntimeVersion}`,
       installMode: "in_lime",
       storage: {
         namespaceRoot: "content-factory-app",

@@ -42,6 +42,39 @@ describe("AgentAppRuntimePage", () => {
     expect(container.textContent).not.toContain("已注入能力");
   });
 
+  it("Agent App 卸载事件后应刷新 installed list 并释放旧 runtime 引用", async () => {
+    const state = buildReadyState();
+    apiMocks.listInstalledAgentApps
+      .mockResolvedValueOnce({
+        states: [state],
+        issues: [],
+      })
+      .mockResolvedValueOnce({
+        states: [],
+        issues: [],
+      });
+    const container = await renderPage(state);
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-app-runtime-frame"]'),
+    ).not.toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(new Event("lime:agent-apps-changed"));
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(apiMocks.listInstalledAgentApps).toHaveBeenCalledTimes(2);
+    expect(
+      container.querySelector('[data-testid="agent-app-runtime-frame"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain(
+      "还没有可使用的已安装 Agent App。请先到 Agent Apps 安装。",
+    );
+  });
+
   it("Host iframe chrome 默认只显示静默 App 信息图标，点击后展开版本信息", async () => {
     const container = await renderPage();
     await flush();

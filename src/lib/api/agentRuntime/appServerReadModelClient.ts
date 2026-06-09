@@ -25,8 +25,7 @@ export function createAppServerReadModelClient({
     const response = await appServerClient.readSession({
       sessionId: normalizedSessionId,
     });
-    assertAgentSessionReadResponse(response.result);
-    return projectAppServerSessionReadToThreadReadModel(response.result);
+    return projectAppServerSessionReadResult(response.result);
   }
 
   return {
@@ -34,7 +33,14 @@ export function createAppServerReadModelClient({
   };
 }
 
-function assertAgentSessionReadResponse(
+export function projectAppServerSessionReadResult(
+  value: unknown,
+): AgentRuntimeThreadReadModel {
+  assertAgentSessionReadResponse(value);
+  return projectAppServerSessionReadToThreadReadModel(value);
+}
+
+export function assertAgentSessionReadResponse(
   value: unknown,
 ): asserts value is AppServerAgentSessionReadResponse {
   if (!isAgentSessionReadResponse(value)) {

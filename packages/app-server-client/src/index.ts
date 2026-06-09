@@ -80,6 +80,22 @@ import {
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_FILE_SYSTEM_RENAME_FILE,
+  METHOD_GALLERY_MATERIAL_GET,
+  METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
+  METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
+  METHOD_GALLERY_MATERIAL_LIST_BY_MOOD,
+  METHOD_GALLERY_MATERIAL_METADATA_CREATE,
+  METHOD_GALLERY_MATERIAL_METADATA_DELETE,
+  METHOD_GALLERY_MATERIAL_METADATA_GET,
+  METHOD_GALLERY_MATERIAL_METADATA_UPDATE,
+  METHOD_PROJECT_MATERIAL_CONTENT,
+  METHOD_PROJECT_MATERIAL_COUNT,
+  METHOD_PROJECT_MATERIAL_DELETE,
+  METHOD_PROJECT_MATERIAL_GET,
+  METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL,
+  METHOD_PROJECT_MATERIAL_LIST,
+  METHOD_PROJECT_MATERIAL_UPDATE,
+  METHOD_PROJECT_MATERIAL_UPLOAD,
   METHOD_GATEWAY_CHANNEL_START,
   METHOD_GATEWAY_CHANNEL_STOP,
   METHOD_GATEWAY_CHANNEL_STATUS,
@@ -119,6 +135,7 @@ import {
   METHOD_MEDIA_TASK_ARTIFACT_GET,
   METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   METHOD_MEDIA_TASK_ARTIFACT_LIST,
+  METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PREFERENCES_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
@@ -164,6 +181,23 @@ import {
   METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
   METHOD_MCP_TOOL_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
+  METHOD_UNIFIED_MEMORY_ANALYZE,
+  METHOD_UNIFIED_MEMORY_CREATE,
+  METHOD_UNIFIED_MEMORY_DELETE,
+  METHOD_UNIFIED_MEMORY_GET,
+  METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
+  METHOD_UNIFIED_MEMORY_LIST,
+  METHOD_UNIFIED_MEMORY_SEARCH,
+  METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
+  METHOD_UNIFIED_MEMORY_STATS,
+  METHOD_UNIFIED_MEMORY_UPDATE,
+  METHOD_SESSION_FILE_DELETE,
+  METHOD_SESSION_FILE_GET_OR_CREATE,
+  METHOD_SESSION_FILE_LIST,
+  METHOD_SESSION_FILE_READ,
+  METHOD_SESSION_FILE_RESOLVE_PATH,
+  METHOD_SESSION_FILE_SAVE,
+  METHOD_SESSION_FILE_UPDATE_META,
   METHOD_SKILL_CACHE_REFRESH,
   METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
   METHOD_SKILL_LOCAL_IMPORT,
@@ -189,6 +223,17 @@ import {
   METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
   METHOD_USAGE_STATS_MODEL_RANKING_LIST,
   METHOD_USAGE_STATS_READ,
+  METHOD_VOICE_ASR_CREDENTIAL_CREATE,
+  METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET,
+  METHOD_VOICE_ASR_CREDENTIAL_DELETE,
+  METHOD_VOICE_ASR_CREDENTIAL_LIST,
+  METHOD_VOICE_ASR_CREDENTIAL_TEST,
+  METHOD_VOICE_ASR_CREDENTIAL_UPDATE,
+  METHOD_VOICE_INSTRUCTION_DELETE,
+  METHOD_VOICE_INSTRUCTION_LIST,
+  METHOD_VOICE_INSTRUCTION_SAVE,
+  METHOD_VOICE_MODEL_DEFAULT_SET,
+  METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
   METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
   METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
   METHOD_WECHAT_CHANNEL_LOGIN_START,
@@ -333,6 +378,24 @@ import {
   type FileSystemMutationResponse,
   type FileSystemReadFilePreviewParams,
   type FileSystemRenameFileParams,
+  type GalleryMaterialDeleteResponse,
+  type GalleryMaterialFilterParams,
+  type GalleryMaterialListResponse,
+  type GalleryMaterialLookupParams,
+  type GalleryMaterialMetadataCreateParams,
+  type GalleryMaterialMetadataResponse,
+  type GalleryMaterialMetadataUpdateParams,
+  type GalleryMaterialResponse,
+  type ProjectMaterialContentResponse,
+  type ProjectMaterialCountResponse,
+  type ProjectMaterialDeleteResponse,
+  type ProjectMaterialImportFromUrlParams,
+  type ProjectMaterialListParams,
+  type ProjectMaterialListResponse,
+  type ProjectMaterialLookupParams,
+  type ProjectMaterialResponse,
+  type ProjectMaterialUpdateParams,
+  type ProjectMaterialUploadParams,
   type GatewayChannelStartParams,
   type GatewayChannelStopParams,
   type GatewayChannelStatusParams,
@@ -377,6 +440,16 @@ import {
   type LogPersistedTailParams,
   type LogPersistedTailResponse,
   type ServerDiagnosticsResponse,
+  type SessionFileEntryResponse,
+  type SessionFileGetOrCreateParams,
+  type SessionFileIdParams,
+  type SessionFileListResponse,
+  type SessionFileMetaResponse,
+  type SessionFileMutationResponse,
+  type SessionFileReadResponse,
+  type SessionFileResolvePathResponse,
+  type SessionFileSaveParams,
+  type SessionFileUpdateMetaParams,
   type SupportBundleExportResponse,
   type WindowsStartupDiagnosticsResponse,
   type MediaTaskArtifactAudioCompleteParams,
@@ -386,6 +459,7 @@ import {
   type MediaTaskArtifactListResponse,
   type MediaTaskArtifactLookupParams,
   type MediaTaskArtifactResponse,
+  type MediaTaskArtifactVideoCreateParams,
   type ModelListParams,
   type ModelListResponse,
   type ModelPreferencesListResponse,
@@ -439,6 +513,21 @@ import {
   type ProtocolSchemaGroup,
   type ProjectMemoryReadParams,
   type ProjectMemoryReadResponse,
+  type UnifiedMemoryAnalysisResponse,
+  type UnifiedMemoryAnalyzeParams,
+  type UnifiedMemoryCreateParams,
+  type UnifiedMemoryDeleteParams,
+  type UnifiedMemoryDeleteResponse,
+  type UnifiedMemoryGetParams,
+  type UnifiedMemoryGetResponse,
+  type UnifiedMemoryHybridSearchParams,
+  type UnifiedMemoryListParams,
+  type UnifiedMemoryListResponse,
+  type UnifiedMemorySearchParams,
+  type UnifiedMemorySemanticSearchParams,
+  type UnifiedMemoryStatsResponse,
+  type UnifiedMemoryUpdateParams,
+  type UnifiedMemoryWriteResponse,
   type RequestId,
   type SkillDownloadInstallParams,
   type SkillDownloadInstallResponse,
@@ -479,6 +568,21 @@ import {
   type UsageStatsModelRankingListResponse,
   type UsageStatsRangeParams,
   type UsageStatsReadResponse,
+  type VoiceAsrCredentialCreateParams,
+  type VoiceAsrCredentialIdParams,
+  type VoiceAsrCredentialListResponse,
+  type VoiceAsrCredentialMutationResponse,
+  type VoiceAsrCredentialTestResponse,
+  type VoiceAsrCredentialUpdateParams,
+  type VoiceAsrCredentialWriteResponse,
+  type VoiceInstructionIdParams,
+  type VoiceInstructionListResponse,
+  type VoiceInstructionMutationResponse,
+  type VoiceInstructionSaveParams,
+  type VoiceModelDefaultSetParams,
+  type VoiceModelDefaultSetResponse,
+  type VoiceModelTestTranscribeFileParams,
+  type VoiceModelTestTranscribeFileResponse,
   type WechatChannelAccountRemoveParams,
   type WechatChannelAccountRemoveResponse,
   type WechatChannelAccountListResponse,
@@ -635,6 +739,44 @@ export type AgentEventListener = (
   event: AgentEvent,
   notification: AgentSessionEventNotification,
 ) => void | Promise<void>;
+
+export type AgentRuntimeEventListener = AgentEventListener;
+
+export type AgentRuntimeClientOptions = {
+  request?: AppServerRequestOptions;
+};
+
+export type AgentRuntimeClientSubscription = {
+  unsubscribe(): void;
+};
+
+export interface AgentRuntimeClient {
+  startTurn(
+    params: AgentSessionTurnStartParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<AgentSessionTurnStartResponse>>;
+  cancelTurn(
+    params: AgentSessionTurnCancelParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<AgentSessionTurnCancelResponse>>;
+  respondAction(
+    params: AgentSessionActionRespondParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<AgentSessionActionRespondResponse>>;
+  readThread(
+    params: AgentSessionReadParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<AgentSessionReadResponse>>;
+  exportEvidence(
+    params: EvidenceExportParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<EvidenceExportResponse>>;
+  subscribeEvents(
+    listener: AgentRuntimeEventListener,
+  ): AgentRuntimeClientSubscription;
+  dispatchEvent(message: JsonRpcMessage): Promise<boolean>;
+  nextEvent(timeoutMs?: number): Promise<AgentSessionEventNotification>;
+}
 
 export type AppServerRequestOptions = {
   timeoutMs?: number;
@@ -797,6 +939,36 @@ export class AppServerClient {
     params: AgentSessionFileCheckpointRestoreParams,
   ): JsonRpcRequest {
     return this.request(METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, params);
+  }
+
+  getOrCreateSessionFile(
+    params: SessionFileGetOrCreateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_SESSION_FILE_GET_OR_CREATE, params);
+  }
+
+  updateSessionFileMeta(params: SessionFileUpdateMetaParams): JsonRpcRequest {
+    return this.request(METHOD_SESSION_FILE_UPDATE_META, params);
+  }
+
+  saveSessionFile(params: SessionFileSaveParams): JsonRpcRequest {
+    return this.request(METHOD_SESSION_FILE_SAVE, params);
+  }
+
+  readSessionFile(params: SessionFileIdParams): JsonRpcRequest {
+    return this.request(METHOD_SESSION_FILE_READ, params);
+  }
+
+  resolveSessionFilePath(params: SessionFileIdParams): JsonRpcRequest {
+    return this.request(METHOD_SESSION_FILE_RESOLVE_PATH, params);
+  }
+
+  deleteSessionFile(params: SessionFileIdParams): JsonRpcRequest {
+    return this.request(METHOD_SESSION_FILE_DELETE, params);
+  }
+
+  listSessionFiles(params: SessionFileGetOrCreateParams): JsonRpcRequest {
+    return this.request(METHOD_SESSION_FILE_LIST, params);
   }
 
   listWorkspaces(): JsonRpcRequest {
@@ -1177,6 +1349,50 @@ export class AppServerClient {
     return this.request(METHOD_PROJECT_MEMORY_READ, params);
   }
 
+  listUnifiedMemories(params: UnifiedMemoryListParams): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_LIST, params);
+  }
+
+  getUnifiedMemory(params: UnifiedMemoryGetParams): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_GET, params);
+  }
+
+  createUnifiedMemory(params: UnifiedMemoryCreateParams): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_CREATE, params);
+  }
+
+  updateUnifiedMemory(params: UnifiedMemoryUpdateParams): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_UPDATE, params);
+  }
+
+  deleteUnifiedMemory(params: UnifiedMemoryDeleteParams): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_DELETE, params);
+  }
+
+  searchUnifiedMemories(params: UnifiedMemorySearchParams): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_SEARCH, params);
+  }
+
+  readUnifiedMemoryStats(): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_STATS, {});
+  }
+
+  analyzeUnifiedMemories(params: UnifiedMemoryAnalyzeParams): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_ANALYZE, params);
+  }
+
+  semanticSearchUnifiedMemories(
+    params: UnifiedMemorySemanticSearchParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH, params);
+  }
+
+  hybridSearchUnifiedMemories(
+    params: UnifiedMemoryHybridSearchParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_UNIFIED_MEMORY_HYBRID_SEARCH, params);
+  }
+
   listLogs(): JsonRpcRequest {
     return this.request(METHOD_LOG_LIST, {});
   }
@@ -1209,9 +1425,7 @@ export class AppServerClient {
     return this.request(METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, {});
   }
 
-  readGatewayChannelStatus(
-    params: GatewayChannelStatusParams,
-  ): JsonRpcRequest {
+  readGatewayChannelStatus(params: GatewayChannelStatusParams): JsonRpcRequest {
     return this.request(METHOD_GATEWAY_CHANNEL_STATUS, params);
   }
 
@@ -1315,6 +1529,12 @@ export class AppServerClient {
     return this.request(METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, params);
   }
 
+  createVideoMediaTaskArtifact(
+    params: MediaTaskArtifactVideoCreateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, params);
+  }
+
   completeAudioMediaTaskArtifact(
     params: MediaTaskArtifactAudioCompleteParams,
   ): JsonRpcRequest {
@@ -1333,6 +1553,143 @@ export class AppServerClient {
     params: MediaTaskArtifactLookupParams,
   ): JsonRpcRequest {
     return this.request(METHOD_MEDIA_TASK_ARTIFACT_CANCEL, params);
+  }
+
+  getGalleryMaterial(params: GalleryMaterialLookupParams): JsonRpcRequest {
+    return this.request(METHOD_GALLERY_MATERIAL_GET, params);
+  }
+
+  createGalleryMaterialMetadata(
+    params: GalleryMaterialMetadataCreateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GALLERY_MATERIAL_METADATA_CREATE, params);
+  }
+
+  getGalleryMaterialMetadata(
+    params: GalleryMaterialLookupParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GALLERY_MATERIAL_METADATA_GET, params);
+  }
+
+  updateGalleryMaterialMetadata(
+    params: GalleryMaterialMetadataUpdateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GALLERY_MATERIAL_METADATA_UPDATE, params);
+  }
+
+  deleteGalleryMaterialMetadata(
+    params: GalleryMaterialLookupParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GALLERY_MATERIAL_METADATA_DELETE, params);
+  }
+
+  listGalleryMaterialsByImageCategory(
+    params: GalleryMaterialFilterParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY, params);
+  }
+
+  listGalleryMaterialsByLayoutCategory(
+    params: GalleryMaterialFilterParams,
+  ): JsonRpcRequest {
+    return this.request(
+      METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
+      params,
+    );
+  }
+
+  listGalleryMaterialsByMood(
+    params: GalleryMaterialFilterParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GALLERY_MATERIAL_LIST_BY_MOOD, params);
+  }
+
+  listProjectMaterials(params: ProjectMaterialListParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MATERIAL_LIST, params);
+  }
+
+  getProjectMaterial(params: ProjectMaterialLookupParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MATERIAL_GET, params);
+  }
+
+  countProjectMaterials(params: ProjectMaterialListParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MATERIAL_COUNT, params);
+  }
+
+  uploadProjectMaterial(params: ProjectMaterialUploadParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MATERIAL_UPLOAD, params);
+  }
+
+  importProjectMaterialFromUrl(
+    params: ProjectMaterialImportFromUrlParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL, params);
+  }
+
+  updateProjectMaterial(params: ProjectMaterialUpdateParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MATERIAL_UPDATE, params);
+  }
+
+  deleteProjectMaterial(params: ProjectMaterialLookupParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MATERIAL_DELETE, params);
+  }
+
+  readProjectMaterialContent(
+    params: ProjectMaterialLookupParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_MATERIAL_CONTENT, params);
+  }
+
+  listVoiceAsrCredentials(): JsonRpcRequest {
+    return this.request(METHOD_VOICE_ASR_CREDENTIAL_LIST, {});
+  }
+
+  createVoiceAsrCredential(
+    params: VoiceAsrCredentialCreateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_VOICE_ASR_CREDENTIAL_CREATE, params);
+  }
+
+  updateVoiceAsrCredential(
+    params: VoiceAsrCredentialUpdateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_VOICE_ASR_CREDENTIAL_UPDATE, params);
+  }
+
+  deleteVoiceAsrCredential(params: VoiceAsrCredentialIdParams): JsonRpcRequest {
+    return this.request(METHOD_VOICE_ASR_CREDENTIAL_DELETE, params);
+  }
+
+  setDefaultVoiceAsrCredential(
+    params: VoiceAsrCredentialIdParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET, params);
+  }
+
+  testVoiceAsrCredential(params: VoiceAsrCredentialIdParams): JsonRpcRequest {
+    return this.request(METHOD_VOICE_ASR_CREDENTIAL_TEST, params);
+  }
+
+  listVoiceInstructions(): JsonRpcRequest {
+    return this.request(METHOD_VOICE_INSTRUCTION_LIST, {});
+  }
+
+  saveVoiceInstruction(params: VoiceInstructionSaveParams): JsonRpcRequest {
+    return this.request(METHOD_VOICE_INSTRUCTION_SAVE, params);
+  }
+
+  deleteVoiceInstruction(params: VoiceInstructionIdParams): JsonRpcRequest {
+    return this.request(METHOD_VOICE_INSTRUCTION_DELETE, params);
+  }
+
+  setDefaultVoiceModel(params: VoiceModelDefaultSetParams): JsonRpcRequest {
+    return this.request(METHOD_VOICE_MODEL_DEFAULT_SET, params);
+  }
+
+  testTranscribeVoiceModelFile(
+    params: VoiceModelTestTranscribeFileParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE, params);
   }
 
   readUsageStats(params: UsageStatsRangeParams): JsonRpcRequest {
@@ -1404,7 +1761,9 @@ export class AppServerClient {
     );
   }
 
-  saveReviewDecision(params: AgentSessionReviewDecisionSaveParams): JsonRpcRequest {
+  saveReviewDecision(
+    params: AgentSessionReviewDecisionSaveParams,
+  ): JsonRpcRequest {
     return this.request(METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, params);
   }
 
@@ -1664,7 +2023,9 @@ export class AppServerConnection {
   async updateAgentSessionObjectiveStatus(
     params: AgentSessionObjectiveStatusUpdateParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<AgentSessionObjectiveStatusUpdateResponse>> {
+  ): Promise<
+    AppServerRequestResult<AgentSessionObjectiveStatusUpdateResponse>
+  > {
     return await this.request<AgentSessionObjectiveStatusUpdateResponse>(
       this.client.updateAgentSessionObjectiveStatus(params),
       METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
@@ -1791,6 +2152,83 @@ export class AppServerConnection {
     return await this.request<AgentSessionFileCheckpointRestoreResponse>(
       this.client.restoreAgentSessionFileCheckpoint(params),
       METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE,
+      options,
+    );
+  }
+
+  async getOrCreateSessionFile(
+    params: SessionFileGetOrCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SessionFileMetaResponse>> {
+    return await this.request<SessionFileMetaResponse>(
+      this.client.getOrCreateSessionFile(params),
+      METHOD_SESSION_FILE_GET_OR_CREATE,
+      options,
+    );
+  }
+
+  async updateSessionFileMeta(
+    params: SessionFileUpdateMetaParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SessionFileMetaResponse>> {
+    return await this.request<SessionFileMetaResponse>(
+      this.client.updateSessionFileMeta(params),
+      METHOD_SESSION_FILE_UPDATE_META,
+      options,
+    );
+  }
+
+  async saveSessionFile(
+    params: SessionFileSaveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SessionFileEntryResponse>> {
+    return await this.request<SessionFileEntryResponse>(
+      this.client.saveSessionFile(params),
+      METHOD_SESSION_FILE_SAVE,
+      options,
+    );
+  }
+
+  async readSessionFile(
+    params: SessionFileIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SessionFileReadResponse>> {
+    return await this.request<SessionFileReadResponse>(
+      this.client.readSessionFile(params),
+      METHOD_SESSION_FILE_READ,
+      options,
+    );
+  }
+
+  async resolveSessionFilePath(
+    params: SessionFileIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SessionFileResolvePathResponse>> {
+    return await this.request<SessionFileResolvePathResponse>(
+      this.client.resolveSessionFilePath(params),
+      METHOD_SESSION_FILE_RESOLVE_PATH,
+      options,
+    );
+  }
+
+  async deleteSessionFile(
+    params: SessionFileIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SessionFileMutationResponse>> {
+    return await this.request<SessionFileMutationResponse>(
+      this.client.deleteSessionFile(params),
+      METHOD_SESSION_FILE_DELETE,
+      options,
+    );
+  }
+
+  async listSessionFiles(
+    params: SessionFileGetOrCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SessionFileListResponse>> {
+    return await this.request<SessionFileListResponse>(
+      this.client.listSessionFiles(params),
+      METHOD_SESSION_FILE_LIST,
       options,
     );
   }
@@ -2701,6 +3139,115 @@ export class AppServerConnection {
     );
   }
 
+  async listUnifiedMemories(
+    params: UnifiedMemoryListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryListResponse>> {
+    return await this.request<UnifiedMemoryListResponse>(
+      this.client.listUnifiedMemories(params),
+      METHOD_UNIFIED_MEMORY_LIST,
+      options,
+    );
+  }
+
+  async getUnifiedMemory(
+    params: UnifiedMemoryGetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryGetResponse>> {
+    return await this.request<UnifiedMemoryGetResponse>(
+      this.client.getUnifiedMemory(params),
+      METHOD_UNIFIED_MEMORY_GET,
+      options,
+    );
+  }
+
+  async createUnifiedMemory(
+    params: UnifiedMemoryCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryWriteResponse>> {
+    return await this.request<UnifiedMemoryWriteResponse>(
+      this.client.createUnifiedMemory(params),
+      METHOD_UNIFIED_MEMORY_CREATE,
+      options,
+    );
+  }
+
+  async updateUnifiedMemory(
+    params: UnifiedMemoryUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryWriteResponse>> {
+    return await this.request<UnifiedMemoryWriteResponse>(
+      this.client.updateUnifiedMemory(params),
+      METHOD_UNIFIED_MEMORY_UPDATE,
+      options,
+    );
+  }
+
+  async deleteUnifiedMemory(
+    params: UnifiedMemoryDeleteParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryDeleteResponse>> {
+    return await this.request<UnifiedMemoryDeleteResponse>(
+      this.client.deleteUnifiedMemory(params),
+      METHOD_UNIFIED_MEMORY_DELETE,
+      options,
+    );
+  }
+
+  async searchUnifiedMemories(
+    params: UnifiedMemorySearchParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryListResponse>> {
+    return await this.request<UnifiedMemoryListResponse>(
+      this.client.searchUnifiedMemories(params),
+      METHOD_UNIFIED_MEMORY_SEARCH,
+      options,
+    );
+  }
+
+  async readUnifiedMemoryStats(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryStatsResponse>> {
+    return await this.request<UnifiedMemoryStatsResponse>(
+      this.client.readUnifiedMemoryStats(),
+      METHOD_UNIFIED_MEMORY_STATS,
+      options,
+    );
+  }
+
+  async analyzeUnifiedMemories(
+    params: UnifiedMemoryAnalyzeParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryAnalysisResponse>> {
+    return await this.request<UnifiedMemoryAnalysisResponse>(
+      this.client.analyzeUnifiedMemories(params),
+      METHOD_UNIFIED_MEMORY_ANALYZE,
+      options,
+    );
+  }
+
+  async semanticSearchUnifiedMemories(
+    params: UnifiedMemorySemanticSearchParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryListResponse>> {
+    return await this.request<UnifiedMemoryListResponse>(
+      this.client.semanticSearchUnifiedMemories(params),
+      METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
+      options,
+    );
+  }
+
+  async hybridSearchUnifiedMemories(
+    params: UnifiedMemoryHybridSearchParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<UnifiedMemoryListResponse>> {
+    return await this.request<UnifiedMemoryListResponse>(
+      this.client.hybridSearchUnifiedMemories(params),
+      METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
+      options,
+    );
+  }
+
   async listLogs(
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<LogListResponse>> {
@@ -3028,6 +3575,17 @@ export class AppServerConnection {
     );
   }
 
+  async createVideoMediaTaskArtifact(
+    params: MediaTaskArtifactVideoCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MediaTaskArtifactResponse>> {
+    return await this.request<MediaTaskArtifactResponse>(
+      this.client.createVideoMediaTaskArtifact(params),
+      METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
+      options,
+    );
+  }
+
   async completeAudioMediaTaskArtifact(
     params: MediaTaskArtifactAudioCompleteParams,
     options: AppServerRequestOptions = {},
@@ -3068,6 +3626,301 @@ export class AppServerConnection {
     return await this.request<MediaTaskArtifactResponse>(
       this.client.cancelMediaTaskArtifact(params),
       METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
+      options,
+    );
+  }
+
+  async getGalleryMaterial(
+    params: GalleryMaterialLookupParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GalleryMaterialResponse>> {
+    return await this.request<GalleryMaterialResponse>(
+      this.client.getGalleryMaterial(params),
+      METHOD_GALLERY_MATERIAL_GET,
+      options,
+    );
+  }
+
+  async createGalleryMaterialMetadata(
+    params: GalleryMaterialMetadataCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GalleryMaterialMetadataResponse>> {
+    return await this.request<GalleryMaterialMetadataResponse>(
+      this.client.createGalleryMaterialMetadata(params),
+      METHOD_GALLERY_MATERIAL_METADATA_CREATE,
+      options,
+    );
+  }
+
+  async getGalleryMaterialMetadata(
+    params: GalleryMaterialLookupParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GalleryMaterialMetadataResponse>> {
+    return await this.request<GalleryMaterialMetadataResponse>(
+      this.client.getGalleryMaterialMetadata(params),
+      METHOD_GALLERY_MATERIAL_METADATA_GET,
+      options,
+    );
+  }
+
+  async updateGalleryMaterialMetadata(
+    params: GalleryMaterialMetadataUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GalleryMaterialMetadataResponse>> {
+    return await this.request<GalleryMaterialMetadataResponse>(
+      this.client.updateGalleryMaterialMetadata(params),
+      METHOD_GALLERY_MATERIAL_METADATA_UPDATE,
+      options,
+    );
+  }
+
+  async deleteGalleryMaterialMetadata(
+    params: GalleryMaterialLookupParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GalleryMaterialDeleteResponse>> {
+    return await this.request<GalleryMaterialDeleteResponse>(
+      this.client.deleteGalleryMaterialMetadata(params),
+      METHOD_GALLERY_MATERIAL_METADATA_DELETE,
+      options,
+    );
+  }
+
+  async listGalleryMaterialsByImageCategory(
+    params: GalleryMaterialFilterParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GalleryMaterialListResponse>> {
+    return await this.request<GalleryMaterialListResponse>(
+      this.client.listGalleryMaterialsByImageCategory(params),
+      METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
+      options,
+    );
+  }
+
+  async listGalleryMaterialsByLayoutCategory(
+    params: GalleryMaterialFilterParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GalleryMaterialListResponse>> {
+    return await this.request<GalleryMaterialListResponse>(
+      this.client.listGalleryMaterialsByLayoutCategory(params),
+      METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
+      options,
+    );
+  }
+
+  async listGalleryMaterialsByMood(
+    params: GalleryMaterialFilterParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GalleryMaterialListResponse>> {
+    return await this.request<GalleryMaterialListResponse>(
+      this.client.listGalleryMaterialsByMood(params),
+      METHOD_GALLERY_MATERIAL_LIST_BY_MOOD,
+      options,
+    );
+  }
+
+  async listProjectMaterials(
+    params: ProjectMaterialListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMaterialListResponse>> {
+    return await this.request<ProjectMaterialListResponse>(
+      this.client.listProjectMaterials(params),
+      METHOD_PROJECT_MATERIAL_LIST,
+      options,
+    );
+  }
+
+  async getProjectMaterial(
+    params: ProjectMaterialLookupParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMaterialResponse>> {
+    return await this.request<ProjectMaterialResponse>(
+      this.client.getProjectMaterial(params),
+      METHOD_PROJECT_MATERIAL_GET,
+      options,
+    );
+  }
+
+  async countProjectMaterials(
+    params: ProjectMaterialListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMaterialCountResponse>> {
+    return await this.request<ProjectMaterialCountResponse>(
+      this.client.countProjectMaterials(params),
+      METHOD_PROJECT_MATERIAL_COUNT,
+      options,
+    );
+  }
+
+  async uploadProjectMaterial(
+    params: ProjectMaterialUploadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMaterialResponse>> {
+    return await this.request<ProjectMaterialResponse>(
+      this.client.uploadProjectMaterial(params),
+      METHOD_PROJECT_MATERIAL_UPLOAD,
+      options,
+    );
+  }
+
+  async importProjectMaterialFromUrl(
+    params: ProjectMaterialImportFromUrlParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMaterialResponse>> {
+    return await this.request<ProjectMaterialResponse>(
+      this.client.importProjectMaterialFromUrl(params),
+      METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL,
+      options,
+    );
+  }
+
+  async updateProjectMaterial(
+    params: ProjectMaterialUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMaterialResponse>> {
+    return await this.request<ProjectMaterialResponse>(
+      this.client.updateProjectMaterial(params),
+      METHOD_PROJECT_MATERIAL_UPDATE,
+      options,
+    );
+  }
+
+  async deleteProjectMaterial(
+    params: ProjectMaterialLookupParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMaterialDeleteResponse>> {
+    return await this.request<ProjectMaterialDeleteResponse>(
+      this.client.deleteProjectMaterial(params),
+      METHOD_PROJECT_MATERIAL_DELETE,
+      options,
+    );
+  }
+
+  async readProjectMaterialContent(
+    params: ProjectMaterialLookupParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectMaterialContentResponse>> {
+    return await this.request<ProjectMaterialContentResponse>(
+      this.client.readProjectMaterialContent(params),
+      METHOD_PROJECT_MATERIAL_CONTENT,
+      options,
+    );
+  }
+
+  async listVoiceAsrCredentials(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceAsrCredentialListResponse>> {
+    return await this.request<VoiceAsrCredentialListResponse>(
+      this.client.listVoiceAsrCredentials(),
+      METHOD_VOICE_ASR_CREDENTIAL_LIST,
+      options,
+    );
+  }
+
+  async createVoiceAsrCredential(
+    params: VoiceAsrCredentialCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceAsrCredentialWriteResponse>> {
+    return await this.request<VoiceAsrCredentialWriteResponse>(
+      this.client.createVoiceAsrCredential(params),
+      METHOD_VOICE_ASR_CREDENTIAL_CREATE,
+      options,
+    );
+  }
+
+  async updateVoiceAsrCredential(
+    params: VoiceAsrCredentialUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceAsrCredentialMutationResponse>> {
+    return await this.request<VoiceAsrCredentialMutationResponse>(
+      this.client.updateVoiceAsrCredential(params),
+      METHOD_VOICE_ASR_CREDENTIAL_UPDATE,
+      options,
+    );
+  }
+
+  async deleteVoiceAsrCredential(
+    params: VoiceAsrCredentialIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceAsrCredentialMutationResponse>> {
+    return await this.request<VoiceAsrCredentialMutationResponse>(
+      this.client.deleteVoiceAsrCredential(params),
+      METHOD_VOICE_ASR_CREDENTIAL_DELETE,
+      options,
+    );
+  }
+
+  async setDefaultVoiceAsrCredential(
+    params: VoiceAsrCredentialIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceAsrCredentialMutationResponse>> {
+    return await this.request<VoiceAsrCredentialMutationResponse>(
+      this.client.setDefaultVoiceAsrCredential(params),
+      METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET,
+      options,
+    );
+  }
+
+  async testVoiceAsrCredential(
+    params: VoiceAsrCredentialIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceAsrCredentialTestResponse>> {
+    return await this.request<VoiceAsrCredentialTestResponse>(
+      this.client.testVoiceAsrCredential(params),
+      METHOD_VOICE_ASR_CREDENTIAL_TEST,
+      options,
+    );
+  }
+
+  async listVoiceInstructions(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceInstructionListResponse>> {
+    return await this.request<VoiceInstructionListResponse>(
+      this.client.listVoiceInstructions(),
+      METHOD_VOICE_INSTRUCTION_LIST,
+      options,
+    );
+  }
+
+  async saveVoiceInstruction(
+    params: VoiceInstructionSaveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceInstructionMutationResponse>> {
+    return await this.request<VoiceInstructionMutationResponse>(
+      this.client.saveVoiceInstruction(params),
+      METHOD_VOICE_INSTRUCTION_SAVE,
+      options,
+    );
+  }
+
+  async deleteVoiceInstruction(
+    params: VoiceInstructionIdParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceInstructionMutationResponse>> {
+    return await this.request<VoiceInstructionMutationResponse>(
+      this.client.deleteVoiceInstruction(params),
+      METHOD_VOICE_INSTRUCTION_DELETE,
+      options,
+    );
+  }
+
+  async setDefaultVoiceModel(
+    params: VoiceModelDefaultSetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceModelDefaultSetResponse>> {
+    return await this.request<VoiceModelDefaultSetResponse>(
+      this.client.setDefaultVoiceModel(params),
+      METHOD_VOICE_MODEL_DEFAULT_SET,
+      options,
+    );
+  }
+
+  async testTranscribeVoiceModelFile(
+    params: VoiceModelTestTranscribeFileParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<VoiceModelTestTranscribeFileResponse>> {
+    return await this.request<VoiceModelTestTranscribeFileResponse>(
+      this.client.testTranscribeVoiceModelFile(params),
+      METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
       options,
     );
   }
@@ -3218,7 +4071,9 @@ export class AppServerConnection {
   async exportAnalysisHandoff(
     params: AgentSessionAnalysisHandoffExportParams,
     options: AppServerRequestOptions = {},
-  ): Promise<AppServerRequestResult<AgentSessionAnalysisHandoffExportResponse>> {
+  ): Promise<
+    AppServerRequestResult<AgentSessionAnalysisHandoffExportResponse>
+  > {
     return await this.request<AgentSessionAnalysisHandoffExportResponse>(
       this.client.exportAnalysisHandoff(params),
       METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
@@ -3646,6 +4501,107 @@ export class AppServerAgentEventRouter {
     }
     return true;
   }
+}
+
+export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
+  readonly connection: AppServerConnection;
+  readonly eventRouter: AppServerAgentEventRouter;
+  readonly defaultRequestOptions: AppServerRequestOptions;
+
+  constructor(
+    connection: AppServerConnection,
+    options: AgentRuntimeClientOptions = {},
+  ) {
+    this.connection = connection;
+    this.eventRouter = new AppServerAgentEventRouter();
+    this.defaultRequestOptions = options.request ?? {};
+  }
+
+  async startTurn(
+    params: AgentSessionTurnStartParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionTurnStartResponse>> {
+    return await this.connection.startTurn(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  async cancelTurn(
+    params: AgentSessionTurnCancelParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionTurnCancelResponse>> {
+    return await this.connection.cancelTurn(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  async respondAction(
+    params: AgentSessionActionRespondParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionActionRespondResponse>> {
+    return await this.connection.respondAction(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  async readThread(
+    params: AgentSessionReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionReadResponse>> {
+    return await this.connection.readSession(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  async exportEvidence(
+    params: EvidenceExportParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<EvidenceExportResponse>> {
+    return await this.connection.exportEvidence(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  subscribeEvents(
+    listener: AgentRuntimeEventListener,
+  ): AgentRuntimeClientSubscription {
+    const unsubscribe = this.eventRouter.subscribe(listener);
+    return { unsubscribe };
+  }
+
+  async dispatchEvent(message: JsonRpcMessage): Promise<boolean> {
+    return await this.eventRouter.dispatch(message);
+  }
+
+  async nextEvent(timeoutMs?: number): Promise<AgentSessionEventNotification> {
+    for (;;) {
+      const notification = await this.connection.nextNotification(timeoutMs);
+      const agentNotification = agentSessionEventNotification(notification);
+      if (agentNotification) {
+        await this.dispatchEvent(agentNotification);
+        return agentNotification;
+      }
+    }
+  }
+}
+
+export function createAgentRuntimeClient(
+  connection: AppServerConnection,
+  options: AgentRuntimeClientOptions = {},
+): AgentRuntimeClient {
+  return new AppServerAgentRuntimeClient(connection, options);
+}
+
+function mergeRequestOptions(
+  defaults: AppServerRequestOptions,
+  overrides: AppServerRequestOptions,
+): AppServerRequestOptions {
+  return { ...defaults, ...overrides };
 }
 
 function normalizeMethodSpecs(

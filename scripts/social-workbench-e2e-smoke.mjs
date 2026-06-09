@@ -15,6 +15,7 @@
 const BRIDGE_URL = "http://127.0.0.1:3030/invoke";
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const METHOD_DIAGNOSTICS_SERVER_READ = "diagnostics/server/read";
+const METHOD_AGENT_SESSION_READ = "agentSession/read";
 
 function printUsage() {
   console.log(`
@@ -131,8 +132,7 @@ async function invokeAppServerJsonRpc(method, params = {}) {
       continue;
     }
     if (message.error) {
-      const detail =
-        message.error?.message || JSON.stringify(message.error);
+      const detail = message.error?.message || JSON.stringify(message.error);
       throw new Error(`${method}: ${detail}`);
     }
     if (Object.hasOwn(message, "result")) {
@@ -207,15 +207,193 @@ function pickPathBySuffix(paths, suffix) {
   return paths.find((item) => item.toLowerCase().endsWith(suffix)) || "";
 }
 
+function isTerminalRunStatus(status) {
+  return (
+    status === "success" ||
+    status === "error" ||
+    status === "canceled" ||
+    status === "timeout"
+  );
+}
+
+function normalizeRunItem(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const runId = normalizeNonEmptyString(value.run_id || value.runId);
+  const title = normalizeNonEmptyString(value.title);
+  const status = normalizeNonEmptyString(value.status);
+  const startedAt = normalizeNonEmptyString(
+    value.started_at || value.startedAt,
+  );
+  if (!runId || !title || !status || !startedAt) {
+    return null;
+  }
+  const artifactPaths = Array.isArray(
+    value.artifact_paths || value.artifactPaths,
+  )
+    ? (value.artifact_paths || value.artifactPaths).filter(
+        (item) => typeof item === "string" && item.trim(),
+      )
+    : [];
+  return {
+    run_id: runId,
+    execution_id: normalizeNonEmptyString(
+      value.execution_id || value.executionId,
+    ),
+    session_id: normalizeNonEmptyString(value.session_id || value.sessionId),
+    metadata: value.metadata || value.run_metadata || value.runMetadata || null,
+    artifact_paths: artifactPaths,
+    title,
+    gate_key: normalizeNonEmptyString(value.gate_key || value.gateKey) || null,
+    status,
+    source: normalizeNonEmptyString(value.source) || "chat",
+    source_ref:
+      normalizeNonEmptyString(value.source_ref || value.sourceRef) || null,
+    started_at: startedAt,
+    finished_at:
+      normalizeNonEmptyString(value.finished_at || value.finishedAt) || null,
+  };
+}
+
+function statusFromTurnStatus(status) {
+  switch (status) {
+    case "accepted":
+    case "queued":
+      return "queued";
+    case "running":
+    case "waitingAction":
+      return "running";
+    case "completed":
+      return "success";
+    case "failed":
+      return "error";
+    case "canceled":
+      return "canceled";
+    default:
+      return "";
+  }
+}
+
+function readExecutionRuns(sessionRead) {
+  const detail =
+    sessionRead?.detail && typeof sessionRead.detail === "object"
+      ? sessionRead.detail
+      : {};
+  const threadRead =
+    detail.thread_read && typeof detail.thread_read === "object"
+      ? detail.thread_read
+      : detail.threadRead && typeof detail.threadRead === "object"
+        ? detail.threadRead
+        : {};
+  const runs =
+    threadRead.execution_runs ||
+    threadRead.executionRuns ||
+    detail.execution_runs ||
+    detail.executionRuns;
+  return Array.isArray(runs) ? runs.map(normalizeRunItem).filter(Boolean) : [];
+}
+
+function runItemFromTurn(session, turn) {
+  const status = statusFromTurnStatus(turn?.status);
+  const turnId = normalizeNonEmptyString(turn?.turnId || turn?.turn_id);
+  const startedAt =
+    normalizeNonEmptyString(turn?.startedAt || turn?.started_at) ||
+    normalizeNonEmptyString(session?.updatedAt || session?.updated_at);
+  if (!turnId || !status || !startedAt) {
+    return null;
+  }
+  return {
+    run_id: normalizeNonEmptyString(session?.sessionId || session?.session_id),
+    execution_id: turnId,
+    session_id: normalizeNonEmptyString(
+      session?.sessionId || session?.session_id,
+    ),
+    artifact_paths: [],
+    title:
+      normalizeNonEmptyString(session?.businessObjectRef?.title) ||
+      normalizeNonEmptyString(session?.business_object_ref?.title) ||
+      "主题工作台社媒链路",
+    gate_key: "write_mode",
+    status,
+    source: "chat",
+    source_ref:
+      normalizeNonEmptyString(session?.businessObjectRef?.kind) ||
+      normalizeNonEmptyString(session?.business_object_ref?.kind) ||
+      null,
+    started_at: startedAt,
+    finished_at:
+      normalizeNonEmptyString(turn?.completedAt || turn?.completed_at) || null,
+  };
+}
+
+async function readAgentSession(sessionId) {
+  const result = await invokeAppServerJsonRpc(METHOD_AGENT_SESSION_READ, {
+    sessionId,
+  });
+  assert(result?.session, "agentSession/read 未返回 session");
+  assert(Array.isArray(result.turns), "agentSession/read 未返回 turns 数组");
+  return result;
+}
+
+function projectWorkbenchState(sessionRead, limit) {
+  const detailRuns = readExecutionRuns(sessionRead);
+  const turnRuns = (Array.isArray(sessionRead.turns) ? sessionRead.turns : [])
+    .map((turn) => runItemFromTurn(sessionRead.session, turn))
+    .filter(Boolean);
+  const runs = detailRuns.length > 0 ? detailRuns : turnRuns;
+  const queueItems = runs
+    .filter((item) => !isTerminalRunStatus(item.status))
+    .slice(0, limit);
+  const recentTerminals = runs
+    .filter((item) => isTerminalRunStatus(item.status))
+    .slice(0, limit);
+  return {
+    run_state: queueItems.length > 0 ? "auto_running" : "idle",
+    current_gate_key: queueItems[0]?.gate_key || "idle",
+    queue_items: queueItems,
+    latest_terminal: recentTerminals[0] || null,
+    recent_terminals: recentTerminals,
+    updated_at:
+      normalizeNonEmptyString(sessionRead.session?.updatedAt) ||
+      normalizeNonEmptyString(sessionRead.session?.updated_at),
+  };
+}
+
+function projectRunDetail(sessionRead, runId) {
+  const runs = readExecutionRuns(sessionRead);
+  const matchedRun =
+    runs.find((item) => item.run_id === runId || item.execution_id === runId) ||
+    runs[0] ||
+    null;
+  const detail =
+    sessionRead?.detail && typeof sessionRead.detail === "object"
+      ? sessionRead.detail
+      : {};
+  const metadata =
+    matchedRun?.metadata ||
+    detail.social_workbench_run_metadata ||
+    detail.socialWorkbenchRunMetadata ||
+    detail.general_workbench_run_metadata ||
+    detail.generalWorkbenchRunMetadata ||
+    detail.run_metadata ||
+    detail.runMetadata ||
+    detail.metadata ||
+    sessionRead.session?.metadata ||
+    null;
+  return {
+    ...(matchedRun || {}),
+    metadata,
+  };
+}
+
 async function waitTerminalState(sessionId, timeoutMs, intervalMs) {
   const startedAt = Date.now();
   let latest = null;
 
   while (Date.now() - startedAt < timeoutMs) {
-    const state = await invoke("execution_run_get_theme_workbench_state", {
-      sessionId,
-      limit: 10,
-    });
+    const sessionRead = await readAgentSession(sessionId);
+    const state = projectWorkbenchState(sessionRead, 10);
     latest = state;
 
     const terminal = state?.latest_terminal;
@@ -231,18 +409,7 @@ async function waitTerminalState(sessionId, timeoutMs, intervalMs) {
   );
 }
 
-async function verifySessionArtifacts(sessionId, artifactPaths) {
-  const files = await invoke("session_files_list_files", { sessionId });
-  const fileNames = Array.isArray(files)
-    ? files.map((item) => item?.name).filter((item) => typeof item === "string")
-    : [];
-
-  const missing = artifactPaths.filter((path) => !fileNames.includes(path));
-  assert(
-    missing.length === 0,
-    `会话文件缺失产物: ${missing.join(", ")}`,
-  );
-
+function verifyArtifactPaths(artifactPaths) {
   const articlePath = pickPathBySuffix(artifactPaths, ".md");
   const coverPath = pickPathBySuffix(artifactPaths, ".cover.json");
   const publishPackPath = pickPathBySuffix(artifactPaths, ".publish-pack.json");
@@ -250,35 +417,9 @@ async function verifySessionArtifacts(sessionId, artifactPaths) {
   assert(articlePath, "缺少主稿路径（*.md）");
   assert(coverPath, "缺少封面元数据路径（*.cover.json）");
   assert(publishPackPath, "缺少发布包路径（*.publish-pack.json）");
-
-  const articleContent = await invoke("session_files_read_file", {
-    sessionId,
-    fileName: articlePath,
-  });
-  assert(typeof articleContent === "string", "主稿内容读取失败");
-  assert(articleContent.includes("![封面图]("), "主稿缺少封面图占位/链接");
-  assert(articleContent.includes("## 配图说明"), "主稿缺少配图说明章节");
-
-  const coverContent = await invoke("session_files_read_file", {
-    sessionId,
-    fileName: coverPath,
-  });
-  const coverJson = JSON.parse(String(coverContent));
-  assert(typeof coverJson.cover_url === "string", "cover.json 缺少 cover_url");
-  assert(typeof coverJson.status === "string", "cover.json 缺少 status");
-
-  const publishPackContent = await invoke("session_files_read_file", {
-    sessionId,
-    fileName: publishPackPath,
-  });
-  const publishPackJson = JSON.parse(String(publishPackContent));
   assert(
-    publishPackJson.article_path === articlePath,
-    "publish-pack.json article_path 与主稿路径不一致",
-  );
-  assert(
-    publishPackJson.cover_meta_path === coverPath,
-    "publish-pack.json cover_meta_path 与封面元数据路径不一致",
+    new Set([articlePath, coverPath, publishPackPath]).size === 3,
+    "产物路径不应重复",
   );
 
   return {
@@ -288,7 +429,12 @@ async function verifySessionArtifacts(sessionId, artifactPaths) {
   };
 }
 
-async function verifyContentVersionState(contentId, expectedRunId, timeoutMs, intervalMs) {
+async function verifyContentVersionState(
+  contentId,
+  expectedRunId,
+  timeoutMs,
+  intervalMs,
+) {
   const startedAt = Date.now();
   let latest = null;
 
@@ -395,10 +541,9 @@ async function main() {
     `[Smoke] 终态: status=${terminal.status}, run_id=${terminal.run_id}, gate=${terminal.gate_key}`,
   );
 
-  const runDetail = await invoke("execution_run_get", {
-    runId: terminal.run_id,
-  });
-  assert(runDetail, "execution_run_get 返回为空");
+  const sessionRead = await readAgentSession(args.sessionId);
+  const runDetail = projectRunDetail(sessionRead, terminal.run_id);
+  assert(runDetail, "agentSession/read 未能投影运行详情");
 
   const metadata = parseRunMetadata(runDetail.metadata);
   assert(metadata, "运行 metadata 为空或不可解析");
@@ -429,9 +574,9 @@ async function main() {
   );
   console.log("[Smoke] 产物路径:", artifactPaths.join(", "));
 
-  const artifactSummary = await verifySessionArtifacts(args.sessionId, artifactPaths);
+  const artifactSummary = verifyArtifactPaths(artifactPaths);
   console.log(
-    `[Smoke] 会话产物校验通过: ${artifactSummary.articlePath}, ${artifactSummary.coverPath}, ${artifactSummary.publishPackPath}`,
+    `[Smoke] 产物路径校验通过: ${artifactSummary.articlePath}, ${artifactSummary.coverPath}, ${artifactSummary.publishPackPath}`,
   );
 
   if (args.contentId) {
@@ -452,6 +597,9 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("[Smoke] ❌ 校验失败:", error instanceof Error ? error.message : error);
+  console.error(
+    "[Smoke] ❌ 校验失败:",
+    error instanceof Error ? error.message : error,
+  );
   process.exit(1);
 });

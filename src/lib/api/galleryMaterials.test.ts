@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { safeInvoke } from "@/lib/dev-bridge";
 import {
   createGalleryMetadata,
   deleteGalleryMetadata,
@@ -10,8 +9,30 @@ import {
   updateGalleryMetadata,
 } from "./galleryMaterials";
 
-vi.mock("@/lib/dev-bridge", () => ({
-  safeInvoke: vi.fn(),
+const appServerMocks = vi.hoisted(() => ({
+  getGalleryMaterial: vi.fn(),
+  createGalleryMaterialMetadata: vi.fn(),
+  updateGalleryMaterialMetadata: vi.fn(),
+  deleteGalleryMaterialMetadata: vi.fn(),
+  listGalleryMaterialsByImageCategory: vi.fn(),
+  listGalleryMaterialsByLayoutCategory: vi.fn(),
+  listGalleryMaterialsByMood: vi.fn(),
+}));
+
+vi.mock("./appServer", () => ({
+  APP_SERVER_METHOD_GALLERY_MATERIAL_GET: "galleryMaterial/get",
+  APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_CREATE:
+    "galleryMaterialMetadata/create",
+  APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_UPDATE:
+    "galleryMaterialMetadata/update",
+  APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_DELETE:
+    "galleryMaterialMetadata/delete",
+  APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY:
+    "galleryMaterial/listByImageCategory",
+  APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY:
+    "galleryMaterial/listByLayoutCategory",
+  APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_MOOD: "galleryMaterial/listByMood",
+  createAppServerClient: () => appServerMocks,
 }));
 
 function createMaterial(id: string) {
@@ -39,22 +60,29 @@ describe("galleryMaterials API", () => {
     vi.clearAllMocks();
   });
 
-  it("应获取单个素材", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(createMaterial("m1"));
+  it("应通过 App Server current 获取单个素材", async () => {
+    appServerMocks.getGalleryMaterial.mockResolvedValueOnce({
+      result: { material: createMaterial("m1") },
+    });
 
     await expect(getGalleryMaterial("m1")).resolves.toEqual(
       expect.objectContaining({ id: "m1" }),
     );
-    expect(safeInvoke).toHaveBeenCalledWith("get_gallery_material", {
+    expect(appServerMocks.getGalleryMaterial).toHaveBeenCalledWith({
       materialId: "m1",
     });
   });
 
-  it("应代理素材元数据写操作", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce(createMetadata("m2"))
-      .mockResolvedValueOnce(createMetadata("m2"))
-      .mockResolvedValueOnce(undefined);
+  it("应通过 App Server current 代理素材元数据写操作", async () => {
+    appServerMocks.createGalleryMaterialMetadata.mockResolvedValueOnce({
+      result: { metadata: createMetadata("m2") },
+    });
+    appServerMocks.updateGalleryMaterialMetadata.mockResolvedValueOnce({
+      result: { metadata: createMetadata("m2") },
+    });
+    appServerMocks.deleteGalleryMaterialMetadata.mockResolvedValueOnce({
+      result: {},
+    });
 
     await expect(
       createGalleryMetadata({
@@ -64,18 +92,35 @@ describe("galleryMaterials API", () => {
     ).resolves.toEqual(expect.objectContaining({ materialId: "m2" }));
     await expect(
       updateGalleryMetadata("m2", {
-        materialId: "m2",
+        materialId: "different",
         colors: ["#000"],
       }),
     ).resolves.toEqual(expect.objectContaining({ materialId: "m2" }));
     await expect(deleteGalleryMetadata("m2")).resolves.toBeUndefined();
+
+    expect(appServerMocks.createGalleryMaterialMetadata).toHaveBeenCalledWith({
+      materialId: "m2",
+      colors: ["#fff"],
+    });
+    expect(appServerMocks.updateGalleryMaterialMetadata).toHaveBeenCalledWith({
+      materialId: "m2",
+      metadata: { materialId: "m2", colors: ["#000"] },
+    });
+    expect(appServerMocks.deleteGalleryMaterialMetadata).toHaveBeenCalledWith({
+      materialId: "m2",
+    });
   });
 
-  it("应代理不同维度的素材查询", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([createMaterial("img-1")])
-      .mockResolvedValueOnce([createMaterial("layout-1")])
-      .mockResolvedValueOnce([createMaterial("color-1")]);
+  it("应通过 App Server current 查询不同维度的素材", async () => {
+    appServerMocks.listGalleryMaterialsByImageCategory.mockResolvedValueOnce({
+      result: { materials: [createMaterial("img-1")] },
+    });
+    appServerMocks.listGalleryMaterialsByLayoutCategory.mockResolvedValueOnce({
+      result: { materials: [createMaterial("layout-1")] },
+    });
+    appServerMocks.listGalleryMaterialsByMood.mockResolvedValueOnce({
+      result: { materials: [createMaterial("color-1")] },
+    });
 
     await expect(
       listGalleryMaterialsByImageCategory("project-1", "background"),
@@ -86,76 +131,76 @@ describe("galleryMaterials API", () => {
     await expect(
       listGalleryMaterialsByMood("project-1", "warm"),
     ).resolves.toEqual([expect.objectContaining({ id: "color-1" })]);
-  });
 
-  it("收到对象级 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        source: "electron-degraded-facade",
-      },
+    expect(
+      appServerMocks.listGalleryMaterialsByImageCategory,
+    ).toHaveBeenCalledWith({
+      projectId: "project-1",
+      category: "background",
     });
-
-    await expect(getGalleryMaterial("m-degraded")).rejects.toThrow(
-      "get_gallery_material 尚未接入真实图库材料 current 通道",
-    );
+    expect(
+      appServerMocks.listGalleryMaterialsByLayoutCategory,
+    ).toHaveBeenCalledWith({
+      projectId: "project-1",
+      category: "grid",
+    });
+    expect(appServerMocks.listGalleryMaterialsByMood).toHaveBeenCalledWith({
+      projectId: "project-1",
+      mood: "warm",
+    });
   });
 
-  it("收到列表级 diagnostic facade 时应 fail closed", async () => {
-    const degradedList = [] as unknown[] & {
-      __diagnostic?: { category: string };
-    };
-    degradedList.__diagnostic = {
-      category: "app-server-unavailable",
-    };
-    vi.mocked(safeInvoke).mockResolvedValueOnce(degradedList);
+  it("素材不存在时应返回 null", async () => {
+    appServerMocks.getGalleryMaterial.mockResolvedValueOnce({ result: {} });
 
-    await expect(
-      listGalleryMaterialsByImageCategory("project-degraded"),
-    ).rejects.toThrow(
-      "list_gallery_materials_by_image_category 尚未接入真实图库材料 current 通道",
-    );
+    await expect(getGalleryMaterial("missing")).resolves.toBeNull();
   });
 
-  it("收到非图库素材形状时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ id: "m1", type: "image" })
+  it("收到非图库素材结果形状或 error envelope 时应 fail closed", async () => {
+    appServerMocks.getGalleryMaterial
       .mockResolvedValueOnce({
-        error: "Electron host command is not supported: get_gallery_material",
+        result: { material: { id: "m1", type: "image" } },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          material: {
+            ...createMaterial("m1"),
+            error: "unsupported",
+          },
+        },
       });
 
     await expect(getGalleryMaterial("m1")).rejects.toThrow(
-      "get_gallery_material did not return gallery material",
+      "galleryMaterial/get did not return gallery material",
     );
     await expect(getGalleryMaterial("m1")).rejects.toThrow(
-      "get_gallery_material returned an error envelope",
-    );
-  });
-
-  it("收到带 error 的伪素材对象时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      ...createMaterial("m1"),
-      error: "Electron host command is not supported: get_gallery_material",
-    });
-
-    await expect(getGalleryMaterial("m1")).rejects.toThrow(
-      "get_gallery_material returned an error envelope",
+      "galleryMaterial/get returned an error envelope",
     );
   });
 
   it("收到非图库元数据或 delete 假结果时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ materialId: "m2" })
+    appServerMocks.createGalleryMaterialMetadata
+      .mockResolvedValueOnce({ result: { metadata: { materialId: "m2" } } })
       .mockResolvedValueOnce({
-        materialId: "m2",
-        colors: [],
-        createdAt: 1,
-      })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({
-        ...createMetadata("m2"),
-        error:
-          "Electron host command is not supported: create_gallery_material_metadata",
+        result: {
+          metadata: {
+            ...createMetadata("m2"),
+            error: "unsupported",
+          },
+        },
       });
+    appServerMocks.updateGalleryMaterialMetadata.mockResolvedValueOnce({
+      result: {
+        metadata: {
+          materialId: "m2",
+          colors: [],
+          createdAt: 1,
+        },
+      },
+    });
+    appServerMocks.deleteGalleryMaterialMetadata.mockResolvedValueOnce({
+      result: { success: true },
+    });
 
     await expect(
       createGalleryMetadata({
@@ -163,7 +208,15 @@ describe("galleryMaterials API", () => {
         colors: ["#fff"],
       }),
     ).rejects.toThrow(
-      "create_gallery_material_metadata did not return gallery material metadata",
+      "galleryMaterialMetadata/create did not return gallery material metadata",
+    );
+    await expect(
+      createGalleryMetadata({
+        materialId: "m2",
+        colors: ["#fff"],
+      }),
+    ).rejects.toThrow(
+      "galleryMaterialMetadata/create returned an error envelope",
     );
     await expect(
       updateGalleryMetadata("m2", {
@@ -171,41 +224,36 @@ describe("galleryMaterials API", () => {
         colors: ["#000"],
       }),
     ).rejects.toThrow(
-      "update_gallery_material_metadata did not return gallery material metadata",
+      "galleryMaterialMetadata/update did not return gallery material metadata",
     );
     await expect(deleteGalleryMetadata("m2")).rejects.toThrow(
-      "delete_gallery_material_metadata did not return void result",
-    );
-    await expect(
-      createGalleryMetadata({
-        materialId: "m2",
-        colors: ["#fff"],
-      }),
-    ).rejects.toThrow(
-      "create_gallery_material_metadata returned an error envelope",
+      "galleryMaterialMetadata/delete did not return void result",
     );
   });
 
   it("收到非图库素材列表形状时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([{ id: "img-1" }])
-      .mockResolvedValueOnce([
-        {
-          ...createMaterial("img-1"),
-          error:
-            "Electron host command is not supported: list_gallery_materials_by_image_category",
+    appServerMocks.listGalleryMaterialsByImageCategory
+      .mockResolvedValueOnce({ result: { materials: [{ id: "img-1" }] } })
+      .mockResolvedValueOnce({
+        result: {
+          materials: [
+            {
+              ...createMaterial("img-1"),
+              error: "unsupported",
+            },
+          ],
         },
-      ]);
+      });
 
     await expect(
       listGalleryMaterialsByImageCategory("project-1"),
     ).rejects.toThrow(
-      "list_gallery_materials_by_image_category did not return gallery materials",
+      "galleryMaterial/listByImageCategory did not return gallery materials",
     );
     await expect(
       listGalleryMaterialsByImageCategory("project-1"),
     ).rejects.toThrow(
-      "list_gallery_materials_by_image_category returned an error envelope",
+      "galleryMaterial/listByImageCategory returned an error envelope",
     );
   });
 });

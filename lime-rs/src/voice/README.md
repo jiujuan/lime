@@ -1,42 +1,39 @@
 # voice/ - 语音输入模块
 
-语音输入功能的 Tauri 后端模块，提供全局快捷键、悬浮窗、ASR 识别、LLM 润色等功能。
+语音输入底层模块，保留全局快捷键、配置、ASR、录音和输出服务桥接。
+
+旧 `commands.rs` Tauri wrapper 已退役；前端生产路径不得再调用实时语音旧命令。
+后续语音转写、润色、输出与录音控制必须先定义 App Server / Electron current 通道，
+再复用 `lime-services` 中的底层服务实现。
 
 ## 文件索引
 
-| 文件 | 说明 |
-|------|------|
-| `mod.rs` | 模块入口，导出子模块 |
-| `asr_service.rs` | ASR 桥接层（纯逻辑已迁移到 `crates/services/src/voice_asr_service.rs`） |
-| `commands.rs` | Tauri 命令，供前端调用 |
-| `config.rs` | 配置桥接层（纯逻辑已迁移到 `crates/services/src/voice_config_service.rs`） |
-| `output_service.rs` | 输出桥接层（纯逻辑已迁移到 `crates/services/src/voice_output_service.rs`） |
-| `processor.rs` | 润色桥接层（纯逻辑已迁移到 `crates/services/src/voice_processor_service.rs`） |
+| 文件                   | 说明                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| `mod.rs`               | 模块入口，导出子模块                                                          |
+| `asr_service.rs`       | ASR 桥接层（纯逻辑已迁移到 `crates/services/src/voice_asr_service.rs`）       |
+| `config.rs`            | 配置桥接层（纯逻辑已迁移到 `crates/services/src/voice_config_service.rs`）    |
+| `output_service.rs`    | 输出桥接层（纯逻辑已迁移到 `crates/services/src/voice_output_service.rs`）    |
+| `processor.rs`         | 润色桥接层（纯逻辑已迁移到 `crates/services/src/voice_processor_service.rs`） |
 | `recording_service.rs` | 录音桥接层（纯逻辑已迁移到 `crates/services/src/voice_recording_service.rs`） |
-| `shortcut.rs` | 全局快捷键管理 |
-| `window.rs` | 悬浮窗管理 |
+| `shortcut.rs`          | 全局快捷键管理                                                                |
 
 ## 录音服务架构
 
 由于 `cpal::Stream` 不实现 `Send` trait，无法直接在 Tauri 的 async 命令中使用。
-录音服务采用**独立线程 + channel 通信**的方案：
+底层录音服务采用**独立线程 + channel 通信**的方案：
 
 ```
-┌─────────────────┐     Command      ┌─────────────────┐
-│  Tauri Command  │ ───────────────> │  Recording      │
-│  (async)        │                  │  Thread         │
+┌─────────────────┐     Request      ┌─────────────────┐
+│  current host   │ ───────────────> │  Recording      │
+│  boundary       │                  │  Thread         │
 │                 │ <─────────────── │  (owns Stream)  │
 └─────────────────┘     Response     └─────────────────┘
 ```
 
-### 录音命令
-
-| 命令 | 说明 |
-|------|------|
-| `start_recording` | 开始录音 |
-| `stop_recording` | 停止录音，返回音频数据 |
-| `cancel_recording` | 取消录音 |
-| `get_recording_status` | 获取录音状态（是否录音中、音量、时长）|
+旧 `start_recording` / `stop_recording` / `cancel_recording` /
+`get_recording_status` Tauri command 已退役，不能重新接回 runner、Rust DevBridge
+dispatcher、DevBridge policy 或 mock。
 
 ## 依赖关系
 
@@ -46,18 +43,17 @@ voice/
 ├── recording_service.rs ──→ lime-services (voice_recording_service)
 ├── config.rs ──→ lime-services (voice_config_service)
 ├── output_service.rs ──→ lime-services (voice_output_service)
-├── processor.rs ──→ lime-services (voice_processor_service)
-└── commands.rs ──→ 上述所有服务
+└── processor.rs ──→ lime-services (voice_processor_service)
 ```
 
 ## ASR 服务支持
 
-| Provider | 状态 | 说明 |
-|----------|------|------|
-| Whisper Local | ✅ | 本地离线识别，需下载模型文件 |
-| OpenAI Whisper | ✅ | 云端 API，支持自定义 base_url |
-| 百度语音 | ✅ | 云端 API |
-| 讯飞语音 | ✅ | WebSocket 流式识别 |
+| Provider       | 状态 | 说明                          |
+| -------------- | ---- | ----------------------------- |
+| Whisper Local  | ✅   | 本地离线识别，需下载模型文件  |
+| OpenAI Whisper | ✅   | 云端 API，支持自定义 base_url |
+| 百度语音       | ✅   | 云端 API                      |
+| 讯飞语音       | ✅   | WebSocket 流式识别            |
 
 ### 云端回退机制
 
@@ -75,9 +71,9 @@ voice/
 
 下载地址：https://huggingface.co/ggerganov/whisper.cpp/tree/main
 
-| 模型 | 文件名 | 大小 |
-|------|--------|------|
-| tiny | `ggml-tiny.bin` | ~75MB |
-| base | `ggml-base.bin` | ~142MB |
-| small | `ggml-small.bin` | ~466MB |
+| 模型   | 文件名            | 大小   |
+| ------ | ----------------- | ------ |
+| tiny   | `ggml-tiny.bin`   | ~75MB  |
+| base   | `ggml-base.bin`   | ~142MB |
+| small  | `ggml-small.bin`  | ~466MB |
 | medium | `ggml-medium.bin` | ~1.5GB |

@@ -5,6 +5,7 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
   APP_SERVER_METHOD_AGENT_SESSION_COMPACT,
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+  APP_SERVER_METHOD_AGENT_SESSION_LIST,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ,
   APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET,
@@ -189,6 +190,54 @@ describe("App Server API", () => {
               workspaceId: "default",
               sessionId: "session-1",
               limit: 1,
+            },
+          }),
+        ],
+      },
+    });
+  });
+
+  it("listSessions 应通过 App Server JSON-RPC agentSession/list", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 5,
+          result: {
+            sessions: [
+              {
+                sessionId: "session-1",
+                threadId: "thread-1",
+                title: "Session 1",
+                model: "gpt-5.4",
+                createdAt: "2026-06-09T09:00:00.000Z",
+                updatedAt: "2026-06-09T09:01:00.000Z",
+                archivedAt: null,
+                messagesCount: 2,
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 5 });
+    const result = await client.listSessions({
+      includeArchived: true,
+      workspaceId: "workspace-1",
+      limit: 10,
+    });
+
+    expect(result.result.sessions[0].sessionId).toBe("session-1");
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 5,
+            method: APP_SERVER_METHOD_AGENT_SESSION_LIST,
+            params: {
+              includeArchived: true,
+              workspaceId: "workspace-1",
+              limit: 10,
             },
           }),
         ],
@@ -471,8 +520,7 @@ describe("App Server API", () => {
           lines: [
             line({
               id: 8,
-              method:
-                APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+              method: APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
               params: {
                 sessionId: "session-1",
                 status: "blocked",
@@ -1285,9 +1333,11 @@ describe("App Server API", () => {
     await expect(client.readServerDiagnostics()).resolves.toMatchObject({
       result: { running: true },
     });
-    await expect(client.readWindowsStartupDiagnostics()).resolves.toMatchObject({
-      result: { platform: "darwin" },
-    });
+    await expect(client.readWindowsStartupDiagnostics()).resolves.toMatchObject(
+      {
+        result: { platform: "darwin" },
+      },
+    );
 
     expect(safeInvoke).toHaveBeenNthCalledWith(
       1,
@@ -1425,7 +1475,8 @@ describe("App Server API", () => {
               status: "pending_submit",
               normalized_status: "pending",
               path: ".lime/tasks/image_generate/task-image-1.json",
-              absolute_path: "/workspace/.lime/tasks/image_generate/task-image-1.json",
+              absolute_path:
+                "/workspace/.lime/tasks/image_generate/task-image-1.json",
               artifact_path: ".lime/tasks/image_generate/task-image-1.json",
               absolute_artifact_path:
                 "/workspace/.lime/tasks/image_generate/task-image-1.json",
@@ -1447,7 +1498,8 @@ describe("App Server API", () => {
               status: "pending_submit",
               normalized_status: "pending",
               path: ".lime/tasks/audio_generate/task-audio-1.json",
-              absolute_path: "/workspace/.lime/tasks/audio_generate/task-audio-1.json",
+              absolute_path:
+                "/workspace/.lime/tasks/audio_generate/task-audio-1.json",
               artifact_path: ".lime/tasks/audio_generate/task-audio-1.json",
               absolute_artifact_path:
                 "/workspace/.lime/tasks/audio_generate/task-audio-1.json",
@@ -1469,7 +1521,8 @@ describe("App Server API", () => {
               status: "succeeded",
               normalized_status: "succeeded",
               path: ".lime/tasks/audio_generate/task-audio-1.json",
-              absolute_path: "/workspace/.lime/tasks/audio_generate/task-audio-1.json",
+              absolute_path:
+                "/workspace/.lime/tasks/audio_generate/task-audio-1.json",
               artifact_path: ".lime/tasks/audio_generate/task-audio-1.json",
               absolute_artifact_path:
                 "/workspace/.lime/tasks/audio_generate/task-audio-1.json",
@@ -1491,7 +1544,8 @@ describe("App Server API", () => {
               status: "pending_submit",
               normalized_status: "pending",
               path: ".lime/tasks/image_generate/task-image-1.json",
-              absolute_path: "/workspace/.lime/tasks/image_generate/task-image-1.json",
+              absolute_path:
+                "/workspace/.lime/tasks/image_generate/task-image-1.json",
               artifact_path: ".lime/tasks/image_generate/task-image-1.json",
               absolute_artifact_path:
                 "/workspace/.lime/tasks/image_generate/task-image-1.json",
@@ -1529,7 +1583,8 @@ describe("App Server API", () => {
               status: "cancelled",
               normalized_status: "cancelled",
               path: ".lime/tasks/image_generate/task-image-1.json",
-              absolute_path: "/workspace/.lime/tasks/image_generate/task-image-1.json",
+              absolute_path:
+                "/workspace/.lime/tasks/image_generate/task-image-1.json",
               artifact_path: ".lime/tasks/image_generate/task-image-1.json",
               absolute_artifact_path:
                 "/workspace/.lime/tasks/image_generate/task-image-1.json",
@@ -1580,10 +1635,14 @@ describe("App Server API", () => {
     ).resolves.toMatchObject({
       result: { normalized_status: "succeeded" },
     });
-    await expect(client.getMediaTaskArtifact(lookupRequest)).resolves.toMatchObject({
+    await expect(
+      client.getMediaTaskArtifact(lookupRequest),
+    ).resolves.toMatchObject({
       result: { task_id: "task-image-1" },
     });
-    await expect(client.listMediaTaskArtifacts(listRequest)).resolves.toMatchObject({
+    await expect(
+      client.listMediaTaskArtifacts(listRequest),
+    ).resolves.toMatchObject({
       result: { total: 1 },
     });
     await expect(
@@ -1594,7 +1653,11 @@ describe("App Server API", () => {
 
     const expectedCalls = [
       [13, APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, imageRequest],
-      [14, APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, audioCreateRequest],
+      [
+        14,
+        APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+        audioCreateRequest,
+      ],
       [
         15,
         APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
@@ -1872,35 +1935,43 @@ describe("App Server API", () => {
       }),
     );
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "app_server_handle_json_lines", {
-      request: {
-        lines: [
-          line({
-            id: 1,
-            method: APP_SERVER_METHOD_GATEWAY_CHANNEL_START,
-            params: {
-              channel: "telegram",
-              accountId: "default",
-              pollTimeoutSecs: 25,
-            },
-          }),
-        ],
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      1,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 1,
+              method: APP_SERVER_METHOD_GATEWAY_CHANNEL_START,
+              params: {
+                channel: "telegram",
+                accountId: "default",
+                pollTimeoutSecs: 25,
+              },
+            }),
+          ],
+        },
       },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "app_server_handle_json_lines", {
-      request: {
-        lines: [
-          line({
-            id: 2,
-            method: APP_SERVER_METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
-            params: {
-              providerId: "openai",
-              modelId: "gpt-5.4",
-            },
-          }),
-        ],
+    );
+    expect(safeInvoke).toHaveBeenNthCalledWith(
+      2,
+      "app_server_handle_json_lines",
+      {
+        request: {
+          lines: [
+            line({
+              id: 2,
+              method: APP_SERVER_METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
+              params: {
+                providerId: "openai",
+                modelId: "gpt-5.4",
+              },
+            }),
+          ],
+        },
       },
-    });
+    );
   });
 
   it("Gateway Tunnel 应通过 App Server current methods", async () => {

@@ -156,6 +156,32 @@ const retiredGatewayTunnelFacadeCommands = new Set([
 ]);
 const retiredVoiceInputConfigElectronFacadeCommands = new Set([
   "get_voice_input_config",
+  "save_voice_input_config",
+]);
+const retiredVoiceAudioDeviceFacadeCommands = new Set(["list_audio_devices"]);
+const retiredVoiceAsrCredentialFacadeCommands = new Set([
+  "get_asr_credentials",
+  "add_asr_credential",
+  "update_asr_credential",
+  "delete_asr_credential",
+  "set_default_asr_credential",
+  "test_asr_credential",
+]);
+const retiredVoiceInstructionFacadeCommands = new Set([
+  "get_voice_instructions",
+  "save_voice_instruction",
+  "delete_voice_instruction",
+]);
+const retiredVoiceRealtimeFacadeCommands = new Set([
+  "transcribe_audio",
+  "polish_voice_text",
+  "output_voice_text",
+  "start_recording",
+  "stop_recording",
+  "get_recording_snapshot",
+  "get_recording_segment",
+  "cancel_recording",
+  "get_recording_status",
 ]);
 const currentAgentAppShellDesktopHostCommands = new Set([
   "agent_app_launch_shell",
@@ -172,6 +198,20 @@ const currentTrayDesktopHostShellCommands = new Set([
 const currentHotkeyDesktopHostShellCommands = new Set([
   "get_voice_shortcut_runtime_status",
   "validate_shortcut",
+]);
+const currentVoiceModelDesktopHostReadCommands = new Set([
+  "voice_models_get_install_state",
+  "voice_models_list_catalog",
+]);
+const currentVoiceModelDesktopHostSideEffectCommands = new Set([
+  "voice_models_delete",
+  "voice_models_download",
+]);
+const retiredVoiceModelDefaultFacadeCommands = new Set([
+  "voice_models_set_default",
+]);
+const retiredVoiceModelTestTranscribeFacadeCommands = new Set([
+  "voice_models_test_transcribe_file",
 ]);
 const currentSkillDesktopHostShellCommands = new Set([
   "get_local_skills_for_app",
@@ -326,6 +366,101 @@ const retiredMediaTaskArtifactFacadeCommands = new Set([
   "list_media_task_artifacts",
   "cancel_media_task_artifact",
 ]);
+const retiredVideoGenerationFacadeCommands = new Set([
+  "create_video_generation_task",
+  "get_video_generation_task",
+  "list_video_generation_tasks",
+  "cancel_video_generation_task",
+]);
+const retiredGalleryMaterialFacadeCommands = new Set([
+  "create_gallery_material_metadata",
+  "get_gallery_material_metadata",
+  "get_gallery_material",
+  "list_gallery_materials_by_image_category",
+  "list_gallery_materials_by_layout_category",
+  "list_gallery_materials_by_mood",
+  "update_gallery_material_metadata",
+  "delete_gallery_material_metadata",
+]);
+const retiredProjectMaterialFacadeCommands = new Set([
+  "list_materials",
+  "get_material",
+  "get_material_count",
+  "upload_material",
+  "import_material_from_url",
+  "update_material",
+  "delete_material",
+  "get_material_content",
+]);
+const retiredWorkspaceWriteFacadeCommands = new Set([
+  "workspace_create",
+  "workspace_update",
+  "workspace_delete",
+  "workspace_set_default",
+]);
+const retiredContentCrudFacadeCommands = new Set([
+  "content_create",
+  "content_get",
+  "content_get_general_workbench_document_state",
+  "content_list",
+  "content_update",
+  "content_delete",
+  "content_reorder",
+  "content_stats",
+]);
+const retiredExecutionRunFacadeCommands = new Set([
+  "execution_run_list",
+  "execution_run_get",
+  "execution_run_get_general_workbench_state",
+  "execution_run_list_general_workbench_history",
+]);
+const retiredFrontendSessionFileFacadeCommands = new Set([
+  "session_files_create",
+  "session_files_exists",
+  "session_files_get_or_create",
+  "session_files_delete",
+  "session_files_list",
+  "session_files_get_detail",
+  "session_files_update_meta",
+  "session_files_save_file",
+  "session_files_read_file",
+  "session_files_resolve_file_path",
+  "session_files_delete_file",
+  "session_files_list_files",
+  "session_files_cleanup_expired",
+  "session_files_cleanup_empty",
+]);
+const retiredUnifiedMemoryFacadeCommands = new Set([
+  "unified_memory_list",
+  "unified_memory_get",
+  "unified_memory_create",
+  "unified_memory_update",
+  "unified_memory_delete",
+  "unified_memory_search",
+  "unified_memory_stats",
+  "unified_memory_analyze",
+  "unified_memory_semantic_search",
+  "unified_memory_hybrid_search",
+  "unified_memory_feedback",
+]);
+const retiredMemoryRuntimeTauriGenerateHandlerCommands = new Set([
+  "memory_runtime_get_stats",
+  "memory_runtime_get_overview",
+  "memory_runtime_request_analysis",
+  "memory_runtime_cleanup",
+  "memory_runtime_get_working_memory",
+  "memory_runtime_get_extraction_status",
+  "memory_runtime_prefetch_for_turn",
+  "memory_get_effective_sources",
+  "memory_get_auto_index",
+  "memory_toggle_auto",
+  "memory_update_auto_note",
+  "memory_cleanup_memdir",
+  "memory_scaffold_memdir",
+  "memory_scaffold_runtime_agents_template",
+  "memory_ensure_workspace_local_agents_gitignore",
+]);
+const retiredMemoryRuntimeCatalogSections = new Set(["memoryRuntimeCommands"]);
 const retiredAgentRuntimeRustCommands = new Set([
   ...retiredAgentRuntimeSessionRustCommands,
   ...retiredAgentRuntimeSubagentRustCommands,
@@ -347,6 +482,15 @@ const retiredTauriGenerateHandlerCommands = new Set([
   ...retiredLogTauriGenerateHandlerCommands,
   ...retiredFrontendDiagnosticsTauriGenerateHandlerCommands,
   ...retiredConfigTauriGenerateHandlerCommands,
+  ...retiredGalleryMaterialFacadeCommands,
+  ...retiredProjectMaterialFacadeCommands,
+  ...retiredVideoGenerationFacadeCommands,
+  ...retiredWorkspaceWriteFacadeCommands,
+  ...retiredContentCrudFacadeCommands,
+  ...retiredExecutionRunFacadeCommands,
+  ...retiredUnifiedMemoryFacadeCommands,
+  ...retiredMemoryRuntimeTauriGenerateHandlerCommands,
+  "unified_memory_feedback",
   "add_mcp_server",
   "add_model_to_provider",
   "add_prompt",
@@ -441,6 +585,7 @@ const retiredTauriGenerateHandlerCommands = new Set([
   "open_codex_cli_logout",
   "open_config_folder",
   "open_external_url",
+  "open_system_settings_url",
   "read_image_from_session",
   "refresh_relay_registry",
   "resize_webview_panel",
@@ -512,7 +657,11 @@ const retiredTauriCommandModules = new Set([
   "image_upload_cmd",
   "injection_cmd",
   "knowledge_cmd",
+  "layered_design_cmd",
+  "memory_feedback_cmd",
   "models_cmd",
+  "execution_run_cmd",
+  "video_generation_cmd",
   "mcp_cmd",
   "persona_cmd",
   "prompt_cmd",
@@ -520,6 +669,7 @@ const retiredTauriCommandModules = new Set([
   "telegram_remote_cmd",
   "theme_context_cmd",
   "tray_cmd",
+  "voice_model_cmd",
   "voice_test_cmd",
   "websocket_cmd",
   "windows_startup_cmd",
@@ -536,6 +686,8 @@ const currentElectronHostRequiredCommands = new Set([
   "app_server_drain_events",
   ...currentTrayDesktopHostShellCommands,
   ...currentHotkeyDesktopHostShellCommands,
+  ...currentVoiceModelDesktopHostReadCommands,
+  ...currentVoiceModelDesktopHostSideEffectCommands,
   ...currentSkillDesktopHostShellCommands,
   ...currentLayeredDesignDesktopHostShellCommands,
   ...currentFileBrowserDesktopHostShellCommands,
@@ -571,6 +723,7 @@ const currentElectronHostRequiredCommands = new Set([
   "get_models_for_provider",
   "get_provider_alias_config",
   "open_external_url",
+  "open_system_settings_url",
   "project_memory_get",
   "save_experimental_config",
   "start_oem_cloud_oauth_callback_bridge",
@@ -591,7 +744,6 @@ const currentDevBridgeTruthRequiredCommands = new Set([
 ]);
 
 const electronDiagnosticFacadeCommands = new Set([
-  "get_asr_credentials",
   "get_browser_backend_policy",
   "get_browser_backends_status",
   "get_browser_connector_install_status_cmd",
@@ -600,10 +752,6 @@ const electronDiagnosticFacadeCommands = new Set([
   "get_chrome_bridge_status",
   "get_chrome_profile_sessions",
   "get_environment_preview",
-  "list_audio_devices",
-  "unified_memory_stats",
-  "voice_models_get_install_state",
-  "voice_models_list_catalog",
 ]);
 
 function normalizePath(filePath) {
@@ -877,6 +1025,23 @@ function collectBridgeTruthCommands() {
   return commands;
 }
 
+function collectNoMockFallbackCompatCommands() {
+  const filePath = path.join(repoRoot, "src/lib/dev-bridge/commandPolicy.ts");
+  const sourceCode = fs.readFileSync(filePath, "utf8");
+  const match = sourceCode.match(
+    /const noMockFallbackCompatCommands = new Set<string>\(\[([\s\S]*?)\]\);/,
+  );
+  if (!match) {
+    throw new Error("未找到 noMockFallbackCompatCommands 定义");
+  }
+
+  const commands = new Set();
+  for (const stringMatch of match[1].matchAll(/["'`]([^"'`]+)["'`]/g)) {
+    commands.add(stringMatch[1]);
+  }
+  return commands;
+}
+
 function readAgentCommandCatalog() {
   const catalogPath = path.join(
     repoRoot,
@@ -983,6 +1148,14 @@ function hasTauriCommandRegistration(sourceCode, command) {
   return pattern.test(sourceCode);
 }
 
+function hasFrontendCommandInvocation(sourceCode, command) {
+  const escapedCommand = escapeRegExp(command);
+  const pattern = new RegExp(
+    String.raw`\b(?:safeInvoke|invoke)(?:<[^>]+>)?\s*\(\s*["'\`]${escapedCommand}["'\`]`,
+  );
+  return pattern.test(sourceCode);
+}
+
 function hasRustFunctionDefinition(sourceCode, functionName) {
   const pattern = new RegExp(
     String.raw`\b(?:pub(?:\s*\([^)]*\))?\s+)?(?:async\s+)?fn\s+${escapeRegExp(functionName)}\s*\(`,
@@ -1006,6 +1179,10 @@ function stripRustTestModules(sourceCode) {
 }
 
 function readProductionSourceForGuard(relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    return "";
+  }
   const sourceCode = readSource(relativePath);
   return relativePath.endsWith(".rs")
     ? stripRustTestModules(sourceCode)
@@ -1602,7 +1779,7 @@ function collectRetiredFileBrowserFacadeSourceFailures() {
   ];
 
   for (const source of restrictedSources) {
-    const sourceCode = readProductionSourceForGuard(source.path);
+    const sourceCode = readExistingProductionSourceForGuard(source.path);
     const commands = source.commands ?? retiredFileBrowserFacadeCommands;
     for (const command of commands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
@@ -1649,7 +1826,7 @@ function collectRetiredAutomationFacadeSourceFailures() {
   ];
 
   for (const source of restrictedSources) {
-    const sourceCode = readProductionSourceForGuard(source.path);
+    const sourceCode = readExistingProductionSourceForGuard(source.path);
     for (const command of retiredAutomationFacadeCommands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
         failures.push({
@@ -2392,6 +2569,705 @@ function collectCurrentHotkeyDesktopHostShellSourceFailures() {
   return failures;
 }
 
+function collectCurrentVoiceModelDesktopHostSourceFailures() {
+  const failures = [];
+  const bridgeTruthCommands = collectBridgeTruthCommands();
+  const noMockFallbackCompatCommands = collectNoMockFallbackCompatCommands();
+  const currentVoiceModelDesktopHostCommands = new Set([
+    ...currentVoiceModelDesktopHostReadCommands,
+    ...currentVoiceModelDesktopHostSideEffectCommands,
+  ]);
+  const voiceModelDesktopHostCommandReason = (command) =>
+    currentVoiceModelDesktopHostSideEffectCommands.has(command)
+      ? "语音模型删除是 Electron Desktop Host current 删除壳能力"
+      : "语音模型目录 / 安装状态是 Electron Desktop Host 读链壳能力";
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      messageForCommand: (command) =>
+        `${voiceModelDesktopHostCommandReason(command)}，不能继续作为 DevBridge truth command`,
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      messageForCommand: (command) =>
+        `${voiceModelDesktopHostCommandReason(command)}，不能继续作为 mock priority command`,
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      messageForCommand: (command) =>
+        `${voiceModelDesktopHostCommandReason(command)}，不能保留 desktop-host 默认 mock`,
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      messageForCommand: (command) =>
+        `${voiceModelDesktopHostCommandReason(command)}，不能回到 legacy Tauri generate_handler`,
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      messageForCommand: (command) =>
+        `${voiceModelDesktopHostCommandReason(command)}，不能回到 Rust DevBridge dispatcher`,
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      messageForCommand: (command) =>
+        `${voiceModelDesktopHostCommandReason(command)}，不能回到 Rust DevBridge dispatcher`,
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of currentVoiceModelDesktopHostCommands) {
+      const hasVoiceModelDesktopHostLeak =
+        source.path === "src/lib/dev-bridge/commandPolicy.ts"
+          ? bridgeTruthCommands.has(command) ||
+            noMockFallbackCompatCommands.has(command)
+          : hasStandaloneIdentifier(sourceCode, command);
+      if (hasVoiceModelDesktopHostLeak) {
+        failures.push({
+          file: source.path,
+          message: source.messageForCommand(command),
+          token: command,
+        });
+      }
+    }
+  }
+
+  const voiceModelCommandPath = "lime-rs/src/commands/voice_model_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, voiceModelCommandPath))) {
+    const sourceCode = readProductionSourceForGuard(voiceModelCommandPath);
+    for (const command of currentVoiceModelDesktopHostCommands) {
+      if (hasRustFunctionDefinition(sourceCode, command)) {
+        failures.push({
+          file: voiceModelCommandPath,
+          message: `${voiceModelDesktopHostCommandReason(command)}，旧 Rust wrapper 不能继续保留同名正向函数`,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredVoiceModelDefaultFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/voiceModels.ts",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，前端 API 不能继续 safeInvoke 旧 voice_models_set_default 命令",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能回到 Electron Host 白名单",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能回到 Electron Host facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能回到 runtime/capability catalog",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      message:
+        "语音模型设默认已迁到 App Server voiceModel/default/set current，不能回到 Rust DevBridge voice dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredVoiceModelDefaultFacadeCommands) {
+      const hasRetiredVoiceModelDefaultLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/governance/agentCommandCatalog.json"
+            ? agentCommandCatalogRuntimeSurfaceHas(command)
+            : source.path === "src/lib/api/voiceModels.ts"
+              ? hasFrontendCommandInvocation(sourceCode, command)
+              : hasStandaloneIdentifier(sourceCode, command);
+      if (hasRetiredVoiceModelDefaultLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const voiceModelCommandPath = "lime-rs/src/commands/voice_model_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, voiceModelCommandPath))) {
+    const sourceCode = readProductionSourceForGuard(voiceModelCommandPath);
+    for (const command of retiredVoiceModelDefaultFacadeCommands) {
+      if (hasRustFunctionDefinition(sourceCode, command)) {
+        failures.push({
+          file: voiceModelCommandPath,
+          message:
+            "语音模型设默认已迁到 App Server voiceModel/default/set current，旧 Rust wrapper 不能继续保留同名正向函数",
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredVoiceModelTestTranscribeFacadeSourceFailures() {
+  const failures = [];
+  const bridgeTruthCommands = collectBridgeTruthCommands();
+  const noMockFallbackCompatCommands = collectNoMockFallbackCompatCommands();
+  const restrictedSources = [
+    {
+      path: "src/lib/api/voiceModels.ts",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，前端 API 不能继续 safeInvoke 旧 voice_models_test_transcribe_file 命令",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能回到 Electron Host 白名单",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能回到 Electron Host facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能回到 runtime/capability catalog",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      message:
+        "语音模型测试转写已迁到 App Server voiceModel/testTranscribeFile current，不能回到 Rust DevBridge voice dispatcher",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message:
+        "语音模型测试转写旧 Tauri wrapper 已删除，不能回到 commands/mod.rs",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredVoiceModelTestTranscribeFacadeCommands) {
+      const hasRetiredVoiceModelTestTranscribeLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/governance/agentCommandCatalog.json"
+            ? agentCommandCatalogRuntimeSurfaceHas(command)
+            : source.path === "src/lib/api/voiceModels.ts"
+              ? hasFrontendCommandInvocation(sourceCode, command)
+              : source.path === "src/lib/dev-bridge/commandPolicy.ts"
+                ? bridgeTruthCommands.has(command) ||
+                  noMockFallbackCompatCommands.has(command)
+                : hasStandaloneIdentifier(sourceCode, command);
+      if (hasRetiredVoiceModelTestTranscribeLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const retiredWrapperPath = "lime-rs/src/commands/voice_model_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredWrapperPath))) {
+    failures.push({
+      file: retiredWrapperPath,
+      message: "语音模型测试转写旧 Tauri wrapper 已删除，不能恢复旧文件本体",
+      token: retiredWrapperPath,
+    });
+  }
+
+  return failures;
+}
+
+function collectRetiredVoiceInputConfigFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已收敛到 app config current 网关的旧 Voice Input config 命令不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "已收敛到 app config current 网关的旧 Voice Input config 命令不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      message:
+        "已收敛到 app config current 网关的旧 Voice Input config 命令不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已收敛到 app config current 网关的旧 Voice Input config 命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "已收敛到 app config current 网关的旧 Voice Input config 命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      message:
+        "已收敛到 app config current 网关的旧 Voice Input config 命令不能回到 Rust DevBridge voice dispatcher",
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/runtime_turn/bootstrap.rs",
+      message:
+        "Aster Config tool 可以读取 voice config service / 内部 helper，不能继续调用旧 Voice Input config Tauri command wrapper",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredVoiceInputConfigElectronFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const voiceCommandPath = "lime-rs/src/voice/commands.rs";
+  if (fs.existsSync(path.join(repoRoot, voiceCommandPath))) {
+    const sourceCode = readProductionSourceForGuard(voiceCommandPath);
+    for (const command of retiredVoiceInputConfigElectronFacadeCommands) {
+      if (hasRustFunctionDefinition(sourceCode, command)) {
+        failures.push({
+          file: voiceCommandPath,
+          message:
+            "Voice Input config 已收敛到前端 app config current 网关，旧 Tauri voice command wrapper 不能继续保留同名正向函数",
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredVoiceAudioDeviceFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/asrProvider.ts",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，前端 API 不能继续 safeInvoke 旧 list_audio_devices 命令",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，不能回到 Electron Host 白名单",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，不能回到 Electron Host diagnostic facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，不能回到 Rust DevBridge voice dispatcher",
+    },
+    {
+      path: "lime-rs/src/voice/commands.rs",
+      message:
+        "麦克风设备列表已收敛到 renderer media devices current，旧 Tauri voice command 不能继续保留同名正向函数",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredVoiceAudioDeviceFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredVoiceAsrCredentialFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/asrProvider.ts",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，前端 API 不能继续 safeInvoke 旧 ASR 凭证命令",
+    },
+    {
+      path: "src/lib/api/voiceModels.ts",
+      message:
+        "默认本地语音模型 readiness 必须经 asrProvider App Server current 间接读取 ASR 凭证，不能直接调用旧 ASR 凭证命令",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能回到 Electron Host 白名单",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能回到 Electron Host diagnostic facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能回到 runtime/capability catalog",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      message:
+        "ASR 凭证 CRUD 已迁到 App Server voiceAsrCredential/* current，不能回到 Rust DevBridge voice dispatcher",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message: "ASR 凭证旧 Tauri wrapper 已删除，不能回到 commands/mod.rs",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredVoiceAsrCredentialFacadeCommands) {
+      const hasRetiredAsrCredentialLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/governance/agentCommandCatalog.json"
+            ? agentCommandCatalogRuntimeSurfaceHas(command)
+            : hasStandaloneIdentifier(sourceCode, command);
+      if (hasRetiredAsrCredentialLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const retiredWrapperPath = "lime-rs/src/commands/asr_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredWrapperPath))) {
+    failures.push({
+      file: retiredWrapperPath,
+      message:
+        "ASR 凭证旧 Tauri wrapper 文件已物理删除，不能恢复 asr_cmd.rs 文件本体",
+      token: retiredWrapperPath,
+    });
+  }
+
+  return failures;
+}
+
+function collectRetiredVoiceInstructionFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/asrProvider.ts",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，前端 API 不能继续 safeInvoke 旧 voice instruction 命令",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能回到 Electron Host 白名单",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能回到 Electron Host diagnostic facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能回到 runtime/capability catalog",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      message:
+        "Voice instructions 已迁到 App Server voiceInstruction/* current，不能回到 Rust DevBridge voice dispatcher",
+    },
+    {
+      path: "lime-rs/src/voice/commands.rs",
+      message:
+        "Voice instructions 旧 Tauri wrapper 已删除，不能回到 voice/commands.rs 正向函数",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredVoiceInstructionFacadeCommands) {
+      const hasRetiredVoiceInstructionLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/governance/agentCommandCatalog.json"
+            ? agentCommandCatalogRuntimeSurfaceHas(command)
+            : hasStandaloneIdentifier(sourceCode, command);
+      if (hasRetiredVoiceInstructionLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredVoiceRealtimeFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/asrProvider.ts",
+      message:
+        "语音转写、润色、输出与录音控制尚未接入 App Server / Electron current，前端 API 不能继续 safeInvoke 旧实时语音命令",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "旧实时语音命令不能回到 Electron Host 白名单；后续必须先定义 current voice runtime 通道",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "旧实时语音命令不能回到 Electron Host diagnostic facade；后续必须先定义 current voice runtime 通道",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "旧实时语音命令不能继续作为 DevBridge truth command 或 no-mock fallback",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message: "旧实时语音命令不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      message: "旧实时语音命令不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message: "旧实时语音命令不能回到 runtime/capability catalog",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message: "旧实时语音命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message: "旧实时语音命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      message: "旧实时语音命令不能回到 Rust DevBridge voice dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredVoiceRealtimeFacadeCommands) {
+      const hasRetiredVoiceRealtimeLeak =
+        source.path === "src/lib/api/asrProvider.ts"
+          ? hasFrontendCommandInvocation(sourceCode, command)
+          : source.path === "lime-rs/src/app/runner.rs"
+            ? hasTauriCommandRegistration(sourceCode, command)
+            : source.path === "src/lib/governance/agentCommandCatalog.json"
+              ? agentCommandCatalogRuntimeSurfaceHas(command)
+              : hasStandaloneIdentifier(sourceCode, command);
+      if (hasRetiredVoiceRealtimeLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const retiredWrapperPath = "lime-rs/src/voice/commands.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredWrapperPath))) {
+    failures.push({
+      file: retiredWrapperPath,
+      message:
+        "旧实时语音 Tauri wrapper 文件已物理删除，不能恢复 voice/commands.rs 文件本体",
+      token: retiredWrapperPath,
+    });
+  }
+
+  return failures;
+}
+
 function collectCurrentSkillDesktopHostShellSourceFailures() {
   const failures = [];
   const retiredSkillCommandPath = "lime-rs/src/commands/skill_cmd.rs";
@@ -2464,6 +3340,16 @@ function collectCurrentSkillDesktopHostShellSourceFailures() {
 function collectCurrentLayeredDesignDesktopHostShellSourceFailures() {
   const failures = [];
   const bridgeTruthCommands = collectBridgeTruthCommands();
+  const retiredLayeredDesignCommandPath =
+    "lime-rs/src/commands/layered_design_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredLayeredDesignCommandPath))) {
+    failures.push({
+      file: retiredLayeredDesignCommandPath,
+      message:
+        "Layered Design 已迁到 Electron Desktop Host current 壳能力，不能恢复旧 Rust layered_design_cmd.rs 文件本体",
+      token: retiredLayeredDesignCommandPath,
+    });
+  }
   const restrictedSources = [
     {
       path: "src/lib/dev-bridge/commandPolicy.ts",
@@ -2513,24 +3399,6 @@ function collectCurrentLayeredDesignDesktopHostShellSourceFailures() {
           token: command,
         });
       }
-    }
-  }
-
-  const commandSource = readProductionSourceForGuard(
-    "lime-rs/src/commands/layered_design_cmd.rs",
-  );
-  for (const command of currentLayeredDesignDesktopHostShellCommands) {
-    const tauriWrapperPattern = new RegExp(
-      `#\\[\\s*tauri::command\\s*\\][\\s\\S]{0,240}\\b${command}\\b`,
-      "u",
-    );
-    if (tauriWrapperPattern.test(commandSource)) {
-      failures.push({
-        file: "lime-rs/src/commands/layered_design_cmd.rs",
-        message:
-          "Layered Design 旧 Tauri wrapper 已退场，layered_design_cmd.rs 只能保留迁移来源 / inner 测试，不能恢复可调用 command wrapper",
-        token: command,
-      });
     }
   }
 
@@ -3116,6 +3984,53 @@ function collectRetiredMediaTaskArtifactFacadeSourceFailures() {
   return failures;
 }
 
+function collectRetiredVideoGenerationPromptSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/video_skill_launch.rs",
+      message:
+        "Video skill launch 必须走 video_generate -> App Server mediaTaskArtifact/video/* current 主链，不能提示模型回退旧 video generation facade",
+    },
+    {
+      path: "lime-rs/resources/default-skills/video_generate/SKILL.md",
+      message:
+        "默认 video_generate skill 必须走 CLI/App Server mediaTaskArtifact/video/* current 主链，不能允许或提示回退旧 video generation facade",
+    },
+  ];
+  const retiredPromptTokens = new Set([
+    "lime_create_video_generation_task",
+    ...retiredVideoGenerationFacadeCommands,
+  ]);
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const token of retiredPromptTokens) {
+      if (sourceCode.includes(token)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token,
+        });
+      }
+    }
+  }
+
+  const themeVideoModulePath = "lime-rs/src/theme/video/mod.rs";
+  const themeVideoModuleSource =
+    readProductionSourceForGuard(themeVideoModulePath);
+  if (hasStandaloneIdentifier(themeVideoModuleSource, "command")) {
+    failures.push({
+      file: themeVideoModulePath,
+      message:
+        "theme::video::command 是旧视频任务内部 owner residual，不能再从 theme/video 模块树暴露",
+      token: "command",
+    });
+  }
+
+  return failures;
+}
+
 function collectCurrentFileBrowserDesktopHostShellSourceFailures() {
   const failures = [];
   const restrictedSources = [
@@ -3157,6 +4072,454 @@ function collectCurrentFileBrowserDesktopHostShellSourceFailures() {
         });
       }
     }
+  }
+
+  return failures;
+}
+
+function collectRetiredGalleryMaterialFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Gallery material 旧 Tauri facade 已迁到 App Server galleryMaterial*，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Gallery material 旧 Tauri facade 已迁到 App Server galleryMaterial*，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Gallery material 旧 Tauri facade 已迁到 App Server galleryMaterial*，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/galleryMaterials.ts",
+      message:
+        "galleryMaterials API 必须通过 App Server galleryMaterial*，不能回到旧 Tauri facade",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "Gallery material 旧 Tauri facade 不能回到 Electron Host 白名单；current 入口是 App Server galleryMaterial*",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "Gallery material 旧 Tauri facade 不能回到 Electron Host diagnostic facade；current 入口是 App Server galleryMaterial*",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Gallery material 旧 Tauri facade 不能回到 legacy Tauri generate_handler；current 入口是 App Server galleryMaterial*",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "Gallery material 旧 Tauri facade 不能回到 Rust DevBridge dispatcher；current 入口是 App Server galleryMaterial*",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/project_resources.rs",
+      message:
+        "Gallery material 旧 Tauri facade 不能回到 Rust DevBridge project resource dispatcher；current 入口是 App Server galleryMaterial*",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readExistingProductionSourceForGuard(source.path);
+    for (const command of retiredGalleryMaterialFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  for (const retiredPath of ["lime-rs/src/commands/gallery_material_cmd.rs"]) {
+    if (fs.existsSync(path.join(repoRoot, retiredPath))) {
+      failures.push({
+        file: retiredPath,
+        message:
+          "Gallery material 旧 Tauri wrapper 已迁到 App Server current，不能恢复旧文件本体",
+        token: retiredPath,
+      });
+    }
+  }
+
+  const commandsModPath = "lime-rs/src/commands/mod.rs";
+  const commandsModSource = readProductionSourceForGuard(commandsModPath);
+  if (hasStandaloneIdentifier(commandsModSource, "gallery_material_cmd")) {
+    failures.push({
+      file: commandsModPath,
+      message:
+        "Gallery material 旧 Tauri wrapper 已迁到 App Server current，不能恢复 commands/mod.rs 模块声明",
+      token: "gallery_material_cmd",
+    });
+  }
+
+  return failures;
+}
+
+function collectRetiredProjectMaterialFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Project material 旧 Tauri facade 已迁到 App Server projectMaterial/*，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Project material 旧 Tauri facade 已迁到 App Server projectMaterial/*，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Project material 旧 Tauri facade 已迁到 App Server projectMaterial/*，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/materials.ts",
+      message:
+        "materials API 必须通过 App Server projectMaterial/*，不能回到旧 Tauri facade",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "Project material 旧 Tauri facade 不能回到 Electron Host 白名单；current 入口是 App Server projectMaterial/*",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "Project material 旧 Tauri facade 不能回到 Electron Host diagnostic facade；current 入口是 App Server projectMaterial/*",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Project material 旧 Tauri facade 不能回到 legacy Tauri generate_handler；current 入口是 App Server projectMaterial/*",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "Project material 旧 Tauri facade 不能回到 Rust DevBridge dispatcher；current 入口是 App Server projectMaterial/*",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/project_resources.rs",
+      message:
+        "Project material 旧 Tauri facade 不能回到 Rust DevBridge project resource dispatcher；current 入口是 App Server projectMaterial/*",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readExistingProductionSourceForGuard(source.path);
+    for (const command of retiredProjectMaterialFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  for (const retiredPath of ["lime-rs/src/commands/material_cmd.rs"]) {
+    if (fs.existsSync(path.join(repoRoot, retiredPath))) {
+      failures.push({
+        file: retiredPath,
+        message:
+          "Project material 旧 Tauri wrapper 已迁到 App Server current，不能恢复旧文件本体",
+        token: retiredPath,
+      });
+    }
+  }
+
+  const commandsModPath = "lime-rs/src/commands/mod.rs";
+  const commandsModSource = readProductionSourceForGuard(commandsModPath);
+  if (hasStandaloneIdentifier(commandsModSource, "material_cmd")) {
+    failures.push({
+      file: commandsModPath,
+      message:
+        "Project material 旧 Tauri wrapper 已迁到 App Server current，不能恢复 commands/mod.rs 模块声明",
+      token: "material_cmd",
+    });
+  }
+
+  return failures;
+}
+
+function collectRetiredWorkspaceContentFacadeSourceFailures() {
+  const failures = [];
+  const retiredCommands = [
+    ...retiredWorkspaceWriteFacadeCommands,
+    ...retiredContentCrudFacadeCommands,
+  ];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/project.ts",
+      message:
+        "Workspace 写链 / Content CRUD 已在前端 fail closed，不能重新 safeInvoke 旧 Tauri facade",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "Workspace 写链 / Content CRUD 未接 App Server current，不能回到 Electron Host 白名单",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "Workspace 写链 / Content CRUD 未接 App Server current，不能回到 Electron Host adapter / diagnostic facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Workspace 写链 / Content CRUD 已 retired，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Workspace 写链 / Content CRUD 已 retired，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/workspaceMocks.ts",
+      message:
+        "Workspace 写链 / Content CRUD 已 retired，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Workspace 写链 / Content CRUD 已 retired，不能回到 runtime/capability catalog",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Workspace 写链 / Content CRUD 已从前端退场，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "Workspace 写链 / Content CRUD 已从前端退场，不能回到 Rust DevBridge dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredCommands) {
+      const hasLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/api/project.ts"
+            ? hasFrontendCommandInvocation(sourceCode, command)
+            : source.path === "src/lib/governance/agentCommandCatalog.json"
+              ? agentCommandCatalogRuntimeSurfaceHas(command)
+              : hasStandaloneIdentifier(sourceCode, command);
+      if (hasLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredExecutionRunFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/executionRun.ts",
+      message:
+        "Execution run 读链已在前端 fail closed，不能重新 safeInvoke 旧 Tauri facade",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "Execution run 读链未接 App Server current，不能回到 Electron Host 白名单",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "Execution run 读链未接 App Server current，不能回到 Electron Host diagnostic facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Execution run 读链已 retired，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Execution run 读链已 retired，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/core.ts",
+      message: "Execution run 读链已 retired，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Execution run 读链已 retired，不能回到 runtime/capability catalog",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Execution run 旧 Tauri command surface 已 retired，不能回到 legacy generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "Execution run 旧 Tauri command surface 已 retired，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/runtime_queries.rs",
+      message:
+        "Execution run 旧 Tauri command surface 已 retired，不能回到 Rust DevBridge runtime query dispatcher",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message:
+        "Execution run 旧 Tauri wrapper 已 retired，不能回到 commands 模块树",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredExecutionRunFacadeCommands) {
+      const hasLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/api/executionRun.ts"
+            ? hasFrontendCommandInvocation(sourceCode, command)
+            : source.path === "src/lib/governance/agentCommandCatalog.json"
+              ? agentCommandCatalogRuntimeSurfaceHas(command)
+              : hasStandaloneIdentifier(sourceCode, command);
+      if (hasLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const retiredWrapperPath = "lime-rs/src/commands/execution_run_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredWrapperPath))) {
+    failures.push({
+      file: retiredWrapperPath,
+      message: "Execution run 旧 Tauri wrapper 已 retired，不能恢复旧文件本体",
+      token: retiredWrapperPath,
+    });
+  }
+
+  return failures;
+}
+
+function collectRetiredFrontendSessionFileFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/session-files.ts",
+      message:
+        "Session files 工作台写读链已前端 fail closed，不能重新 safeInvoke 旧 Tauri facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Session files 旧写读链已 retired，不能继续作为 DevBridge truth / optional legacy command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Session files 旧写读链已 retired，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/sessionFileMocks.ts",
+      message:
+        "Session files 旧写读链已 retired，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Session files 旧写读链已 retired，不能回到 runtime/capability catalog",
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "Session files 旧写读链未接 App Server current，不能回到 Electron Host 白名单",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "Session files 旧写读链未接 App Server current，不能回到 Electron Host diagnostic facade",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Session files 旧 Tauri command surface 已 retired，不能回到 legacy generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "Session files 旧 Tauri command surface 已 retired，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/files.rs",
+      message:
+        "Session files 旧 Tauri command surface 已 retired，不能回到 Rust DevBridge files dispatcher",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message:
+        "Session files 旧 Tauri wrapper 已 retired，不能回到 commands 模块树",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredFrontendSessionFileFacadeCommands) {
+      const hasLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/api/session-files.ts"
+            ? hasFrontendCommandInvocation(sourceCode, command)
+            : source.path === "src/lib/governance/agentCommandCatalog.json"
+              ? agentCommandCatalogRuntimeSurfaceHas(command)
+              : hasStandaloneIdentifier(sourceCode, command);
+      if (hasLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const retiredWrapperPath = "lime-rs/src/commands/session_files_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredWrapperPath))) {
+    failures.push({
+      file: retiredWrapperPath,
+      message: "Session files 旧 Tauri wrapper 已 retired，不能恢复旧文件本体",
+      token: retiredWrapperPath,
+    });
   }
 
   return failures;
@@ -3225,6 +4588,11 @@ function main() {
   const mockPriorityCommands = collectMockPriorityCommands();
   const bridgeTruthCommands = collectBridgeTruthCommands();
   const agentCommandCatalog = readAgentCommandCatalog();
+  const retiredMemoryRuntimeCatalogSectionLeaks = Object.keys(
+    agentCommandCatalog,
+  ).filter((sectionName) =>
+    retiredMemoryRuntimeCatalogSections.has(sectionName),
+  );
   const productionBridgeGuardFailures = collectProductionBridgeGuardFailures();
   const retiredFileBrowserFacadeSourceFailures =
     collectRetiredFileBrowserFacadeSourceFailures();
@@ -3252,6 +4620,28 @@ function main() {
     collectCurrentTrayDesktopHostShellSourceFailures();
   const currentHotkeyDesktopHostShellSourceFailures =
     collectCurrentHotkeyDesktopHostShellSourceFailures();
+  const currentVoiceModelDesktopHostSourceFailures =
+    collectCurrentVoiceModelDesktopHostSourceFailures();
+  const retiredVoiceModelDefaultFacadeSourceFailures =
+    collectRetiredVoiceModelDefaultFacadeSourceFailures();
+  const retiredVoiceModelTestTranscribeFacadeSourceFailures =
+    collectRetiredVoiceModelTestTranscribeFacadeSourceFailures();
+  const retiredVoiceInputConfigFacadeSourceFailures =
+    collectRetiredVoiceInputConfigFacadeSourceFailures();
+  const retiredVoiceAudioDeviceFacadeSourceFailures =
+    collectRetiredVoiceAudioDeviceFacadeSourceFailures();
+  const retiredVoiceAsrCredentialFacadeSourceFailures =
+    collectRetiredVoiceAsrCredentialFacadeSourceFailures();
+  const retiredVoiceInstructionFacadeSourceFailures =
+    collectRetiredVoiceInstructionFacadeSourceFailures();
+  const retiredVoiceRealtimeFacadeSourceFailures =
+    collectRetiredVoiceRealtimeFacadeSourceFailures();
+  const retiredWorkspaceContentFacadeSourceFailures =
+    collectRetiredWorkspaceContentFacadeSourceFailures();
+  const retiredExecutionRunFacadeSourceFailures =
+    collectRetiredExecutionRunFacadeSourceFailures();
+  const retiredFrontendSessionFileFacadeSourceFailures =
+    collectRetiredFrontendSessionFileFacadeSourceFailures();
   const currentSkillDesktopHostShellSourceFailures =
     collectCurrentSkillDesktopHostShellSourceFailures();
   const currentLayeredDesignDesktopHostShellSourceFailures =
@@ -3274,6 +4664,12 @@ function main() {
     collectRetiredSiteAdapterFacadeSourceFailures();
   const retiredMediaTaskArtifactFacadeSourceFailures =
     collectRetiredMediaTaskArtifactFacadeSourceFailures();
+  const retiredVideoGenerationPromptSourceFailures =
+    collectRetiredVideoGenerationPromptSourceFailures();
+  const retiredGalleryMaterialFacadeSourceFailures =
+    collectRetiredGalleryMaterialFacadeSourceFailures();
+  const retiredProjectMaterialFacadeSourceFailures =
+    collectRetiredProjectMaterialFacadeSourceFailures();
   const currentFileBrowserDesktopHostShellSourceFailures =
     collectCurrentFileBrowserDesktopHostShellSourceFailures();
   const retiredTauriGenerateHandlerFailures =
@@ -3426,11 +4822,84 @@ function main() {
   const retiredVoiceInputConfigElectronFacadeLeaks = new Set(
     [...retiredVoiceInputConfigElectronFacadeCommands].filter(
       (command) =>
+        frontendCommands.has(command) ||
         registeredCommands.has(command) ||
         bridgeTruthCommands.has(command) ||
         mockPriorityCommands.has(command) ||
         runtimeGatewayCommands.has(command) ||
         capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredVoiceAudioDeviceFacadeLeaks = new Set(
+    [...retiredVoiceAudioDeviceFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredVoiceAsrCredentialFacadeLeaks = new Set(
+    [...retiredVoiceAsrCredentialFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredVoiceInstructionFacadeLeaks = new Set(
+    [...retiredVoiceInstructionFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredVoiceRealtimeFacadeLeaks = new Set(
+    [...retiredVoiceRealtimeFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredVoiceModelDefaultFacadeLeaks = new Set(
+    [...retiredVoiceModelDefaultFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredVoiceModelTestTranscribeFacadeLeaks = new Set(
+    [...retiredVoiceModelTestTranscribeFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
     ),
   );
   const retiredAgentRuntimeExportSurfaceLeaks = new Set(
@@ -3609,6 +5078,66 @@ function main() {
         deferredCommands.has(command),
     ),
   );
+  const retiredGalleryMaterialFacadeLeaks = new Set(
+    [...retiredGalleryMaterialFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredFrontendSessionFileFacadeLeaks = new Set(
+    [...retiredFrontendSessionFileFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredExecutionRunFacadeLeaks = new Set(
+    [...retiredExecutionRunFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredUnifiedMemoryFacadeLeaks = new Set(
+    [...retiredUnifiedMemoryFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredMemoryRuntimeFacadeLeaks = new Set(
+    [...retiredMemoryRuntimeTauriGenerateHandlerCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
   const currentFileBrowserDesktopHostShellBridgeLeaks = new Set(
     [...currentFileBrowserDesktopHostShellCommands].filter(
       (command) =>
@@ -3629,6 +5158,19 @@ function main() {
   );
   const currentHotkeyDesktopHostShellBridgeLeaks = new Set(
     [...currentHotkeyDesktopHostShellCommands].filter(
+      (command) =>
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const currentVoiceModelDesktopHostCommandBridgeLeaks = new Set(
+    [
+      ...currentVoiceModelDesktopHostReadCommands,
+      ...currentVoiceModelDesktopHostSideEffectCommands,
+    ].filter(
       (command) =>
         bridgeTruthCommands.has(command) ||
         mockPriorityCommands.has(command) ||
@@ -3933,6 +5475,59 @@ function main() {
     );
   }
 
+  if (retiredVoiceAudioDeviceFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已收敛到 renderer media devices current 的旧音频设备命令不能回到前端 safeInvoke、Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredVoiceAudioDeviceFacadeLeaks,
+    );
+  }
+
+  if (retiredVoiceAsrCredentialFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server voiceAsrCredential/* 的旧 ASR 凭证命令不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredVoiceAsrCredentialFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
+  if (retiredVoiceInstructionFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server voiceInstruction/* 的旧 Voice instruction 命令不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredVoiceInstructionFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
+  if (retiredVoiceRealtimeFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "旧实时语音转写 / 录音命令不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单；后续必须先定义 current voice runtime 通道",
+      retiredVoiceRealtimeFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
+  if (retiredVoiceModelDefaultFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server voiceModel/default/set 的旧语音模型设默认命令不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredVoiceModelDefaultFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
+  if (retiredVoiceModelTestTranscribeFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "语音模型测试转写旧 facade 已退役，不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredVoiceModelTestTranscribeFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
   if (retiredAgentRuntimeExportSurfaceLeaks.size > 0) {
     hasError = true;
     printCommandGroup(
@@ -4045,6 +5640,81 @@ function main() {
     );
   }
 
+  if (retiredGalleryMaterialFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Gallery material 旧 facade 已迁到 App Server current，不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredGalleryMaterialFacadeLeaks,
+    );
+  }
+
+  if (retiredWorkspaceContentFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Workspace 写链 / Content CRUD retired facade 不能回到旧客户端源码",
+      retiredWorkspaceContentFacadeSourceFailures,
+    );
+  }
+
+  if (retiredExecutionRunFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Execution run 旧读链已前端 fail closed，不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredExecutionRunFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
+  if (retiredExecutionRunFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Execution run 旧读链 retired facade 不能回到受限事实源",
+      retiredExecutionRunFacadeSourceFailures,
+    );
+  }
+
+  if (retiredFrontendSessionFileFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Session files 旧写读链已前端 fail closed，不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredFrontendSessionFileFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
+  if (retiredFrontendSessionFileFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Session files 旧写读链 retired facade 不能回到受限事实源",
+      retiredFrontendSessionFileFacadeSourceFailures,
+    );
+  }
+
+  if (retiredUnifiedMemoryFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Unified Memory 已迁到 App Server unifiedMemory/* current，旧 unified_memory_* 不能回到前端调用、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredUnifiedMemoryFacadeLeaks,
+      frontendUsage,
+    );
+  }
+  if (retiredMemoryRuntimeCatalogSectionLeaks.length > 0) {
+    hasError = true;
+    console.error(
+      `\n[command-contracts] retired Memory runtime catalog sections must not come back: ${retiredMemoryRuntimeCatalogSectionLeaks.join(
+        ", ",
+      )}`,
+    );
+  }
+  if (retiredMemoryRuntimeFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已退役的 Memory runtime Tauri 命令不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredMemoryRuntimeFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
   if (retiredSkillExecutionFacadeSourceFailures.length > 0) {
     hasError = true;
     printGuardFailures(
@@ -4101,11 +5771,35 @@ function main() {
     );
   }
 
+  if (retiredGalleryMaterialFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Gallery material 旧 facade 已迁到 App Server galleryMaterial/*，不能回到受限事实源",
+      retiredGalleryMaterialFacadeSourceFailures,
+    );
+  }
+
+  if (retiredProjectMaterialFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Project material 旧 facade 已迁到 App Server projectMaterial/*，不能回到受限事实源",
+      retiredProjectMaterialFacadeSourceFailures,
+    );
+  }
+
   if (retiredMediaTaskArtifactFacadeSourceFailures.length > 0) {
     hasError = true;
     printGuardFailures(
       "Media task artifact 旧 facade 已迁到 App Server mediaTaskArtifact/*，不能回到受限事实源",
       retiredMediaTaskArtifactFacadeSourceFailures,
+    );
+  }
+
+  if (retiredVideoGenerationPromptSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Video generation prompt 不能回退旧 video generation facade",
+      retiredVideoGenerationPromptSourceFailures,
     );
   }
 
@@ -4154,6 +5848,78 @@ function main() {
     printGuardFailures(
       "已迁到 Electron Desktop Host 的快捷键壳命令不能回到旧客户端源码",
       currentHotkeyDesktopHostShellSourceFailures,
+    );
+  }
+
+  if (currentVoiceModelDesktopHostCommandBridgeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 Electron Desktop Host 的语音模型命令不能回到 DevBridge truth、mock priority、runtime gateway 或 deferred surface",
+      currentVoiceModelDesktopHostCommandBridgeLeaks,
+    );
+  }
+
+  if (currentVoiceModelDesktopHostSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host 的语音模型命令不能回到旧客户端源码",
+      currentVoiceModelDesktopHostSourceFailures,
+    );
+  }
+
+  if (retiredVoiceModelDefaultFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server voiceModel/default/set 的旧语音模型设默认命令不能回到旧客户端源码",
+      retiredVoiceModelDefaultFacadeSourceFailures,
+    );
+  }
+
+  if (retiredVoiceModelTestTranscribeFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "语音模型测试转写旧 facade 已退役，不能回到旧客户端源码",
+      retiredVoiceModelTestTranscribeFacadeSourceFailures,
+    );
+  }
+
+  if (retiredVoiceInputConfigFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已收敛到 app config current 网关的旧 Voice Input config 命令不能回到旧客户端源码",
+      retiredVoiceInputConfigFacadeSourceFailures,
+    );
+  }
+
+  if (retiredVoiceAudioDeviceFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已收敛到 renderer media devices current 的旧音频设备命令不能回到旧客户端源码",
+      retiredVoiceAudioDeviceFacadeSourceFailures,
+    );
+  }
+
+  if (retiredVoiceAsrCredentialFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server voiceAsrCredential/* 的旧 ASR 凭证命令不能回到旧客户端源码",
+      retiredVoiceAsrCredentialFacadeSourceFailures,
+    );
+  }
+
+  if (retiredVoiceInstructionFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server voiceInstruction/* 的旧 Voice instruction 命令不能回到旧客户端源码",
+      retiredVoiceInstructionFacadeSourceFailures,
+    );
+  }
+
+  if (retiredVoiceRealtimeFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "旧实时语音转写 / 录音命令不能回到旧客户端源码；后续必须先定义 current voice runtime 通道",
+      retiredVoiceRealtimeFacadeSourceFailures,
     );
   }
 

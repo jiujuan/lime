@@ -737,10 +737,11 @@ function readBootstrapAgentAppCatalog(): CloudBootstrapPayload | null {
 export async function inspectLocalAgentAppPackage(
   appDir: string,
 ): Promise<AgentAppLocalPackageInspection> {
-  const result = await requestAgentAppAppServer<AgentAppLocalPackageInspectResponse>(
-    METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
-    { appDir } satisfies AgentAppLocalPackageInspectParams,
-  );
+  const result =
+    await requestAgentAppAppServer<AgentAppLocalPackageInspectResponse>(
+      METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+      { appDir } satisfies AgentAppLocalPackageInspectParams,
+    );
   assertAgentAppLocalPackageInspectionResult(
     METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
     result,
@@ -776,13 +777,17 @@ export async function saveInstalledAgentAppState(
 export async function fetchCloudAgentAppPackage(
   descriptor: CloudBootstrapReleaseDescriptor,
 ): Promise<AgentAppPackageCacheEntry> {
-  const result = await requestAgentAppAppServer<AppServerAgentAppPackageCacheEntry>(
+  const result =
+    await requestAgentAppAppServer<AppServerAgentAppPackageCacheEntry>(
+      METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
+      {
+        descriptor,
+      } satisfies AgentAppFetchCloudPackageParams,
+    );
+  assertAgentAppPackageCacheEntryResult(
     METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
-    {
-      descriptor,
-    } satisfies AgentAppFetchCloudPackageParams,
+    result,
   );
-  assertAgentAppPackageCacheEntryResult(METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, result);
   return result as AgentAppPackageCacheEntry;
 }
 
@@ -1076,10 +1081,11 @@ export async function setAgentAppDisabled(
 export async function previewAgentAppUninstall(
   request: AgentAppUninstallRehearsalRequest,
 ): Promise<AgentAppUninstallRehearsalResult> {
-  const result = await requestAgentAppAppServer<AgentAppUninstallRehearsalResponse>(
-    METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
-    request satisfies AgentAppUninstallRehearsalParams,
-  );
+  const result =
+    await requestAgentAppAppServer<AgentAppUninstallRehearsalResponse>(
+      METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+      request satisfies AgentAppUninstallRehearsalParams,
+    );
   assertAgentAppUninstallRehearsalResult(
     METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
     result,

@@ -4,6 +4,7 @@ import {
   type LimeColorSchemeId,
 } from "@/lib/appearance/colorSchemes";
 import { selectAgentAppDirectory } from "@/lib/api/agentApps";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import {
   getEffectiveLimeThemeMode,
   LIME_THEME_CHANGED_EVENT,
@@ -152,7 +153,7 @@ export interface CreateAgentAppHostBridgeOptions {
   entryUrl: string;
   locale?: string;
   notify?: (payload: AgentAppHostBridgeNotifyPayload) => void;
-  openExternal?: (url: string) => void;
+  openExternal?: (url: string) => void | Promise<void>;
   openAgentRunUi?: (
     request: AgentAppHostAgentRunUiRequest,
   ) => AgentAppHostAgentRunUiOpenResult;
@@ -198,7 +199,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function readString(value: Record<string, unknown>, key: string): string | undefined {
+function readString(
+  value: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const item = value[key];
   return typeof item === "string" && item.trim() ? item.trim() : undefined;
 }
@@ -252,7 +256,9 @@ function readCapabilityInvokeProvenance(
   };
 }
 
-function readTaskIdFromPayload(payload: Record<string, unknown>): string | undefined {
+function readTaskIdFromPayload(
+  payload: Record<string, unknown>,
+): string | undefined {
   const directTaskId = readString(payload, "taskId");
   if (directTaskId) {
     return directTaskId;
@@ -292,7 +298,9 @@ function readRuntimeEventNameFromPayload(
 ): string {
   const explicit =
     readString(payload, "eventName") ??
-    (isRecord(payload.input) ? readString(payload.input, "eventName") : undefined);
+    (isRecord(payload.input)
+      ? readString(payload.input, "eventName")
+      : undefined);
   return explicit ?? `agent_app_runtime:${appId}:${taskId}`;
 }
 
@@ -368,7 +376,9 @@ function readArtifactsFromValue(value: unknown): Record<string, unknown>[] {
     return [];
   }
   const direct = Array.isArray(value.artifacts) ? value.artifacts : [];
-  const fromResult = isRecord(value.result) ? readArtifactsFromValue(value.result) : [];
+  const fromResult = isRecord(value.result)
+    ? readArtifactsFromValue(value.result)
+    : [];
   const fromThreadRead = isRecord(value.threadRead)
     ? readArtifactsFromValue(value.threadRead)
     : [];
@@ -411,7 +421,9 @@ function repairUnescapedStringQuotes(value: string): string {
   return output;
 }
 
-function parseJsonRecordCandidate(candidate: string): Record<string, unknown> | null {
+function parseJsonRecordCandidate(
+  candidate: string,
+): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(candidate);
     return isRecord(parsed) ? parsed : null;
@@ -429,7 +441,9 @@ function parseJsonRecordCandidate(candidate: string): Record<string, unknown> | 
   }
 }
 
-function parseJsonObjectFromMarkdown(content: string): Record<string, unknown> | null {
+function parseJsonObjectFromMarkdown(
+  content: string,
+): Record<string, unknown> | null {
   const text = content.trim();
   const candidates: string[] = [];
   if (text.startsWith("{") && text.endsWith("}")) {
@@ -447,7 +461,9 @@ function parseJsonObjectFromMarkdown(content: string): Record<string, unknown> |
   return null;
 }
 
-function hasContentFactoryWorkspacePatchFields(value: Record<string, unknown>): boolean {
+function hasContentFactoryWorkspacePatchFields(
+  value: Record<string, unknown>,
+): boolean {
   return [
     "workspace",
     "project",
@@ -480,7 +496,9 @@ function extractWorkspacePatchFromValue(
   }
   if (typeof value === "string") {
     const parsed = parseJsonObjectFromMarkdown(value);
-    return parsed ? extractWorkspacePatchFromValue(parsed, depth + 1) : undefined;
+    return parsed
+      ? extractWorkspacePatchFromValue(parsed, depth + 1)
+      : undefined;
   }
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -559,11 +577,13 @@ function buildArtifactReplayEventsFromValue(value: unknown): unknown[] {
       readString(artifact, "id") ??
       `artifact:${index + 1}`;
     const artifactDocument =
-      isRecord(metadata.artifactDocument) || isRecord(metadata.artifact_document)
+      isRecord(metadata.artifactDocument) ||
+      isRecord(metadata.artifact_document)
         ? (metadata.artifactDocument ?? metadata.artifact_document)
         : undefined;
     const workspacePatch =
-      isRecord(metadata.workspacePatch) || isRecord(metadata.contentFactoryWorkspacePatch)
+      isRecord(metadata.workspacePatch) ||
+      isRecord(metadata.contentFactoryWorkspacePatch)
         ? (metadata.workspacePatch ?? metadata.contentFactoryWorkspacePatch)
         : extractWorkspacePatchFromValue(artifactDocument);
     return {
@@ -623,16 +643,28 @@ function hasWorkspacePatchPayload(value: unknown): boolean {
   if (isRecord(value.result) && hasWorkspacePatchPayload(value.result)) {
     return true;
   }
-  if (isRecord(value.threadRead) && hasWorkspacePatchPayload(value.threadRead)) {
+  if (
+    isRecord(value.threadRead) &&
+    hasWorkspacePatchPayload(value.threadRead)
+  ) {
     return true;
   }
-  if (Array.isArray(value.events) && value.events.some(hasWorkspacePatchPayload)) {
+  if (
+    Array.isArray(value.events) &&
+    value.events.some(hasWorkspacePatchPayload)
+  ) {
     return true;
   }
-  if (Array.isArray(value.taskEvents) && value.taskEvents.some(hasWorkspacePatchPayload)) {
+  if (
+    Array.isArray(value.taskEvents) &&
+    value.taskEvents.some(hasWorkspacePatchPayload)
+  ) {
     return true;
   }
-  if (Array.isArray(value.artifacts) && value.artifacts.some(hasWorkspacePatchPayload)) {
+  if (
+    Array.isArray(value.artifacts) &&
+    value.artifacts.some(hasWorkspacePatchPayload)
+  ) {
     return true;
   }
   return false;
@@ -648,17 +680,24 @@ function hasArtifactPayload(value: unknown): boolean {
   if (Array.isArray(value.events) && value.events.some(hasArtifactPayload)) {
     return true;
   }
-  if (Array.isArray(value.taskEvents) && value.taskEvents.some(hasArtifactPayload)) {
+  if (
+    Array.isArray(value.taskEvents) &&
+    value.taskEvents.some(hasArtifactPayload)
+  ) {
     return true;
   }
   return false;
 }
 
-function shouldWaitForContentFactoryPatch(subscription: AgentAppTaskSubscription): boolean {
+function shouldWaitForContentFactoryPatch(
+  subscription: AgentAppTaskSubscription,
+): boolean {
   return subscription.bridgeAction === "contentFactoryProduction";
 }
 
-function shouldWaitForImageArtifact(subscription: AgentAppTaskSubscription): boolean {
+function shouldWaitForImageArtifact(
+  subscription: AgentAppTaskSubscription,
+): boolean {
   return subscription.bridgeAction === "studioLogoGenerate";
 }
 
@@ -713,11 +752,18 @@ function normalizeCapabilities(
   if (!capabilities) {
     return {
       available: ["lime.ui"],
-      blocked: ["lime.storage", "lime.agent", "lime.knowledge", "lime.workflow"],
+      blocked: [
+        "lime.storage",
+        "lime.agent",
+        "lime.knowledge",
+        "lime.workflow",
+      ],
     };
   }
   return {
-    available: Array.from(new Set(["lime.ui", ...capabilities.available])).sort(),
+    available: Array.from(
+      new Set(["lime.ui", ...capabilities.available]),
+    ).sort(),
     blocked: Array.from(
       new Set(capabilities.blocked.filter((item) => item !== "lime.ui")),
     ).sort(),
@@ -737,8 +783,9 @@ function readDocumentVisibilityState(): AgentAppVisibilityState {
 }
 
 export function buildAgentAppThemePayload(
-  root: HTMLElement =
-    typeof document === "undefined" ? (undefined as never) : document.documentElement,
+  root: HTMLElement = typeof document === "undefined"
+    ? (undefined as never)
+    : document.documentElement,
 ): AgentAppThemePayload {
   const themeMode = loadLimeThemeMode();
   const effectiveThemeMode = getEffectiveLimeThemeMode(themeMode);
@@ -751,7 +798,10 @@ export function buildAgentAppThemePayload(
 }
 
 export function buildAgentAppHostSnapshot(
-  options: Omit<CreateAgentAppHostBridgeOptions, "frame" | "notify" | "openExternal"> & {
+  options: Omit<
+    CreateAgentAppHostBridgeOptions,
+    "frame" | "notify" | "openExternal"
+  > & {
     runtimeOrigin: string;
   },
 ): AgentAppHostSnapshotPayload {
@@ -856,7 +906,7 @@ export class AgentAppHostBridge {
   private readonly entryUrl: string;
   private readonly locale?: string;
   private readonly notify?: (payload: AgentAppHostBridgeNotifyPayload) => void;
-  private readonly openExternal?: (url: string) => void;
+  private readonly openExternal?: (url: string) => void | Promise<void>;
   private readonly openAgentRunUi?: (
     request: AgentAppHostAgentRunUiRequest,
   ) => AgentAppHostAgentRunUiOpenResult;
@@ -874,7 +924,10 @@ export class AgentAppHostBridge {
   private readonly listenRuntimeEvent: typeof safeListen;
   private readonly now?: () => string;
   private readonly runtimeOrigin: string;
-  private readonly taskSubscriptions = new Map<string, AgentAppTaskSubscription>();
+  private readonly taskSubscriptions = new Map<
+    string,
+    AgentAppTaskSubscription
+  >();
   private taskSubscriptionSequence = 0;
   private disposed = false;
 
@@ -935,7 +988,10 @@ export class AgentAppHostBridge {
     }
     this.disposed = true;
     window.removeEventListener("message", this.handleWindowMessage);
-    window.removeEventListener(LIME_THEME_CHANGED_EVENT, this.handleThemeChanged);
+    window.removeEventListener(
+      LIME_THEME_CHANGED_EVENT,
+      this.handleThemeChanged,
+    );
     window.removeEventListener(
       LIME_COLOR_SCHEME_CHANGED_EVENT,
       this.handleThemeChanged,
@@ -1009,7 +1065,9 @@ export class AgentAppHostBridge {
     });
   };
 
-  private async handleAppMessage(message: LimeAgentAppBridgeMessage): Promise<void> {
+  private async handleAppMessage(
+    message: LimeAgentAppBridgeMessage,
+  ): Promise<void> {
     if (message.type === "app:ready" || message.type === "host:getSnapshot") {
       this.sendSnapshot(message.requestId);
       return;
@@ -1040,7 +1098,10 @@ export class AgentAppHostBridge {
       return { accepted: true };
     }
     if (message.type === "host:navigate") {
-      const url = this.resolveSameOriginActionUrl(message.payload, ["route", "url"]);
+      const url = this.resolveSameOriginActionUrl(message.payload, [
+        "route",
+        "url",
+      ]);
       window.setTimeout(() => {
         if (!this.disposed) {
           this.frame.src = url.href;
@@ -1050,13 +1111,14 @@ export class AgentAppHostBridge {
     }
     if (message.type === "host:openExternal") {
       const url = this.resolveExternalUrl(message.payload);
-      (this.openExternal ?? ((target) => window.open(target, "_blank", "noopener,noreferrer")))(
-        url.href,
-      );
+      await this.openExternalUrl(url);
       return { opened: true };
     }
     if (message.type === "host:download") {
-      const url = this.resolveSameOriginActionUrl(message.payload, ["url", "href"]);
+      const url = this.resolveSameOriginActionUrl(message.payload, [
+        "url",
+        "href",
+      ]);
       this.downloadSameOriginUrl(url, message.payload);
       return { downloaded: true };
     }
@@ -1180,7 +1242,10 @@ export class AgentAppHostBridge {
       return { accepted: true };
     }
     if (request.method === "navigate") {
-      const url = this.resolveSameOriginActionUrl(request.input, ["route", "url"]);
+      const url = this.resolveSameOriginActionUrl(request.input, [
+        "route",
+        "url",
+      ]);
       window.setTimeout(() => {
         if (!this.disposed) {
           this.frame.src = url.href;
@@ -1190,13 +1255,13 @@ export class AgentAppHostBridge {
     }
     if (request.method === "openExternal") {
       const url = this.resolveExternalUrl(request.input);
-      (this.openExternal ?? ((target) => window.open(target, "_blank", "noopener,noreferrer")))(
-        url.href,
-      );
-      return { opened: true };
+      return this.openExternalUrl(url).then(() => ({ opened: true }));
     }
     if (request.method === "download") {
-      const url = this.resolveSameOriginActionUrl(request.input, ["url", "href"]);
+      const url = this.resolveSameOriginActionUrl(request.input, [
+        "url",
+        "href",
+      ]);
       this.downloadSameOriginUrl(url, request.input);
       return { downloaded: true };
     }
@@ -1218,30 +1283,40 @@ export class AgentAppHostBridge {
       }) as unknown as Record<string, unknown>;
     }
     if (request.method === "openAgentRun") {
-      return this.openAgentRunUi?.(this.normalizeAgentRunUiRequest(request.input)) ?? {
-        opened: true,
-        surface: "host_agent_run",
-        mode: "drawer",
-        taskId: this.readAgentRunUiTaskId(request.input),
-      };
+      return (
+        this.openAgentRunUi?.(
+          this.normalizeAgentRunUiRequest(request.input),
+        ) ?? {
+          opened: true,
+          surface: "host_agent_run",
+          mode: "drawer",
+          taskId: this.readAgentRunUiTaskId(request.input),
+        }
+      );
     }
     if (request.method === "updateAgentRun") {
-      return this.updateAgentRunUi?.(this.normalizeAgentRunUiRequest(request.input)) ?? {
-        updated: true,
-        surface: "host_agent_run",
-        taskId: this.readAgentRunUiTaskId(request.input),
-      };
+      return (
+        this.updateAgentRunUi?.(
+          this.normalizeAgentRunUiRequest(request.input),
+        ) ?? {
+          updated: true,
+          surface: "host_agent_run",
+          taskId: this.readAgentRunUiTaskId(request.input),
+        }
+      );
     }
     if (request.method === "closeAgentRun") {
       const normalized = this.normalizeAgentRunUiRequest(request.input);
-      return this.closeAgentRunUi?.({
-        taskId: normalized.taskId,
-        bridgeAction: normalized.bridgeAction,
-      }) ?? {
-        closed: true,
-        surface: "host_agent_run",
-        taskId: normalized.taskId,
-      };
+      return (
+        this.closeAgentRunUi?.({
+          taskId: normalized.taskId,
+          bridgeAction: normalized.bridgeAction,
+        }) ?? {
+          closed: true,
+          surface: "host_agent_run",
+          taskId: normalized.taskId,
+        }
+      );
     }
     throw new AgentAppHostBridgeActionError(
       "UNSUPPORTED_CAPABILITY_METHOD",
@@ -1249,7 +1324,9 @@ export class AgentAppHostBridge {
     );
   }
 
-  private normalizeAgentRunUiRequest(input: unknown): AgentAppHostAgentRunUiRequest {
+  private normalizeAgentRunUiRequest(
+    input: unknown,
+  ): AgentAppHostAgentRunUiRequest {
     if (!isRecord(input)) {
       return {};
     }
@@ -1260,13 +1337,17 @@ export class AgentAppHostBridge {
       bridgeAction: readString(input, "bridgeAction"),
       title: readString(input, "title"),
       mode: mode === "modal" || mode === "page" ? mode : "drawer",
-      expectedOutput: hasOwn(input, "expectedOutput") ? input.expectedOutput : undefined,
+      expectedOutput: hasOwn(input, "expectedOutput")
+        ? input.expectedOutput
+        : undefined,
       runtimeProcess: hasOwn(input, "runtimeProcess")
         ? input.runtimeProcess
         : hasOwn(input, "process")
           ? input.process
           : undefined,
-      runtimeFacts: hasOwn(input, "runtimeFacts") ? input.runtimeFacts : undefined,
+      runtimeFacts: hasOwn(input, "runtimeFacts")
+        ? input.runtimeFacts
+        : undefined,
       task: hasOwn(input, "task") ? input.task : undefined,
       snapshot: hasOwn(input, "snapshot") ? input.snapshot : undefined,
       events: Array.isArray(input.events) ? input.events : undefined,
@@ -1280,11 +1361,15 @@ export class AgentAppHostBridge {
     return (
       readString(input, "taskId") ??
       (isRecord(input.task) ? readString(input.task, "taskId") : undefined) ??
-      (isRecord(input.snapshot) ? readString(input.snapshot, "taskId") : undefined)
+      (isRecord(input.snapshot)
+        ? readString(input.snapshot, "taskId")
+        : undefined)
     );
   }
 
-  private async selectDirectory(input: unknown): Promise<AgentAppHostSelectDirectoryResult> {
+  private async selectDirectory(
+    input: unknown,
+  ): Promise<AgentAppHostSelectDirectoryResult> {
     const title = isRecord(input) ? readString(input, "title") : undefined;
     const selected = await selectAgentAppDirectory({ title });
     const path = selected.path ?? null;
@@ -1295,6 +1380,15 @@ export class AgentAppHostBridge {
     };
   }
 
+  private async openExternalUrl(url: URL): Promise<void> {
+    const target = url.href;
+    if (this.openExternal) {
+      await this.openExternal(target);
+      return;
+    }
+    await openExternalUrlWithSystemBrowser(target);
+  }
+
   private enrichAgentCapabilityResult(
     request: AgentAppHostBridgeCapabilityRequest,
     result: unknown,
@@ -1302,10 +1396,7 @@ export class AgentAppHostBridge {
     if (request.capability !== "lime.agent" || !isRecord(result)) {
       return result;
     }
-    if (
-      isRecord(result.process) &&
-      isRecord(result.runtimeProcess)
-    ) {
+    if (isRecord(result.process) && isRecord(result.runtimeProcess)) {
       return result;
     }
     if (
@@ -1328,7 +1419,9 @@ export class AgentAppHostBridge {
     });
     return {
       ...result,
-      runtimeProcess: isRecord(result.runtimeProcess) ? result.runtimeProcess : process,
+      runtimeProcess: isRecord(result.runtimeProcess)
+        ? result.runtimeProcess
+        : process,
       process: isRecord(result.process) ? result.process : process,
     };
   }
@@ -1350,10 +1443,16 @@ export class AgentAppHostBridge {
     }
     const capability = readString(message.payload, "capability");
     const topic =
-      readString(message.payload, "topic") ?? readString(message.payload, "method");
+      readString(message.payload, "topic") ??
+      readString(message.payload, "method");
     const taskId = readTaskIdFromPayload(message.payload);
     const sessionId = readSessionIdFromPayload(message.payload);
-    if (capability !== "lime.agent" || !topic || !topic.startsWith("task") || !taskId) {
+    if (
+      capability !== "lime.agent" ||
+      !topic ||
+      !topic.startsWith("task") ||
+      !taskId
+    ) {
       throw new AgentAppHostBridgeActionError(
         "INVALID_PAYLOAD",
         "capability:subscribe currently requires lime.agent task payload.taskId.",
@@ -1375,7 +1474,8 @@ export class AgentAppHostBridge {
         : undefined);
     const expectedOutput = hasOwn(message.payload, "expectedOutput")
       ? message.payload.expectedOutput
-      : isRecord(message.payload.input) && hasOwn(message.payload.input, "expectedOutput")
+      : isRecord(message.payload.input) &&
+          hasOwn(message.payload.input, "expectedOutput")
         ? message.payload.input.expectedOutput
         : undefined;
     const runtimeEventName = readRuntimeEventNameFromPayload(
@@ -1452,7 +1552,10 @@ export class AgentAppHostBridge {
         (event) => this.handleRuntimeTaskEvent(subscriptionId, event.payload),
       );
       const latest = this.taskSubscriptions.get(subscriptionId);
-      if (!latest || latest.runtimeEventName !== subscription.runtimeEventName) {
+      if (
+        !latest ||
+        latest.runtimeEventName !== subscription.runtimeEventName
+      ) {
         unlisten();
         return;
       }
@@ -1482,7 +1585,10 @@ export class AgentAppHostBridge {
     }
   }
 
-  private handleRuntimeTaskEvent(subscriptionId: string, payload: unknown): void {
+  private handleRuntimeTaskEvent(
+    subscriptionId: string,
+    payload: unknown,
+  ): void {
     const subscription = this.taskSubscriptions.get(subscriptionId);
     if (!subscription || this.disposed) {
       return;
@@ -1503,7 +1609,9 @@ export class AgentAppHostBridge {
       bridgeAction: subscription.bridgeAction,
       runtimeEventName: subscription.runtimeEventName,
       runtimeEvent: payload,
-      events: events.length ? events : buildTaskEventsFromRuntimeEventPayload(payload),
+      events: events.length
+        ? events
+        : buildTaskEventsFromRuntimeEventPayload(payload),
       runtimeProcess: process,
       process,
       emittedAt: (this.now ?? (() => new Date().toISOString()))(),
@@ -1515,7 +1623,10 @@ export class AgentAppHostBridge {
     value: unknown,
     events: unknown[],
   ): AgentAppRuntimeProcessView {
-    if (isRecord(value) && (Array.isArray(value.events) || Array.isArray(value.taskEvents))) {
+    if (
+      isRecord(value) &&
+      (Array.isArray(value.events) || Array.isArray(value.taskEvents))
+    ) {
       subscription.latestTask = value;
     }
     subscription.events = mergeTaskEvents(subscription.events, events);
@@ -1533,7 +1644,9 @@ export class AgentAppHostBridge {
     return process;
   }
 
-  private readRuntimeProcess(value: unknown): AgentAppRuntimeProcessView | null {
+  private readRuntimeProcess(
+    value: unknown,
+  ): AgentAppRuntimeProcessView | null {
     if (!isRecord(value)) {
       return null;
     }
@@ -1562,7 +1675,12 @@ export class AgentAppHostBridge {
 
   private async pollTaskSubscription(subscriptionId: string): Promise<void> {
     const subscription = this.taskSubscriptions.get(subscriptionId);
-    if (!subscription || subscription.inFlight || this.disposed || !this.dispatchCapability) {
+    if (
+      !subscription ||
+      subscription.inFlight ||
+      this.disposed ||
+      !this.dispatchCapability
+    ) {
       return;
     }
     subscription.inFlight = true;
@@ -1594,14 +1712,16 @@ export class AgentAppHostBridge {
         isSuccessfulTerminalTaskValue(result) &&
         ((shouldWaitForContentFactoryPatch(subscription) &&
           !hasWorkspacePatchPayload(result)) ||
-          (shouldWaitForImageArtifact(subscription) && !hasArtifactPayload(result)));
+          (shouldWaitForImageArtifact(subscription) &&
+            !hasArtifactPayload(result)));
       if (shouldPollForTerminalArtifact) {
         subscription.terminalArtifactReplayPolls += 1;
       }
       if (
         isTerminalTaskValue(result) &&
         (!shouldPollForTerminalArtifact ||
-          subscription.terminalArtifactReplayPolls > DEFAULT_TERMINAL_ARTIFACT_REPLAY_POLLS)
+          subscription.terminalArtifactReplayPolls >
+            DEFAULT_TERMINAL_ARTIFACT_REPLAY_POLLS)
       ) {
         this.stopTaskSubscription(subscriptionId);
         return;
@@ -1716,10 +1836,7 @@ export class AgentAppHostBridge {
     this.notify?.({ message, level });
   }
 
-  private resolveSameOriginActionUrl(
-    payload: unknown,
-    keys: string[],
-  ): URL {
+  private resolveSameOriginActionUrl(payload: unknown, keys: string[]): URL {
     if (!isRecord(payload)) {
       throw new AgentAppHostBridgeActionError(
         "INVALID_PAYLOAD",
@@ -1770,7 +1887,9 @@ export class AgentAppHostBridge {
   private downloadSameOriginUrl(url: URL, payload: unknown): void {
     const link = document.createElement("a");
     link.href = url.href;
-    link.download = isRecord(payload) ? readString(payload, "fileName") ?? "" : "";
+    link.download = isRecord(payload)
+      ? (readString(payload, "fileName") ?? "")
+      : "";
     link.rel = "noopener noreferrer";
     document.body.appendChild(link);
     link.click();
@@ -1822,11 +1941,7 @@ export class AgentAppHostBridge {
     request: LimeAgentAppBridgeMessage,
     payload: Record<string, unknown>,
   ): void {
-    this.postToApp(
-      "host:error",
-      payload,
-      request.requestId,
-    );
+    this.postToApp("host:error", payload, request.requestId);
   }
 
   private postToApp(type: string, payload?: unknown, requestId?: string): void {

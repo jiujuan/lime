@@ -16,6 +16,39 @@ describe("SkillsWorkspacePage marketplace", () => {
   it("技能广场点击未安装官方技能应安装标准包并刷新本地列表", async () => {
     const { container } = renderPage();
     const card = findMarketplaceCard(container, "数据分析");
+    mocks.installOfficialMarketplaceSkill.mockResolvedValueOnce({
+      directory: "analysis-official",
+      inspection: {
+        content: "# Analysis",
+        metadata: {},
+        allowedTools: [],
+        resourceSummary: {
+          hasScripts: false,
+          hasReferences: true,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      },
+    });
+    mocks.refreshLocalSkills.mockImplementationOnce(() => {
+      mocks.localSkills = [
+        ...createDefaultLocalSkills(),
+        {
+          key: "local:analysis-official",
+          name: "数据分析",
+          description: "整理数据、提炼结论，并输出可继续追问的分析摘要。",
+          directory: "analysis-official",
+          installed: true,
+          sourceKind: "other",
+          catalogSource: "user",
+        } as Skill,
+      ];
+      return Promise.resolve();
+    });
 
     await act(async () => {
       findButtonIn(card!, "安装")?.click();
@@ -29,6 +62,11 @@ describe("SkillsWorkspacePage marketplace", () => {
     );
     expect(mocks.refreshLocalSkills).toHaveBeenCalled();
     expect(mocks.toastSuccess).toHaveBeenCalledWith("已安装「数据分析」");
+    expect(
+      container.querySelector('[data-testid="skills-installed-view"]'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("数据分析");
+    expect(container.textContent).toContain("使用");
   });
 
   it("技能广场点击详情应打开当前技能的 SKILL.md 内容", async () => {

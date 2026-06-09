@@ -51,8 +51,10 @@ vi.mock("@/lib/api/externalUrl", () => ({
 }));
 
 vi.mock("@/lib/desktop-runtime", () => ({
-  hasDesktopHostInvokeCapability: desktopRuntimeMocks.hasDesktopHostInvokeCapability,
-  hasDesktopHostRuntimeMarkers: desktopRuntimeMocks.hasDesktopHostRuntimeMarkers,
+  hasDesktopHostInvokeCapability:
+    desktopRuntimeMocks.hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers:
+    desktopRuntimeMocks.hasDesktopHostRuntimeMarkers,
 }));
 
 vi.mock("@/lib/dev-bridge", async (importOriginal) => {
@@ -133,16 +135,18 @@ describe("oemCloudLoginLauncher", () => {
     expect(browserTarget.navigate).not.toHaveBeenCalled();
   });
 
-  it("native 打开命令不可用时应回退到 Desktop Host shell open", async () => {
+  it("native 打开命令不可用时不回退 Desktop Host shell open", async () => {
     desktopRuntimeMocks.hasDesktopHostInvokeCapability.mockReturnValue(true);
     desktopRuntimeMocks.hasDesktopHostRuntimeMarkers.mockReturnValue(true);
     systemBrowserMocks.openExternalUrlWithSystemBrowser.mockRejectedValue(
       new Error("unknown command"),
     );
 
-    await openExternalUrl("https://user.limeai.run/login");
+    await expect(
+      openExternalUrl("https://user.limeai.run/login"),
+    ).rejects.toThrow("系统浏览器打开失败：unknown command");
 
-    expect(shellOpenMock).toHaveBeenCalledWith("https://user.limeai.run/login");
+    expect(shellOpenMock).not.toHaveBeenCalled();
   });
 
   it("Desktop Host shell open 失败时应抛错且不回退成假成功", async () => {

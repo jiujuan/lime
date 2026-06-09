@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildAgentRunStandardProjectionStateFromState,
   buildAgentRunProjectionViewModelFromState,
   collectAgentRunProjectionSourceEvents,
 } from "./agentRunProjectionState";
@@ -93,6 +94,48 @@ describe("agentRunProjectionState", () => {
       artifactId: "artifact-1",
       ref: ".lime/artifacts/content.json",
     });
+  });
+
+  it("从 Host Run state 生成标准 AgentUiProjectionState", () => {
+    const state = buildAgentRunStandardProjectionStateFromState({
+      taskId: "task-standard",
+      sessionId: "session-standard",
+      threadId: "thread-standard",
+      taskEvents: [
+        {
+          id: "runtime:text:standard",
+          eventType: "task:partialArtifact",
+          status: "streaming",
+          message: "第一段",
+          payload: {
+            streamKind: "assistant_text_delta",
+            delta: "第一段",
+          },
+        },
+        {
+          id: "runtime:approval:standard",
+          eventType: "task:reviewRequested",
+          status: "pending",
+          requestId: "approval-standard",
+          message: "需要确认",
+        },
+      ],
+    });
+
+    expect(state.runtime.status).toBe("waiting");
+    expect(state.messages[0]).toMatchObject({
+      type: "text",
+      text: "第一段",
+      sourceEventId: "runtime:text:standard",
+    });
+    expect(state.actions[0]).toMatchObject({
+      actionId: "approval-standard",
+      displayStatusKey: "agent.status.actionRequired",
+    });
+    expect(state.timeline.map((entry) => entry.sourceEventId)).toEqual([
+      "runtime:text:standard",
+      "runtime:approval:standard",
+    ]);
   });
 
   it("展开 task:runtimeEvent.taskEvents 并继承 wrapper 上的 session/thread/task 上下文", () => {

@@ -33,6 +33,8 @@ macOS 真实 Electron E2E / GUI smoke 可以使用 Chromium `--use-mock-keychain
 
 新增 AI Agent / runtime / host integration / 跨 App 复用能力默认走 App Server JSON-RPC current 主链。Electron main / preload 只作为 Desktop Host bridge，负责桌面壳能力、sidecar 生命周期与白名单 IPC；只有为旧 GUI 做兼容适配时，才继续触碰 `agent_runtime_*` / Aster legacy command facade；这类改动不能承接新业务逻辑，必须写清退出条件。
 
+`lime-rs/src/**` 是旧主 crate、启动/注册、legacy facade 和迁移来源区，不再作为业务逻辑、领域服务、runtime 分支、API adapter、数据访问或跨 App 复用能力的长期 owner。触碰该目录下逻辑时，默认优先迁到 `lime-rs/crates/**` 的 App Server、RuntimeCore、services、core、agent 或协议/client crate；桌面壳能力迁到 Electron Desktop Host。只能保留必要 bootstrap / runner 接线、compat facade 委托、撤注册机械修复和带退出条件的 blocker 记录。
+
 `lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。允许触碰它的场景只剩：删除旧 wrapper；撤 runner / DevBridge dispatcher / catalog / mock 注册后的机械编译修复；或记录无法删除的 blocker。新增 Rust 后端能力必须落到 App Server crates / RuntimeCore / services 等 current 事实源；桌面壳能力落到 Electron Desktop Host。
 
 前端 `src/lib/dev-bridge/**` 不是旧 Tauri DevBridge 本体，也不是整体删除对象。当前分类固定如下：
@@ -42,7 +44,7 @@ macOS 真实 Electron E2E / GUI smoke 可以使用 Chromium `--use-mock-keychain
 - `dead`：已经迁到 Electron Desktop Host 或 App Server current 的旧命令名；不得回到 `bridgeTruthCommands`、`noMockFallbackCompatCommands`、`mockPriorityCommands`、前端生产 `safeInvoke` 或治理 catalog。
 - `test-only`：负向测试、retired command guard、explicit test fixture。它们只能证明旧命令没有回流，不能成为生产 fallback。
 
-清理 `src/lib/dev-bridge` 时先按命令组收缩 `commandPolicy`、`mockPriorityCommands`、`explicitMockFallback`、相关测试和 contract guard；不要把删除整个目录当作治理第一刀。只有当所有前端 API 网关都已经迁出 `safeInvoke` 当前传输，并且有新的 renderer bridge 事实源接替 `app_server_handle_json_lines`、事件监听和可用性探测后，才允许单独开计划讨论目录级退场。
+清理 `src/lib/dev-bridge` 时先按命令组收缩 `commandPolicy`、`mockPriorityCommands`、`explicitMockFallback`、相关测试和 contract guard；不要把删除整个目录当作治理第一刀。删不动的 legacy policy / mock residual 必须同步写入当前执行计划和 `internal/exec-plans/tech-debt-tracker.md` 的 `CCD-012`，记录命令名、当前分类、阻塞文件、退出条件和验证入口，不能只停留在聊天、handoff 或临时备注里。只有当所有前端 API 网关都已经迁出 `safeInvoke` 当前传输，并且有新的 renderer bridge 事实源接替 `app_server_handle_json_lines`、事件监听和可用性探测后，才允许单独开计划讨论目录级退场。
 
 这样做的目的不是“多包一层”，而是为了保证：
 
@@ -354,7 +356,7 @@ Skill 执行链路同样遵循单一命令边界。当前前端入口为 `src/li
 
 `Claw` 的纯文本视频命令也应沿相同心智收敛：
 
-- Agent 驱动的视频命令：`@视频` / `@video` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `video_task` 写入 `request_metadata.harness.video_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/video_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(video_generate)` 的系统提示；当前视频 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型在 `@视频` 首刀前先去搜索工具目录。后续默认 skill 必须先进入 `video_generate` 的 current binding；若当前 binding family 被注册为 `typed local_cli`，则由 runtime 结构化组装 `lime media video generate --json`；若当前 binding family 仍是原生结构化 binding，则继续直接调用 `lime_create_video_generation_task` / `create_video_generation_task`。无论选择哪种 executor，最终仍只允许落到标准 `video_generate` 任务主链。
+- Agent 驱动的视频命令：`@视频` / `@video` 在 `src/components/agent/chat/workspace/useWorkspaceSendActions.ts` 中保留原始用户文本发送。聊天发送边界会把结构化 `video_task` 写入 `request_metadata.harness.video_skill_launch`，同时打开 `request_metadata.harness.allow_model_skills = true`。Rust 侧 `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs` 与 `lime-rs/src/commands/aster_agent_cmd/video_skill_launch.rs` 会给当前 turn 注入只允许首刀优先调用 `Skill(video_generate)` 的系统提示；当前视频 launch 还会在 session permission 中显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类偏航工具，并在当前 session registry 中直接移除这些 detour tools，避免模型在 `@视频` 首刀前先去搜索工具目录。后续默认 skill 必须先进入 `video_generate` 的 current binding，并最终落到 App Server `mediaTaskArtifact/video/create|get|list|cancel` 任务 artifact 主链；若当前 binding family 被注册为 `typed local_cli`，runtime 可以结构化组装 `lime media video generate --json` 作为 skill executor，但该 executor 也必须写回同一条 task artifact 主链。`lime_create_video_generation_task` / `create_video_generation_task` 旧视频 facade 已归类为 `dead / retired guard-only`，不得作为 Skill 不可用时的 fallback；Skill 或 binding 不可用时应 fail closed 并报告视频生成绑定不可用，不能伪造任务已提交。
 - 前端消费层不再把 `@视频` 当成图片任务特判。当前聊天区通过统一 `taskPreview` 消费 `video_generate` 任务摘要，点击结果卡后直接复用现有 `VideoCanvas / VideoWorkspace` 打开右侧 viewer；运行中的视频任务则由 `useWorkspaceVideoTaskPreviewRuntime` 基于 `videoGenerationApi.getTask(...)` 轮询回流状态与结果 URL。
 
 `Claw` 的纯文本播报命令也应沿同一条 current 主链收敛：
@@ -706,7 +708,9 @@ npm run verify:local
 
 - 在页面、组件、普通 Hook 中直接散落 `invoke`
 - 给 `compat` 路径继续长新业务逻辑
+- 把 `lime-rs/src/**` 当作新增后端业务、领域服务、runtime 分支、API adapter、数据访问或跨 App 复用能力的落点；触碰旧主 crate 逻辑时必须优先迁往 `lime-rs/crates/**` 或 Electron Desktop Host
 - 在 `lime-rs/src/commands/**` 新增业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub；该目录只允许删除旧 Tauri wrapper、撤注册后的机械编译修复，或登记 blocker
+- 继续向超过 `1000` 行的非生成代码文件追加新业务逻辑而不拆分；无法拆分时必须登记 blocker、风险和退出条件
 - 把已经进入 `deprecated` / `dead-candidate` / `dead` 的命令重新接回主链
 - 只改前端或只改 Rust，一侧通过就宣布完成
 - 用“先兼容一下”作为长期保留第二套入口的理由

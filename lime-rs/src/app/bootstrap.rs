@@ -11,7 +11,6 @@ use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::context_memory::ContextMemoryServiceState;
 use crate::commands::machine_id_cmd::MachineIdState;
 use crate::commands::model_registry_cmd::ModelRegistryState;
-use crate::commands::session_files_cmd::SessionFilesState;
 use crate::commands::webview_cmd::ChromeProfileManagerWrapper;
 use crate::config::{GlobalConfigManager, GlobalConfigManagerState};
 use crate::database::{self, DbConnection};
@@ -50,7 +49,6 @@ pub struct AppStates {
     pub global_config_manager: GlobalConfigManagerState,
     pub chrome_profile_manager: ChromeProfileManagerWrapper,
     pub update_check_service: UpdateCheckServiceState,
-    pub session_files: SessionFilesState,
     pub context_memory_service: ContextMemoryServiceState,
     pub recording_service: RecordingServiceState,
     pub mcp_manager: McpManagerState,
@@ -167,11 +165,6 @@ pub fn init_states(config: &Config) -> Result<AppStates, String> {
     // 初始化更新检查服务
     let update_check_service_state = UpdateCheckServiceState::new();
 
-    // 初始化会话文件存储
-    let session_files_storage = crate::session_files::SessionFileStorage::new()
-        .map_err(|e| format!("SessionFileStorage 初始化失败: {e}"))?;
-    let session_files_state = SessionFilesState(std::sync::Mutex::new(session_files_storage));
-
     // 初始化全局配置管理器
     let config_path = ConfigManager::default_config_path();
     let global_config_manager = GlobalConfigManager::new(config.clone(), config_path);
@@ -241,7 +234,6 @@ pub fn init_states(config: &Config) -> Result<AppStates, String> {
         global_config_manager: global_config_manager_state,
         chrome_profile_manager: chrome_profile_manager_state,
         update_check_service: update_check_service_state,
-        session_files: session_files_state,
         context_memory_service: context_memory_service_state,
         recording_service: recording_service_state,
         mcp_manager: mcp_manager_state,

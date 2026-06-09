@@ -22,6 +22,12 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { artifactRegistry } from "@/lib/artifact/registry";
+import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
+import {
+  isAbsoluteLocalFilePath,
+  openHtmlPreviewWindow,
+} from "@/lib/api/fileSystem";
+import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import type { Artifact } from "@/lib/artifact/types";
 import { resolveArtifactWritePhase } from "@/components/agent/chat/utils/messageArtifacts";
 
@@ -237,6 +243,51 @@ function escapeHtml(str: string): string {
   return div.innerHTML;
 }
 
+function readStringMeta(meta: Artifact["meta"], key: string): string | null {
+  const value = meta[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function supportsLocalPreviewWindow(artifact: Artifact): boolean {
+  const language = artifact.meta.language?.toLowerCase() || "";
+  return (
+    artifact.type === "html" ||
+    artifact.type === "svg" ||
+    (artifact.type === "code" && PREVIEWABLE_LANGUAGES.includes(language))
+  );
+}
+
+function resolveArtifactLocalPreviewWindowPath(
+  artifact: Artifact,
+): string | null {
+  if (!supportsLocalPreviewWindow(artifact)) {
+    return null;
+  }
+
+  const candidatePaths = [
+    readStringMeta(artifact.meta, "filePath"),
+    readStringMeta(artifact.meta, "file_path"),
+    readStringMeta(artifact.meta, "path"),
+    readStringMeta(artifact.meta, "sourcePath"),
+    readStringMeta(artifact.meta, "source_path"),
+    readStringMeta(artifact.meta, "absolutePath"),
+    readStringMeta(artifact.meta, "absolute_path"),
+    readStringMeta(artifact.meta, "absoluteFilePath"),
+    readStringMeta(artifact.meta, "absolute_file_path"),
+    readStringMeta(artifact.meta, "outputPath"),
+    readStringMeta(artifact.meta, "output_path"),
+    resolveArtifactProtocolFilePath(artifact),
+  ];
+
+  for (const candidatePath of candidatePaths) {
+    if (candidatePath && isAbsoluteLocalFilePath(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  return null;
+}
+
 /**
  * 根据 Artifact 类型和元数据生成文件名
  * @param artifact - Artifact 对象
@@ -415,7 +466,21 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
      * 在新窗口中打开
      * @requirements 13.4
      */
-    const handleOpenInWindow = useCallback(() => {
+    const handleOpenInWindow = useCallback(async () => {
+      const localPreviewPath = resolveArtifactLocalPreviewWindowPath(artifact);
+      if (localPreviewPath) {
+        const opened = await openHtmlPreviewWindow(localPreviewPath, {
+          title: artifact.title,
+        });
+        if (opened) {
+          return;
+        }
+        if (hasDesktopHostInvokeCapability()) {
+          console.error("Desktop Host HTML 预览窗口创建失败");
+          return;
+        }
+      }
+
       const win = window.open("", "_blank");
       if (win) {
         if (artifact.type === "html") {

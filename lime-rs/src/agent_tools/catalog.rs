@@ -527,10 +527,10 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         name: LIME_CREATE_VIDEO_TASK_TOOL_NAME,
         profiles: WORKBENCH_PROFILES,
         capabilities: CONTENT_CAP,
-        lifecycle: ToolLifecycle::Current,
+        lifecycle: ToolLifecycle::Deprecated,
         source: ToolSourceKind::LimeInjected,
         permission_plane: ToolPermissionPlane::SessionAllowlist,
-        workspace_default_allow: true,
+        workspace_default_allow: false,
     },
     ToolCatalogEntry {
         name: LIME_CREATE_AUDIO_TASK_TOOL_NAME,
@@ -1086,7 +1086,7 @@ mod tests {
     fn test_workspace_default_allowed_tool_names_includes_workbench_surface() {
         let names = workspace_default_allowed_tool_names(WorkspaceToolSurface::workbench());
         assert!(names.contains(&SOCIAL_IMAGE_TOOL_NAME));
-        assert!(names.contains(&LIME_CREATE_VIDEO_TASK_TOOL_NAME));
+        assert!(!names.contains(&LIME_CREATE_VIDEO_TASK_TOOL_NAME));
         assert!(names.contains(&LIME_CREATE_AUDIO_TASK_TOOL_NAME));
         assert!(names.contains(&LIME_CREATE_TRANSCRIPTION_TASK_TOOL_NAME));
     }
@@ -1152,6 +1152,12 @@ mod tests {
         assert_eq!(names.len(), 12);
         assert!(names.contains(SOCIAL_IMAGE_TOOL_NAME));
         assert!(names.contains(LIME_CREATE_VIDEO_TASK_TOOL_NAME));
+        assert_eq!(
+            tool_catalog_entry(LIME_CREATE_VIDEO_TASK_TOOL_NAME)
+                .expect("retired video task tool should stay cataloged for guard visibility")
+                .lifecycle,
+            ToolLifecycle::Deprecated
+        );
         assert!(names.contains(LIME_CREATE_AUDIO_TASK_TOOL_NAME));
         assert!(names.contains(LIME_CREATE_TRANSCRIPTION_TASK_TOOL_NAME));
         assert!(names.contains(LIME_RUN_SERVICE_SKILL_TOOL_NAME));
@@ -1183,6 +1189,7 @@ mod tests {
         assert!(names.contains(&"TeamDelete"));
         assert!(names.contains(&LIME_CREATE_TRANSCRIPTION_TASK_TOOL_NAME));
         assert!(names.contains(&LIME_CREATE_AUDIO_TASK_TOOL_NAME));
+        assert!(!names.contains(&LIME_CREATE_VIDEO_TASK_TOOL_NAME));
         assert!(names.contains(&LIME_SEARCH_WEB_IMAGES_TOOL_NAME));
         assert!(names.contains(&LIME_SITE_RECOMMEND_TOOL_NAME));
         assert!(names.contains(&LIME_SITE_RUN_TOOL_NAME));

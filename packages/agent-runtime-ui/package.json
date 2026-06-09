@@ -35,9 +35,12 @@
     "build": "tsc --project tsconfig.json",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm --prefix ../agent-ui-contracts run build && npm --prefix ../agent-runtime-projection run build && npm run build && node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@limecloud/agent-ui-contracts": "0.1.0"
+  },
+  "devDependencies": {
     "@limecloud/agent-runtime-projection": "0.1.0"
   },
   "peerDependencies": {

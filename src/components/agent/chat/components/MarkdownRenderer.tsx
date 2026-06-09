@@ -15,6 +15,10 @@ import { CHAT_A2UI_TASK_CARD_PRESET } from "@/lib/workspace/a2ui";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import { readFilePreview } from "@/lib/api/fileBrowser";
 import {
+  hasDesktopHostInvokeCapability,
+  hasDesktopHostRuntimeMarkers,
+} from "@/lib/desktop-runtime";
+import {
   interceptHttpExternalLinkClick,
   resolveHttpExternalHref,
 } from "@/lib/markdown/externalLinks";
@@ -526,8 +530,7 @@ const INLINE_COLLAPSED_FENCE_PATTERN =
 const COLLAPSED_MARKDOWN_TRAILING_TABLE_TEXT_PATTERN =
   /\|(?=[\u3400-\u9fffA-Za-z][^|\n]{0,24}[：:])/g;
 const COLLAPSED_SPACED_HEADING_PATTERN = /[^\n#]#{2,6}\s+\S/g;
-const COLLAPSED_ORDERED_LIST_PATTERN =
-  /(?:[：:]\s*|\s)[1-9]\d{0,1}\.\s+\S/g;
+const COLLAPSED_ORDERED_LIST_PATTERN = /(?:[：:]\s*|\s)[1-9]\d{0,1}\.\s+\S/g;
 const COLLAPSED_BULLET_LIST_PATTERN = /(?:[：:]\s*|\s)[-*+]\s+\S/g;
 const MARKDOWN_HEADING_LINE_PATTERN = /^#{1,6}\s+\S/;
 const MARKDOWN_ORDERED_LIST_LINE_PATTERN = /^[1-9]\d{0,1}\.\s+\S/;
@@ -541,6 +544,10 @@ const COLLAPSED_HEADING_TITLE_FORBIDDEN_PATTERN =
   /[#>*`_[\]()|：:。！？.!?,，；;]/u;
 const COLLAPSED_HEADING_BODY_LEADING_FORBIDDEN_PATTERN =
   /^[#>*`_[\]()|：:。！？.!?,，；;]/u;
+
+function hasDesktopHostImagePreviewBoundary(): boolean {
+  return hasDesktopHostRuntimeMarkers() || hasDesktopHostInvokeCapability();
+}
 
 interface MarkdownRendererProps {
   content: string;
@@ -921,10 +928,7 @@ function normalizeCollapsedMarkdownTextBlocks(markdown: string): string {
       /(^|\n)(#{1,6}\s+[^\n*#]{2,64}?)(?=\*\*[\u3400-\u9fffA-Za-z0-9][^*\n]{0,32}[：:])/gu,
       "$1$2\n\n",
     )
-    .replace(
-      /(^|\n)(#{1,6}\s+[^\n#>]{2,90}?)(?=>\s*\S)/gu,
-      "$1$2\n\n",
-    )
+    .replace(/(^|\n)(#{1,6}\s+[^\n#>]{2,90}?)(?=>\s*\S)/gu, "$1$2\n\n")
     .replace(
       /(^|\n)(#{1,6}\s+[^\n`#]{2,64}?)(?=`[^`\n])/gu,
       (_match, prefix: string, heading: string) => {
@@ -1028,8 +1032,7 @@ function getWordSegmentBoundaries(value: string): number[] {
 
   for (const segment of segmenter.segment(value)) {
     const isWordLike =
-      segment.isWordLike ??
-      /[\u3400-\u9fffA-Za-z0-9]/u.test(segment.segment);
+      segment.isWordLike ?? /[\u3400-\u9fffA-Za-z0-9]/u.test(segment.segment);
     if (!isWordLike) {
       continue;
     }
@@ -1106,7 +1109,10 @@ function normalizeRecoveredListNesting(markdown: string): string {
       continue;
     }
 
-    if (activeOrderedItem && MARKDOWN_UNORDERED_LIST_LINE_PATTERN.test(trimmed)) {
+    if (
+      activeOrderedItem &&
+      MARKDOWN_UNORDERED_LIST_LINE_PATTERN.test(trimmed)
+    ) {
       outputLines.push(`   ${trimmed}`);
       continue;
     }
@@ -1501,6 +1507,20 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
     const imageCaption = t("agentChat.markdown.image.caption");
     const quoteContentBlockLabel = t("agentChat.markdown.block.quote");
     const copyContentBlockLabel = t("agentChat.markdown.block.copy");
+    const shouldBlockBrowserImagePreview = React.useCallback(
+      (source: string) => {
+        if (!hasDesktopHostImagePreviewBoundary()) {
+          return false;
+        }
+
+        console.error(
+          "[MarkdownRenderer] Desktop Host image preview cannot fall back to browser window",
+          source,
+        );
+        return true;
+      },
+      [],
+    );
     const handleQuoteContent = React.useCallback(() => {
       if (!onQuoteContent) {
         return;
@@ -1566,6 +1586,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
 
       return processedContent.images.map((img, idx) => {
         const handleImageClick = () => {
+          if (shouldBlockBrowserImagePreview(img.src)) {
+            return;
+          }
+
           const newWindow = window.open();
           if (newWindow) {
             newWindow.document.write(`
@@ -2009,8 +2033,18 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                   }
                   const resolvedSrc = resolveImageSrc(src);
 
-                  const handleImageClick = () => {
-                    if (resolvedSrc) {
+                  const handleImageClick = (
+                    event: React.MouseEvent<HTMLImageElement>,
+                  ) => {
+                    if (
+                      !interceptHttpExternalLinkClick(event, resolvedSrc) &&
+                      resolvedSrc
+                    ) {
+                      if (shouldBlockBrowserImagePreview(resolvedSrc)) {
+                        event.preventDefault();
+                        return;
+                      }
+
                       window.open(resolvedSrc, "_blank");
                     }
                   };

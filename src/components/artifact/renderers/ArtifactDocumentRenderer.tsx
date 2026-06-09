@@ -2,6 +2,10 @@ import React, { memo, useMemo } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { FileStack, Flag, Info, Link2 } from "lucide-react";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 import { cn } from "@/lib/utils";
 import type {
   ArtifactDocumentBlock,
@@ -26,6 +30,20 @@ interface ResolvedDocumentStat {
 }
 
 type WorkspaceT = TFunction<"workspace", undefined>;
+
+function getHttpExternalLinkProps(url: string) {
+  const externalUrl = resolveHttpExternalHref(url);
+  const onClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    interceptHttpExternalLinkClick(event, url);
+  };
+
+  return {
+    target: externalUrl ? undefined : "_blank",
+    rel: "noreferrer noopener",
+    onClick,
+    onAuxClick: onClick,
+  };
+}
 
 function getDocumentKindLabel(
   kind: ArtifactDocumentV1["kind"],
@@ -246,8 +264,7 @@ const SourceAppendix = memo(function SourceAppendix({
             {source.locator?.url ? (
               <a
                 href={source.locator.url}
-                target="_blank"
-                rel="noreferrer"
+                {...getHttpExternalLinkProps(source.locator.url)}
                 className="mt-2 inline-flex items-center gap-1 text-sm text-sky-600 hover:text-sky-700"
               >
                 <Link2 className="h-3.5 w-3.5" />

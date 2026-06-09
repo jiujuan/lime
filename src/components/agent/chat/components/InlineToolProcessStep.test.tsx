@@ -5,8 +5,8 @@ import { InlineToolProcessStep } from "./InlineToolProcessStep";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
-vi.mock("@/lib/desktop-host/plugin-shell", () => ({
-  open: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./MarkdownRenderer", () => ({

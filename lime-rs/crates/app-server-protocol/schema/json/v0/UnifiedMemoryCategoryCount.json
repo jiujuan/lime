@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "UnifiedMemoryCategory": {
+      "enum": [
+        "activity",
+        "context",
+        "experience",
+        "identity",
+        "preference"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "category": {
+      "$ref": "#/$defs/UnifiedMemoryCategory"
+    },
+    "count": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "category",
+    "count"
+  ],
+  "title": "UnifiedMemoryCategoryCount",
+  "type": "object"
+}

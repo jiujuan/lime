@@ -137,7 +137,8 @@ describe("Agent App P17.3 lifecycle action descriptor", () => {
       mode: "delete-data",
       generatedAt: now,
     });
-    const confirmationPhrase = buildAgentAppDeleteDataConfirmationPhrase(descriptor);
+    const confirmationPhrase =
+      buildAgentAppDeleteDataConfirmationPhrase(descriptor);
 
     expect(
       buildAgentAppDeleteDataExecutionGate({
@@ -205,7 +206,8 @@ describe("Agent App P17.3 lifecycle action descriptor", () => {
     expect(
       buildAgentAppDeleteDataExecutionGate({
         descriptor: outOfScope,
-        confirmationPhrase: buildAgentAppDeleteDataConfirmationPhrase(outOfScope),
+        confirmationPhrase:
+          buildAgentAppDeleteDataConfirmationPhrase(outOfScope),
         generatedAt: now,
       }),
     ).toMatchObject({
@@ -222,7 +224,9 @@ describe("Agent App P17.3 lifecycle action descriptor", () => {
       appId: "content-factory-app",
       reason: "disabled",
     });
-    expect(buildAgentAppLifecycleLaunchGate({ ...state, disabled: false })).toEqual({
+    expect(
+      buildAgentAppLifecycleLaunchGate({ ...state, disabled: false }),
+    ).toEqual({
       allowed: true,
       appId: "content-factory-app",
     });

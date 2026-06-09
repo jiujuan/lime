@@ -18,6 +18,10 @@ const { mockFetchProviderModelsAuto } = vi.hoisted(() => ({
   mockFetchProviderModelsAuto: vi.fn(),
 }));
 
+const { mockOpenExternalUrlWithSystemBrowser } = vi.hoisted(() => ({
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(),
+}));
+
 vi.mock("@/lib/api/modelRegistry", () => ({
   fetchProviderModelsAuto: (...args: unknown[]) =>
     mockFetchProviderModelsAuto(...args),
@@ -26,6 +30,11 @@ vi.mock("@/lib/api/modelRegistry", () => ({
     models: unknown[];
     error: string | null;
   }) => result.source,
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: (...args: unknown[]) =>
+    mockOpenExternalUrlWithSystemBrowser(...args),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -87,6 +96,7 @@ beforeEach(() => {
     models: [{ id: "deepseek-chat" }],
     error: null,
   });
+  mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -134,8 +144,40 @@ describe("ProviderSetting", () => {
     expect(text).not.toContain("支持的模型");
     expect(byTestId(container, "provider-simple-card")).not.toBeNull();
     expect(byTestId(container, "provider-api-host-input")).not.toBeNull();
-    expect(byTestId(container, "provider-test-connection-button")).not.toBeNull();
+    expect(
+      byTestId(container, "provider-test-connection-button"),
+    ).not.toBeNull();
     expect(byTestId(container, "provider-api-key-save-button")).not.toBeNull();
+  });
+
+  it("获取 API Key 链接应走 Desktop Host 外链网关", async () => {
+    const container = renderSetting(createProvider());
+    await flushEffects();
+
+    const link = byTestId<HTMLAnchorElement>(
+      container,
+      "provider-api-key-link",
+    );
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBe(
+      "https://platform.deepseek.com/api_keys",
+    );
+    expect(link?.getAttribute("target")).toBeNull();
+    expect(link?.getAttribute("rel")).toBe("noreferrer noopener");
+
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      link?.dispatchEvent(clickEvent);
+      await Promise.resolve();
+    });
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://platform.deepseek.com/api_keys",
+    );
   });
 
   it("应支持修改并保存 Provider API Host", async () => {
@@ -154,15 +196,16 @@ describe("ProviderSetting", () => {
     );
     await flushEffects();
 
-    const input = byTestId<HTMLInputElement>(container, "provider-api-host-input");
+    const input = byTestId<HTMLInputElement>(
+      container,
+      "provider-api-host-input",
+    );
     const saveButton = byTestId<HTMLButtonElement>(
       container,
       "provider-api-host-save-button",
     );
 
-    expect(input?.value).toBe(
-      "https://token-plan-cn.xiaomimimo.com/anthropic",
-    );
+    expect(input?.value).toBe("https://token-plan-cn.xiaomimimo.com/anthropic");
     expect(saveButton).not.toBeNull();
     expect(saveButton?.disabled).toBe(true);
 
@@ -223,7 +266,10 @@ describe("ProviderSetting", () => {
     );
 
     await act(async () => {
-      changeInput(hostInput!, "https://token-plan-sgp.xiaomimimo.com/anthropic");
+      changeInput(
+        hostInput!,
+        "https://token-plan-sgp.xiaomimimo.com/anthropic",
+      );
       await Promise.resolve();
     });
 
@@ -322,7 +368,10 @@ describe("ProviderSetting", () => {
     const container = renderSetting(createProvider({ custom_models: [] }));
     await flushEffects();
 
-    const button = byTestId<HTMLButtonElement>(container, "fetch-models-button");
+    const button = byTestId<HTMLButtonElement>(
+      container,
+      "fetch-models-button",
+    );
 
     await act(async () => {
       button?.click();
@@ -596,7 +645,10 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const input = byTestId<HTMLInputElement>(container, "provider-api-key-input");
+    const input = byTestId<HTMLInputElement>(
+      container,
+      "provider-api-key-input",
+    );
     const saveButton = byTestId<HTMLButtonElement>(
       container,
       "provider-api-key-save-button",
@@ -637,7 +689,10 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const input = byTestId<HTMLInputElement>(container, "provider-api-key-input");
+    const input = byTestId<HTMLInputElement>(
+      container,
+      "provider-api-key-input",
+    );
     const saveButton = byTestId<HTMLButtonElement>(
       container,
       "provider-api-key-save-button",
@@ -675,7 +730,10 @@ describe("ProviderSetting", () => {
     });
     await flushEffects();
 
-    const input = byTestId<HTMLInputElement>(container, "provider-api-key-input");
+    const input = byTestId<HTMLInputElement>(
+      container,
+      "provider-api-key-input",
+    );
     const saveButton = byTestId<HTMLButtonElement>(
       container,
       "provider-api-key-save-button",
@@ -718,7 +776,10 @@ describe("ProviderSetting", () => {
     );
     await flushEffects();
 
-    const input = byTestId<HTMLInputElement>(container, "provider-api-key-input");
+    const input = byTestId<HTMLInputElement>(
+      container,
+      "provider-api-key-input",
+    );
     const button = byTestId<HTMLButtonElement>(
       container,
       "provider-test-connection-button",

@@ -5,7 +5,10 @@ import { ThinkingBlock } from "@/components/agent/chat/components/ThinkingBlock"
 import { resolveUserFacingToolDisplayLabel } from "@/components/agent/chat/utils/toolDisplayInfo";
 import { resolveToolProcessNarrative } from "@/components/agent/chat/utils/toolProcessSummary";
 import type { AgentToolCallState } from "@/lib/api/agentProtocol";
-import { buildAgentRunProjectionViewModelFromState } from "../runtime/agentRunProjectionState";
+import {
+  buildAgentRunProjectionViewModelFromState,
+  buildAgentRunStandardProjectionStateFromState,
+} from "../runtime/agentRunProjectionState";
 import type {
   AgentAppHostAgentRunUiMode,
   AgentAppHostAgentRunUiRequest,
@@ -816,6 +819,7 @@ export function AgentRunRenderer({
   onAction,
 }: AgentRunRendererProps) {
   const projectionView = buildAgentRunProjectionViewModelFromState(run);
+  const standardProjectionState = buildAgentRunStandardProjectionStateFromState(run);
   const shouldRenderProjection = hasProjectionContent(projectionView);
 
   return (
@@ -842,6 +846,7 @@ export function AgentRunRenderer({
       {shouldRenderProjection ? (
         <AgentRunProjectionPanel
           view={projectionView}
+          standardState={standardProjectionState}
           labels={buildProjectionPanelLabels(t)}
           onAction={onAction}
         />

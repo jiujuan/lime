@@ -85,12 +85,3 @@ export function createMediaClient({
     listMediaTaskArtifacts,
   };
 }
-
-export const {
-  cancelMediaTaskArtifact,
-  completeAudioGenerationTaskArtifact,
-  createAudioGenerationTaskArtifact,
-  createImageGenerationTaskArtifact,
-  getMediaTaskArtifact,
-  listMediaTaskArtifacts,
-} = createMediaClient();

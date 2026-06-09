@@ -51,10 +51,10 @@ function readRepoFile(path: string): string {
 function readDesktopHostMockSources(): string {
   const desktopHostDir = resolve(cwd(), "src/lib/desktop-host");
   return readdirSync(desktopHostDir)
-    .filter((fileName) => fileName.endsWith(".ts") || fileName.endsWith(".d.ts"))
-    .map((fileName) =>
-      readFileSync(join(desktopHostDir, fileName), "utf8"),
+    .filter(
+      (fileName) => fileName.endsWith(".ts") || fileName.endsWith(".d.ts"),
     )
+    .map((fileName) => readFileSync(join(desktopHostDir, fileName), "utf8"))
     .join("\n");
 }
 
@@ -71,7 +71,12 @@ describe("gateway tunnel current boundary", () => {
       readRepoFile("src/lib/api/appServer.ts"),
       readRepoFile("packages/app-server-client/src/protocol.ts"),
       readRepoFile("packages/app-server-client/src/index.ts"),
-      readRepoFile("lime-rs/crates/app-server-protocol/src/protocol/v0.rs"),
+      readRepoFile(
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
+      ),
+      readRepoFile(
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/channels.rs",
+      ),
       readRepoFile("lime-rs/crates/app-server/src/processor.rs"),
       readRepoFile("lime-rs/crates/app-server/src/runtime.rs"),
     ].join("\n");

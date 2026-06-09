@@ -29,6 +29,7 @@ const {
   mockInputbar,
   mockIsSpecializedWorkbenchTheme,
   mockMessageList,
+  mockUseAgentChatUnified,
   mockUseDeveloperFeatureFlags,
   mockUseThemeContextWorkspace,
 } = getIndexTestMocks();
@@ -72,6 +73,29 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(
       container.querySelector('[data-testid="empty-state"]'),
     ).not.toBeNull();
+  });
+
+  it("空白新建任务首页刷新后不应自动恢复最近会话", async () => {
+    renderPage({
+      agentEntry: "new-task",
+      newChatAt: 1234567890,
+      projectId: "project-home",
+      showChatPanel: false,
+      theme: "general",
+    });
+    await flushEffects();
+
+    const workspaceCall = mockUseAgentChatUnified.mock.calls
+      .map(
+        (call) =>
+          call[0] as {
+            disableSessionRestore?: boolean;
+            workspaceId?: string;
+          },
+      )
+      .find((options) => options.workspaceId === "project-home");
+
+    expect(workspaceCall?.disableSessionRestore).toBe(true);
   });
 
   it("空白新建任务发送后应立即展示轻量对话预览", async () => {

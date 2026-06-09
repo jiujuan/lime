@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "api_key": {
+      "type": "string"
+    },
+    "base_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "proxy_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "api_key"
+  ],
+  "title": "VoiceAsrOpenAiConfig",
+  "type": "object"
+}

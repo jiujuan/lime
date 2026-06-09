@@ -19,7 +19,13 @@ function slugifyAppId(value: string): string {
 
 function normalizeManifestVersion(
   version: string,
-): "0.2" | "0.3" | "0.5" | "0.6" | "0.7" | "0.8" {
+): "0.2" | "0.3" | "0.5" | "0.6" | "0.7" | "0.8" | "0.9" | "0.10" {
+  if (version.startsWith("0.10")) {
+    return "0.10";
+  }
+  if (version.startsWith("0.9")) {
+    return "0.9";
+  }
   if (version.startsWith("0.8")) {
     return "0.8";
   }

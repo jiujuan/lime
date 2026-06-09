@@ -43,6 +43,10 @@ import {
 } from "@/lib/api/skillCatalog";
 import { getProviderModelAutoFetchCapability } from "@/lib/model/providerModelFetchSupport";
 import { getProviderPromptCacheMode } from "@/lib/model/providerPromptCacheSupport";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 import { getProviderAccessHelp } from "@/lib/provider/providerAccessHelp";
 import { resolveAgentRuntimeErrorPresentation } from "@/components/agent/chat/utils/agentRuntimeErrorPresentation";
 import { dedupeModelIds, getProviderTypeLabel } from "./providerConfigUtils";
@@ -256,7 +260,10 @@ function formatActionError(error: unknown, fallback: string): string {
   return readActionErrorMessage(error) ?? fallback;
 }
 
-function formatProviderRuntimeError(error: string | undefined, fallback: string) {
+function formatProviderRuntimeError(
+  error: string | undefined,
+  fallback: string,
+) {
   const rawMessage = error?.trim() || fallback;
   return resolveAgentRuntimeErrorPresentation(rawMessage).displayMessage;
 }
@@ -400,9 +407,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   const [apiHostDraft, setApiHostDraft] = useState(provider.api_host);
   const [apiHostDirty, setApiHostDirty] = useState(false);
   const [savingApiHost, setSavingApiHost] = useState(false);
-  const [apiHostStatus, setApiHostStatus] = useState<InlineStatus | null>(
-    null,
-  );
+  const [apiHostStatus, setApiHostStatus] = useState<InlineStatus | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<InlineStatus | null>(
@@ -455,6 +460,9 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     providerName: provider.name,
     apiHost: effectiveApiHost,
   });
+  const accessHelpRel = resolveHttpExternalHref(accessHelp.url)
+    ? "noreferrer noopener"
+    : undefined;
   const modelAutoFetchCapability = getProviderModelAutoFetchCapability({
     providerId: provider.id,
     providerType: provider.type,
@@ -604,7 +612,9 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
 
     if (!onUpdate) {
       throw new Error(
-        t("settings.providers.setting.feedback.apiHost.updateMissingCapability"),
+        t(
+          "settings.providers.setting.feedback.apiHost.updateMissingCapability",
+        ),
       );
     }
 
@@ -1131,8 +1141,13 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                 {accessHelp.url ? (
                   <a
                     href={accessHelp.url}
-                    target="_blank"
-                    rel="noreferrer"
+                    rel={accessHelpRel}
+                    onAuxClick={(event) => {
+                      interceptHttpExternalLinkClick(event, accessHelp.url);
+                    }}
+                    onClick={(event) => {
+                      interceptHttpExternalLinkClick(event, accessHelp.url);
+                    }}
                     className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
                     data-testid="provider-api-key-link"
                   >
@@ -1790,10 +1805,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                         "settings.providers.setting.body.connection.testChat",
                         "试跑当前模型",
                       )
-                  : t(
-                      "settings.providers.setting.body.connection.test",
-                      "测试连接",
-                    )}
+                    : t(
+                        "settings.providers.setting.body.connection.test",
+                        "测试连接",
+                      )}
               </Button>
 
               {!canTestConnection && !testingConnection ? (

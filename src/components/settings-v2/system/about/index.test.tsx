@@ -19,6 +19,9 @@ const {
   mockSetSkillPackageFileAssociationDefault: vi.fn(),
   mockStartUpdateInstallSession: vi.fn(),
 }));
+const { mockOpenExternalUrlWithSystemBrowser } = vi.hoisted(() => ({
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appUpdate", () => ({
   checkForUpdates: mockCheckForUpdates,
@@ -43,6 +46,9 @@ vi.mock("@/lib/api/skills", () => ({
     setSkillPackageFileAssociationDefault:
       mockSetSkillPackageFileAssociationDefault,
   },
+}));
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
 }));
 
 import { AboutSection } from ".";
@@ -137,6 +143,7 @@ beforeEach(async () => {
     latest: "1.10.1",
     hasUpdate: true,
     downloadUrl: "https://example.com/lime",
+    releaseNotesUrl: "https://example.com/lime/releases",
     releaseNotes: "修复设置页视觉层级并优化更新体验。",
     pubDate: "2026-03-20T00:00:00.000Z",
     error: undefined,
@@ -184,6 +191,7 @@ beforeEach(async () => {
       detail: null,
     },
   });
+  mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -277,6 +285,81 @@ describe("AboutSection", () => {
       "Unable to install the update automatically. Please download the latest version from the web page.",
     );
     expect(container.textContent).not.toContain("signature mismatch");
+  });
+
+  it("手动下载链接应走 Desktop Host 外链网关", async () => {
+    const container = renderComponent();
+    await waitForLoad();
+
+    const link = Array.from(container.querySelectorAll("a")).find((anchor) =>
+      anchor.textContent?.includes("Download from Web"),
+    );
+    expect(link).toBeInstanceOf(HTMLAnchorElement);
+    expect(link?.getAttribute("href")).toBe(
+      "https://example.com/lime/releases",
+    );
+    expect(link?.getAttribute("target")).toBeNull();
+    expect(link?.getAttribute("rel")).toBe("noreferrer noopener");
+
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      link?.dispatchEvent(clickEvent);
+      await Promise.resolve();
+    });
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://example.com/lime/releases",
+    );
+  });
+
+  it("自动安装失败后的网页下载链接应走 Desktop Host 外链网关", async () => {
+    mockStartUpdateInstallSession.mockResolvedValueOnce(
+      createInstallSession({
+        stage: "failed",
+        downloadedBytes: 0,
+        totalBytes: null,
+        percent: 0,
+        message: "failed",
+        error: "signature mismatch",
+        completedAt: 3,
+        isActive: false,
+      }),
+    );
+    const container = renderComponent();
+    await waitForLoad();
+
+    await act(async () => {
+      findButton(container, "Download Update").click();
+      await waitForLoad();
+    });
+
+    const link = Array.from(container.querySelectorAll("a")).find((anchor) =>
+      anchor.textContent?.includes("Open Web Download"),
+    );
+    expect(link).toBeInstanceOf(HTMLAnchorElement);
+    expect(link?.getAttribute("href")).toBe(
+      "https://example.com/lime/releases",
+    );
+    expect(link?.getAttribute("target")).toBeNull();
+    expect(link?.getAttribute("rel")).toBe("noreferrer noopener");
+
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      link?.dispatchEvent(clickEvent);
+      await Promise.resolve();
+    });
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://example.com/lime/releases",
+    );
   });
 
   it("Windows 关于页应只提示单一 setup 安装包", async () => {

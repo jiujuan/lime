@@ -93,7 +93,8 @@ describe("layeredDesignAnalysis API", () => {
 
   it("recognizeLayeredDesignText 收到 unsupported host error envelope 时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
-      error: "Electron host command is not supported: recognize_layered_design_text",
+      error:
+        "Electron host command is not supported: recognize_layered_design_text",
     });
 
     await expect(
@@ -235,11 +236,13 @@ describe("layeredDesignAnalysis API", () => {
       },
     };
 
-    await expect(analyzeLayeredDesignFlatImageNative(request)).resolves.toEqual({
-      supported: false,
-      engine: "native_heuristic_analyzer",
-      message: "当前来源不支持 native structured analyzer",
-    });
+    await expect(analyzeLayeredDesignFlatImageNative(request)).resolves.toEqual(
+      {
+        supported: false,
+        engine: "native_heuristic_analyzer",
+        message: "当前来源不支持 native structured analyzer",
+      },
+    );
     await expect(analyzeLayeredDesignFlatImageNative(request)).rejects.toThrow(
       "analyze_layered_design_flat_image returned an error envelope",
     );

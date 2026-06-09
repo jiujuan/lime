@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppPackageCacheEntry } from "../install/packageCache";
+import { currentAgentAppHostRuntimeVersion } from "../readiness/hostCapabilityProfile";
 import type { AgentAppSetupState, InstalledAppPreview } from "../types";
 import { buildLimeRuntimeProfileFromHostProfile } from "../runtime-profile";
 import { buildUiRuntimeCapabilityProfile } from "./uiRuntimeCapabilityProfile";
@@ -96,8 +97,8 @@ describe("EntryRuntimeGuard P14", () => {
         nodeApiAllowed: false,
       },
       runtimeProfile: {
-        runtimeId: "content-factory-app:in_lime:0.8.0",
-        runtimeVersion: "0.8.0",
+        runtimeId: `content-factory-app:in_lime:${currentAgentAppHostRuntimeVersion}`,
+        runtimeVersion: currentAgentAppHostRuntimeVersion,
         shellKind: "desktop",
         installMode: "in_lime",
       },

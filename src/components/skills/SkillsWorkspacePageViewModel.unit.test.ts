@@ -10,6 +10,7 @@ import {
   getVisibleInstalledLocalSkills,
   getVisibleSkillStoreItems,
   getVisibleUserInstalledSkills,
+  isMarketplaceSkillInstalledAsLocalSkill,
   matchesSkillsText,
   normalizeSkillsKeyword,
   splitFeaturedSkillStoreItems,
@@ -184,6 +185,41 @@ describe("SkillsWorkspacePageViewModel", () => {
     expect(fallbackItems[0]?.skill.id).toBe("local-fallback:service-0");
   });
 
+  it("官方市场技能应识别后端为避让内置目录而生成的安装目录", () => {
+    const marketplaceSkill = createMarketplaceSkill({
+      name: "analysis",
+      aliases: ["data-analysis"],
+    });
+
+    expect(
+      isMarketplaceSkillInstalledAsLocalSkill({
+        marketplaceSkill,
+        localSkill: createSkill({
+          directory: "analysis-official",
+          name: "数据分析",
+        }),
+      }),
+    ).toBe(true);
+    expect(
+      isMarketplaceSkillInstalledAsLocalSkill({
+        marketplaceSkill,
+        localSkill: createSkill({
+          directory: "data-analysis-official",
+          name: "数据分析",
+        }),
+      }),
+    ).toBe(true);
+    expect(
+      isMarketplaceSkillInstalledAsLocalSkill({
+        marketplaceSkill,
+        localSkill: createSkill({
+          directory: "unrelated",
+          name: "其他技能",
+        }),
+      }),
+    ).toBe(false);
+  });
+
   it("按市场标题、别名、分类、输出提示和服务能力说明过滤商店项", () => {
     const official = createMarketplaceSkill({
       aliases: ["insight"],
@@ -226,7 +262,7 @@ describe("SkillsWorkspacePageViewModel", () => {
     expect(visibleByCapability).toHaveLength(1);
   });
 
-  it("拆分精选商店项，并按来源区分内置与用户已安装 Skill", () => {
+  it("拆分精选商店项，并按来源区分内置与用户可管理已安装 Skill", () => {
     const storeItems = Array.from({ length: 4 }, (_, index) => ({
       source: "official" as const,
       skill: createMarketplaceSkill({ id: `official-${index}` }),
@@ -247,6 +283,26 @@ describe("SkillsWorkspacePageViewModel", () => {
       sourceKind: "other",
       name: "用户写作",
     });
+    const projectInstalled = createSkill({
+      directory: "project",
+      sourceKind: "other",
+      catalogSource: "project",
+      name: "项目写作",
+    });
+    const remoteInstalled = createSkill({
+      directory: "remote",
+      sourceKind: "other",
+      catalogSource: "remote",
+      name: "远端候选",
+    });
+    const legacyRemoteInstalled = createSkill({
+      directory: "legacy-remote",
+      sourceKind: "other",
+      catalogSource: undefined,
+      repoOwner: "anthropics",
+      repoName: "skills",
+      name: "旧远端候选",
+    });
 
     expect(
       getVisibleBuiltinLocalSkills({
@@ -255,9 +311,13 @@ describe("SkillsWorkspacePageViewModel", () => {
       }).map((skill) => skill.directory),
     ).toEqual(["builtin"]);
     expect(
-      getVisibleUserInstalledSkills([builtin, userInstalled]).map(
-        (skill) => skill.directory,
-      ),
+      getVisibleUserInstalledSkills([
+        builtin,
+        userInstalled,
+        projectInstalled,
+        remoteInstalled,
+        legacyRemoteInstalled,
+      ]).map((skill) => skill.directory),
     ).toEqual(["user"]);
   });
 });

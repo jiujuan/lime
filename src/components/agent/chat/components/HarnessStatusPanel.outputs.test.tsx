@@ -448,8 +448,10 @@ describe("HarnessStatusPanel outputs", () => {
       await Promise.resolve();
     });
 
-    const { mockShellOpen } = getHarnessPanelTestMocks();
-    expect(mockShellOpen).toHaveBeenCalledWith("https://example.com/xinhua");
+    const { mockOpenExternalUrlWithSystemBrowser } = getHarnessPanelTestMocks();
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://example.com/xinhua",
+    );
   });
 
   it("连续多条搜索输出应在 harness 中按搜索批次分组展示", () => {
@@ -608,8 +610,10 @@ describe("HarnessStatusPanel outputs", () => {
       await Promise.resolve();
     });
 
-    const { mockShellOpen } = getHarnessPanelTestMocks();
-    expect(mockShellOpen).toHaveBeenCalledWith("https://example.com/report");
+    const { mockOpenExternalUrlWithSystemBrowser } = getHarnessPanelTestMocks();
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
+      "https://example.com/report",
+    );
   });
 
   it("能力区中的上下文路径应支持直接系统打开", async () => {

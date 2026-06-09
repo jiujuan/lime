@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "duration_secs": {
+      "format": "float",
+      "type": "number"
+    },
+    "language": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sample_rate": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "duration_secs",
+    "sample_rate",
+    "text"
+  ],
+  "title": "VoiceModelTestTranscribeFileResponse",
+  "type": "object"
+}

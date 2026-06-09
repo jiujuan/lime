@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "fileName": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fileName",
+    "sessionId"
+  ],
+  "title": "SessionFileIdParams",
+  "type": "object"
+}

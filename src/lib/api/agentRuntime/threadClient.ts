@@ -13,13 +13,15 @@ import {
   type AppServerAgentSessionFileCheckpointSummary,
   type AppServerAgentSessionActionRespondParams,
   type AppServerAgentSessionActionScope,
+  type AppServerAgentSessionReadParams,
   type AppServerAgentSessionTurnCancelParams,
   type AppServerAgentSessionTurnStartParams,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
+import type { AgentRuntimeClient as StandardAgentRuntimeClient } from "@limecloud/agent-runtime-client";
 import { publishAgentRuntimeEvent } from "../agentRuntimeEvents";
-import { createAppServerReadModelClient } from "./appServerReadModelClient";
+import { projectAppServerSessionReadResult } from "./appServerReadModelClient";
 import {
   invokeAgentRuntimeCommand,
   type AgentRuntimeCommandInvoke,
@@ -68,26 +70,34 @@ export type AgentRuntimeAppServerClient = Pick<
   | "restoreAgentSessionFileCheckpoint"
 >;
 
+export type AgentRuntimeLifecycleClient = Pick<
+  StandardAgentRuntimeClient,
+  "startTurn" | "cancelTurn" | "respondAction" | "readThread"
+>;
+
 export interface AgentRuntimeThreadClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeAppServerClient;
+  standardRuntimeClient?: AgentRuntimeLifecycleClient;
   isAppServerTurnLifecycleAvailable?: () => boolean;
   enableAppServerEventDrain?: boolean;
 }
 
-export function createThreadClient({
-  invokeCommand = invokeAgentRuntimeCommand,
-  appServerClient = new AppServerClient(),
-  isAppServerTurnLifecycleAvailable = defaultIsAppServerTurnLifecycleAvailable,
-  enableAppServerEventDrain,
-}: AgentRuntimeThreadClientDeps = {}) {
+export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
+  const {
+    invokeCommand = invokeAgentRuntimeCommand,
+    appServerClient = new AppServerClient(),
+    isAppServerTurnLifecycleAvailable = defaultIsAppServerTurnLifecycleAvailable,
+    enableAppServerEventDrain,
+  } = deps;
   void invokeCommand;
-  const appServerReadModelClient = createAppServerReadModelClient({
-    appServerClient,
-  });
+  const standardRuntimeClient =
+    deps.standardRuntimeClient ??
+    createAppServerAgentRuntimeLifecycleClient(appServerClient);
   const appServerEventRouter = shouldEnableAppServerEventDrain(
     appServerClient,
     enableAppServerEventDrain,
+    deps.standardRuntimeClient,
   )
     ? new AppServerAgentSessionEventDrainRouter(appServerClient)
     : null;
@@ -102,7 +112,7 @@ export function createThreadClient({
       turnId: request.turn_id,
     });
     try {
-      const result = await appServerClient.startTurn(
+      const result = await standardRuntimeClient.startTurn(
         appServerTurnStartParamsFromRequest(request),
       );
       if (route) {
@@ -127,7 +137,7 @@ export function createThreadClient({
     request: AgentRuntimeInterruptTurnRequest,
   ): Promise<boolean> {
     assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
-    const result = await appServerClient.cancelTurn(
+    const result = await standardRuntimeClient.cancelTurn(
       appServerTurnCancelParamsFromRequest(request),
     );
     publishAppServerAgentSessionNotifications(
@@ -212,7 +222,7 @@ export function createThreadClient({
   ): Promise<void> {
     assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
     try {
-      const result = await appServerClient.respondAction(
+      const result = await standardRuntimeClient.respondAction(
         appServerActionRespondParamsFromRequest(request),
       );
       const route = appServerEventRouter?.register({
@@ -242,7 +252,14 @@ export function createThreadClient({
     sessionId: string,
   ): Promise<AgentRuntimeThreadReadModel> {
     assertAppServerTurnLifecycleAvailable(isAppServerTurnLifecycleAvailable);
-    return await appServerReadModelClient.getAgentRuntimeThreadRead(sessionId);
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      throw new Error("sessionId is required to read App Server session");
+    }
+    const response = await standardRuntimeClient.readThread({
+      sessionId: normalizedSessionId,
+    });
+    return projectAppServerSessionReadResult(response.result);
   }
 
   async function listAgentRuntimeFileCheckpoints(
@@ -324,11 +341,38 @@ function assertAppServerTurnLifecycleAvailable(
 function shouldEnableAppServerEventDrain(
   appServerClient: AgentRuntimeAppServerClient,
   override: boolean | undefined,
+  standardRuntimeClient: AgentRuntimeLifecycleClient | undefined,
 ): boolean {
   if (override !== undefined) {
     return override;
   }
+  if (standardRuntimeClient) {
+    return false;
+  }
   return appServerClient instanceof AppServerClient;
+}
+
+function createAppServerAgentRuntimeLifecycleClient(
+  appServerClient: AgentRuntimeAppServerClient,
+): AgentRuntimeLifecycleClient {
+  return {
+    startTurn: (params) =>
+      appServerClient.startTurn(
+        params as unknown as AppServerAgentSessionTurnStartParams,
+      ) as ReturnType<AgentRuntimeLifecycleClient["startTurn"]>,
+    cancelTurn: (params) =>
+      appServerClient.cancelTurn(
+        params as unknown as AppServerAgentSessionTurnCancelParams,
+      ) as ReturnType<AgentRuntimeLifecycleClient["cancelTurn"]>,
+    respondAction: (params) =>
+      appServerClient.respondAction(
+        params as unknown as AppServerAgentSessionActionRespondParams,
+      ) as ReturnType<AgentRuntimeLifecycleClient["respondAction"]>,
+    readThread: (params) =>
+      appServerClient.readSession(
+        params as unknown as AppServerAgentSessionReadParams,
+      ) as ReturnType<AgentRuntimeLifecycleClient["readThread"]>,
+  };
 }
 
 function publishAppServerRpcErrorNotifications(

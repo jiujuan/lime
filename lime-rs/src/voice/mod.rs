@@ -7,7 +7,6 @@
 //! - 文本输出
 
 pub mod asr_service;
-pub mod commands;
 pub mod config;
 pub mod events;
 pub mod fn_shortcut;
@@ -27,6 +26,28 @@ pub(crate) fn register_fn_shortcut_if_supported(app: &AppHandle) {
     if let Err(error) = fn_shortcut::register(app) {
         tracing::warn!("[语音输入] Fn 按住录音监听注册失败: {}", error);
     }
+}
+
+pub(crate) fn set_voice_input_enabled(app: &AppHandle, enabled: bool) -> Result<bool, String> {
+    let mut config = config::load_voice_config()?;
+    if config.enabled == enabled {
+        if enabled {
+            register_fn_shortcut_if_supported(app);
+        }
+        return Ok(config.enabled);
+    }
+
+    if enabled {
+        shortcut::register(app, &config.shortcut)?;
+        register_fn_shortcut_if_supported(app);
+    } else {
+        shortcut::unregister(app)?;
+        let _ = fn_shortcut::unregister();
+    }
+
+    config.enabled = enabled;
+    config::save_voice_config(config)?;
+    Ok(enabled)
 }
 
 /// 初始化语音输入模块

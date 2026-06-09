@@ -144,6 +144,14 @@ use app_server_protocol::FileSystemListDirectoryParams;
 use app_server_protocol::FileSystemMutationResponse;
 use app_server_protocol::FileSystemReadFilePreviewParams;
 use app_server_protocol::FileSystemRenameFileParams;
+use app_server_protocol::GalleryMaterialDeleteResponse;
+use app_server_protocol::GalleryMaterialFilterParams;
+use app_server_protocol::GalleryMaterialListResponse;
+use app_server_protocol::GalleryMaterialLookupParams;
+use app_server_protocol::GalleryMaterialMetadataCreateParams;
+use app_server_protocol::GalleryMaterialMetadataResponse;
+use app_server_protocol::GalleryMaterialMetadataUpdateParams;
+use app_server_protocol::GalleryMaterialResponse;
 use app_server_protocol::GatewayChannelStartParams;
 use app_server_protocol::GatewayChannelStatusParams;
 use app_server_protocol::GatewayChannelStatusResponse;
@@ -211,6 +219,7 @@ use app_server_protocol::MediaTaskArtifactListParams;
 use app_server_protocol::MediaTaskArtifactListResponse;
 use app_server_protocol::MediaTaskArtifactLookupParams;
 use app_server_protocol::MediaTaskArtifactResponse;
+use app_server_protocol::MediaTaskArtifactVideoCreateParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -250,9 +259,29 @@ use app_server_protocol::ModelProviderUiStateWriteParams;
 use app_server_protocol::ModelProviderUpdateParams;
 use app_server_protocol::ModelProviderWriteResponse;
 use app_server_protocol::ModelSyncStateReadResponse;
+use app_server_protocol::ProjectMaterialContentResponse;
+use app_server_protocol::ProjectMaterialCountResponse;
+use app_server_protocol::ProjectMaterialDeleteResponse;
+use app_server_protocol::ProjectMaterialImportFromUrlParams;
+use app_server_protocol::ProjectMaterialListParams;
+use app_server_protocol::ProjectMaterialListResponse;
+use app_server_protocol::ProjectMaterialLookupParams;
+use app_server_protocol::ProjectMaterialResponse;
+use app_server_protocol::ProjectMaterialUpdateParams;
+use app_server_protocol::ProjectMaterialUploadParams;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::ServerDiagnosticsResponse;
+use app_server_protocol::SessionFileEntryResponse;
+use app_server_protocol::SessionFileGetOrCreateParams;
+use app_server_protocol::SessionFileIdParams;
+use app_server_protocol::SessionFileListResponse;
+use app_server_protocol::SessionFileMetaResponse;
+use app_server_protocol::SessionFileMutationResponse;
+use app_server_protocol::SessionFileReadResponse;
+use app_server_protocol::SessionFileResolvePathResponse;
+use app_server_protocol::SessionFileSaveParams;
+use app_server_protocol::SessionFileUpdateMetaParams;
 use app_server_protocol::SkillDownloadInstallParams;
 use app_server_protocol::SkillDownloadInstallResponse;
 use app_server_protocol::SkillInstalledDirectoriesListResponse;
@@ -289,10 +318,40 @@ use app_server_protocol::SkillRepositorySaveParams;
 use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::SkillScaffoldCreateResponse;
 use app_server_protocol::SupportBundleExportResponse;
+use app_server_protocol::UnifiedMemoryAnalysisResponse;
+use app_server_protocol::UnifiedMemoryAnalyzeParams;
+use app_server_protocol::UnifiedMemoryCreateParams;
+use app_server_protocol::UnifiedMemoryDeleteParams;
+use app_server_protocol::UnifiedMemoryDeleteResponse;
+use app_server_protocol::UnifiedMemoryGetParams;
+use app_server_protocol::UnifiedMemoryGetResponse;
+use app_server_protocol::UnifiedMemoryHybridSearchParams;
+use app_server_protocol::UnifiedMemoryListParams;
+use app_server_protocol::UnifiedMemoryListResponse;
+use app_server_protocol::UnifiedMemorySearchParams;
+use app_server_protocol::UnifiedMemorySemanticSearchParams;
+use app_server_protocol::UnifiedMemoryStatsResponse;
+use app_server_protocol::UnifiedMemoryUpdateParams;
+use app_server_protocol::UnifiedMemoryWriteResponse;
 use app_server_protocol::UsageStatsDailyTrendsListResponse;
 use app_server_protocol::UsageStatsModelRankingListResponse;
 use app_server_protocol::UsageStatsRangeParams;
 use app_server_protocol::UsageStatsReadResponse;
+use app_server_protocol::VoiceAsrCredentialCreateParams;
+use app_server_protocol::VoiceAsrCredentialIdParams;
+use app_server_protocol::VoiceAsrCredentialListResponse;
+use app_server_protocol::VoiceAsrCredentialMutationResponse;
+use app_server_protocol::VoiceAsrCredentialTestResponse;
+use app_server_protocol::VoiceAsrCredentialUpdateParams;
+use app_server_protocol::VoiceAsrCredentialWriteResponse;
+use app_server_protocol::VoiceInstructionIdParams;
+use app_server_protocol::VoiceInstructionListResponse;
+use app_server_protocol::VoiceInstructionMutationResponse;
+use app_server_protocol::VoiceInstructionSaveParams;
+use app_server_protocol::VoiceModelDefaultSetParams;
+use app_server_protocol::VoiceModelDefaultSetResponse;
+use app_server_protocol::VoiceModelTestTranscribeFileParams;
+use app_server_protocol::VoiceModelTestTranscribeFileResponse;
 use app_server_protocol::WechatChannelAccountListResponse;
 use app_server_protocol::WechatChannelAccountRemoveParams;
 use app_server_protocol::WechatChannelAccountRemoveResponse;
@@ -542,6 +601,69 @@ pub trait AppDataSource: Send + Sync {
     ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
         Err(RuntimeCoreError::Backend(
             "agentSession/objective/audit is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn get_or_create_session_file(
+        &self,
+        _params: SessionFileGetOrCreateParams,
+    ) -> Result<SessionFileMetaResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "sessionFile/getOrCreate is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_session_file_meta(
+        &self,
+        _params: SessionFileUpdateMetaParams,
+    ) -> Result<SessionFileMetaResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "sessionFile/updateMeta is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn save_session_file(
+        &self,
+        _params: SessionFileSaveParams,
+    ) -> Result<SessionFileEntryResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "sessionFile/save is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_session_file(
+        &self,
+        _params: SessionFileIdParams,
+    ) -> Result<SessionFileReadResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "sessionFile/read is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn resolve_session_file_path(
+        &self,
+        _params: SessionFileIdParams,
+    ) -> Result<SessionFileResolvePathResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "sessionFile/resolvePath is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_session_file(
+        &self,
+        _params: SessionFileIdParams,
+    ) -> Result<SessionFileMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "sessionFile/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_session_files(
+        &self,
+        _params: SessionFileGetOrCreateParams,
+    ) -> Result<SessionFileListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "sessionFile/list is not available without an app data source".to_string(),
         ))
     }
 
@@ -957,6 +1079,16 @@ pub trait AppDataSource: Send + Sync {
         ))
     }
 
+    async fn create_video_media_task_artifact(
+        &self,
+        _params: MediaTaskArtifactVideoCreateParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mediaTaskArtifact/video/create is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
     async fn complete_audio_media_task_artifact(
         &self,
         _params: MediaTaskArtifactAudioCompleteParams,
@@ -991,6 +1123,253 @@ pub trait AppDataSource: Send + Sync {
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
         Err(RuntimeCoreError::Backend(
             "mediaTaskArtifact/cancel is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn get_gallery_material(
+        &self,
+        _params: GalleryMaterialLookupParams,
+    ) -> Result<GalleryMaterialResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "galleryMaterial/get is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_gallery_material_metadata(
+        &self,
+        _params: GalleryMaterialMetadataCreateParams,
+    ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "galleryMaterialMetadata/create is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn get_gallery_material_metadata(
+        &self,
+        _params: GalleryMaterialLookupParams,
+    ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "galleryMaterialMetadata/get is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_gallery_material_metadata(
+        &self,
+        _params: GalleryMaterialMetadataUpdateParams,
+    ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "galleryMaterialMetadata/update is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn delete_gallery_material_metadata(
+        &self,
+        _params: GalleryMaterialLookupParams,
+    ) -> Result<GalleryMaterialDeleteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "galleryMaterialMetadata/delete is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn list_gallery_materials_by_image_category(
+        &self,
+        _params: GalleryMaterialFilterParams,
+    ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "galleryMaterial/listByImageCategory is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn list_gallery_materials_by_layout_category(
+        &self,
+        _params: GalleryMaterialFilterParams,
+    ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "galleryMaterial/listByLayoutCategory is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn list_gallery_materials_by_mood(
+        &self,
+        _params: GalleryMaterialFilterParams,
+    ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "galleryMaterial/listByMood is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_project_materials(
+        &self,
+        _params: ProjectMaterialListParams,
+    ) -> Result<ProjectMaterialListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "projectMaterial/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn get_project_material(
+        &self,
+        _params: ProjectMaterialLookupParams,
+    ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "projectMaterial/get is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn count_project_materials(
+        &self,
+        _params: ProjectMaterialListParams,
+    ) -> Result<ProjectMaterialCountResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "projectMaterial/count is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn upload_project_material(
+        &self,
+        _params: ProjectMaterialUploadParams,
+    ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "projectMaterial/upload is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn import_project_material_from_url(
+        &self,
+        _params: ProjectMaterialImportFromUrlParams,
+    ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "projectMaterial/importFromUrl is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_project_material(
+        &self,
+        _params: ProjectMaterialUpdateParams,
+    ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "projectMaterial/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_project_material(
+        &self,
+        _params: ProjectMaterialLookupParams,
+    ) -> Result<ProjectMaterialDeleteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "projectMaterial/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_project_material_content(
+        &self,
+        _params: ProjectMaterialLookupParams,
+    ) -> Result<ProjectMaterialContentResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "projectMaterial/content is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_voice_asr_credentials(
+        &self,
+    ) -> Result<VoiceAsrCredentialListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceAsrCredential/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_voice_asr_credential(
+        &self,
+        _params: VoiceAsrCredentialCreateParams,
+    ) -> Result<VoiceAsrCredentialWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceAsrCredential/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_voice_asr_credential(
+        &self,
+        _params: VoiceAsrCredentialUpdateParams,
+    ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceAsrCredential/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_voice_asr_credential(
+        &self,
+        _params: VoiceAsrCredentialIdParams,
+    ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceAsrCredential/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn set_default_voice_asr_credential(
+        &self,
+        _params: VoiceAsrCredentialIdParams,
+    ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceAsrCredential/default/set is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn test_voice_asr_credential(
+        &self,
+        _params: VoiceAsrCredentialIdParams,
+    ) -> Result<VoiceAsrCredentialTestResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceAsrCredential/test is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn test_transcribe_voice_model_file(
+        &self,
+        _params: VoiceModelTestTranscribeFileParams,
+    ) -> Result<VoiceModelTestTranscribeFileResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceModel/testTranscribeFile is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_voice_instructions(
+        &self,
+    ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceInstruction/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn save_voice_instruction(
+        &self,
+        _params: VoiceInstructionSaveParams,
+    ) -> Result<VoiceInstructionMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceInstruction/save is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_voice_instruction(
+        &self,
+        _params: VoiceInstructionIdParams,
+    ) -> Result<VoiceInstructionMutationResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceInstruction/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn set_default_voice_model(
+        &self,
+        _params: VoiceModelDefaultSetParams,
+    ) -> Result<VoiceModelDefaultSetResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "voiceModel/default/set is not available without an app data source".to_string(),
         ))
     }
 
@@ -1375,6 +1754,98 @@ pub trait AppDataSource: Send + Sync {
         &self,
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError>;
+
+    async fn list_unified_memories(
+        &self,
+        _params: UnifiedMemoryListParams,
+    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn get_unified_memory(
+        &self,
+        _params: UnifiedMemoryGetParams,
+    ) -> Result<UnifiedMemoryGetResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/get is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_unified_memory(
+        &self,
+        _params: UnifiedMemoryCreateParams,
+    ) -> Result<UnifiedMemoryWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_unified_memory(
+        &self,
+        _params: UnifiedMemoryUpdateParams,
+    ) -> Result<UnifiedMemoryWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_unified_memory(
+        &self,
+        _params: UnifiedMemoryDeleteParams,
+    ) -> Result<UnifiedMemoryDeleteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn search_unified_memories(
+        &self,
+        _params: UnifiedMemorySearchParams,
+    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/search is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_unified_memory_stats(
+        &self,
+    ) -> Result<UnifiedMemoryStatsResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/stats is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn analyze_unified_memories(
+        &self,
+        _params: UnifiedMemoryAnalyzeParams,
+    ) -> Result<UnifiedMemoryAnalysisResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/analyze requires RuntimeCore memory extraction current implementation"
+                .to_string(),
+        ))
+    }
+
+    async fn semantic_search_unified_memories(
+        &self,
+        _params: UnifiedMemorySemanticSearchParams,
+    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/semanticSearch requires current embedding provider integration"
+                .to_string(),
+        ))
+    }
+
+    async fn hybrid_search_unified_memories(
+        &self,
+        _params: UnifiedMemoryHybridSearchParams,
+    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "unifiedMemory/hybridSearch requires current embedding provider integration"
+                .to_string(),
+        ))
+    }
 
     async fn list_logs(&self) -> Result<LogListResponse, RuntimeCoreError> {
         Err(RuntimeCoreError::Backend(
@@ -5151,6 +5622,57 @@ impl RuntimeCore {
         })
     }
 
+    pub async fn get_or_create_session_file(
+        &self,
+        params: SessionFileGetOrCreateParams,
+    ) -> Result<SessionFileMetaResponse, RuntimeCoreError> {
+        self.app_data_source
+            .get_or_create_session_file(params)
+            .await
+    }
+
+    pub async fn update_session_file_meta(
+        &self,
+        params: SessionFileUpdateMetaParams,
+    ) -> Result<SessionFileMetaResponse, RuntimeCoreError> {
+        self.app_data_source.update_session_file_meta(params).await
+    }
+
+    pub async fn save_session_file(
+        &self,
+        params: SessionFileSaveParams,
+    ) -> Result<SessionFileEntryResponse, RuntimeCoreError> {
+        self.app_data_source.save_session_file(params).await
+    }
+
+    pub async fn read_session_file(
+        &self,
+        params: SessionFileIdParams,
+    ) -> Result<SessionFileReadResponse, RuntimeCoreError> {
+        self.app_data_source.read_session_file(params).await
+    }
+
+    pub async fn resolve_session_file_path(
+        &self,
+        params: SessionFileIdParams,
+    ) -> Result<SessionFileResolvePathResponse, RuntimeCoreError> {
+        self.app_data_source.resolve_session_file_path(params).await
+    }
+
+    pub async fn delete_session_file(
+        &self,
+        params: SessionFileIdParams,
+    ) -> Result<SessionFileMutationResponse, RuntimeCoreError> {
+        self.app_data_source.delete_session_file(params).await
+    }
+
+    pub async fn list_session_files(
+        &self,
+        params: SessionFileGetOrCreateParams,
+    ) -> Result<SessionFileListResponse, RuntimeCoreError> {
+        self.app_data_source.list_session_files(params).await
+    }
+
     fn update_runtime_core_session_overview(
         &self,
         params: AgentSessionUpdateParams,
@@ -5921,6 +6443,15 @@ impl RuntimeCore {
             .await
     }
 
+    pub async fn create_video_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactVideoCreateParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        self.app_data_source
+            .create_video_media_task_artifact(params)
+            .await
+    }
+
     pub async fn complete_audio_media_task_artifact(
         &self,
         params: MediaTaskArtifactAudioCompleteParams,
@@ -5951,6 +6482,221 @@ impl RuntimeCore {
         self.app_data_source
             .cancel_media_task_artifact(params)
             .await
+    }
+
+    pub async fn get_gallery_material(
+        &self,
+        params: GalleryMaterialLookupParams,
+    ) -> Result<GalleryMaterialResponse, RuntimeCoreError> {
+        self.app_data_source.get_gallery_material(params).await
+    }
+
+    pub async fn create_gallery_material_metadata(
+        &self,
+        params: GalleryMaterialMetadataCreateParams,
+    ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+        self.app_data_source
+            .create_gallery_material_metadata(params)
+            .await
+    }
+
+    pub async fn get_gallery_material_metadata(
+        &self,
+        params: GalleryMaterialLookupParams,
+    ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+        self.app_data_source
+            .get_gallery_material_metadata(params)
+            .await
+    }
+
+    pub async fn update_gallery_material_metadata(
+        &self,
+        params: GalleryMaterialMetadataUpdateParams,
+    ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+        self.app_data_source
+            .update_gallery_material_metadata(params)
+            .await
+    }
+
+    pub async fn delete_gallery_material_metadata(
+        &self,
+        params: GalleryMaterialLookupParams,
+    ) -> Result<GalleryMaterialDeleteResponse, RuntimeCoreError> {
+        self.app_data_source
+            .delete_gallery_material_metadata(params)
+            .await
+    }
+
+    pub async fn list_gallery_materials_by_image_category(
+        &self,
+        params: GalleryMaterialFilterParams,
+    ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_gallery_materials_by_image_category(params)
+            .await
+    }
+
+    pub async fn list_gallery_materials_by_layout_category(
+        &self,
+        params: GalleryMaterialFilterParams,
+    ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_gallery_materials_by_layout_category(params)
+            .await
+    }
+
+    pub async fn list_gallery_materials_by_mood(
+        &self,
+        params: GalleryMaterialFilterParams,
+    ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_gallery_materials_by_mood(params)
+            .await
+    }
+
+    pub async fn list_project_materials(
+        &self,
+        params: ProjectMaterialListParams,
+    ) -> Result<ProjectMaterialListResponse, RuntimeCoreError> {
+        self.app_data_source.list_project_materials(params).await
+    }
+
+    pub async fn get_project_material(
+        &self,
+        params: ProjectMaterialLookupParams,
+    ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+        self.app_data_source.get_project_material(params).await
+    }
+
+    pub async fn count_project_materials(
+        &self,
+        params: ProjectMaterialListParams,
+    ) -> Result<ProjectMaterialCountResponse, RuntimeCoreError> {
+        self.app_data_source.count_project_materials(params).await
+    }
+
+    pub async fn upload_project_material(
+        &self,
+        params: ProjectMaterialUploadParams,
+    ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+        self.app_data_source.upload_project_material(params).await
+    }
+
+    pub async fn import_project_material_from_url(
+        &self,
+        params: ProjectMaterialImportFromUrlParams,
+    ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+        self.app_data_source
+            .import_project_material_from_url(params)
+            .await
+    }
+
+    pub async fn update_project_material(
+        &self,
+        params: ProjectMaterialUpdateParams,
+    ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+        self.app_data_source.update_project_material(params).await
+    }
+
+    pub async fn delete_project_material(
+        &self,
+        params: ProjectMaterialLookupParams,
+    ) -> Result<ProjectMaterialDeleteResponse, RuntimeCoreError> {
+        self.app_data_source.delete_project_material(params).await
+    }
+
+    pub async fn read_project_material_content(
+        &self,
+        params: ProjectMaterialLookupParams,
+    ) -> Result<ProjectMaterialContentResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_project_material_content(params)
+            .await
+    }
+
+    pub async fn list_voice_asr_credentials(
+        &self,
+    ) -> Result<VoiceAsrCredentialListResponse, RuntimeCoreError> {
+        self.app_data_source.list_voice_asr_credentials().await
+    }
+
+    pub async fn create_voice_asr_credential(
+        &self,
+        params: VoiceAsrCredentialCreateParams,
+    ) -> Result<VoiceAsrCredentialWriteResponse, RuntimeCoreError> {
+        self.app_data_source
+            .create_voice_asr_credential(params)
+            .await
+    }
+
+    pub async fn update_voice_asr_credential(
+        &self,
+        params: VoiceAsrCredentialUpdateParams,
+    ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+        self.app_data_source
+            .update_voice_asr_credential(params)
+            .await
+    }
+
+    pub async fn delete_voice_asr_credential(
+        &self,
+        params: VoiceAsrCredentialIdParams,
+    ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+        self.app_data_source
+            .delete_voice_asr_credential(params)
+            .await
+    }
+
+    pub async fn set_default_voice_asr_credential(
+        &self,
+        params: VoiceAsrCredentialIdParams,
+    ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+        self.app_data_source
+            .set_default_voice_asr_credential(params)
+            .await
+    }
+
+    pub async fn test_voice_asr_credential(
+        &self,
+        params: VoiceAsrCredentialIdParams,
+    ) -> Result<VoiceAsrCredentialTestResponse, RuntimeCoreError> {
+        self.app_data_source.test_voice_asr_credential(params).await
+    }
+
+    pub async fn test_transcribe_voice_model_file(
+        &self,
+        params: VoiceModelTestTranscribeFileParams,
+    ) -> Result<VoiceModelTestTranscribeFileResponse, RuntimeCoreError> {
+        self.app_data_source
+            .test_transcribe_voice_model_file(params)
+            .await
+    }
+
+    pub async fn list_voice_instructions(
+        &self,
+    ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {
+        self.app_data_source.list_voice_instructions().await
+    }
+
+    pub async fn save_voice_instruction(
+        &self,
+        params: VoiceInstructionSaveParams,
+    ) -> Result<VoiceInstructionMutationResponse, RuntimeCoreError> {
+        self.app_data_source.save_voice_instruction(params).await
+    }
+
+    pub async fn delete_voice_instruction(
+        &self,
+        params: VoiceInstructionIdParams,
+    ) -> Result<VoiceInstructionMutationResponse, RuntimeCoreError> {
+        self.app_data_source.delete_voice_instruction(params).await
+    }
+
+    pub async fn set_default_voice_model(
+        &self,
+        params: VoiceModelDefaultSetParams,
+    ) -> Result<VoiceModelDefaultSetResponse, RuntimeCoreError> {
+        self.app_data_source.set_default_voice_model(params).await
     }
 
     pub async fn list_knowledge_packs(
@@ -6272,6 +7018,79 @@ impl RuntimeCore {
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
         self.app_data_source.read_project_memory(params).await
+    }
+
+    pub async fn list_unified_memories(
+        &self,
+        params: UnifiedMemoryListParams,
+    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
+        self.app_data_source.list_unified_memories(params).await
+    }
+
+    pub async fn get_unified_memory(
+        &self,
+        params: UnifiedMemoryGetParams,
+    ) -> Result<UnifiedMemoryGetResponse, RuntimeCoreError> {
+        self.app_data_source.get_unified_memory(params).await
+    }
+
+    pub async fn create_unified_memory(
+        &self,
+        params: UnifiedMemoryCreateParams,
+    ) -> Result<UnifiedMemoryWriteResponse, RuntimeCoreError> {
+        self.app_data_source.create_unified_memory(params).await
+    }
+
+    pub async fn update_unified_memory(
+        &self,
+        params: UnifiedMemoryUpdateParams,
+    ) -> Result<UnifiedMemoryWriteResponse, RuntimeCoreError> {
+        self.app_data_source.update_unified_memory(params).await
+    }
+
+    pub async fn delete_unified_memory(
+        &self,
+        params: UnifiedMemoryDeleteParams,
+    ) -> Result<UnifiedMemoryDeleteResponse, RuntimeCoreError> {
+        self.app_data_source.delete_unified_memory(params).await
+    }
+
+    pub async fn search_unified_memories(
+        &self,
+        params: UnifiedMemorySearchParams,
+    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
+        self.app_data_source.search_unified_memories(params).await
+    }
+
+    pub async fn read_unified_memory_stats(
+        &self,
+    ) -> Result<UnifiedMemoryStatsResponse, RuntimeCoreError> {
+        self.app_data_source.read_unified_memory_stats().await
+    }
+
+    pub async fn analyze_unified_memories(
+        &self,
+        params: UnifiedMemoryAnalyzeParams,
+    ) -> Result<UnifiedMemoryAnalysisResponse, RuntimeCoreError> {
+        self.app_data_source.analyze_unified_memories(params).await
+    }
+
+    pub async fn semantic_search_unified_memories(
+        &self,
+        params: UnifiedMemorySemanticSearchParams,
+    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .semantic_search_unified_memories(params)
+            .await
+    }
+
+    pub async fn hybrid_search_unified_memories(
+        &self,
+        params: UnifiedMemoryHybridSearchParams,
+    ) -> Result<UnifiedMemoryListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .hybrid_search_unified_memories(params)
+            .await
     }
 
     pub async fn list_logs(&self) -> Result<LogListResponse, RuntimeCoreError> {
@@ -10566,6 +11385,208 @@ mod tests {
             params: ProjectMemoryReadParams,
         ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
             NoopAppDataSource.read_project_memory(params).await
+        }
+
+        async fn get_gallery_material(
+            &self,
+            params: GalleryMaterialLookupParams,
+        ) -> Result<GalleryMaterialResponse, RuntimeCoreError> {
+            NoopAppDataSource.get_gallery_material(params).await
+        }
+
+        async fn create_gallery_material_metadata(
+            &self,
+            params: GalleryMaterialMetadataCreateParams,
+        ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .create_gallery_material_metadata(params)
+                .await
+        }
+
+        async fn get_gallery_material_metadata(
+            &self,
+            params: GalleryMaterialLookupParams,
+        ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .get_gallery_material_metadata(params)
+                .await
+        }
+
+        async fn update_gallery_material_metadata(
+            &self,
+            params: GalleryMaterialMetadataUpdateParams,
+        ) -> Result<GalleryMaterialMetadataResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .update_gallery_material_metadata(params)
+                .await
+        }
+
+        async fn delete_gallery_material_metadata(
+            &self,
+            params: GalleryMaterialLookupParams,
+        ) -> Result<GalleryMaterialDeleteResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .delete_gallery_material_metadata(params)
+                .await
+        }
+
+        async fn list_gallery_materials_by_image_category(
+            &self,
+            params: GalleryMaterialFilterParams,
+        ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .list_gallery_materials_by_image_category(params)
+                .await
+        }
+
+        async fn list_gallery_materials_by_layout_category(
+            &self,
+            params: GalleryMaterialFilterParams,
+        ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .list_gallery_materials_by_layout_category(params)
+                .await
+        }
+
+        async fn list_gallery_materials_by_mood(
+            &self,
+            params: GalleryMaterialFilterParams,
+        ) -> Result<GalleryMaterialListResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .list_gallery_materials_by_mood(params)
+                .await
+        }
+
+        async fn list_project_materials(
+            &self,
+            params: ProjectMaterialListParams,
+        ) -> Result<ProjectMaterialListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_project_materials(params).await
+        }
+
+        async fn get_project_material(
+            &self,
+            params: ProjectMaterialLookupParams,
+        ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+            NoopAppDataSource.get_project_material(params).await
+        }
+
+        async fn count_project_materials(
+            &self,
+            params: ProjectMaterialListParams,
+        ) -> Result<ProjectMaterialCountResponse, RuntimeCoreError> {
+            NoopAppDataSource.count_project_materials(params).await
+        }
+
+        async fn upload_project_material(
+            &self,
+            params: ProjectMaterialUploadParams,
+        ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+            NoopAppDataSource.upload_project_material(params).await
+        }
+
+        async fn import_project_material_from_url(
+            &self,
+            params: ProjectMaterialImportFromUrlParams,
+        ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .import_project_material_from_url(params)
+                .await
+        }
+
+        async fn update_project_material(
+            &self,
+            params: ProjectMaterialUpdateParams,
+        ) -> Result<ProjectMaterialResponse, RuntimeCoreError> {
+            NoopAppDataSource.update_project_material(params).await
+        }
+
+        async fn delete_project_material(
+            &self,
+            params: ProjectMaterialLookupParams,
+        ) -> Result<ProjectMaterialDeleteResponse, RuntimeCoreError> {
+            NoopAppDataSource.delete_project_material(params).await
+        }
+
+        async fn read_project_material_content(
+            &self,
+            params: ProjectMaterialLookupParams,
+        ) -> Result<ProjectMaterialContentResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .read_project_material_content(params)
+                .await
+        }
+
+        async fn list_voice_asr_credentials(
+            &self,
+        ) -> Result<VoiceAsrCredentialListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_voice_asr_credentials().await
+        }
+
+        async fn create_voice_asr_credential(
+            &self,
+            params: VoiceAsrCredentialCreateParams,
+        ) -> Result<VoiceAsrCredentialWriteResponse, RuntimeCoreError> {
+            NoopAppDataSource.create_voice_asr_credential(params).await
+        }
+
+        async fn update_voice_asr_credential(
+            &self,
+            params: VoiceAsrCredentialUpdateParams,
+        ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+            NoopAppDataSource.update_voice_asr_credential(params).await
+        }
+
+        async fn delete_voice_asr_credential(
+            &self,
+            params: VoiceAsrCredentialIdParams,
+        ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+            NoopAppDataSource.delete_voice_asr_credential(params).await
+        }
+
+        async fn set_default_voice_asr_credential(
+            &self,
+            params: VoiceAsrCredentialIdParams,
+        ) -> Result<VoiceAsrCredentialMutationResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .set_default_voice_asr_credential(params)
+                .await
+        }
+
+        async fn test_voice_asr_credential(
+            &self,
+            params: VoiceAsrCredentialIdParams,
+        ) -> Result<VoiceAsrCredentialTestResponse, RuntimeCoreError> {
+            NoopAppDataSource.test_voice_asr_credential(params).await
+        }
+
+        async fn test_transcribe_voice_model_file(
+            &self,
+            params: VoiceModelTestTranscribeFileParams,
+        ) -> Result<VoiceModelTestTranscribeFileResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .test_transcribe_voice_model_file(params)
+                .await
+        }
+
+        async fn list_voice_instructions(
+            &self,
+        ) -> Result<VoiceInstructionListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_voice_instructions().await
+        }
+
+        async fn save_voice_instruction(
+            &self,
+            params: VoiceInstructionSaveParams,
+        ) -> Result<VoiceInstructionMutationResponse, RuntimeCoreError> {
+            NoopAppDataSource.save_voice_instruction(params).await
+        }
+
+        async fn delete_voice_instruction(
+            &self,
+            params: VoiceInstructionIdParams,
+        ) -> Result<VoiceInstructionMutationResponse, RuntimeCoreError> {
+            NoopAppDataSource.delete_voice_instruction(params).await
         }
 
         async fn list_logs(&self) -> Result<LogListResponse, RuntimeCoreError> {

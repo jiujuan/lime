@@ -121,6 +121,31 @@ export function buildInstalledLocalSkills(
   ];
 }
 
+export function isMarketplaceSkillInstalledAsLocalSkill({
+  marketplaceSkill,
+  localSkill,
+}: {
+  marketplaceSkill: SkillMarketplaceItem;
+  localSkill: Skill;
+}): boolean {
+  const candidates = new Set(
+    [
+      marketplaceSkill.name,
+      `${marketplaceSkill.name}-official`,
+      ...(marketplaceSkill.aliases ?? []),
+      ...(marketplaceSkill.aliases ?? []).map((alias) => `${alias}-official`),
+    ]
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+
+  return (
+    candidates.has(localSkill.directory) ||
+    candidates.has(localSkill.name) ||
+    localSkill.metadata?.lime_marketplace_skill_name === marketplaceSkill.name
+  );
+}
+
 export function getVisibleInstalledLocalSkills({
   installedLocalSkills,
   searchQuery,
@@ -243,6 +268,10 @@ export function getVisibleUserInstalledSkills(
   visibleInstalledLocalSkills: Skill[],
 ): Skill[] {
   return visibleInstalledLocalSkills.filter(
-    (skill) => skill.sourceKind !== "builtin",
+    (skill) =>
+      skill.sourceKind !== "builtin" &&
+      skill.catalogSource !== "project" &&
+      skill.catalogSource !== "remote" &&
+      !(skill.catalogSource === undefined && skill.repoOwner && skill.repoName),
   );
 }

@@ -34,30 +34,93 @@ describe("skillsApi", () => {
     appServerRequestMock.mockReset();
   });
 
-  it("浏览器 fallback 未返回本地技能数组时应回退为空列表", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
-
-    await expect(skillsApi.getLocal("lime")).resolves.toEqual([]);
-    expect(safeInvoke).toHaveBeenCalledWith("get_local_skills_for_app", {
-      app: "lime",
+  it("本地技能列表应走 App Server current 管理列表并过滤远端候选", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        skills: [
+          {
+            key: "local:writer",
+            name: "写作助手",
+            description: "用户安装技能",
+            directory: "writer",
+            installed: true,
+            sourceKind: "other",
+            catalogSource: "user",
+            standardCompliance: {
+              isStandard: true,
+            },
+          },
+          {
+            key: "anthropics/skills:remote-writer",
+            name: "远端写作助手",
+            description: "远端候选技能",
+            directory: "remote-writer",
+            installed: false,
+            sourceKind: "other",
+            catalogSource: "remote",
+            repoOwner: "anthropics",
+            repoName: "skills",
+          },
+          {
+            key: "project:writer",
+            name: "项目写作助手",
+            description: "项目保存技能",
+            directory: "project-writer",
+            installed: true,
+            sourceKind: "other",
+            catalogSource: "project",
+          },
+          {
+            key: "builtin:summary",
+            name: "内置总结",
+            description: "内置技能",
+            directory: "summary",
+            installed: true,
+            sourceKind: "builtin",
+            catalogSource: "user",
+          },
+        ],
+      },
     });
+
+    await expect(skillsApi.getLocal("lime")).resolves.toEqual([
+      expect.objectContaining({
+        key: "local:writer",
+        catalogSource: "user",
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      }),
+      expect.objectContaining({
+        key: "builtin:summary",
+        catalogSource: "user",
+        sourceKind: "builtin",
+      }),
+    ]);
+    expect(appServerRequestMock).toHaveBeenCalledWith("skillManagement/list", {
+      app: "lime",
+      refreshRemote: false,
+      scope: "user",
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "get_local_skills_for_app",
+      expect.anything(),
+    );
   });
 
-  it("本地技能列表遇到 Electron empty diagnostic list 时应 fail closed", async () => {
-    const diagnosticList: unknown[] = [];
-    Object.defineProperty(diagnosticList, "__diagnostic", {
-      value: {
-        command: "get_local_skills_for_app",
-        source: "electron-empty-diagnostic",
-        status: "degraded",
-      },
-      enumerable: false,
+  it("本地技能列表缺少 App Server result 时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {},
     });
 
-    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
-
     await expect(skillsApi.getLocal("lime")).rejects.toThrow(
-      "get_local_skills_for_app 尚未接入真实 Skill 管理 current 通道，收到 electron-empty-diagnostic 诊断返回。",
+      "skillManagement/list did not return skills",
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "get_local_skills_for_app",
+      expect.anything(),
     );
   });
 
@@ -136,9 +199,9 @@ describe("skillsApi", () => {
       })
       .mockResolvedValueOnce({ result: { inspection: validInspection } });
 
-    await expect(
-      skillsApi.install("article-typesetting-master"),
-    ).resolves.toBe(true);
+    await expect(skillsApi.install("article-typesetting-master")).resolves.toBe(
+      true,
+    );
     await expect(
       skillsApi.uninstall("article-typesetting-master"),
     ).resolves.toBe(true);
@@ -150,9 +213,9 @@ describe("skillsApi", () => {
         enabled: true,
       }),
     ).resolves.toBe(true);
-    await expect(
-      skillsApi.removeRepo("anthropics", "skills"),
-    ).resolves.toBe(true);
+    await expect(skillsApi.removeRepo("anthropics", "skills")).resolves.toBe(
+      true,
+    );
     await expect(skillsApi.refreshCache()).resolves.toBe(true);
     await expect(
       skillsApi.inspectLocalSkill("article-typesetting-master"),
@@ -809,9 +872,7 @@ describe("skillsApi", () => {
     );
     await expect(
       skillsApi.importLocalSkill("/Users/demo/article-typesetting-master"),
-    ).rejects.toThrow(
-      "skillLocal/import did not return imported skill result",
-    );
+    ).rejects.toThrow("skillLocal/import did not return imported skill result");
     await expect(
       skillsApi.exportLocalSkillPackage(
         "article-typesetting-master",

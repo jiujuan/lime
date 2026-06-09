@@ -251,7 +251,14 @@ const WorkspaceFrame = styled.div`
 `;
 
 export const VideoCanvas: React.FC<VideoCanvasProps> = memo(
-  ({ state, onStateChange, projectId, contentId, onClose: _onClose }) => {
+  ({
+    state,
+    onStateChange,
+    projectRootPath,
+    projectId,
+    contentId,
+    onClose: _onClose,
+  }) => {
     const { t } = useTranslation("workspace");
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [providers, setProviders] = useState<VideoProviderOption[]>([]);
@@ -455,6 +462,7 @@ export const VideoCanvas: React.FC<VideoCanvasProps> = memo(
             <MainContainer>
               <VideoWorkspace
                 state={state}
+                projectRootPath={projectRootPath}
                 projectId={projectId}
                 onStateChange={onStateChange}
               />

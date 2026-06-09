@@ -40,7 +40,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
 
   return (
     <DropdownMenuContext.Provider value={{ open, setOpen }}>
-      <div style={{ position: "relative", display: "contents" }}>
+      <div style={{ position: "relative", display: "inline-flex" }}>
         {children}
       </div>
     </DropdownMenuContext.Provider>

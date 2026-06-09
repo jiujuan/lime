@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import contentFactoryFixture from "../fixtures/content-factory-app.json";
+import { currentAgentAppHostRuntimeVersion } from "../readiness/hostCapabilityProfile";
 import { buildInstalledAppPreview } from "./installedAppPreview";
 import {
   BrowserLocalStorageAgentAppPersistenceDriver,
@@ -57,7 +58,7 @@ describe("InstalledAgentAppState P10", () => {
       runtimeProfileSummary: {
         installMode: "in_lime",
         shellKind: "desktop",
-        runtimeVersion: "0.8.0",
+        runtimeVersion: currentAgentAppHostRuntimeVersion,
       },
       setup: {
         knowledgeBindings: {
@@ -104,7 +105,7 @@ describe("InstalledAgentAppState P10", () => {
       runtimeProfileSummary: {
         installMode: "standalone",
         shellKind: "app_shell",
-        runtimeVersion: "0.8.0",
+        runtimeVersion: currentAgentAppHostRuntimeVersion,
         checkedAt: now,
       },
     });

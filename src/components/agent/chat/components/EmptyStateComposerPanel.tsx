@@ -288,6 +288,16 @@ export function EmptyStateComposerPanel({
     setDraftInput(input);
   }, [input]);
 
+  const handleSendDraft = () => {
+    const submittedInput = draftInput;
+    setDraftInput("");
+    onSend(submittedInput, {
+      goalEnabled: objectiveEnabled,
+      planEnabled: taskEnabled,
+      subagentEnabled,
+    });
+  };
+
   const suggestionKey = `${activeTheme}:${draftInput.trim().toLowerCase()}`;
   const teamSuggestion = useMemo(
     () =>
@@ -676,13 +686,7 @@ export function EmptyStateComposerPanel({
         textareaRef={textareaRef}
         text={draftInput}
         setText={setDraftInput}
-        onSend={() =>
-          onSend(draftInput, {
-            goalEnabled: objectiveEnabled,
-            planEnabled: taskEnabled,
-            subagentEnabled,
-          })
-        }
+        onSend={handleSendDraft}
         isLoading={isLoading}
         disabled={disabled}
         onToolClick={handleToolAction}

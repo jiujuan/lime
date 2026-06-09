@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "UnifiedMemoryCategory": {
+      "enum": [
+        "activity",
+        "context",
+        "experience",
+        "identity",
+        "preference"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "category": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UnifiedMemoryCategory"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "limit": {
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "min_similarity": {
+      "format": "float",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "query": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "title": "UnifiedMemorySemanticSearchOptions",
+  "type": "object"
+}

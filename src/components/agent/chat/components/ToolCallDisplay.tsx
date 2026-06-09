@@ -12,7 +12,6 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
 import {
   ChevronDown,
   ChevronRight,
@@ -22,6 +21,7 @@ import {
   FolderTree,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { cn } from "@/lib/utils";
 import { skillsApi } from "@/lib/api/skills";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
@@ -740,16 +740,11 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   const handleOpenExternalUrl = useCallback(
     async (url: string) => {
       try {
-        await openExternal(url);
-      } catch {
-        if (
-          typeof window !== "undefined" &&
-          typeof window.open === "function"
-        ) {
-          window.open(url, "_blank");
-          return;
-        }
-        throw new Error(openExternalUnsupportedMessage);
+        await openExternalUrlWithSystemBrowser(url);
+      } catch (error) {
+        throw error instanceof Error
+          ? error
+          : new Error(openExternalUnsupportedMessage);
       }
     },
     [openExternalUnsupportedMessage],

@@ -1,5 +1,10 @@
+import type { MouseEvent } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 
 export function stripSkillFrontmatter(content: string): string {
   const normalized = content.replace(/^\uFEFF/, "");
@@ -46,9 +51,7 @@ const skillMarkdownComponents: Components = {
   },
   p({ children }) {
     return (
-      <p className="my-4 leading-7 text-[color:var(--lime-text)]">
-        {children}
-      </p>
+      <p className="my-4 leading-7 text-[color:var(--lime-text)]">{children}</p>
     );
   },
   ul({ children }) {
@@ -124,13 +127,33 @@ const skillMarkdownComponents: Components = {
       </td>
     );
   },
-  a({ href, children }) {
+  a({ href, children, ...props }) {
+    const { onAuxClick, onClick, rel, ...anchorProps } = props;
+    const externalHref = typeof href === "string" ? href : "";
+    const linkRel = resolveHttpExternalHref(externalHref)
+      ? "noreferrer noopener"
+      : rel;
+    const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+      onClick?.(event);
+      if (!event.defaultPrevented) {
+        interceptHttpExternalLinkClick(event, externalHref);
+      }
+    };
+    const handleAuxClick = (event: MouseEvent<HTMLAnchorElement>) => {
+      onAuxClick?.(event);
+      if (!event.defaultPrevented) {
+        interceptHttpExternalLinkClick(event, externalHref);
+      }
+    };
+
     return (
       <a
+        {...anchorProps}
         className="font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
         href={href}
-        rel="noreferrer"
-        target="_blank"
+        rel={linkRel}
+        onAuxClick={handleAuxClick}
+        onClick={handleClick}
       >
         {children}
       </a>

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type CreateAudioGenerationTaskArtifactRequest,
   type CreateImageGenerationTaskArtifactRequest,
+  type CreateVideoGenerationTaskArtifactRequest,
   type ListMediaTaskArtifactsRequest,
   type MediaTaskLookupRequest,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
@@ -10,10 +11,12 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
   cancelMediaTaskArtifact,
   completeAudioGenerationTaskArtifact,
   createAudioGenerationTaskArtifact,
   createImageGenerationTaskArtifact,
+  createVideoGenerationTaskArtifact,
   getMediaTaskArtifact,
   listMediaTaskArtifacts,
 } from "./mediaTasks";
@@ -25,6 +28,8 @@ vi.mock("@/lib/api/appServer", () => ({
     "mediaTaskArtifact/image/create",
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE:
     "mediaTaskArtifact/audio/create",
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE:
+    "mediaTaskArtifact/video/create",
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE:
     "mediaTaskArtifact/audio/complete",
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET: "mediaTaskArtifact/get",
@@ -33,6 +38,7 @@ vi.mock("@/lib/api/appServer", () => ({
   createAppServerClient: vi.fn(() => ({
     createImageMediaTaskArtifact: appServerRequestMock,
     createAudioMediaTaskArtifact: appServerRequestMock,
+    createVideoMediaTaskArtifact: appServerRequestMock,
     completeAudioMediaTaskArtifact: appServerRequestMock,
     getMediaTaskArtifact: appServerRequestMock,
     listMediaTaskArtifacts: appServerRequestMock,
@@ -148,6 +154,41 @@ describe("mediaTasks API", () => {
     );
     expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE).toBe(
       "mediaTaskArtifact/audio/create",
+    );
+    expect(appServerRequestMock).toHaveBeenCalledWith(request);
+  });
+
+  it("应通过 App Server current 创建视频任务 artifact", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: buildTaskResult({
+        task_id: "task-video-1",
+        task_type: "video_generate",
+        task_family: "video",
+      }),
+    });
+    const request = {
+      projectRootPath: "/workspace",
+      prompt: "城市夜景",
+      providerId: "doubao",
+      model: "seedance-1-5-pro",
+      aspectRatio: "16:9",
+      duration: 5,
+      entrySource: "video_workspace",
+      modalityContractKey: "video_generation",
+      modality: "video",
+      requiredCapabilities: ["video_generation"],
+      routingSlot: "video_generation_model",
+      requestedTarget: "video",
+    } satisfies CreateVideoGenerationTaskArtifactRequest;
+
+    await expect(createVideoGenerationTaskArtifact(request)).resolves.toEqual(
+      expect.objectContaining({
+        task_id: "task-video-1",
+        task_type: "video_generate",
+      }),
+    );
+    expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE).toBe(
+      "mediaTaskArtifact/video/create",
     );
     expect(appServerRequestMock).toHaveBeenCalledWith(request);
   });
@@ -313,18 +354,9 @@ describe("mediaTasks API", () => {
       expect.objectContaining({ normalized_status: "cancelled" }),
     );
 
-    expect(appServerRequestMock).toHaveBeenNthCalledWith(
-      1,
-      lookupRequest,
-    );
-    expect(appServerRequestMock).toHaveBeenNthCalledWith(
-      2,
-      listRequest,
-    );
-    expect(appServerRequestMock).toHaveBeenNthCalledWith(
-      3,
-      lookupRequest,
-    );
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(1, lookupRequest);
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(2, listRequest);
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(3, lookupRequest);
     expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET).toBe(
       "mediaTaskArtifact/get",
     );

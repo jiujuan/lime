@@ -16,6 +16,7 @@ const {
   mockOpenBrowserRemoteDebuggingPage,
   mockOpenBrowserConnectorGuideWindowCommand,
   mockHasDesktopHostInvokeCapability,
+  mockOpenExternalUrlWithSystemBrowser,
 } = vi.hoisted(() => {
   return {
     mockOpenDialog: vi.fn(),
@@ -30,6 +31,7 @@ const {
     mockOpenBrowserRemoteDebuggingPage: vi.fn(),
     mockOpenBrowserConnectorGuideWindowCommand: vi.fn(),
     mockHasDesktopHostInvokeCapability: vi.fn(),
+    mockOpenExternalUrlWithSystemBrowser: vi.fn(),
   };
 });
 
@@ -44,6 +46,10 @@ vi.mock("@/lib/api/fileSystem", () => ({
 
 vi.mock("@/lib/desktop-runtime", () => ({
   hasDesktopHostInvokeCapability: mockHasDesktopHostInvokeCapability,
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
 }));
 
 vi.mock("@/lib/webview-api", async () => {
@@ -304,18 +310,24 @@ describe("BrowserConnectorGuideWindow", () => {
     );
   });
 
-  it("非 Desktop Host 环境打开引导时应回退到浏览器窗口", async () => {
+  it("非 Desktop Host 环境打开引导时只允许回退到内部浏览器窗口", async () => {
     const mockWindowOpen = vi
       .spyOn(window, "open")
       .mockImplementation(() => null);
 
     await openBrowserConnectorGuideWindow({ mode: "cdp" });
 
+    const [url, target, features] = mockWindowOpen.mock.calls[0] ?? [];
+    expect(url).toBe("/browser-connector-guide?mode=cdp");
+    expect(String(url)).not.toMatch(/^https?:\/\//);
+    expect(target).toBe("_blank");
+    expect(features).toBe("noopener,noreferrer");
     expect(mockWindowOpen).toHaveBeenCalledWith(
       "/browser-connector-guide?mode=cdp",
       "_blank",
       "noopener,noreferrer",
     );
+    expect(mockOpenExternalUrlWithSystemBrowser).not.toHaveBeenCalled();
     expect(mockOpenBrowserConnectorGuideWindowCommand).not.toHaveBeenCalled();
     mockWindowOpen.mockRestore();
   });

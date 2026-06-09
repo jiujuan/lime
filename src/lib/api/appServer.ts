@@ -20,6 +20,7 @@ import {
   METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
   METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
   METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
+  METHOD_AGENT_SESSION_LIST,
   METHOD_AGENT_SESSION_READ,
   METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
   METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
@@ -37,6 +38,22 @@ import {
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_FILE_SYSTEM_RENAME_FILE,
+  METHOD_GALLERY_MATERIAL_GET,
+  METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
+  METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
+  METHOD_GALLERY_MATERIAL_LIST_BY_MOOD,
+  METHOD_GALLERY_MATERIAL_METADATA_CREATE,
+  METHOD_GALLERY_MATERIAL_METADATA_DELETE,
+  METHOD_GALLERY_MATERIAL_METADATA_GET,
+  METHOD_GALLERY_MATERIAL_METADATA_UPDATE,
+  METHOD_PROJECT_MATERIAL_CONTENT,
+  METHOD_PROJECT_MATERIAL_COUNT,
+  METHOD_PROJECT_MATERIAL_DELETE,
+  METHOD_PROJECT_MATERIAL_GET,
+  METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL,
+  METHOD_PROJECT_MATERIAL_LIST,
+  METHOD_PROJECT_MATERIAL_UPDATE,
+  METHOD_PROJECT_MATERIAL_UPLOAD,
   METHOD_GATEWAY_CHANNEL_START,
   METHOD_GATEWAY_CHANNEL_STOP,
   METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT,
@@ -68,15 +85,34 @@ import {
   METHOD_MEDIA_TASK_ARTIFACT_GET,
   METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   METHOD_MEDIA_TASK_ARTIFACT_LIST,
+  METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
   METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
   METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
   METHOD_WECHAT_CHANNEL_LOGIN_START,
   METHOD_WECHAT_CHANNEL_LOGIN_WAIT,
   METHOD_WECHAT_CHANNEL_PROBE,
   METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
+  METHOD_SESSION_FILE_DELETE,
+  METHOD_SESSION_FILE_GET_OR_CREATE,
+  METHOD_SESSION_FILE_LIST,
+  METHOD_SESSION_FILE_READ,
+  METHOD_SESSION_FILE_RESOLVE_PATH,
+  METHOD_SESSION_FILE_SAVE,
+  METHOD_SESSION_FILE_UPDATE_META,
   METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
   METHOD_USAGE_STATS_MODEL_RANKING_LIST,
   METHOD_USAGE_STATS_READ,
+  METHOD_VOICE_ASR_CREDENTIAL_CREATE,
+  METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET,
+  METHOD_VOICE_ASR_CREDENTIAL_DELETE,
+  METHOD_VOICE_ASR_CREDENTIAL_LIST,
+  METHOD_VOICE_ASR_CREDENTIAL_TEST,
+  METHOD_VOICE_ASR_CREDENTIAL_UPDATE,
+  METHOD_VOICE_INSTRUCTION_DELETE,
+  METHOD_VOICE_INSTRUCTION_LIST,
+  METHOD_VOICE_INSTRUCTION_SAVE,
+  METHOD_VOICE_MODEL_DEFAULT_SET,
+  METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
   PROTOCOL_VERSION,
   SERVER_NAME,
   decodeMessage,
@@ -114,6 +150,8 @@ import {
   type AgentSessionHandoffArtifact,
   type AgentSessionHandoffBundleExportParams,
   type AgentSessionHandoffBundleExportResponse,
+  type AgentSessionListParams,
+  type AgentSessionListResponse,
   type AgentSessionObjectiveClearParams,
   type AgentSessionObjectiveClearResponse,
   type AgentSessionObjectiveAuditParams,
@@ -175,6 +213,25 @@ import {
   type FileSystemMutationResponse,
   type FileSystemReadFilePreviewParams,
   type FileSystemRenameFileParams,
+  type GalleryMaterialDeleteResponse,
+  type GalleryMaterialFilterParams,
+  type GalleryMaterialListResponse,
+  type GalleryMaterialLookupParams,
+  type GalleryMaterialMetadataCreateParams,
+  type GalleryMaterialMetadataResponse,
+  type GalleryMaterialMetadataUpdateParams,
+  type GalleryMaterialResponse,
+  type ProjectMaterial,
+  type ProjectMaterialContentResponse,
+  type ProjectMaterialCountResponse,
+  type ProjectMaterialDeleteResponse,
+  type ProjectMaterialImportFromUrlParams,
+  type ProjectMaterialListParams,
+  type ProjectMaterialListResponse,
+  type ProjectMaterialLookupParams,
+  type ProjectMaterialResponse,
+  type ProjectMaterialUpdateParams,
+  type ProjectMaterialUploadParams,
   type GatewayChannelStartParams,
   type GatewayChannelStopParams,
   type GatewayChannelStatusParams,
@@ -206,6 +263,18 @@ import {
   type LogPersistedTailParams,
   type LogPersistedTailResponse,
   type ServerDiagnosticsResponse,
+  type SessionFileEntry,
+  type SessionFileEntryResponse,
+  type SessionFileGetOrCreateParams,
+  type SessionFileIdParams,
+  type SessionFileListResponse,
+  type SessionFileMeta,
+  type SessionFileMetaResponse,
+  type SessionFileMutationResponse,
+  type SessionFileReadResponse,
+  type SessionFileResolvePathResponse,
+  type SessionFileSaveParams,
+  type SessionFileUpdateMetaParams,
   type SupportBundleExportResponse,
   type WindowsStartupDiagnosticsResponse,
   type MediaTaskArtifactAudioCompleteParams,
@@ -215,6 +284,7 @@ import {
   type MediaTaskArtifactListResponse,
   type MediaTaskArtifactLookupParams,
   type MediaTaskArtifactResponse,
+  type MediaTaskArtifactVideoCreateParams,
   type ManagedObjective,
   type ManagedObjectiveStatus,
   type RequestId,
@@ -223,6 +293,24 @@ import {
   type UsageStatsModelRankingListResponse,
   type UsageStatsRangeParams,
   type UsageStatsReadResponse,
+  type VoiceAsrCredential,
+  type VoiceAsrCredentialCreateParams,
+  type VoiceAsrCredentialIdParams,
+  type VoiceAsrCredentialListResponse,
+  type VoiceAsrCredentialMutationResponse,
+  type VoiceAsrCredentialTestResponse,
+  type VoiceAsrCredentialUpdateParams,
+  type VoiceAsrCredentialWriteResponse,
+  type VoiceAsrProviderType,
+  type VoiceInstruction,
+  type VoiceInstructionIdParams,
+  type VoiceInstructionListResponse,
+  type VoiceInstructionMutationResponse,
+  type VoiceInstructionSaveParams,
+  type VoiceModelDefaultSetParams,
+  type VoiceModelDefaultSetResponse,
+  type VoiceModelTestTranscribeFileParams,
+  type VoiceModelTestTranscribeFileResponse,
   type WechatChannelAccountRemoveParams,
   type WechatChannelAccountRemoveResponse,
   type WechatChannelAccountListResponse,
@@ -268,6 +356,7 @@ export const APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT =
 export const APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE =
   METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE;
 export const APP_SERVER_METHOD_AGENT_SESSION_START = METHOD_AGENT_SESSION_START;
+export const APP_SERVER_METHOD_AGENT_SESSION_LIST = METHOD_AGENT_SESSION_LIST;
 export const APP_SERVER_METHOD_AGENT_SESSION_READ = METHOD_AGENT_SESSION_READ;
 export const APP_SERVER_METHOD_AGENT_SESSION_UPDATE =
   METHOD_AGENT_SESSION_UPDATE;
@@ -337,8 +426,7 @@ export const APP_SERVER_METHOD_GATEWAY_TUNNEL_CREATE =
   METHOD_GATEWAY_TUNNEL_CREATE;
 export const APP_SERVER_METHOD_GATEWAY_TUNNEL_START =
   METHOD_GATEWAY_TUNNEL_START;
-export const APP_SERVER_METHOD_GATEWAY_TUNNEL_STOP =
-  METHOD_GATEWAY_TUNNEL_STOP;
+export const APP_SERVER_METHOD_GATEWAY_TUNNEL_STOP = METHOD_GATEWAY_TUNNEL_STOP;
 export const APP_SERVER_METHOD_GATEWAY_TUNNEL_RESTART =
   METHOD_GATEWAY_TUNNEL_RESTART;
 export const APP_SERVER_METHOD_GATEWAY_TUNNEL_STATUS =
@@ -367,6 +455,8 @@ export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE =
   METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
 export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE =
   METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE;
+export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE =
+  METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE;
 export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE =
   METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE;
 export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET =
@@ -375,6 +465,70 @@ export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST =
   METHOD_MEDIA_TASK_ARTIFACT_LIST;
 export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL =
   METHOD_MEDIA_TASK_ARTIFACT_CANCEL;
+export const APP_SERVER_METHOD_GALLERY_MATERIAL_GET =
+  METHOD_GALLERY_MATERIAL_GET;
+export const APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_CREATE =
+  METHOD_GALLERY_MATERIAL_METADATA_CREATE;
+export const APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_GET =
+  METHOD_GALLERY_MATERIAL_METADATA_GET;
+export const APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_UPDATE =
+  METHOD_GALLERY_MATERIAL_METADATA_UPDATE;
+export const APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_DELETE =
+  METHOD_GALLERY_MATERIAL_METADATA_DELETE;
+export const APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY =
+  METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY;
+export const APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY =
+  METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY;
+export const APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_MOOD =
+  METHOD_GALLERY_MATERIAL_LIST_BY_MOOD;
+export const APP_SERVER_METHOD_PROJECT_MATERIAL_LIST =
+  METHOD_PROJECT_MATERIAL_LIST;
+export const APP_SERVER_METHOD_PROJECT_MATERIAL_GET =
+  METHOD_PROJECT_MATERIAL_GET;
+export const APP_SERVER_METHOD_PROJECT_MATERIAL_COUNT =
+  METHOD_PROJECT_MATERIAL_COUNT;
+export const APP_SERVER_METHOD_PROJECT_MATERIAL_UPLOAD =
+  METHOD_PROJECT_MATERIAL_UPLOAD;
+export const APP_SERVER_METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL =
+  METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL;
+export const APP_SERVER_METHOD_PROJECT_MATERIAL_UPDATE =
+  METHOD_PROJECT_MATERIAL_UPDATE;
+export const APP_SERVER_METHOD_PROJECT_MATERIAL_DELETE =
+  METHOD_PROJECT_MATERIAL_DELETE;
+export const APP_SERVER_METHOD_PROJECT_MATERIAL_CONTENT =
+  METHOD_PROJECT_MATERIAL_CONTENT;
+export const APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_LIST =
+  METHOD_VOICE_ASR_CREDENTIAL_LIST;
+export const APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_CREATE =
+  METHOD_VOICE_ASR_CREDENTIAL_CREATE;
+export const APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_UPDATE =
+  METHOD_VOICE_ASR_CREDENTIAL_UPDATE;
+export const APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DELETE =
+  METHOD_VOICE_ASR_CREDENTIAL_DELETE;
+export const APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET =
+  METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET;
+export const APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_TEST =
+  METHOD_VOICE_ASR_CREDENTIAL_TEST;
+export const APP_SERVER_METHOD_VOICE_INSTRUCTION_LIST =
+  METHOD_VOICE_INSTRUCTION_LIST;
+export const APP_SERVER_METHOD_VOICE_INSTRUCTION_SAVE =
+  METHOD_VOICE_INSTRUCTION_SAVE;
+export const APP_SERVER_METHOD_VOICE_INSTRUCTION_DELETE =
+  METHOD_VOICE_INSTRUCTION_DELETE;
+export const APP_SERVER_METHOD_VOICE_MODEL_DEFAULT_SET =
+  METHOD_VOICE_MODEL_DEFAULT_SET;
+export const APP_SERVER_METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE =
+  METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE;
+export const APP_SERVER_METHOD_SESSION_FILE_GET_OR_CREATE =
+  METHOD_SESSION_FILE_GET_OR_CREATE;
+export const APP_SERVER_METHOD_SESSION_FILE_UPDATE_META =
+  METHOD_SESSION_FILE_UPDATE_META;
+export const APP_SERVER_METHOD_SESSION_FILE_SAVE = METHOD_SESSION_FILE_SAVE;
+export const APP_SERVER_METHOD_SESSION_FILE_READ = METHOD_SESSION_FILE_READ;
+export const APP_SERVER_METHOD_SESSION_FILE_RESOLVE_PATH =
+  METHOD_SESSION_FILE_RESOLVE_PATH;
+export const APP_SERVER_METHOD_SESSION_FILE_DELETE = METHOD_SESSION_FILE_DELETE;
+export const APP_SERVER_METHOD_SESSION_FILE_LIST = METHOD_SESSION_FILE_LIST;
 export const APP_SERVER_METHOD_USAGE_STATS_READ = METHOD_USAGE_STATS_READ;
 export const APP_SERVER_METHOD_USAGE_STATS_MODEL_RANKING_LIST =
   METHOD_USAGE_STATS_MODEL_RANKING_LIST;
@@ -457,6 +611,8 @@ export type AppServerAgentSessionReviewDecisionSaveParams =
   AgentSessionReviewDecisionSaveParams;
 export type AppServerAgentSessionReviewDecision = AgentSessionReviewDecision;
 export type AppServerAgentSessionStartParams = AgentSessionStartParams;
+export type AppServerAgentSessionListParams = AgentSessionListParams;
+export type AppServerAgentSessionListResponse = AgentSessionListResponse;
 export type AppServerAgentSessionReadParams = AgentSessionReadParams;
 export type AppServerAgentInput = AgentInput;
 export type AppServerAgentAttachment = AgentAttachment;
@@ -537,6 +693,20 @@ export type AppServerAgentSessionFileCheckpointDiffResponse =
   AgentSessionFileCheckpointDiffResponse;
 export type AppServerAgentSessionFileCheckpointRestoreResponse =
   AgentSessionFileCheckpointRestoreResponse;
+export type AppServerSessionFileIdParams = SessionFileIdParams;
+export type AppServerSessionFileGetOrCreateParams =
+  SessionFileGetOrCreateParams;
+export type AppServerSessionFileUpdateMetaParams = SessionFileUpdateMetaParams;
+export type AppServerSessionFileSaveParams = SessionFileSaveParams;
+export type AppServerSessionFileMeta = SessionFileMeta;
+export type AppServerSessionFileEntry = SessionFileEntry;
+export type AppServerSessionFileMetaResponse = SessionFileMetaResponse;
+export type AppServerSessionFileEntryResponse = SessionFileEntryResponse;
+export type AppServerSessionFileReadResponse = SessionFileReadResponse;
+export type AppServerSessionFileResolvePathResponse =
+  SessionFileResolvePathResponse;
+export type AppServerSessionFileListResponse = SessionFileListResponse;
+export type AppServerSessionFileMutationResponse = SessionFileMutationResponse;
 export type AppServerAgentSessionTurnStartResponse =
   AgentSessionTurnStartResponse;
 export type AppServerAgentSessionTurnCancelResponse =
@@ -589,8 +759,7 @@ export type AppServerLogPersistedTailResponse = LogPersistedTailResponse;
 export type AppServerLogClearResponse = LogClearResponse;
 export type AppServerLogStorageDiagnosticsResponse =
   LogStorageDiagnosticsResponse;
-export type AppServerSupportBundleExportResponse =
-  SupportBundleExportResponse;
+export type AppServerSupportBundleExportResponse = SupportBundleExportResponse;
 export type AppServerServerDiagnosticsResponse = ServerDiagnosticsResponse;
 export type AppServerWindowsStartupDiagnosticsResponse =
   WindowsStartupDiagnosticsResponse;
@@ -598,15 +767,74 @@ export type AppServerMediaTaskArtifactImageCreateParams =
   MediaTaskArtifactImageCreateParams;
 export type AppServerMediaTaskArtifactAudioCreateParams =
   MediaTaskArtifactAudioCreateParams;
+export type AppServerMediaTaskArtifactVideoCreateParams =
+  MediaTaskArtifactVideoCreateParams;
 export type AppServerMediaTaskArtifactAudioCompleteParams =
   MediaTaskArtifactAudioCompleteParams;
 export type AppServerMediaTaskArtifactLookupParams =
   MediaTaskArtifactLookupParams;
-export type AppServerMediaTaskArtifactListParams =
-  MediaTaskArtifactListParams;
+export type AppServerMediaTaskArtifactListParams = MediaTaskArtifactListParams;
 export type AppServerMediaTaskArtifactResponse = MediaTaskArtifactResponse;
 export type AppServerMediaTaskArtifactListResponse =
   MediaTaskArtifactListResponse;
+export type AppServerGalleryMaterialLookupParams = GalleryMaterialLookupParams;
+export type AppServerGalleryMaterialMetadataCreateParams =
+  GalleryMaterialMetadataCreateParams;
+export type AppServerGalleryMaterialMetadataUpdateParams =
+  GalleryMaterialMetadataUpdateParams;
+export type AppServerGalleryMaterialFilterParams = GalleryMaterialFilterParams;
+export type AppServerGalleryMaterialResponse = GalleryMaterialResponse;
+export type AppServerGalleryMaterialMetadataResponse =
+  GalleryMaterialMetadataResponse;
+export type AppServerGalleryMaterialListResponse = GalleryMaterialListResponse;
+export type AppServerGalleryMaterialDeleteResponse =
+  GalleryMaterialDeleteResponse;
+export type AppServerProjectMaterial = ProjectMaterial;
+export type AppServerProjectMaterialListParams = ProjectMaterialListParams;
+export type AppServerProjectMaterialLookupParams =
+  ProjectMaterialLookupParams;
+export type AppServerProjectMaterialUploadParams = ProjectMaterialUploadParams;
+export type AppServerProjectMaterialImportFromUrlParams =
+  ProjectMaterialImportFromUrlParams;
+export type AppServerProjectMaterialUpdateParams = ProjectMaterialUpdateParams;
+export type AppServerProjectMaterialListResponse =
+  ProjectMaterialListResponse;
+export type AppServerProjectMaterialResponse = ProjectMaterialResponse;
+export type AppServerProjectMaterialCountResponse =
+  ProjectMaterialCountResponse;
+export type AppServerProjectMaterialContentResponse =
+  ProjectMaterialContentResponse;
+export type AppServerProjectMaterialDeleteResponse =
+  ProjectMaterialDeleteResponse;
+export type AppServerVoiceAsrProviderType = VoiceAsrProviderType;
+export type AppServerVoiceAsrCredential = VoiceAsrCredential;
+export type AppServerVoiceAsrCredentialCreateParams =
+  VoiceAsrCredentialCreateParams;
+export type AppServerVoiceAsrCredentialUpdateParams =
+  VoiceAsrCredentialUpdateParams;
+export type AppServerVoiceAsrCredentialIdParams = VoiceAsrCredentialIdParams;
+export type AppServerVoiceAsrCredentialListResponse =
+  VoiceAsrCredentialListResponse;
+export type AppServerVoiceAsrCredentialWriteResponse =
+  VoiceAsrCredentialWriteResponse;
+export type AppServerVoiceAsrCredentialMutationResponse =
+  VoiceAsrCredentialMutationResponse;
+export type AppServerVoiceAsrCredentialTestResponse =
+  VoiceAsrCredentialTestResponse;
+export type AppServerVoiceInstruction = VoiceInstruction;
+export type AppServerVoiceInstructionSaveParams = VoiceInstructionSaveParams;
+export type AppServerVoiceInstructionIdParams = VoiceInstructionIdParams;
+export type AppServerVoiceInstructionListResponse =
+  VoiceInstructionListResponse;
+export type AppServerVoiceInstructionMutationResponse =
+  VoiceInstructionMutationResponse;
+export type AppServerVoiceModelDefaultSetParams = VoiceModelDefaultSetParams;
+export type AppServerVoiceModelDefaultSetResponse =
+  VoiceModelDefaultSetResponse;
+export type AppServerVoiceModelTestTranscribeFileParams =
+  VoiceModelTestTranscribeFileParams;
+export type AppServerVoiceModelTestTranscribeFileResponse =
+  VoiceModelTestTranscribeFileResponse;
 export type AppServerUsageStatsRangeParams = UsageStatsRangeParams;
 export type AppServerUsageStatsReadResponse = UsageStatsReadResponse;
 export type AppServerUsageStatsModelRankingListResponse =
@@ -746,6 +974,15 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerAgentSessionStartResponse>> {
     return await this.request<AppServerAgentSessionStartResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_START,
+      params,
+    );
+  }
+
+  async listSessions(
+    params: AppServerAgentSessionListParams = {},
+  ): Promise<AppServerRequestResult<AppServerAgentSessionListResponse>> {
+    return await this.request<AppServerAgentSessionListResponse>(
+      APP_SERVER_METHOD_AGENT_SESSION_LIST,
       params,
     );
   }
@@ -917,7 +1154,9 @@ export class AppServerClient {
 
   async setAgentSessionObjective(
     params: AppServerAgentSessionObjectiveSetParams,
-  ): Promise<AppServerRequestResult<AppServerAgentSessionObjectiveSetResponse>> {
+  ): Promise<
+    AppServerRequestResult<AppServerAgentSessionObjectiveSetResponse>
+  > {
     return await this.request<AppServerAgentSessionObjectiveSetResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET,
       params,
@@ -959,7 +1198,9 @@ export class AppServerClient {
 
   async auditAgentSessionObjective(
     params: AppServerAgentSessionObjectiveAuditParams,
-  ): Promise<AppServerRequestResult<AppServerAgentSessionObjectiveAuditResponse>> {
+  ): Promise<
+    AppServerRequestResult<AppServerAgentSessionObjectiveAuditResponse>
+  > {
     return await this.request<AppServerAgentSessionObjectiveAuditResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
       params,
@@ -977,7 +1218,9 @@ export class AppServerClient {
 
   async resumeAgentSessionThread(
     params: AppServerAgentSessionThreadResumeParams,
-  ): Promise<AppServerRequestResult<AppServerAgentSessionThreadResumeResponse>> {
+  ): Promise<
+    AppServerRequestResult<AppServerAgentSessionThreadResumeResponse>
+  > {
     return await this.request<AppServerAgentSessionThreadResumeResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME,
       params,
@@ -1050,6 +1293,69 @@ export class AppServerClient {
     );
   }
 
+  async getOrCreateSessionFile(
+    params: AppServerSessionFileGetOrCreateParams,
+  ): Promise<AppServerRequestResult<AppServerSessionFileMetaResponse>> {
+    return await this.request<AppServerSessionFileMetaResponse>(
+      APP_SERVER_METHOD_SESSION_FILE_GET_OR_CREATE,
+      params,
+    );
+  }
+
+  async updateSessionFileMeta(
+    params: AppServerSessionFileUpdateMetaParams,
+  ): Promise<AppServerRequestResult<AppServerSessionFileMetaResponse>> {
+    return await this.request<AppServerSessionFileMetaResponse>(
+      APP_SERVER_METHOD_SESSION_FILE_UPDATE_META,
+      params,
+    );
+  }
+
+  async saveSessionFile(
+    params: AppServerSessionFileSaveParams,
+  ): Promise<AppServerRequestResult<AppServerSessionFileEntryResponse>> {
+    return await this.request<AppServerSessionFileEntryResponse>(
+      APP_SERVER_METHOD_SESSION_FILE_SAVE,
+      params,
+    );
+  }
+
+  async readSessionFile(
+    params: AppServerSessionFileIdParams,
+  ): Promise<AppServerRequestResult<AppServerSessionFileReadResponse>> {
+    return await this.request<AppServerSessionFileReadResponse>(
+      APP_SERVER_METHOD_SESSION_FILE_READ,
+      params,
+    );
+  }
+
+  async resolveSessionFilePath(
+    params: AppServerSessionFileIdParams,
+  ): Promise<AppServerRequestResult<AppServerSessionFileResolvePathResponse>> {
+    return await this.request<AppServerSessionFileResolvePathResponse>(
+      APP_SERVER_METHOD_SESSION_FILE_RESOLVE_PATH,
+      params,
+    );
+  }
+
+  async deleteSessionFile(
+    params: AppServerSessionFileIdParams,
+  ): Promise<AppServerRequestResult<AppServerSessionFileMutationResponse>> {
+    return await this.request<AppServerSessionFileMutationResponse>(
+      APP_SERVER_METHOD_SESSION_FILE_DELETE,
+      params,
+    );
+  }
+
+  async listSessionFiles(
+    params: AppServerSessionFileGetOrCreateParams,
+  ): Promise<AppServerRequestResult<AppServerSessionFileListResponse>> {
+    return await this.request<AppServerSessionFileListResponse>(
+      APP_SERVER_METHOD_SESSION_FILE_LIST,
+      params,
+    );
+  }
+
   async startTurn(
     params: AppServerAgentSessionTurnStartParams,
   ): Promise<AppServerRequestResult<AppServerAgentSessionTurnStartResponse>> {
@@ -1081,7 +1387,9 @@ export class AppServerClient {
 
   async replayAction(
     params: AppServerAgentSessionActionReplayParams,
-  ): Promise<AppServerRequestResult<AppServerAgentSessionActionReplayResponse>> {
+  ): Promise<
+    AppServerRequestResult<AppServerAgentSessionActionReplayResponse>
+  > {
     return await this.request<AppServerAgentSessionActionReplayResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY,
       params,
@@ -1104,7 +1412,9 @@ export class AppServerClient {
     );
   }
 
-  async clearLogs(): Promise<AppServerRequestResult<AppServerLogClearResponse>> {
+  async clearLogs(): Promise<
+    AppServerRequestResult<AppServerLogClearResponse>
+  > {
     return await this.request<AppServerLogClearResponse>(
       APP_SERVER_METHOD_LOG_CLEAR,
       {},
@@ -1369,6 +1679,15 @@ export class AppServerClient {
     );
   }
 
+  async createVideoMediaTaskArtifact(
+    params: AppServerMediaTaskArtifactVideoCreateParams,
+  ): Promise<AppServerRequestResult<AppServerMediaTaskArtifactResponse>> {
+    return await this.request<AppServerMediaTaskArtifactResponse>(
+      APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
+      params,
+    );
+  }
+
   async completeAudioMediaTaskArtifact(
     params: AppServerMediaTaskArtifactAudioCompleteParams,
   ): Promise<AppServerRequestResult<AppServerMediaTaskArtifactResponse>> {
@@ -1401,6 +1720,261 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerMediaTaskArtifactResponse>> {
     return await this.request<AppServerMediaTaskArtifactResponse>(
       APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
+      params,
+    );
+  }
+
+  async getGalleryMaterial(
+    params: AppServerGalleryMaterialLookupParams,
+  ): Promise<AppServerRequestResult<AppServerGalleryMaterialResponse>> {
+    return await this.request<AppServerGalleryMaterialResponse>(
+      APP_SERVER_METHOD_GALLERY_MATERIAL_GET,
+      params,
+    );
+  }
+
+  async createGalleryMaterialMetadata(
+    params: AppServerGalleryMaterialMetadataCreateParams,
+  ): Promise<AppServerRequestResult<AppServerGalleryMaterialMetadataResponse>> {
+    return await this.request<AppServerGalleryMaterialMetadataResponse>(
+      APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_CREATE,
+      params,
+    );
+  }
+
+  async getGalleryMaterialMetadata(
+    params: AppServerGalleryMaterialLookupParams,
+  ): Promise<AppServerRequestResult<AppServerGalleryMaterialMetadataResponse>> {
+    return await this.request<AppServerGalleryMaterialMetadataResponse>(
+      APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_GET,
+      params,
+    );
+  }
+
+  async updateGalleryMaterialMetadata(
+    params: AppServerGalleryMaterialMetadataUpdateParams,
+  ): Promise<AppServerRequestResult<AppServerGalleryMaterialMetadataResponse>> {
+    return await this.request<AppServerGalleryMaterialMetadataResponse>(
+      APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_UPDATE,
+      params,
+    );
+  }
+
+  async deleteGalleryMaterialMetadata(
+    params: AppServerGalleryMaterialLookupParams,
+  ): Promise<AppServerRequestResult<AppServerGalleryMaterialDeleteResponse>> {
+    return await this.request<AppServerGalleryMaterialDeleteResponse>(
+      APP_SERVER_METHOD_GALLERY_MATERIAL_METADATA_DELETE,
+      params,
+    );
+  }
+
+  async listGalleryMaterialsByImageCategory(
+    params: AppServerGalleryMaterialFilterParams,
+  ): Promise<AppServerRequestResult<AppServerGalleryMaterialListResponse>> {
+    return await this.request<AppServerGalleryMaterialListResponse>(
+      APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
+      params,
+    );
+  }
+
+  async listGalleryMaterialsByLayoutCategory(
+    params: AppServerGalleryMaterialFilterParams,
+  ): Promise<AppServerRequestResult<AppServerGalleryMaterialListResponse>> {
+    return await this.request<AppServerGalleryMaterialListResponse>(
+      APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
+      params,
+    );
+  }
+
+  async listGalleryMaterialsByMood(
+    params: AppServerGalleryMaterialFilterParams,
+  ): Promise<AppServerRequestResult<AppServerGalleryMaterialListResponse>> {
+    return await this.request<AppServerGalleryMaterialListResponse>(
+      APP_SERVER_METHOD_GALLERY_MATERIAL_LIST_BY_MOOD,
+      params,
+    );
+  }
+
+  async listProjectMaterials(
+    params: AppServerProjectMaterialListParams,
+  ): Promise<AppServerRequestResult<AppServerProjectMaterialListResponse>> {
+    return await this.request<AppServerProjectMaterialListResponse>(
+      APP_SERVER_METHOD_PROJECT_MATERIAL_LIST,
+      params,
+    );
+  }
+
+  async getProjectMaterial(
+    params: AppServerProjectMaterialLookupParams,
+  ): Promise<AppServerRequestResult<AppServerProjectMaterialResponse>> {
+    return await this.request<AppServerProjectMaterialResponse>(
+      APP_SERVER_METHOD_PROJECT_MATERIAL_GET,
+      params,
+    );
+  }
+
+  async countProjectMaterials(
+    params: AppServerProjectMaterialListParams,
+  ): Promise<AppServerRequestResult<AppServerProjectMaterialCountResponse>> {
+    return await this.request<AppServerProjectMaterialCountResponse>(
+      APP_SERVER_METHOD_PROJECT_MATERIAL_COUNT,
+      params,
+    );
+  }
+
+  async uploadProjectMaterial(
+    params: AppServerProjectMaterialUploadParams,
+  ): Promise<AppServerRequestResult<AppServerProjectMaterialResponse>> {
+    return await this.request<AppServerProjectMaterialResponse>(
+      APP_SERVER_METHOD_PROJECT_MATERIAL_UPLOAD,
+      params,
+    );
+  }
+
+  async importProjectMaterialFromUrl(
+    params: AppServerProjectMaterialImportFromUrlParams,
+  ): Promise<AppServerRequestResult<AppServerProjectMaterialResponse>> {
+    return await this.request<AppServerProjectMaterialResponse>(
+      APP_SERVER_METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL,
+      params,
+    );
+  }
+
+  async updateProjectMaterial(
+    params: AppServerProjectMaterialUpdateParams,
+  ): Promise<AppServerRequestResult<AppServerProjectMaterialResponse>> {
+    return await this.request<AppServerProjectMaterialResponse>(
+      APP_SERVER_METHOD_PROJECT_MATERIAL_UPDATE,
+      params,
+    );
+  }
+
+  async deleteProjectMaterial(
+    params: AppServerProjectMaterialLookupParams,
+  ): Promise<AppServerRequestResult<AppServerProjectMaterialDeleteResponse>> {
+    return await this.request<AppServerProjectMaterialDeleteResponse>(
+      APP_SERVER_METHOD_PROJECT_MATERIAL_DELETE,
+      params,
+    );
+  }
+
+  async readProjectMaterialContent(
+    params: AppServerProjectMaterialLookupParams,
+  ): Promise<AppServerRequestResult<AppServerProjectMaterialContentResponse>> {
+    return await this.request<AppServerProjectMaterialContentResponse>(
+      APP_SERVER_METHOD_PROJECT_MATERIAL_CONTENT,
+      params,
+    );
+  }
+
+  async listVoiceAsrCredentials(): Promise<
+    AppServerRequestResult<AppServerVoiceAsrCredentialListResponse>
+  > {
+    return await this.request<AppServerVoiceAsrCredentialListResponse>(
+      APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_LIST,
+      {},
+    );
+  }
+
+  async createVoiceAsrCredential(
+    params: AppServerVoiceAsrCredentialCreateParams,
+  ): Promise<AppServerRequestResult<AppServerVoiceAsrCredentialWriteResponse>> {
+    return await this.request<AppServerVoiceAsrCredentialWriteResponse>(
+      APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_CREATE,
+      params,
+    );
+  }
+
+  async updateVoiceAsrCredential(
+    params: AppServerVoiceAsrCredentialUpdateParams,
+  ): Promise<
+    AppServerRequestResult<AppServerVoiceAsrCredentialMutationResponse>
+  > {
+    return await this.request<AppServerVoiceAsrCredentialMutationResponse>(
+      APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_UPDATE,
+      params,
+    );
+  }
+
+  async deleteVoiceAsrCredential(
+    params: AppServerVoiceAsrCredentialIdParams,
+  ): Promise<
+    AppServerRequestResult<AppServerVoiceAsrCredentialMutationResponse>
+  > {
+    return await this.request<AppServerVoiceAsrCredentialMutationResponse>(
+      APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DELETE,
+      params,
+    );
+  }
+
+  async setDefaultVoiceAsrCredential(
+    params: AppServerVoiceAsrCredentialIdParams,
+  ): Promise<
+    AppServerRequestResult<AppServerVoiceAsrCredentialMutationResponse>
+  > {
+    return await this.request<AppServerVoiceAsrCredentialMutationResponse>(
+      APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET,
+      params,
+    );
+  }
+
+  async testVoiceAsrCredential(
+    params: AppServerVoiceAsrCredentialIdParams,
+  ): Promise<AppServerRequestResult<AppServerVoiceAsrCredentialTestResponse>> {
+    return await this.request<AppServerVoiceAsrCredentialTestResponse>(
+      APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_TEST,
+      params,
+    );
+  }
+
+  async listVoiceInstructions(): Promise<
+    AppServerRequestResult<AppServerVoiceInstructionListResponse>
+  > {
+    return await this.request<AppServerVoiceInstructionListResponse>(
+      APP_SERVER_METHOD_VOICE_INSTRUCTION_LIST,
+      {},
+    );
+  }
+
+  async saveVoiceInstruction(
+    params: AppServerVoiceInstructionSaveParams,
+  ): Promise<
+    AppServerRequestResult<AppServerVoiceInstructionMutationResponse>
+  > {
+    return await this.request<AppServerVoiceInstructionMutationResponse>(
+      APP_SERVER_METHOD_VOICE_INSTRUCTION_SAVE,
+      params,
+    );
+  }
+
+  async deleteVoiceInstruction(
+    params: AppServerVoiceInstructionIdParams,
+  ): Promise<
+    AppServerRequestResult<AppServerVoiceInstructionMutationResponse>
+  > {
+    return await this.request<AppServerVoiceInstructionMutationResponse>(
+      APP_SERVER_METHOD_VOICE_INSTRUCTION_DELETE,
+      params,
+    );
+  }
+
+  async setDefaultVoiceModel(
+    params: AppServerVoiceModelDefaultSetParams,
+  ): Promise<AppServerRequestResult<AppServerVoiceModelDefaultSetResponse>> {
+    return await this.request<AppServerVoiceModelDefaultSetResponse>(
+      APP_SERVER_METHOD_VOICE_MODEL_DEFAULT_SET,
+      params,
+    );
+  }
+
+  async testTranscribeVoiceModelFile(
+    params: AppServerVoiceModelTestTranscribeFileParams,
+  ): Promise<
+    AppServerRequestResult<AppServerVoiceModelTestTranscribeFileResponse>
+  > {
+    return await this.request<AppServerVoiceModelTestTranscribeFileResponse>(
+      APP_SERVER_METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE,
       params,
     );
   }

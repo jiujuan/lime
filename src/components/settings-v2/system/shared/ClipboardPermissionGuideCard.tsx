@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ExternalLink } from "lucide-react";
-import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
+import { openSystemSettingsUrl } from "@/lib/api/systemSettings";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { getClipboardPermissionGuide } from "@/lib/crashDiagnostic";
@@ -67,19 +67,13 @@ export function ClipboardPermissionGuideCard({
     if (!guide.settingsUrl) return;
     setOpenError(null);
     try {
-      await openExternal(guide.settingsUrl);
+      await openSystemSettingsUrl(guide.settingsUrl);
     } catch (error) {
-      try {
-        window.open(guide.settingsUrl, "_blank");
-      } catch {
-        setOpenError(
-          error instanceof Error
-            ? error.message
-            : t(
-                "settings.system.clipboardPermission.message.openSettingsFailed",
-              ),
-        );
-      }
+      setOpenError(
+        error instanceof Error
+          ? error.message
+          : t("settings.system.clipboardPermission.message.openSettingsFailed"),
+      );
     }
   };
 

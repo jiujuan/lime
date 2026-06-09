@@ -2,8 +2,7 @@ import { safeInvoke } from "@/lib/dev-bridge";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import { assertEmptyElectronHostResult } from "./electronHostResult";
 
-export const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT =
-  "oem-cloud-oauth-callback";
+export const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT = "oem-cloud-oauth-callback";
 
 export interface OemCloudOAuthCallbackBridgeStartResponse {
   callbackUrl: string;

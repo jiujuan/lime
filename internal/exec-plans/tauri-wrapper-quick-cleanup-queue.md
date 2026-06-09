@@ -27,6 +27,8 @@
 
 硬边界：
 
+- `src/lib/dev-bridge/**` 不等同于旧 Rust DevBridge，也不是快速清理队列的整目录删除对象；`safeInvoke`、HTTP client、`app_server_handle_json_lines`、事件监听和可用性探测是 current renderer bridge。
+- 本队列清 `src/lib/dev-bridge` 时只按命令组收缩 `commandPolicy.ts`、`mockPriorityCommands.ts`、explicit fallback、旧 smoke、desktop-host mock 和 retired guard；删不动且跨命令组长期存在的 residual 必须回挂 `internal/exec-plans/tech-debt-tracker.md` 的 `CCD-012`。
 - `lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再落新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。
 - 该目录只允许做旧 wrapper 删除、撤 runner / DevBridge dispatcher / catalog / mock 注册后的机械编译修复，或记录无法删除的 blocker。
 - 新 Rust 后端能力必须落到 App Server crates / RuntimeCore / services 等 current 事实源；桌面壳能力落到 Electron Desktop Host。
@@ -78,29 +80,29 @@ git diff --cached --name-only
 
 ## 快速分配表
 
-| Task ID                                  | 优先级 | 可并行性                   | 难度   | 重要性 | 推荐写集                                                                          | 避让写集                                       | 目标                                                        |
-| ---------------------------------------- | ------ | -------------------------- | ------ | ------ | --------------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
-| TW-Q0-INVENTORY                          | 1      | 可单独并行                 | 低     | 低     | 新增 inventory 报告或治理测试                                                     | `runner.rs`、App Server protocol 热区          | 输出机械 command 对照，给后续进程减少重复扫描               |
-| TW-Q1-DOCS-SMOKE                         | 2      | 可并行                     | 低     | 低     | `internal/**`、`scripts/electron/current-docs-guard.test.mjs`、相关 smoke fixture | App Server protocol、Rust commands             | 清 current 文档 / smoke 里的旧 Tauri 证据                   |
-| TW-Q2-DEAD-NAMES                         | 3      | 可并行调研，写入需拆子任务 | 低到中 | 低     | 旧命令所在前端 / mock / runner / dispatcher 精确文件                              | 当前已脏共享文件                               | 清零引用或已下线旧命令族                                    |
-| TW-Q3A-DEVBRIDGE-MODELS                  | 4      | 可并行                     | 中     | 低     | `lime-rs/src/dev_bridge/dispatcher/models.rs`、必要 guard                         | `commandPolicy.ts` 若已被占用                  | 清 models dispatcher 已 current 分支                        |
-| TW-Q3B-DEVBRIDGE-PROJECT-RESOURCES       | 4      | 可并行                     | 中     | 低     | `lime-rs/src/dev_bridge/dispatcher/project_resources.rs`、必要 guard              | `commandPolicy.ts` 若已被占用                  | 清 materials / project resources dispatcher 已 current 分支 |
-| TW-Q3C-DEVBRIDGE-APP-RUNTIME             | 4      | 可并行                     | 中     | 低到中 | `lime-rs/src/dev_bridge/dispatcher/app_runtime.rs`、必要 guard                    | config / logs 共享写集                         | 清 config / diagnostics 旧 dispatcher 分支                  |
-| TW-Q4A-WINDOW-SHELL                      | 5      | 需避开 Electron host 热区  | 中     | 低到中 | `window_cmd.rs`、Electron window API / tests                                      | `electron/hostCommands.ts` 若已被占用          | 把窗口壳能力收回 Electron Host                              |
-| TW-Q4B-EXTERNAL-TOOLS-SHELL              | 5      | 可并行                     | 中     | 低到中 | `external_tools_cmd.rs`、`src/lib/api/externalUrl.ts`、Electron shell tests       | App Server protocol                            | 清外部打开 / CLI login shell wrapper                        |
-| TW-Q5A-KNOWLEDGE-READ                    | 6      | 当前易冲突                 | 中     | 中     | `knowledge_cmd.rs`、knowledge API / tests / mocks                                 | `local_data_source.rs`、protocol 热区若未释放  | 清已 current 的 knowledge 读链旧入口                        |
-| TW-Q5B-MODEL-READ                        | 6      | 可并行                     | 中     | 中     | `model_registry_cmd.rs`、models API / mocks / dispatcher                          | `commandPolicy.ts` 若已被占用                  | 清 model registry 读链旧入口                                |
-| TW-Q5C-AGENT-APP-READ                    | 6      | 当前易冲突                 | 中     | 中     | Agent Apps API / UI tests / App Server current fixture                            | Agent Apps 页面热区若未释放                    | Agent App 旧 wrapper 已删除；只补 current fixture / 守卫    |
-| TW-Q6-SESSION-FILES                      | 7      | 可并行但需 App Server 判断 | 中     | 中     | `session_files_cmd.rs`、session files API / mocks                                 | App Server protocol 热区                       | 清 session file 读写残留                                    |
-| TW-Q7-CONFIG-LOGS-DIAG                   | 8      | 可并行拆分                 | 中     | 中     | config / logs / diagnostics API 与 Rust wrapper                                   | `app/commands/config.rs` 若被占用              | 拆分配置、日志、诊断 current owner                          |
-| TW-Q8-BROWSER-WEBVIEW                    | 9      | 建议单进程                 | 中到高 | 中     | `webview_cmd.rs`、browser dispatcher、`src/lib/webview-api.ts`                    | Electron host 热区                             | 清 Browser / Webview / CDP / Profile wrapper                |
-| TW-Q9-VOICE-ASR                          | 10     | 可并行                     | 中到高 | 中到高 | voice / ASR API、dispatcher voice、desktop-host voice mocks                       | 录音设备 / Electron host 热区                  | 拆分录音设备与 ASR service current owner                    |
-| TW-Q10-SKILLS                            | 11     | 建议单进程                 | 高     | 中到高 | `skill_cmd.rs`、`dispatcher/skills.rs`、skills API / mocks                        | Agent Runtime tool runtime                     | 清 Skill catalog / package / marketplace wrapper            |
+| Task ID                                  | 优先级 | 可并行性                   | 难度   | 重要性 | 推荐写集                                                                          | 避让写集                                       | 目标                                                         |
+| ---------------------------------------- | ------ | -------------------------- | ------ | ------ | --------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| TW-Q0-INVENTORY                          | 1      | 可单独并行                 | 低     | 低     | 新增 inventory 报告或治理测试                                                     | `runner.rs`、App Server protocol 热区          | 输出机械 command 对照，给后续进程减少重复扫描                |
+| TW-Q1-DOCS-SMOKE                         | 2      | 可并行                     | 低     | 低     | `internal/**`、`scripts/electron/current-docs-guard.test.mjs`、相关 smoke fixture | App Server protocol、Rust commands             | 清 current 文档 / smoke 里的旧 Tauri 证据                    |
+| TW-Q2-DEAD-NAMES                         | 3      | 可并行调研，写入需拆子任务 | 低到中 | 低     | 旧命令所在前端 / mock / runner / dispatcher 精确文件                              | 当前已脏共享文件                               | 清零引用或已下线旧命令族                                     |
+| TW-Q3A-DEVBRIDGE-MODELS                  | 4      | 可并行                     | 中     | 低     | `lime-rs/src/dev_bridge/dispatcher/models.rs`、必要 guard                         | `commandPolicy.ts` 若已被占用                  | 清 models dispatcher 已 current 分支                         |
+| TW-Q3B-DEVBRIDGE-PROJECT-RESOURCES       | 4      | 可并行                     | 中     | 低     | `lime-rs/src/dev_bridge/dispatcher/project_resources.rs`、必要 guard              | `commandPolicy.ts` 若已被占用                  | 清 materials / project resources dispatcher 已 current 分支  |
+| TW-Q3C-DEVBRIDGE-APP-RUNTIME             | 4      | 可并行                     | 中     | 低到中 | `lime-rs/src/dev_bridge/dispatcher/app_runtime.rs`、必要 guard                    | config / logs 共享写集                         | 清 config / diagnostics 旧 dispatcher 分支                   |
+| TW-Q4A-WINDOW-SHELL                      | 5      | 需避开 Electron host 热区  | 中     | 低到中 | `window_cmd.rs`、Electron window API / tests                                      | `electron/hostCommands.ts` 若已被占用          | 把窗口壳能力收回 Electron Host                               |
+| TW-Q4B-EXTERNAL-TOOLS-SHELL              | 5      | 可并行                     | 中     | 低到中 | `external_tools_cmd.rs`、`src/lib/api/externalUrl.ts`、Electron shell tests       | App Server protocol                            | 清外部打开 / CLI login shell wrapper                         |
+| TW-Q5A-KNOWLEDGE-READ                    | 6      | 当前易冲突                 | 中     | 中     | `knowledge_cmd.rs`、knowledge API / tests / mocks                                 | `local_data_source.rs`、protocol 热区若未释放  | 清已 current 的 knowledge 读链旧入口                         |
+| TW-Q5B-MODEL-READ                        | 6      | 可并行                     | 中     | 中     | `model_registry_cmd.rs`、models API / mocks / dispatcher                          | `commandPolicy.ts` 若已被占用                  | 清 model registry 读链旧入口                                 |
+| TW-Q5C-AGENT-APP-READ                    | 6      | 当前易冲突                 | 中     | 中     | Agent Apps API / UI tests / App Server current fixture                            | Agent Apps 页面热区若未释放                    | Agent App 旧 wrapper 已删除；只补 current fixture / 守卫     |
+| TW-Q6-SESSION-FILES                      | 7      | 可并行但需 App Server 判断 | 中     | 中     | `session_files_cmd.rs`、session files API / mocks                                 | App Server protocol 热区                       | 清 session file 读写残留                                     |
+| TW-Q7-CONFIG-LOGS-DIAG                   | 8      | 可并行拆分                 | 中     | 中     | config / logs / diagnostics API 与 Rust wrapper                                   | `app/commands/config.rs` 若被占用              | 拆分配置、日志、诊断 current owner                           |
+| TW-Q8-BROWSER-WEBVIEW                    | 9      | 建议单进程                 | 中到高 | 中     | `webview_cmd.rs`、browser dispatcher、`src/lib/webview-api.ts`                    | Electron host 热区                             | 清 Browser / Webview / CDP / Profile wrapper                 |
+| TW-Q9-VOICE-ASR                          | 10     | 可并行                     | 中到高 | 中到高 | voice / ASR API、dispatcher voice、desktop-host voice mocks                       | 录音设备 / Electron host 热区                  | 拆分录音设备与 ASR service current owner                     |
+| TW-Q10-SKILLS                            | 11     | 建议单进程                 | 高     | 中到高 | `skill_cmd.rs`、`dispatcher/skills.rs`、skills API / mocks                        | Agent Runtime tool runtime                     | 清 Skill catalog / package / marketplace wrapper             |
 | TW-Q11-MCP                               | 12     | 当前易冲突                 | 高     | 高     | MCP API / App Server protocol / tests                                             | App Server protocol 热区                       | MCP 已 current；旧 wrapper 已删除；real stdio fixture 已补齐 |
-| TW-Q12-KNOWLEDGE-WORKSPACE-CONTENT-WRITE | 13     | 建议单进程                 | 高     | 高     | knowledge / workspace / content API、Rust wrappers、App Server protocol           | App Server protocol 热区                       | 迁写链并清旧入口                                            |
-| TW-Q13-MEMORY                            | 14     | 建议单进程                 | 高     | 高     | memory / unifiedMemory / memoryRuntime API 与 Rust wrappers                       | RuntimeCore / workspace 文件系统热区           | 迁 Memory / Unified Memory / Project Memory                 |
-| TW-Q14-AGENT-APP-RUNTIME                 | 15     | 当前易冲突                 | 高     | 高     | agent app runtime API、Electron Host projection、Agent Apps UI                    | Agent Apps 页面热区                            | 旧 Rust wrapper 已删除；继续收 App Server runtime residual  |
-| TW-Q15-AGENT-RUNTIME                     | 16     | 不建议作为快速清理并行项   | 最高   | 最高   | App Server runtime、agentRuntime clients、Aster runtime core                      | `runtime_turn/**`、tool runtime、protocol 热区 | 逐条迁 Agent Runtime residual                               |
+| TW-Q12-KNOWLEDGE-WORKSPACE-CONTENT-WRITE | 13     | 建议单进程                 | 高     | 高     | knowledge / workspace / content API、Rust wrappers、App Server protocol           | App Server protocol 热区                       | 迁写链并清旧入口                                             |
+| TW-Q13-MEMORY                            | 14     | 建议单进程                 | 高     | 高     | memory / unifiedMemory / memoryRuntime API 与 Rust wrappers                       | RuntimeCore / workspace 文件系统热区           | 迁 Memory / Unified Memory / Project Memory                  |
+| TW-Q14-AGENT-APP-RUNTIME                 | 15     | 当前易冲突                 | 高     | 高     | agent app runtime API、Electron Host projection、Agent Apps UI                    | Agent Apps 页面热区                            | 旧 Rust wrapper 已删除；继续收 App Server runtime residual   |
+| TW-Q15-AGENT-RUNTIME                     | 16     | 不建议作为快速清理并行项   | 最高   | 最高   | App Server runtime、agentRuntime clients、Aster runtime core                      | `runtime_turn/**`、tool runtime、protocol 热区 | 逐条迁 Agent Runtime residual                                |
 
 推荐并行启动方式：
 
@@ -548,6 +550,7 @@ npx vitest run "src/lib/api/session-files.test.ts" "src/lib/api/fileBrowser.test
   - `get_environment_preview`
   - `get_default_provider`
   - `set_default_provider`
+  - `update_provider_env_vars`
 - `app/commands/logs.rs`
   - `get_logs`
   - `clear_logs`
@@ -560,8 +563,9 @@ npx vitest run "src/lib/api/session-files.test.ts" "src/lib/api/fileBrowser.test
 执行口径：
 
 - 配置事实源若属于 runtime / provider，应收进 App Server 或 services。
+- Provider 残留不能并列迁成旧配置写链：`get_default_provider` 目前是运行时模型解析 current 入口之一，由 Electron Host / App Server 已配置 Provider 链承接；`set_default_provider`、`update_provider_env_vars` 属于旧写链 / retired guard，若无产品入口应判 `dead`，不得恢复旧 Tauri 写命令。
 - 前端 crash/debug/support bundle 更偏 Electron Desktop Host / diagnostic bridge。
-- 不允许 DevBridge health / diagnostic 假装 current Electron-host 证据。
+- 不允许 Rust DevBridge health / diagnostic 假装 current Electron-host 证据；前端 `src/lib/dev-bridge` current bridge 只作为传输和诊断出口保留，不作为旧命令成功证据。
 
 验证：
 
@@ -824,6 +828,15 @@ npm run smoke:agent-session-history-electron-fixture -- --timeout-ms 180000
 不要为了“看起来清得多”优先碰 Q15。Agent Runtime 是主链事实源迁移，不是快速垃圾回收。
 
 ## 文档 / 守卫补强记录
+
+- 2026-06-09 Codex TW-Q1-DEVBRIDGE-DOC-GOVERNANCE 完成
+  - 写集：`internal/aiprompts/remote-runtime.md`、`internal/roadmap/appserver/frontend-electron-migration.md`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`
+  - 避让：Knowledge、P6 session files、P14 voice、Electron Host / IPC、App Server protocol/runtime/client、Rust runner / dispatcher、`src/lib/dev-bridge/**` 生产代码、`lime-rs/src/**`
+  - 清理结果：`docs-broadcast-hardened`；remote runtime 与 Electron migration 文档已把 Rust `lime-rs/src/dev_bridge/**`、前端 `src/lib/dev-bridge` current renderer bridge、`commandPolicy` 迁移期 residual 拆开分类；快速清理队列新增硬边界，禁止把 `src/lib/dev-bridge/**` 当整目录删除对象。
+  - 分类：`safeInvoke` / HTTP client / `app_server_handle_json_lines` / 事件监听 / 可用性探测 = `current renderer bridge`；`commandPolicy.ts` 旧命令 truth / no-mock fallback = `compat / deprecated governance target`；已迁旧命令名 = `dead / retired guard-only` 或 `test-only`；跨命令组长期 residual 必须回挂 `CCD-012`。
+  - Q7 更新：Provider residual 不再把 `get_default_provider`、`set_default_provider`、`update_provider_env_vars` 并列迁成旧配置写链；`get_default_provider` 是运行时模型解析 current 入口之一，后两者按旧写链 / retired guard 判定，若无产品入口应判 `dead`。
+  - 验证结果：`npx prettier --write "internal/aiprompts/remote-runtime.md" "internal/roadmap/appserver/frontend-electron-migration.md" "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md"` 已执行；`npx prettier --check "internal/aiprompts/remote-runtime.md" "internal/roadmap/appserver/frontend-electron-migration.md" "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md"` 通过；定向 `rg` 命中 current renderer bridge、`CCD-012`、`update_provider_env_vars` 与 Provider residual 分类；`git diff --check -- "internal/aiprompts/remote-runtime.md" "internal/roadmap/appserver/frontend-electron-migration.md" "internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md"` 通过。
+  - 剩余阻塞：本刀只同步治理文档，不替代 P6 / P14 / P16 代码迁移；继续执行命令组时仍需按当前 `git status` 重新认领窄写集。
 
 - 2026-06-08 Codex TW-Q2-USAGE-STATS-WRAPPER 认领
   - 写集：`lime-rs/src/app/runner.rs`、`lime-rs/src/commands/mod.rs`、`lime-rs/src/commands/usage_stats_cmd.rs`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`

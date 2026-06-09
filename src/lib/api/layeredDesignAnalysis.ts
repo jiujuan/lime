@@ -69,7 +69,9 @@ function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === "string";
 }
 
-function isTextBlock(value: unknown): value is LayeredDesignRecognizedTextBlock {
+function isTextBlock(
+  value: unknown,
+): value is LayeredDesignRecognizedTextBlock {
   if (!isRecord(value) || typeof value.text !== "string") {
     return false;
   }
@@ -132,10 +134,9 @@ function assertFlatImageAnalysisOutput(
 export async function recognizeLayeredDesignText(
   request: RecognizeLayeredDesignTextRequest,
 ): Promise<RecognizeLayeredDesignTextOutput> {
-  const result = await safeInvoke<unknown>(
-    "recognize_layered_design_text",
-    { request },
-  );
+  const result = await safeInvoke<unknown>("recognize_layered_design_text", {
+    request,
+  });
   assertNotDiagnosticFacade(
     "recognize_layered_design_text",
     result,

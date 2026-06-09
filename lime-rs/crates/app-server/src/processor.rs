@@ -60,6 +60,10 @@ use app_server_protocol::FileSystemDeleteFileParams;
 use app_server_protocol::FileSystemListDirectoryParams;
 use app_server_protocol::FileSystemReadFilePreviewParams;
 use app_server_protocol::FileSystemRenameFileParams;
+use app_server_protocol::GalleryMaterialFilterParams;
+use app_server_protocol::GalleryMaterialLookupParams;
+use app_server_protocol::GalleryMaterialMetadataCreateParams;
+use app_server_protocol::GalleryMaterialMetadataUpdateParams;
 use app_server_protocol::GatewayChannelStartParams;
 use app_server_protocol::GatewayChannelStatusParams;
 use app_server_protocol::GatewayChannelStopParams;
@@ -101,6 +105,7 @@ use app_server_protocol::MediaTaskArtifactAudioCreateParams;
 use app_server_protocol::MediaTaskArtifactImageCreateParams;
 use app_server_protocol::MediaTaskArtifactListParams;
 use app_server_protocol::MediaTaskArtifactLookupParams;
+use app_server_protocol::MediaTaskArtifactVideoCreateParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelProviderAliasReadParams;
 use app_server_protocol::ModelProviderConfigExportParams;
@@ -122,8 +127,17 @@ use app_server_protocol::ModelProviderUiStateWriteParams;
 use app_server_protocol::ModelProviderUpdateParams;
 use app_server_protocol::PlatformInfo;
 use app_server_protocol::ProjectMemoryReadParams;
+use app_server_protocol::ProjectMaterialImportFromUrlParams;
+use app_server_protocol::ProjectMaterialListParams;
+use app_server_protocol::ProjectMaterialLookupParams;
+use app_server_protocol::ProjectMaterialUpdateParams;
+use app_server_protocol::ProjectMaterialUploadParams;
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
+use app_server_protocol::SessionFileGetOrCreateParams;
+use app_server_protocol::SessionFileIdParams;
+use app_server_protocol::SessionFileSaveParams;
+use app_server_protocol::SessionFileUpdateMetaParams;
 use app_server_protocol::SkillDownloadInstallParams;
 use app_server_protocol::SkillLocalDetailInspectParams;
 use app_server_protocol::SkillLocalImportParams;
@@ -143,6 +157,22 @@ use app_server_protocol::SkillRepositoryDeleteParams;
 use app_server_protocol::SkillRepositorySaveParams;
 use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::UsageStatsRangeParams;
+use app_server_protocol::UnifiedMemoryAnalyzeParams;
+use app_server_protocol::UnifiedMemoryCreateParams;
+use app_server_protocol::UnifiedMemoryDeleteParams;
+use app_server_protocol::UnifiedMemoryGetParams;
+use app_server_protocol::UnifiedMemoryHybridSearchParams;
+use app_server_protocol::UnifiedMemoryListParams;
+use app_server_protocol::UnifiedMemorySearchParams;
+use app_server_protocol::UnifiedMemorySemanticSearchParams;
+use app_server_protocol::UnifiedMemoryUpdateParams;
+use app_server_protocol::VoiceAsrCredentialCreateParams;
+use app_server_protocol::VoiceAsrCredentialIdParams;
+use app_server_protocol::VoiceAsrCredentialUpdateParams;
+use app_server_protocol::VoiceInstructionIdParams;
+use app_server_protocol::VoiceInstructionSaveParams;
+use app_server_protocol::VoiceModelDefaultSetParams;
+use app_server_protocol::VoiceModelTestTranscribeFileParams;
 use app_server_protocol::WechatChannelAccountRemoveParams;
 use app_server_protocol::WechatLoginStartParams;
 use app_server_protocol::WechatLoginWaitParams;
@@ -224,6 +254,14 @@ use app_server_protocol::METHOD_FILE_SYSTEM_DELETE_FILE;
 use app_server_protocol::METHOD_FILE_SYSTEM_LIST_DIRECTORY;
 use app_server_protocol::METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
 use app_server_protocol::METHOD_FILE_SYSTEM_RENAME_FILE;
+use app_server_protocol::METHOD_GALLERY_MATERIAL_GET;
+use app_server_protocol::METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY;
+use app_server_protocol::METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY;
+use app_server_protocol::METHOD_GALLERY_MATERIAL_LIST_BY_MOOD;
+use app_server_protocol::METHOD_GALLERY_MATERIAL_METADATA_CREATE;
+use app_server_protocol::METHOD_GALLERY_MATERIAL_METADATA_DELETE;
+use app_server_protocol::METHOD_GALLERY_MATERIAL_METADATA_GET;
+use app_server_protocol::METHOD_GALLERY_MATERIAL_METADATA_UPDATE;
 use app_server_protocol::METHOD_GATEWAY_CHANNEL_START;
 use app_server_protocol::METHOD_GATEWAY_CHANNEL_STATUS;
 use app_server_protocol::METHOD_GATEWAY_CHANNEL_STOP;
@@ -275,6 +313,7 @@ use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_CANCEL;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_GET;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_LIST;
+use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE;
 use app_server_protocol::METHOD_MODEL_LIST;
 use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -301,6 +340,21 @@ use app_server_protocol::METHOD_MODEL_PROVIDER_UI_STATE_WRITE;
 use app_server_protocol::METHOD_MODEL_PROVIDER_UPDATE;
 use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
 use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
+use app_server_protocol::METHOD_PROJECT_MATERIAL_CONTENT;
+use app_server_protocol::METHOD_PROJECT_MATERIAL_COUNT;
+use app_server_protocol::METHOD_PROJECT_MATERIAL_DELETE;
+use app_server_protocol::METHOD_PROJECT_MATERIAL_GET;
+use app_server_protocol::METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL;
+use app_server_protocol::METHOD_PROJECT_MATERIAL_LIST;
+use app_server_protocol::METHOD_PROJECT_MATERIAL_UPDATE;
+use app_server_protocol::METHOD_PROJECT_MATERIAL_UPLOAD;
+use app_server_protocol::METHOD_SESSION_FILE_DELETE;
+use app_server_protocol::METHOD_SESSION_FILE_GET_OR_CREATE;
+use app_server_protocol::METHOD_SESSION_FILE_LIST;
+use app_server_protocol::METHOD_SESSION_FILE_READ;
+use app_server_protocol::METHOD_SESSION_FILE_RESOLVE_PATH;
+use app_server_protocol::METHOD_SESSION_FILE_SAVE;
+use app_server_protocol::METHOD_SESSION_FILE_UPDATE_META;
 use app_server_protocol::METHOD_SKILL_CACHE_REFRESH;
 use app_server_protocol::METHOD_SKILL_INSTALLED_DIRECTORIES_LIST;
 use app_server_protocol::METHOD_SKILL_LIST;
@@ -327,6 +381,27 @@ use app_server_protocol::METHOD_TELEGRAM_CHANNEL_PROBE;
 use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
 use app_server_protocol::METHOD_USAGE_STATS_READ;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_ANALYZE;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_CREATE;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_DELETE;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_GET;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_HYBRID_SEARCH;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_LIST;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_SEARCH;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_STATS;
+use app_server_protocol::METHOD_UNIFIED_MEMORY_UPDATE;
+use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_CREATE;
+use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET;
+use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_DELETE;
+use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_LIST;
+use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_TEST;
+use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_UPDATE;
+use app_server_protocol::METHOD_VOICE_INSTRUCTION_DELETE;
+use app_server_protocol::METHOD_VOICE_INSTRUCTION_LIST;
+use app_server_protocol::METHOD_VOICE_INSTRUCTION_SAVE;
+use app_server_protocol::METHOD_VOICE_MODEL_DEFAULT_SET;
+use app_server_protocol::METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE;
 use app_server_protocol::METHOD_WECHAT_CHANNEL_ACCOUNT_LIST;
 use app_server_protocol::METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE;
 use app_server_protocol::METHOD_WECHAT_CHANNEL_LOGIN_START;
@@ -457,6 +532,15 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE => {
                 self.handle_file_checkpoint_restore(params).await
             }
+            METHOD_SESSION_FILE_GET_OR_CREATE => {
+                self.handle_session_file_get_or_create(params).await
+            }
+            METHOD_SESSION_FILE_UPDATE_META => self.handle_session_file_update_meta(params).await,
+            METHOD_SESSION_FILE_SAVE => self.handle_session_file_save(params).await,
+            METHOD_SESSION_FILE_READ => self.handle_session_file_read(params).await,
+            METHOD_SESSION_FILE_RESOLVE_PATH => self.handle_session_file_resolve_path(params).await,
+            METHOD_SESSION_FILE_DELETE => self.handle_session_file_delete(params).await,
+            METHOD_SESSION_FILE_LIST => self.handle_session_file_list(params).await,
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
             METHOD_AGENT_SESSION_READ => self.handle_session_read(params).await,
             METHOD_WORKSPACE_LIST => self.handle_workspace_list().await,
@@ -546,6 +630,9 @@ impl RequestProcessor {
             METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE => {
                 self.handle_media_task_artifact_audio_create(params).await
             }
+            METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE => {
+                self.handle_media_task_artifact_video_create(params).await
+            }
             METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE => {
                 self.handle_media_task_artifact_audio_complete(params).await
             }
@@ -553,6 +640,61 @@ impl RequestProcessor {
             METHOD_MEDIA_TASK_ARTIFACT_LIST => self.handle_media_task_artifact_list(params).await,
             METHOD_MEDIA_TASK_ARTIFACT_CANCEL => {
                 self.handle_media_task_artifact_cancel(params).await
+            }
+            METHOD_GALLERY_MATERIAL_GET => self.handle_gallery_material_get(params).await,
+            METHOD_GALLERY_MATERIAL_METADATA_CREATE => {
+                self.handle_gallery_material_metadata_create(params).await
+            }
+            METHOD_GALLERY_MATERIAL_METADATA_GET => {
+                self.handle_gallery_material_metadata_get(params).await
+            }
+            METHOD_GALLERY_MATERIAL_METADATA_UPDATE => {
+                self.handle_gallery_material_metadata_update(params).await
+            }
+            METHOD_GALLERY_MATERIAL_METADATA_DELETE => {
+                self.handle_gallery_material_metadata_delete(params).await
+            }
+            METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY => {
+                self.handle_gallery_material_list_by_image_category(params)
+                    .await
+            }
+            METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY => {
+                self.handle_gallery_material_list_by_layout_category(params)
+                    .await
+            }
+            METHOD_GALLERY_MATERIAL_LIST_BY_MOOD => {
+                self.handle_gallery_material_list_by_mood(params).await
+            }
+            METHOD_PROJECT_MATERIAL_LIST => self.handle_project_material_list(params).await,
+            METHOD_PROJECT_MATERIAL_GET => self.handle_project_material_get(params).await,
+            METHOD_PROJECT_MATERIAL_COUNT => self.handle_project_material_count(params).await,
+            METHOD_PROJECT_MATERIAL_UPLOAD => self.handle_project_material_upload(params).await,
+            METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL => {
+                self.handle_project_material_import_from_url(params).await
+            }
+            METHOD_PROJECT_MATERIAL_UPDATE => self.handle_project_material_update(params).await,
+            METHOD_PROJECT_MATERIAL_DELETE => self.handle_project_material_delete(params).await,
+            METHOD_PROJECT_MATERIAL_CONTENT => self.handle_project_material_content(params).await,
+            METHOD_VOICE_ASR_CREDENTIAL_LIST => self.handle_voice_asr_credential_list().await,
+            METHOD_VOICE_ASR_CREDENTIAL_CREATE => {
+                self.handle_voice_asr_credential_create(params).await
+            }
+            METHOD_VOICE_ASR_CREDENTIAL_UPDATE => {
+                self.handle_voice_asr_credential_update(params).await
+            }
+            METHOD_VOICE_ASR_CREDENTIAL_DELETE => {
+                self.handle_voice_asr_credential_delete(params).await
+            }
+            METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET => {
+                self.handle_voice_asr_credential_default_set(params).await
+            }
+            METHOD_VOICE_ASR_CREDENTIAL_TEST => self.handle_voice_asr_credential_test(params).await,
+            METHOD_VOICE_INSTRUCTION_LIST => self.handle_voice_instruction_list().await,
+            METHOD_VOICE_INSTRUCTION_SAVE => self.handle_voice_instruction_save(params).await,
+            METHOD_VOICE_INSTRUCTION_DELETE => self.handle_voice_instruction_delete(params).await,
+            METHOD_VOICE_MODEL_DEFAULT_SET => self.handle_voice_model_default_set(params).await,
+            METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE => {
+                self.handle_voice_model_test_transcribe_file(params).await
             }
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
                 self.handle_workspace_skill_bindings_list(params).await
@@ -645,6 +787,20 @@ impl RequestProcessor {
             METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list().await,
             METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read(params).await,
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
+            METHOD_UNIFIED_MEMORY_LIST => self.handle_unified_memory_list(params).await,
+            METHOD_UNIFIED_MEMORY_GET => self.handle_unified_memory_get(params).await,
+            METHOD_UNIFIED_MEMORY_CREATE => self.handle_unified_memory_create(params).await,
+            METHOD_UNIFIED_MEMORY_UPDATE => self.handle_unified_memory_update(params).await,
+            METHOD_UNIFIED_MEMORY_DELETE => self.handle_unified_memory_delete(params).await,
+            METHOD_UNIFIED_MEMORY_SEARCH => self.handle_unified_memory_search(params).await,
+            METHOD_UNIFIED_MEMORY_STATS => self.handle_unified_memory_stats().await,
+            METHOD_UNIFIED_MEMORY_ANALYZE => self.handle_unified_memory_analyze(params).await,
+            METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH => {
+                self.handle_unified_memory_semantic_search(params).await
+            }
+            METHOD_UNIFIED_MEMORY_HYBRID_SEARCH => {
+                self.handle_unified_memory_hybrid_search(params).await
+            }
             METHOD_LOG_LIST => self.handle_log_list().await,
             METHOD_LOG_PERSISTED_TAIL => self.handle_log_persisted_tail(params).await,
             METHOD_LOG_CLEAR => self.handle_log_clear().await,
@@ -1002,6 +1158,104 @@ impl RequestProcessor {
         let response = self
             .runtime
             .restore_agent_session_file_checkpoint(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_file_get_or_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SessionFileGetOrCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .get_or_create_session_file(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_file_update_meta(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SessionFileUpdateMetaParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_session_file_meta(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_file_save(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SessionFileSaveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .save_session_file(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_file_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SessionFileIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_session_file(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_file_resolve_path(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SessionFileIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .resolve_session_file_path(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_file_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SessionFileIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_session_file(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_file_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SessionFileGetOrCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_session_files(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -1699,6 +1953,20 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_media_task_artifact_video_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: MediaTaskArtifactVideoCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_video_media_task_artifact(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_media_task_artifact_audio_complete(
         &self,
         params: Option<serde_json::Value>,
@@ -1750,6 +2018,376 @@ impl RequestProcessor {
         let response = self
             .runtime
             .cancel_media_task_artifact(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gallery_material_get(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GalleryMaterialLookupParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .get_gallery_material(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gallery_material_metadata_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GalleryMaterialMetadataCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_gallery_material_metadata(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gallery_material_metadata_get(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GalleryMaterialLookupParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .get_gallery_material_metadata(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gallery_material_metadata_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GalleryMaterialMetadataUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_gallery_material_metadata(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gallery_material_metadata_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GalleryMaterialLookupParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_gallery_material_metadata(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gallery_material_list_by_image_category(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GalleryMaterialFilterParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_gallery_materials_by_image_category(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gallery_material_list_by_layout_category(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GalleryMaterialFilterParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_gallery_materials_by_layout_category(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gallery_material_list_by_mood(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GalleryMaterialFilterParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_gallery_materials_by_mood(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_material_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMaterialListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_project_materials(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_material_get(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMaterialLookupParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .get_project_material(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_material_count(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMaterialListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .count_project_materials(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_material_upload(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMaterialUploadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .upload_project_material(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_material_import_from_url(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMaterialImportFromUrlParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .import_project_material_from_url(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_material_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMaterialUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_project_material(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_material_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMaterialLookupParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_project_material(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_project_material_content(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectMaterialLookupParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_project_material_content(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_asr_credential_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_voice_asr_credentials()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_asr_credential_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceAsrCredentialCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_voice_asr_credential(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_asr_credential_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceAsrCredentialUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_voice_asr_credential(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_asr_credential_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceAsrCredentialIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_voice_asr_credential(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_asr_credential_default_set(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceAsrCredentialIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .set_default_voice_asr_credential(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_asr_credential_test(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceAsrCredentialIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .test_voice_asr_credential(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_model_test_transcribe_file(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceModelTestTranscribeFileParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .test_transcribe_voice_model_file(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_instruction_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_voice_instructions()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_instruction_save(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceInstructionSaveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .save_voice_instruction(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_instruction_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceInstructionIdParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_voice_instruction(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_voice_model_default_set(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: VoiceModelDefaultSetParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .set_default_voice_model(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -2224,6 +2862,142 @@ impl RequestProcessor {
         let response = self
             .runtime
             .read_project_memory(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemoryListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_unified_memories(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_get(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemoryGetParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .get_unified_memory(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemoryCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_unified_memory(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemoryUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_unified_memory(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemoryDeleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_unified_memory(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_search(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemorySearchParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .search_unified_memories(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_stats(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .read_unified_memory_stats()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_analyze(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemoryAnalyzeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .analyze_unified_memories(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_semantic_search(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemorySemanticSearchParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .semantic_search_unified_memories(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_unified_memory_hybrid_search(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: UnifiedMemoryHybridSearchParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .hybrid_search_unified_memories(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

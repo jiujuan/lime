@@ -55,6 +55,7 @@ interface WorkspaceRegisteredSkillsPanelProps {
     string,
     AgentRuntimeCompletionAuditSummary | undefined
   >;
+  hideWhenEmpty?: boolean;
   className?: string;
 }
 
@@ -1806,6 +1807,7 @@ export function WorkspaceRegisteredSkillsPanel({
   onEnableRuntime,
   onCreateManagedAutomationDraft,
   completionAuditSummariesByDirectory,
+  hideWhenEmpty = false,
   className,
 }: WorkspaceRegisteredSkillsPanelProps) {
   const { t } = useTranslation("agent");
@@ -1987,6 +1989,14 @@ export function WorkspaceRegisteredSkillsPanel({
   );
   const effectiveError = projectError || error;
   const isBusy = projectPending || loading;
+  if (
+    hideWhenEmpty &&
+    (!normalizedWorkspaceRoot ||
+      isBusy ||
+      (!effectiveError && visibleSkills.length === 0))
+  ) {
+    return null;
+  }
 
   return (
     <section

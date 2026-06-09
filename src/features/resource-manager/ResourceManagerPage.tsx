@@ -6,6 +6,7 @@ import {
   openPathWithDefaultApp,
   revealPathInFinder,
 } from "@/lib/api/fileSystem";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { readFilePreview } from "@/lib/api/fileBrowser";
 import {
   hasDesktopHostEventCapability,
@@ -66,20 +67,6 @@ async function closeCurrentResourceManagerWindow(): Promise<void> {
   }
 
   window.close();
-}
-
-async function openExternalUrl(url: string): Promise<void> {
-  if (hasDesktopHostInvokeCapability()) {
-    try {
-      const { open } = await import("@/lib/desktop-host/plugin-shell");
-      await open(url);
-      return;
-    } catch (error) {
-      console.warn("[资源管理器] 系统打开外链失败，回退到浏览器窗口:", error);
-    }
-  }
-
-  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function sanitizeFileName(value: string): string {
@@ -557,7 +544,7 @@ export function ResourceManagerPage() {
         return;
       }
 
-      await openExternalUrl(parsed.toString());
+      await openExternalUrlWithSystemBrowser(parsed.toString());
     } catch (error) {
       console.warn("[资源管理器] 打开原文链接失败:", error);
       toast.error("原文链接无法打开");

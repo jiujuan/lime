@@ -47,7 +47,7 @@ describe("AgentAppRuntimePage Host Bridge", () => {
               compatible: compatibleAgentAppStandardVersions,
             },
             runtimeProfile: expect.objectContaining({
-              runtimeId: "content-factory-app:in_lime:0.8.0",
+              runtimeId: `content-factory-app:in_lime:${currentAgentAppHostRuntimeVersion}`,
               runtimeVersion: currentAgentAppHostRuntimeVersion,
               shellKind: "desktop",
               installMode: "in_lime",

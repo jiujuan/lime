@@ -110,6 +110,7 @@ export const apiMocks = hoisted.apiMocks;
 export const runtimeApiMocks = hoisted.runtimeApiMocks;
 
 vi.mock("@/lib/api/agentApps", () => ({
+  AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
   getAgentAppCloudCatalog: hoisted.apiMocks.getAgentAppCloudCatalog,
   listInstalledAgentApps: hoisted.apiMocks.listInstalledAgentApps,
   startAgentAppUiRuntime: hoisted.apiMocks.startAgentAppUiRuntime,

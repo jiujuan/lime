@@ -6,6 +6,7 @@
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
 import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
 import { getAsrCredentials, type AsrCredentialEntry } from "./asrProvider";
+import { createAppServerClient } from "./appServer";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export const VOICE_MODEL_DOWNLOAD_PROGRESS_EVENT =
@@ -117,7 +118,9 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function normalizeText(value: unknown): string | null {
@@ -201,7 +204,10 @@ function assertDownloadResult(
   };
 }
 
-function assertCatalog(command: string, value: unknown): VoiceModelCatalogEntry[] {
+function assertCatalog(
+  command: string,
+  value: unknown,
+): VoiceModelCatalogEntry[] {
   if (!Array.isArray(value)) {
     throw new Error(`${command} did not return a voice model catalog`);
   }
@@ -370,10 +376,13 @@ export async function downloadVoiceModel(
 ): Promise<VoiceModelDownloadResult> {
   const oemCatalog = await fetchOemVoiceModelCatalog();
   const catalogEntry = oemCatalog?.find((item) => item.id === modelId);
-  const result = await invokeVoiceModelCommand<unknown>("voice_models_download", {
-    modelId,
-    ...(catalogEntry ? { catalogEntry } : {}),
-  });
+  const result = await invokeVoiceModelCommand<unknown>(
+    "voice_models_download",
+    {
+      modelId,
+      ...(catalogEntry ? { catalogEntry } : {}),
+    },
+  );
   return assertDownloadResult("voice_models_download", result);
 }
 
@@ -398,28 +407,30 @@ export async function deleteVoiceModel(
 export async function setDefaultVoiceModel(
   modelId: string,
 ): Promise<AsrCredentialEntry> {
-  const result = await invokeVoiceModelCommand<unknown>(
-    "voice_models_set_default",
-    {
-      modelId,
-    },
+  const state = await getVoiceModelInstallState(modelId);
+  const response = await createAppServerClient().setDefaultVoiceModel({
+    model_id: modelId,
+    install_dir: state.install_dir,
+  });
+  if (!isRecord(response.result) || !isRecord(response.result.credential)) {
+    throw new Error("voiceModel/default/set did not return an ASR credential");
+  }
+  return assertAsrCredential(
+    "voiceModel/default/set",
+    response.result.credential,
   );
-  return assertAsrCredential("voice_models_set_default", result);
 }
 
 export async function testTranscribeVoiceModelFile(
   modelId: string,
   filePath: string,
 ): Promise<VoiceModelTestTranscribeResult> {
-  const result = await invokeVoiceModelCommand<unknown>(
-    "voice_models_test_transcribe_file",
-    {
-      modelId,
-      filePath,
-    },
-  );
+  const response = await createAppServerClient().testTranscribeVoiceModelFile({
+    model_id: modelId,
+    file_path: filePath,
+  });
   return assertTestTranscribeResult(
-    "voice_models_test_transcribe_file",
-    result,
+    "voiceModel/testTranscribeFile",
+    response.result,
   );
 }

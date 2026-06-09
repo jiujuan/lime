@@ -73,11 +73,3 @@ export function createSubagentClient({
     waitAgentRuntimeSubagents,
   };
 }
-
-export const {
-  closeAgentRuntimeSubagent,
-  resumeAgentRuntimeSubagent,
-  sendAgentRuntimeSubagentInput,
-  spawnAgentRuntimeSubagent,
-  waitAgentRuntimeSubagents,
-} = createSubagentClient();

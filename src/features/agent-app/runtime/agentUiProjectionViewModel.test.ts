@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { buildAgentAppAgentUiProjectionEvents } from "./agentUiProjectionBridge";
-import { buildAgentAppRunProjectionViewModel } from "./agentUiProjectionViewModel";
+import { buildAgentRunStandardProjectionStateFromState } from "./agentRunProjectionState";
+import {
+  buildAgentAppRunProjectionViewModel,
+  buildAgentAppRunProjectionViewModelFromStandardState,
+} from "./agentUiProjectionViewModel";
 
 describe("buildAgentAppRunProjectionViewModel", () => {
   it("按 AgentUI sequence 保留 reasoning / tool / text 的穿插顺序", () => {
@@ -383,6 +387,86 @@ describe("buildAgentAppRunProjectionViewModel", () => {
     expect(view.metrics).toMatchObject({
       modelName: "deepseek-v4-flash",
       tokenCount: 120,
+      tokenText: "120 tokens",
+    });
+  });
+
+  it("可以从标准 AgentUiProjectionState 派生宿主 view model", () => {
+    const standardState = buildAgentRunStandardProjectionStateFromState({
+      taskId: "task-standard-view",
+      sessionId: "session-standard-view",
+      threadId: "thread-standard-view",
+      runId: "run-standard-view",
+      taskEvents: [
+        {
+          id: "text-1",
+          eventType: "task:partialArtifact",
+          status: "streaming",
+          payload: { streamKind: "assistant_text_delta", delta: "标准正文。" },
+        },
+        {
+          id: "thinking-1",
+          eventType: "task:progress",
+          status: "thinking",
+          payload: { streamKind: "thinking_delta", delta: "标准思考。" },
+        },
+        {
+          id: "approval-1",
+          eventType: "task:reviewRequested",
+          status: "pending",
+          requestId: "approval-1",
+          message: "需要确认",
+        },
+        {
+          id: "artifact-1",
+          eventType: "artifact:created",
+          status: "ready",
+          artifactRef: ".lime/artifacts/content.json",
+          message: "内容产物",
+          payload: {
+            artifact: {
+              artifact_id: "content-artifact",
+            },
+          },
+        },
+        {
+          id: "metric-1",
+          eventType: "task:metricChanged",
+          status: "recorded",
+          payload: {
+            metricName: "usage",
+            providerName: "deepseek",
+            modelName: "deepseek-v4-flash",
+            usage: { totalTokens: 120 },
+          },
+        },
+      ],
+    });
+
+    const view = buildAgentAppRunProjectionViewModelFromStandardState(standardState);
+
+    expect(view.answerText).toBe("标准正文。");
+    expect(view.reasoningText).toBe("标准思考。");
+    expect(view.actions).toEqual([
+      expect.objectContaining({
+        actionId: "approval-1",
+        sessionId: "session-standard-view",
+        threadId: "thread-standard-view",
+        runId: "run-standard-view",
+        taskId: "task-standard-view",
+        status: "pending",
+        controls: ["approve", "reject"],
+      }),
+    ]);
+    expect(view.artifacts).toEqual([
+      expect.objectContaining({
+        artifactId: "content-artifact",
+        ref: ".lime/artifacts/content.json",
+      }),
+    ]);
+    expect(view.metrics).toMatchObject({
+      providerName: "deepseek",
+      modelName: "deepseek-v4-flash",
       tokenText: "120 tokens",
     });
   });

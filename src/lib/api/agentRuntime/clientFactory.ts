@@ -13,8 +13,6 @@ import {
 } from "./objectiveClient";
 import type { AppServerSessionRpcClient } from "./appServerSessionClient";
 import { createSessionClient } from "./sessionClient";
-import { createSiteClient } from "./siteClient";
-import { createSubagentClient } from "./subagentClient";
 import {
   createThreadClient,
   type AgentRuntimeThreadClientDeps,
@@ -38,6 +36,7 @@ export interface AgentRuntimeClientDeps extends AgentRuntimeTransportDeps {
   bridgeInvoke?: AgentRuntimeBridgeInvoke;
   invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeAppServerClient;
+  standardRuntimeClient?: AgentRuntimeThreadClientDeps["standardRuntimeClient"];
   isAppServerTurnLifecycleAvailable?: AgentRuntimeThreadClientDeps["isAppServerTurnLifecycleAvailable"];
 }
 
@@ -46,6 +45,7 @@ export function createAgentRuntimeClient({
   bridgeInvoke,
   invoke,
   invokeCommand,
+  standardRuntimeClient,
   isAppServerTurnLifecycleAvailable,
 }: AgentRuntimeClientDeps = {}) {
   const resolvedBridgeInvoke =
@@ -72,11 +72,10 @@ export function createAgentRuntimeClient({
     ...createSessionClient({
       appServerClient,
     }),
-    ...createSiteClient({ bridgeInvoke: resolvedBridgeInvoke }),
-    ...createSubagentClient({ invokeCommand: resolvedInvokeCommand }),
     ...createThreadClient({
       appServerClient,
       invokeCommand: resolvedInvokeCommand,
+      standardRuntimeClient,
       isAppServerTurnLifecycleAvailable,
     }),
   };

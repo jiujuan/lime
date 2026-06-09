@@ -146,7 +146,6 @@ pub fn run() {
         webview_manager: webview_manager_state,
         chrome_profile_manager: chrome_profile_manager_state,
         update_check_service: update_check_service_state,
-        session_files: session_files_state,
         context_memory_service,
         recording_service,
         mcp_manager: mcp_manager_state,
@@ -255,7 +254,6 @@ pub fn run() {
         .manage(webview_manager_state)
         .manage(chrome_profile_manager_state)
         .manage(update_check_service_state)
-        .manage(session_files_state)
         .manage(context_memory_service)
         .manage(recording_service)
         .manage(mcp_manager_state)
@@ -924,11 +922,6 @@ pub fn run() {
             app_commands::get_available_models,
             app_commands::check_api_compatibility,
             // Agent App Desktop shell / runtime facade commands
-            // Execution run commands
-            commands::execution_run_cmd::execution_run_list,
-            commands::execution_run_cmd::execution_run_get,
-            commands::execution_run_cmd::execution_run_get_general_workbench_state,
-            commands::execution_run_cmd::execution_run_list_general_workbench_history,
             commands::browser_runtime_cmd::open_browser_runtime_debugger_window,
             commands::browser_runtime_cmd::close_browser_runtime_debugger_window,
             commands::browser_runtime_cmd::launch_browser_session,
@@ -1019,28 +1012,9 @@ pub fn run() {
             commands::webview_cmd::get_browser_event_buffer,
             commands::webview_cmd::browser_execute_action,
             commands::webview_cmd::get_browser_action_audit_logs,
-            // Session Files commands
-            commands::session_files_cmd::session_files_create,
-            commands::session_files_cmd::session_files_exists,
-            commands::session_files_cmd::session_files_get_or_create,
-            commands::session_files_cmd::session_files_delete,
-            commands::session_files_cmd::session_files_list,
-            commands::session_files_cmd::session_files_get_detail,
-            commands::session_files_cmd::session_files_update_meta,
-            commands::session_files_cmd::session_files_save_file,
-            commands::session_files_cmd::session_files_read_file,
-            commands::session_files_cmd::session_files_resolve_file_path,
-            commands::session_files_cmd::session_files_delete_file,
-            commands::session_files_cmd::session_files_list_files,
-            commands::session_files_cmd::session_files_cleanup_expired,
-            commands::session_files_cmd::session_files_cleanup_empty,
             // Workspace commands
-            commands::workspace_cmd::workspace_create,
             commands::workspace_cmd::workspace_list,
             commands::workspace_cmd::workspace_get,
-            commands::workspace_cmd::workspace_update,
-            commands::workspace_cmd::workspace_delete,
-            commands::workspace_cmd::workspace_set_default,
             commands::workspace_cmd::workspace_get_default,
             commands::workspace_cmd::workspace_ensure_ready,
             commands::workspace_cmd::workspace_ensure_default_ready,
@@ -1050,38 +1024,6 @@ pub fn run() {
             commands::workspace_cmd::get_or_create_default_project,
             commands::workspace_cmd::build_project_system_prompt,
             // Persona commands
-            // Material commands
-            commands::material_cmd::upload_material,
-            commands::material_cmd::import_material_from_url,
-            commands::material_cmd::list_materials,
-            commands::material_cmd::get_material,
-            commands::material_cmd::update_material,
-            commands::material_cmd::delete_material,
-            commands::material_cmd::get_material_content,
-            commands::material_cmd::get_material_count,
-            // Video generation commands
-            commands::video_generation_cmd::create_video_generation_task,
-            commands::video_generation_cmd::get_video_generation_task,
-            commands::video_generation_cmd::list_video_generation_tasks,
-            commands::video_generation_cmd::cancel_video_generation_task,
-            // Gallery material commands
-            commands::gallery_material_cmd::create_gallery_material_metadata,
-            commands::gallery_material_cmd::get_gallery_material_metadata,
-            commands::gallery_material_cmd::get_gallery_material,
-            commands::gallery_material_cmd::list_gallery_materials_by_image_category,
-            commands::gallery_material_cmd::list_gallery_materials_by_layout_category,
-            commands::gallery_material_cmd::list_gallery_materials_by_mood,
-            commands::gallery_material_cmd::update_gallery_material_metadata,
-            commands::gallery_material_cmd::delete_gallery_material_metadata,
-            // Content commands
-            commands::content_cmd::content_create,
-            commands::content_cmd::content_get,
-            commands::content_cmd::content_get_general_workbench_document_state,
-            commands::content_cmd::content_list,
-            commands::content_cmd::content_update,
-            commands::content_cmd::content_delete,
-            commands::content_cmd::content_reorder,
-            commands::content_cmd::content_stats,
             // Memory commands (Character, WorldBuilding, Outline)
             commands::memory_cmd::character_create,
             commands::memory_cmd::character_get,
@@ -1096,65 +1038,6 @@ pub fn run() {
             commands::memory_cmd::outline_node_update,
             commands::memory_cmd::outline_node_delete,
             commands::memory_cmd::project_memory_get,
-            // Memory Management commands
-            commands::memory_management_cmd::memory_runtime_get_stats,
-            commands::memory_management_cmd::memory_runtime_get_overview,
-            commands::memory_management_cmd::memory_runtime_request_analysis,
-            commands::memory_management_cmd::memory_runtime_cleanup,
-            commands::memory_management_cmd::memory_runtime_get_working_memory,
-            commands::memory_management_cmd::memory_runtime_get_extraction_status,
-            commands::memory_management_cmd::memory_runtime_prefetch_for_turn,
-            commands::memory_management_cmd::memory_get_effective_sources,
-            commands::memory_management_cmd::memory_get_auto_index,
-            commands::memory_management_cmd::memory_toggle_auto,
-            commands::memory_management_cmd::memory_update_auto_note,
-            commands::memory_management_cmd::memory_cleanup_memdir,
-            commands::memory_management_cmd::memory_scaffold_memdir,
-            commands::memory_management_cmd::memory_scaffold_runtime_agents_template,
-            commands::memory_management_cmd::memory_ensure_workspace_local_agents_gitignore,
-            // Unified Memory commands
-            commands::unified_memory_cmd::unified_memory_list,
-            commands::unified_memory_cmd::unified_memory_get,
-            commands::unified_memory_cmd::unified_memory_create,
-            commands::unified_memory_cmd::unified_memory_update,
-            commands::unified_memory_cmd::unified_memory_delete,
-            commands::unified_memory_cmd::unified_memory_search,
-            commands::unified_memory_cmd::unified_memory_stats,
-            commands::unified_memory_cmd::unified_memory_analyze,
-            commands::memory_search_cmd::unified_memory_semantic_search,
-            commands::memory_search_cmd::unified_memory_hybrid_search,
-            commands::memory_feedback_cmd::unified_memory_feedback,
-            // File Upload commands
-            // ASR commands
-            commands::asr_cmd::get_asr_credentials,
-            commands::asr_cmd::add_asr_credential,
-            commands::asr_cmd::update_asr_credential,
-            commands::asr_cmd::delete_asr_credential,
-            commands::asr_cmd::set_default_asr_credential,
-            commands::asr_cmd::test_asr_credential,
-            commands::voice_model_cmd::voice_models_list_catalog,
-            commands::voice_model_cmd::voice_models_get_install_state,
-            commands::voice_model_cmd::voice_models_download,
-            commands::voice_model_cmd::voice_models_delete,
-            commands::voice_model_cmd::voice_models_set_default,
-            commands::voice_model_cmd::voice_models_test_transcribe_file,
-            // Voice Input commands
-            crate::voice::commands::get_voice_input_config,
-            crate::voice::commands::save_voice_input_config,
-            crate::voice::commands::get_voice_instructions,
-            crate::voice::commands::save_voice_instruction,
-            crate::voice::commands::delete_voice_instruction,
-            crate::voice::commands::transcribe_audio,
-            crate::voice::commands::polish_voice_text,
-            crate::voice::commands::output_voice_text,
-            // 录音命令（使用独立线程 + channel 通信）
-            crate::voice::commands::start_recording,
-            crate::voice::commands::stop_recording,
-            crate::voice::commands::get_recording_snapshot,
-            crate::voice::commands::get_recording_segment,
-            crate::voice::commands::cancel_recording,
-            crate::voice::commands::get_recording_status,
-            crate::voice::commands::list_audio_devices,
         ])
         .build(tauri::generate_context!())
         .map(|app| {

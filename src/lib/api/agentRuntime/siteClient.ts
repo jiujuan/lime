@@ -57,9 +57,7 @@ export function createSiteClient({
     request: SiteAdapterLaunchReadinessRequest,
   ): Promise<SiteAdapterLaunchReadinessResult> {
     void request;
-    return rejectRetiredSiteAdapterCommand(
-      "site_get_adapter_launch_readiness",
-    );
+    return rejectRetiredSiteAdapterCommand("site_get_adapter_launch_readiness");
   }
 
   async function siteGetAdapterCatalogStatus(): Promise<SiteAdapterCatalogStatus> {
@@ -122,18 +120,3 @@ export function createSiteClient({
     siteSearchAdapters,
   };
 }
-
-export const {
-  siteApplyAdapterCatalogBootstrap,
-  siteClearAdapterCatalogCache,
-  siteDebugRunAdapter,
-  siteGetAdapterCatalogStatus,
-  siteGetAdapterInfo,
-  siteGetAdapterLaunchReadiness,
-  siteImportAdapterYamlBundle,
-  siteListAdapters,
-  siteRecommendAdapters,
-  siteRunAdapter,
-  siteSaveAdapterResult,
-  siteSearchAdapters,
-} = createSiteClient();

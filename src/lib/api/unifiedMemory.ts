@@ -5,8 +5,20 @@
  * 更新：添加语义搜索和混合搜索 API
  */
 
-import { safeInvoke } from "@/lib/dev-bridge";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
+import { createAppServerClient } from "./appServer";
+import {
+  METHOD_UNIFIED_MEMORY_ANALYZE,
+  METHOD_UNIFIED_MEMORY_CREATE,
+  METHOD_UNIFIED_MEMORY_DELETE,
+  METHOD_UNIFIED_MEMORY_GET,
+  METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
+  METHOD_UNIFIED_MEMORY_LIST,
+  METHOD_UNIFIED_MEMORY_SEARCH,
+  METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
+  METHOD_UNIFIED_MEMORY_STATS,
+  METHOD_UNIFIED_MEMORY_UPDATE,
+} from "../../../packages/app-server-client/src/protocol";
 
 // ==================== 类型定义 ====================
 
@@ -223,7 +235,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isNumberArray(value: unknown): value is number[] {
@@ -260,7 +274,8 @@ function isMemoryMetadata(value: unknown): value is MemoryMetadata {
     isFiniteNumber(value.confidence) &&
     isFiniteNumber(value.importance) &&
     isFiniteNumber(value.access_count) &&
-    (value.last_accessed_at === null || isFiniteNumber(value.last_accessed_at)) &&
+    (value.last_accessed_at === null ||
+      isFiniteNumber(value.last_accessed_at)) &&
     isMemorySource(value.source) &&
     (value.embedding === null || isNumberArray(value.embedding))
   );
@@ -284,7 +299,9 @@ function isUnifiedMemory(value: unknown): value is UnifiedMemory {
   );
 }
 
-function isUnifiedMemoryStats(value: unknown): value is UnifiedMemoryStatsResponse {
+function isUnifiedMemoryStats(
+  value: unknown,
+): value is UnifiedMemoryStatsResponse {
   return (
     isRecord(value) &&
     isFiniteNumber(value.total_entries) &&
@@ -300,16 +317,20 @@ function isUnifiedMemoryStats(value: unknown): value is UnifiedMemoryStatsRespon
   );
 }
 
-const assertMemoryArrayResult = (
+const assertMemoryListResult = (
   command: string,
   value: unknown,
 ): UnifiedMemory[] => {
   assertNotDiagnosticFacade(command, value, "真实统一记忆 current 通道");
-  if (!Array.isArray(value) || !value.every(isUnifiedMemory)) {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.memories) ||
+    !value.memories.every(isUnifiedMemory)
+  ) {
     throw new Error(`${command} did not return a memories array`);
   }
 
-  return value;
+  return value.memories;
 };
 
 const assertMemoryObjectResult = (
@@ -317,11 +338,11 @@ const assertMemoryObjectResult = (
   value: unknown,
 ): UnifiedMemory => {
   assertNotDiagnosticFacade(command, value, "真实统一记忆 current 通道");
-  if (!isUnifiedMemory(value)) {
+  if (!isRecord(value) || !isUnifiedMemory(value.memory)) {
     throw new Error(`${command} did not return a memory object`);
   }
 
-  return value;
+  return value.memory;
 };
 
 const assertNullableMemoryObjectResult = (
@@ -329,14 +350,15 @@ const assertNullableMemoryObjectResult = (
   value: unknown,
 ): UnifiedMemory | null => {
   assertNotDiagnosticFacade(command, value, "真实统一记忆 current 通道");
-  if (value === null) {
-    return null;
-  }
-  if (!isUnifiedMemory(value)) {
+  if (
+    !isRecord(value) ||
+    !("memory" in value) ||
+    (value.memory !== null && !isUnifiedMemory(value.memory))
+  ) {
     throw new Error(`${command} did not return a memory object or null`);
   }
 
-  return value;
+  return value.memory;
 };
 
 const assertStatsResult = (
@@ -353,12 +375,14 @@ const assertStatsResult = (
 
 const assertAnalysisResult = (value: unknown): UnifiedMemoryAnalysisResult => {
   assertNotDiagnosticFacade(
-    "unified_memory_analyze",
+    METHOD_UNIFIED_MEMORY_ANALYZE,
     value,
     "真实统一记忆分析 current 通道",
   );
   if (!value || typeof value !== "object") {
-    throw new Error("unified_memory_analyze did not return an analysis result");
+    throw new Error(
+      `${METHOD_UNIFIED_MEMORY_ANALYZE} did not return an analysis result`,
+    );
   }
 
   const result = value as Partial<UnifiedMemoryAnalysisResult>;
@@ -368,7 +392,9 @@ const assertAnalysisResult = (value: unknown): UnifiedMemoryAnalysisResult => {
     typeof result.generated_entries !== "number" ||
     typeof result.deduplicated_entries !== "number"
   ) {
-    throw new Error("unified_memory_analyze did not return an analysis result");
+    throw new Error(
+      `${METHOD_UNIFIED_MEMORY_ANALYZE} did not return an analysis result`,
+    );
   }
 
   return result as UnifiedMemoryAnalysisResult;
@@ -387,11 +413,17 @@ export async function listUnifiedMemories(
 ): Promise<UnifiedMemory[]> {
   console.log("[记忆列表] Filters:", filters);
 
-  const result = await safeInvoke<UnifiedMemory[]>("unified_memory_list", {
-    filters: filters || null,
-  });
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_LIST,
+    {
+      filters: filters || null,
+    },
+  );
 
-  const memories = assertMemoryArrayResult("unified_memory_list", result);
+  const memories = assertMemoryListResult(
+    METHOD_UNIFIED_MEMORY_LIST,
+    response.result,
+  );
 
   console.log("[记忆列表] Results:", memories);
   return memories;
@@ -419,13 +451,19 @@ export async function searchUnifiedMemories(
     limit,
   );
 
-  const result = await safeInvoke<UnifiedMemory[]>("unified_memory_search", {
-    query,
-    category: category?.toString(),
-    limit,
-  });
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_SEARCH,
+    {
+      query,
+      category: category?.toString(),
+      limit,
+    },
+  );
 
-  const memories = assertMemoryArrayResult("unified_memory_search", result);
+  const memories = assertMemoryListResult(
+    METHOD_UNIFIED_MEMORY_SEARCH,
+    response.result,
+  );
   console.log("[关键词搜索] Results:", memories);
   return memories;
 }
@@ -441,10 +479,16 @@ export async function getUnifiedMemory(
 ): Promise<UnifiedMemory | null> {
   console.log("[获取记忆] ID:", id);
 
-  const result = await safeInvoke<UnifiedMemory | null>("unified_memory_get", {
-    id,
-  });
-  const memory = assertNullableMemoryObjectResult("unified_memory_get", result);
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_GET,
+    {
+      id,
+    },
+  );
+  const memory = assertNullableMemoryObjectResult(
+    METHOD_UNIFIED_MEMORY_GET,
+    response.result,
+  );
 
   console.log("[获取记忆] Result:", memory);
   return memory;
@@ -461,11 +505,17 @@ export async function createUnifiedMemory(
 ): Promise<UnifiedMemory> {
   console.log("[创建记忆] Request:", request);
 
-  const result = await safeInvoke<UnifiedMemory>("unified_memory_create", {
-    request,
-  });
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_CREATE,
+    {
+      request,
+    },
+  );
 
-  const memory = assertMemoryObjectResult("unified_memory_create", result);
+  const memory = assertMemoryObjectResult(
+    METHOD_UNIFIED_MEMORY_CREATE,
+    response.result,
+  );
   console.log("[创建记忆] Result:", memory);
   return memory;
 }
@@ -483,12 +533,18 @@ export async function updateUnifiedMemory(
 ): Promise<UnifiedMemory> {
   console.log("[更新记忆] ID:", id, "Request:", request);
 
-  const result = await safeInvoke<UnifiedMemory>("unified_memory_update", {
-    id,
-    request,
-  });
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_UPDATE,
+    {
+      id,
+      request,
+    },
+  );
 
-  const memory = assertMemoryObjectResult("unified_memory_update", result);
+  const memory = assertMemoryObjectResult(
+    METHOD_UNIFIED_MEMORY_UPDATE,
+    response.result,
+  );
   console.log("[更新记忆] Result:", memory);
   return memory;
 }
@@ -502,18 +558,22 @@ export async function updateUnifiedMemory(
 export async function deleteUnifiedMemory(id: string): Promise<boolean> {
   console.log("[删除记忆] ID:", id);
 
-  const result = await safeInvoke<boolean>("unified_memory_delete", { id });
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_DELETE,
+    { id },
+  );
+  const result = response.result;
   assertNotDiagnosticFacade(
-    "unified_memory_delete",
+    METHOD_UNIFIED_MEMORY_DELETE,
     result,
     "真实统一记忆 current 通道",
   );
-  if (typeof result !== "boolean") {
-    throw new Error("unified_memory_delete did not return a boolean");
+  if (!isRecord(result) || typeof result.deleted !== "boolean") {
+    throw new Error(`${METHOD_UNIFIED_MEMORY_DELETE} did not return a boolean`);
   }
 
-  console.log("[删除记忆] Result:", result);
-  return result;
+  console.log("[删除记忆] Result:", result.deleted);
+  return result.deleted;
 }
 
 /**
@@ -521,10 +581,11 @@ export async function deleteUnifiedMemory(id: string): Promise<boolean> {
  */
 export async function getUnifiedMemoryStats(): Promise<UnifiedMemoryStatsResponse> {
   console.log("[记忆统计] 获取统一记忆统计");
-  const result = await safeInvoke<UnifiedMemoryStatsResponse>(
-    "unified_memory_stats",
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_STATS,
+    {},
   );
-  return assertStatsResult("unified_memory_stats", result);
+  return assertStatsResult(METHOD_UNIFIED_MEMORY_STATS, response.result);
 }
 
 /**
@@ -539,15 +600,15 @@ export async function analyzeUnifiedMemories(
     toTimestamp,
   });
 
-  const result = await safeInvoke<UnifiedMemoryAnalysisResult>(
-    "unified_memory_analyze",
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_ANALYZE,
     {
-      fromTimestamp,
-      toTimestamp,
+      from_timestamp: fromTimestamp,
+      to_timestamp: toTimestamp,
     },
   );
 
-  return assertAnalysisResult(result);
+  return assertAnalysisResult(response.result);
 }
 
 /**
@@ -574,8 +635,8 @@ export async function semanticSearch(
     minSimilarity,
   );
 
-  const result = await safeInvoke<UnifiedMemory[]>(
-    "unified_memory_semantic_search",
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
     {
       options: {
         query,
@@ -586,9 +647,9 @@ export async function semanticSearch(
     },
   );
 
-  const memories = assertMemoryArrayResult(
-    "unified_memory_semantic_search",
-    result,
+  const memories = assertMemoryListResult(
+    METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH,
+    response.result,
   );
   console.log("[语义搜索] Results:", memories);
   return memories;
@@ -622,8 +683,8 @@ export async function hybridSearch(
     minSimilarity,
   );
 
-  const result = await safeInvoke<UnifiedMemory[]>(
-    "unified_memory_hybrid_search",
+  const response = await createAppServerClient().request<unknown>(
+    METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
     {
       options: {
         query,
@@ -635,9 +696,9 @@ export async function hybridSearch(
     },
   );
 
-  const memories = assertMemoryArrayResult(
-    "unified_memory_hybrid_search",
-    result,
+  const memories = assertMemoryListResult(
+    METHOD_UNIFIED_MEMORY_HYBRID_SEARCH,
+    response.result,
   );
   console.log("[混合搜索] Results:", memories);
   return memories;

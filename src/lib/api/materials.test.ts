@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { safeInvoke } from "@/lib/dev-bridge";
 import {
   deleteMaterial,
   getMaterialContent,
@@ -11,8 +10,26 @@ import {
   uploadMaterial,
 } from "./materials";
 
-vi.mock("@/lib/dev-bridge", () => ({
-  safeInvoke: vi.fn(),
+const appServerMocks = vi.hoisted(() => ({
+  listProjectMaterials: vi.fn(),
+  countProjectMaterials: vi.fn(),
+  uploadProjectMaterial: vi.fn(),
+  importProjectMaterialFromUrl: vi.fn(),
+  updateProjectMaterial: vi.fn(),
+  deleteProjectMaterial: vi.fn(),
+  readProjectMaterialContent: vi.fn(),
+}));
+
+vi.mock("./appServer", () => ({
+  APP_SERVER_METHOD_PROJECT_MATERIAL_LIST: "projectMaterial/list",
+  APP_SERVER_METHOD_PROJECT_MATERIAL_COUNT: "projectMaterial/count",
+  APP_SERVER_METHOD_PROJECT_MATERIAL_UPLOAD: "projectMaterial/upload",
+  APP_SERVER_METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL:
+    "projectMaterial/importFromUrl",
+  APP_SERVER_METHOD_PROJECT_MATERIAL_UPDATE: "projectMaterial/update",
+  APP_SERVER_METHOD_PROJECT_MATERIAL_DELETE: "projectMaterial/delete",
+  APP_SERVER_METHOD_PROJECT_MATERIAL_CONTENT: "projectMaterial/content",
+  createAppServerClient: () => appServerMocks,
 }));
 
 describe("materials API", () => {
@@ -47,15 +64,19 @@ describe("materials API", () => {
     );
   });
 
-  it("listMaterials 应返回规范化后的素材数组", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce([
-      {
-        id: "m1",
-        project_id: "project-1",
-        material_type: "image",
-        file_path: "/tmp/demo.png",
+  it("listMaterials 应通过 App Server current 返回规范化后的素材数组", async () => {
+    appServerMocks.listProjectMaterials.mockResolvedValueOnce({
+      result: {
+        materials: [
+          {
+            id: "m1",
+            project_id: "project-1",
+            material_type: "image",
+            file_path: "/tmp/demo.png",
+          },
+        ],
       },
-    ]);
+    });
 
     await expect(listMaterials("project-1")).resolves.toEqual([
       expect.objectContaining({
@@ -66,75 +87,55 @@ describe("materials API", () => {
       }),
     ]);
 
-    expect(safeInvoke).toHaveBeenCalledWith("list_materials", {
+    expect(appServerMocks.listProjectMaterials).toHaveBeenCalledWith({
       projectId: "project-1",
-      project_id: "project-1",
       filter: null,
     });
   });
 
-  it("listMaterials 遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "list_materials",
-        reason: "not-supported",
+  it("listMaterials 遇到非数组返回时不应伪装成空列表", async () => {
+    appServerMocks.listProjectMaterials.mockResolvedValueOnce({
+      result: {
+        materials: { id: "m1" },
       },
     });
 
     await expect(listMaterials("project-1")).rejects.toThrow(
-      "list_materials 尚未接入真实 Materials current 通道",
+      "projectMaterial/list did not return a materials array",
     );
   });
 
-  it("listMaterials 遇到非数组返回时不应伪装成空列表", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      materials: [],
+  it("getMaterialCount 应调用 App Server 统计方法", async () => {
+    appServerMocks.countProjectMaterials.mockResolvedValueOnce({
+      result: { count: 3 },
     });
-
-    await expect(listMaterials("project-1")).rejects.toThrow(
-      "list_materials did not return a materials array",
-    );
-  });
-
-  it("getMaterialCount 应调用统计命令", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(3);
 
     await expect(getMaterialCount("project-2")).resolves.toBe(3);
-    expect(safeInvoke).toHaveBeenCalledWith("get_material_count", {
+    expect(appServerMocks.countProjectMaterials).toHaveBeenCalledWith({
       projectId: "project-2",
-      project_id: "project-2",
     });
-  });
-
-  it("getMaterialCount 遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "get_material_count",
-        reason: "not-supported",
-      },
-    });
-
-    await expect(getMaterialCount("project-2")).rejects.toThrow(
-      "get_material_count 尚未接入真实 Materials current 通道",
-    );
   });
 
   it("getMaterialCount 遇到非数字返回时不应伪装成 0", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      count: 0,
+    appServerMocks.countProjectMaterials.mockResolvedValueOnce({
+      result: { count: "3" },
     });
 
     await expect(getMaterialCount("project-2")).rejects.toThrow(
-      "get_material_count did not return a number",
+      "projectMaterial/count did not return a number",
     );
   });
 
-  it("uploadMaterial 应发送兼容字段并规范化返回值", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      id: "m2",
-      project_id: "project-3",
-      material_type: "image",
-      file_path: "/tmp/upload.png",
+  it("uploadMaterial 应发送 App Server current 请求并规范化返回值", async () => {
+    appServerMocks.uploadProjectMaterial.mockResolvedValueOnce({
+      result: {
+        material: {
+          id: "m2",
+          project_id: "project-3",
+          material_type: "image",
+          file_path: "/tmp/upload.png",
+        },
+      },
     });
 
     await expect(
@@ -154,22 +155,17 @@ describe("materials API", () => {
       }),
     );
 
-    expect(safeInvoke).toHaveBeenCalledWith("upload_material", {
-      req: expect.objectContaining({
+    expect(appServerMocks.uploadProjectMaterial).toHaveBeenCalledWith(
+      expect.objectContaining({
         projectId: "project-3",
-        project_id: "project-3",
         filePath: "/tmp/upload.png",
-        file_path: "/tmp/upload.png",
       }),
-    });
+    );
   });
 
-  it("uploadMaterial 遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "upload_material",
-        reason: "not-supported",
-      },
+  it("uploadMaterial 遇到非素材对象时应 fail closed", async () => {
+    appServerMocks.uploadProjectMaterial.mockResolvedValueOnce({
+      result: { material: null },
     });
 
     await expect(
@@ -179,11 +175,22 @@ describe("materials API", () => {
         type: "image",
         filePath: "/tmp/upload.png",
       }),
-    ).rejects.toThrow("upload_material 尚未接入真实 Materials current 通道");
+    ).rejects.toThrow("projectMaterial/upload did not return a material object");
   });
 
-  it("importMaterialFromUrl 应统一走网关请求格式", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ id: "m3" });
+  it("importMaterialFromUrl 应通过 App Server current 返回导入素材 id", async () => {
+    appServerMocks.importProjectMaterialFromUrl.mockResolvedValueOnce({
+      result: {
+        material: {
+          id: "m3",
+          projectId: "project-4",
+          type: "image",
+          name: "remote-image",
+          tags: [],
+          createdAt: 1,
+        },
+      },
+    });
 
     await expect(
       importMaterialFromUrl({
@@ -195,21 +202,17 @@ describe("materials API", () => {
       }),
     ).resolves.toEqual({ id: "m3" });
 
-    expect(safeInvoke).toHaveBeenCalledWith("import_material_from_url", {
-      req: expect.objectContaining({
+    expect(appServerMocks.importProjectMaterialFromUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
         projectId: "project-4",
-        project_id: "project-4",
         url: "https://example.com/demo.png",
       }),
-    });
+    );
   });
 
-  it("importMaterialFromUrl 遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "import_material_from_url",
-        reason: "not-supported",
-      },
+  it("importMaterialFromUrl 遇到非素材结果时应 fail closed", async () => {
+    appServerMocks.importProjectMaterialFromUrl.mockResolvedValueOnce({
+      result: {},
     });
 
     await expect(
@@ -220,19 +223,24 @@ describe("materials API", () => {
         url: "https://example.com/demo.png",
       }),
     ).rejects.toThrow(
-      "import_material_from_url 尚未接入真实 Materials current 通道",
+      "projectMaterial/importFromUrl did not return an imported material id",
     );
   });
 
-  it("updateMaterial / deleteMaterial / getMaterialContent 应代理到对应命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        id: "m4",
-        projectId: "project-5",
-        type: "text",
-      })
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce("hello");
+  it("updateMaterial / deleteMaterial / getMaterialContent 应代理到 App Server current", async () => {
+    appServerMocks.updateProjectMaterial.mockResolvedValueOnce({
+      result: {
+        material: {
+          id: "m4",
+          projectId: "project-5",
+          type: "text",
+        },
+      },
+    });
+    appServerMocks.deleteProjectMaterial.mockResolvedValueOnce({ result: {} });
+    appServerMocks.readProjectMaterialContent.mockResolvedValueOnce({
+      result: { content: "hello" },
+    });
 
     await expect(updateMaterial("m4", { name: "new-name" })).resolves.toEqual(
       expect.objectContaining({
@@ -244,60 +252,35 @@ describe("materials API", () => {
     await expect(deleteMaterial("m4")).resolves.toBeUndefined();
     await expect(getMaterialContent("m4")).resolves.toBe("hello");
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "update_material", {
+    expect(appServerMocks.updateProjectMaterial).toHaveBeenCalledWith({
       id: "m4",
       update: { name: "new-name" },
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "delete_material", {
+    expect(appServerMocks.deleteProjectMaterial).toHaveBeenCalledWith({
       id: "m4",
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(3, "get_material_content", {
+    expect(appServerMocks.readProjectMaterialContent).toHaveBeenCalledWith({
       id: "m4",
     });
-  });
-
-  it("updateMaterial / deleteMaterial / getMaterialContent 遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        diagnostic: {
-          command: "update_material",
-          reason: "not-supported",
-        },
-      })
-      .mockResolvedValueOnce({
-        diagnostic: {
-          command: "delete_material",
-          reason: "not-supported",
-        },
-      })
-      .mockResolvedValueOnce({
-        diagnostic: {
-          command: "get_material_content",
-          reason: "not-supported",
-        },
-      });
-
-    await expect(updateMaterial("m4", { name: "new-name" })).rejects.toThrow(
-      "update_material 尚未接入真实 Materials current 通道",
-    );
-    await expect(deleteMaterial("m4")).rejects.toThrow(
-      "delete_material 尚未接入真实 Materials current 通道",
-    );
-    await expect(getMaterialContent("m4")).rejects.toThrow(
-      "get_material_content 尚未接入真实 Materials current 通道",
-    );
   });
 
   it("deleteMaterial 遇到 mock-like payload 时不应伪装成成功", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ error: "not available" });
+    appServerMocks.deleteProjectMaterial.mockResolvedValueOnce({
+      result: { success: true },
+    });
 
     await expect(deleteMaterial("m4")).rejects.toThrow(
-      "delete_material did not return void",
+      "projectMaterial/delete did not return void",
     );
-    await expect(deleteMaterial("m4")).rejects.toThrow(
-      "delete_material did not return void",
+  });
+
+  it("getMaterialContent 遇到非字符串内容时应 fail closed", async () => {
+    appServerMocks.readProjectMaterialContent.mockResolvedValueOnce({
+      result: { content: null },
+    });
+
+    await expect(getMaterialContent("m4")).rejects.toThrow(
+      "projectMaterial/content did not return content text",
     );
   });
 });

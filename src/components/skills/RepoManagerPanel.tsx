@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, Plus, Trash2, ExternalLink, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import type { SkillRepo } from "@/lib/api/skills";
 
 interface RepoManagerPanelProps {
@@ -69,8 +70,10 @@ export function RepoManagerPanel({
     }
   };
 
-  const openRepo = (repo: SkillRepo) => {
-    window.open(`https://github.com/${repo.owner}/${repo.name}`, "_blank");
+  const openRepo = async (repo: SkillRepo) => {
+    await openExternalUrlWithSystemBrowser(
+      `https://github.com/${repo.owner}/${repo.name}`,
+    );
   };
 
   return (

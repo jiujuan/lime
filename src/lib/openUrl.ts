@@ -1,9 +1,5 @@
-import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 
 export async function openUrl(url: string): Promise<void> {
-  try {
-    await openExternal(url);
-  } catch {
-    window.open(url, "_blank");
-  }
+  await openExternalUrlWithSystemBrowser(url);
 }

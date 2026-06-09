@@ -53,6 +53,7 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("list_executable_skills")).toBe(false);
     expect(isElectronHostCommand("workspace_list")).toBe(true);
     expect(isElectronHostCommand("workspace_get_by_path")).toBe(true);
+    expect(isElectronHostCommand("workspace_set_default")).toBe(false);
     expect(isElectronHostCommand("get_config")).toBe(true);
     expect(isElectronHostCommand("get_experimental_config")).toBe(true);
     expect(isElectronHostCommand("save_experimental_config")).toBe(true);
@@ -83,12 +84,15 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_browser_backend_policy")).toBe(true);
     expect(isElectronHostCommand("get_browser_backends_status")).toBe(true);
     expect(isElectronHostCommand("get_voice_input_config")).toBe(false);
-    expect(isElectronHostCommand("get_asr_credentials")).toBe(true);
-    expect(isElectronHostCommand("get_voice_instructions")).toBe(true);
+    expect(isElectronHostCommand("get_asr_credentials")).toBe(false);
+    expect(isElectronHostCommand("list_audio_devices")).toBe(false);
+    expect(isElectronHostCommand("get_voice_instructions")).toBe(false);
     expect(isElectronHostCommand("validate_shortcut")).toBe(true);
+    expect(isElectronHostCommand("voice_models_delete")).toBe(true);
+    expect(isElectronHostCommand("voice_models_download")).toBe(true);
     expect(isElectronHostCommand("voice_models_get_install_state")).toBe(true);
     expect(isElectronHostCommand("get_environment_preview")).toBe(true);
-    expect(isElectronHostCommand("unified_memory_stats")).toBe(true);
+    expect(isElectronHostCommand("unified_memory_stats")).toBe(false);
     expect(isElectronHostCommand("get_mcp_servers")).toBe(false);
     expect(isElectronHostCommand("mcp_list_servers_with_status")).toBe(false);
     expect(isElectronHostCommand("mcp_list_tools")).toBe(false);
@@ -111,6 +115,7 @@ describe("electron/ipcChannels", () => {
     );
     expect(isElectronHostCommand("site_list_adapters")).toBe(false);
     expect(isElectronHostCommand("open_external_url")).toBe(true);
+    expect(isElectronHostCommand("open_system_settings_url")).toBe(true);
     expect(isElectronHostCommand("open_with_default_app")).toBe(true);
     expect(isElectronHostCommand("reveal_in_finder")).toBe(true);
     expect(isElectronHostCommand("save_exported_document")).toBe(true);

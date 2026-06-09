@@ -4,7 +4,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.63.0",
+  "version": "1.64.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -223,6 +223,10 @@
   "dependencies": {
     "@babel/standalone": "^7.29.0",
     "@floating-ui/react": "^0.27.16",
+    "@limecloud/agent-runtime-client": "0.1.0",
+    "@limecloud/agent-runtime-projection": "0.1.0",
+    "@limecloud/agent-runtime-ui": "0.1.0",
+    "@limecloud/agent-ui-contracts": "0.1.0",
     "@observablehq/plot": "^0.6.17",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-context-menu": "^2.2.16",

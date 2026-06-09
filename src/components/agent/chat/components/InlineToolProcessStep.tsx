@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { open as openExternal } from "@/lib/desktop-host/plugin-shell";
 import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import { cn } from "@/lib/utils";
 import { skillsApi } from "@/lib/api/skills";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -665,11 +665,9 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
 
   const handleOpenExternalUrl = useCallback(async (url: string) => {
     try {
-      await openExternal(url);
-    } catch {
-      if (typeof window !== "undefined" && typeof window.open === "function") {
-        window.open(url, "_blank");
-      }
+      await openExternalUrlWithSystemBrowser(url);
+    } catch (error) {
+      console.error("打开外部链接失败:", error);
     }
   }, []);
 

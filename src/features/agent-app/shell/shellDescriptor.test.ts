@@ -3,7 +3,10 @@ import { buildPackageIdentity } from "../install/packageIdentity";
 import { normalizeManifest } from "../manifest/normalizeManifest";
 import { parseManifest } from "../manifest/parseManifest";
 import { projectApp } from "../projection/projectApp";
-import { p0HostCapabilityProfile } from "../readiness/hostCapabilityProfile";
+import {
+  currentAgentAppHostRuntimeVersion,
+  p0HostCapabilityProfile,
+} from "../readiness/hostCapabilityProfile";
 import { buildLimeRuntimeProfileFromHostProfile } from "../runtime-profile";
 import type { InstalledAgentAppState, InstalledAppPreview } from "../types";
 import {
@@ -54,7 +57,7 @@ describe("Agent App v2 shell descriptor", () => {
       appId: "content-factory-app",
       installMode: "standalone",
       runtimeProfile: {
-        runtimeVersion: "0.8.0",
+        runtimeVersion: currentAgentAppHostRuntimeVersion,
         shellKind: "app_shell",
       },
       entry: {

@@ -5,12 +5,14 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
   createAppServerClient,
 } from "@/lib/api/appServer";
 import type {
   CompleteAudioGenerationTaskArtifactRequest,
   CreateAudioGenerationTaskArtifactRequest,
   CreateImageGenerationTaskArtifactRequest,
+  CreateVideoGenerationTaskArtifactRequest,
   ListMediaTaskArtifactsOutput,
   ListMediaTaskArtifactsRequest,
   MediaTaskArtifactOutput,
@@ -21,6 +23,7 @@ export type {
   CompleteAudioGenerationTaskArtifactRequest,
   CreateAudioGenerationTaskArtifactRequest,
   CreateImageGenerationTaskArtifactRequest,
+  CreateVideoGenerationTaskArtifactRequest,
   ListMediaTaskArtifactsOutput,
   ListMediaTaskArtifactsRequest,
   MediaTaskModalityRuntimeContractIndex,
@@ -43,6 +46,7 @@ export {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
 };
 
 export async function createImageGenerationTaskArtifact(
@@ -56,6 +60,13 @@ export async function createAudioGenerationTaskArtifact(
   request: CreateAudioGenerationTaskArtifactRequest,
 ): Promise<MediaTaskArtifactOutput> {
   return (await createAppServerClient().createAudioMediaTaskArtifact(request))
+    .result as MediaTaskArtifactOutput;
+}
+
+export async function createVideoGenerationTaskArtifact(
+  request: CreateVideoGenerationTaskArtifactRequest,
+): Promise<MediaTaskArtifactOutput> {
+  return (await createAppServerClient().createVideoMediaTaskArtifact(request))
     .result as MediaTaskArtifactOutput;
 }
 

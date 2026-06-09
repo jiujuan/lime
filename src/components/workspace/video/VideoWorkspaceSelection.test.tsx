@@ -88,6 +88,7 @@ function ControlledVideoWorkspace({
 
   return (
     <VideoWorkspace
+      projectRootPath="/workspace"
       projectId="project-video-1"
       state={state}
       onStateChange={(nextState) => {
@@ -108,6 +109,7 @@ function ControlledGenerateVideoWorkspace() {
 
   return (
     <VideoWorkspace
+      projectRootPath="/workspace"
       projectId="project-video-1"
       state={state}
       onStateChange={setState}
@@ -179,6 +181,7 @@ describe("VideoWorkspace 任务聚焦", () => {
 
     expect(mockListTasks).toHaveBeenCalledWith("project-video-1", {
       limit: 50,
+      projectRootPath: "/workspace",
     });
 
     const oldPreviewButton = mounted.container.querySelector(

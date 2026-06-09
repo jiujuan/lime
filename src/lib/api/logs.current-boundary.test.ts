@@ -81,7 +81,9 @@ function readOptionalRepoFile(path: string): string {
 }
 
 function readAgentCommandCatalog(): Record<string, unknown> {
-  return JSON.parse(readRepoFile("src/lib/governance/agentCommandCatalog.json"));
+  return JSON.parse(
+    readRepoFile("src/lib/governance/agentCommandCatalog.json"),
+  );
 }
 
 function expectCatalogSurfaceAbsent(
@@ -118,9 +120,14 @@ describe("logs diagnostics current App Server boundary", () => {
     const clientProtocolSource = readRepoFile(
       "packages/app-server-client/src/protocol.ts",
     );
-    const rustProtocolSource = readRepoFile(
-      "lime-rs/crates/app-server-protocol/src/protocol/v0.rs",
-    );
+    const rustProtocolSource = [
+      readRepoFile(
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
+      ),
+      readRepoFile(
+        "lime-rs/crates/app-server-protocol/src/protocol/v0/observability.rs",
+      ),
+    ].join("\n");
     const catalog = readAgentCommandCatalog();
 
     for (const method of CURRENT_LOG_DIAGNOSTIC_METHODS) {
@@ -140,7 +147,10 @@ describe("logs diagnostics current App Server boundary", () => {
         !Array.isArray(replacements),
       "deprecatedCommandReplacements should be an object",
     ).toBe(true);
-    for (const [index, command] of LEGACY_LOG_DIAGNOSTIC_FACADE_COMMANDS.entries()) {
+    for (const [
+      index,
+      command,
+    ] of LEGACY_LOG_DIAGNOSTIC_FACADE_COMMANDS.entries()) {
       expect(
         (replacements as Record<string, unknown>)[command],
         `${command} should point to current App Server method`,

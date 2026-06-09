@@ -63,57 +63,6 @@ export declare function createAgentRuntimeClient({
   submitAgentRuntimeTurn: (
     request: import("./types").AgentRuntimeSubmitTurnRequest,
   ) => Promise<void>;
-  closeAgentRuntimeSubagent: (
-    request: import("./types").AgentRuntimeCloseSubagentRequest,
-  ) => Promise<import("./types").AgentRuntimeCloseSubagentResponse>;
-  resumeAgentRuntimeSubagent: (
-    request: import("./types").AgentRuntimeResumeSubagentRequest,
-  ) => Promise<import("./types").AgentRuntimeResumeSubagentResponse>;
-  sendAgentRuntimeSubagentInput: (
-    request: import("./types").AgentRuntimeSendSubagentInputRequest,
-  ) => Promise<import("./types").AgentRuntimeSendSubagentInputResponse>;
-  spawnAgentRuntimeSubagent: (
-    request: import("./types").AgentRuntimeSpawnSubagentRequest,
-  ) => Promise<import("./types").AgentRuntimeSpawnSubagentResponse>;
-  waitAgentRuntimeSubagents: (
-    request: import("./types").AgentRuntimeWaitSubagentsRequest,
-  ) => Promise<import("./types").AgentRuntimeWaitSubagentsResponse>;
-  siteApplyAdapterCatalogBootstrap: (
-    payload: unknown,
-  ) => Promise<import("../../webview-api").SiteAdapterCatalogStatus>;
-  siteClearAdapterCatalogCache: () => Promise<
-    import("../../webview-api").SiteAdapterCatalogStatus
-  >;
-  siteDebugRunAdapter: (
-    request: import("../../webview-api").RunSiteAdapterRequest,
-  ) => Promise<import("../../webview-api").SiteAdapterRunResult>;
-  siteGetAdapterCatalogStatus: () => Promise<
-    import("../../webview-api").SiteAdapterCatalogStatus
-  >;
-  siteGetAdapterInfo: (
-    name: string,
-  ) => Promise<import("../../webview-api").SiteAdapterDefinition>;
-  siteGetAdapterLaunchReadiness: (
-    request: import("../../webview-api").SiteAdapterLaunchReadinessRequest,
-  ) => Promise<import("../../webview-api").SiteAdapterLaunchReadinessResult>;
-  siteImportAdapterYamlBundle: (
-    request: import("../../webview-api").SiteAdapterImportYamlBundleRequest,
-  ) => Promise<import("../../webview-api").SiteAdapterImportResult>;
-  siteListAdapters: () => Promise<
-    import("../../webview-api").SiteAdapterDefinition[]
-  >;
-  siteRecommendAdapters: (
-    limit?: number,
-  ) => Promise<import("../../webview-api").SiteAdapterRecommendation[]>;
-  siteRunAdapter: (
-    request: import("../../webview-api").RunSiteAdapterRequest,
-  ) => Promise<import("../../webview-api").SiteAdapterRunResult>;
-  siteSaveAdapterResult: (
-    request: import("../../webview-api").SaveSiteAdapterResultRequest,
-  ) => Promise<import("../../webview-api").SavedSiteAdapterContent>;
-  siteSearchAdapters: (
-    query: string,
-  ) => Promise<import("../../webview-api").SiteAdapterDefinition[]>;
   createAgentRuntimeSession: (
     workspaceId: string,
     name?: string,

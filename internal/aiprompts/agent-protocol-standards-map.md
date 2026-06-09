@@ -52,6 +52,7 @@
 | 内部协议 / 标准 | 事实源 | 负责内容 | 不应负责 |
 | --- | --- | --- | --- |
 | Query Loop | `query-loop.md` | turn 提交、prompt 组包、runtime 主链、执行入口 | 公共 runtime 标准全文 |
+| Agent UI / Runtime 标准边界 | `agent-ui-runtime-standard.md` | 四包职责、宿主接入、主聊天 projection 迁移分类、标准包守卫 | 公共 Agent UI / Agent Runtime 标准全文 |
 | Command Runtime | `command-runtime.md` | `@` / `/` / 轻卡 / viewer / 功能方案包执行边界 | 新造独立命令协议 |
 | Desktop Host / App Server Command Boundary | `commands.md` | `safeInvoke`、Electron host / preload、App Server protocol / client、legacy adapter、command catalog、mock 多侧同步 | UI 或业务语义定义 |
 | Skill Standard | `skill-standard.md` | Skill 包解析、标准摘要层、runtime binding、目录投影 | 把 `SKILL.md` 原文当 runtime 协议 |

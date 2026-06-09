@@ -4,9 +4,22 @@
  * 定义语音识别服务相关的类型，与 Rust 后端保持一致。
  */
 
-import { safeInvoke } from "@/lib/dev-bridge";
+import {
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_CREATE,
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET,
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DELETE,
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_LIST,
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_TEST,
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_UPDATE,
+  APP_SERVER_METHOD_VOICE_INSTRUCTION_DELETE,
+  APP_SERVER_METHOD_VOICE_INSTRUCTION_LIST,
+  APP_SERVER_METHOD_VOICE_INSTRUCTION_SAVE,
+  createAppServerClient,
+  type AppServerVoiceAsrCredential,
+  type AppServerVoiceAsrCredentialCreateParams,
+  type AppServerVoiceAsrProviderType,
+} from "./appServer";
 import { getConfig, saveConfig, type Config } from "./appConfig";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 // ============ ASR Provider 类型 ============
 
@@ -162,7 +175,8 @@ const DEFAULT_VOICE_INPUT_CONFIG: VoiceInputConfig = {
   translate_instruction_id: "translate_en",
 };
 
-const VOICE_INPUT_CURRENT_SURFACE = "真实语音输入 current 通道";
+const VOICE_REALTIME_CURRENT_BLOCKED_MESSAGE =
+  "语音转写、润色、输出与录音控制尚未接入 App Server / Electron current 通道";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -235,43 +249,20 @@ export interface AudioDeviceInfo {
 
 // ============ Desktop Host / App Server 命令封装 ============
 
-async function invokeVoiceInputCommand<T>(
-  command: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  const result = args
-    ? await safeInvoke(command, args)
-    : await safeInvoke(command);
-  assertNotDiagnosticFacade(command, result, VOICE_INPUT_CURRENT_SURFACE);
-  return result as T;
+function failClosedRetiredVoiceInputCommand(): never {
+  throw new Error(
+    `${VOICE_REALTIME_CURRENT_BLOCKED_MESSAGE}，旧 Tauri in-process command 已退役。`,
+  );
 }
 
-function assertArrayResult<T>(command: string, value: unknown): T[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${command} did not return an array`);
-  }
-  return value as T[];
-}
-
-function assertVoidLike(command: string, value: unknown): void {
-  if (value == null) {
-    return;
-  }
-  throw new Error(`${command} did not return an empty result`);
-}
-
-function assertAsrCredential(
-  command: string,
-  value: unknown,
-): AsrCredentialEntry {
+function assertVoidResult(command: string, value: unknown): void {
   if (
-    !isRecord(value) ||
-    typeof value.id !== "string" ||
-    typeof value.provider !== "string"
+    value !== undefined &&
+    value !== null &&
+    (!isRecord(value) || Object.keys(value).length > 0)
   ) {
-    throw new Error(`${command} did not return an ASR credential`);
+    throw new Error(`${command} did not return an empty result`);
   }
-  return value as unknown as AsrCredentialEntry;
 }
 
 function assertTestAsrCredentialResult(
@@ -288,137 +279,191 @@ function assertTestAsrCredentialResult(
   return value as { success: boolean; message: string };
 }
 
-function assertTranscribeResult(
-  command: string,
-  value: unknown,
-): TranscribeResult {
-  if (
-    !isRecord(value) ||
-    typeof value.text !== "string" ||
-    typeof value.provider !== "string"
-  ) {
-    throw new Error(`${command} did not return a transcribe result`);
+function asrProviderFromAppServer(
+  provider: AppServerVoiceAsrProviderType,
+): AsrProviderType {
+  if (provider === "sense_voice_local") {
+    return "sensevoice_local";
   }
-  return value as unknown as TranscribeResult;
+  return provider;
 }
 
-function assertPolishResult(command: string, value: unknown): PolishResult {
-  if (
-    !isRecord(value) ||
-    typeof value.text !== "string" ||
-    typeof value.instruction_name !== "string"
-  ) {
-    throw new Error(`${command} did not return a polish result`);
+function asrProviderToAppServer(
+  provider: AsrProviderType,
+): AppServerVoiceAsrProviderType {
+  if (provider === "sensevoice_local") {
+    return "sense_voice_local";
   }
-  return value as unknown as PolishResult;
+  return provider;
 }
 
-function assertAudioCaptureResult(
-  command: string,
-  value: unknown,
-): RecordingSnapshotResult {
-  if (
-    !isRecord(value) ||
-    !Array.isArray(value.audio_data) ||
-    typeof value.sample_rate !== "number" ||
-    typeof value.duration !== "number"
-  ) {
-    throw new Error(`${command} did not return an audio capture result`);
-  }
-  return value as unknown as RecordingSnapshotResult;
+function asrCredentialFromAppServer(
+  credential: AppServerVoiceAsrCredential,
+): AsrCredentialEntry {
+  return {
+    ...credential,
+    provider: asrProviderFromAppServer(credential.provider),
+  };
 }
 
-function assertRecordingSegmentResult(
-  command: string,
-  value: unknown,
-): RecordingSegmentResult {
-  const base = assertAudioCaptureResult(command, value);
-  if (
-    !isRecord(value) ||
-    typeof value.start_sample !== "number" ||
-    typeof value.end_sample !== "number" ||
-    typeof value.total_samples !== "number"
-  ) {
-    throw new Error(`${command} did not return a recording segment result`);
-  }
-  return base as RecordingSegmentResult;
+function asrCredentialToAppServer(
+  credential: AsrCredentialEntry,
+): AppServerVoiceAsrCredential {
+  return {
+    ...credential,
+    provider: asrProviderToAppServer(credential.provider),
+  };
 }
 
-function assertRecordingStatus(
-  command: string,
-  value: unknown,
-): RecordingStatus {
-  if (
-    !isRecord(value) ||
-    typeof value.is_recording !== "boolean" ||
-    typeof value.volume !== "number" ||
-    typeof value.duration !== "number"
-  ) {
-    throw new Error(`${command} did not return a recording status`);
-  }
-  return value as unknown as RecordingStatus;
+function asrCredentialCreateToAppServer(
+  credential: Omit<AsrCredentialEntry, "id">,
+): AppServerVoiceAsrCredentialCreateParams {
+  return {
+    ...credential,
+    provider: asrProviderToAppServer(credential.provider),
+  };
+}
+
+function describeMediaDeviceError(error: unknown): string {
+  return error instanceof Error && error.message.trim()
+    ? error.message
+    : String(error || "未知错误");
+}
+
+function normalizeAudioInputDevice(
+  device: MediaDeviceInfo,
+  index: number,
+): AudioDeviceInfo {
+  const rawLabel = device.label.trim();
+  const label =
+    device.deviceId.trim() === "default"
+      ? rawLabel.replace(/^(default|system default)\s*[-:]\s*/iu, "").trim() ||
+        rawLabel
+      : rawLabel;
+  const browserDeviceId = device.deviceId.trim();
+  const fallbackName =
+    browserDeviceId === "default"
+      ? "系统默认麦克风"
+      : `麦克风设备 ${index + 1}`;
+  const name = label || fallbackName;
+  return {
+    // 录音服务当前按设备名称匹配；有权限时浏览器 label 与 cpal 设备名保持同源。
+    id: label || browserDeviceId || fallbackName,
+    name,
+    is_default: browserDeviceId === "default" || index === 0,
+  };
 }
 
 /** 获取所有可用的麦克风设备 */
 export async function listAudioDevices(): Promise<AudioDeviceInfo[]> {
-  const result = await invokeVoiceInputCommand<unknown>("list_audio_devices");
-  return assertArrayResult<AudioDeviceInfo>("list_audio_devices", result);
+  const mediaDevices = globalThis.navigator?.mediaDevices;
+  if (!mediaDevices?.enumerateDevices) {
+    throw new Error("当前环境不支持麦克风设备枚举");
+  }
+
+  let stream: MediaStream | null = null;
+  try {
+    if (mediaDevices.getUserMedia) {
+      stream = await mediaDevices.getUserMedia({ audio: true });
+    }
+    const devices = await mediaDevices.enumerateDevices();
+    const result: AudioDeviceInfo[] = [];
+    const seenIds = new Set<string>();
+    devices
+      .filter((device) => device.kind === "audioinput")
+      .map((device, index) => normalizeAudioInputDevice(device, index))
+      .forEach((device) => {
+        if (seenIds.has(device.id)) {
+          return;
+        }
+        seenIds.add(device.id);
+        result.push(device);
+      });
+    return result;
+  } catch (error) {
+    throw new Error(
+      `无法获取麦克风设备列表：${describeMediaDeviceError(error)}`,
+    );
+  } finally {
+    for (const track of stream?.getTracks() ?? []) {
+      track.stop();
+    }
+  }
 }
 
 /** 获取 ASR 凭证列表 */
 export async function getAsrCredentials(): Promise<AsrCredentialEntry[]> {
-  const result = await invokeVoiceInputCommand<unknown>("get_asr_credentials");
-  return assertArrayResult<AsrCredentialEntry>("get_asr_credentials", result);
+  const response = await createAppServerClient().listVoiceAsrCredentials();
+  const result = response.result;
+  if (!isRecord(result) || !Array.isArray(result.credentials)) {
+    throw new Error(
+      `${APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_LIST} did not return ASR credentials`,
+    );
+  }
+  return result.credentials.map(asrCredentialFromAppServer);
 }
 
 /** 添加 ASR 凭证 */
 export async function addAsrCredential(
   entry: Omit<AsrCredentialEntry, "id">,
 ): Promise<AsrCredentialEntry> {
-  const result = await invokeVoiceInputCommand<unknown>("add_asr_credential", {
-    entry,
-  });
-  return assertAsrCredential("add_asr_credential", result);
+  const response = await createAppServerClient().createVoiceAsrCredential(
+    asrCredentialCreateToAppServer(entry),
+  );
+  if (!isRecord(response.result) || !isRecord(response.result.credential)) {
+    throw new Error(
+      `${APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_CREATE} did not return an ASR credential`,
+    );
+  }
+  return asrCredentialFromAppServer(
+    response.result.credential as AppServerVoiceAsrCredential,
+  );
 }
 
 /** 更新 ASR 凭证 */
 export async function updateAsrCredential(
   entry: AsrCredentialEntry,
 ): Promise<void> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "update_asr_credential",
-    { entry },
+  const response = await createAppServerClient().updateVoiceAsrCredential({
+    credential: asrCredentialToAppServer(entry),
+  });
+  assertVoidResult(
+    APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_UPDATE,
+    response.result,
   );
-  assertVoidLike("update_asr_credential", result);
 }
 
 /** 删除 ASR 凭证 */
 export async function deleteAsrCredential(id: string): Promise<void> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "delete_asr_credential",
-    { id },
+  const response = await createAppServerClient().deleteVoiceAsrCredential({
+    id,
+  });
+  assertVoidResult(
+    APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DELETE,
+    response.result,
   );
-  assertVoidLike("delete_asr_credential", result);
 }
 
 /** 设置默认 ASR 凭证 */
 export async function setDefaultAsrCredential(id: string): Promise<void> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "set_default_asr_credential",
-    { id },
+  const response = await createAppServerClient().setDefaultVoiceAsrCredential({
+    id,
+  });
+  assertVoidResult(
+    APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET,
+    response.result,
   );
-  assertVoidLike("set_default_asr_credential", result);
 }
 
 /** 测试 ASR 凭证连通性 */
 export async function testAsrCredential(
   id: string,
 ): Promise<{ success: boolean; message: string }> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "test_asr_credential",
-    { id },
+  const response = await createAppServerClient().testVoiceAsrCredential({ id });
+  return assertTestAsrCredentialResult(
+    APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_TEST,
+    response.result,
   );
-  return assertTestAsrCredentialResult("test_asr_credential", result);
 }
 
 // ============ 语音输入配置命令 ============
@@ -439,29 +484,30 @@ export async function saveVoiceInputConfig(
 
 /** 获取指令列表 */
 export async function getVoiceInstructions(): Promise<VoiceInstruction[]> {
-  const result =
-    await invokeVoiceInputCommand<unknown>("get_voice_instructions");
-  return assertArrayResult<VoiceInstruction>("get_voice_instructions", result);
+  const response = await createAppServerClient().listVoiceInstructions();
+  const result = response.result;
+  if (!isRecord(result) || !Array.isArray(result.instructions)) {
+    throw new Error(
+      `${APP_SERVER_METHOD_VOICE_INSTRUCTION_LIST} did not return voice instructions`,
+    );
+  }
+  return result.instructions as VoiceInstruction[];
 }
 
 /** 保存指令 */
 export async function saveVoiceInstruction(
   instruction: VoiceInstruction,
 ): Promise<void> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "save_voice_instruction",
-    { instruction },
-  );
-  assertVoidLike("save_voice_instruction", result);
+  const response = await createAppServerClient().saveVoiceInstruction({
+    instruction,
+  });
+  assertVoidResult(APP_SERVER_METHOD_VOICE_INSTRUCTION_SAVE, response.result);
 }
 
 /** 删除指令 */
 export async function deleteVoiceInstruction(id: string): Promise<void> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "delete_voice_instruction",
-    { id },
-  );
-  assertVoidLike("delete_voice_instruction", result);
+  const response = await createAppServerClient().deleteVoiceInstruction({ id });
+  assertVoidResult(APP_SERVER_METHOD_VOICE_INSTRUCTION_DELETE, response.result);
 }
 
 // ============ 语音识别和润色命令 ============
@@ -484,12 +530,10 @@ export async function transcribeAudio(
   sampleRate: number,
   credentialId?: string,
 ): Promise<TranscribeResult> {
-  const result = await invokeVoiceInputCommand<unknown>("transcribe_audio", {
-    audioData: Array.from(audioData),
-    sampleRate,
-    credentialId,
-  });
-  return assertTranscribeResult("transcribe_audio", result);
+  void audioData;
+  void sampleRate;
+  void credentialId;
+  failClosedRetiredVoiceInputCommand();
 }
 
 /** 润色文本 */
@@ -497,11 +541,9 @@ export async function polishVoiceText(
   text: string,
   instructionId?: string,
 ): Promise<PolishResult> {
-  const result = await invokeVoiceInputCommand<unknown>("polish_voice_text", {
-    text,
-    instructionId,
-  });
-  return assertPolishResult("polish_voice_text", result);
+  void text;
+  void instructionId;
+  failClosedRetiredVoiceInputCommand();
 }
 
 /** 输出文本到系统 */
@@ -509,11 +551,9 @@ export async function outputVoiceText(
   text: string,
   mode?: "type" | "clipboard" | "both",
 ): Promise<void> {
-  const result = await invokeVoiceInputCommand<unknown>("output_voice_text", {
-    text,
-    mode,
-  });
-  assertVoidLike("output_voice_text", result);
+  void text;
+  void mode;
+  failClosedRetiredVoiceInputCommand();
 }
 
 // ============ 录音控制命令 ============
@@ -560,27 +600,18 @@ export interface RecordingSegmentResult extends RecordingSnapshotResult {
 
 /** 开始录音 */
 export async function startRecording(deviceId?: string): Promise<void> {
-  const result = await invokeVoiceInputCommand<unknown>("start_recording", {
-    deviceId,
-  });
-  assertVoidLike("start_recording", result);
+  void deviceId;
+  failClosedRetiredVoiceInputCommand();
 }
 
 /** 停止录音并返回音频数据 */
 export async function stopRecording(): Promise<StopRecordingResult> {
-  const result = await invokeVoiceInputCommand<unknown>("stop_recording");
-  return assertAudioCaptureResult(
-    "stop_recording",
-    result,
-  ) as StopRecordingResult;
+  failClosedRetiredVoiceInputCommand();
 }
 
 /** 获取当前录音快照，不停止录音 */
 export async function getRecordingSnapshot(): Promise<RecordingSnapshotResult> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "get_recording_snapshot",
-  );
-  return assertAudioCaptureResult("get_recording_snapshot", result);
+  failClosedRetiredVoiceInputCommand();
 }
 
 /** 获取当前录音片段，不停止录音 */
@@ -588,26 +619,17 @@ export async function getRecordingSegment(
   startSample: number,
   maxDurationSecs?: number,
 ): Promise<RecordingSegmentResult> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "get_recording_segment",
-    {
-      startSample,
-      maxDurationSecs,
-    },
-  );
-  return assertRecordingSegmentResult("get_recording_segment", result);
+  void startSample;
+  void maxDurationSecs;
+  failClosedRetiredVoiceInputCommand();
 }
 
 /** 取消录音 */
 export async function cancelRecording(): Promise<void> {
-  const result = await invokeVoiceInputCommand<unknown>("cancel_recording");
-  assertVoidLike("cancel_recording", result);
+  failClosedRetiredVoiceInputCommand();
 }
 
 /** 获取录音状态 */
 export async function getRecordingStatus(): Promise<RecordingStatus> {
-  const result = await invokeVoiceInputCommand<unknown>(
-    "get_recording_status",
-  );
-  return assertRecordingStatus("get_recording_status", result);
+  failClosedRetiredVoiceInputCommand();
 }

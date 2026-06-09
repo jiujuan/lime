@@ -52,7 +52,6 @@ const bridgeTruthCommands = new Set<string>([
   "agent_runtime_get_tool_inventory",
   "get_default_provider",
   "get_model_registry",
-  "get_model_registry_provider_ids",
   "get_models_for_provider",
   "get_models_by_tier",
   "get_provider_alias_config",
@@ -63,29 +62,21 @@ const bridgeTruthCommands = new Set<string>([
   "app_server_drain_events",
   "project_memory_get",
   "get_file_name",
-  "session_files_save_file",
-  "session_files_resolve_file_path",
-  "upload_material",
-  "voice_models_download",
-  "voice_models_delete",
-  "voice_models_set_default",
-  "voice_models_test_transcribe_file",
 ]);
 
 const noMockFallbackCompatCommands = new Set<string>([]);
 
 const electronHostNoMockFallbackCommands = new Set([
+  "open_system_settings_url",
   "save_layered_design_project_export",
   "read_layered_design_project_export",
   "recognize_layered_design_text",
   "analyze_layered_design_flat_image",
+  "voice_models_delete",
+  "voice_models_download",
 ]);
 
-const optionalLegacyUxCommands = new Set<string>([
-  "get_hint_routes",
-  "session_files_get_or_create",
-  "session_files_list_files",
-]);
+const optionalLegacyUxCommands = new Set<string>(["get_hint_routes"]);
 
 const devBridgeAgentAppUiRuntimeStartCommands = new Set([
   "agent_app_start_ui_runtime",
@@ -191,6 +182,17 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "modelProviderAlias/list",
   "connectDeepLink/resolve",
   "connectOpenDeepLink/resolve",
+  "voiceAsrCredential/list",
+  "voiceAsrCredential/create",
+  "voiceAsrCredential/update",
+  "voiceAsrCredential/delete",
+  "voiceAsrCredential/default/set",
+  "voiceAsrCredential/test",
+  "voiceInstruction/list",
+  "voiceInstruction/save",
+  "voiceInstruction/delete",
+  "voiceModel/default/set",
+  "voiceModel/testTranscribeFile",
 ]);
 const APP_SERVER_STARTUP_TRUTH_METHODS = new Set([
   "workspace/default/read",

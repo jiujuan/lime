@@ -296,6 +296,38 @@
     },
     {
       "kind": "request",
+      "method": "galleryMaterial/get"
+    },
+    {
+      "kind": "request",
+      "method": "galleryMaterial/listByImageCategory"
+    },
+    {
+      "kind": "request",
+      "method": "galleryMaterial/listByLayoutCategory"
+    },
+    {
+      "kind": "request",
+      "method": "galleryMaterial/listByMood"
+    },
+    {
+      "kind": "request",
+      "method": "galleryMaterialMetadata/create"
+    },
+    {
+      "kind": "request",
+      "method": "galleryMaterialMetadata/delete"
+    },
+    {
+      "kind": "request",
+      "method": "galleryMaterialMetadata/get"
+    },
+    {
+      "kind": "request",
+      "method": "galleryMaterialMetadata/update"
+    },
+    {
+      "kind": "request",
       "method": "gatewayChannel/start"
     },
     {
@@ -500,6 +532,10 @@
     },
     {
       "kind": "request",
+      "method": "mediaTaskArtifact/video/create"
+    },
+    {
+      "kind": "request",
       "method": "model/list"
     },
     {
@@ -600,7 +636,67 @@
     },
     {
       "kind": "request",
+      "method": "projectMaterial/content"
+    },
+    {
+      "kind": "request",
+      "method": "projectMaterial/count"
+    },
+    {
+      "kind": "request",
+      "method": "projectMaterial/delete"
+    },
+    {
+      "kind": "request",
+      "method": "projectMaterial/get"
+    },
+    {
+      "kind": "request",
+      "method": "projectMaterial/importFromUrl"
+    },
+    {
+      "kind": "request",
+      "method": "projectMaterial/list"
+    },
+    {
+      "kind": "request",
+      "method": "projectMaterial/update"
+    },
+    {
+      "kind": "request",
+      "method": "projectMaterial/upload"
+    },
+    {
+      "kind": "request",
       "method": "projectMemory/read"
+    },
+    {
+      "kind": "request",
+      "method": "sessionFile/delete"
+    },
+    {
+      "kind": "request",
+      "method": "sessionFile/getOrCreate"
+    },
+    {
+      "kind": "request",
+      "method": "sessionFile/list"
+    },
+    {
+      "kind": "request",
+      "method": "sessionFile/read"
+    },
+    {
+      "kind": "request",
+      "method": "sessionFile/resolvePath"
+    },
+    {
+      "kind": "request",
+      "method": "sessionFile/save"
+    },
+    {
+      "kind": "request",
+      "method": "sessionFile/updateMeta"
     },
     {
       "kind": "request",
@@ -696,6 +792,46 @@
     },
     {
       "kind": "request",
+      "method": "unifiedMemory/analyze"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/create"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/delete"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/get"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/hybridSearch"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/list"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/search"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/semanticSearch"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/stats"
+    },
+    {
+      "kind": "request",
+      "method": "unifiedMemory/update"
+    },
+    {
+      "kind": "request",
       "method": "usageStats/dailyTrends/list"
     },
     {
@@ -705,6 +841,50 @@
     {
       "kind": "request",
       "method": "usageStats/read"
+    },
+    {
+      "kind": "request",
+      "method": "voiceAsrCredential/create"
+    },
+    {
+      "kind": "request",
+      "method": "voiceAsrCredential/default/set"
+    },
+    {
+      "kind": "request",
+      "method": "voiceAsrCredential/delete"
+    },
+    {
+      "kind": "request",
+      "method": "voiceAsrCredential/list"
+    },
+    {
+      "kind": "request",
+      "method": "voiceAsrCredential/test"
+    },
+    {
+      "kind": "request",
+      "method": "voiceAsrCredential/update"
+    },
+    {
+      "kind": "request",
+      "method": "voiceInstruction/delete"
+    },
+    {
+      "kind": "request",
+      "method": "voiceInstruction/list"
+    },
+    {
+      "kind": "request",
+      "method": "voiceInstruction/save"
+    },
+    {
+      "kind": "request",
+      "method": "voiceModel/default/set"
+    },
+    {
+      "kind": "request",
+      "method": "voiceModel/testTranscribeFile"
     },
     {
       "kind": "request",
@@ -937,6 +1117,16 @@
       "FileSystemMutationResponse",
       "FileSystemReadFilePreviewParams",
       "FileSystemRenameFileParams",
+      "GalleryMaterial",
+      "GalleryMaterialDeleteResponse",
+      "GalleryMaterialFilterParams",
+      "GalleryMaterialListResponse",
+      "GalleryMaterialLookupParams",
+      "GalleryMaterialMetadata",
+      "GalleryMaterialMetadataCreateParams",
+      "GalleryMaterialMetadataResponse",
+      "GalleryMaterialMetadataUpdateParams",
+      "GalleryMaterialResponse",
       "GatewayChannelStartParams",
       "GatewayChannelStatusParams",
       "GatewayChannelStatusResponse",
@@ -1013,6 +1203,7 @@
       "MediaTaskArtifactListResponse",
       "MediaTaskArtifactLookupParams",
       "MediaTaskArtifactResponse",
+      "MediaTaskArtifactVideoCreateParams",
       "ModelListParams",
       "ModelListResponse",
       "ModelPreferencesListResponse",
@@ -1055,12 +1246,37 @@
       "ModelSyncStateReadResponse",
       "OpenDeepLinkPayload",
       "PlatformInfo",
+      "ProjectMaterial",
+      "ProjectMaterialContentResponse",
+      "ProjectMaterialCountResponse",
+      "ProjectMaterialDeleteResponse",
+      "ProjectMaterialFilter",
+      "ProjectMaterialImportFromUrlParams",
+      "ProjectMaterialListParams",
+      "ProjectMaterialListResponse",
+      "ProjectMaterialLookupParams",
+      "ProjectMaterialResponse",
+      "ProjectMaterialUpdate",
+      "ProjectMaterialUpdateParams",
+      "ProjectMaterialUploadParams",
       "ProjectMemoryReadParams",
       "ProjectMemoryReadResponse",
       "RuntimeOptions",
       "ServerCapabilities",
       "ServerDiagnosticsResponse",
       "ServerInfo",
+      "SessionFileEntry",
+      "SessionFileEntryResponse",
+      "SessionFileGetOrCreateParams",
+      "SessionFileIdParams",
+      "SessionFileListResponse",
+      "SessionFileMeta",
+      "SessionFileMetaResponse",
+      "SessionFileMutationResponse",
+      "SessionFileReadResponse",
+      "SessionFileResolvePathResponse",
+      "SessionFileSaveParams",
+      "SessionFileUpdateMetaParams",
       "SkillDownloadInstallParams",
       "SkillDownloadInstallResponse",
       "SkillInstalledDirectoriesListResponse",
@@ -1093,11 +1309,38 @@
       "SkillRemoteInspectParams",
       "SkillRemoteInspectResponse",
       "SkillRepositoryDeleteParams",
+      "SkillRepositoryEntry",
       "SkillRepositoryListResponse",
       "SkillRepositorySaveParams",
       "SkillScaffoldCreateParams",
       "SkillScaffoldCreateResponse",
       "SupportBundleExportResponse",
+      "UnifiedMemory",
+      "UnifiedMemoryAnalysisResponse",
+      "UnifiedMemoryAnalyzeParams",
+      "UnifiedMemoryCategory",
+      "UnifiedMemoryCategoryCount",
+      "UnifiedMemoryCreateParams",
+      "UnifiedMemoryCreateRequest",
+      "UnifiedMemoryDeleteParams",
+      "UnifiedMemoryDeleteResponse",
+      "UnifiedMemoryGetParams",
+      "UnifiedMemoryGetResponse",
+      "UnifiedMemoryHybridSearchOptions",
+      "UnifiedMemoryHybridSearchParams",
+      "UnifiedMemoryListFilters",
+      "UnifiedMemoryListParams",
+      "UnifiedMemoryListResponse",
+      "UnifiedMemoryMetadata",
+      "UnifiedMemorySearchParams",
+      "UnifiedMemorySemanticSearchOptions",
+      "UnifiedMemorySemanticSearchParams",
+      "UnifiedMemorySource",
+      "UnifiedMemoryStatsResponse",
+      "UnifiedMemoryType",
+      "UnifiedMemoryUpdateParams",
+      "UnifiedMemoryUpdateRequest",
+      "UnifiedMemoryWriteResponse",
       "UsageStatsDailyTrendsListResponse",
       "UsageStatsDailyUsage",
       "UsageStatsModelRankingListResponse",
@@ -1105,6 +1348,30 @@
       "UsageStatsRangeParams",
       "UsageStatsReadResponse",
       "UsageStatsSummary",
+      "VoiceAsrBaiduConfig",
+      "VoiceAsrCredential",
+      "VoiceAsrCredentialCreateParams",
+      "VoiceAsrCredentialIdParams",
+      "VoiceAsrCredentialListResponse",
+      "VoiceAsrCredentialMutationResponse",
+      "VoiceAsrCredentialTestResponse",
+      "VoiceAsrCredentialUpdateParams",
+      "VoiceAsrCredentialWriteResponse",
+      "VoiceAsrOpenAiConfig",
+      "VoiceAsrProviderType",
+      "VoiceAsrSenseVoiceLocalConfig",
+      "VoiceAsrWhisperLocalConfig",
+      "VoiceAsrWhisperModelSize",
+      "VoiceAsrXunfeiConfig",
+      "VoiceInstruction",
+      "VoiceInstructionIdParams",
+      "VoiceInstructionListResponse",
+      "VoiceInstructionMutationResponse",
+      "VoiceInstructionSaveParams",
+      "VoiceModelDefaultSetParams",
+      "VoiceModelDefaultSetResponse",
+      "VoiceModelTestTranscribeFileParams",
+      "VoiceModelTestTranscribeFileResponse",
       "WechatChannelAccountListResponse",
       "WechatChannelAccountRemoveParams",
       "WechatChannelAccountRemoveResponse",

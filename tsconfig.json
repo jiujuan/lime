@@ -17,6 +17,18 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
+      "@limecloud/agent-runtime-projection": [
+        "./packages/agent-runtime-projection/src/index.ts"
+      ],
+      "@limecloud/agent-runtime-client": [
+        "./packages/agent-runtime-client/src/index.ts"
+      ],
+      "@limecloud/agent-runtime-ui": [
+        "./packages/agent-runtime-ui/src/index.ts"
+      ],
+      "@limecloud/agent-ui-contracts": [
+        "./packages/agent-ui-contracts/src/index.ts"
+      ],
       "@/*": ["./src/*"]
     }
   },

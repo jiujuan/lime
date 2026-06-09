@@ -84,7 +84,6 @@ const CREATION_TASK_TOOLS = [
   "lime_create_transcription_task",
   "lime_create_typesetting_task",
   "lime_create_url_parse_task",
-  "lime_create_video_generation_task",
 ];
 const MCP_RESOURCE_TOOLS = ["ListMcpResourcesTool", "ReadMcpResourceTool"];
 const SKILL_TOOLS = ["Skill"];
@@ -109,7 +108,6 @@ const OPTIONAL_RUNTIME_COVERAGE_TOOLS = [
   "Skill",
   "WebFetch",
   "WebSearch",
-  "lime_create_video_generation_task",
 ];
 
 function printHelp() {
@@ -699,18 +697,6 @@ function buildCreationTaskFixtureResponses({ audioPath }) {
       summary: "LIME_TOOL_EXECUTION_URL_PARSE_TASK_OK",
       outputPath: outputPathFor("url-parse"),
     }),
-    toolCall(
-      "lime_create_video_generation_task",
-      "call-tool-exec-create-video",
-      {
-        projectId: "lime-tool-smoke-project",
-        providerId: "fixture-openai",
-        model: "lime-fixture-video",
-        prompt: "LIME_TOOL_EXECUTION_VIDEO_TASK_OK",
-        aspectRatio: "16:9",
-        duration: 5,
-      },
-    ),
     {
       type: "text",
       content: "AGENT_RUNTIME_CREATION_TASK_TOOLS_DONE",
@@ -982,7 +968,7 @@ function buildBatchScenario(batchId, fixtureFiles) {
     return {
       id: "creation-task-tools",
       prompt:
-        "请从普通输入框自然语言触发内容创建任务工具验收：依次创建音频、播报、封面、图片、素材搜索、转写、排版、链接解析和视频生成任务。不要使用命令入口。",
+        "请从普通输入框自然语言触发内容创建任务工具验收：依次创建音频、播报、封面、图片、素材搜索、转写、排版和链接解析任务。不要使用命令入口。",
       promptNeedle: "内容创建任务工具验收",
       targetTools: CREATION_TASK_TOOLS,
       scriptedResponses: buildCreationTaskFixtureResponses({
@@ -1000,7 +986,6 @@ function buildBatchScenario(batchId, fixtureFiles) {
             toolOutputText.includes("projectId"),
           evidencePackMentionsCreationTools:
             evidencePackText.includes("lime_create_audio_generation_task") ||
-            evidencePackText.includes("lime_create_video_generation_task") ||
             evidencePackText.includes("creation-task-tools"),
         };
       },

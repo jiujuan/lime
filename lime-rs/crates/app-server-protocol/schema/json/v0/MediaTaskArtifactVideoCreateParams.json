@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "aspectRatio": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "cameraFixed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "contentId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "duration": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "endImageUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "entrySource": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "generateAudio": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "imageUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modality": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modalityContractKey": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "outputPath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "projectId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "projectRootPath": {
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "rawText": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "requestedTarget": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "requiredCapabilities": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "resolution": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "routingSlot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "runtimeContract": true,
+    "seed": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "threadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "projectRootPath",
+    "prompt"
+  ],
+  "title": "MediaTaskArtifactVideoCreateParams",
+  "type": "object"
+}

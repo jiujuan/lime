@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "api_key": {
+      "type": "string"
+    },
+    "secret_key": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "api_key",
+    "secret_key"
+  ],
+  "title": "VoiceAsrBaiduConfig",
+  "type": "object"
+}

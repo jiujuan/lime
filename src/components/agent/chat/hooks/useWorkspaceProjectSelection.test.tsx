@@ -13,6 +13,7 @@ interface HookHarness {
     externalProjectId?: string | null;
     initialSessionId?: string | null;
     newChatAt?: number;
+    keepNewChatSessionRestoreDisabled?: boolean;
   }) => void;
   unmount: () => void;
 }
@@ -22,6 +23,7 @@ function mountHook(
     externalProjectId?: string | null;
     initialSessionId?: string | null;
     newChatAt?: number;
+    keepNewChatSessionRestoreDisabled?: boolean;
   } = {},
 ): HookHarness {
   const container = document.createElement("div");
@@ -34,6 +36,7 @@ function mountHook(
     externalProjectId?: string | null;
     initialSessionId?: string | null;
     newChatAt?: number;
+    keepNewChatSessionRestoreDisabled?: boolean;
   }) {
     hookValue = useWorkspaceProjectSelection(props);
     return null;
@@ -43,6 +46,7 @@ function mountHook(
     externalProjectId?: string | null;
     initialSessionId?: string | null;
     newChatAt?: number;
+    keepNewChatSessionRestoreDisabled?: boolean;
   }) => {
     act(() => {
       root.render(<TestComponent {...props} />);
@@ -101,6 +105,28 @@ describe("useWorkspaceProjectSelection", () => {
       expect(harness.getValue().shouldDisableSessionRestore).toBe(false);
       expect(harness.getValue().projectId).toBe("project-local");
       expect(harness.getValue().projectSelectionSource).toBe("remembered");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("首页新会话请求可持续禁用自动恢复旧会话", () => {
+    localStorage.setItem(LAST_PROJECT_ID_KEY, JSON.stringify("project-local"));
+    const harness = mountHook({
+      keepNewChatSessionRestoreDisabled: true,
+      newChatAt: 123,
+    });
+
+    try {
+      expect(harness.getValue().projectId).toBe("project-local");
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
+
+      act(() => {
+        harness.getValue().markNewChatRequestHandled("123");
+      });
+
+      expect(harness.getValue().hasHandledNewChatRequest("123")).toBe(true);
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
     } finally {
       harness.unmount();
     }

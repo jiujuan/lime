@@ -1,4 +1,11 @@
 import type {
+  AgentRuntimeActionProjection,
+  AgentRuntimeExecutionEvent,
+  AgentUiProjectionState,
+} from "@limecloud/agent-ui-contracts";
+import { AgentUiProjectionView } from "@limecloud/agent-runtime-ui";
+
+import type {
   AgentAppRunProjectionAction,
   AgentAppRunProjectionActionControl,
   AgentAppRunProjectionLabel,
@@ -21,6 +28,7 @@ export interface AgentRunProjectionPanelLabels {
 
 export interface AgentRunProjectionPanelProps {
   view: AgentAppRunProjectionViewModel;
+  standardState?: AgentUiProjectionState;
   labels: AgentRunProjectionPanelLabels;
   className?: string;
   onAction?: (
@@ -31,15 +39,22 @@ export interface AgentRunProjectionPanelProps {
 
 export function AgentRunProjectionPanel({
   view,
+  standardState,
   labels,
   className = "space-y-3",
   onAction,
 }: AgentRunProjectionPanelProps) {
+  const hasStandardState = Boolean(standardState);
+  const resolveStandardAction = onAction
+    ? standardAgentActionResolver(onAction)
+    : undefined;
+
   return (
     <section
       className={className}
       data-testid="agent-run-projection-panel"
       data-agent-run-projection-terminal={view.task.terminal ? "true" : "false"}
+      data-agent-run-standard-projection={hasStandardState ? "true" : "false"}
     >
       <div
         className="grid grid-cols-2 gap-2"
@@ -70,6 +85,20 @@ export function AgentRunProjectionPanel({
           value={String(view.task.queueCount)}
         />
       </div>
+
+      {standardState ? (
+        <div
+          className="space-y-2"
+          data-testid="agent-run-standard-projection"
+          data-agent-run-standard-runtime-status={standardState.runtime.status}
+        >
+          <AgentUiProjectionView
+            state={standardState}
+            emptyMessages={null}
+            onResolveAction={resolveStandardAction}
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-2" data-testid="agent-run-projection-parts">
         {view.orderedParts.length > 0 ? (
@@ -228,6 +257,107 @@ export function AgentRunProjectionPanel({
       ) : null}
     </section>
   );
+}
+
+function standardAgentActionResolver(
+  onAction: NonNullable<AgentRunProjectionPanelProps["onAction"]>,
+) {
+  return (
+    event: AgentRuntimeExecutionEvent,
+    action: AgentRuntimeActionProjection,
+  ) => {
+    const projectionAction = actionFromStandardRuntimeEvent(event, action);
+    if (!projectionAction) {
+      return;
+    }
+    const control =
+      actionControlFromDecision(action.decision) ??
+      projectionAction.controls[0];
+    if (!control) {
+      return;
+    }
+    onAction(projectionAction, control);
+  };
+}
+
+function actionFromStandardRuntimeEvent(
+  event: AgentRuntimeExecutionEvent,
+  action: AgentRuntimeActionProjection,
+): AgentAppRunProjectionAction | null {
+  const actionId = event.actionId ?? stringValue(event.payload?.actionId);
+  if (!actionId) {
+    return null;
+  }
+  const resolved = event.eventClass === "action.resolved";
+  const controls = readActionControls(event.payload, action);
+  return {
+    actionId,
+    sessionId: event.runtimeId ?? event.threadId,
+    threadId: event.threadId,
+    runId: event.runId,
+    turnId: event.turnId,
+    taskId: event.taskId,
+    actionType: stringValue(event.payload?.actionType),
+    status: resolved ? "resolved" : "pending",
+    label: resolved ? "actionResolved" : "actionRequired",
+    control: controls[0],
+    controls,
+    preview: event.detail ?? stringValue(event.payload?.preview) ?? event.title,
+  };
+}
+
+function readActionControls(
+  payload: Record<string, unknown> | undefined,
+  action: AgentRuntimeActionProjection,
+): AgentAppRunProjectionActionControl[] {
+  const controls = payload?.controls;
+  const payloadControls = Array.isArray(controls) ? controls : [];
+  const candidates = [
+    action.decision,
+    stringValue(payload?.control),
+    stringValue(payload?.decision),
+    ...payloadControls,
+  ];
+  const normalized = candidates
+    .map((item) => actionControlFromDecision(item))
+    .filter((item): item is AgentAppRunProjectionActionControl => Boolean(item));
+  return normalized.length ? [...new Set(normalized)] : ["approve"];
+}
+
+function actionControlFromDecision(value: unknown): AgentAppRunProjectionActionControl | undefined {
+  if (
+    value === "approve" ||
+    value === "approved" ||
+    value === "confirmed" ||
+    value === "acknowledge"
+  ) {
+    return "approve";
+  }
+  if (value === "reject" || value === "rejected" || value === "denied") {
+    return "reject";
+  }
+  if (value === "answer" || value === "respond") {
+    return "answer";
+  }
+  if (value === "edit") {
+    return "edit";
+  }
+  if (value === "retry") {
+    return "retry";
+  }
+  if (value === "interrupt") {
+    return "interrupt";
+  }
+  if (value === "stop") {
+    return "stop";
+  }
+  return typeof value === "string" && value.trim() && value !== "none"
+    ? value
+    : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 function SummaryCard({ label, value }: { label: string; value: string }) {

@@ -1,139 +1,57 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { safeInvoke } from "@/lib/dev-bridge";
-import { videoGenerationApi } from "./videoGeneration";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { cwd } from "node:process";
+import { describe, expect, it } from "vitest";
 
-vi.mock("@/lib/dev-bridge", () => ({
-  safeInvoke: vi.fn(),
-}));
+const RETIRED_VIDEO_GENERATION_COMMANDS = [
+  "create_video_generation_task",
+  "get_video_generation_task",
+  "list_video_generation_tasks",
+  "cancel_video_generation_task",
+];
 
-describe("videoGeneration API retired fail-closed", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+function readRepoFile(path: string): string {
+  return readFileSync(resolve(cwd(), path), "utf8");
+}
+
+function expectStringLiteralsAbsent(source: string, literals: string[]): void {
+  for (const literal of literals) {
+    expect(source).not.toContain(`"${literal}"`);
+    expect(source).not.toContain(`'${literal}'`);
+  }
+}
+
+describe("videoGeneration current boundary", () => {
+  it("videoGeneration API 应走 App Server mediaTaskArtifact current helper", () => {
+    const source = readRepoFile("src/lib/api/videoGeneration.ts");
+
+    expect(source).toContain("createVideoGenerationTaskArtifact");
+    expect(source).toContain("getMediaTaskArtifact");
+    expect(source).toContain("listMediaTaskArtifacts");
+    expect(source).toContain("cancelMediaTaskArtifact");
+    expect(source).toContain("video_generation");
+    expect(source).toContain("video_generation_model");
+    expectStringLiteralsAbsent(source, RETIRED_VIDEO_GENERATION_COMMANDS);
+    expect(source).not.toContain("safeInvoke(");
+    expect(source).not.toContain("bridgeInvoke(");
   });
 
-  it("创建视频任务应在调用旧 native 命令前 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      diagnostic: {
-        command: "create_video_generation_task",
-        source: "electron-host",
-      },
-    });
+  it("旧视频 native 命令不得回到生产命令 surface", () => {
+    const restrictedProductionSources = [
+      readRepoFile("src/lib/dev-bridge/commandPolicy.ts"),
+      readRepoFile("src/lib/dev-bridge/mockPriorityCommands.ts"),
+      readRepoFile("src/lib/governance/agentCommandCatalog.json"),
+      readRepoFile("electron/ipcChannels.ts"),
+      readRepoFile("electron/hostCommands.ts"),
+      readRepoFile("lime-rs/src/app/runner.rs"),
+      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readRepoFile("lime-rs/src/commands/mod.rs"),
+    ].join("\n");
 
-    await expect(
-      videoGenerationApi.createTask({
-        projectId: "project-1",
-        providerId: "doubao",
-        model: "seedance-1-5-pro",
-        prompt: "城市夜景",
-      }),
-    ).rejects.toThrow(
-      "create_video_generation_task is retired until video generation tasks move to App Server current methods",
+    expectStringLiteralsAbsent(
+      restrictedProductionSources,
+      RETIRED_VIDEO_GENERATION_COMMANDS,
     );
-
-    expect(safeInvoke).not.toHaveBeenCalled();
-  });
-
-  it("列表视频任务应在调用旧 native 命令前 fail closed", async () => {
-    const diagnosticList = [] as unknown[] & {
-      __diagnostic?: Record<string, unknown>;
-    };
-    diagnosticList.__diagnostic = {
-      command: "list_video_generation_tasks",
-      source: "electron-host",
-    };
-    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
-
-    await expect(
-      videoGenerationApi.listTasks("project-1"),
-    ).rejects.toThrow(
-      "list_video_generation_tasks is retired until video generation tasks move to App Server current methods",
-    );
-
-    expect(safeInvoke).not.toHaveBeenCalled();
-  });
-
-  it("查询和取消视频任务应在调用旧 native 命令前 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        diagnostic: {
-          command: "get_video_generation_task",
-          source: "electron-host",
-        },
-      })
-      .mockResolvedValueOnce({
-        diagnostic: {
-          command: "cancel_video_generation_task",
-          source: "electron-host",
-        },
-      });
-
-    await expect(videoGenerationApi.getTask("task-1")).rejects.toThrow(
-      "get_video_generation_task is retired until video generation tasks move to App Server current methods",
-    );
-    await expect(videoGenerationApi.cancelTask("task-1")).rejects.toThrow(
-      "cancel_video_generation_task is retired until video generation tasks move to App Server current methods",
-    );
-
-    expect(safeInvoke).not.toHaveBeenCalled();
-  });
-
-  it("创建视频任务不接受旧 native 假成功返回", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
-
-    await expect(
-      videoGenerationApi.createTask({
-        projectId: "project-1",
-        providerId: "doubao",
-        model: "seedance-1-5-pro",
-        prompt: "城市夜景",
-      }),
-    ).rejects.toThrow(
-      "create_video_generation_task is retired until video generation tasks move to App Server current methods",
-    );
-
-    expect(safeInvoke).not.toHaveBeenCalled();
-  });
-
-  it("列表视频任务不接受旧 native 错误元素返回", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce([
-      {
-        id: "task-1",
-        status: "processing",
-      },
-    ]);
-
-    await expect(videoGenerationApi.listTasks("project-1")).rejects.toThrow(
-      "list_video_generation_tasks is retired until video generation tasks move to App Server current methods",
-    );
-
-    expect(safeInvoke).not.toHaveBeenCalled();
-  });
-
-  it("查询和取消视频任务不接受旧 native 错误对象返回", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        error: {
-          code: "COMMAND_UNSUPPORTED",
-          message: "not available",
-        },
-      })
-      .mockResolvedValueOnce({
-        id: "task-2",
-        projectId: "project-1",
-        providerId: "doubao",
-        model: "seedance-1-5-pro",
-        prompt: "城市夜景",
-        status: "cancelled",
-        createdAt: 1,
-      });
-
-    await expect(videoGenerationApi.getTask("task-1")).rejects.toThrow(
-      "get_video_generation_task is retired until video generation tasks move to App Server current methods",
-    );
-    await expect(videoGenerationApi.cancelTask("task-2")).rejects.toThrow(
-      "cancel_video_generation_task is retired until video generation tasks move to App Server current methods",
-    );
-
-    expect(safeInvoke).not.toHaveBeenCalled();
+    expect(restrictedProductionSources).not.toContain("video_generation_cmd");
   });
 });

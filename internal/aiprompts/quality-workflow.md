@@ -56,6 +56,8 @@
 
 生产不能 mock，只有测试才 mock。`src/lib/desktop-host/` 中的 mock、`mockPriorityCommands`、`defaultMocks`、`invokeMockOnly`、`explicitMockFallback` 和 App Server mock backend 只允许用于 `*.test.*`、测试夹具、契约守卫或专门声明为测试的 smoke 场景；GUI smoke、业务 E2E、Electron Host 和 App Server sidecar 生产路径必须真实连通，失败时直接暴露错误。
 
+`lime-rs/src/**` 是旧主 crate、启动/注册、legacy facade 和迁移来源区，不再作为业务逻辑、领域服务、runtime 分支、API adapter、数据访问或跨 App 复用能力的长期 owner。质量检查不能把该目录当成新增 Rust 后端能力的落点；触碰其中逻辑时，默认优先迁到 `lime-rs/crates/**` 的 App Server、RuntimeCore、services、core、agent 或协议/client crate，桌面壳能力迁到 Electron Desktop Host。只能保留必要 bootstrap / runner 接线、compat facade 委托、撤注册机械修复和带退出条件的 blocker 记录。
+
 `lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。质量检查不能把该目录当成新增 Rust 后端能力或桌面壳能力的落点；新增后端能力必须进入 App Server crates / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host。涉及该目录的测试只允许作为 cleanup guard，证明旧 wrapper 已删除、已迁出或没有回流，不能作为 GUI current 可交付证据。
 
 新增或迁移测试时按下面顺序处理：
@@ -162,7 +164,7 @@ npm run smoke:claw-chat-current-fixture
 
 只改其中一侧，不算完成。
 
-命令迁移或清退收口时，质量结论必须说明 `src/lib/dev-bridge` 的检查结果：已迁旧命令是否仍在 production truth / mock fallback 中；如果只能保留旧命令字符串，是否明确为 `dead / retired guard-only` 或 `test-only`；删不掉的 residual 是否已登记到当前执行计划或 `CCD-012`。这条检查不替代 `npm run test:contracts`，而是防止 contract 通过后旧 policy / 旧 smoke 继续把 retired 命令伪装成 current。
+命令迁移或清退收口时，质量结论必须说明 `src/lib/dev-bridge` 的检查结果：已迁旧命令是否仍在 production truth / mock fallback 中；如果只能保留旧命令字符串，是否明确为 `dead / retired guard-only` 或 `test-only`；删不掉的 residual 是否已登记到当前执行计划。跨命令组或会长期存在的 legacy policy / mock residual 必须同步回挂 `internal/exec-plans/tech-debt-tracker.md` 的 `CCD-012`，不能只留在聊天、handoff、旧 smoke 备注或单次校验输出里。这条检查不替代 `npm run test:contracts`，而是防止 contract 通过后旧 policy / 旧 smoke 继续把 retired 命令伪装成 current。
 
 如果本轮是在下线共享网关控制面，`start_server`、`stop_server`、`get_server_status`、`get_available_routes`、`get_route_curl_examples`、`test_api`、`get_network_info`，以及托盘残留 `sync_tray_state`、`update_tray_server_status`、`update_tray_credential_status`、`get_tray_state`、`refresh_tray_menu`、`refresh_tray_with_stats` 必须同步从前端网关、Rust 注册、DevBridge 和 mock 中撤掉；server 兼容面 `/v1/routes`、`/{selector}/v1/messages`、`/{selector}/v1/chat/completions` 也必须同步从 server 路由表与 services/core 模型中撤掉；开发者诊断只保留 App Server `diagnostics/server/read` current 主链，旧 `get_server_diagnostics` 只能作为 retired guard / 负向测试 / cleanup-only residual；托盘只保留 `sync_tray_model_shortcuts`，server 只保留标准 `/v1/messages` 与 `/v1/chat/completions`。
 
@@ -257,6 +259,13 @@ npm run governance:scripts
 - 目标是尽快暴露问题，而不是一上来把所有测试都跑满
 - 在仓库根运行 Rust 校验必须显式带 `--manifest-path "lime-rs/Cargo.toml"`，或先 `cd lime-rs`；不要直接 `rustc lime-rs/src/*.rs` 编译主 crate，否则会绕过 workspace 依赖并产生 `can't find crate for lime_*` 误报
 - 如果定向测试来自 `lime-rs/crates/aster-rust` 这类被 legacy host watch 覆盖的子工作区，先确认其 Cargo `target-dir` 已统一回 `lime-rs/target`，避免 watch 风暴导致 dev 无法启动
+
+### 6. 巨型文件先拆分
+
+- 新增 Rust 模块尽量控制在 `500 LoC` 内，文件接近 `800 LoC` 时优先拆新模块
+- 非生成代码文件超过 `1000` 行时，触碰前必须先判断是否能按领域、职责、数据边界或协议边界拆分
+- 如果本轮无法拆分，必须在执行计划登记原因、风险、退出条件和下一次拆分入口
+- 不得继续向超过 `1000` 行的文件追加新业务逻辑，把“后续再拆”当作默认完成态
 
 ## 质量分层
 

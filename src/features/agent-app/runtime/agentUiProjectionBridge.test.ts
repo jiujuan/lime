@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildAgentAppAgentUiProjectionEvents } from "./agentUiProjectionBridge";
+import {
+  buildAgentAppAgentUiProjectionEvents,
+  buildAgentAppStandardRuntimeEvents,
+} from "./agentUiProjectionBridge";
 
 describe("buildAgentAppAgentUiProjectionEvents", () => {
   it("把 Agent App runtime projection payload 展开为有序 AgentUI text / tool events", () => {
@@ -75,6 +78,106 @@ describe("buildAgentAppAgentUiProjectionEvents", () => {
         streamKind: "tool_input_delta",
       },
     });
+  });
+
+  it("同时输出标准 Agent Runtime execution events 供共享 projection 消费", () => {
+    const events = buildAgentAppStandardRuntimeEvents({
+      taskId: "task-standard",
+      sessionId: "session-standard",
+      threadId: "thread-standard",
+      runId: "run-standard",
+      events: [
+        {
+          id: "runtime:text:standard",
+          eventType: "task:partialArtifact",
+          status: "streaming",
+          message: "标准消息",
+          payload: {
+            streamKind: "assistant_text_delta",
+            delta: "标准消息",
+          },
+        },
+        {
+          id: "task:reviewRequested:approval-standard",
+          eventType: "task:reviewRequested",
+          status: "pending",
+          requestId: "approval-standard",
+          message: "需要确认",
+        },
+      ],
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        id: "runtime:text:standard",
+        kind: "model",
+        status: "running",
+        eventClass: "model.delta",
+        threadId: "thread-standard",
+        taskId: "task-standard",
+        runId: "run-standard",
+        title: "text.delta",
+        detail: "标准消息",
+        payload: expect.objectContaining({
+          sessionId: "session-standard",
+          projectionType: "text.delta",
+        }),
+      }),
+      expect.objectContaining({
+        id: "task:reviewRequested:approval-standard",
+        kind: "action",
+        eventClass: "action.required",
+        actionId: "approval-standard",
+        phase: "action_required",
+        status: "pending",
+        detail: "需要确认",
+      }),
+    ]);
+  });
+
+  it("把 reasoning / metric 投影为标准过程和快照事件，不混成模型消息", () => {
+    const events = buildAgentAppStandardRuntimeEvents({
+      taskId: "task-standard-process",
+      events: [
+        {
+          id: "reasoning-1",
+          eventType: "task:progress",
+          status: "thinking",
+          payload: { streamKind: "thinking_delta", delta: "先分析素材。" },
+        },
+        {
+          id: "metric-1",
+          eventType: "task:metricChanged",
+          status: "recorded",
+          message: "120 tokens",
+          payload: {
+            metricName: "usage",
+            usage: { totalTokens: 120 },
+          },
+        },
+      ],
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        id: "reasoning-1",
+        kind: "note",
+        eventClass: "reasoning.delta",
+        phase: "streaming",
+        detail: "先分析素材。",
+      }),
+      expect.objectContaining({
+        id: "metric-1",
+        kind: "state",
+        eventClass: "snapshot.updated",
+        owner: "runtime",
+        detail: "120 tokens",
+        payload: expect.objectContaining({
+          projectionType: "metric.changed",
+          metricName: "usage",
+        }),
+      }),
+    ]);
   });
 
   it("把 HITL request 和 resolved 事件映射为 action.required / action.resolved", () => {

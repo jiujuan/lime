@@ -67,4 +67,4 @@
 - `lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，只允许迁出核心逻辑、撤 runner / DevBridge dispatcher / catalog / mock 注册、机械编译修复和删除旧 wrapper。
 - 新增 Rust 后端能力进入 App Server crates / RuntimeCore / services；桌面壳能力进入 Electron Desktop Host。
 - 任何执行计划如果仍需要在 `lime-rs/src/commands/**` 新增业务逻辑、API adapter、runtime 分支、compat wrapper、fail-closed stub、tombstone 或 thin facade，必须先改计划并登记 blocker，不能把该目录当完成态。
-- 前端 `src/lib/dev-bridge/**` 按职责治理：`safeInvoke`、HTTP client、`app_server_handle_json_lines`、bridge availability / event listener capability 是 current renderer bridge；旧命令 policy / no-mock fallback 是迁移期 `compat / deprecated`；已迁旧命令名只能作为 `dead` / `test-only` guard。后续计划清命令时必须同步检查 policy、mock、fallback、旧 smoke 和 contract guard，不得把整目录删除当作默认治理动作。
+- 前端 `src/lib/dev-bridge/**` 按职责治理：`safeInvoke`、HTTP client、`app_server_handle_json_lines`、bridge availability / event listener capability 是 current renderer bridge；旧命令 policy / no-mock fallback 是迁移期 `compat / deprecated`；已迁旧命令名只能作为 `dead` / `test-only` guard。后续计划清命令时必须同步检查 policy、mock、fallback、旧 smoke 和 contract guard，不得把整目录删除当作默认治理动作；删不动且跨命令组长期存在的 residual 必须回挂 `tech-debt-tracker.md` 的 `CCD-012`。

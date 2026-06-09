@@ -1,0 +1,353 @@
+use super::data_error;
+use super::values_from_serializable_vec;
+use crate::RuntimeCoreError;
+use app_server_protocol::McpContent;
+use app_server_protocol::McpPromptGetParams;
+use app_server_protocol::McpPromptGetResponse;
+use app_server_protocol::McpPromptListResponse;
+use app_server_protocol::McpPromptMessage;
+use app_server_protocol::McpResourceListResponse;
+use app_server_protocol::McpResourceReadParams;
+use app_server_protocol::McpResourceReadResponse;
+use app_server_protocol::McpServerCreateParams;
+use app_server_protocol::McpServerDeleteParams;
+use app_server_protocol::McpServerEnabledSetParams;
+use app_server_protocol::McpServerImportFromAppParams;
+use app_server_protocol::McpServerImportFromAppResponse;
+use app_server_protocol::McpServerLifecycleResponse;
+use app_server_protocol::McpServerListResponse;
+use app_server_protocol::McpServerStartParams;
+use app_server_protocol::McpServerStatusListResponse;
+use app_server_protocol::McpServerStopParams;
+use app_server_protocol::McpServerUpdateParams;
+use app_server_protocol::McpToolCallParams;
+use app_server_protocol::McpToolCallResponse;
+use app_server_protocol::McpToolCallWithCallerParams;
+use app_server_protocol::McpToolListForContextParams;
+use app_server_protocol::McpToolListResponse;
+use app_server_protocol::McpToolSearchParams;
+use lime_core::database::DbConnection;
+use lime_core::models::McpServer;
+use lime_mcp::McpError;
+use lime_mcp::McpManagerState;
+use lime_mcp::McpServerConfig;
+use lime_services::mcp_service::McpService;
+use serde_json::json;
+use serde_json::Value;
+
+pub(crate) fn list_mcp_servers(
+    db: &DbConnection,
+) -> Result<McpServerListResponse, RuntimeCoreError> {
+    Ok(McpServerListResponse {
+        servers: values_from_serializable_vec(McpService::get_all(db).map_err(data_error)?)?,
+    })
+}
+
+pub(crate) async fn list_mcp_servers_with_status(
+    db: &DbConnection,
+    manager: &McpManagerState,
+) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
+    let servers = McpService::get_all(db).map_err(data_error)?;
+    let manager = manager.lock().await;
+    let mut result = Vec::with_capacity(servers.len());
+    for server in servers {
+        let is_running = manager.is_server_running(&server.name).await;
+        let server_info = if is_running {
+            manager.get_client_capabilities(&server.name).await
+        } else {
+            None
+        };
+        result.push(json!({
+            "id": server.id,
+            "name": server.name,
+            "description": server.description,
+            "config": server.parse_config(),
+            "is_running": is_running,
+            "server_info": server_info,
+            "enabled_lime": server.enabled_lime,
+            "enabled_claude": server.enabled_claude,
+            "enabled_codex": server.enabled_codex,
+            "enabled_gemini": server.enabled_gemini,
+        }));
+    }
+    Ok(McpServerStatusListResponse { servers: result })
+}
+
+pub(crate) fn create_mcp_server(
+    db: &DbConnection,
+    params: McpServerCreateParams,
+) -> Result<McpServerListResponse, RuntimeCoreError> {
+    let server = mcp_server_from_value(params.server)?;
+    McpService::add(db, server).map_err(data_error)?;
+    list_mcp_servers(db)
+}
+
+pub(crate) fn update_mcp_server(
+    db: &DbConnection,
+    params: McpServerUpdateParams,
+) -> Result<McpServerListResponse, RuntimeCoreError> {
+    let server = mcp_server_from_value(params.server)?;
+    McpService::update(db, server).map_err(data_error)?;
+    list_mcp_servers(db)
+}
+
+pub(crate) fn delete_mcp_server(
+    db: &DbConnection,
+    params: McpServerDeleteParams,
+) -> Result<McpServerListResponse, RuntimeCoreError> {
+    McpService::delete(db, &params.id).map_err(data_error)?;
+    list_mcp_servers(db)
+}
+
+pub(crate) fn set_mcp_server_enabled(
+    db: &DbConnection,
+    params: McpServerEnabledSetParams,
+) -> Result<McpServerListResponse, RuntimeCoreError> {
+    McpService::toggle_enabled(db, &params.id, &params.app_type, params.enabled)
+        .map_err(data_error)?;
+    list_mcp_servers(db)
+}
+
+pub(crate) fn import_mcp_servers_from_app(
+    db: &DbConnection,
+    params: McpServerImportFromAppParams,
+) -> Result<McpServerImportFromAppResponse, RuntimeCoreError> {
+    let imported_count = McpService::import_from_app(db, &params.app_type).map_err(data_error)?;
+    let servers = list_mcp_servers(db)?.servers;
+    Ok(McpServerImportFromAppResponse {
+        imported_count,
+        servers,
+    })
+}
+
+pub(crate) fn sync_all_mcp_servers_to_live(
+    db: &DbConnection,
+) -> Result<McpServerListResponse, RuntimeCoreError> {
+    McpService::sync_all_to_live(db).map_err(data_error)?;
+    list_mcp_servers(db)
+}
+
+pub(crate) async fn start_mcp_server(
+    db: &DbConnection,
+    manager: &McpManagerState,
+    params: McpServerStartParams,
+) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+    let server = McpService::get_all(db)
+        .map_err(data_error)?
+        .into_iter()
+        .find(|server| server.name == params.name)
+        .ok_or_else(|| {
+            RuntimeCoreError::Backend(format!("MCP server not found: {}", params.name))
+        })?;
+    let config = parse_mcp_server_config(&server.server_config);
+    let manager = manager.lock().await;
+    manager
+        .start_server(&params.name, &config)
+        .await
+        .map_err(mcp_error)?;
+    Ok(McpServerLifecycleResponse::default())
+}
+
+pub(crate) async fn stop_mcp_server(
+    manager: &McpManagerState,
+    params: McpServerStopParams,
+) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    manager.stop_server(&params.name).await.map_err(mcp_error)?;
+    Ok(McpServerLifecycleResponse::default())
+}
+
+pub(crate) async fn list_mcp_tools(
+    manager: &McpManagerState,
+) -> Result<McpToolListResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    Ok(McpToolListResponse {
+        tools: values_from_serializable_vec(manager.list_tools().await.map_err(mcp_error)?)?,
+    })
+}
+
+pub(crate) async fn list_mcp_tools_for_context(
+    manager: &McpManagerState,
+    params: McpToolListForContextParams,
+) -> Result<McpToolListResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    Ok(McpToolListResponse {
+        tools: values_from_serializable_vec(
+            manager
+                .list_tools_for_context(params.caller.as_deref(), params.include_deferred)
+                .await
+                .map_err(mcp_error)?,
+        )?,
+    })
+}
+
+pub(crate) async fn search_mcp_tools(
+    manager: &McpManagerState,
+    params: McpToolSearchParams,
+) -> Result<McpToolListResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    Ok(McpToolListResponse {
+        tools: values_from_serializable_vec(
+            manager
+                .search_tools(&params.query, params.limit, params.caller.as_deref())
+                .await
+                .map_err(mcp_error)?,
+        )?,
+    })
+}
+
+pub(crate) async fn call_mcp_tool(
+    manager: &McpManagerState,
+    params: McpToolCallParams,
+) -> Result<McpToolCallResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    let result = manager
+        .call_tool(&params.tool_name, params.arguments)
+        .await
+        .map_err(mcp_error)?;
+    Ok(to_mcp_tool_call_response(result))
+}
+
+pub(crate) async fn call_mcp_tool_with_caller(
+    manager: &McpManagerState,
+    params: McpToolCallWithCallerParams,
+) -> Result<McpToolCallResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    let result = manager
+        .call_tool_with_caller(
+            &params.tool_name,
+            params.arguments,
+            params.caller.as_deref(),
+        )
+        .await
+        .map_err(mcp_error)?;
+    Ok(to_mcp_tool_call_response(result))
+}
+
+pub(crate) async fn list_mcp_prompts(
+    manager: &McpManagerState,
+) -> Result<McpPromptListResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    Ok(McpPromptListResponse {
+        prompts: values_from_serializable_vec(manager.list_prompts().await.map_err(mcp_error)?)?,
+    })
+}
+
+pub(crate) async fn get_mcp_prompt(
+    manager: &McpManagerState,
+    params: McpPromptGetParams,
+) -> Result<McpPromptGetResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    let result = manager
+        .get_prompt(&params.name, params.arguments)
+        .await
+        .map_err(mcp_error)?;
+    Ok(to_mcp_prompt_get_response(result))
+}
+
+pub(crate) async fn list_mcp_resources(
+    manager: &McpManagerState,
+) -> Result<McpResourceListResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    Ok(McpResourceListResponse {
+        resources: values_from_serializable_vec(
+            manager.list_resources().await.map_err(mcp_error)?,
+        )?,
+    })
+}
+
+pub(crate) async fn read_mcp_resource(
+    manager: &McpManagerState,
+    params: McpResourceReadParams,
+) -> Result<McpResourceReadResponse, RuntimeCoreError> {
+    let manager = manager.lock().await;
+    let result = manager
+        .read_resource(&params.uri)
+        .await
+        .map_err(mcp_error)?;
+    Ok(McpResourceReadResponse {
+        uri: result.uri,
+        mime_type: result.mime_type,
+        text: result.text,
+        blob: result.blob,
+    })
+}
+
+fn parse_mcp_server_config(config_value: &Value) -> McpServerConfig {
+    serde_json::from_value(config_value.clone()).unwrap_or_else(|_| McpServerConfig {
+        command: config_value
+            .get("command")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+        args: config_value
+            .get("args")
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str().map(ToString::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        env: config_value
+            .get("env")
+            .and_then(|value| value.as_object())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        value.as_str().map(|value| (key.clone(), value.to_string()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        cwd: config_value
+            .get("cwd")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string),
+        timeout: config_value
+            .get("timeout")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(30),
+    })
+}
+
+fn mcp_server_from_value(value: Value) -> Result<McpServer, RuntimeCoreError> {
+    serde_json::from_value(value).map_err(data_error)
+}
+
+fn mcp_error(error: McpError) -> RuntimeCoreError {
+    RuntimeCoreError::Backend(format!("MCP current runtime error: {error}"))
+}
+
+fn to_mcp_tool_call_response(result: lime_mcp::McpToolResult) -> McpToolCallResponse {
+    McpToolCallResponse {
+        content: result.content.into_iter().map(to_mcp_content).collect(),
+        is_error: result.is_error,
+    }
+}
+
+fn to_mcp_prompt_get_response(result: lime_mcp::McpPromptResult) -> McpPromptGetResponse {
+    McpPromptGetResponse {
+        description: result.description,
+        messages: result
+            .messages
+            .into_iter()
+            .map(|message| McpPromptMessage {
+                role: message.role,
+                content: to_mcp_content(message.content),
+            })
+            .collect(),
+    }
+}
+
+fn to_mcp_content(content: lime_mcp::McpContent) -> McpContent {
+    match content {
+        lime_mcp::McpContent::Text { text } => McpContent::Text { text },
+        lime_mcp::McpContent::Image { data, mime_type } => McpContent::Image { data, mime_type },
+        lime_mcp::McpContent::Resource { uri, text, blob } => {
+            McpContent::Resource { uri, text, blob }
+        }
+    }
+}

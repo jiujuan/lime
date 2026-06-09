@@ -43,29 +43,6 @@ export {
   updateAgentRuntimeSession,
 } from "./sessionClient";
 export {
-  closeAgentRuntimeSubagent,
-  createSubagentClient,
-  resumeAgentRuntimeSubagent,
-  sendAgentRuntimeSubagentInput,
-  spawnAgentRuntimeSubagent,
-  waitAgentRuntimeSubagents,
-} from "./subagentClient";
-export {
-  createSiteClient,
-  siteApplyAdapterCatalogBootstrap,
-  siteClearAdapterCatalogCache,
-  siteDebugRunAdapter,
-  siteGetAdapterCatalogStatus,
-  siteGetAdapterInfo,
-  siteGetAdapterLaunchReadiness,
-  siteImportAdapterYamlBundle,
-  siteListAdapters,
-  siteRecommendAdapters,
-  siteRunAdapter,
-  siteSaveAdapterResult,
-  siteSearchAdapters,
-} from "./siteClient";
-export {
   compactAgentRuntimeSession,
   createThreadClient,
   diffAgentRuntimeFileCheckpoint,

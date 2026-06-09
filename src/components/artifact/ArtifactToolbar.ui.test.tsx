@@ -6,6 +6,25 @@ import type { Artifact } from "@/lib/artifact/types";
 import { registerLightweightRenderers } from "./renderers";
 import { ArtifactToolbar } from "./ArtifactToolbar";
 
+const openHtmlPreviewWindowMock = vi.hoisted(() => vi.fn());
+const hasDesktopHostInvokeCapabilityMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api/fileSystem", async (importActual) => {
+  const actual = await importActual<typeof import("@/lib/api/fileSystem")>();
+  return {
+    ...actual,
+    openHtmlPreviewWindow: openHtmlPreviewWindowMock,
+  };
+});
+
+vi.mock("@/lib/desktop-runtime", async (importActual) => {
+  const actual = await importActual<typeof import("@/lib/desktop-runtime")>();
+  return {
+    ...actual,
+    hasDesktopHostInvokeCapability: hasDesktopHostInvokeCapabilityMock,
+  };
+});
+
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
 function buildArtifact(overrides: Partial<Artifact> = {}): Artifact {
@@ -53,6 +72,10 @@ function expectButtonTitle(container: HTMLElement, title: string) {
   expect(container.querySelector(`button[title="${title}"]`)).not.toBeNull();
 }
 
+function queryButtonByTitle(container: HTMLElement, title: string) {
+  return container.querySelector<HTMLButtonElement>(`button[title="${title}"]`);
+}
+
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -68,6 +91,8 @@ beforeEach(async () => {
   });
 
   registerLightweightRenderers();
+  openHtmlPreviewWindowMock.mockResolvedValue(false);
+  hasDesktopHostInvokeCapabilityMock.mockReturnValue(false);
   await changeLimeLocale("en-US");
 });
 
@@ -85,6 +110,7 @@ afterEach(async () => {
   }
 
   await changeLimeLocale("zh-CN");
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -106,5 +132,90 @@ describe("ArtifactToolbar", () => {
     expectButtonTitle(container, "Download file");
     expectButtonTitle(container, "Open in new window");
     expectButtonTitle(container, "Close");
+  });
+
+  it("有绝对本地 HTML 路径时应优先使用 Desktop Host 独立预览窗口", async () => {
+    openHtmlPreviewWindowMock.mockResolvedValueOnce(true);
+    const openWindow = vi.fn();
+    vi.spyOn(window, "open").mockImplementation(openWindow);
+    const container = renderToolbar(
+      buildArtifact({
+        meta: {
+          language: "html",
+          filePath: "/tmp/lime/artifacts/index.html",
+        },
+      }),
+    );
+
+    await act(async () => {
+      queryButtonByTitle(container, "Open in new window")?.click();
+      await Promise.resolve();
+    });
+
+    expect(openHtmlPreviewWindowMock).toHaveBeenCalledWith(
+      "/tmp/lime/artifacts/index.html",
+      { title: "index.html" },
+    );
+    expect(openWindow).not.toHaveBeenCalled();
+  });
+
+  it("无绝对本地路径时保留内存内容预览，不误走 Desktop Host 文件预览", async () => {
+    const documentClose = vi.fn();
+    const documentWrite = vi.fn();
+    vi.spyOn(window, "open").mockReturnValue({
+      document: {
+        write: documentWrite,
+        close: documentClose,
+      },
+    } as unknown as Window);
+    const container = renderToolbar(
+      buildArtifact({
+        meta: {
+          language: "html",
+          filePath: "relative/index.html",
+        },
+      }),
+    );
+
+    await act(async () => {
+      queryButtonByTitle(container, "Open in new window")?.click();
+      await Promise.resolve();
+    });
+
+    expect(openHtmlPreviewWindowMock).not.toHaveBeenCalled();
+    expect(documentWrite).toHaveBeenCalledWith("<main>Hello</main>");
+    expect(documentClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("Desktop Host 预览窗口失败时不应回退浏览器空白窗口", async () => {
+    openHtmlPreviewWindowMock.mockResolvedValueOnce(false);
+    hasDesktopHostInvokeCapabilityMock.mockReturnValue(true);
+    const openWindow = vi.fn();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    vi.spyOn(window, "open").mockImplementation(openWindow);
+    const container = renderToolbar(
+      buildArtifact({
+        meta: {
+          language: "html",
+          filePath: "/tmp/lime/artifacts/index.html",
+        },
+      }),
+    );
+
+    await act(async () => {
+      queryButtonByTitle(container, "Open in new window")?.click();
+      await Promise.resolve();
+    });
+
+    expect(openHtmlPreviewWindowMock).toHaveBeenCalledWith(
+      "/tmp/lime/artifacts/index.html",
+      { title: "index.html" },
+    );
+    expect(consoleError).toHaveBeenCalledWith(
+      "Desktop Host HTML 预览窗口创建失败",
+    );
+    expect(openWindow).not.toHaveBeenCalled();
   });
 });

@@ -44,7 +44,6 @@ import {
 } from "./appServer";
 import {
   exportAgentRuntimeAnalysisHandoff,
-  closeAgentRuntimeSubagent,
   createAgentRuntimeSession,
   deleteAgentRuntimeSession,
   exportAgentRuntimeEvidencePack,
@@ -63,13 +62,9 @@ import {
   promoteAgentRuntimeQueuedTurn,
   replayAgentRuntimeRequest,
   resumeAgentRuntimeThread,
-  resumeAgentRuntimeSubagent,
   respondAgentRuntimeAction,
-  sendAgentRuntimeSubagentInput,
-  spawnAgentRuntimeSubagent,
   submitAgentRuntimeTurn,
   updateAgentRuntimeSession,
-  waitAgentRuntimeSubagents,
 } from "./agentRuntime";
 
 function line(value: unknown): string {
@@ -606,9 +601,13 @@ describe("Agent API 治理护栏", () => {
       linked_handoff_artifact_count: 4,
     });
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, {
-      sessionId: "session-runtime-replay-case",
-    });
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
+      {
+        sessionId: "session-runtime-replay-case",
+      },
+    );
   });
 
   it("promoteAgentRuntimeQueuedTurn 应经 Electron IPC 调 App Server queuedTurn/promote", async () => {
@@ -2031,37 +2030,6 @@ describe("Agent API 治理护栏", () => {
       usedFallback: true,
       fallbackReason: "local_preview_title",
     });
-    expect(mockSafeInvoke).not.toHaveBeenCalled();
-  });
-
-  it("subagent 控制面 helper 没有 current method 时应 fail closed", async () => {
-    await expect(
-      spawnAgentRuntimeSubagent({
-        parent_session_id: "session-runtime-parent",
-        message: "处理 Image #1",
-        agent_type: "image_editor",
-      }),
-    ).rejects.toThrow("agent_runtime_spawn_subagent is retired");
-    await expect(
-      sendAgentRuntimeSubagentInput({
-        id: "subagent-session-1",
-        message: "继续优化导出尺寸",
-        interrupt: true,
-      }),
-    ).rejects.toThrow("agent_runtime_send_subagent_input is retired");
-    await expect(
-      waitAgentRuntimeSubagents({
-        ids: ["subagent-session-1"],
-        timeout_ms: 12000,
-      }),
-    ).rejects.toThrow("agent_runtime_wait_subagents is retired");
-    await expect(
-      resumeAgentRuntimeSubagent({ id: "subagent-session-1" }),
-    ).rejects.toThrow("agent_runtime_resume_subagent is retired");
-    await expect(
-      closeAgentRuntimeSubagent({ id: "subagent-session-1" }),
-    ).rejects.toThrow("agent_runtime_close_subagent is retired");
-
     expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 });

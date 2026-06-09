@@ -175,7 +175,7 @@ describe("useSkills", () => {
     });
     await flushEffects(4);
 
-    expect(mockRefreshCache).toHaveBeenCalledTimes(1);
+    expect(mockRefreshCache).not.toHaveBeenCalled();
     expect(mockGetLocal).toHaveBeenCalledTimes(2);
     expect(mockGetAll).not.toHaveBeenCalled();
     expect(getLatestValue().skills).toEqual([refreshedSkill]);

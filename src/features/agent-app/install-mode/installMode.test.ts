@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { p0HostCapabilityProfile } from "../readiness/hostCapabilityProfile";
+import {
+  currentAgentAppHostRuntimeVersion,
+  p0HostCapabilityProfile,
+} from "../readiness/hostCapabilityProfile";
 import {
   checkInstallModesReadiness,
   defaultInstallModeRegistry,
@@ -119,7 +122,7 @@ describe("Agent App v2 install mode contract", () => {
     const install = normalizeInstallContract({
       input: {
         modes: ["standalone", "runtime_backed"],
-        runtime: { minVersion: "0.9.0" },
+        runtime: { minVersion: "9.0.0" },
       },
       fallbackName: "Future App",
     });
@@ -133,5 +136,6 @@ describe("Agent App v2 install mode contract", () => {
       code: "RUNTIME_VERSION_UNSUPPORTED",
       key: "standalone",
     });
+    expect(readiness[0].runtimeVersion).toBe(currentAgentAppHostRuntimeVersion);
   });
 });

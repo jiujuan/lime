@@ -20,6 +20,10 @@ import {
   type SkillPackageFileAssociationStatus,
 } from "@/lib/api/skills";
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 import { cn } from "@/lib/utils";
 
 const FALLBACK_RELEASES_URL = "https://github.com/limecloud/lime/releases";
@@ -51,6 +55,9 @@ export function AboutSection() {
   >(null);
   const manualDownloadUrl =
     versionInfo.releaseNotesUrl || FALLBACK_RELEASES_URL;
+  const manualDownloadRel = resolveHttpExternalHref(manualDownloadUrl)
+    ? "noreferrer noopener"
+    : undefined;
   const isWindows =
     typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
   const installingUpdate = isUpdateInstallSessionActive(installSession);
@@ -388,8 +395,13 @@ export function AboutSection() {
               </button>
               <a
                 href={manualDownloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                rel={manualDownloadRel}
+                onAuxClick={(event) => {
+                  interceptHttpExternalLinkClick(event, manualDownloadUrl);
+                }}
+                onClick={(event) => {
+                  interceptHttpExternalLinkClick(event, manualDownloadUrl);
+                }}
                 className={SECONDARY_ACTION_BUTTON_CLASS}
               >
                 <ExternalLink className="h-4 w-4" />
@@ -454,8 +466,13 @@ export function AboutSection() {
                 {installFailed ? (
                   <a
                     href={manualDownloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    rel={manualDownloadRel}
+                    onAuxClick={(event) => {
+                      interceptHttpExternalLinkClick(event, manualDownloadUrl);
+                    }}
+                    onClick={(event) => {
+                      interceptHttpExternalLinkClick(event, manualDownloadUrl);
+                    }}
                     className="mt-2 inline-flex items-center gap-1 underline hover:no-underline"
                   >
                     <ExternalLink className="h-3 w-3" />

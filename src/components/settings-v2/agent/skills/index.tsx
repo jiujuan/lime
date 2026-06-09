@@ -1,9 +1,18 @@
 import { SkillsPage } from "@/components/skills/SkillsPage";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
+import {
+  interceptHttpExternalLinkClick,
+  resolveHttpExternalHref,
+} from "@/lib/markdown/externalLinks";
 import { useTranslation } from "react-i18next";
+
+const FEEDBACK_URL = "https://github.com/aiclientproxy/lime/issues";
 
 export function ExtensionsSettings() {
   const { t } = useTranslation("settings");
+  const feedbackRel = resolveHttpExternalHref(FEEDBACK_URL)
+    ? "noreferrer noopener"
+    : undefined;
 
   return (
     <div className="space-y-5">
@@ -16,9 +25,14 @@ export function ExtensionsSettings() {
             tone="slate"
           />
           <a
-            href="https://github.com/aiclientproxy/lime/issues"
-            target="_blank"
-            rel="noopener noreferrer"
+            href={FEEDBACK_URL}
+            rel={feedbackRel}
+            onAuxClick={(event) => {
+              interceptHttpExternalLinkClick(event, FEEDBACK_URL);
+            }}
+            onClick={(event) => {
+              interceptHttpExternalLinkClick(event, FEEDBACK_URL);
+            }}
             className="ml-1 text-primary hover:underline"
           >
             {t("settings.agent.skills.advancedEntry.feedback")}

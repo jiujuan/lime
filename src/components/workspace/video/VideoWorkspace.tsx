@@ -26,6 +26,7 @@ import { formatDate, formatNumber } from "@/i18n/format";
 
 interface VideoWorkspaceProps {
   state: VideoCanvasState;
+  projectRootPath?: string | null;
   projectId?: string | null;
   onStateChange: (state: VideoCanvasState) => void;
 }
@@ -1048,7 +1049,7 @@ function resolveTaskSyncMessage(
 }
 
 export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
-  ({ state, projectId, onStateChange }) => {
+  ({ state, projectRootPath, projectId, onStateChange }) => {
     const { t, i18n } = useTranslation("workspace");
     const [tasks, setTasks] = useState<WorkspaceTask[]>([]);
     const pollingGuard = useRef(false);
@@ -1219,7 +1220,7 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
     );
 
     useEffect(() => {
-      if (!projectId) {
+      if (!projectRootPath?.trim()) {
         setTasks([]);
         return;
       }
@@ -1227,8 +1228,9 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
       let active = true;
       const loadTasks = async () => {
         try {
-          const list = await videoGenerationApi.listTasks(projectId, {
+          const list = await videoGenerationApi.listTasks(projectId || "", {
             limit: 50,
+            projectRootPath,
           });
           if (!active) {
             return;
@@ -1248,7 +1250,7 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
       return () => {
         active = false;
       };
-    }, [projectId, syncPrimaryState]);
+    }, [projectId, projectRootPath, syncPrimaryState]);
 
     const runningTaskIds = useMemo(
       () =>
@@ -1274,7 +1276,10 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
         try {
           const updates = await Promise.all(
             runningTaskIds.map((taskId) =>
-              videoGenerationApi.getTask(taskId, { refreshStatus: true }),
+              videoGenerationApi.getTask(taskId, {
+                refreshStatus: true,
+                projectRootPath: projectRootPath ?? undefined,
+              }),
             ),
           );
 
@@ -1318,7 +1323,12 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
         active = false;
         window.clearInterval(timer);
       };
-    }, [runningTaskIds, saveVideoToResource, syncPrimaryState]);
+    }, [
+      projectRootPath,
+      runningTaskIds,
+      saveVideoToResource,
+      syncPrimaryState,
+    ]);
 
     const ensureReferenceImageUrl = useCallback(
       async (
@@ -1452,6 +1462,7 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
 
           const created = await videoGenerationApi.createTask({
             projectId,
+            projectRootPath: projectRootPath || undefined,
             providerId: state.providerId,
             model: state.model,
             prompt: promptText,
@@ -1495,6 +1506,7 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
       [
         ensureReferenceImageUrl,
         projectId,
+        projectRootPath,
         pushState,
         state,
         syncPrimaryState,

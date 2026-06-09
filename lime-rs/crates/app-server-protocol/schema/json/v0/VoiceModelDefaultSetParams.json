@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "install_dir": {
+      "type": "string"
+    },
+    "model_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "install_dir",
+    "model_id"
+  ],
+  "title": "VoiceModelDefaultSetParams",
+  "type": "object"
+}

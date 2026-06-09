@@ -191,11 +191,42 @@ Agent App 不只复用 UI runtime start/status/stop，而是复用 Agent turn ru
 建议包边界：
 
 ```text
-agent-runtime-projection
-agent-runtime-ui
+@limecloud/agent-runtime-client
+@limecloud/agent-ui-contracts
+@limecloud/agent-runtime-projection
+@limecloud/agent-runtime-ui
 ```
 
-命名最终以仓库规则为准，新增包默认不加品牌前缀，除非对外发布品牌生态需要。
+命名最终以仓库已落地四包为准。`@limecloud/agent-runtime-projection` 和 `@limecloud/agent-runtime-ui` 是 canonical package names；早期讨论名 `@limecloud/agent-ui-projection`、`@limecloud/agent-ui-react` 不再新增为平行包、workspace alias 或发布包，避免 projection 与 React primitives 出现两套 API 面。新增包默认不加品牌前缀，除非对外发布品牌生态需要。
+
+2026-06-09 current 落地状态：
+
+1. `@limecloud/agent-runtime-client` 是标准 Runtime client facade。它只 re-export / 委托 `app-server-client` 中的 current App Server JSON-RPC runtime surface，不新增协议，不触碰 legacy desktop facade，不伪造 `readTask`。
+2. `@limecloud/agent-ui-contracts` 是类型事实源，包含 execution event、read model、message parts、process timeline、execution graph、projection state 和 projector interface。
+3. `@limecloud/agent-runtime-projection` 提供 `projectAgentUiState`、`createAgentUiProjector` 等纯投影函数，并 re-export contracts 类型以兼容旧调用。旧 `projectAgentRuntimeReadModel` 保留为兼容事实栏入口。
+4. `@limecloud/agent-runtime-ui` 提供 `AgentUiProjectionView`、`UIMessagePartsView`、`ProcessTimelineView`、`ExecutionGraphView`、`ToolGroup`、`ActionRequiredList`，直接消费 contracts / projection state。旧 `AgentTimeline` / `RuntimeFactsPanel` 保留为兼容 primitives。
+5. `app-server-client` 仍是底层 App Server JSON-RPC 与 sidecar lifecycle client；`AgentRuntimeClient` facade 落在这里，`@limecloud/agent-runtime-client` 只作为对外标准包入口。
+6. Agent App Host Drawer 已把运行过程 view model 切到 `AgentUiProjectionState -> Agent App view model`，并保留本地 artifact / evidence / action 业务卡片作为宿主扩展层；旧组件目录 projection 类型只作为迁移输入适配来源，不再是该入口的最终 read model。
+7. 公共 Agent UI adapter event 类型已迁到 `@limecloud/agent-ui-contracts`；主聊天旧 projection 文件只 re-export 这些公共类型并继续保留自己的投影构建逻辑，作为后续分批迁移来源，而不是新的类型事实源。
+8. 前端 `src/lib/api/agentRuntime/threadClient.ts` 的 turn lifecycle 已可消费标准 `AgentRuntimeClient` facade：`submit / cancel / respond / read` 先从旧 UI 请求 shape 投影为 App Server current 参数，再委托 `startTurn / cancelTurn / respondAction / readThread`。该文件仍是迁移期 compat gateway，负责旧 DTO、事件路由、read model 投影、file checkpoint / queue / compact / replay 等尚未进入标准 client 的业务面，不允许继续扩展成第二套 runtime SDK。
+9. 根依赖、TypeScript paths 与 Vite alias 已接入 `@limecloud/agent-runtime-client`，避免标准包只停留在 package 目录而无法被前端 current 网关消费。
+10. `@limecloud/agent-runtime-projection` 已承接 host-neutral 的 Agent UI projection event index / scope selector / latest selector。主聊天 `conversationProjectionStore` 只保留本地 external store、stream diagnostics 和兼容导出名，事件筛选与索引不再在主聊天目录内作为公共事实解释继续扩展。
+11. `@limecloud/agent-runtime-projection` 已承接 host-neutral 的 Agent UI summary selectors：事件类型分组、action / task / artifact / evidence / diagnostics 计数、notable latest events、Team Workbench surface / lane 聚合和 artifact latest lookup。主聊天 `agentUiProjectionSummary.ts` 只保留本地化 label、展示文案 formatter 和兼容导出名，不再作为这些 selector 的事实源。
+12. `internal/aiprompts/agent-ui-runtime-standard.md` 已成为四包职责、宿主接入、App Server runtime 配合、主聊天 projection 迁移分类和守卫要求的集中事实源；后续改标准包或主聊天 projection 前应先读该文档。
+13. `scripts/check-app-server-client-contract.mjs` 已守住标准包名入口，扫描根依赖、lockfile、TypeScript paths、Vite alias 和 `packages/*/package.json`，防止早期讨论包名回流成新的物理包或 alias。
+14. Agent App Runtime 已作为第二个真实宿主基线消费标准 projection：`agentRunProjectionState.ts` 从 host run state 生成标准 `AgentUiProjectionState`，`AgentRunProjectionPanel.tsx` 直接渲染 `AgentUiProjectionView`，宿主 summary / action callback / artifact presentation 保留在 Agent App adapter 层。
+
+退出条件补充：
+
+1. 新 Agent UI 页面默认走 `AgentRuntimeClient -> execution events -> projectAgentUiState -> AgentUiProjectionView`。
+2. 不允许把组件本地树或 UI 本地状态定义成 runtime fact source。
+3. `readThread` 当前映射 `agentSession/read`；独立 `readTask` 只能等 App Server current method 出现后再接入。
+4. 至少两个真实宿主复用 `@limecloud/agent-ui-contracts`、`@limecloud/agent-runtime-projection` 与 `@limecloud/agent-runtime-ui` 后，才能继续收缩旧主聊天专用 projection / UI 壳。
+5. 主聊天目录不得重新实现标准 projection selector；新增 host-neutral selector 必须先进入 `@limecloud/agent-runtime-projection`，宿主只做本地化、交互路由和业务卡片适配。
+6. 标准包实现不得重新合并为单文件；`@limecloud/agent-runtime-projection` 的 `index` 只能做 barrel exports，具体实现必须按 contracts / eventStore / summary / readModel / uiState 等职责拆分。
+7. `@limecloud/agent-runtime-ui` 的 `index.ts` 只能做 barrel exports；React primitives 必须按 types / labels / messages / processTimeline / executionGraph / runtimeFacts / projectionView 等职责拆分。
+8. `@limecloud/agent-ui-projection`、`@limecloud/agent-ui-react` 只能作为历史讨论语义出现在路线图或标准说明中，不得进入依赖、paths、alias 或 workspace package。
+9. 第二宿主复用不再以“拼几个 primitives”为合格证据；至少一个非主聊天宿主必须直接渲染 `AgentUiProjectionView`，并由测试锁住 `.agent-ui-projection`、`.agent-ui-main`、`.agent-ui-sidecar`。
 
 ## 14. N11：compat 退场
 

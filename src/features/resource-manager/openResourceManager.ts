@@ -62,11 +62,11 @@ async function openDesktopHostResourceManagerWindow(params: {
     ]);
     return true;
   } catch (error) {
-    console.warn(
-      "[资源管理器] 打开 Desktop Host 独立窗口失败，回退到浏览器窗口:",
-      error,
-    );
-    return false;
+    const message =
+      error instanceof Error && error.message.trim()
+        ? `Desktop Host 独立资源管理器窗口打开失败：${error.message.trim()}`
+        : "Desktop Host 独立资源管理器窗口打开失败";
+    throw new Error(message);
   }
 }
 

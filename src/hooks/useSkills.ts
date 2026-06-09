@@ -92,9 +92,8 @@ export function useSkills(app: AppType = "lime", options?: UseSkillsOptions) {
 
   const refreshSkills = useCallback(
     async (refreshRemote = false) => {
-      await skillsApi.refreshCache();
-
       if (includeRepos) {
+        await skillsApi.refreshCache();
         await fetchAllSkills(refreshRemote);
         return;
       }

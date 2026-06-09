@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import { invalidateAppConfigCache } from "./appConfig";
 import {
@@ -25,46 +25,161 @@ import {
   updateAsrCredential,
 } from "./asrProvider";
 
+const appServerMocks = vi.hoisted(() => ({
+  listVoiceAsrCredentials: vi.fn(),
+  createVoiceAsrCredential: vi.fn(),
+  updateVoiceAsrCredential: vi.fn(),
+  deleteVoiceAsrCredential: vi.fn(),
+  setDefaultVoiceAsrCredential: vi.fn(),
+  testVoiceAsrCredential: vi.fn(),
+  listVoiceInstructions: vi.fn(),
+  saveVoiceInstruction: vi.fn(),
+  deleteVoiceInstruction: vi.fn(),
+}));
+
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
+vi.mock("./appServer", () => ({
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_LIST: "voiceAsrCredential/list",
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_CREATE: "voiceAsrCredential/create",
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_UPDATE: "voiceAsrCredential/update",
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DELETE: "voiceAsrCredential/delete",
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET:
+    "voiceAsrCredential/default/set",
+  APP_SERVER_METHOD_VOICE_ASR_CREDENTIAL_TEST: "voiceAsrCredential/test",
+  APP_SERVER_METHOD_VOICE_INSTRUCTION_LIST: "voiceInstruction/list",
+  APP_SERVER_METHOD_VOICE_INSTRUCTION_SAVE: "voiceInstruction/save",
+  APP_SERVER_METHOD_VOICE_INSTRUCTION_DELETE: "voiceInstruction/delete",
+  createAppServerClient: () => appServerMocks,
+}));
+
 describe("asrProvider API", () => {
+  const originalNavigator = globalThis.navigator;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(safeInvoke).mockReset();
+    Object.values(appServerMocks).forEach((mock) => {
+      mock.mockReset();
+    });
     invalidateAppConfigCache();
   });
 
-  it("应代理设备与凭证命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([
-        { id: "default", name: "系统默认", is_default: true },
-      ])
-      .mockResolvedValueOnce([{ id: "cred-1", provider: "openai" }])
-      .mockResolvedValueOnce({ id: "cred-2", provider: "openai" })
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({ success: true, message: "ok" });
+  afterEach(() => {
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: originalNavigator,
+    });
+  });
+
+  function mockMediaDevices(
+    devices: Array<{
+      deviceId: string;
+      kind: "audioinput" | "audiooutput" | "videoinput";
+      label: string;
+    }>,
+  ) {
+    const stop = vi.fn();
+    const getUserMedia = vi.fn().mockResolvedValue({
+      getTracks: () => [{ stop }],
+    });
+    const enumerateDevices = vi.fn().mockResolvedValue(devices);
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        mediaDevices: {
+          enumerateDevices,
+          getUserMedia,
+        },
+      },
+    });
+    return { enumerateDevices, getUserMedia, stop };
+  }
+
+  it("麦克风设备列表走 renderer media devices current，不再调用旧命令", async () => {
+    const mediaDevices = mockMediaDevices([
+      {
+        deviceId: "default",
+        kind: "audioinput",
+        label: "Default - 内置麦克风",
+      },
+      { deviceId: "input-2", kind: "audioinput", label: "USB 麦克风" },
+      { deviceId: "camera-1", kind: "videoinput", label: "摄像头" },
+    ]);
 
     await expect(listAudioDevices()).resolves.toEqual([
-      expect.objectContaining({ id: "default" }),
+      { id: "内置麦克风", name: "内置麦克风", is_default: true },
+      { id: "USB 麦克风", name: "USB 麦克风", is_default: false },
     ]);
+    expect(mediaDevices.getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(mediaDevices.enumerateDevices).toHaveBeenCalledTimes(1);
+    expect(mediaDevices.stop).toHaveBeenCalledTimes(1);
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("ASR 凭证读写应走 App Server current 并投影 provider 名", async () => {
+    appServerMocks.listVoiceAsrCredentials.mockResolvedValueOnce({
+      result: {
+        credentials: [
+          {
+            id: "cred-1",
+            provider: "sense_voice_local",
+            is_default: true,
+            disabled: false,
+            language: "auto",
+          },
+        ],
+      },
+    });
+    appServerMocks.createVoiceAsrCredential.mockResolvedValueOnce({
+      result: {
+        credential: {
+          id: "cred-2",
+          provider: "sense_voice_local",
+          is_default: true,
+          disabled: false,
+          language: "zh-CN",
+        },
+      },
+    });
+    appServerMocks.updateVoiceAsrCredential.mockResolvedValueOnce({
+      result: {},
+    });
+    appServerMocks.deleteVoiceAsrCredential.mockResolvedValueOnce({
+      result: {},
+    });
+    appServerMocks.setDefaultVoiceAsrCredential.mockResolvedValueOnce({
+      result: {},
+    });
+    appServerMocks.testVoiceAsrCredential.mockResolvedValueOnce({
+      result: { success: true, message: "ok" },
+    });
+
     await expect(getAsrCredentials()).resolves.toEqual([
-      expect.objectContaining({ id: "cred-1" }),
+      expect.objectContaining({
+        id: "cred-1",
+        provider: "sensevoice_local",
+      }),
     ]);
     await expect(
       addAsrCredential({
-        provider: "openai",
+        provider: "sensevoice_local",
         is_default: true,
         disabled: false,
         language: "zh-CN",
       }),
-    ).resolves.toEqual(expect.objectContaining({ id: "cred-2" }));
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "cred-2",
+        provider: "sensevoice_local",
+      }),
+    );
     await expect(
       updateAsrCredential({
         id: "cred-2",
-        provider: "openai",
+        provider: "sensevoice_local",
         is_default: true,
         disabled: false,
         language: "zh-CN",
@@ -75,82 +190,158 @@ describe("asrProvider API", () => {
     await expect(testAsrCredential("cred-2")).resolves.toEqual(
       expect.objectContaining({ success: true }),
     );
+
+    expect(appServerMocks.listVoiceAsrCredentials).toHaveBeenCalledWith();
+    expect(appServerMocks.createVoiceAsrCredential).toHaveBeenCalledWith({
+      provider: "sense_voice_local",
+      is_default: true,
+      disabled: false,
+      language: "zh-CN",
+    });
+    expect(appServerMocks.updateVoiceAsrCredential).toHaveBeenCalledWith({
+      credential: {
+        id: "cred-2",
+        provider: "sense_voice_local",
+        is_default: true,
+        disabled: false,
+        language: "zh-CN",
+      },
+    });
+    expect(appServerMocks.deleteVoiceAsrCredential).toHaveBeenCalledWith({
+      id: "cred-2",
+    });
+    expect(appServerMocks.setDefaultVoiceAsrCredential).toHaveBeenCalledWith({
+      id: "cred-2",
+    });
+    expect(appServerMocks.testVoiceAsrCredential).toHaveBeenCalledWith({
+      id: "cred-2",
+    });
+    expect(safeInvoke).not.toHaveBeenCalledWith("get_asr_credentials");
   });
 
-  it("音频设备列表遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
-    const diagnosticList: unknown[] = [];
-    Object.defineProperty(diagnosticList, "__diagnostic", {
-      value: {
-        source: "electron-host-diagnostic",
-        command: "list_audio_devices",
-        status: "degraded",
-      },
-      enumerable: false,
+  it("麦克风设备枚举缺少浏览器能力时应 fail closed", async () => {
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {},
     });
-    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
 
     await expect(listAudioDevices()).rejects.toThrow(
-      "list_audio_devices 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "当前环境不支持麦克风设备枚举",
     );
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("ASR 凭证列表遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
-    const diagnosticList: unknown[] = [];
-    Object.defineProperty(diagnosticList, "__diagnostic", {
-      value: {
-        source: "electron-host-diagnostic",
-        command: "get_asr_credentials",
-        status: "degraded",
-      },
-      enumerable: false,
+  it("转写、输出与录音控制未接 current 前应本地 fail closed，不再调用旧命令", async () => {
+    const currentBlockedMessage =
+      "语音转写、润色、输出与录音控制尚未接入 App Server / Electron current 通道，旧 Tauri in-process command 已退役。";
+
+    await expect(
+      transcribeAudio(new Uint8Array([1, 2, 3]), 16000, "cred-1"),
+    ).rejects.toThrow(currentBlockedMessage);
+    await expect(polishVoiceText("你好")).rejects.toThrow(
+      currentBlockedMessage,
+    );
+    await expect(outputVoiceText("hello", "type")).rejects.toThrow(
+      currentBlockedMessage,
+    );
+    await expect(startRecording("default")).rejects.toThrow(
+      currentBlockedMessage,
+    );
+    await expect(stopRecording()).rejects.toThrow(currentBlockedMessage);
+    await expect(getRecordingSnapshot()).rejects.toThrow(currentBlockedMessage);
+    await expect(getRecordingSegment(16000, 0.8)).rejects.toThrow(
+      currentBlockedMessage,
+    );
+    await expect(cancelRecording()).rejects.toThrow(currentBlockedMessage);
+    await expect(getRecordingStatus()).rejects.toThrow(currentBlockedMessage);
+    expect(safeInvoke).not.toHaveBeenCalledWith("transcribe_audio", {
+      audioData: [1, 2, 3],
+      sampleRate: 16000,
+      credentialId: "cred-1",
     });
-    vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
+    for (const command of [
+      "polish_voice_text",
+      "output_voice_text",
+      "start_recording",
+      "stop_recording",
+      "get_recording_snapshot",
+      "get_recording_segment",
+      "cancel_recording",
+      "get_recording_status",
+    ]) {
+      expect(safeInvoke).not.toHaveBeenCalledWith(command, expect.anything());
+      expect(safeInvoke).not.toHaveBeenCalledWith(command);
+    }
+  });
+
+  it("ASR 凭证 App Server 返回错误形态时不应吞成成功", async () => {
+    appServerMocks.listVoiceAsrCredentials.mockResolvedValueOnce({
+      result: { credentials: {} },
+    });
+    appServerMocks.createVoiceAsrCredential.mockResolvedValueOnce({
+      result: { success: true },
+    });
+    appServerMocks.updateVoiceAsrCredential.mockResolvedValueOnce({
+      result: { success: true },
+    });
+    appServerMocks.deleteVoiceAsrCredential.mockResolvedValueOnce({
+      result: { success: true },
+    });
+    appServerMocks.setDefaultVoiceAsrCredential.mockResolvedValueOnce({
+      result: { success: true },
+    });
+    appServerMocks.testVoiceAsrCredential.mockResolvedValueOnce({
+      result: { success: true },
+    });
 
     await expect(getAsrCredentials()).rejects.toThrow(
-      "get_asr_credentials 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "voiceAsrCredential/list did not return ASR credentials",
+    );
+    await expect(
+      addAsrCredential({
+        provider: "openai",
+        is_default: true,
+        disabled: false,
+        language: "zh-CN",
+      }),
+    ).rejects.toThrow(
+      "voiceAsrCredential/create did not return an ASR credential",
+    );
+    await expect(
+      updateAsrCredential({
+        id: "cred-2",
+        provider: "openai",
+        is_default: true,
+        disabled: false,
+        language: "zh-CN",
+      }),
+    ).rejects.toThrow(
+      "voiceAsrCredential/update did not return an empty result",
+    );
+    await expect(deleteAsrCredential("cred-2")).rejects.toThrow(
+      "voiceAsrCredential/delete did not return an empty result",
+    );
+    await expect(setDefaultAsrCredential("cred-2")).rejects.toThrow(
+      "voiceAsrCredential/default/set did not return an empty result",
+    );
+    await expect(testAsrCredential("cred-2")).rejects.toThrow(
+      "voiceAsrCredential/test did not return a test result",
     );
   });
 
-  it("ASR 写链、指令与录音命令遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValue({
-      diagnostic: {
-        source: "electron-host-diagnostic",
-        status: "degraded",
-      },
+  it("Voice instructions App Server 返回错误形态时不应吞成成功", async () => {
+    appServerMocks.listVoiceInstructions.mockResolvedValueOnce({
+      result: { instructions: {} },
+    });
+    appServerMocks.saveVoiceInstruction.mockResolvedValueOnce({
+      result: { success: true },
+    });
+    appServerMocks.deleteVoiceInstruction.mockResolvedValueOnce({
+      result: { success: true },
     });
 
-    await expect(
-      addAsrCredential({
-        provider: "openai",
-        is_default: true,
-        disabled: false,
-        language: "zh-CN",
-      }),
-    ).rejects.toThrow(
-      "add_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(
-      updateAsrCredential({
-        id: "cred-2",
-        provider: "openai",
-        is_default: true,
-        disabled: false,
-        language: "zh-CN",
-      }),
-    ).rejects.toThrow(
-      "update_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(deleteAsrCredential("cred-2")).rejects.toThrow(
-      "delete_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(setDefaultAsrCredential("cred-2")).rejects.toThrow(
-      "set_default_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(testAsrCredential("cred-2")).rejects.toThrow(
-      "test_asr_credential 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
     await expect(getVoiceInstructions()).rejects.toThrow(
-      "get_voice_instructions 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "voiceInstruction/list did not return voice instructions",
     );
     await expect(
       saveVoiceInstruction({
@@ -159,131 +350,9 @@ describe("asrProvider API", () => {
         prompt: "请优化",
         is_preset: false,
       }),
-    ).rejects.toThrow(
-      "save_voice_instruction 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
+    ).rejects.toThrow("voiceInstruction/save did not return an empty result");
     await expect(deleteVoiceInstruction("inst-2")).rejects.toThrow(
-      "delete_voice_instruction 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(
-      transcribeAudio(new Uint8Array([1, 2, 3]), 16000, "cred-1"),
-    ).rejects.toThrow(
-      "transcribe_audio 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(polishVoiceText("你好")).rejects.toThrow(
-      "polish_voice_text 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(outputVoiceText("hello", "type")).rejects.toThrow(
-      "output_voice_text 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(startRecording("default")).rejects.toThrow(
-      "start_recording 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(stopRecording()).rejects.toThrow(
-      "stop_recording 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(getRecordingSnapshot()).rejects.toThrow(
-      "get_recording_snapshot 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(getRecordingSegment(16000, 0.8)).rejects.toThrow(
-      "get_recording_segment 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(cancelRecording()).rejects.toThrow(
-      "cancel_recording 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(getRecordingStatus()).rejects.toThrow(
-      "get_recording_status 尚未接入真实语音输入 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-  });
-
-  it("ASR 写链、转写与录音命令返回错误形态时不应吞成成功", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ success: true });
-
-    await expect(
-      addAsrCredential({
-        provider: "openai",
-        is_default: true,
-        disabled: false,
-        language: "zh-CN",
-      }),
-    ).rejects.toThrow("add_asr_credential did not return an ASR credential");
-    await expect(
-      updateAsrCredential({
-        id: "cred-2",
-        provider: "openai",
-        is_default: true,
-        disabled: false,
-        language: "zh-CN",
-      }),
-    ).rejects.toThrow("update_asr_credential did not return an empty result");
-    await expect(deleteAsrCredential("cred-2")).rejects.toThrow(
-      "delete_asr_credential did not return an empty result",
-    );
-    await expect(setDefaultAsrCredential("cred-2")).rejects.toThrow(
-      "set_default_asr_credential did not return an empty result",
-    );
-    await expect(testAsrCredential("cred-2")).rejects.toThrow(
-      "test_asr_credential did not return a test result",
-    );
-    await expect(getVoiceInstructions()).rejects.toThrow(
-      "get_voice_instructions did not return an array",
-    );
-    await expect(
-      saveVoiceInstruction({
-        id: "inst-2",
-        name: "润色",
-        prompt: "请优化",
-        is_preset: false,
-      }),
-    ).rejects.toThrow(
-      "save_voice_instruction did not return an empty result",
-    );
-    await expect(deleteVoiceInstruction("inst-2")).rejects.toThrow(
-      "delete_voice_instruction did not return an empty result",
-    );
-    await expect(
-      transcribeAudio(new Uint8Array([1, 2, 3]), 16000, "cred-1"),
-    ).rejects.toThrow("transcribe_audio did not return a transcribe result");
-    await expect(polishVoiceText("你好")).rejects.toThrow(
-      "polish_voice_text did not return a polish result",
-    );
-    await expect(outputVoiceText("hello", "type")).rejects.toThrow(
-      "output_voice_text did not return an empty result",
-    );
-    await expect(startRecording("default")).rejects.toThrow(
-      "start_recording did not return an empty result",
-    );
-    await expect(stopRecording()).rejects.toThrow(
-      "stop_recording did not return an audio capture result",
-    );
-    await expect(getRecordingSnapshot()).rejects.toThrow(
-      "get_recording_snapshot did not return an audio capture result",
-    );
-    await expect(getRecordingSegment(16000, 0.8)).rejects.toThrow(
-      "get_recording_segment did not return an audio capture result",
-    );
-    await expect(cancelRecording()).rejects.toThrow(
-      "cancel_recording did not return an empty result",
-    );
-    await expect(getRecordingStatus()).rejects.toThrow(
-      "get_recording_status did not return a recording status",
+      "voiceInstruction/delete did not return an empty result",
     );
   });
 
@@ -324,12 +393,16 @@ describe("asrProvider API", () => {
           },
         },
       })
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce([
-        { id: "inst-1", name: "默认", prompt: "优化", is_preset: true },
-      ])
-      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined);
+    appServerMocks.listVoiceInstructions.mockResolvedValueOnce({
+      result: {
+        instructions: [
+          { id: "inst-1", name: "默认", prompt: "优化", is_preset: true },
+        ],
+      },
+    });
+    appServerMocks.saveVoiceInstruction.mockResolvedValueOnce({ result: {} });
+    appServerMocks.deleteVoiceInstruction.mockResolvedValueOnce({ result: {} });
 
     await expect(getVoiceInputConfig()).resolves.toEqual(
       expect.objectContaining({ enabled: true }),
@@ -365,70 +438,26 @@ describe("asrProvider API", () => {
       "save_voice_input_config",
       expect.anything(),
     );
-  });
-
-  it("应代理转写、润色与录音命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ text: "你好", provider: "openai" })
-      .mockResolvedValueOnce({ text: "你好，世界", instruction_name: "润色" })
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({
-        audio_data: [1, 2],
-        sample_rate: 16000,
-        duration: 1,
-      })
-      .mockResolvedValueOnce({
-        audio_data: [1, 2],
-        sample_rate: 16000,
-        duration: 1,
-      })
-      .mockResolvedValueOnce({
-        audio_data: [3, 4],
-        sample_rate: 16000,
-        duration: 0.8,
-        start_sample: 16000,
-        end_sample: 28800,
-        total_samples: 28800,
-      })
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({ is_recording: false, volume: 0, duration: 0 })
-      .mockResolvedValueOnce(undefined);
-
-    await expect(
-      transcribeAudio(new Uint8Array([1, 2, 3]), 16000, "cred-1"),
-    ).resolves.toEqual(expect.objectContaining({ text: "你好" }));
-    await expect(polishVoiceText("你好")).resolves.toEqual(
-      expect.objectContaining({ instruction_name: "润色" }),
-    );
-    await expect(outputVoiceText("hello", "type")).resolves.toBeUndefined();
-    await expect(startRecording("default")).resolves.toBeUndefined();
-    await expect(stopRecording()).resolves.toEqual(
-      expect.objectContaining({ sample_rate: 16000 }),
-    );
-    await expect(getRecordingSnapshot()).resolves.toEqual(
-      expect.objectContaining({ sample_rate: 16000 }),
-    );
-    await expect(getRecordingSegment(16000, 0.8)).resolves.toEqual(
-      expect.objectContaining({ end_sample: 28800 }),
-    );
-    await expect(cancelRecording()).resolves.toBeUndefined();
-    await expect(getRecordingStatus()).resolves.toEqual(
-      expect.objectContaining({ is_recording: false }),
-    );
-
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "transcribe_audio", {
-      audioData: [1, 2, 3],
-      sampleRate: 16000,
-      credentialId: "cred-1",
+    expect(appServerMocks.listVoiceInstructions).toHaveBeenCalledWith();
+    expect(appServerMocks.saveVoiceInstruction).toHaveBeenCalledWith({
+      instruction: {
+        id: "inst-2",
+        name: "润色",
+        prompt: "请优化",
+        is_preset: false,
+      },
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(4, "start_recording", {
-      deviceId: "default",
+    expect(appServerMocks.deleteVoiceInstruction).toHaveBeenCalledWith({
+      id: "inst-2",
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(6, "get_recording_snapshot");
-    expect(safeInvoke).toHaveBeenNthCalledWith(7, "get_recording_segment", {
-      startSample: 16000,
-      maxDurationSecs: 0.8,
-    });
+    expect(safeInvoke).not.toHaveBeenCalledWith("get_voice_instructions");
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "save_voice_instruction",
+      expect.anything(),
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "delete_voice_instruction",
+      expect.anything(),
+    );
   });
 });

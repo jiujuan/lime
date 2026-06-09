@@ -11,8 +11,8 @@ const { mockOpen } = vi.hoisted(() => ({
   mockOpen: vi.fn(),
 }));
 
-vi.mock("@/lib/desktop-host/plugin-shell", () => ({
-  open: mockOpen,
+vi.mock("@/lib/api/systemSettings", () => ({
+  openSystemSettingsUrl: mockOpen,
 }));
 
 import { ClipboardPermissionGuideCard } from "./ClipboardPermissionGuideCard";
@@ -97,9 +97,7 @@ describe("ClipboardPermissionGuideCard", () => {
 
   it("打开系统设置失败时应显示可翻译错误", async () => {
     mockOpen.mockRejectedValueOnce(new Error("denied"));
-    vi.spyOn(window, "open").mockImplementation(() => {
-      throw new Error("blocked");
-    });
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
 
     const container = renderComponent();
     const button = Array.from(container.querySelectorAll("button")).find(
@@ -117,5 +115,6 @@ describe("ClipboardPermissionGuideCard", () => {
       "Failed to open system settings: denied",
     );
     expect(container.textContent).not.toContain("打开系统设置失败");
+    expect(windowOpen).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,14 @@ import {
 
 setupReactActEnvironment();
 
+const { mockOpenExternalUrlWithSystemBrowser } = vi.hoisted(() => ({
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(),
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser: mockOpenExternalUrlWithSystemBrowser,
+}));
+
 describe("A2UIRenderer", () => {
   const mountedRoots: MountedRoot[] = [];
 
@@ -243,7 +251,8 @@ describe("TextRenderer", () => {
     expect(container.textContent).toContain("辅助说明");
   });
 
-  it("检测到 markdown 语法时应渲染语义化内容而不是原始标记", () => {
+  it("检测到 markdown 语法时应渲染语义化内容而不是原始标记", async () => {
+    mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
     const { container } = mountHarness(
       TextRenderer,
       {
@@ -280,7 +289,20 @@ describe("TextRenderer", () => {
         (item) => item.textContent,
       ),
     ).toEqual(["第一项", "第二项"]);
-    expect(container.querySelector("a")?.getAttribute("href")).toBe(
+    const link = container.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("https://example.com");
+    expect(link?.getAttribute("target")).toBeNull();
+    expect(link?.getAttribute("rel")).toBe("noreferrer noopener");
+
+    const clickEvent = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    link?.dispatchEvent(clickEvent);
+    await Promise.resolve();
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(mockOpenExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
       "https://example.com",
     );
     expect(container.querySelector("br")).not.toBeNull();

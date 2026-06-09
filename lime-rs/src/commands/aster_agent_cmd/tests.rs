@@ -5463,6 +5463,10 @@ mod tests {
         assert!(merged.contains("不要先走 ToolSearch / WebSearch / Read / Glob / Grep"));
         assert!(merged.contains("应立即改为直调 Skill(video_generate)"));
         assert!(merged.contains("lime media video generate --json"));
+        assert!(merged.contains("App Server media task artifact 主链"));
+        assert!(merged.contains("不得回退旧视频 Tauri facade"));
+        assert!(!merged.contains("lime_create_video_generation_task"));
+        assert!(!merged.contains("create_video_generation_task"));
         assert!(merged.contains("不要伪造“视频已生成完成”"));
         assert!(merged.contains("当前任务已经显式进入视频技能主链"));
     }

@@ -2,9 +2,8 @@
 //!
 //! Provides unified memory CRUD operations and analysis pipeline.
 
-use crate::config::GlobalConfigManagerState;
 use crate::database::DbConnection;
-use crate::services::chat_history_service::{load_memory_source_candidates, MemorySourceCandidate};
+use crate::services::chat_history_service::MemorySourceCandidate;
 use lime_core::config::{MemoryConfig, MemoryEmbeddingProvider};
 use lime_memory::extractor::{self, ExtractionContext};
 use lime_memory::gatekeeper::ChatMessage;
@@ -12,41 +11,15 @@ use lime_memory::{MemoryCategory, MemoryMetadata, MemorySource, MemoryType, Unif
 use rusqlite::{params, params_from_iter, types::Value};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use tauri::State;
 use tracing::{info, warn};
 
 const DEFAULT_LIST_LIMIT: usize = 120;
 const MAX_LIST_LIMIT: usize = 1000;
-const MAX_SOURCE_MESSAGES: usize = 6000;
 const MAX_GENERATED_PER_REQUEST: usize = 200;
 const MAX_GENERATED_PER_REQUEST_CAP: usize = 2000;
 const MAX_GENERATED_PER_SESSION: usize = 40;
-const MIN_MESSAGE_LENGTH: usize = 18;
 const MAX_LLM_SESSIONS: usize = 20;
 const MAX_LLM_MESSAGES_PER_SESSION: usize = 40;
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct CreateRequest {
-    pub session_id: String,
-    pub title: String,
-    pub content: String,
-    pub summary: String,
-    pub category: Option<MemoryCategory>,
-    #[serde(default)]
-    pub tags: Vec<String>,
-    pub confidence: Option<f32>,
-    pub importance: Option<u8>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct UpdateRequest {
-    pub title: Option<String>,
-    pub content: Option<String>,
-    pub summary: Option<String>,
-    pub tags: Option<Vec<String>>,
-    pub confidence: Option<f32>,
-    pub importance: Option<u8>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ListFilters {
@@ -58,20 +31,6 @@ pub struct ListFilters {
     pub order: Option<String>,
     pub offset: Option<usize>,
     pub limit: Option<usize>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryStatsResponse {
-    pub total_entries: u32,
-    pub storage_used: u64,
-    pub memory_count: u32,
-    pub categories: Vec<MemoryCategoryStat>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryCategoryStat {
-    pub category: String,
-    pub count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,18 +53,6 @@ struct PendingMemory {
     importance: u8,
     created_at: i64,
     source: MemorySource,
-}
-
-#[tauri::command]
-pub async fn unified_memory_list(
-    db: State<'_, DbConnection>,
-    filters: Option<ListFilters>,
-) -> Result<Vec<UnifiedMemory>, String> {
-    let filters = filters.unwrap_or_default();
-    info!("[Unified Memory] List memories: {:?}", filters);
-
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    list_unified_memories(&conn, filters)
 }
 
 pub(crate) fn list_unified_memories(
@@ -164,315 +111,6 @@ pub(crate) fn list_unified_memories(
         .map_err(|e| format!("解析记忆失败: {e}"))?;
 
     Ok(memories)
-}
-
-#[tauri::command]
-pub async fn unified_memory_get(
-    db: State<'_, DbConnection>,
-    id: String,
-) -> Result<Option<UnifiedMemory>, String> {
-    info!("[Unified Memory] Get memory: {}", id);
-
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-
-    let mut stmt = conn
-        .prepare("SELECT id, session_id, memory_type, category, title, content, summary, tags, confidence, importance, access_count, last_accessed_at, source, created_at, updated_at, archived FROM unified_memory WHERE id = ?")
-        .map_err(|e| format!("构建查询失败: {e}"))?;
-
-    let mut rows = stmt
-        .query_map(params![&id], parse_memory_row)
-        .map_err(|e| format!("查询记忆失败: {e}"))?;
-
-    if let Some(Ok(memory)) = rows.next() {
-        let now = chrono::Utc::now().timestamp_millis();
-        conn.execute(
-            "UPDATE unified_memory SET access_count = access_count + 1, last_accessed_at = ?1 WHERE id = ?2",
-            params![now, &id],
-        )
-        .map_err(|e| format!("更新访问统计失败: {e}"))?;
-
-        Ok(Some(memory))
-    } else {
-        Ok(None)
-    }
-}
-
-#[tauri::command]
-pub async fn unified_memory_create(
-    db: State<'_, DbConnection>,
-    global_config: State<'_, GlobalConfigManagerState>,
-    request: CreateRequest,
-) -> Result<UnifiedMemory, String> {
-    info!("[Unified Memory] Create memory: {}", request.title);
-
-    if request.title.trim().is_empty() {
-        return Err("记忆标题不能为空".to_string());
-    }
-
-    if request.content.trim().is_empty() {
-        return Err("记忆内容不能为空".to_string());
-    }
-
-    let now = chrono::Utc::now().timestamp_millis();
-    let category = request.category.unwrap_or_else(|| {
-        infer_category_from_text(&request.title, &request.summary, &request.content)
-    });
-
-    let mut memory = UnifiedMemory {
-        id: uuid::Uuid::new_v4().to_string(),
-        session_id: request.session_id,
-        memory_type: MemoryType::Conversation,
-        category,
-        title: request.title.trim().to_string(),
-        content: request.content.trim().to_string(),
-        summary: if request.summary.trim().is_empty() {
-            truncate_text(request.content.trim(), 120)
-        } else {
-            truncate_text(request.summary.trim(), 140)
-        },
-        tags: normalize_tags(request.tags),
-        metadata: MemoryMetadata {
-            confidence: request.confidence.unwrap_or(0.7).clamp(0.0, 1.0),
-            importance: request.importance.unwrap_or(5).clamp(0, 10),
-            access_count: 0,
-            last_accessed_at: None,
-            source: MemorySource::Manual,
-            embedding: None,
-        },
-        created_at: now,
-        updated_at: now,
-        archived: false,
-    };
-
-    let memory_config = global_config.config().memory;
-    attach_memory_embedding(&db, &memory_config, &mut memory).await;
-
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    insert_unified_memory(&conn, &memory)?;
-
-    Ok(memory)
-}
-
-#[tauri::command]
-pub async fn unified_memory_update(
-    db: State<'_, DbConnection>,
-    global_config: State<'_, GlobalConfigManagerState>,
-    id: String,
-    request: UpdateRequest,
-) -> Result<UnifiedMemory, String> {
-    info!("[Unified Memory] Update memory: {}", id);
-
-    let existing = {
-        let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-        let existing = get_memory_by_id(&conn, &id)?;
-        let Some(existing) = existing else {
-            return Err("记忆不存在".to_string());
-        };
-        existing
-    };
-
-    let should_refresh_embedding =
-        request.title.is_some() || request.content.is_some() || request.summary.is_some();
-    let now = chrono::Utc::now().timestamp_millis();
-    let mut updated = UnifiedMemory {
-        id: existing.id,
-        session_id: existing.session_id,
-        memory_type: existing.memory_type,
-        category: existing.category,
-        title: request
-            .title
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-            .unwrap_or(existing.title),
-        content: request
-            .content
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-            .unwrap_or(existing.content),
-        summary: request
-            .summary
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-            .unwrap_or(existing.summary),
-        tags: request.tags.map(normalize_tags).unwrap_or(existing.tags),
-        metadata: MemoryMetadata {
-            confidence: request
-                .confidence
-                .unwrap_or(existing.metadata.confidence)
-                .clamp(0.0, 1.0),
-            importance: request
-                .importance
-                .unwrap_or(existing.metadata.importance)
-                .clamp(0, 10),
-            access_count: existing.metadata.access_count,
-            last_accessed_at: existing.metadata.last_accessed_at,
-            source: existing.metadata.source,
-            embedding: existing.metadata.embedding,
-        },
-        created_at: existing.created_at,
-        updated_at: now,
-        archived: existing.archived,
-    };
-
-    if should_refresh_embedding {
-        let memory_config = global_config.config().memory;
-        attach_memory_embedding(&db, &memory_config, &mut updated).await;
-    }
-
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    update_unified_memory(&conn, &updated, should_refresh_embedding)?;
-    Ok(updated)
-}
-
-#[tauri::command]
-pub async fn unified_memory_delete(
-    db: State<'_, DbConnection>,
-    id: String,
-) -> Result<bool, String> {
-    info!("[Unified Memory] Delete memory (hard): {}", id);
-
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    let rows = conn
-        .execute("DELETE FROM unified_memory WHERE id = ?", params![&id])
-        .map_err(|e| format!("删除记忆失败: {e}"))?;
-
-    Ok(rows > 0)
-}
-
-#[tauri::command]
-pub async fn unified_memory_search(
-    db: State<'_, DbConnection>,
-    query: String,
-    category: Option<MemoryCategory>,
-    limit: Option<usize>,
-) -> Result<Vec<UnifiedMemory>, String> {
-    info!("[Unified Memory] Search: {}", query);
-
-    let trimmed = query.trim();
-    if trimmed.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    let search_pattern = format!("%{}%", escape_like(trimmed));
-    let limit = limit.unwrap_or(DEFAULT_LIST_LIMIT).clamp(1, MAX_LIST_LIMIT) as i64;
-
-    let mut params: Vec<Value> = vec![
-        Value::from(search_pattern.clone()),
-        Value::from(search_pattern.clone()),
-        Value::from(search_pattern.clone()),
-    ];
-
-    let mut sql = String::from(
-        "SELECT id, session_id, memory_type, category, title, content, summary, tags, confidence, importance, access_count, last_accessed_at, source, created_at, updated_at, archived FROM unified_memory WHERE archived = 0 AND (title LIKE ? ESCAPE '\\\\' OR summary LIKE ? ESCAPE '\\\\' OR content LIKE ? ESCAPE '\\\\')",
-    );
-
-    if let Some(category) = category {
-        let encoded =
-            serde_json::to_string(&category).map_err(|e| format!("序列化 category 失败: {e}"))?;
-        sql.push_str(" AND category = ?");
-        params.push(Value::from(encoded));
-    }
-
-    sql.push_str(" ORDER BY updated_at DESC LIMIT ?");
-    params.push(Value::from(limit));
-
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("构建查询失败: {e}"))?;
-
-    let memories = stmt
-        .query_map(params_from_iter(params), parse_memory_row)
-        .map_err(|e| format!("搜索失败: {e}"))?
-        .collect::<Result<Vec<_>, rusqlite::Error>>()
-        .map_err(|e| format!("解析搜索结果失败: {e}"))?;
-
-    Ok(memories)
-}
-
-#[tauri::command]
-pub async fn unified_memory_stats(
-    db: State<'_, DbConnection>,
-) -> Result<MemoryStatsResponse, String> {
-    info!("[Unified Memory] Stats");
-
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    collect_unified_memory_stats(&conn)
-}
-
-pub(crate) fn collect_unified_memory_stats(
-    conn: &rusqlite::Connection,
-) -> Result<MemoryStatsResponse, String> {
-    let (total_entries, memory_count, storage_used): (i64, i64, i64) = conn
-        .query_row(
-            "SELECT COUNT(*), COUNT(DISTINCT session_id), COALESCE(SUM(length(title) + length(content) + length(summary) + length(tags)), 0) FROM unified_memory WHERE archived = 0",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .map_err(|e| format!("统计记忆失败: {e}"))?;
-
-    let mut category_counts: HashMap<String, u32> = HashMap::new();
-    let mut stmt = conn
-        .prepare(
-            "SELECT category, COUNT(*) FROM unified_memory WHERE archived = 0 GROUP BY category",
-        )
-        .map_err(|e| format!("构建分类统计查询失败: {e}"))?;
-
-    let rows = stmt
-        .query_map([], |row| {
-            let category_raw: String = row.get(0)?;
-            let count: i64 = row.get(1)?;
-            Ok((category_raw, count))
-        })
-        .map_err(|e| format!("分类统计查询失败: {e}"))?;
-
-    for row in rows.flatten() {
-        if let Some(category) = normalize_category_value(&row.0) {
-            category_counts.insert(category.to_string(), row.1.max(0) as u32);
-        }
-    }
-
-    let categories = ordered_categories()
-        .iter()
-        .map(|category| MemoryCategoryStat {
-            category: (*category).to_string(),
-            count: *category_counts.get(*category).unwrap_or(&0),
-        })
-        .collect();
-
-    Ok(MemoryStatsResponse {
-        total_entries: total_entries.max(0) as u32,
-        storage_used: storage_used.max(0) as u64,
-        memory_count: memory_count.max(0) as u32,
-        categories,
-    })
-}
-
-#[tauri::command]
-pub async fn unified_memory_analyze(
-    db: State<'_, DbConnection>,
-    global_config: State<'_, GlobalConfigManagerState>,
-    from_timestamp: Option<i64>,
-    to_timestamp: Option<i64>,
-) -> Result<MemoryAnalysisResult, String> {
-    info!(
-        "[Unified Memory] Analyze memories, from={:?}, to={:?}",
-        from_timestamp, to_timestamp
-    );
-
-    if let (Some(start), Some(end)) = (from_timestamp, to_timestamp) {
-        if start > end {
-            return Err("开始时间不能晚于结束时间".to_string());
-        }
-    }
-
-    let memory_config = global_config.config().memory;
-    let candidates = {
-        let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-        load_memory_candidates(&conn, from_timestamp, to_timestamp)?
-    };
-
-    analyze_unified_memory_candidates(&db, &memory_config, &candidates).await
 }
 
 pub(crate) async fn analyze_unified_memory_candidates(

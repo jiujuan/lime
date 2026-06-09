@@ -4,8 +4,17 @@ const agentAppApiMocks = vi.hoisted(() => ({
   selectAgentAppDirectory: vi.fn(),
 }));
 
+const externalUrlApiMocks = vi.hoisted(() => ({
+  openExternalUrlWithSystemBrowser: vi.fn(),
+}));
+
 vi.mock("@/lib/api/agentApps", () => ({
   selectAgentAppDirectory: agentAppApiMocks.selectAgentAppDirectory,
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser:
+    externalUrlApiMocks.openExternalUrlWithSystemBrowser,
 }));
 
 import {
@@ -62,6 +71,7 @@ describe("AgentAppHostBridge", () => {
     document.documentElement.removeAttribute("lang");
     document.documentElement.removeAttribute("style");
     agentAppApiMocks.selectAgentAppDirectory.mockReset();
+    externalUrlApiMocks.openExternalUrlWithSystemBrowser.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -549,6 +559,105 @@ describe("AgentAppHostBridge", () => {
     cleanup();
   });
 
+  it("host:openExternal 默认应委托系统浏览器 current 网关", async () => {
+    externalUrlApiMocks.openExternalUrlWithSystemBrowser.mockResolvedValue(
+      undefined,
+    );
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { frame, postMessage } = buildFrame();
+    const bridge = new AgentAppHostBridge({
+      frame,
+      appId,
+      entryKey,
+      displayName: "内容工厂",
+      entryRoute: "/dashboard",
+      entryUrl,
+    });
+    const cleanup = bridge.start();
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: buildAppMessage("host:openExternal", {
+          url: "https://lime.ai/docs",
+        }),
+        origin: runtimeOrigin,
+        source: frame.contentWindow,
+      }),
+    );
+    await flushBridgeTasks();
+
+    expect(
+      externalUrlApiMocks.openExternalUrlWithSystemBrowser,
+    ).toHaveBeenCalledWith("https://lime.ai/docs");
+    expect(windowOpen).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        payload: { opened: true },
+      }),
+      runtimeOrigin,
+    );
+
+    cleanup();
+  });
+
+  it("lime.ui openExternal 默认网关失败时应返回错误而不是 window.open 兜底", async () => {
+    externalUrlApiMocks.openExternalUrlWithSystemBrowser.mockRejectedValue(
+      new Error("open_external_url unavailable"),
+    );
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
+    const { frame, postMessage } = buildFrame();
+    const bridge = new AgentAppHostBridge({
+      frame,
+      appId,
+      entryKey,
+      displayName: "内容工厂",
+      entryRoute: "/dashboard",
+      entryUrl,
+    });
+    const cleanup = bridge.start();
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: buildAppMessage(
+          "capability:invoke",
+          {
+            capability: "lime.ui",
+            method: "openExternal",
+            input: { url: "https://lime.ai/docs" },
+          },
+          "req-open-external-fail",
+        ),
+        origin: runtimeOrigin,
+        source: frame.contentWindow,
+      }),
+    );
+    await flushBridgeTasks();
+
+    expect(
+      externalUrlApiMocks.openExternalUrlWithSystemBrowser,
+    ).toHaveBeenCalledWith("https://lime.ai/docs");
+    expect(windowOpen).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:error",
+        requestId: "req-open-external-fail",
+        payload: expect.objectContaining({
+          code: "upstream_failed",
+          message: "open_external_url unavailable",
+          ok: false,
+          error: expect.objectContaining({
+            capability: "lime.ui",
+            method: "openExternal",
+          }),
+        }),
+      }),
+      runtimeOrigin,
+    );
+
+    cleanup();
+  });
+
   it("lime.ui selectDirectory 应调用宿主封装目录选择命令", async () => {
     agentAppApiMocks.selectAgentAppDirectory.mockResolvedValue({
       path: "/Users/example/agent-app",
@@ -746,7 +855,10 @@ describe("AgentAppHostBridge", () => {
           data: buildAppMessage("capability:subscribe", {
             capability: "lime.agent",
             topic: "task",
-            input: { taskId: "task-1", bridgeAction: "contentFactoryProduction" },
+            input: {
+              taskId: "task-1",
+              bridgeAction: "contentFactoryProduction",
+            },
             pollIntervalMs: 250,
           }),
           origin: runtimeOrigin,
@@ -903,9 +1015,7 @@ describe("AgentAppHostBridge", () => {
   it("订阅 task 时应同时接入 AgentRuntime event bus 并转发运行时事件", async () => {
     vi.useFakeTimers();
     const { frame, postMessage } = buildFrame();
-    let runtimeHandler:
-      | ((event: { payload: unknown }) => void)
-      | undefined;
+    let runtimeHandler: ((event: { payload: unknown }) => void) | undefined;
     const runtimeUnlisten = vi.fn();
     const listenRuntimeEventMock = vi.fn(
       async (
@@ -942,7 +1052,10 @@ describe("AgentAppHostBridge", () => {
           data: buildAppMessage("capability:subscribe", {
             capability: "lime.agent",
             topic: "task",
-            input: { taskId: "task-1", bridgeAction: "contentFactoryProduction" },
+            input: {
+              taskId: "task-1",
+              bridgeAction: "contentFactoryProduction",
+            },
             pollIntervalMs: 250,
           }),
           origin: runtimeOrigin,
@@ -1012,9 +1125,7 @@ describe("AgentAppHostBridge", () => {
   it("Host 已封装 runtimeProcess 时应优先转发 canonical 过程而不是从事件重建", async () => {
     vi.useFakeTimers();
     const { frame, postMessage } = buildFrame();
-    let runtimeHandler:
-      | ((event: { payload: unknown }) => void)
-      | undefined;
+    let runtimeHandler: ((event: { payload: unknown }) => void) | undefined;
     const listenRuntimeEventMock = vi.fn(
       async (
         _eventName: string,
@@ -1050,7 +1161,10 @@ describe("AgentAppHostBridge", () => {
           data: buildAppMessage("capability:subscribe", {
             capability: "lime.agent",
             topic: "task",
-            input: { taskId: "task-1", bridgeAction: "contentFactoryProduction" },
+            input: {
+              taskId: "task-1",
+              bridgeAction: "contentFactoryProduction",
+            },
             pollIntervalMs: 250,
           }),
           origin: runtimeOrigin,
@@ -1077,7 +1191,11 @@ describe("AgentAppHostBridge", () => {
             executionText: "后端执行",
             skillNames: ["article-writer"],
             invokedSkillNames: ["article-writer"],
-            model: { provider: "openai", model: "gpt-4.1", label: "openai/gpt-4.1" },
+            model: {
+              provider: "openai",
+              model: "gpt-4.1",
+              label: "openai/gpt-4.1",
+            },
             usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
             cost: { estimatedTotalCost: 0.0002, currency: "USD" },
             terminal: false,
@@ -1115,7 +1233,6 @@ describe("AgentAppHostBridge", () => {
       vi.useRealTimers();
     }
   });
-
 
   it("成功终态未带 artifact 时应继续短轮询直到最终 patch replay", async () => {
     vi.useFakeTimers();
@@ -1165,7 +1282,10 @@ describe("AgentAppHostBridge", () => {
           data: buildAppMessage("capability:subscribe", {
             capability: "lime.agent",
             topic: "task",
-            input: { taskId: "task-1", bridgeAction: "contentFactoryProduction" },
+            input: {
+              taskId: "task-1",
+              bridgeAction: "contentFactoryProduction",
+            },
             pollIntervalMs: 250,
           }),
           origin: runtimeOrigin,
@@ -1279,7 +1399,10 @@ describe("AgentAppHostBridge", () => {
           data: buildAppMessage("capability:subscribe", {
             capability: "lime.agent",
             topic: "task",
-            input: { taskId: "task-1", bridgeAction: "contentFactoryProduction" },
+            input: {
+              taskId: "task-1",
+              bridgeAction: "contentFactoryProduction",
+            },
             pollIntervalMs: 250,
           }),
           origin: runtimeOrigin,

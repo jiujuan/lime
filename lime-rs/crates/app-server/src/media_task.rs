@@ -6,6 +6,7 @@ use app_server_protocol::MediaTaskArtifactListParams;
 use app_server_protocol::MediaTaskArtifactListResponse;
 use app_server_protocol::MediaTaskArtifactLookupParams;
 use app_server_protocol::MediaTaskArtifactResponse;
+use app_server_protocol::MediaTaskArtifactVideoCreateParams;
 use lime_media_runtime::list_task_outputs;
 use lime_media_runtime::load_task_output;
 use lime_media_runtime::patch_task_artifact;
@@ -25,8 +26,10 @@ use std::path::Path;
 const AUDIO_TASK_DEFAULT_MIME_TYPE: &str = "audio/mpeg";
 const AUDIO_TASK_COMPLETION_WORKER_ID: &str = "app-server-audio-output-writer";
 const IMAGE_GENERATION_CONTRACT_KEY: &str = "image_generation";
+const VIDEO_GENERATION_CONTRACT_KEY: &str = "video_generation";
 const VOICE_GENERATION_CONTRACT_KEY: &str = "voice_generation";
 const IMAGE_GENERATION_ROUTING_SLOT: &str = "image_generation_model";
+const VIDEO_GENERATION_ROUTING_SLOT: &str = "video_generation_model";
 const VOICE_GENERATION_ROUTING_SLOT: &str = "voice_generation_model";
 
 fn data_error(error: impl std::fmt::Display) -> String {
@@ -115,6 +118,29 @@ fn build_audio_idempotency_key(params: &MediaTaskArtifactAudioCreateParams) -> S
     format!("app-server:media:audio:{:x}", sha256_json(&seed))
 }
 
+fn build_video_idempotency_key(params: &MediaTaskArtifactVideoCreateParams) -> String {
+    let seed = json!({
+        "kind": "video",
+        "projectRootPath": params.project_root_path,
+        "prompt": params.prompt,
+        "providerId": params.provider_id,
+        "model": params.model,
+        "threadId": params.thread_id,
+        "turnId": params.turn_id,
+        "contentId": params.content_id,
+        "aspectRatio": params.aspect_ratio,
+        "resolution": params.resolution,
+        "duration": params.duration,
+        "imageUrl": params.image_url,
+        "endImageUrl": params.end_image_url,
+        "seed": params.seed,
+        "generateAudio": params.generate_audio,
+        "cameraFixed": params.camera_fixed,
+        "outputPath": params.output_path,
+    });
+    format!("app-server:media:video:{:x}", sha256_json(&seed))
+}
+
 fn sha256_json(value: &Value) -> sha2::digest::Output<sha2::Sha256> {
     use sha2::Digest;
     sha2::Sha256::digest(serde_json::to_string(value).unwrap_or_default().as_bytes())
@@ -162,6 +188,32 @@ fn audio_runtime_contract(params: &MediaTaskArtifactAudioCreateParams) -> Value 
             "executor_binding": {
                 "executor_kind": "app_server",
                 "binding_key": "mediaTaskArtifact/audio/create"
+            },
+            "limecore_policy_refs": [
+                "model_catalog",
+                "provider_offer",
+                "tenant_feature_flags"
+            ]
+        })
+    })
+}
+
+fn video_runtime_contract(params: &MediaTaskArtifactVideoCreateParams) -> Value {
+    params.runtime_contract.clone().unwrap_or_else(|| {
+        json!({
+            "contract_key": VIDEO_GENERATION_CONTRACT_KEY,
+            "modality": "video",
+            "routing_slot": VIDEO_GENERATION_ROUTING_SLOT,
+            "required_capabilities": ["video_generation"],
+            "execution_profile": {
+                "profile_key": "video_generation_profile"
+            },
+            "executor_adapter": {
+                "adapter_key": "app-server:media_task_artifact:video"
+            },
+            "executor_binding": {
+                "executor_kind": "app_server",
+                "binding_key": "mediaTaskArtifact/video/create"
             },
             "limecore_policy_refs": [
                 "model_catalog",
@@ -223,6 +275,48 @@ fn create_image_payload(params: &MediaTaskArtifactImageCreateParams) -> Value {
         "target_output_ref_id": params.target_output_ref_id,
         "reference_images": params.reference_images,
         "storyboard_slots": params.storyboard_slots,
+    })
+}
+
+fn create_video_payload(params: &MediaTaskArtifactVideoCreateParams) -> Value {
+    let modality_contract_key = normalize_optional_string(params.modality_contract_key.clone())
+        .unwrap_or_else(|| VIDEO_GENERATION_CONTRACT_KEY.to_string());
+    let modality =
+        normalize_optional_string(params.modality.clone()).unwrap_or_else(|| "video".to_string());
+    let routing_slot = normalize_optional_string(params.routing_slot.clone())
+        .unwrap_or_else(|| VIDEO_GENERATION_ROUTING_SLOT.to_string());
+    let required_capabilities = if params.required_capabilities.is_empty() {
+        vec!["video_generation".to_string()]
+    } else {
+        normalize_string_list(params.required_capabilities.clone())
+    };
+
+    json!({
+        "prompt": params.prompt,
+        "project_root_path": params.project_root_path,
+        "raw_text": params.raw_text,
+        "aspect_ratio": params.aspect_ratio,
+        "resolution": params.resolution,
+        "duration": params.duration,
+        "image_url": params.image_url,
+        "end_image_url": params.end_image_url,
+        "seed": params.seed,
+        "generate_audio": params.generate_audio,
+        "camera_fixed": params.camera_fixed,
+        "provider_id": params.provider_id,
+        "model": params.model,
+        "session_id": params.session_id,
+        "thread_id": params.thread_id,
+        "turn_id": params.turn_id,
+        "project_id": params.project_id,
+        "content_id": params.content_id,
+        "entry_source": normalize_optional_string(params.entry_source.clone()).unwrap_or_else(|| "video_workspace".to_string()),
+        "modality_contract_key": modality_contract_key,
+        "modality": modality,
+        "required_capabilities": required_capabilities,
+        "routing_slot": routing_slot,
+        "runtime_contract": video_runtime_contract(params),
+        "requested_target": normalize_optional_string(params.requested_target.clone()).unwrap_or_else(|| "video".to_string()),
     })
 }
 
@@ -685,6 +779,32 @@ pub fn create_audio_generation_task_artifact(
             output_path: output_path.as_deref(),
             artifact_dir: None,
             idempotency_key: Some(build_audio_idempotency_key(&params).as_str()),
+            relationships: TaskRelationships::default(),
+        },
+    )
+    .map_err(data_error)?;
+    response_from_output(output)
+}
+
+pub fn create_video_generation_task_artifact(
+    params: MediaTaskArtifactVideoCreateParams,
+) -> Result<MediaTaskArtifactResponse, String> {
+    let workspace_root = normalize_required_string(&params.project_root_path, "projectRootPath")?;
+    let prompt = normalize_required_string(&params.prompt, "prompt")?;
+    let mut params = params;
+    params.project_root_path = workspace_root.clone();
+    params.prompt = prompt;
+    let output_path = normalize_optional_string(params.output_path.clone());
+    let output = write_task_artifact(
+        Path::new(&workspace_root),
+        MediaTaskType::VideoGenerate,
+        normalize_optional_string(params.title.clone()),
+        create_video_payload(&params),
+        TaskWriteOptions {
+            status: Some("pending_submit".to_string()),
+            output_path: output_path.as_deref(),
+            artifact_dir: None,
+            idempotency_key: Some(build_video_idempotency_key(&params).as_str()),
             relationships: TaskRelationships::default(),
         },
     )

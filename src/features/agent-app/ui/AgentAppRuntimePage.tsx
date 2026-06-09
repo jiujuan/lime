@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import {
+  AGENT_APPS_CHANGED_EVENT,
   getAgentAppCloudCatalog,
   listInstalledAgentApps,
   startAgentAppUiRuntime,
@@ -75,9 +76,8 @@ const RUNTIME_PAGE_PROFILE = buildUiRuntimeCapabilityProfile({
   uiRuntimeEnabled: true,
 });
 const RUNTIME_PAGE_FLAGS = RUNTIME_PAGE_PROFILE.featureFlags;
-const NEGATIVE_AGENT_RUN_ACTION_CONTROLS = new Set<
-  AgentAppRunProjectionActionControl
->(["reject", "interrupt", "stop"]);
+const NEGATIVE_AGENT_RUN_ACTION_CONTROLS =
+  new Set<AgentAppRunProjectionActionControl>(["reject", "interrupt", "stop"]);
 const AGENT_RUN_UI_STORAGE_PREFIX = "lime.agentApp.hostAgentRunUi.v1";
 
 function isUiEntry(entry: ProjectedEntry): boolean {
@@ -108,16 +108,14 @@ function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function parseAppVersion(value: string | undefined): [number, number, number] | null {
+function parseAppVersion(
+  value: string | undefined,
+): [number, number, number] | null {
   const match = value?.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/i);
   if (!match) {
     return null;
   }
-  return [
-    Number(match[1] ?? 0),
-    Number(match[2] ?? 0),
-    Number(match[3] ?? 0),
-  ];
+  return [Number(match[1] ?? 0), Number(match[2] ?? 0), Number(match[3] ?? 0)];
 }
 
 function compareAppVersion(
@@ -247,7 +245,9 @@ function normalizeAgentRunActionType(
   return "ask_user";
 }
 
-function buildAgentRunActionResponse(control: AgentAppRunProjectionActionControl) {
+function buildAgentRunActionResponse(
+  control: AgentAppRunProjectionActionControl,
+) {
   return {
     confirmed: !NEGATIVE_AGENT_RUN_ACTION_CONTROLS.has(control),
     response: control,
@@ -264,7 +264,9 @@ function buildAgentRunUiStorageKey(
   return `${AGENT_RUN_UI_STORAGE_PREFIX}:${appId}:${entryKey}`;
 }
 
-function readStoredAgentRunUi(storageKey: string | null): AgentRunUiState | null {
+function readStoredAgentRunUi(
+  storageKey: string | null,
+): AgentRunUiState | null {
   if (!storageKey || typeof window === "undefined") {
     return null;
   }
@@ -313,10 +315,14 @@ function readAgentRunItemKey(item: unknown, index: number): string {
   }
   return [
     readString(item.eventId) ?? readString(item.id),
-    readString(item.eventType) ?? readString(item.type) ?? readString(item.kind),
+    readString(item.eventType) ??
+      readString(item.type) ??
+      readString(item.kind),
     readString(item.status) ?? readString(item.statusText),
     readString(item.message) ?? readString(item.title),
-    readString(item.occurredAt) ?? readString(item.at) ?? readString(item.createdAt),
+    readString(item.occurredAt) ??
+      readString(item.at) ??
+      readString(item.createdAt),
   ]
     .filter(Boolean)
     .join("|");
@@ -348,7 +354,10 @@ function mergeAgentRunItems(
   return merged.slice(-limit);
 }
 
-function mergeStringArray(previous: unknown, next: unknown): unknown[] | undefined {
+function mergeStringArray(
+  previous: unknown,
+  next: unknown,
+): unknown[] | undefined {
   const merged = mergeAgentRunItems(previous, next);
   return merged?.length ? merged : undefined;
 }
@@ -648,6 +657,19 @@ export function AgentAppRuntimePage({
 
   useEffect(() => {
     void refresh();
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const reload = () => {
+      void refresh();
+    };
+    window.addEventListener(AGENT_APPS_CHANGED_EVENT, reload);
+    window.addEventListener("focus", reload);
+    return () => {
+      window.removeEventListener(AGENT_APPS_CHANGED_EVENT, reload);
+      window.removeEventListener("focus", reload);
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -747,56 +769,64 @@ export function AgentAppRuntimePage({
     setAppInfoOpen(false);
   }, [agentRunStorageKey]);
 
-  const openAgentRunUi = useCallback((request: AgentAppHostAgentRunUiRequest) => {
-    const now = new Date().toISOString();
-    const mode = request.mode ?? "drawer";
-    setAgentRunUi((previous) => {
-      if (
-        !previous &&
-        matchesDismissedAgentRun(dismissedAgentRunRef.current, request)
-      ) {
-        return null;
-      }
-      dismissedAgentRunRef.current = null;
-      const next = mergeAgentRunUiState(previous, request, now, mode);
-      persistAgentRunUi(agentRunStorageKeyRef.current, next);
-      return next;
-    });
-    return {
-      opened: true as const,
-      surface: "host_agent_run" as const,
-      mode,
-      taskId: request.taskId,
-    };
-  }, []);
+  const openAgentRunUi = useCallback(
+    (request: AgentAppHostAgentRunUiRequest) => {
+      const now = new Date().toISOString();
+      const mode = request.mode ?? "drawer";
+      setAgentRunUi((previous) => {
+        if (
+          !previous &&
+          matchesDismissedAgentRun(dismissedAgentRunRef.current, request)
+        ) {
+          return null;
+        }
+        dismissedAgentRunRef.current = null;
+        const next = mergeAgentRunUiState(previous, request, now, mode);
+        persistAgentRunUi(agentRunStorageKeyRef.current, next);
+        return next;
+      });
+      return {
+        opened: true as const,
+        surface: "host_agent_run" as const,
+        mode,
+        taskId: request.taskId,
+      };
+    },
+    [],
+  );
 
-  const updateAgentRunUi = useCallback((request: AgentAppHostAgentRunUiRequest) => {
-    const now = new Date().toISOString();
-    setAgentRunUi((previous) => {
-      if (
-        !previous &&
-        matchesDismissedAgentRun(dismissedAgentRunRef.current, request)
-      ) {
-        return null;
-      }
-      const next = mergeAgentRunUiState(
-        previous,
-        request,
-        now,
-        previous?.mode ?? "drawer",
-      );
-      persistAgentRunUi(agentRunStorageKeyRef.current, next);
-      return next;
-    });
-    return {
-      updated: true as const,
-      surface: "host_agent_run" as const,
-      taskId: request.taskId,
-    };
-  }, []);
+  const updateAgentRunUi = useCallback(
+    (request: AgentAppHostAgentRunUiRequest) => {
+      const now = new Date().toISOString();
+      setAgentRunUi((previous) => {
+        if (
+          !previous &&
+          matchesDismissedAgentRun(dismissedAgentRunRef.current, request)
+        ) {
+          return null;
+        }
+        const next = mergeAgentRunUiState(
+          previous,
+          request,
+          now,
+          previous?.mode ?? "drawer",
+        );
+        persistAgentRunUi(agentRunStorageKeyRef.current, next);
+        return next;
+      });
+      return {
+        updated: true as const,
+        surface: "host_agent_run" as const,
+        taskId: request.taskId,
+      };
+    },
+    [],
+  );
 
   const closeAgentRunUi = useCallback(
-    (request: Pick<AgentAppHostAgentRunUiRequest, "taskId" | "bridgeAction">) => {
+    (
+      request: Pick<AgentAppHostAgentRunUiRequest, "taskId" | "bridgeAction">,
+    ) => {
       const requestKey = buildAgentRunDismissalKey(request);
       setAgentRunUi((previous) => {
         if (!previous) {
@@ -1069,7 +1099,13 @@ export function AgentAppRuntimePage({
                   <dt className="text-muted-foreground">
                     {t("agentApp.apps.runtime.appInfo.latestVersion")}
                   </dt>
-                  <dd className={upgradeAvailable ? "font-semibold text-rose-700 dark:text-rose-300" : "font-medium text-foreground"}>
+                  <dd
+                    className={
+                      upgradeAvailable
+                        ? "font-semibold text-rose-700 dark:text-rose-300"
+                        : "font-medium text-foreground"
+                    }
+                  >
                     v{selectedCloudApp.version}
                   </dd>
                 </div>
