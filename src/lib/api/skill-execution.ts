@@ -3,7 +3,6 @@
  * @description 封装 Skill 执行相关的 Desktop Host / App Server 命令调用
  *
  * 提供以下功能：
- * - executeSkill: 执行指定的 Skill
  * - listExecutableSkills: 列出所有可执行的 Skills
  * - getSkillDetail: 获取 Skill 详情
  *
@@ -12,14 +11,12 @@
  */
 
 import { AppServerClient } from "@/lib/api/appServer";
-import { safeInvoke } from "@/lib/dev-bridge";
 import {
   METHOD_SKILL_LIST,
   METHOD_SKILL_READ,
   type SkillListResponse as AppServerSkillListResponse,
   type SkillReadResponse as AppServerSkillReadResponse,
 } from "../../../packages/app-server-client/src/protocol";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 type SkillExecutionAppServerClient = Pick<AppServerClient, "request">;
 
@@ -30,24 +27,6 @@ async function requestSkillExecutionAppServer<T>(
 ): Promise<T> {
   const response = await appServerClient.request<T>(method, params);
   return response.result;
-}
-
-async function invokeSkillExecutionCommand<T>(
-  command: string,
-  args: Record<string, unknown>,
-  validate: (
-    command: string,
-    value: unknown,
-  ) => asserts value is T,
-): Promise<T> {
-  const result = await safeInvoke<unknown>(command, args);
-  assertNotDiagnosticFacade(
-    command,
-    result,
-    "真实 Skill execution current 通道",
-  );
-  validate(command, result);
-  return result;
 }
 
 // ============================================================================
@@ -150,167 +129,6 @@ export interface StepResult {
   error?: string;
 }
 
-/**
- * Skill 执行结果
- *
- * 用于 executeSkill 返回的执行结果
- */
-export interface SkillExecutionResult {
-  /** 是否成功 */
-  success: boolean;
-  /** 最终输出 */
-  output?: string;
-  /** 错误信息 */
-  error?: string;
-  /** 已完成的步骤结果 */
-  steps_completed: StepResult[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function assertSkillExecutionResult(
-  command: string,
-  value: unknown,
-): asserts value is SkillExecutionResult {
-  if (
-    !isRecord(value) ||
-    typeof value.success !== "boolean" ||
-    !Array.isArray(value.steps_completed)
-  ) {
-    throw new Error(`${command} did not return a skill execution result`);
-  }
-
-  for (const step of value.steps_completed) {
-    if (
-      !isRecord(step) ||
-      typeof step.step_id !== "string" ||
-      typeof step.step_name !== "string" ||
-      typeof step.success !== "boolean"
-    ) {
-      throw new Error(`${command} did not return valid skill execution steps`);
-    }
-  }
-}
-
-/**
- * Skill 执行请求参数
- *
- * 统一对象参数，避免位置参数导致的调用混乱。
- */
-export interface ExecuteSkillRequest {
-  /** Skill 名称 */
-  skillName: string;
-  /** 用户输入 */
-  userInput: string;
-  /** 图片输入（可选） */
-  images?: SkillExecutionImageInput[];
-  /** 结构化请求上下文（可选） */
-  requestContext?: Record<string, unknown>;
-  /** Provider 覆盖 */
-  providerOverride?: string;
-  /** 模型覆盖 */
-  modelOverride?: string;
-  /** 执行 ID（用于事件关联） */
-  executionId?: string;
-  /** 会话 ID（用于上下文延续） */
-  sessionId?: string;
-}
-
-export interface SkillExecutionImageInput {
-  data: string;
-  mediaType: string;
-}
-
-// ============================================================================
-// Desktop Host 事件 Payload 类型
-// ============================================================================
-
-/**
- * 步骤开始事件 Payload
- *
- * 当 Skill 执行步骤开始时发送
- * 事件名: skill:step_start
- */
-export interface StepStartPayload {
-  /** 执行 ID */
-  execution_id: string;
-  /** 步骤 ID */
-  step_id: string;
-  /** 步骤名称 */
-  step_name: string;
-  /** 当前步骤序号（从 1 开始） */
-  current_step: number;
-  /** 总步骤数 */
-  total_steps: number;
-}
-
-/**
- * 步骤完成事件 Payload
- *
- * 当 Skill 执行步骤完成时发送
- * 事件名: skill:step_complete
- */
-export interface StepCompletePayload {
-  /** 执行 ID */
-  execution_id: string;
-  /** 步骤 ID */
-  step_id: string;
-  /** 输出内容 */
-  output: string;
-}
-
-/**
- * 步骤错误事件 Payload
- *
- * 当 Skill 执行步骤出错时发送
- * 事件名: skill:step_error
- */
-export interface StepErrorPayload {
-  /** 执行 ID */
-  execution_id: string;
-  /** 步骤 ID */
-  step_id: string;
-  /** 错误信息 */
-  error: string;
-  /** 是否会重试 */
-  will_retry: boolean;
-}
-
-/**
- * 执行完成事件 Payload
- *
- * 当 Skill 执行完成时发送
- * 事件名: skill:complete
- */
-export interface ExecutionCompletePayload {
-  /** 执行 ID */
-  execution_id: string;
-  /** 是否成功 */
-  success: boolean;
-  /** 输出内容（成功时） */
-  output?: string;
-  /** 错误信息（失败时） */
-  error?: string;
-}
-
-// ============================================================================
-// Desktop Host 事件名常量
-// ============================================================================
-
-/** Skill 执行相关的 Desktop Host 事件名 */
-export const SKILL_EVENTS = {
-  /** 步骤开始事件 */
-  STEP_START: "skill:step_start",
-  /** 步骤完成事件 */
-  STEP_COMPLETE: "skill:step_complete",
-  /** 步骤错误事件 */
-  STEP_ERROR: "skill:step_error",
-  /** 执行完成事件 */
-  COMPLETE: "skill:complete",
-} as const;
-
 // ============================================================================
 // API 函数
 // ============================================================================
@@ -321,24 +139,6 @@ export const SKILL_EVENTS = {
  * 封装 Skill 执行相关的 Desktop Host / App Server 命令调用
  */
 export const skillExecutionApi = {
-  /**
-   * 执行指定的 Skill
-   *
-   * @param request - 执行参数
-   * @returns 执行结果
-   *
-   * @requirements 3.1, 3.2, 3.5
-   */
-  async executeSkill(
-    request: ExecuteSkillRequest,
-  ): Promise<SkillExecutionResult> {
-    return invokeSkillExecutionCommand(
-      "execute_skill",
-      request as unknown as Record<string, unknown>,
-      assertSkillExecutionResult,
-    );
-  },
-
   /**
    * 列出所有可执行的 Skills
    *

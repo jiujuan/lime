@@ -1,14 +1,12 @@
-use super::{args_or_default, get_string_arg, parse_nested_arg};
+use super::{args_or_default, get_string_arg};
 use crate::dev_bridge::DevBridgeState;
 use serde_json::Value as JsonValue;
-
-type DynError = Box<dyn std::error::Error>;
 
 pub(super) async fn try_handle(
     _state: &DevBridgeState,
     cmd: &str,
     args: Option<&JsonValue>,
-) -> Result<Option<JsonValue>, DynError> {
+) -> Result<Option<JsonValue>, Box<dyn std::error::Error>> {
     let result = match cmd {
         "session_files_save_file" => {
             let args = args_or_default(args);
@@ -42,49 +40,6 @@ pub(super) async fn try_handle(
             serde_json::json!(storage
                 .resolve_file_path(&session_id, &file_name)
                 .map_err(|error| format!("解析会话文件路径失败: {error}"))?)
-        }
-        "save_layered_design_project_export" => {
-            let args = args_or_default(args);
-            let request: crate::commands::layered_design_cmd::SaveLayeredDesignProjectExportRequest =
-                parse_nested_arg(&args, "request")?;
-            serde_json::to_value(
-                crate::commands::layered_design_cmd::save_layered_design_project_export_inner(
-                    request,
-                )
-                .await
-                .map_err(to_dyn_error)?,
-            )?
-        }
-        "read_layered_design_project_export" => {
-            let args = args_or_default(args);
-            let request: crate::commands::layered_design_cmd::ReadLayeredDesignProjectExportRequest =
-                parse_nested_arg(&args, "request")?;
-            serde_json::to_value(
-                crate::commands::layered_design_cmd::read_layered_design_project_export_inner(
-                    request,
-                )
-                .map_err(to_dyn_error)?,
-            )?
-        }
-        "recognize_layered_design_text" => {
-            let args = args_or_default(args);
-            let request: crate::commands::layered_design_cmd::RecognizeLayeredDesignTextRequest =
-                parse_nested_arg(&args, "request")?;
-            serde_json::to_value(
-                crate::commands::layered_design_cmd::recognize_layered_design_text_inner(request)
-                    .map_err(to_dyn_error)?,
-            )?
-        }
-        "analyze_layered_design_flat_image" => {
-            let args = args_or_default(args);
-            let request: crate::commands::layered_design_cmd::AnalyzeLayeredDesignFlatImageRequest =
-                parse_nested_arg(&args, "request")?;
-            serde_json::to_value(
-                crate::commands::layered_design_cmd::analyze_layered_design_flat_image_inner(
-                    request,
-                )
-                .map_err(to_dyn_error)?,
-            )?
         }
         _ => return Ok(None),
     };

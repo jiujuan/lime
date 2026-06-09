@@ -2,31 +2,9 @@ use super::agentruntime_profile::AgentRuntimeProfileStream;
 use super::runtime_turn::{
     emit_agent_runtime_profile_event_with_port, TauriRuntimeProjectionEventPort,
 };
-use super::session_runtime::delete_runtime_session_internal_with_runtime;
 use super::*;
 use lime_agent::{build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent};
 use lime_core::workspace::WorkspaceSettings;
-use tauri::Manager;
-
-/// 统一运行时：删除会话。
-#[tauri::command]
-pub async fn agent_runtime_delete_session(
-    app: AppHandle,
-    state: State<'_, AsterAgentState>,
-    db: State<'_, DbConnection>,
-    session_id: String,
-) -> Result<(), String> {
-    let trimmed_session_id = session_id.trim().to_string();
-    let _ = state.cancel_session(&trimmed_session_id).await;
-    let _ = clear_runtime_queue_service(&app, &trimmed_session_id).await;
-    delete_runtime_session_internal_with_runtime(
-        db.inner(),
-        state.inner(),
-        app.state::<crate::mcp::McpManagerState>().inner(),
-        &trimmed_session_id,
-    )
-    .await
-}
 
 /// 确认权限请求
 #[derive(Debug, Deserialize)]
@@ -442,17 +420,6 @@ pub(crate) fn build_runtime_action_scope(
         thread_id,
         turn_id,
     })
-}
-
-/// 统一运行时：响应工具确认 / ask / elicitation。
-#[tauri::command]
-pub async fn agent_runtime_respond_action(
-    app: AppHandle,
-    state: State<'_, AsterAgentState>,
-    db: State<'_, DbConnection>,
-    request: AgentRuntimeRespondActionRequest,
-) -> Result<(), String> {
-    respond_runtime_action_internal(&app, state.inner(), db.inner(), request).await
 }
 
 pub(crate) async fn respond_runtime_action_internal(

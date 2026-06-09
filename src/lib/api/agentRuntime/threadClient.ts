@@ -3,19 +3,23 @@ import {
   AppServerClient,
   AppServerRpcError,
   isAppServerJsonRpcNotification,
+  type AppServerAgentSessionActionReplayResponse,
   type AppServerAgentAttachment,
   type AppServerAgentEvent,
+  type AppServerAgentSessionFileCheckpointDetail,
+  type AppServerAgentSessionFileCheckpointDiffResponse,
+  type AppServerAgentSessionFileCheckpointListResponse,
+  type AppServerAgentSessionFileCheckpointRestoreResponse,
+  type AppServerAgentSessionFileCheckpointSummary,
   type AppServerAgentSessionActionRespondParams,
   type AppServerAgentSessionActionScope,
   type AppServerAgentSessionTurnCancelParams,
   type AppServerAgentSessionTurnStartParams,
   type AppServerJsonRpcNotification,
 } from "@/lib/api/appServer";
-import { isDevBridgeAvailable } from "@/lib/dev-bridge";
-import { isElectronHostCommandAvailable } from "@/lib/electron-host";
+import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
 import { publishAgentRuntimeEvent } from "../agentRuntimeEvents";
 import { createAppServerReadModelClient } from "./appServerReadModelClient";
-import { AGENT_RUNTIME_COMMANDS } from "./commandManifest.generated";
 import {
   invokeAgentRuntimeCommand,
   type AgentRuntimeCommandInvoke,
@@ -27,6 +31,7 @@ import type {
   AgentRuntimeFileCheckpointDiffResult,
   AgentRuntimeFileCheckpointListResult,
   AgentRuntimeFileCheckpointRestoreResult,
+  AgentRuntimeFileCheckpointSummary,
   AgentRuntimeGetFileCheckpointRequest,
   AgentRuntimeInterruptTurnRequest,
   AgentRuntimeListFileCheckpointsRequest,
@@ -41,14 +46,26 @@ import type {
   AgentRuntimeThreadReadModel,
 } from "./types";
 
-const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_EVENT_DRAIN_LIMIT = 50;
 const APP_SERVER_EVENT_DRAIN_INTERVAL_MS = 250;
 const APP_SERVER_EVENT_ROUTE_TTL_MS = 30 * 60 * 1000;
 
 export type AgentRuntimeAppServerClient = Pick<
   AppServerClient,
-  "readSession" | "startTurn" | "cancelTurn" | "respondAction" | "drainEvents"
+  | "readSession"
+  | "startTurn"
+  | "cancelTurn"
+  | "replayAction"
+  | "compactAgentSession"
+  | "resumeAgentSessionThread"
+  | "removeAgentSessionQueuedTurn"
+  | "promoteAgentSessionQueuedTurn"
+  | "respondAction"
+  | "drainEvents"
+  | "listAgentSessionFileCheckpoints"
+  | "getAgentSessionFileCheckpoint"
+  | "diffAgentSessionFileCheckpoint"
+  | "restoreAgentSessionFileCheckpoint"
 >;
 
 export interface AgentRuntimeThreadClientDeps {
@@ -64,6 +81,7 @@ export function createThreadClient({
   isAppServerTurnLifecycleAvailable = defaultIsAppServerTurnLifecycleAvailable,
   enableAppServerEventDrain,
 }: AgentRuntimeThreadClientDeps = {}) {
+  void invokeCommand;
   const appServerReadModelClient = createAppServerReadModelClient({
     appServerClient,
   });
@@ -122,45 +140,71 @@ export function createThreadClient({
   async function compactAgentRuntimeSession(
     request: AgentRuntimeCompactSessionRequest,
   ): Promise<void> {
-    const command = AGENT_RUNTIME_COMMANDS.compactSession;
-    const result = await invokeCommand(command, { request });
-    assertVoidResult(command, result);
+    const result = await appServerClient.compactAgentSession({
+      sessionId: request.session_id,
+      eventName: request.event_name,
+    });
+    publishAppServerAgentSessionNotifications(
+      request.event_name,
+      result.notifications,
+    );
   }
 
   async function resumeAgentRuntimeThread(
     request: AgentRuntimeResumeThreadRequest,
   ): Promise<boolean> {
-    const command = AGENT_RUNTIME_COMMANDS.resumeThread;
-    const result = await invokeCommand(command, { request });
-    assertBooleanResult(command, result);
-    return result;
+    const result = await appServerClient.resumeAgentSessionThread({
+      sessionId: request.session_id,
+    });
+    publishAppServerAgentSessionNotifications(
+      `agentSession/event/${request.session_id}`,
+      result.notifications,
+    );
+    return result.result.resumed === true;
   }
 
   async function replayAgentRuntimeRequest(
     request: AgentRuntimeReplayRequestRequest,
   ): Promise<AgentRuntimeReplayedActionRequiredView | null> {
-    const command = AGENT_RUNTIME_COMMANDS.replayRequest;
-    const result = await invokeCommand(command, { request });
-    assertReplayedActionRequiredViewOrNull(command, result);
+    const response = await appServerClient.replayAction(
+      appServerActionReplayParamsFromRequest(request),
+    );
+    const result = agentRuntimeReplayedActionFromAppServer(
+      response.result.action,
+    );
+    assertReplayedActionRequiredViewOrNull(
+      "agentSession/action/replay",
+      result,
+    );
     return result;
   }
 
   async function removeAgentRuntimeQueuedTurn(
     request: AgentRuntimeRemoveQueuedTurnRequest,
   ): Promise<boolean> {
-    const command = AGENT_RUNTIME_COMMANDS.removeQueuedTurn;
-    const result = await invokeCommand(command, { request });
-    assertBooleanResult(command, result);
-    return result;
+    const result = await appServerClient.removeAgentSessionQueuedTurn({
+      sessionId: request.session_id,
+      queuedTurnId: request.queued_turn_id,
+    });
+    publishAppServerAgentSessionNotifications(
+      `agentSession/event/${request.session_id}`,
+      result.notifications,
+    );
+    return result.result.removed === true;
   }
 
   async function promoteAgentRuntimeQueuedTurn(
     request: AgentRuntimePromoteQueuedTurnRequest,
   ): Promise<boolean> {
-    const command = AGENT_RUNTIME_COMMANDS.promoteQueuedTurn;
-    const result = await invokeCommand(command, { request });
-    assertBooleanResult(command, result);
-    return result;
+    const result = await appServerClient.promoteAgentSessionQueuedTurn({
+      sessionId: request.session_id,
+      queuedTurnId: request.queued_turn_id,
+    });
+    publishAppServerAgentSessionNotifications(
+      `agentSession/event/${request.session_id}`,
+      result.notifications,
+    );
+    return result.result.promoted === true;
   }
 
   async function respondAgentRuntimeAction(
@@ -204,37 +248,46 @@ export function createThreadClient({
   async function listAgentRuntimeFileCheckpoints(
     request: AgentRuntimeListFileCheckpointsRequest,
   ): Promise<AgentRuntimeFileCheckpointListResult> {
-    const command = AGENT_RUNTIME_COMMANDS.listFileCheckpoints;
-    const result = await invokeCommand(command, { request });
-    assertFileCheckpointListResult(command, result);
-    return result;
+    const command = "agentSession/fileCheckpoint/list";
+    const result = await appServerClient.listAgentSessionFileCheckpoints({
+      sessionId: request.session_id,
+    });
+    return projectAppServerFileCheckpointListResult(command, result.result);
   }
 
   async function getAgentRuntimeFileCheckpoint(
     request: AgentRuntimeGetFileCheckpointRequest,
   ): Promise<AgentRuntimeFileCheckpointDetail> {
-    const command = AGENT_RUNTIME_COMMANDS.getFileCheckpoint;
-    const result = await invokeCommand(command, { request });
-    assertFileCheckpointDetail(command, result);
-    return result;
+    const command = "agentSession/fileCheckpoint/get";
+    const result = await appServerClient.getAgentSessionFileCheckpoint({
+      sessionId: request.session_id,
+      checkpointId: request.checkpoint_id,
+    });
+    return projectAppServerFileCheckpointDetail(command, result.result);
   }
 
   async function diffAgentRuntimeFileCheckpoint(
     request: AgentRuntimeDiffFileCheckpointRequest,
   ): Promise<AgentRuntimeFileCheckpointDiffResult> {
-    const command = AGENT_RUNTIME_COMMANDS.diffFileCheckpoint;
-    const result = await invokeCommand(command, { request });
-    assertFileCheckpointDiffResult(command, result);
-    return result;
+    const command = "agentSession/fileCheckpoint/diff";
+    const result = await appServerClient.diffAgentSessionFileCheckpoint({
+      sessionId: request.session_id,
+      checkpointId: request.checkpoint_id,
+    });
+    return projectAppServerFileCheckpointDiffResult(command, result.result);
   }
 
   async function restoreAgentRuntimeFileCheckpoint(
     request: AgentRuntimeRestoreFileCheckpointRequest,
   ): Promise<AgentRuntimeFileCheckpointRestoreResult> {
-    const command = AGENT_RUNTIME_COMMANDS.restoreFileCheckpoint;
-    const result = await invokeCommand(command, { request });
-    assertFileCheckpointRestoreResult(command, result);
-    return result;
+    const command = "agentSession/fileCheckpoint/restore";
+    const result = await appServerClient.restoreAgentSessionFileCheckpoint({
+      sessionId: request.session_id,
+      checkpointId: request.checkpoint_id,
+      confirmRestore: request.confirm_restore,
+      createBackup: request.create_backup,
+    });
+    return projectAppServerFileCheckpointRestoreResult(command, result.result);
   }
 
   return {
@@ -255,10 +308,7 @@ export function createThreadClient({
 }
 
 function defaultIsAppServerTurnLifecycleAvailable(): boolean {
-  return (
-    isElectronHostCommandAvailable(APP_SERVER_HANDLE_JSON_LINES_COMMAND) ||
-    isDevBridgeAvailable()
-  );
+  return isAppServerBridgeAvailable();
 }
 
 function assertAppServerTurnLifecycleAvailable(
@@ -445,6 +495,351 @@ function isFileCheckpointRestoreResult(
   );
 }
 
+function readField(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): unknown {
+  if (Object.prototype.hasOwnProperty.call(record, camelKey)) {
+    return record[camelKey];
+  }
+  return snakeKey ? record[snakeKey] : undefined;
+}
+
+function isOptionalNullableString(
+  value: unknown,
+): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === "string";
+}
+
+function isAppServerFileCheckpointSummary(
+  value: unknown,
+): value is AppServerAgentSessionFileCheckpointSummary {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isRequiredString(readField(value, "checkpointId", "checkpoint_id")) &&
+    isRequiredString(readField(value, "turnId", "turn_id")) &&
+    isRequiredString(readField(value, "path")) &&
+    isRequiredString(readField(value, "source")) &&
+    isRequiredString(readField(value, "updatedAt", "updated_at")) &&
+    isOptionalFiniteNumber(readField(value, "versionNo", "version_no")) &&
+    isOptionalString(readField(value, "versionId", "version_id")) &&
+    isOptionalString(readField(value, "requestId", "request_id")) &&
+    isOptionalString(readField(value, "title")) &&
+    isOptionalString(readField(value, "kind")) &&
+    isOptionalString(readField(value, "status")) &&
+    isOptionalString(readField(value, "previewText", "preview_text")) &&
+    isOptionalString(readField(value, "snapshotPath", "snapshot_path")) &&
+    typeof readField(value, "validationIssueCount", "validation_issue_count") ===
+      "number" &&
+    Number.isFinite(
+      readField(value, "validationIssueCount", "validation_issue_count"),
+    )
+  );
+}
+
+function isAppServerFileCheckpointListResponse(
+  value: unknown,
+): value is AppServerAgentSessionFileCheckpointListResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isRequiredString(readField(value, "sessionId", "session_id")) &&
+    isRequiredString(readField(value, "threadId", "thread_id")) &&
+    typeof readField(value, "checkpointCount", "checkpoint_count") ===
+      "number" &&
+    Number.isFinite(readField(value, "checkpointCount", "checkpoint_count")) &&
+    Array.isArray(readField(value, "checkpoints")) &&
+    (readField(value, "checkpoints") as unknown[]).every(
+      isAppServerFileCheckpointSummary,
+    )
+  );
+}
+
+function isAppServerFileCheckpointDetail(
+  value: unknown,
+): value is AppServerAgentSessionFileCheckpointDetail {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isRequiredString(readField(value, "sessionId", "session_id")) &&
+    isRequiredString(readField(value, "threadId", "thread_id")) &&
+    isAppServerFileCheckpointSummary(readField(value, "checkpoint")) &&
+    isRequiredString(readField(value, "livePath", "live_path")) &&
+    isRequiredString(readField(value, "snapshotPath", "snapshot_path")) &&
+    Array.isArray(readField(value, "versionHistory", "version_history")) &&
+    isStringArray(readField(value, "validationIssues", "validation_issues")) &&
+    (readField(value, "content") === undefined ||
+      typeof readField(value, "content") === "string")
+  );
+}
+
+function isAppServerFileCheckpointDiffResponse(
+  value: unknown,
+): value is AppServerAgentSessionFileCheckpointDiffResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isRequiredString(readField(value, "sessionId", "session_id")) &&
+    isRequiredString(readField(value, "threadId", "thread_id")) &&
+    isAppServerFileCheckpointSummary(readField(value, "checkpoint")) &&
+    isOptionalString(readField(value, "currentVersionId", "current_version_id")) &&
+    isOptionalString(readField(value, "previousVersionId", "previous_version_id"))
+  );
+}
+
+function isAppServerFileCheckpointRestoreResponse(
+  value: unknown,
+): value is AppServerAgentSessionFileCheckpointRestoreResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    isRequiredString(readField(value, "sessionId", "session_id")) &&
+    isRequiredString(readField(value, "threadId", "thread_id")) &&
+    isAppServerFileCheckpointSummary(readField(value, "checkpoint")) &&
+    isRequiredString(readField(value, "livePath", "live_path")) &&
+    isRequiredString(readField(value, "snapshotPath", "snapshot_path")) &&
+    isOptionalNullableString(readField(value, "backupPath", "backup_path")) &&
+    isRequiredString(readField(value, "restoredAt", "restored_at"))
+  );
+}
+
+function assignStringIfPresent<T extends object>(
+  target: Partial<T>,
+  key: keyof T,
+  value: unknown,
+): void {
+  if (typeof value === "string") {
+    target[key] = value as T[keyof T];
+  }
+}
+
+function assignNumberIfPresent<T extends object>(
+  target: Partial<T>,
+  key: keyof T,
+  value: unknown,
+): void {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    target[key] = value as T[keyof T];
+  }
+}
+
+function assignNullableStringIfPresent<T extends object>(
+  target: Partial<T>,
+  key: keyof T,
+  value: unknown,
+): void {
+  if (value === null || typeof value === "string") {
+    target[key] = value as T[keyof T];
+  }
+}
+
+function assignIfPresent<T extends object>(
+  target: Partial<T>,
+  key: keyof T,
+  value: unknown,
+): void {
+  if (value !== undefined) {
+    target[key] = value as T[keyof T];
+  }
+}
+
+function projectAppServerFileCheckpointSummary(
+  command: string,
+  value: unknown,
+): AgentRuntimeFileCheckpointSummary {
+  if (!isAppServerFileCheckpointSummary(value)) {
+    throw new Error(`${command} did not return file checkpoint summary`);
+  }
+  const record = value as unknown as Record<string, unknown>;
+  const summary: AgentRuntimeFileCheckpointSummary = {
+    checkpoint_id: readField(record, "checkpointId", "checkpoint_id") as string,
+    turn_id: readField(record, "turnId", "turn_id") as string,
+    path: readField(record, "path") as string,
+    source: readField(record, "source") as string,
+    updated_at: readField(record, "updatedAt", "updated_at") as string,
+    validation_issue_count: readField(
+      record,
+      "validationIssueCount",
+      "validation_issue_count",
+    ) as number,
+  };
+  assignNumberIfPresent(
+    summary,
+    "version_no",
+    readField(record, "versionNo", "version_no"),
+  );
+  assignStringIfPresent(
+    summary,
+    "version_id",
+    readField(record, "versionId", "version_id"),
+  );
+  assignStringIfPresent(
+    summary,
+    "request_id",
+    readField(record, "requestId", "request_id"),
+  );
+  assignStringIfPresent(summary, "title", readField(record, "title"));
+  assignStringIfPresent(summary, "kind", readField(record, "kind"));
+  assignStringIfPresent(summary, "status", readField(record, "status"));
+  assignStringIfPresent(
+    summary,
+    "preview_text",
+    readField(record, "previewText", "preview_text"),
+  );
+  assignStringIfPresent(
+    summary,
+    "snapshot_path",
+    readField(record, "snapshotPath", "snapshot_path"),
+  );
+  if (!isFileCheckpointSummary(summary)) {
+    throw new Error(`${command} did not return file checkpoint summary`);
+  }
+  return summary;
+}
+
+function projectAppServerFileCheckpointListResult(
+  command: string,
+  value: unknown,
+): AgentRuntimeFileCheckpointListResult {
+  if (!isAppServerFileCheckpointListResponse(value)) {
+    throw new Error(`${command} did not return file checkpoint list`);
+  }
+  const record = value as unknown as Record<string, unknown>;
+  const result: AgentRuntimeFileCheckpointListResult = {
+    session_id: readField(record, "sessionId", "session_id") as string,
+    thread_id: readField(record, "threadId", "thread_id") as string,
+    checkpoint_count: readField(
+      record,
+      "checkpointCount",
+      "checkpoint_count",
+    ) as number,
+    checkpoints: (readField(record, "checkpoints") as unknown[]).map(
+      (checkpoint) => projectAppServerFileCheckpointSummary(command, checkpoint),
+    ),
+  };
+  assertFileCheckpointListResult(command, result);
+  return result;
+}
+
+function projectAppServerFileCheckpointDetail(
+  command: string,
+  value: unknown,
+): AgentRuntimeFileCheckpointDetail {
+  if (!isAppServerFileCheckpointDetail(value)) {
+    throw new Error(`${command} did not return file checkpoint detail`);
+  }
+  const record = value as unknown as Record<string, unknown>;
+  const detail: AgentRuntimeFileCheckpointDetail = {
+    session_id: readField(record, "sessionId", "session_id") as string,
+    thread_id: readField(record, "threadId", "thread_id") as string,
+    checkpoint: projectAppServerFileCheckpointSummary(
+      command,
+      readField(record, "checkpoint"),
+    ),
+    live_path: readField(record, "livePath", "live_path") as string,
+    snapshot_path: readField(record, "snapshotPath", "snapshot_path") as string,
+    version_history: readField(
+      record,
+      "versionHistory",
+      "version_history",
+    ) as unknown[],
+    validation_issues: readField(
+      record,
+      "validationIssues",
+      "validation_issues",
+    ) as string[],
+  };
+  assignIfPresent(
+    detail,
+    "checkpoint_document",
+    readField(record, "checkpointDocument", "checkpoint_document"),
+  );
+  assignIfPresent(
+    detail,
+    "live_document",
+    readField(record, "liveDocument", "live_document"),
+  );
+  assignIfPresent(detail, "metadata", readField(record, "metadata"));
+  assignStringIfPresent(detail, "content", readField(record, "content"));
+  assertFileCheckpointDetail(command, detail);
+  return detail;
+}
+
+function projectAppServerFileCheckpointDiffResult(
+  command: string,
+  value: unknown,
+): AgentRuntimeFileCheckpointDiffResult {
+  if (!isAppServerFileCheckpointDiffResponse(value)) {
+    throw new Error(`${command} did not return file checkpoint diff`);
+  }
+  const record = value as unknown as Record<string, unknown>;
+  const result: AgentRuntimeFileCheckpointDiffResult = {
+    session_id: readField(record, "sessionId", "session_id") as string,
+    thread_id: readField(record, "threadId", "thread_id") as string,
+    checkpoint: projectAppServerFileCheckpointSummary(
+      command,
+      readField(record, "checkpoint"),
+    ),
+  };
+  assignStringIfPresent(
+    result,
+    "current_version_id",
+    readField(record, "currentVersionId", "current_version_id"),
+  );
+  assignStringIfPresent(
+    result,
+    "previous_version_id",
+    readField(record, "previousVersionId", "previous_version_id"),
+  );
+  assignIfPresent(result, "diff", readField(record, "diff"));
+  assertFileCheckpointDiffResult(command, result);
+  return result;
+}
+
+function projectAppServerFileCheckpointRestoreResult(
+  command: string,
+  value: unknown,
+): AgentRuntimeFileCheckpointRestoreResult {
+  if (!isAppServerFileCheckpointRestoreResponse(value)) {
+    throw new Error(`${command} did not return file checkpoint restore result`);
+  }
+  const record = value as unknown as Record<string, unknown>;
+  const result: AgentRuntimeFileCheckpointRestoreResult = {
+    session_id: readField(record, "sessionId", "session_id") as string,
+    thread_id: readField(record, "threadId", "thread_id") as string,
+    checkpoint: projectAppServerFileCheckpointSummary(
+      command,
+      readField(record, "checkpoint"),
+    ),
+    live_path: readField(record, "livePath", "live_path") as string,
+    snapshot_path: readField(record, "snapshotPath", "snapshot_path") as string,
+    restored_at: readField(record, "restoredAt", "restored_at") as string,
+  };
+  assignNullableStringIfPresent(
+    result,
+    "backup_path",
+    readField(record, "backupPath", "backup_path"),
+  );
+  assertFileCheckpointRestoreResult(command, result);
+  return result;
+}
+
+function assertFileCheckpointListResult(
+  command: string,
+  value: unknown,
+): asserts value is AgentRuntimeFileCheckpointListResult {
+  if (!isFileCheckpointListResult(value)) {
+    throw new Error(`${command} did not return file checkpoint list`);
+  }
+}
+
 function isReplayedActionRequiredView(
   value: unknown,
 ): value is AgentRuntimeReplayedActionRequiredView {
@@ -462,36 +857,12 @@ function isReplayedActionRequiredView(
   );
 }
 
-function assertVoidResult(command: string, value: unknown): void {
-  if (value !== undefined && value !== null) {
-    throw new Error(`${command} did not return void`);
-  }
-}
-
-function assertBooleanResult(
-  command: string,
-  value: unknown,
-): asserts value is boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${command} did not return boolean`);
-  }
-}
-
 function assertReplayedActionRequiredViewOrNull(
   command: string,
   value: unknown,
 ): asserts value is AgentRuntimeReplayedActionRequiredView | null {
   if (value !== null && !isReplayedActionRequiredView(value)) {
     throw new Error(`${command} did not return replayed action view`);
-  }
-}
-
-function assertFileCheckpointListResult(
-  command: string,
-  value: unknown,
-): asserts value is AgentRuntimeFileCheckpointListResult {
-  if (!isFileCheckpointListResult(value)) {
-    throw new Error(`${command} did not return file checkpoint list`);
   }
 }
 
@@ -1120,6 +1491,42 @@ export function appServerActionRespondParamsFromRequest(
     metadata: request.metadata,
     eventName: request.event_name,
     actionScope: appServerActionScopeFromRequest(request.action_scope),
+  });
+}
+
+function appServerActionReplayParamsFromRequest(
+  request: AgentRuntimeReplayRequestRequest,
+) {
+  return {
+    sessionId: request.session_id,
+    requestId: request.request_id,
+  };
+}
+
+function agentRuntimeReplayedActionFromAppServer(
+  action: AppServerAgentSessionActionReplayResponse["action"],
+): AgentRuntimeReplayedActionRequiredView | null {
+  if (!action) {
+    return null;
+  }
+  return omitUndefined({
+    type: action.type,
+    request_id: action.requestId,
+    action_type: action.actionType,
+    tool_name: action.toolName,
+    arguments: isRecord(action.arguments) ? action.arguments : undefined,
+    prompt: action.prompt,
+    questions: action.questions,
+    requested_schema: isRecord(action.requestedSchema)
+      ? action.requestedSchema
+      : undefined,
+    scope: action.scope
+      ? omitUndefined({
+          session_id: action.scope.sessionId,
+          thread_id: action.scope.threadId,
+          turn_id: action.scope.turnId,
+        })
+      : undefined,
   });
 }
 

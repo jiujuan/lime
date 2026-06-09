@@ -398,6 +398,7 @@
   "agentChat.teamWorkspace.control.sendInput.sentInterrupt": "已中断当前执行并发送新说明",
   "agentChat.teamWorkspace.control.sendInput.sent": "已向这项任务发送补充说明",
   "agentChat.teamWorkspace.control.sendInput.failedFallback": "发送任务说明失败",
+  "agentChat.teamWorkspace.control.unavailable": "团队任务控制正在迁移到新的运行链路，暂时不能直接操作子任务",
   "agentChat.teamWorkspace.control.stop.pausedCount": "已暂停 {{formattedCount}} 项任务的处理",
   "agentChat.teamWorkspace.control.stop.pausedOne": "已暂停这项任务的处理",
   "agentChat.teamWorkspace.control.stop.requestedCount": "已向 {{formattedCount}} 项任务发送暂停请求",

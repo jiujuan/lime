@@ -210,6 +210,19 @@ describe("fileBrowser API", () => {
     );
   });
 
+  it("文件管理器快捷入口遇到 mock-like payload 或缺字段项时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce([{ id: "downloads" }]);
+
+    await expect(getFileManagerLocations()).rejects.toThrow(
+      "get_file_manager_locations did not return file manager locations",
+    );
+    await expect(getFileManagerLocations()).rejects.toThrow(
+      "get_file_manager_locations did not return file manager locations",
+    );
+  });
+
   it("应代理文件图标异步读取命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce("data:image/png;base64,abc");
 
@@ -219,5 +232,20 @@ describe("fileBrowser API", () => {
     expect(safeInvoke).toHaveBeenCalledWith("get_file_icon_data_url", {
       path: "/Applications/Lime.app",
     });
+  });
+
+  it("文件图标异步读取允许 null，但错误 payload 应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ error: "failed" });
+
+    await expect(getFileIconDataUrl("/tmp/missing.txt")).resolves.toBeNull();
+    await expect(getFileIconDataUrl("/Applications/Lime.app")).rejects.toThrow(
+      "get_file_icon_data_url did not return file icon data URL",
+    );
+    await expect(getFileIconDataUrl("/Applications/Lime.app")).rejects.toThrow(
+      "get_file_icon_data_url did not return file icon data URL",
+    );
   });
 });

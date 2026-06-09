@@ -34,11 +34,31 @@ import {
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
+  METHOD_AGENT_SESSION_ACTION_REPLAY,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
+  METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+  METHOD_AGENT_SESSION_COMPACT,
   METHOD_AGENT_SESSION_EVENT,
+  METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
+  METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET,
+  METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
+  METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE,
+  METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
   METHOD_AGENT_SESSION_LIST,
+  METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
+  METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
+  METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
+  METHOD_AGENT_SESSION_OBJECTIVE_READ,
+  METHOD_AGENT_SESSION_OBJECTIVE_SET,
+  METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+  METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
+  METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
+  METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
   METHOD_AGENT_SESSION_READ,
+  METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
+  METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   METHOD_AGENT_SESSION_START,
+  METHOD_AGENT_SESSION_THREAD_RESUME,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
@@ -68,6 +88,25 @@ import {
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_FILE_SYSTEM_RENAME_FILE,
+  METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
+  METHOD_DIAGNOSTICS_SERVER_READ,
+  METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+  METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
+  METHOD_DISCORD_CHANNEL_PROBE,
+  METHOD_FEISHU_CHANNEL_PROBE,
+  METHOD_GATEWAY_CHANNEL_START,
+  METHOD_GATEWAY_CHANNEL_STOP,
+  METHOD_GATEWAY_CHANNEL_STATUS,
+  METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT,
+  METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL,
+  METHOD_GATEWAY_TUNNEL_CREATE,
+  METHOD_GATEWAY_TUNNEL_PROBE,
+  METHOD_GATEWAY_TUNNEL_RESTART,
+  METHOD_GATEWAY_TUNNEL_START,
+  METHOD_GATEWAY_TUNNEL_STATUS,
+  METHOD_GATEWAY_TUNNEL_STOP,
+  METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL,
+  METHOD_TELEGRAM_CHANNEL_PROBE,
   METHOD_INITIALIZED,
   METHOD_INITIALIZE,
   METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
@@ -123,12 +162,48 @@ import {
   METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
   METHOD_MCP_TOOL_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
+  METHOD_LOG_CLEAR,
+  METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR,
+  METHOD_LOG_LIST,
+  METHOD_LOG_PERSISTED_TAIL,
+  METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
+  METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+  METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
+  METHOD_MEDIA_TASK_ARTIFACT_GET,
+  METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+  METHOD_MEDIA_TASK_ARTIFACT_LIST,
   PROTOCOL_VERSION,
+  METHOD_SKILL_CACHE_REFRESH,
+  METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
+  METHOD_SKILL_LOCAL_IMPORT,
+  METHOD_SKILL_LOCAL_INSPECT,
+  METHOD_SKILL_LOCAL_DETAIL_INSPECT,
+  METHOD_SKILL_LOCAL_RENAME,
+  METHOD_SKILL_LOCAL_SCAFFOLD_CREATE,
+  METHOD_SKILL_MANAGEMENT_INSTALL,
+  METHOD_SKILL_MANAGEMENT_LIST,
+  METHOD_SKILL_MANAGEMENT_UNINSTALL,
+  METHOD_SKILL_MARKETPLACE_INSTALL,
   METHOD_SKILL_LIST,
+  METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL,
+  METHOD_SKILL_PACKAGE_EXPORT,
+  METHOD_SKILL_PACKAGE_LOCAL_INSPECT,
+  METHOD_SKILL_PACKAGE_LOCAL_INSTALL,
+  METHOD_SKILL_PACKAGE_LOCAL_REPLACE,
+  METHOD_SKILL_REMOTE_INSPECT,
+  METHOD_SKILL_REPOSITORY_DELETE,
+  METHOD_SKILL_REPOSITORY_LIST,
+  METHOD_SKILL_REPOSITORY_SAVE,
   METHOD_SKILL_READ,
   METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
   METHOD_USAGE_STATS_MODEL_RANKING_LIST,
   METHOD_USAGE_STATS_READ,
+  METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
+  METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
+  METHOD_WECHAT_CHANNEL_LOGIN_START,
+  METHOD_WECHAT_CHANNEL_LOGIN_WAIT,
+  METHOD_WECHAT_CHANNEL_PROBE,
+  METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
@@ -252,6 +327,27 @@ test("builds workspace and skill read requests with current methods", () => {
     recentPreferences: { task: true, subagent: false },
     recentTeamSelection: { disabled: true },
   });
+  const readObjective = client.readAgentSessionObjective({
+    sessionId: "session-main",
+  });
+  const setObjective = client.setAgentSessionObjective({
+    sessionId: "session-main",
+    workspaceId: "workspace-main",
+    objectiveText: "完成生产命令 current 迁移",
+    successCriteria: ["CRUD 走 App Server current"],
+    budgetPolicy: { maxTurns: 8 },
+    riskPolicy: { level: "medium" },
+    approvalPolicy: { required: false },
+    continuationPolicy: { mode: "manual" },
+  });
+  const updateObjectiveStatus = client.updateAgentSessionObjectiveStatus({
+    sessionId: "session-main",
+    status: "blocked",
+    blockerReason: "等待共享写集释放",
+  });
+  const clearObjective = client.clearAgentSessionObjective({
+    sessionId: "session-main",
+  });
   const workspaces = client.listWorkspaces();
   const workspace = client.readWorkspace({ id: "workspace-main" });
   const workspaceByPath = client.readWorkspaceByPath({
@@ -295,6 +391,34 @@ test("builds workspace and skill read requests with current methods", () => {
     recentAccessMode: "full-access",
     recentPreferences: { task: true, subagent: false },
     recentTeamSelection: { disabled: true },
+  });
+  assert.equal(readObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_READ);
+  assert.deepEqual(readObjective.params, {
+    sessionId: "session-main",
+  });
+  assert.equal(setObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_SET);
+  assert.deepEqual(setObjective.params, {
+    sessionId: "session-main",
+    workspaceId: "workspace-main",
+    objectiveText: "完成生产命令 current 迁移",
+    successCriteria: ["CRUD 走 App Server current"],
+    budgetPolicy: { maxTurns: 8 },
+    riskPolicy: { level: "medium" },
+    approvalPolicy: { required: false },
+    continuationPolicy: { mode: "manual" },
+  });
+  assert.equal(
+    updateObjectiveStatus.method,
+    METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+  );
+  assert.deepEqual(updateObjectiveStatus.params, {
+    sessionId: "session-main",
+    status: "blocked",
+    blockerReason: "等待共享写集释放",
+  });
+  assert.equal(clearObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_CLEAR);
+  assert.deepEqual(clearObjective.params, {
+    sessionId: "session-main",
   });
   assert.equal(workspaces.method, METHOD_WORKSPACE_LIST);
   assert.deepEqual(workspaces.params, {});
@@ -363,6 +487,95 @@ test("builds session archive and unarchive requests with current App Server meth
     ),
     false,
   );
+});
+
+test("builds agent session file checkpoint requests with current App Server methods", () => {
+  const client = new AppServerClient();
+
+  const compact = client.compactAgentSession({
+    sessionId: "sess_1",
+    eventName: "agentSession/event/sess_1",
+  });
+  const resume = client.resumeAgentSessionThread({
+    sessionId: "sess_1",
+  });
+  const remove = client.removeAgentSessionQueuedTurn({
+    sessionId: "sess_1",
+    queuedTurnId: "queued-1",
+  });
+  const promote = client.promoteAgentSessionQueuedTurn({
+    sessionId: "sess_1",
+    queuedTurnId: "queued-2",
+  });
+
+  assert.equal(compact.id, 1);
+  assert.equal(compact.method, METHOD_AGENT_SESSION_COMPACT);
+  assert.deepEqual(compact.params, {
+    sessionId: "sess_1",
+    eventName: "agentSession/event/sess_1",
+  });
+  assert.equal(resume.id, 2);
+  assert.equal(resume.method, METHOD_AGENT_SESSION_THREAD_RESUME);
+  assert.deepEqual(resume.params, {
+    sessionId: "sess_1",
+  });
+  assert.equal(remove.id, 3);
+  assert.equal(remove.method, METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE);
+  assert.deepEqual(remove.params, {
+    sessionId: "sess_1",
+    queuedTurnId: "queued-1",
+  });
+  assert.equal(promote.id, 4);
+  assert.equal(promote.method, METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE);
+  assert.deepEqual(promote.params, {
+    sessionId: "sess_1",
+    queuedTurnId: "queued-2",
+  });
+
+  const checkpointClient = new AppServerClient();
+  const list = checkpointClient.listAgentSessionFileCheckpoints({
+    sessionId: "sess_1",
+  });
+  const get = checkpointClient.getAgentSessionFileCheckpoint({
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+  });
+  const diff = checkpointClient.diffAgentSessionFileCheckpoint({
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+  });
+  const restore = checkpointClient.restoreAgentSessionFileCheckpoint({
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+    confirmRestore: true,
+    createBackup: false,
+  });
+
+  assert.equal(list.id, 1);
+  assert.equal(list.method, METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST);
+  assert.deepEqual(list.params, {
+    sessionId: "sess_1",
+  });
+  assert.equal(get.id, 2);
+  assert.equal(get.method, METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET);
+  assert.deepEqual(get.params, {
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+  });
+  assert.equal(diff.id, 3);
+  assert.equal(diff.method, METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF);
+  assert.deepEqual(diff.params, {
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+  });
+  assert.equal(restore.id, 4);
+  assert.equal(restore.method, METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE);
+  assert.deepEqual(restore.params, {
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+    confirmRestore: true,
+    createBackup: false,
+  });
 });
 
 test("builds app data surface requests with current methods", () => {
@@ -529,6 +742,96 @@ test("builds app data surface requests with current methods", () => {
   });
   const memory = client.readProjectMemory({
     projectId: "workspace-main",
+  });
+  const logs = client.listLogs();
+  const persistedTail = client.readPersistedLogTail({ lines: 250 });
+  const clearedLogs = client.clearLogs();
+  const clearedDiagnosticHistory = client.clearDiagnosticLogHistory();
+  const logStorageDiagnostics = client.readLogStorageDiagnostics();
+  const supportBundle = client.exportSupportBundle();
+  const serverDiagnostics = client.readServerDiagnostics();
+  const windowsStartupDiagnostics = client.readWindowsStartupDiagnostics();
+  const gatewayChannelStatus = client.readGatewayChannelStatus({
+    channel: "wechat",
+  });
+  const gatewayChannelStart = client.startGatewayChannel({
+    channel: "telegram",
+    accountId: "default",
+    pollTimeoutSecs: 25,
+  });
+  const gatewayChannelStop = client.stopGatewayChannel({
+    channel: "telegram",
+    accountId: "default",
+  });
+  const telegramChannelProbe = client.probeTelegramChannel({
+    accountId: "default",
+  });
+  const wechatChannelLoginStart = client.startWechatChannelLogin({
+    baseUrl: "http://127.0.0.1:8080",
+    botType: "ilink",
+  });
+  const wechatChannelLoginWait = client.waitWechatChannelLogin({
+    sessionKey: "login-session-1",
+    timeoutMs: 60000,
+  });
+  const wechatChannelAccounts = client.listWechatChannelAccounts();
+  const wechatChannelAccountRemove = client.removeWechatChannelAccount({
+    accountId: "wechat-default",
+    purgeData: false,
+  });
+  const wechatRuntimeModelSet = client.setWechatChannelRuntimeModel({
+    providerId: "openai",
+    modelId: "gpt-5.4",
+  });
+  const gatewayTunnelProbe = client.probeGatewayTunnel();
+  const gatewayTunnelDetectCloudflared =
+    client.detectGatewayTunnelCloudflared();
+  const gatewayTunnelInstallCloudflared =
+    client.installGatewayTunnelCloudflared({
+      confirm: true,
+    });
+  const gatewayTunnelCreate = client.createGatewayTunnel({
+    tunnelName: "lime",
+    dnsName: "bot.example.com",
+    persist: true,
+  });
+  const gatewayTunnelStart = client.startGatewayTunnel();
+  const gatewayTunnelStop = client.stopGatewayTunnel();
+  const gatewayTunnelRestart = client.restartGatewayTunnel();
+  const gatewayTunnelStatus = client.readGatewayTunnelStatus();
+  const gatewayTunnelSyncWebhookUrl = client.syncGatewayTunnelWebhookUrl({
+    channel: "feishu",
+    accountId: "default",
+    webhookPath: "/feishu/default",
+    persist: true,
+  });
+  const imageMediaTask = client.createImageMediaTaskArtifact({
+    projectRootPath: "/workspace",
+    prompt: "未来感青柠实验室",
+    mode: "generate",
+  });
+  const audioMediaTask = client.createAudioMediaTaskArtifact({
+    projectRootPath: "/workspace",
+    sourceText: "请生成温暖旁白",
+  });
+  const completedAudioMediaTask = client.completeAudioMediaTaskArtifact({
+    projectRootPath: "/workspace",
+    taskRef: "task-audio-1",
+    audioPath: ".lime/runtime/audio/task-audio-1.mp3",
+  });
+  const mediaTask = client.getMediaTaskArtifact({
+    projectRootPath: "/workspace",
+    taskRef: "task-image-1",
+  });
+  const mediaTaskList = client.listMediaTaskArtifacts({
+    projectRootPath: "/workspace",
+    taskType: "image_generate",
+    modalityContractKey: "image_generation",
+    limit: 10,
+  });
+  const cancelledMediaTask = client.cancelMediaTaskArtifact({
+    projectRootPath: "/workspace",
+    taskRef: "task-image-1",
   });
 
   assert.equal(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
@@ -735,6 +1038,161 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(memory.params, {
     projectId: "workspace-main",
   });
+  assert.equal(logs.method, METHOD_LOG_LIST);
+  assert.deepEqual(logs.params, {});
+  assert.equal(persistedTail.method, METHOD_LOG_PERSISTED_TAIL);
+  assert.deepEqual(persistedTail.params, { lines: 250 });
+  assert.equal(clearedLogs.method, METHOD_LOG_CLEAR);
+  assert.deepEqual(clearedLogs.params, {});
+  assert.equal(
+    clearedDiagnosticHistory.method,
+    METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR,
+  );
+  assert.deepEqual(clearedDiagnosticHistory.params, {});
+  assert.equal(logStorageDiagnostics.method, METHOD_DIAGNOSTICS_LOG_STORAGE_READ);
+  assert.deepEqual(logStorageDiagnostics.params, {});
+  assert.equal(supportBundle.method, METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT);
+  assert.deepEqual(supportBundle.params, {});
+  assert.equal(serverDiagnostics.method, METHOD_DIAGNOSTICS_SERVER_READ);
+  assert.deepEqual(serverDiagnostics.params, {});
+  assert.equal(
+    windowsStartupDiagnostics.method,
+    METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
+  );
+  assert.deepEqual(windowsStartupDiagnostics.params, {});
+  assert.equal(gatewayChannelStatus.method, METHOD_GATEWAY_CHANNEL_STATUS);
+  assert.deepEqual(gatewayChannelStatus.params, { channel: "wechat" });
+  assert.equal(gatewayChannelStart.method, METHOD_GATEWAY_CHANNEL_START);
+  assert.deepEqual(gatewayChannelStart.params, {
+    channel: "telegram",
+    accountId: "default",
+    pollTimeoutSecs: 25,
+  });
+  assert.equal(gatewayChannelStop.method, METHOD_GATEWAY_CHANNEL_STOP);
+  assert.deepEqual(gatewayChannelStop.params, {
+    channel: "telegram",
+    accountId: "default",
+  });
+  assert.equal(telegramChannelProbe.method, METHOD_TELEGRAM_CHANNEL_PROBE);
+  assert.deepEqual(telegramChannelProbe.params, { accountId: "default" });
+  assert.equal(
+    wechatChannelLoginStart.method,
+    METHOD_WECHAT_CHANNEL_LOGIN_START,
+  );
+  assert.deepEqual(wechatChannelLoginStart.params, {
+    baseUrl: "http://127.0.0.1:8080",
+    botType: "ilink",
+  });
+  assert.equal(
+    wechatChannelLoginWait.method,
+    METHOD_WECHAT_CHANNEL_LOGIN_WAIT,
+  );
+  assert.deepEqual(wechatChannelLoginWait.params, {
+    sessionKey: "login-session-1",
+    timeoutMs: 60000,
+  });
+  assert.equal(
+    wechatChannelAccounts.method,
+    METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
+  );
+  assert.deepEqual(wechatChannelAccounts.params, {});
+  assert.equal(
+    wechatChannelAccountRemove.method,
+    METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
+  );
+  assert.deepEqual(wechatChannelAccountRemove.params, {
+    accountId: "wechat-default",
+    purgeData: false,
+  });
+  assert.equal(
+    wechatRuntimeModelSet.method,
+    METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
+  );
+  assert.deepEqual(wechatRuntimeModelSet.params, {
+    providerId: "openai",
+    modelId: "gpt-5.4",
+  });
+  assert.equal(gatewayTunnelProbe.method, METHOD_GATEWAY_TUNNEL_PROBE);
+  assert.deepEqual(gatewayTunnelProbe.params, {});
+  assert.equal(
+    gatewayTunnelDetectCloudflared.method,
+    METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT,
+  );
+  assert.deepEqual(gatewayTunnelDetectCloudflared.params, {});
+  assert.equal(
+    gatewayTunnelInstallCloudflared.method,
+    METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL,
+  );
+  assert.deepEqual(gatewayTunnelInstallCloudflared.params, {
+    confirm: true,
+  });
+  assert.equal(gatewayTunnelCreate.method, METHOD_GATEWAY_TUNNEL_CREATE);
+  assert.deepEqual(gatewayTunnelCreate.params, {
+    tunnelName: "lime",
+    dnsName: "bot.example.com",
+    persist: true,
+  });
+  assert.equal(gatewayTunnelStart.method, METHOD_GATEWAY_TUNNEL_START);
+  assert.deepEqual(gatewayTunnelStart.params, {});
+  assert.equal(gatewayTunnelStop.method, METHOD_GATEWAY_TUNNEL_STOP);
+  assert.deepEqual(gatewayTunnelStop.params, {});
+  assert.equal(gatewayTunnelRestart.method, METHOD_GATEWAY_TUNNEL_RESTART);
+  assert.deepEqual(gatewayTunnelRestart.params, {});
+  assert.equal(gatewayTunnelStatus.method, METHOD_GATEWAY_TUNNEL_STATUS);
+  assert.deepEqual(gatewayTunnelStatus.params, {});
+  assert.equal(
+    gatewayTunnelSyncWebhookUrl.method,
+    METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL,
+  );
+  assert.deepEqual(gatewayTunnelSyncWebhookUrl.params, {
+    channel: "feishu",
+    accountId: "default",
+    webhookPath: "/feishu/default",
+    persist: true,
+  });
+  assert.equal(
+    imageMediaTask.method,
+    METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+  );
+  assert.deepEqual(imageMediaTask.params, {
+    projectRootPath: "/workspace",
+    prompt: "未来感青柠实验室",
+    mode: "generate",
+  });
+  assert.equal(
+    audioMediaTask.method,
+    METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+  );
+  assert.deepEqual(audioMediaTask.params, {
+    projectRootPath: "/workspace",
+    sourceText: "请生成温暖旁白",
+  });
+  assert.equal(
+    completedAudioMediaTask.method,
+    METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
+  );
+  assert.deepEqual(completedAudioMediaTask.params, {
+    projectRootPath: "/workspace",
+    taskRef: "task-audio-1",
+    audioPath: ".lime/runtime/audio/task-audio-1.mp3",
+  });
+  assert.equal(mediaTask.method, METHOD_MEDIA_TASK_ARTIFACT_GET);
+  assert.deepEqual(mediaTask.params, {
+    projectRootPath: "/workspace",
+    taskRef: "task-image-1",
+  });
+  assert.equal(mediaTaskList.method, METHOD_MEDIA_TASK_ARTIFACT_LIST);
+  assert.deepEqual(mediaTaskList.params, {
+    projectRootPath: "/workspace",
+    taskType: "image_generate",
+    modalityContractKey: "image_generation",
+    limit: 10,
+  });
+  assert.equal(cancelledMediaTask.method, METHOD_MEDIA_TASK_ARTIFACT_CANCEL);
+  assert.deepEqual(cancelledMediaTask.params, {
+    projectRootPath: "/workspace",
+    taskRef: "task-image-1",
+  });
   for (const legacyMethod of [
     "get_automation_scheduler_config",
     "get_automation_status",
@@ -747,6 +1205,15 @@ test("builds app data surface requests with current methods", () => {
     "get_automation_run_history",
     "preview_automation_schedule",
     "validate_automation_schedule",
+    "gateway_tunnel_probe",
+    "gateway_tunnel_detect_cloudflared",
+    "gateway_tunnel_install_cloudflared",
+    "gateway_tunnel_create",
+    "gateway_tunnel_start",
+    "gateway_tunnel_stop",
+    "gateway_tunnel_restart",
+    "gateway_tunnel_status",
+    "gateway_tunnel_sync_webhook_url",
   ]) {
     assert.equal(
       APP_SERVER_METHODS.some(({ method }) => method === legacyMethod),
@@ -848,6 +1315,10 @@ test("builds connect deep link requests with current methods", () => {
   const open = client.resolveConnectOpenDeepLink({
     url: "lime://open?kind=skill&slug=viral-content-breakdown&action=install",
   });
+  const replay = client.replayAction({
+    sessionId: "sess_action",
+    requestId: "req_confirm_1",
+  });
   const save = client.saveConnectRelayApiKey({
     relayId: "relay-one",
     apiKey: "sk-relay-key",
@@ -870,14 +1341,20 @@ test("builds connect deep link requests with current methods", () => {
   assert.deepEqual(open.params, {
     url: "lime://open?kind=skill&slug=viral-content-breakdown&action=install",
   });
-  assert.equal(save.id, 3);
+  assert.equal(replay.id, 3);
+  assert.equal(replay.method, METHOD_AGENT_SESSION_ACTION_REPLAY);
+  assert.deepEqual(replay.params, {
+    sessionId: "sess_action",
+    requestId: "req_confirm_1",
+  });
+  assert.equal(save.id, 4);
   assert.equal(save.method, METHOD_CONNECT_RELAY_API_KEY_SAVE);
   assert.deepEqual(save.params, {
     relayId: "relay-one",
     apiKey: "sk-relay-key",
     name: "Relay Key",
   });
-  assert.equal(callback.id, 4);
+  assert.equal(callback.id, 5);
   assert.equal(callback.method, METHOD_CONNECT_CALLBACK_SEND);
   assert.deepEqual(callback.params, {
     relayId: "relay-one",
@@ -887,7 +1364,7 @@ test("builds connect deep link requests with current methods", () => {
   });
 });
 
-test("builds evidence export requests with optional scope flags", () => {
+test("builds evidence export requests with optional scope flags and runtime export requests", () => {
   const client = new AppServerClient();
 
   const evidence = client.exportEvidence({
@@ -896,6 +1373,32 @@ test("builds evidence export requests with optional scope flags", () => {
     includeEvents: true,
     includeArtifacts: false,
     includeEvidencePack: false,
+  });
+  const handoff = client.exportHandoffBundle({
+    sessionId: "sess_1",
+    locale: "zh-CN",
+  });
+  const replay = client.exportReplayCase({
+    sessionId: "sess_1",
+    locale: "en-US",
+  });
+  const analysis = client.exportAnalysisHandoff({
+    sessionId: "sess_1",
+  });
+  const review = client.exportReviewDecisionTemplate({
+    sessionId: "sess_1",
+  });
+  const save = client.saveReviewDecision({
+    sessionId: "sess_1",
+    decisionStatus: "accepted",
+    decisionSummary: "ok",
+    chosenFixStrategy: "current path",
+    riskLevel: "low",
+    riskTags: ["runtime"],
+    humanReviewer: "reviewer",
+    followupActions: ["follow up"],
+    regressionRequirements: ["npm run test:contracts"],
+    notes: "",
   });
 
   assert.equal(evidence.id, 1);
@@ -906,6 +1409,45 @@ test("builds evidence export requests with optional scope flags", () => {
     includeEvents: true,
     includeArtifacts: false,
     includeEvidencePack: false,
+  });
+  assert.equal(handoff.id, 2);
+  assert.equal(handoff.method, METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT);
+  assert.deepEqual(handoff.params, {
+    sessionId: "sess_1",
+    locale: "zh-CN",
+  });
+  assert.equal(replay.id, 3);
+  assert.equal(replay.method, METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT);
+  assert.deepEqual(replay.params, {
+    sessionId: "sess_1",
+    locale: "en-US",
+  });
+  assert.equal(analysis.id, 4);
+  assert.equal(analysis.method, METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT);
+  assert.deepEqual(analysis.params, {
+    sessionId: "sess_1",
+  });
+  assert.equal(review.id, 5);
+  assert.equal(
+    review.method,
+    METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+  );
+  assert.deepEqual(review.params, {
+    sessionId: "sess_1",
+  });
+  assert.equal(save.id, 6);
+  assert.equal(save.method, METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE);
+  assert.deepEqual(save.params, {
+    sessionId: "sess_1",
+    decisionStatus: "accepted",
+    decisionSummary: "ok",
+    chosenFixStrategy: "current path",
+    riskLevel: "low",
+    riskTags: ["runtime"],
+    humanReviewer: "reviewer",
+    followupActions: ["follow up"],
+    regressionRequirements: ["npm run test:contracts"],
+    notes: "",
   });
 });
 
@@ -922,8 +1464,33 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
     { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
     { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
+    { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
+    { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
+    { method: METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT, kind: "request" },
+    {
+      method: METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+      kind: "request",
+    },
+    { method: METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, kind: "request" },
     { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
     { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
+    { method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" },
+    { method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" },
+    {
+      method: METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+      kind: "request",
+    },
+    { method: METHOD_AGENT_SESSION_OBJECTIVE_CLEAR, kind: "request" },
+    { method: METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE, kind: "request" },
+    { method: METHOD_AGENT_SESSION_OBJECTIVE_AUDIT, kind: "request" },
+    { method: METHOD_AGENT_SESSION_COMPACT, kind: "request" },
+    { method: METHOD_AGENT_SESSION_THREAD_RESUME, kind: "request" },
+    { method: METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE, kind: "request" },
+    { method: METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE, kind: "request" },
+    { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST, kind: "request" },
+    { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET, kind: "request" },
+    { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF, kind: "request" },
+    { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, kind: "request" },
     { method: METHOD_WORKSPACE_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_READ, kind: "request" },
     { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
@@ -934,6 +1501,47 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_WORKSPACE_ENSURE_READY, kind: "request" },
     { method: METHOD_SKILL_LIST, kind: "request" },
     { method: METHOD_SKILL_READ, kind: "request" },
+    { method: METHOD_SKILL_MANAGEMENT_LIST, kind: "request" },
+    { method: METHOD_SKILL_MANAGEMENT_INSTALL, kind: "request" },
+    { method: METHOD_SKILL_MANAGEMENT_UNINSTALL, kind: "request" },
+    { method: METHOD_SKILL_REPOSITORY_LIST, kind: "request" },
+    { method: METHOD_SKILL_REPOSITORY_SAVE, kind: "request" },
+    { method: METHOD_SKILL_REPOSITORY_DELETE, kind: "request" },
+    { method: METHOD_SKILL_CACHE_REFRESH, kind: "request" },
+    { method: METHOD_SKILL_INSTALLED_DIRECTORIES_LIST, kind: "request" },
+    { method: METHOD_SKILL_LOCAL_INSPECT, kind: "request" },
+    { method: METHOD_SKILL_LOCAL_DETAIL_INSPECT, kind: "request" },
+    { method: METHOD_SKILL_LOCAL_SCAFFOLD_CREATE, kind: "request" },
+    { method: METHOD_SKILL_LOCAL_IMPORT, kind: "request" },
+    { method: METHOD_SKILL_LOCAL_RENAME, kind: "request" },
+    { method: METHOD_SKILL_REMOTE_INSPECT, kind: "request" },
+    { method: METHOD_SKILL_PACKAGE_LOCAL_INSPECT, kind: "request" },
+    { method: METHOD_SKILL_PACKAGE_LOCAL_INSTALL, kind: "request" },
+    { method: METHOD_SKILL_PACKAGE_LOCAL_REPLACE, kind: "request" },
+    { method: METHOD_SKILL_PACKAGE_EXPORT, kind: "request" },
+    { method: METHOD_SKILL_MARKETPLACE_INSTALL, kind: "request" },
+    { method: METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL, kind: "request" },
+    { method: METHOD_GATEWAY_CHANNEL_START, kind: "request" },
+    { method: METHOD_GATEWAY_CHANNEL_STOP, kind: "request" },
+    { method: METHOD_GATEWAY_CHANNEL_STATUS, kind: "request" },
+    { method: METHOD_TELEGRAM_CHANNEL_PROBE, kind: "request" },
+    { method: METHOD_FEISHU_CHANNEL_PROBE, kind: "request" },
+    { method: METHOD_DISCORD_CHANNEL_PROBE, kind: "request" },
+    { method: METHOD_WECHAT_CHANNEL_PROBE, kind: "request" },
+    { method: METHOD_WECHAT_CHANNEL_LOGIN_START, kind: "request" },
+    { method: METHOD_WECHAT_CHANNEL_LOGIN_WAIT, kind: "request" },
+    { method: METHOD_WECHAT_CHANNEL_ACCOUNT_LIST, kind: "request" },
+    { method: METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE, kind: "request" },
+    { method: METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_PROBE, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_CREATE, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_START, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_STOP, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_RESTART, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_STATUS, kind: "request" },
+    { method: METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL, kind: "request" },
     { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
     { method: METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, kind: "request" },
@@ -988,6 +1596,20 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
     { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
     { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
+    { method: METHOD_LOG_LIST, kind: "request" },
+    { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
+    { method: METHOD_LOG_CLEAR, kind: "request" },
+    { method: METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR, kind: "request" },
+    { method: METHOD_DIAGNOSTICS_LOG_STORAGE_READ, kind: "request" },
+    { method: METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT, kind: "request" },
+    { method: METHOD_DIAGNOSTICS_SERVER_READ, kind: "request" },
+    { method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, kind: "request" },
+    { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
+    { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
+    { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, kind: "request" },
+    { method: METHOD_MEDIA_TASK_ARTIFACT_GET, kind: "request" },
+    { method: METHOD_MEDIA_TASK_ARTIFACT_LIST, kind: "request" },
+    { method: METHOD_MEDIA_TASK_ARTIFACT_CANCEL, kind: "request" },
     { method: METHOD_USAGE_STATS_READ, kind: "request" },
     { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
     { method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST, kind: "request" },
@@ -1024,6 +1646,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_SESSION_READ, kind: "request" },
     { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
     { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
+    { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
     { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
     { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
   ]);
@@ -1045,7 +1668,45 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_RENAME_FILE), true);
   assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_DELETE_FILE), true);
   assert.equal(isAppServerRequestMethod(METHOD_EVIDENCE_EXPORT), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(
+      METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+    ),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_UPDATE), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_READ),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_SET),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_CLEAR),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_WORKSPACE_LIST), true);
   assert.equal(isAppServerRequestMethod(METHOD_SKILL_LIST), true);
   assert.equal(
@@ -1837,6 +2498,344 @@ test("connection wraps evidence export response", async () => {
   assert.equal(result.result.evidencePack.artifacts[0].bytes, 128);
 });
 
+test("connection wraps handoff bundle export response", async () => {
+  const sent = [];
+  const inbound = [
+    {
+      id: 1,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        workspaceId: "workspace-main",
+        workspaceRoot: "/workspace",
+        bundleRelativeRoot: ".lime/harness/sessions/sess_1",
+        bundleAbsoluteRoot: "/workspace/.lime/harness/sessions/sess_1",
+        exportedAt: "2026-06-05T00:00:04.000Z",
+        threadStatus: "running",
+        latestTurnStatus: "accepted",
+        pendingRequestCount: 0,
+        queuedTurnCount: 0,
+        activeSubagentCount: 1,
+        todoTotal: 3,
+        todoPending: 1,
+        todoInProgress: 1,
+        todoCompleted: 1,
+        artifacts: [
+          {
+            kind: "handoff",
+            title: "Handoff",
+            relativePath: ".lime/harness/sessions/sess_1/handoff.md",
+            absolutePath: "/workspace/.lime/harness/sessions/sess_1/handoff.md",
+            bytes: 256,
+          },
+        ],
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error("empty transport");
+      }
+      return message;
+    },
+  });
+
+  const result = await connection.exportHandoffBundle({
+    sessionId: "sess_1",
+    locale: "zh-CN",
+  });
+
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT);
+  assert.deepEqual(sent[0].params, {
+    sessionId: "sess_1",
+    locale: "zh-CN",
+  });
+  assert.equal(result.result.sessionId, "sess_1");
+  assert.equal(result.result.threadId, "thread_1");
+  assert.equal(result.result.threadStatus, "running");
+  assert.equal(result.result.latestTurnStatus, "accepted");
+  assert.equal(result.result.todoTotal, 3);
+  assert.equal(result.result.artifacts[0].kind, "handoff");
+  assert.equal(
+    result.result.artifacts[0].absolutePath,
+    "/workspace/.lime/harness/sessions/sess_1/handoff.md",
+  );
+});
+
+test("connection wraps derived agent session export responses", async () => {
+  const sent = [];
+  const inbound = [
+    {
+      id: 1,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        workspaceRoot: "/workspace",
+        replayRelativeRoot: ".lime/harness/sessions/sess_1/replay",
+        replayAbsoluteRoot: "/workspace/.lime/harness/sessions/sess_1/replay",
+        handoffBundleRelativeRoot: ".lime/harness/sessions/sess_1",
+        evidencePackRelativeRoot: ".lime/harness/sessions/sess_1/evidence",
+        exportedAt: "2026-06-05T00:00:05.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 0,
+        queuedTurnCount: 0,
+        linkedHandoffArtifactCount: 1,
+        linkedEvidenceArtifactCount: 2,
+        recentArtifactCount: 2,
+        artifacts: [],
+      },
+    },
+    {
+      id: 2,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        workspaceRoot: "/workspace",
+        sanitizedWorkspaceRoot: "/workspace",
+        analysisRelativeRoot: ".lime/harness/sessions/sess_1/analysis",
+        analysisAbsoluteRoot:
+          "/workspace/.lime/harness/sessions/sess_1/analysis",
+        handoffBundleRelativeRoot: ".lime/harness/sessions/sess_1",
+        evidencePackRelativeRoot: ".lime/harness/sessions/sess_1/evidence",
+        replayCaseRelativeRoot: ".lime/harness/sessions/sess_1/replay",
+        exportedAt: "2026-06-05T00:00:06.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 0,
+        queuedTurnCount: 0,
+        title: "Analysis",
+        copyPrompt: "Review current evidence.",
+        artifacts: [],
+      },
+    },
+    {
+      id: 3,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        workspaceRoot: "/workspace",
+        reviewRelativeRoot: ".lime/harness/sessions/sess_1/review",
+        reviewAbsoluteRoot: "/workspace/.lime/harness/sessions/sess_1/review",
+        analysisRelativeRoot: ".lime/harness/sessions/sess_1/analysis",
+        analysisAbsoluteRoot:
+          "/workspace/.lime/harness/sessions/sess_1/analysis",
+        handoffBundleRelativeRoot: ".lime/harness/sessions/sess_1",
+        evidencePackRelativeRoot: ".lime/harness/sessions/sess_1/evidence",
+        replayCaseRelativeRoot: ".lime/harness/sessions/sess_1/replay",
+        exportedAt: "2026-06-05T00:00:07.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 0,
+        queuedTurnCount: 0,
+        title: "Review Decision",
+        defaultDecisionStatus: "pending_review",
+        decision: {
+          decisionStatus: "pending_review",
+          decisionSummary: "",
+          chosenFixStrategy: "",
+          riskLevel: "unknown",
+          riskTags: [],
+          humanReviewer: "",
+          followupActions: [],
+          regressionRequirements: [],
+          notes: "",
+        },
+        decisionStatusOptions: ["pending_review", "accepted"],
+        riskLevelOptions: ["unknown", "low"],
+        reviewChecklist: [],
+        analysisArtifacts: [],
+        artifacts: [],
+      },
+    },
+    {
+      id: 4,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        workspaceRoot: "/workspace",
+        reviewRelativeRoot: ".lime/harness/sessions/sess_1/review",
+        reviewAbsoluteRoot: "/workspace/.lime/harness/sessions/sess_1/review",
+        analysisRelativeRoot: ".lime/harness/sessions/sess_1/analysis",
+        analysisAbsoluteRoot:
+          "/workspace/.lime/harness/sessions/sess_1/analysis",
+        handoffBundleRelativeRoot: ".lime/harness/sessions/sess_1",
+        evidencePackRelativeRoot: ".lime/harness/sessions/sess_1/evidence",
+        replayCaseRelativeRoot: ".lime/harness/sessions/sess_1/replay",
+        exportedAt: "2026-06-05T00:00:08.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 0,
+        queuedTurnCount: 0,
+        title: "Review Decision",
+        defaultDecisionStatus: "pending_review",
+        decision: {
+          decisionStatus: "accepted",
+          decisionSummary: "ok",
+          chosenFixStrategy: "current path",
+          riskLevel: "low",
+          riskTags: ["runtime"],
+          humanReviewer: "reviewer",
+          followupActions: [],
+          regressionRequirements: [],
+          notes: "",
+        },
+        decisionStatusOptions: ["pending_review", "accepted"],
+        riskLevelOptions: ["unknown", "low"],
+        reviewChecklist: [],
+        analysisArtifacts: [],
+        artifacts: [],
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error("empty transport");
+      }
+      return message;
+    },
+  });
+
+  const replay = await connection.exportReplayCase({ sessionId: "sess_1" });
+  const analysis = await connection.exportAnalysisHandoff({
+    sessionId: "sess_1",
+  });
+  const review = await connection.exportReviewDecisionTemplate({
+    sessionId: "sess_1",
+  });
+  const saved = await connection.saveReviewDecision({
+    sessionId: "sess_1",
+    decisionStatus: "accepted",
+    decisionSummary: "ok",
+    chosenFixStrategy: "current path",
+    riskLevel: "low",
+  });
+
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT);
+  assert.equal(sent[1].method, METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT);
+  assert.equal(
+    sent[2].method,
+    METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+  );
+  assert.equal(sent[3].method, METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE);
+  assert.equal(
+    replay.result.replayRelativeRoot,
+    ".lime/harness/sessions/sess_1/replay",
+  );
+  assert.equal(analysis.result.copyPrompt, "Review current evidence.");
+  assert.equal(review.result.decision.decisionStatus, "pending_review");
+  assert.equal(saved.result.decision.decisionStatus, "accepted");
+});
+
+test("connection wraps agent session file checkpoint responses", async () => {
+  const sent = [];
+  const checkpoint = {
+    checkpointId: "artifact-document:req-1",
+    turnId: "turn-1",
+    path: "docs/brief.md",
+    source: "artifact",
+    updatedAt: "2026-06-08T10:00:00Z",
+    versionNo: 2,
+    validationIssueCount: 0,
+  };
+  const inbound = [
+    {
+      id: 1,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        checkpointCount: 1,
+        checkpoints: [checkpoint],
+      },
+    },
+    {
+      id: 2,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        checkpoint,
+        livePath: "/workspace/docs/brief.md",
+        snapshotPath: "/workspace/.lime/checkpoints/brief.md",
+        versionHistory: [],
+        validationIssues: [],
+        content: "draft",
+      },
+    },
+    {
+      id: 3,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        checkpoint,
+        currentVersionId: "v2",
+        previousVersionId: "v1",
+        diff: { changed: true },
+      },
+    },
+    {
+      id: 4,
+      result: {
+        sessionId: "sess_1",
+        threadId: "thread_1",
+        checkpoint,
+        livePath: "/workspace/docs/brief.md",
+        snapshotPath: "/workspace/.lime/checkpoints/brief.md",
+        backupPath: null,
+        restoredAt: "2026-06-08T10:05:00Z",
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error("empty transport");
+      }
+      return message;
+    },
+  });
+
+  const list = await connection.listAgentSessionFileCheckpoints({
+    sessionId: "sess_1",
+  });
+  const detail = await connection.getAgentSessionFileCheckpoint({
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+  });
+  const diff = await connection.diffAgentSessionFileCheckpoint({
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+  });
+  const restore = await connection.restoreAgentSessionFileCheckpoint({
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+    confirmRestore: true,
+  });
+
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST);
+  assert.equal(sent[1].method, METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET);
+  assert.equal(sent[2].method, METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF);
+  assert.equal(sent[3].method, METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE);
+  assert.deepEqual(sent[3].params, {
+    sessionId: "sess_1",
+    checkpointId: "artifact-document:req-1",
+    confirmRestore: true,
+  });
+  assert.equal(list.result.checkpointCount, 1);
+  assert.equal(detail.result.livePath, "/workspace/docs/brief.md");
+  assert.deepEqual(diff.result.diff, { changed: true });
+  assert.equal(restore.result.restoredAt, "2026-06-08T10:05:00Z");
+});
+
 test("connection wraps action respond response", async () => {
   const sent = [];
   const inbound = [
@@ -1877,6 +2876,48 @@ test("connection wraps action respond response", async () => {
   assert.equal(sent[0].params.confirmed, true);
   assert.equal(sent[0].params.actionScope.turnId, "turn_external");
   assert.deepEqual(result.result, {});
+});
+
+test("connection wraps action replay response", async () => {
+  const sent = [];
+  const inbound = [
+    {
+      id: 1,
+      result: {
+        action: {
+          type: "action_required",
+          requestId: "req_confirm_1",
+          actionType: "ask_user",
+          prompt: "请选择执行模式",
+        },
+      },
+    },
+  ];
+  const connection = new AppServerConnection({
+    send(message) {
+      sent.push(message);
+    },
+    async nextMessage() {
+      const message = inbound.shift();
+      if (!message) {
+        throw new Error("empty transport");
+      }
+      return message;
+    },
+  });
+
+  const result = await connection.replayAction({
+    sessionId: "sess_external",
+    requestId: "req_confirm_1",
+  });
+
+  assert.equal(sent[0].method, METHOD_AGENT_SESSION_ACTION_REPLAY);
+  assert.deepEqual(sent[0].params, {
+    sessionId: "sess_external",
+    requestId: "req_confirm_1",
+  });
+  assert.equal(result.result.action.requestId, "req_confirm_1");
+  assert.equal(result.result.action.actionType, "ask_user");
 });
 
 test("routes agent session event notifications for renderer projection", async () => {
@@ -2543,23 +3584,25 @@ test("resolves sidecar config from release manifest file", async () => {
   }
 });
 
-test("starts packaged sidecar lifecycle from resources manifest", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "app-server-client-packaged-"));
-  const resourcesPath = join(dir, "resources");
-  const platform = platformKey();
-  const packagedDir = join(resourcesPath, "app-server", platform);
-  const packagedBinaryPath = join(packagedDir, sidecarBinaryName());
-  const fakeSidecar = join(dir, "fake-packaged-sidecar.mjs");
-  const manifestPath = defaultReleaseManifestPath(resourcesPath);
-  let lifecycle;
+test(
+  "starts packaged sidecar lifecycle from resources manifest",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "app-server-client-packaged-"));
+    const resourcesPath = join(dir, "resources");
+    const platform = platformKey();
+    const packagedDir = join(resourcesPath, "app-server", platform);
+    const packagedBinaryPath = join(packagedDir, sidecarBinaryName());
+    const fakeSidecar = join(dir, "fake-packaged-sidecar.mjs");
+    const manifestPath = defaultReleaseManifestPath(resourcesPath);
+    let lifecycle;
 
-  try {
-    await mkdir(packagedDir, { recursive: true });
-    await copyFile(process.execPath, packagedBinaryPath);
-    await chmod(packagedBinaryPath, 0o755).catch(() => undefined);
-    await writeFile(
-      fakeSidecar,
-      `
+    try {
+      await mkdir(packagedDir, { recursive: true });
+      await copyFile(process.execPath, packagedBinaryPath);
+      await chmod(packagedBinaryPath, 0o755).catch(() => undefined);
+      await writeFile(
+        fakeSidecar,
+        `
         import { createInterface } from 'node:readline';
 
         const lines = createInterface({ input: process.stdin });
@@ -2601,59 +3644,61 @@ test("starts packaged sidecar lifecycle from resources manifest", async () => {
           }
         });
       `,
-    );
-    await writeFile(
-      manifestPath,
-      JSON.stringify({
-        version: "1.58.0",
-        protocolVersion: PROTOCOL_VERSION,
-        artifacts: [
-          {
-            platform,
-            url: `file://${packagedBinaryPath}`,
-            sha256: await sha256File(packagedBinaryPath),
+      );
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          version: "1.58.0",
+          protocolVersion: PROTOCOL_VERSION,
+          artifacts: [
+            {
+              platform,
+              url: `file://${packagedBinaryPath}`,
+              sha256: await sha256File(packagedBinaryPath),
+            },
+          ],
+        }),
+      );
+
+      assert.equal(
+        defaultReleaseManifestPath(resourcesPath),
+        join(resourcesPath, DEFAULT_RELEASE_MANIFEST_NAME),
+      );
+      const started = await startPackagedAppServerSidecar(
+        {
+          clientInfo: {
+            name: "content_studio",
+            version: "0.1.0",
           },
-        ],
-      }),
-    );
-
-    assert.equal(
-      defaultReleaseManifestPath(resourcesPath),
-      join(resourcesPath, DEFAULT_RELEASE_MANIFEST_NAME),
-    );
-    const started = await startPackagedAppServerSidecar(
-      {
-        clientInfo: {
-          name: "content_studio",
-          version: "0.1.0",
         },
-      },
-      {
-        resourcesPath,
-        args: [fakeSidecar],
-        initializeTimeoutMs: 1_000,
-      },
-    );
-    lifecycle = started.lifecycle;
+        {
+          resourcesPath,
+          args: [fakeSidecar],
+          initializeTimeoutMs: 1_000,
+        },
+      );
+      lifecycle = started.lifecycle;
 
-    assert.equal(started.resolved.binaryPathSource, "resources");
-    assert.equal(started.resolved.config.binaryPath, packagedBinaryPath);
-    assert.equal(
-      started.resolved.config.backendMode,
-      DEFAULT_STANDALONE_BACKEND_MODE,
-    );
-    assert.equal(
-      started.connected.initializeResponse.serverInfo.protocolVersion,
-      PROTOCOL_VERSION,
-    );
-    await waitFor(() =>
-      started.connected.sidecar.stderrLines.includes("initialized-packaged"),
-    );
-  } finally {
-    await lifecycle?.stop().catch(() => undefined);
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+      assert.equal(started.resolved.binaryPathSource, "resources");
+      assert.equal(started.resolved.config.binaryPath, packagedBinaryPath);
+      assert.equal(
+        started.resolved.config.backendMode,
+        DEFAULT_STANDALONE_BACKEND_MODE,
+      );
+      assert.equal(
+        started.connected.initializeResponse.serverInfo.protocolVersion,
+        PROTOCOL_VERSION,
+      );
+      await waitFor(() =>
+        started.connected.sidecar.stderrLines.includes("initialized-packaged"),
+      );
+    } finally {
+      await lifecycle?.stop().catch(() => undefined);
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+  10_000,
+);
 
 test("verifies release artifact sha256 before sidecar launch", async () => {
   const dir = await mkdtemp(join(tmpdir(), "app-server-client-"));
@@ -2701,7 +3746,11 @@ test("reads and validates protocol schema manifest metadata", async () => {
     methods: [...APP_SERVER_METHODS].reverse(),
     schemas: {
       jsonrpc: ["JsonRpcRequest"],
-      v0: ["AgentSessionTurnStartParams", "RuntimeOptions"],
+      v0: [
+        "AgentSessionTurnStartParams",
+        "AgentSessionHandoffBundleExportResponse",
+        "RuntimeOptions",
+      ],
     },
   };
 
@@ -2731,6 +3780,15 @@ test("reads and validates protocol schema manifest metadata", async () => {
         group: "v0",
         typeName: "AgentSessionTurnStartParams",
         path: join(schemaRoot, "v0", "AgentSessionTurnStartParams.json"),
+      },
+      {
+        group: "v0",
+        typeName: "AgentSessionHandoffBundleExportResponse",
+        path: join(
+          schemaRoot,
+          "v0",
+          "AgentSessionHandoffBundleExportResponse.json",
+        ),
       },
       {
         group: "v0",
@@ -2778,6 +3836,13 @@ test("consumes checked-in Rust protocol schema manifest", async () => {
   assert.doesNotThrow(() => assertCompatibleProtocolSchemaManifest(manifest));
   assert.ok(manifest.schemas.v0.includes("AgentSessionTurnStartParams"));
   assert.ok(manifest.schemas.v0.includes("EvidenceExportResponse"));
+  assert.ok(
+    manifest.schemas.v0.includes("AgentSessionHandoffBundleExportParams"),
+  );
+  assert.ok(
+    manifest.schemas.v0.includes("AgentSessionHandoffBundleExportResponse"),
+  );
+  assert.ok(manifest.schemas.v0.includes("AgentSessionHandoffArtifact"));
   assert.ok(manifest.schemas.jsonrpc.includes("JsonRpcRequest"));
   assert.ok(
     listProtocolSchemaFiles(manifest, schemaRoot).some(

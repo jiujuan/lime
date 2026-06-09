@@ -1676,34 +1676,6 @@ pub(crate) fn analyze_layered_design_flat_image_inner(
     })
 }
 
-#[tauri::command]
-pub async fn save_layered_design_project_export(
-    request: SaveLayeredDesignProjectExportRequest,
-) -> Result<SaveLayeredDesignProjectExportOutput, String> {
-    save_layered_design_project_export_inner(request).await
-}
-
-#[tauri::command]
-pub fn read_layered_design_project_export(
-    request: ReadLayeredDesignProjectExportRequest,
-) -> Result<ReadLayeredDesignProjectExportOutput, String> {
-    read_layered_design_project_export_inner(request)
-}
-
-#[tauri::command]
-pub fn recognize_layered_design_text(
-    request: RecognizeLayeredDesignTextRequest,
-) -> Result<RecognizeLayeredDesignTextOutput, String> {
-    recognize_layered_design_text_inner(request)
-}
-
-#[tauri::command]
-pub fn analyze_layered_design_flat_image(
-    request: AnalyzeLayeredDesignFlatImageRequest,
-) -> Result<AnalyzeLayeredDesignFlatImageOutput, String> {
-    analyze_layered_design_flat_image_inner(request)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

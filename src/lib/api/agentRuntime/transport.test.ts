@@ -19,11 +19,11 @@ describe("agentRuntime transport", () => {
     const invoke = vi.fn().mockResolvedValueOnce({ ok: true });
     const bridgeInvoke = createAgentRuntimeBridgeInvoke({ invoke });
 
-    await expect(bridgeInvoke("agent_get_process_status")).resolves.toEqual({
+    await expect(bridgeInvoke("app_server_drain_events")).resolves.toEqual({
       ok: true,
     });
 
-    expect(invoke).toHaveBeenCalledWith("agent_get_process_status");
+    expect(invoke).toHaveBeenCalledWith("app_server_drain_events");
   });
 
   it("有 payload 时应透传命令名与请求体", async () => {
@@ -72,11 +72,11 @@ describe("agentRuntime transport", () => {
     const invokeCommand = createAgentRuntimeCommandInvoke({ bridgeInvoke });
 
     await expect(
-      invokeCommand("agent_runtime_spawn_subagent", {
-        request: { name: "worker" },
+      invokeCommand("agent_runtime_list_sessions", {
+        request: { workspaceId: "workspace-1" },
       }),
     ).rejects.toThrow(
-      "agent_runtime_spawn_subagent 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "agent_runtime_list_sessions 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
 
@@ -130,9 +130,9 @@ describe("agentRuntime transport", () => {
     const invokeCommand = createAgentRuntimeCommandInvoke({ bridgeInvoke });
 
     await expect(
-      invokeCommand("agent_runtime_spawn_subagent", {
-        request: { name: "worker" },
+      invokeCommand("agent_runtime_list_sessions", {
+        request: { workspaceId: "workspace-1" },
       }),
-    ).rejects.toThrow("agent_runtime_spawn_subagent returned an error envelope");
+    ).rejects.toThrow("agent_runtime_list_sessions returned an error envelope");
   });
 });

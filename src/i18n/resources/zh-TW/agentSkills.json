@@ -657,7 +657,6 @@
   "skills.scaffoldDialog.validation.description": "請輸入 Skill 描述",
   "skills.scaffoldDialog.validation.directory": "請輸入目錄名",
   "skills.scaffoldDialog.validation.name": "請輸入 Skill 名稱",
-  "skills.skillCard.action.execute": "執行",
   "skills.skillCard.action.inspect": "檢查詳情",
   "skills.skillCard.action.install": "安裝",
   "skills.skillCard.action.installing": "安裝中",

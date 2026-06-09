@@ -657,7 +657,6 @@
   "skills.scaffoldDialog.validation.description": "Skill 설명을 입력하세요",
   "skills.scaffoldDialog.validation.directory": "디렉터리 이름을 입력하세요",
   "skills.scaffoldDialog.validation.name": "Skill 이름을 입력하세요",
-  "skills.skillCard.action.execute": "실행",
   "skills.skillCard.action.inspect": "자세히 검사",
   "skills.skillCard.action.install": "설치",
   "skills.skillCard.action.installing": "설치 중",

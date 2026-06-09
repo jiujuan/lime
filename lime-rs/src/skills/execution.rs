@@ -1029,6 +1029,7 @@ mod tests {
             skill_name: "analysis".to_string(),
             display_name: "analysis".to_string(),
             description: "分析任务".to_string(),
+            local_directory_path: std::path::PathBuf::from("/tmp/analysis"),
             markdown_content: markdown_content.to_string(),
             license: None,
             compatibility: None,

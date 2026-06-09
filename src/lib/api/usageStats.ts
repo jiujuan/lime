@@ -1,4 +1,9 @@
-import { createAppServerClient } from "./appServer";
+import {
+  APP_SERVER_METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
+  APP_SERVER_METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+  APP_SERVER_METHOD_USAGE_STATS_READ,
+  createAppServerClient,
+} from "./appServer";
 
 export interface UsageStatsResponse {
   total_conversations: number;
@@ -41,9 +46,8 @@ function isString(value: unknown): value is string {
 export async function getUsageStats(
   timeRange: string,
 ): Promise<UsageStatsResponse> {
-  const result = (
-    await createAppServerClient().readUsageStats({ timeRange })
-  ).result.stats;
+  const result = (await createAppServerClient().readUsageStats({ timeRange }))
+    .result.stats;
   if (
     !isRecord(result) ||
     !isNumber(result.totalConversations) ||
@@ -57,7 +61,9 @@ export async function getUsageStats(
     !isNumber(result.todayMessages) ||
     !isNumber(result.todayTokens)
   ) {
-    throw new Error("get_usage_stats 未返回有效使用统计数据");
+    throw new Error(
+      `${APP_SERVER_METHOD_USAGE_STATS_READ} 未返回有效使用统计数据`,
+    );
   }
   return {
     total_conversations: result.totalConversations,
@@ -90,7 +96,9 @@ export async function getModelUsageRanking(
         !isNumber(item.percentage),
     )
   ) {
-    throw new Error("get_model_usage_ranking 未返回有效模型使用排行");
+    throw new Error(
+      `${APP_SERVER_METHOD_USAGE_STATS_MODEL_RANKING_LIST} 未返回有效模型使用排行`,
+    );
   }
   return result as ModelUsage[];
 }
@@ -111,7 +119,9 @@ export async function getDailyUsageTrends(
         !isNumber(item.tokens),
     )
   ) {
-    throw new Error("get_daily_usage_trends 未返回有效每日使用趋势");
+    throw new Error(
+      `${APP_SERVER_METHOD_USAGE_STATS_DAILY_TRENDS_LIST} 未返回有效每日使用趋势`,
+    );
   }
   return result as DailyUsage[];
 }

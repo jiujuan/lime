@@ -657,7 +657,6 @@
   "skills.scaffoldDialog.validation.description": "Enter a Skill description",
   "skills.scaffoldDialog.validation.directory": "Enter a directory name",
   "skills.scaffoldDialog.validation.name": "Enter a Skill name",
-  "skills.skillCard.action.execute": "Run",
   "skills.skillCard.action.inspect": "Inspect details",
   "skills.skillCard.action.install": "Install",
   "skills.skillCard.action.installing": "Installing",

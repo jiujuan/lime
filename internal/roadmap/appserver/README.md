@@ -41,13 +41,19 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 | `current target`    | `RuntimeCore`                                                              | 跨 App、跨执行后端复用的公共 runtime service 层。                                         |
 | `current target`    | `ExecutionBackend`                                                         | Aster 和未来更多执行后端的适配接口。                                                      |
 | `current reference` | `lime-rs/crates/agent`                                                     | 当前最接近 runtime core 的 crate，后续继续拆公共模型与服务。                              |
+| `current bridge`    | `src/lib/dev-bridge/safeInvoke.ts`、HTTP client、`app_server_handle_json_lines` | Lime Desktop renderer 进入 Electron Desktop Host / App Server JSON-RPC 的 current 传输、可用性探测和事件监听边界。 |
 | `current client`    | Lime Desktop / content-studio / 更多独立 App 的 app-server client          | 独立 App 只通过协议消费 runtime，不直接 import Lime 内部实现。                            |
 | `compat cleanup`    | `lime-rs/src/commands/**`                                                  | 旧 Tauri command wrapper 清理区；只能迁出核心逻辑、撤注册、删除；删不动登记 blocker，不再保留 stub / compat wrapper。 |
+| `compat cleanup`    | `src/lib/dev-bridge/commandPolicy.ts` 中的旧命令 truth / no-mock fallback  | 只作为迁移期 fail-closed / 阻塞记录存在；旧命令迁到 current 后必须从 production truth、mock policy、旧 smoke 和 catalog 撤出。 |
 | `compat`            | legacy desktop facade                                                      | 迁移期继续服务 Lime Desktop，但只能委托 App Server / Electron Desktop Host current 主链，不继续拥有独立 runtime 事实。 |
 | `deprecated`        | 壳层内直接拼接 runtime 业务逻辑                                            | 只允许迁移和下线，不允许新增能力。                                                        |
 | `dead`              | 新独立 App 自建完整 Agent runtime                                          | 不再作为 Lime 生态扩展方向。                                                              |
 
 `lime-rs/src/commands/**` 的历史实现只能作为迁移参考，不能再作为新业务逻辑、API adapter、runtime 分支或领域服务的落点。新增 Rust 后端能力必须进入 App Server crates / RuntimeCore / services 等 current 事实源；窗口、托盘、Dock、updater、shell、deep link 等桌面壳能力进入 Electron Desktop Host。若某个能力仍只能通过 `commands/` wrapper 才能跑通，应把它判为 current 主链缺口，而不是继续补旧 wrapper。
+
+`src/lib/dev-bridge/**` 不等同于旧 Rust DevBridge，也不是命令迁移完成后的整体删除目标。App Server current 化时，renderer 仍需要 `safeInvoke` / HTTP client / `app_server_handle_json_lines` 作为传输和诊断边界；后续治理只收缩旧命令 policy、mock fallback、旧 smoke 和 retired guard。目录级退场必须另行证明已有替代 renderer bridge 事实源覆盖这些 current 能力。
+
+后续每个 App Server command group 收口时，都必须把 `src/lib/dev-bridge` 作为治理检查项：保留 current renderer bridge；清出已迁旧命令在 `commandPolicy.ts`、`mockPriorityCommands.ts`、desktop-host mock、旧 smoke 和 catalog 中的 production truth / mock fallback；删不动的 residual 回挂 `internal/exec-plans/tech-debt-tracker.md` 的 `CCD-012` 并写清退出条件。
 
 ## 3. 文档索引
 
@@ -60,6 +66,8 @@ App Server + JSON-RPC Protocol + RuntimeCore + ExecutionBackend Adapters
 | [consumer-integration.md](./consumer-integration.md)               | content-studio 和未来独立 App 如何消费 App Server、TS client、sidecar binary 与 release manifest。 |
 | [frontend-electron-migration.md](./frontend-electron-migration.md) | Electron Desktop Host current 契约、renderer / bridge / sidecar 边界与验收口径。                   |
 | [release-updater.md](./release-updater.md)                         | Electron release、签名、公证、updater feed、包资源和下个版本平稳迁移口径。                         |
+| [desktop-platform-product-app-boundary-prd.md](./desktop-platform-product-app-boundary-prd.md) | App Server / Desktop Platform / Product App 的上层边界决策，说明 Desktop Platform 为什么不多余、App Server 不做桌面 Host、Product App 不复制平台能力，并包含架构图、时序图、流程图和 App Server 侧开发任务。 |
+| [provider-store-data-root-prd.md](./provider-store-data-root-prd.md) | Provider store、API Key 单事实源、App Server 显式数据根、空库初始化和 Desktop Platform / Product App 集成计划。 |
 | [sequences.md](./sequences.md)                                     | 初始化、会话、工具审批、事件流、独立 App 集成等时序图。                                            |
 | [flowcharts.md](./flowcharts.md)                                   | 从用户输入到 runtime 执行、服务抽取、迁移替换和多 App 复用流程图。                                 |
 | [implementation-plan.md](./implementation-plan.md)                 | 分阶段实施计划、退出条件、验证和治理守卫。                                                         |
@@ -113,3 +121,11 @@ P0 路线图与公共边界冻结
 2. `RuntimeCore / ExecutionBackend` 先定义清楚，Aster 才能作为 adapter 接入，而不是绑死公共层。
 3. 协议只暴露 session / turn / event / action / artifact / evidence 等稳定事实，不暴露具体 backend。
 4. 完整 tool / artifact / evidence 迁移应跟随 runtime core facts，而不是先做壳层包装。
+
+## 8. 跨项目阅读顺序
+
+涉及 `lime-desktop-platform`、`zhongcao`、App Server 和 Provider/key 时，开发者应按以下顺序读：
+
+1. [desktop-platform-product-app-boundary-prd.md](./desktop-platform-product-app-boundary-prd.md)：先确认四层边界和选定路线。
+2. [provider-store-data-root-prd.md](./provider-store-data-root-prd.md)：再确认 Provider/key、App Server DB 和数据根落点。
+3. 对应项目的 `internal/roadmap/*`：最后看 Desktop Platform 或 Product App 需要做的具体任务。

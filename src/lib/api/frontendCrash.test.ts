@@ -11,7 +11,7 @@ describe("frontendCrash API", () => {
     vi.clearAllMocks();
   });
 
-  it("应代理前端崩溃上报命令", async () => {
+  it("应通过 Electron Host current 通道上报前端崩溃并保持参数投影", async () => {
     const report = { message: "boom" };
     vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
 
@@ -31,20 +31,15 @@ describe("frontendCrash API", () => {
     });
 
     await expect(reportFrontendCrash({ message: "boom" })).rejects.toThrow(
-      "report_frontend_crash 尚未接入真实前端崩溃诊断 current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "report_frontend_crash 尚未接入前端崩溃诊断 Electron Host current 通道",
     );
   });
 
-  it("前端崩溃上报遇到 mock-like 或错误 envelope 时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ error: "failed" });
+  it("遇到异常成功形态时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: false });
 
-    await expect(reportFrontendCrash({ message: "empty" })).rejects.toThrow(
-      "report_frontend_crash did not return frontend crash report result",
-    );
-    await expect(reportFrontendCrash({ message: "error" })).rejects.toThrow(
-      "report_frontend_crash did not return frontend crash report result",
+    await expect(reportFrontendCrash({ message: "boom" })).rejects.toThrow(
+      "report_frontend_crash did not return crash report result",
     );
   });
 });

@@ -13,10 +13,6 @@ export {
   type StepStatus,
 } from "./WorkflowProgress";
 export {
-  SkillExecutionDialog,
-  type SkillExecutionDialogProps,
-} from "./SkillExecutionDialog";
-export {
   SkillContentDialog,
   type SkillContentDialogProps,
 } from "./SkillContentDialog";

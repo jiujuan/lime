@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "AgentSessionHandoffArtifact": {
+      "properties": {
+        "absolutePath": {
+          "type": "string"
+        },
+        "bytes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "absolutePath",
+        "bytes",
+        "kind",
+        "relativePath",
+        "title"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "artifacts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentSessionHandoffArtifact"
+      },
+      "type": "array"
+    },
+    "evidencePackRelativeRoot": {
+      "type": "string"
+    },
+    "exportedAt": {
+      "type": "string"
+    },
+    "handoffBundleRelativeRoot": {
+      "type": "string"
+    },
+    "latestTurnStatus": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "linkedEvidenceArtifactCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "linkedHandoffArtifactCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "pendingRequestCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "queuedTurnCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "recentArtifactCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "replayAbsoluteRoot": {
+      "type": "string"
+    },
+    "replayRelativeRoot": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "threadStatus": {
+      "type": "string"
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceRoot": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "evidencePackRelativeRoot",
+    "exportedAt",
+    "handoffBundleRelativeRoot",
+    "linkedEvidenceArtifactCount",
+    "linkedHandoffArtifactCount",
+    "pendingRequestCount",
+    "queuedTurnCount",
+    "recentArtifactCount",
+    "replayAbsoluteRoot",
+    "replayRelativeRoot",
+    "sessionId",
+    "threadId",
+    "threadStatus",
+    "workspaceRoot"
+  ],
+  "title": "AgentSessionReplayCaseExportResponse",
+  "type": "object"
+}

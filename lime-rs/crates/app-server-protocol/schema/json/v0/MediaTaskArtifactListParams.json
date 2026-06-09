@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "limit": {
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "modalityContractKey": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "projectRootPath": {
+      "type": "string"
+    },
+    "routingOutcome": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "status": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "taskFamily": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "taskType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "projectRootPath"
+  ],
+  "title": "MediaTaskArtifactListParams",
+  "type": "object"
+}

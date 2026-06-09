@@ -287,4 +287,17 @@ describe("materials API", () => {
       "get_material_content 尚未接入真实 Materials current 通道",
     );
   });
+
+  it("deleteMaterial 遇到 mock-like payload 时不应伪装成成功", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ error: "not available" });
+
+    await expect(deleteMaterial("m4")).rejects.toThrow(
+      "delete_material did not return void",
+    );
+    await expect(deleteMaterial("m4")).rejects.toThrow(
+      "delete_material did not return void",
+    );
+  });
 });

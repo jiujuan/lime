@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "audioPath": {
+      "type": "string"
+    },
+    "durationMs": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "mimeType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "projectRootPath": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "taskRef": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "audioPath",
+    "projectRootPath",
+    "taskRef"
+  ],
+  "title": "MediaTaskArtifactAudioCompleteParams",
+  "type": "object"
+}

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as logsApi from "@/lib/api/logs";
+import * as devBridge from "@/lib/dev-bridge";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   buildCrashDiagnosticPayload,
@@ -105,6 +106,7 @@ describe("copyCrashDiagnosticToClipboard", () => {
   });
 
   it("全部复制方案失败时返回中文可操作错误", async () => {
+    const safeInvokeSpy = vi.spyOn(devBridge, "safeInvoke");
     const writeText = vi
       .fn()
       .mockRejectedValue(new Error("NotAllowedError: denied permission"));
@@ -121,6 +123,10 @@ describe("copyCrashDiagnosticToClipboard", () => {
 
     await expect(copyCrashDiagnosticToClipboard(payload)).rejects.toThrow(
       "剪贴板权限被系统拒绝，请允许权限后重试，或使用“导出诊断 JSON”",
+    );
+    expect(safeInvokeSpy).not.toHaveBeenCalledWith(
+      "copy_machine_id_to_clipboard",
+      expect.anything(),
     );
   });
 });

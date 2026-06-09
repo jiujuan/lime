@@ -370,6 +370,9 @@ describe("SkillsPage", () => {
     );
 
     expect(uninstallButtons).toHaveLength(1);
+    expect(
+      buttonTexts.some((textContent) => textContent.includes("执行")),
+    ).toBe(false);
   });
 
   it("远程缓存为空时仍应显示远程分组和刷新提示", () => {

@@ -14,10 +14,11 @@ const INVOKE_RETRY_DELAY_MS = 1_000;
 
 function printHelp() {
   console.log(`
-Lime Site Adapter Catalog Smoke
+Lime Site Adapter Legacy Guard Smoke
 
 用途:
-  验证站点适配器目录最小主链可用：目录状态、列表、推荐与检索结果可读。
+  验证旧 Site Adapter 命令不再作为 current 成功证据。
+  这些命令在迁入 App Server current 前只能 fail closed 或返回 Electron diagnostic。
 
 用法:
   node scripts/site-adapter-catalog-smoke.mjs [选项]
@@ -88,12 +89,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
 async function waitForHealth(options) {
   const startedAt = Date.now();
   let lastError = null;
@@ -126,7 +121,7 @@ async function waitForHealth(options) {
   );
 }
 
-async function invoke(options, cmd, args) {
+async function invokeRaw(options, cmd, args) {
   console.log(`[smoke:site-adapters] invoke ${cmd}`);
   for (let attempt = 1; attempt <= INVOKE_RETRY_COUNT; attempt += 1) {
     let response;
@@ -166,11 +161,68 @@ async function invoke(options, cmd, args) {
 
     const payload = await response.json();
     if (payload?.error) {
-      throw new Error(String(payload.error));
+      return {
+        ok: false,
+        error: String(payload.error),
+        payload,
+      };
     }
 
-    return payload?.result;
+    return {
+      ok: true,
+      result: payload?.result,
+      payload,
+    };
   }
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function diagnosticCommand(value) {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const diagnostic = value.diagnostic;
+  if (!isRecord(diagnostic)) {
+    return null;
+  }
+
+  if (diagnostic.source !== "electron-host-diagnostic") {
+    return null;
+  }
+
+  return typeof diagnostic.command === "string" ? diagnostic.command : null;
+}
+
+function assertRetiredCommandDidNotSucceed(command, invocation) {
+  if (!invocation.ok) {
+    console.log(
+      `[smoke:site-adapters] ${command} fail-closed error=${invocation.error}`,
+    );
+    return;
+  }
+
+  const result = invocation.result;
+  if (diagnosticCommand(result) === command) {
+    console.log(
+      `[smoke:site-adapters] ${command} returned electron-host-diagnostic`,
+    );
+    return;
+  }
+
+  if (Array.isArray(result) && result.length === 0) {
+    console.log(
+      `[smoke:site-adapters] ${command} returned empty diagnostic list`,
+    );
+    return;
+  }
+
+  throw new Error(
+    `[smoke:site-adapters] ${command} returned a successful legacy result; Site Adapter must move to App Server current before this smoke can accept success`,
+  );
 }
 
 async function main() {
@@ -181,69 +233,19 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   await waitForHealth(options);
 
-  const status = await invoke(options, "site_get_adapter_catalog_status");
-  assert(status && typeof status === "object", "site_get_adapter_catalog_status 返回为空");
-  assert(
-    typeof status.adapter_count === "number" && status.adapter_count >= 0,
-    "site_get_adapter_catalog_status 缺少 adapter_count",
-  );
-  assert(
-    status.source_kind === "bundled" || status.source_kind === "server_synced",
-    "site_get_adapter_catalog_status 返回了未知 source_kind",
-  );
+  const retiredChecks = [
+    ["site_get_adapter_catalog_status"],
+    ["site_list_adapters"],
+    ["site_recommend_adapters", { request: { limit: 3 } }],
+    ["site_search_adapters", { request: { query: "news" } }],
+  ];
 
-  const adapters = await invoke(options, "site_list_adapters");
-  assert(Array.isArray(adapters), "site_list_adapters 返回不是数组");
-  assert(adapters.length > 0, "site_list_adapters 返回为空");
-
-  const adapter = adapters[0];
-  assert(
-    typeof adapter?.name === "string" && adapter.name.trim(),
-    "site_list_adapters 首项缺少 name",
-  );
-  assert(
-    typeof adapter?.domain === "string" && adapter.domain.trim(),
-    "site_list_adapters 首项缺少 domain",
-  );
-
-  const recommendations = await invoke(options, "site_recommend_adapters", {
-    request: {
-      limit: 3,
-    },
-  });
-  assert(Array.isArray(recommendations), "site_recommend_adapters 返回不是数组");
-  if (recommendations.length > 0) {
-    const recommendation = recommendations[0];
-    assert(
-      typeof recommendation?.adapter?.name === "string" &&
-        recommendation.adapter.name.trim(),
-      "site_recommend_adapters 首项缺少 adapter.name",
-    );
-    assert(
-      typeof recommendation?.reason === "string" && recommendation.reason.trim(),
-      "site_recommend_adapters 首项缺少 reason",
-    );
-    assert(
-      typeof recommendation?.entry_url === "string" &&
-        recommendation.entry_url.trim(),
-      "site_recommend_adapters 首项缺少 entry_url",
-    );
+  for (const [command, args] of retiredChecks) {
+    const invocation = await invokeRaw(options, command, args);
+    assertRetiredCommandDidNotSucceed(command, invocation);
   }
 
-  const searchResults = await invoke(options, "site_search_adapters", {
-    request: {
-      query: adapter.name,
-    },
-  });
-  assert(Array.isArray(searchResults), "site_search_adapters 返回不是数组");
-  assert(
-    searchResults.some((item) => item?.name === adapter.name),
-    "site_search_adapters 未返回刚刚列出的适配器",
-  );
-
-  console.log(
-    `[smoke:site-adapters] 通过 adapters=${adapters.length} source=${status.source_kind} recommended=${recommendations.length}`,
-  );
+  console.log("[smoke:site-adapters] 通过：旧 Site Adapter 命令未回流成功路径");
 }
 
 main().catch((error) => {

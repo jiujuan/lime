@@ -150,14 +150,14 @@ describe("appUpdate API", () => {
 
   it("应代理更新提醒动作", async () => {
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(123)
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(456)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
 
     await expect(closeUpdateWindow()).resolves.toBeUndefined();
     await expect(openUpdateWindow()).resolves.toBeUndefined();
@@ -189,8 +189,25 @@ describe("appUpdate API", () => {
     );
   });
 
+  it("更新 side-effect 命令收到 mock-like payload 时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ error: "failed" });
+
+    await expect(openUpdateWindow()).rejects.toThrow(
+      "open_update_window did not return void result",
+    );
+    await expect(recordUpdateNotificationAction("dismiss")).rejects.toThrow(
+      "record_update_notification_action did not return void result",
+    );
+    await expect(skipUpdateVersion("1.2.3")).rejects.toThrow(
+      "skip_update_version did not return void result",
+    );
+  });
+
   it("打开更新提醒窗口时应传递更新按钮锚点矩形", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
+    vi.mocked(safeInvoke).mockResolvedValueOnce(null);
 
     await expect(
       openUpdateWindow({ x: 18.4, y: 816.2, width: 30.1, height: 30 }),

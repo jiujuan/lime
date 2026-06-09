@@ -3,7 +3,6 @@ import {
   Bot,
   FileText,
   FolderOpen,
-  HardDriveDownload,
   ListChecks,
   Loader2,
   ShieldAlert,
@@ -13,7 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type {
-  AgentRuntimeHandoffBundle,
+  AgentRuntimeEvidencePack,
   AgentRuntimeToolInventory,
 } from "@/lib/api/agentRuntime";
 import type {
@@ -96,7 +95,7 @@ export function buildHarnessPanelSectionNavItems({
     sections.push({ key: "agentui", label: "AgentUI 投影" });
   }
   if (hasHandoffSection) {
-    sections.push({ key: "handoff", label: "交接制品" });
+    sections.push({ key: "handoff", label: "问题证据包" });
   }
   if (threadReliability.shouldRender) {
     sections.push({ key: "reliability", label: "可靠性" });
@@ -147,7 +146,7 @@ interface BuildHarnessSummaryCardsInput {
   environment: HarnessEnvironmentSummary;
   fileChangeReviewEntries: FileChangeReviewEntry[];
   fileReviewCopy: HarnessFileReviewSummaryCopy;
-  handoffBundle: AgentRuntimeHandoffBundle | null;
+  evidencePack: AgentRuntimeEvidencePack | null;
   hasAgentUiProjectionSection: boolean;
   hasHandoffSection: boolean;
   hasSelectedTeamConfig: boolean;
@@ -175,7 +174,7 @@ export function buildHarnessSummaryCards({
   environment,
   fileChangeReviewEntries,
   fileReviewCopy,
-  handoffBundle,
+  evidencePack,
   hasAgentUiProjectionSection,
   hasHandoffSection,
   hasSelectedTeamConfig,
@@ -225,14 +224,14 @@ export function buildHarnessSummaryCards({
   if (hasHandoffSection) {
     cards.push({
       sectionKey: "handoff",
-      title: "交接制品",
-      value: handoffBundle
-        ? `${handoffBundle.artifacts.length} 个文件`
+      title: "问题证据包",
+      value: evidencePack
+        ? `${evidencePack.artifacts.length} 个文件`
         : "待导出",
-      hint: handoffBundle
-        ? `最近导出 ${formatIsoDateTime(handoffBundle.exported_at)}`
-        : "导出当前会话的 plan / progress / handoff / review 四件套",
-      icon: HardDriveDownload,
+      hint: evidencePack
+        ? `最近导出 ${formatIsoDateTime(evidencePack.exported_at)}`
+        : "导出当前会话的 runtime、timeline、最近产物和已知缺口",
+      icon: ShieldAlert,
     });
   }
 

@@ -3,8 +3,12 @@ mod aster_backend;
 mod backend_event;
 mod capability;
 mod external_backend;
+mod file_checkpoint;
+mod gateway_tunnel;
 mod knowledge_builder_runtime;
 mod local_data_source;
+mod media_task;
+mod objective;
 mod processor;
 mod runtime;
 mod runtime_backend;
@@ -13,10 +17,23 @@ mod runtime_factory;
 pub use app_server_protocol::error_codes;
 pub use app_server_protocol::AgentInput;
 pub use app_server_protocol::AgentSession;
+pub use app_server_protocol::AgentSessionActionReplayParams;
+pub use app_server_protocol::AgentSessionActionReplayResponse;
 pub use app_server_protocol::AgentSessionActionRespondParams;
 pub use app_server_protocol::AgentSessionActionRespondResponse;
 pub use app_server_protocol::AgentSessionActionScope;
 pub use app_server_protocol::AgentSessionActionType;
+pub use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
+pub use app_server_protocol::AgentSessionAnalysisHandoffExportResponse;
+pub use app_server_protocol::AgentSessionHandoffArtifact;
+pub use app_server_protocol::AgentSessionHandoffBundleExportParams;
+pub use app_server_protocol::AgentSessionHandoffBundleExportResponse;
+pub use app_server_protocol::AgentSessionReplayCaseExportParams;
+pub use app_server_protocol::AgentSessionReplayCaseExportResponse;
+pub use app_server_protocol::AgentSessionReviewDecision;
+pub use app_server_protocol::AgentSessionReviewDecisionSaveParams;
+pub use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
+pub use app_server_protocol::AgentSessionReviewDecisionTemplateExportResponse;
 pub use app_server_protocol::AgentSessionStartParams;
 pub use app_server_protocol::AgentSessionStatus;
 pub use app_server_protocol::AgentSessionTurnStartParams;
@@ -39,9 +56,15 @@ pub use app_server_protocol::JsonRpcNotification;
 pub use app_server_protocol::JsonRpcRequest;
 pub use app_server_protocol::RequestId;
 pub use app_server_protocol::RuntimeOptions;
+pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_REPLAY;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
+pub use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
+pub use app_server_protocol::METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_READ;
+pub use app_server_protocol::METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT;
+pub use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE;
+pub use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_START;
 pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
@@ -96,6 +119,7 @@ pub use runtime::ActionRespondRequest;
 pub use runtime::AppDataSource;
 pub use runtime::ArtifactContentProvider;
 pub use runtime::ArtifactContentRequest;
+pub use runtime::BasicEvidenceExportProvider;
 pub use runtime::CancelExecutionRequest;
 pub use runtime::EvidenceExportProvider;
 pub use runtime::EvidencePackRequest;
@@ -103,6 +127,7 @@ pub use runtime::ExecutionBackend;
 pub use runtime::ExecutionRequest;
 pub use runtime::FilesystemArtifactContentProvider;
 pub use runtime::InlineArtifactContentProvider;
+pub use runtime::ManagedObjectiveAuditUpdate;
 pub use runtime::MockBackend;
 pub use runtime::NoopAppDataSource;
 pub use runtime::NoopEvidenceExportProvider;
@@ -538,6 +563,23 @@ mod tests {
                             "kind": "markdown_report",
                             "status": "ready",
                             "content": "# Report"
+                        }),
+                    ),
+                    RuntimeEvent::new(
+                        "action.required",
+                        json!({
+                            "requestId": "req_confirm_1",
+                            "actionType": "tool_confirmation",
+                            "data": {
+                                "toolName": "PublishTool",
+                                "arguments": { "channel": "draft" },
+                                "prompt": "确认发布？"
+                            },
+                            "scope": {
+                                "sessionId": "sess_flow",
+                                "threadId": "thread_flow",
+                                "turnId": "turn_flow"
+                            }
                         }),
                     ),
                 ],
@@ -1125,6 +1167,25 @@ mod tests {
                 "content": "# Report"
             }),
         );
+        assert_agent_event_notification(
+            &turn_messages[3],
+            "action.required",
+            "turn_flow",
+            json!({
+                "requestId": "req_confirm_1",
+                "actionType": "tool_confirmation",
+                "data": {
+                    "toolName": "PublishTool",
+                    "arguments": { "channel": "draft" },
+                    "prompt": "确认发布？"
+                },
+                "scope": {
+                    "sessionId": "sess_flow",
+                    "threadId": "thread_flow",
+                    "turnId": "turn_flow"
+                }
+            }),
+        );
 
         let artifact_response = request(
             &server,
@@ -1176,9 +1237,25 @@ mod tests {
         assert!(evidence_response.get("threadStatus").is_none());
         assert!(evidence_response.get("completionAuditSummary").is_none());
 
+        let replay_before = request(
+            &server,
+            6,
+            METHOD_AGENT_SESSION_ACTION_REPLAY,
+            serde_json::to_value(AgentSessionActionReplayParams {
+                session_id: "sess_flow".to_string(),
+                request_id: "req_confirm_1".to_string(),
+            })
+            .expect("replay params"),
+        )
+        .await;
+        assert_eq!(replay_before["action"]["type"], "action_required");
+        assert_eq!(replay_before["action"]["requestId"], "req_confirm_1");
+        assert_eq!(replay_before["action"]["actionType"], "tool_confirmation");
+        assert_eq!(replay_before["action"]["toolName"], "PublishTool");
+
         let action_messages = server
             .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
-                RequestId::Integer(6),
+                RequestId::Integer(7),
                 METHOD_AGENT_SESSION_ACTION_RESPOND,
                 Some(
                     serde_json::to_value(AgentSessionActionRespondParams {
@@ -1221,6 +1298,19 @@ mod tests {
         );
         assert_eq!(host.submit_count.load(Ordering::SeqCst), 1);
         assert_eq!(host.action_count.load(Ordering::SeqCst), 1);
+
+        let replay_after = request(
+            &server,
+            8,
+            METHOD_AGENT_SESSION_ACTION_REPLAY,
+            serde_json::to_value(AgentSessionActionReplayParams {
+                session_id: "sess_flow".to_string(),
+                request_id: "req_confirm_1".to_string(),
+            })
+            .expect("replay params"),
+        )
+        .await;
+        assert!(replay_after["action"].is_null());
     }
 
     #[tokio::test]

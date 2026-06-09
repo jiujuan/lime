@@ -9,14 +9,6 @@ import type { QueuedTurnSnapshot } from "../queuedTurn";
 import type { ModelCapabilities } from "@/lib/types/modelRegistry";
 export type { QueuedTurnSnapshot } from "../queuedTurn";
 export type { AsterApprovalPolicy, AsterExecutionStrategy, AsterSandboxPolicy, AsterSessionExecutionRuntimeCostState, AsterSessionExecutionRuntimeLimitEvent, AsterSessionExecutionRuntime, AsterSessionExecutionRuntimeAccessMode, AsterSessionExecutionRuntimeLimitState, AsterSessionExecutionRuntimePermissionState, AsterSessionExecutionRuntimePreferences, AsterSessionExecutionRuntimeRecentTeamRole, AsterSessionExecutionRuntimeRecentTeamSelection, AsterSessionExecutionRuntimeRecentTeamSource, AsterSessionExecutionRuntimeRoutingDecision, AsterSessionExecutionRuntimeSource, AsterSessionExecutionRuntimeTaskProfile, AsterTurnOutputSchemaRuntime, AsterTurnOutputSchemaSource, AsterTurnOutputSchemaStrategy, } from "../agentExecutionRuntime";
-/**
- * Agent 状态
- */
-export interface AgentProcessStatus {
-    running: boolean;
-    base_url?: string;
-    port?: number;
-}
 export interface AgentRuntimeGeneratedTitleResult {
     title: string;
     sessionId?: string | null;

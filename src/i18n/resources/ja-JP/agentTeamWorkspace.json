@@ -398,6 +398,7 @@
   "agentChat.teamWorkspace.control.sendInput.sentInterrupt": "現在の実行を中断し、新しい説明を送信しました",
   "agentChat.teamWorkspace.control.sendInput.sent": "このタスクに補足説明を送信しました",
   "agentChat.teamWorkspace.control.sendInput.failedFallback": "タスク説明の送信に失敗しました",
+  "agentChat.teamWorkspace.control.unavailable": "チームタスク制御は新しい実行経路へ移行中のため、一時的に子タスクを直接操作できません。",
   "agentChat.teamWorkspace.control.stop.pausedCount": "{{formattedCount}} 件のタスクを一時停止しました",
   "agentChat.teamWorkspace.control.stop.pausedOne": "このタスクを一時停止しました",
   "agentChat.teamWorkspace.control.stop.requestedCount": "{{formattedCount}} 件のタスクに一時停止リクエストを送信しました",

@@ -38,14 +38,6 @@ const IMAGE_SKILL_LAUNCH_RUNTIME_METADATA_KEY: &str = "lime_runtime";
 const IMAGE_SKILL_LAUNCH_TOOL_SURFACE_KEY: &str = "tool_surface";
 const IMAGE_SKILL_LAUNCH_RUNTIME_CONTROL_KEY: &str = "runtime_control";
 const IMAGE_SKILL_LAUNCH_STOP_AFTER_TOOL_RESULT_KEY: &str = "stop_after_tool_result";
-const IMAGE_SKILL_LAUNCH_DEFAULT_SKILL_NAME: &str = "image_generate";
-
-#[derive(Debug, Clone)]
-pub(crate) struct ImageSkillLaunchDirectTask {
-    pub tool_params: serde_json::Value,
-    pub skill_tool_arguments: String,
-}
-
 fn extract_object_string(
     object: &serde_json::Map<String, serde_json::Value>,
     keys: &[&str],
@@ -79,14 +71,6 @@ fn insert_non_empty_string_if_missing(
         key.to_string(),
         serde_json::Value::String(value.to_string()),
     );
-}
-
-fn build_image_skill_launch_direct_skill_arguments(skill_name: &str) -> String {
-    serde_json::to_string(&serde_json::json!({
-        "skill": skill_name,
-        "source": "image_skill_launch"
-    }))
-    .unwrap_or_else(|_| "{\"skill\":\"image_generate\"}".to_string())
 }
 
 fn build_image_skill_input_ref(index: usize) -> String {
@@ -375,44 +359,6 @@ pub(crate) fn prepare_image_skill_launch_request_metadata(
     }
 
     Some(metadata)
-}
-
-pub(crate) fn build_image_skill_launch_direct_task(
-    request_metadata: Option<&serde_json::Value>,
-    session_id: &str,
-    thread_id: &str,
-    turn_id: &str,
-    project_id: Option<&str>,
-) -> Result<Option<ImageSkillLaunchDirectTask>, String> {
-    let Some(launch) = extract_harness_nested_object(
-        request_metadata,
-        &["image_skill_launch", "imageSkillLaunch"],
-    ) else {
-        return Ok(None);
-    };
-    let kind = extract_object_string(launch, &["kind"]).unwrap_or_else(|| "image_task".to_string());
-    if kind != "image_task" {
-        return Ok(None);
-    }
-
-    let skill_name = extract_object_string(launch, &["skill_name", "skillName"])
-        .unwrap_or_else(|| IMAGE_SKILL_LAUNCH_DEFAULT_SKILL_NAME.to_string());
-    let mut image_task = launch
-        .get("image_task")
-        .and_then(serde_json::Value::as_object)
-        .cloned()
-        .ok_or_else(|| "图片技能启动缺少 image_task 上下文".to_string())?;
-
-    insert_image_generation_contract_fields(&mut image_task);
-    insert_non_empty_string_if_missing(&mut image_task, "session_id", Some(session_id));
-    insert_non_empty_string_if_missing(&mut image_task, "thread_id", Some(thread_id));
-    insert_non_empty_string_if_missing(&mut image_task, "turn_id", Some(turn_id));
-    insert_non_empty_string_if_missing(&mut image_task, "project_id", project_id);
-
-    Ok(Some(ImageSkillLaunchDirectTask {
-        tool_params: serde_json::Value::Object(image_task),
-        skill_tool_arguments: build_image_skill_launch_direct_skill_arguments(&skill_name),
-    }))
 }
 
 pub(crate) fn merge_system_prompt_with_image_skill_launch(

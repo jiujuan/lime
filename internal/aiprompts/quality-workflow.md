@@ -158,10 +158,13 @@ npm run smoke:claw-chat-current-fixture
 - legacy desktop facade 注册（仅在触碰兼容层时）
 - `src/lib/governance/agentCommandCatalog.json` 的治理口径
 - `mockPriorityCommands` 与 `defaultMocks` 的同步状态
+- `src/lib/dev-bridge/**` 的职责分类：`safeInvoke`、HTTP client、`app_server_handle_json_lines`、事件监听和可用性探测属于 `current` renderer bridge；旧命令 `commandPolicy`、no-mock fallback、mock priority、旧 smoke 和 retired guard 属于后续治理对象，不能混成整目录删除
 
 只改其中一侧，不算完成。
 
-如果本轮是在下线共享网关控制面，`start_server`、`stop_server`、`get_server_status`、`get_available_routes`、`get_route_curl_examples`、`test_api`、`get_network_info`，以及托盘残留 `sync_tray_state`、`update_tray_server_status`、`update_tray_credential_status`、`get_tray_state`、`refresh_tray_menu`、`refresh_tray_with_stats` 必须同步从前端网关、Rust 注册、DevBridge 和 mock 中撤掉；server 兼容面 `/v1/routes`、`/{selector}/v1/messages`、`/{selector}/v1/chat/completions` 也必须同步从 server 路由表与 services/core 模型中撤掉；开发者诊断只保留 `get_server_diagnostics`，托盘只保留 `sync_tray_model_shortcuts`，server 只保留标准 `/v1/messages` 与 `/v1/chat/completions`。
+命令迁移或清退收口时，质量结论必须说明 `src/lib/dev-bridge` 的检查结果：已迁旧命令是否仍在 production truth / mock fallback 中；如果只能保留旧命令字符串，是否明确为 `dead / retired guard-only` 或 `test-only`；删不掉的 residual 是否已登记到当前执行计划或 `CCD-012`。这条检查不替代 `npm run test:contracts`，而是防止 contract 通过后旧 policy / 旧 smoke 继续把 retired 命令伪装成 current。
+
+如果本轮是在下线共享网关控制面，`start_server`、`stop_server`、`get_server_status`、`get_available_routes`、`get_route_curl_examples`、`test_api`、`get_network_info`，以及托盘残留 `sync_tray_state`、`update_tray_server_status`、`update_tray_credential_status`、`get_tray_state`、`refresh_tray_menu`、`refresh_tray_with_stats` 必须同步从前端网关、Rust 注册、DevBridge 和 mock 中撤掉；server 兼容面 `/v1/routes`、`/{selector}/v1/messages`、`/{selector}/v1/chat/completions` 也必须同步从 server 路由表与 services/core 模型中撤掉；开发者诊断只保留 App Server `diagnostics/server/read` current 主链，旧 `get_server_diagnostics` 只能作为 retired guard / 负向测试 / cleanup-only residual；托盘只保留 `sync_tray_model_shortcuts`，server 只保留标准 `/v1/messages` 与 `/v1/chat/completions`。
 
 如果本轮是在下线项目默认风格旧链路，`style_guide_get` / `style_guide_update` 与 `ProjectMemory.style_guide` 也必须同步从前端 API、Rust 注册、数据库 schema、默认 mock 和 GUI 入口中撤掉。
 

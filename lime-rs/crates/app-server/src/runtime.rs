@@ -26,18 +26,60 @@ use app_server_protocol::AgentAppUninstallResponse;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
+use app_server_protocol::AgentSessionActionReplayParams;
+use app_server_protocol::AgentSessionActionReplayResponse;
 use app_server_protocol::AgentSessionActionRespondParams;
 use app_server_protocol::AgentSessionActionRespondResponse;
 use app_server_protocol::AgentSessionActionScope;
 use app_server_protocol::AgentSessionActionType;
+use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
+use app_server_protocol::AgentSessionAnalysisHandoffExportResponse;
+use app_server_protocol::AgentSessionCompactParams;
+use app_server_protocol::AgentSessionCompactResponse;
+use app_server_protocol::AgentSessionFileCheckpointDetail;
+use app_server_protocol::AgentSessionFileCheckpointDiffParams;
+use app_server_protocol::AgentSessionFileCheckpointDiffResponse;
+use app_server_protocol::AgentSessionFileCheckpointGetParams;
+use app_server_protocol::AgentSessionFileCheckpointListParams;
+use app_server_protocol::AgentSessionFileCheckpointListResponse;
+use app_server_protocol::AgentSessionFileCheckpointRestoreParams;
+use app_server_protocol::AgentSessionFileCheckpointRestoreResponse;
+use app_server_protocol::AgentSessionHandoffArtifact;
+use app_server_protocol::AgentSessionHandoffBundleExportParams;
+use app_server_protocol::AgentSessionHandoffBundleExportResponse;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionListResponse;
+use app_server_protocol::AgentSessionObjectiveAuditParams;
+use app_server_protocol::AgentSessionObjectiveAuditResponse;
+use app_server_protocol::AgentSessionObjectiveClearParams;
+use app_server_protocol::AgentSessionObjectiveClearResponse;
+use app_server_protocol::AgentSessionObjectiveContinueParams;
+use app_server_protocol::AgentSessionObjectiveContinueResponse;
+use app_server_protocol::AgentSessionObjectiveReadParams;
+use app_server_protocol::AgentSessionObjectiveReadResponse;
+use app_server_protocol::AgentSessionObjectiveSetParams;
+use app_server_protocol::AgentSessionObjectiveSetResponse;
+use app_server_protocol::AgentSessionObjectiveStatusUpdateParams;
+use app_server_protocol::AgentSessionObjectiveStatusUpdateResponse;
 use app_server_protocol::AgentSessionOverview;
+use app_server_protocol::AgentSessionQueuedTurnPromoteParams;
+use app_server_protocol::AgentSessionQueuedTurnPromoteResponse;
+use app_server_protocol::AgentSessionQueuedTurnRemoveParams;
+use app_server_protocol::AgentSessionQueuedTurnRemoveResponse;
 use app_server_protocol::AgentSessionReadParams;
 use app_server_protocol::AgentSessionReadResponse;
+use app_server_protocol::AgentSessionReplayCaseExportParams;
+use app_server_protocol::AgentSessionReplayCaseExportResponse;
+use app_server_protocol::AgentSessionReplayedActionRequired;
+use app_server_protocol::AgentSessionReviewDecision;
+use app_server_protocol::AgentSessionReviewDecisionSaveParams;
+use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
+use app_server_protocol::AgentSessionReviewDecisionTemplateExportResponse;
 use app_server_protocol::AgentSessionStartParams;
 use app_server_protocol::AgentSessionStartResponse;
 use app_server_protocol::AgentSessionStatus;
+use app_server_protocol::AgentSessionThreadResumeParams;
+use app_server_protocol::AgentSessionThreadResumeResponse;
 use app_server_protocol::AgentSessionTurnCancelParams;
 use app_server_protocol::AgentSessionTurnCancelResponse;
 use app_server_protocol::AgentSessionTurnStartParams;
@@ -71,6 +113,8 @@ use app_server_protocol::AutomationSchedulerConfigUpdateResponse;
 use app_server_protocol::AutomationSchedulerStatusResponse;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::CapabilityListResponse;
+use app_server_protocol::ChannelProbeParams;
+use app_server_protocol::ChannelProbeResponse;
 use app_server_protocol::ClientInfo;
 use app_server_protocol::ConnectCallbackSendParams;
 use app_server_protocol::ConnectCallbackSendResponse;
@@ -80,8 +124,15 @@ use app_server_protocol::ConnectOpenDeepLinkResolveParams;
 use app_server_protocol::ConnectOpenDeepLinkResolveResponse;
 use app_server_protocol::ConnectRelayApiKeySaveParams;
 use app_server_protocol::ConnectRelayApiKeySaveResponse;
+use app_server_protocol::DiagnosticsCapabilityRoutingMetricsSnapshot;
+use app_server_protocol::DiagnosticsIdempotencyDiagnostics;
+use app_server_protocol::DiagnosticsMetricConfig;
+use app_server_protocol::DiagnosticsRequestDedupDiagnostics;
+use app_server_protocol::DiagnosticsResponseCacheDiagnostics;
+use app_server_protocol::DiagnosticsTelemetrySummary;
 use app_server_protocol::EvidenceExportParams;
 use app_server_protocol::EvidenceExportResponse;
+use app_server_protocol::EvidencePackArtifact;
 use app_server_protocol::EvidencePackSummary;
 use app_server_protocol::FileSystemCreateDirectoryParams;
 use app_server_protocol::FileSystemCreateFileParams;
@@ -93,6 +144,19 @@ use app_server_protocol::FileSystemListDirectoryParams;
 use app_server_protocol::FileSystemMutationResponse;
 use app_server_protocol::FileSystemReadFilePreviewParams;
 use app_server_protocol::FileSystemRenameFileParams;
+use app_server_protocol::GatewayChannelStartParams;
+use app_server_protocol::GatewayChannelStatusParams;
+use app_server_protocol::GatewayChannelStatusResponse;
+use app_server_protocol::GatewayChannelStopParams;
+use app_server_protocol::GatewayTunnelCloudflaredDetectResponse;
+use app_server_protocol::GatewayTunnelCloudflaredInstallParams;
+use app_server_protocol::GatewayTunnelCloudflaredInstallResponse;
+use app_server_protocol::GatewayTunnelCreateParams;
+use app_server_protocol::GatewayTunnelCreateResponse;
+use app_server_protocol::GatewayTunnelProbeResponse;
+use app_server_protocol::GatewayTunnelStatusResponse;
+use app_server_protocol::GatewayTunnelSyncWebhookUrlParams;
+use app_server_protocol::GatewayTunnelSyncWebhookUrlResponse;
 use app_server_protocol::JsonRpcError;
 use app_server_protocol::KnowledgeCompilePackParams;
 use app_server_protocol::KnowledgeCompilePackResponse;
@@ -110,6 +174,13 @@ use app_server_protocol::KnowledgeUpdatePackStatusParams;
 use app_server_protocol::KnowledgeUpdatePackStatusResponse;
 use app_server_protocol::KnowledgeValidateContextRunParams;
 use app_server_protocol::KnowledgeValidateContextRunResponse;
+use app_server_protocol::LogClearResponse;
+use app_server_protocol::LogListResponse;
+use app_server_protocol::LogPersistedTailParams;
+use app_server_protocol::LogPersistedTailResponse;
+use app_server_protocol::LogStorageDiagnosticsResponse;
+use app_server_protocol::ManagedObjective;
+use app_server_protocol::ManagedObjectiveStatus;
 use app_server_protocol::McpPromptGetParams;
 use app_server_protocol::McpPromptGetResponse;
 use app_server_protocol::McpPromptListResponse;
@@ -133,6 +204,13 @@ use app_server_protocol::McpToolCallWithCallerParams;
 use app_server_protocol::McpToolListForContextParams;
 use app_server_protocol::McpToolListResponse;
 use app_server_protocol::McpToolSearchParams;
+use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
+use app_server_protocol::MediaTaskArtifactAudioCreateParams;
+use app_server_protocol::MediaTaskArtifactImageCreateParams;
+use app_server_protocol::MediaTaskArtifactListParams;
+use app_server_protocol::MediaTaskArtifactListResponse;
+use app_server_protocol::MediaTaskArtifactLookupParams;
+use app_server_protocol::MediaTaskArtifactResponse;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -174,13 +252,57 @@ use app_server_protocol::ModelProviderWriteResponse;
 use app_server_protocol::ModelSyncStateReadResponse;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ProjectMemoryReadResponse;
+use app_server_protocol::ServerDiagnosticsResponse;
+use app_server_protocol::SkillDownloadInstallParams;
+use app_server_protocol::SkillDownloadInstallResponse;
+use app_server_protocol::SkillInstalledDirectoriesListResponse;
 use app_server_protocol::SkillListResponse;
+use app_server_protocol::SkillLocalDetailInspectParams;
+use app_server_protocol::SkillLocalDetailInspectResponse;
+use app_server_protocol::SkillLocalImportParams;
+use app_server_protocol::SkillLocalImportResponse;
+use app_server_protocol::SkillLocalInspectParams;
+use app_server_protocol::SkillLocalInspectResponse;
+use app_server_protocol::SkillLocalRenameParams;
+use app_server_protocol::SkillLocalRenameResponse;
+use app_server_protocol::SkillManagementInstallParams;
+use app_server_protocol::SkillManagementListParams;
+use app_server_protocol::SkillManagementUninstallParams;
+use app_server_protocol::SkillManagementWriteResponse;
+use app_server_protocol::SkillMarketplaceInstallParams;
+use app_server_protocol::SkillMarketplaceInstallResponse;
+use app_server_protocol::SkillPackageExportParams;
+use app_server_protocol::SkillPackageExportResponse;
+use app_server_protocol::SkillPackageLocalInspectParams;
+use app_server_protocol::SkillPackageLocalInspectResponse;
+use app_server_protocol::SkillPackageLocalInstallParams;
+use app_server_protocol::SkillPackageLocalInstallResponse;
+use app_server_protocol::SkillPackageLocalReplaceParams;
+use app_server_protocol::SkillPackageLocalReplaceResponse;
 use app_server_protocol::SkillReadParams;
 use app_server_protocol::SkillReadResponse;
+use app_server_protocol::SkillRemoteInspectParams;
+use app_server_protocol::SkillRemoteInspectResponse;
+use app_server_protocol::SkillRepositoryDeleteParams;
+use app_server_protocol::SkillRepositoryListResponse;
+use app_server_protocol::SkillRepositorySaveParams;
+use app_server_protocol::SkillScaffoldCreateParams;
+use app_server_protocol::SkillScaffoldCreateResponse;
+use app_server_protocol::SupportBundleExportResponse;
 use app_server_protocol::UsageStatsDailyTrendsListResponse;
 use app_server_protocol::UsageStatsModelRankingListResponse;
 use app_server_protocol::UsageStatsRangeParams;
 use app_server_protocol::UsageStatsReadResponse;
+use app_server_protocol::WechatChannelAccountListResponse;
+use app_server_protocol::WechatChannelAccountRemoveParams;
+use app_server_protocol::WechatChannelAccountRemoveResponse;
+use app_server_protocol::WechatLoginStartParams;
+use app_server_protocol::WechatLoginStartResponse;
+use app_server_protocol::WechatLoginWaitParams;
+use app_server_protocol::WechatLoginWaitResponse;
+use app_server_protocol::WechatRuntimeModelSetParams;
+use app_server_protocol::WechatRuntimeModelSetResponse;
+use app_server_protocol::WindowsStartupDiagnosticsResponse;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspaceEnsureReadyResponse;
 use app_server_protocol::WorkspaceListResponse;
@@ -200,6 +322,7 @@ use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::fs;
 use std::io::Read;
 use std::net::TcpListener;
@@ -220,6 +343,20 @@ use uuid::Uuid;
 pub const DEFAULT_ARTIFACT_CONTENT_MAX_BYTES: u64 = 1024 * 1024;
 const AGENT_APP_DATA_DIR: &str = "agent-apps";
 const AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS: u64 = 45;
+const HANDOFF_BUNDLE_RELATIVE_ROOT: &str = ".lime/harness/sessions";
+const HANDOFF_PLAN_FILE_NAME: &str = "plan.md";
+const HANDOFF_PROGRESS_FILE_NAME: &str = "progress.json";
+const HANDOFF_FILE_NAME: &str = "handoff.md";
+const HANDOFF_REVIEW_SUMMARY_FILE_NAME: &str = "review-summary.md";
+const HANDOFF_RECENT_ARTIFACT_LIMIT: usize = 8;
+const REPLAY_CASE_INPUT_FILE_NAME: &str = "input.json";
+const REPLAY_CASE_EXPECTED_FILE_NAME: &str = "expected.json";
+const REPLAY_CASE_GRADER_FILE_NAME: &str = "grader.md";
+const REPLAY_CASE_EVIDENCE_LINKS_FILE_NAME: &str = "evidence-links.json";
+const ANALYSIS_BRIEF_FILE_NAME: &str = "analysis-brief.md";
+const ANALYSIS_CONTEXT_FILE_NAME: &str = "analysis-context.json";
+const REVIEW_DECISION_MARKDOWN_FILE_NAME: &str = "review-decision.md";
+const REVIEW_DECISION_JSON_FILE_NAME: &str = "review-decision.json";
 
 #[derive(Debug, Error)]
 pub enum RuntimeCoreError {
@@ -316,6 +453,15 @@ pub struct EvidencePackRequest {
     pub artifacts: Vec<ArtifactSummary>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ManagedObjectiveAuditUpdate {
+    pub status: ManagedObjectiveStatus,
+    pub last_audit_summary: Option<String>,
+    pub last_evidence_pack_ref: Option<String>,
+    pub last_artifact_refs: Vec<String>,
+    pub blocker_reason: Option<String>,
+}
+
 #[async_trait]
 pub trait EvidenceExportProvider: Send + Sync {
     async fn export_evidence_pack(
@@ -340,6 +486,64 @@ pub trait AppDataSource: Send + Sync {
         &self,
         params: AgentSessionUpdateParams,
     ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError>;
+
+    async fn read_agent_session_objective(
+        &self,
+        _params: AgentSessionObjectiveReadParams,
+    ) -> Result<AgentSessionObjectiveReadResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentSession/objective/read is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn set_agent_session_objective(
+        &self,
+        _params: AgentSessionObjectiveSetParams,
+    ) -> Result<AgentSessionObjectiveSetResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentSession/objective/set is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn update_agent_session_objective_status(
+        &self,
+        _params: AgentSessionObjectiveStatusUpdateParams,
+    ) -> Result<AgentSessionObjectiveStatusUpdateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentSession/objective/status/update is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn clear_agent_session_objective(
+        &self,
+        _params: AgentSessionObjectiveClearParams,
+    ) -> Result<AgentSessionObjectiveClearResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentSession/objective/clear is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_managed_objective_by_owner(
+        &self,
+        _owner_kind: String,
+        _owner_id: String,
+    ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "managed objective owner read is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn audit_agent_session_objective(
+        &self,
+        _owner_kind: String,
+        _owner_id: String,
+        _update: ManagedObjectiveAuditUpdate,
+    ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "agentSession/objective/audit is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError>;
 
@@ -377,6 +581,418 @@ pub trait AppDataSource: Send + Sync {
         &self,
         params: SkillReadParams,
     ) -> Result<SkillReadResponse, RuntimeCoreError>;
+
+    async fn list_management_skills(
+        &self,
+        _params: SkillManagementListParams,
+    ) -> Result<SkillListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillManagement/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn install_management_skill(
+        &self,
+        _params: SkillManagementInstallParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillManagement/install is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn uninstall_management_skill(
+        &self,
+        _params: SkillManagementUninstallParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillManagement/uninstall is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_skill_repositories(
+        &self,
+    ) -> Result<SkillRepositoryListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillRepository/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn save_skill_repository(
+        &self,
+        _params: SkillRepositorySaveParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillRepository/save is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_skill_repository(
+        &self,
+        _params: SkillRepositoryDeleteParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillRepository/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn refresh_skill_cache(&self) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillCache/refresh is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_installed_skill_directories(
+        &self,
+    ) -> Result<SkillInstalledDirectoriesListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillInstalledDirectories/list is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn inspect_local_skill(
+        &self,
+        _params: SkillLocalInspectParams,
+    ) -> Result<SkillLocalInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn inspect_local_skill_detail(
+        &self,
+        _params: SkillLocalDetailInspectParams,
+    ) -> Result<SkillLocalDetailInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/detail/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_skill_scaffold(
+        &self,
+        _params: SkillScaffoldCreateParams,
+    ) -> Result<SkillScaffoldCreateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/scaffold/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn import_local_skill(
+        &self,
+        _params: SkillLocalImportParams,
+    ) -> Result<SkillLocalImportResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/import is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn rename_local_skill(
+        &self,
+        _params: SkillLocalRenameParams,
+    ) -> Result<SkillLocalRenameResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/rename is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn inspect_remote_skill(
+        &self,
+        _params: SkillRemoteInspectParams,
+    ) -> Result<SkillRemoteInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillRemote/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn inspect_local_skill_package(
+        &self,
+        _params: SkillPackageLocalInspectParams,
+    ) -> Result<SkillPackageLocalInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/local/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn install_local_skill_package(
+        &self,
+        _params: SkillPackageLocalInstallParams,
+    ) -> Result<SkillPackageLocalInstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/local/install is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn replace_local_skill_package(
+        &self,
+        _params: SkillPackageLocalReplaceParams,
+    ) -> Result<SkillPackageLocalReplaceResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/local/replace is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn export_local_skill_package(
+        &self,
+        _params: SkillPackageExportParams,
+    ) -> Result<SkillPackageExportResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/export is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn install_marketplace_skill(
+        &self,
+        _params: SkillMarketplaceInstallParams,
+    ) -> Result<SkillMarketplaceInstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillMarketplace/install is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn install_skill_from_download_url(
+        &self,
+        _params: SkillDownloadInstallParams,
+    ) -> Result<SkillDownloadInstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/download/install is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn start_gateway_channel(
+        &self,
+        _params: GatewayChannelStartParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayChannel/start is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn stop_gateway_channel(
+        &self,
+        _params: GatewayChannelStopParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayChannel/stop is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_gateway_channel_status(
+        &self,
+        _params: GatewayChannelStatusParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayChannel/status is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn probe_gateway_tunnel(&self) -> Result<GatewayTunnelProbeResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/probe is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn detect_gateway_tunnel_cloudflared(
+        &self,
+    ) -> Result<GatewayTunnelCloudflaredDetectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/cloudflared/detect is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn install_gateway_tunnel_cloudflared(
+        &self,
+        _params: GatewayTunnelCloudflaredInstallParams,
+    ) -> Result<GatewayTunnelCloudflaredInstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/cloudflared/install is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn create_gateway_tunnel(
+        &self,
+        _params: GatewayTunnelCreateParams,
+    ) -> Result<GatewayTunnelCreateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn start_gateway_tunnel(&self) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/start is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn stop_gateway_tunnel(&self) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/stop is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn restart_gateway_tunnel(
+        &self,
+    ) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/restart is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_gateway_tunnel_status(
+        &self,
+    ) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/status is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn sync_gateway_tunnel_webhook_url(
+        &self,
+        _params: GatewayTunnelSyncWebhookUrlParams,
+    ) -> Result<GatewayTunnelSyncWebhookUrlResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "gatewayTunnel/syncWebhookUrl is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn probe_telegram_channel(
+        &self,
+        _params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "telegramChannel/probe is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn probe_feishu_channel(
+        &self,
+        _params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "feishuChannel/probe is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn probe_discord_channel(
+        &self,
+        _params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "discordChannel/probe is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn probe_wechat_channel(
+        &self,
+        _params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "wechatChannel/probe is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn start_wechat_channel_login(
+        &self,
+        _params: WechatLoginStartParams,
+    ) -> Result<WechatLoginStartResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "wechatChannel/login/start is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn wait_wechat_channel_login(
+        &self,
+        _params: WechatLoginWaitParams,
+    ) -> Result<WechatLoginWaitResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "wechatChannel/login/wait is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_wechat_channel_accounts(
+        &self,
+    ) -> Result<WechatChannelAccountListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "wechatChannel/accounts/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn remove_wechat_channel_account(
+        &self,
+        _params: WechatChannelAccountRemoveParams,
+    ) -> Result<WechatChannelAccountRemoveResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "wechatChannel/account/remove is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn set_wechat_channel_runtime_model(
+        &self,
+        _params: WechatRuntimeModelSetParams,
+    ) -> Result<WechatRuntimeModelSetResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "wechatChannel/runtimeModel/set is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn create_image_media_task_artifact(
+        &self,
+        _params: MediaTaskArtifactImageCreateParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mediaTaskArtifact/image/create is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn create_audio_media_task_artifact(
+        &self,
+        _params: MediaTaskArtifactAudioCreateParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mediaTaskArtifact/audio/create is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn complete_audio_media_task_artifact(
+        &self,
+        _params: MediaTaskArtifactAudioCompleteParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mediaTaskArtifact/audio/complete is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn get_media_task_artifact(
+        &self,
+        _params: MediaTaskArtifactLookupParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mediaTaskArtifact/get is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_media_task_artifacts(
+        &self,
+        _params: MediaTaskArtifactListParams,
+    ) -> Result<MediaTaskArtifactListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mediaTaskArtifact/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn cancel_media_task_artifact(
+        &self,
+        _params: MediaTaskArtifactLookupParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "mediaTaskArtifact/cancel is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn list_workspace_skill_bindings(
         &self,
@@ -760,6 +1376,57 @@ pub trait AppDataSource: Send + Sync {
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError>;
 
+    async fn list_logs(&self) -> Result<LogListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "log/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_persisted_log_tail(
+        &self,
+        _params: LogPersistedTailParams,
+    ) -> Result<LogPersistedTailResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "log/persistedTail is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn clear_logs(&self) -> Result<LogClearResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "log/clear is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn clear_diagnostic_log_history(&self) -> Result<LogClearResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "log/diagnosticHistory/clear is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn read_log_storage_diagnostics(
+        &self,
+    ) -> Result<LogStorageDiagnosticsResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "diagnostics/logStorage/read is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn export_support_bundle(&self) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "diagnostics/supportBundle/export is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn read_windows_startup_diagnostics(
+        &self,
+    ) -> Result<WindowsStartupDiagnosticsResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "diagnostics/windowsStartup/read is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
     async fn read_usage_stats(
         &self,
         params: UsageStatsRangeParams,
@@ -1063,6 +1730,109 @@ impl EvidenceExportProvider for NoopEvidenceExportProvider {
 }
 
 #[derive(Debug, Default)]
+pub struct BasicEvidenceExportProvider;
+
+#[async_trait]
+impl EvidenceExportProvider for BasicEvidenceExportProvider {
+    async fn export_evidence_pack(
+        &self,
+        request: &EvidencePackRequest,
+    ) -> Result<Option<EvidencePackSummary>, RuntimeCoreError> {
+        Ok(Some(basic_evidence_pack_summary(request)))
+    }
+}
+
+fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSummary {
+    let latest_turn_status = request
+        .turns
+        .last()
+        .map(|turn| agent_turn_status_label(turn.status).to_string());
+    let pending_request_count = request
+        .events
+        .iter()
+        .filter(|event| event.event_type == "action.required")
+        .count();
+    let queued_turn_count = request
+        .turns
+        .iter()
+        .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
+        .count();
+    let running_turn_count = request
+        .turns
+        .iter()
+        .filter(|turn| agent_turn_is_active(turn.status))
+        .count();
+    let completion_decision = if pending_request_count > 0 {
+        "needs_input"
+    } else if running_turn_count > 0 || queued_turn_count > 0 {
+        "in_progress"
+    } else if matches!(
+        request.session.status,
+        AgentSessionStatus::Failed | AgentSessionStatus::Canceled
+    ) {
+        "failed"
+    } else {
+        "verifying"
+    };
+    let known_gaps = if request.artifacts.is_empty() {
+        vec!["no_recent_artifacts".to_string()]
+    } else {
+        Vec::new()
+    };
+
+    EvidencePackSummary {
+        pack_relative_root: format!(
+            ".lime/harness/sessions/{}/evidence",
+            request.session.session_id
+        ),
+        pack_absolute_root: None,
+        exported_at: timestamp(),
+        thread_status: agent_session_status_label(request.session.status).to_string(),
+        latest_turn_status,
+        turn_count: request.turns.len(),
+        item_count: request.events.len(),
+        pending_request_count,
+        queued_turn_count,
+        recent_artifact_count: request.artifacts.len(),
+        known_gaps,
+        observability_summary: Some(json!({
+            "schema_version": "runtime-evidence-pack.v1",
+            "source": "app-server-basic",
+            "event_count": request.events.len(),
+            "artifact_count": request.artifacts.len(),
+        })),
+        completion_audit_summary: Some(json!({
+            "decision": completion_decision,
+            "pendingRequestCount": pending_request_count,
+            "queuedTurnCount": queued_turn_count,
+            "runningTurnCount": running_turn_count,
+            "artifactCount": request.artifacts.len(),
+            "turnCount": request.turns.len(),
+            "notes": [
+                "App Server current evidence/export generated a basic audit summary without Desktop legacy evidence writer."
+            ],
+        })),
+        artifacts: request
+            .artifacts
+            .iter()
+            .map(|artifact| EvidencePackArtifact {
+                kind: "artifact".to_string(),
+                title: artifact
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| artifact.artifact_ref.clone()),
+                relative_path: artifact
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| artifact.artifact_ref.clone()),
+                absolute_path: None,
+                bytes: 0,
+            })
+            .collect(),
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct NoopAppDataSource;
 
 #[async_trait]
@@ -1149,6 +1919,182 @@ impl AppDataSource for NoopAppDataSource {
         _params: SkillReadParams,
     ) -> Result<SkillReadResponse, RuntimeCoreError> {
         Err(RuntimeCoreError::Backend("skill not found".to_string()))
+    }
+
+    async fn list_management_skills(
+        &self,
+        _params: SkillManagementListParams,
+    ) -> Result<SkillListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillManagement/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn install_management_skill(
+        &self,
+        _params: SkillManagementInstallParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillManagement/install is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn uninstall_management_skill(
+        &self,
+        _params: SkillManagementUninstallParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillManagement/uninstall is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_skill_repositories(
+        &self,
+    ) -> Result<SkillRepositoryListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillRepository/list is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn save_skill_repository(
+        &self,
+        _params: SkillRepositorySaveParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillRepository/save is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_skill_repository(
+        &self,
+        _params: SkillRepositoryDeleteParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillRepository/delete is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn refresh_skill_cache(&self) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillCache/refresh is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn list_installed_skill_directories(
+        &self,
+    ) -> Result<SkillInstalledDirectoriesListResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillInstalledDirectories/list is not available without an app data source"
+                .to_string(),
+        ))
+    }
+
+    async fn inspect_local_skill(
+        &self,
+        _params: SkillLocalInspectParams,
+    ) -> Result<SkillLocalInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn inspect_local_skill_detail(
+        &self,
+        _params: SkillLocalDetailInspectParams,
+    ) -> Result<SkillLocalDetailInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/detail/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn create_skill_scaffold(
+        &self,
+        _params: SkillScaffoldCreateParams,
+    ) -> Result<SkillScaffoldCreateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/scaffold/create is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn import_local_skill(
+        &self,
+        _params: SkillLocalImportParams,
+    ) -> Result<SkillLocalImportResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/import is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn rename_local_skill(
+        &self,
+        _params: SkillLocalRenameParams,
+    ) -> Result<SkillLocalRenameResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillLocal/rename is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn inspect_remote_skill(
+        &self,
+        _params: SkillRemoteInspectParams,
+    ) -> Result<SkillRemoteInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillRemote/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn inspect_local_skill_package(
+        &self,
+        _params: SkillPackageLocalInspectParams,
+    ) -> Result<SkillPackageLocalInspectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/local/inspect is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn install_local_skill_package(
+        &self,
+        _params: SkillPackageLocalInstallParams,
+    ) -> Result<SkillPackageLocalInstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/local/install is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn replace_local_skill_package(
+        &self,
+        _params: SkillPackageLocalReplaceParams,
+    ) -> Result<SkillPackageLocalReplaceResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/local/replace is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn export_local_skill_package(
+        &self,
+        _params: SkillPackageExportParams,
+    ) -> Result<SkillPackageExportResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/export is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn install_marketplace_skill(
+        &self,
+        _params: SkillMarketplaceInstallParams,
+    ) -> Result<SkillMarketplaceInstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillMarketplace/install is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn install_skill_from_download_url(
+        &self,
+        _params: SkillDownloadInstallParams,
+    ) -> Result<SkillDownloadInstallResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "skillPackage/download/install is not available without an app data source".to_string(),
+        ))
     }
 
     async fn list_workspace_skill_bindings(
@@ -1722,6 +2668,7 @@ struct StoredSession {
     session: AgentSession,
     turns: Vec<AgentTurn>,
     turn_inputs: HashMap<String, AgentInput>,
+    turn_runtime_options: HashMap<String, app_server_protocol::RuntimeOptions>,
     events: Vec<AgentEvent>,
 }
 
@@ -1752,6 +2699,53 @@ struct AgentAppShellDescriptorFields {
     manifest_hash: String,
     entry_key: String,
     window_title: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+struct RuntimeContinuationPreferences {
+    provider_preference: Option<String>,
+    model_preference: Option<String>,
+    provider_config: Option<serde_json::Value>,
+    approval_policy: Option<String>,
+    sandbox_policy: Option<String>,
+    execution_strategy: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct HandoffMetrics {
+    latest_turn_status: Option<String>,
+    pending_request_count: usize,
+    queued_turn_count: usize,
+    active_subagent_count: usize,
+    todo_total: usize,
+    todo_pending: usize,
+    todo_in_progress: usize,
+    todo_completed: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HandoffRecentArtifact {
+    title: String,
+    kind: String,
+    path: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HandoffCopy {
+    plan_title: &'static str,
+    progress_title: &'static str,
+    handoff_title: &'static str,
+    review_summary_title: &'static str,
+    session_label: &'static str,
+    thread_label: &'static str,
+    status_label: &'static str,
+    exported_at_label: &'static str,
+    todo_summary_title: &'static str,
+    recent_artifacts_title: &'static str,
+    no_recent_artifacts: &'static str,
+    next_step_title: &'static str,
+    next_step_body: &'static str,
+    review_note: &'static str,
 }
 
 fn stored_session_to_overview(stored: &StoredSession) -> AgentSessionOverview {
@@ -2017,6 +3011,1292 @@ fn metadata_string(metadata: Option<&serde_json::Value>, key: &str) -> Option<St
         .map(str::to_string)
 }
 
+fn normalized_optional_string(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn runtime_provider_config_from_host_options(
+    host_options: &serde_json::Value,
+) -> Option<serde_json::Value> {
+    let aster_request = host_options.get("asterChatRequest")?;
+    aster_request
+        .pointer("/turn_config/provider_config")
+        .or_else(|| aster_request.pointer("/turn_config/providerConfig"))
+        .or_else(|| aster_request.pointer("/turnConfig/provider_config"))
+        .or_else(|| aster_request.pointer("/turnConfig/providerConfig"))
+        .or_else(|| aster_request.get("provider_config"))
+        .or_else(|| aster_request.get("providerConfig"))
+        .filter(|value| value.is_object())
+        .cloned()
+}
+
+impl RuntimeContinuationPreferences {
+    fn has_any_context(&self) -> bool {
+        self.provider_preference.is_some()
+            || self.model_preference.is_some()
+            || self.provider_config.is_some()
+            || self.approval_policy.is_some()
+            || self.sandbox_policy.is_some()
+            || self.execution_strategy.is_some()
+    }
+
+    fn with_fallback(mut self, fallback: RuntimeContinuationPreferences) -> Self {
+        if self.provider_preference.is_none() {
+            self.provider_preference = fallback.provider_preference;
+        }
+        if self.model_preference.is_none() {
+            self.model_preference = fallback.model_preference;
+        }
+        if self.provider_config.is_none() {
+            self.provider_config = fallback.provider_config;
+        }
+        if self.approval_policy.is_none() {
+            self.approval_policy = fallback.approval_policy;
+        }
+        if self.sandbox_policy.is_none() {
+            self.sandbox_policy = fallback.sandbox_policy;
+        }
+        if self.execution_strategy.is_none() {
+            self.execution_strategy = fallback.execution_strategy;
+        }
+        self
+    }
+
+    fn provider_preference_for_runtime_options(&self) -> Option<String> {
+        if self.provider_config.is_some() {
+            None
+        } else {
+            self.provider_preference.clone()
+        }
+    }
+
+    fn model_preference_for_runtime_options(&self) -> Option<String> {
+        if self.provider_config.is_some() {
+            None
+        } else {
+            self.model_preference.clone()
+        }
+    }
+}
+
+fn build_runtime_evidence_pack_summary(
+    session: &AgentSession,
+    turns: &[AgentTurn],
+    events: &[AgentEvent],
+    artifacts: &[ArtifactSummary],
+    known_gap: &str,
+) -> EvidencePackSummary {
+    EvidencePackSummary {
+        pack_relative_root: format!(".lime/harness/sessions/{}/evidence", session.session_id),
+        pack_absolute_root: None,
+        exported_at: timestamp(),
+        thread_status: agent_session_status_label(session.status).to_string(),
+        latest_turn_status: turns
+            .last()
+            .map(|turn| agent_turn_status_label(turn.status).to_string()),
+        turn_count: turns.len(),
+        item_count: events.len(),
+        pending_request_count: pending_request_count_from_events(events),
+        queued_turn_count: turns
+            .iter()
+            .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
+            .count(),
+        recent_artifact_count: artifacts.len(),
+        known_gaps: vec![known_gap.to_string()],
+        observability_summary: Some(json!({
+            "schemaVersion": "runtime-evidence-pack.v1",
+            "source": "app-server-current",
+            "sessionId": session.session_id,
+            "threadId": session.thread_id,
+        })),
+        completion_audit_summary: None,
+        artifacts: artifacts
+            .iter()
+            .map(evidence_pack_artifact_from_summary)
+            .collect(),
+    }
+}
+
+fn evidence_pack_artifact_from_summary(artifact: &ArtifactSummary) -> EvidencePackArtifact {
+    let title = artifact
+        .title
+        .clone()
+        .or_else(|| artifact.artifact_id.clone())
+        .unwrap_or_else(|| artifact.artifact_ref.clone());
+    let relative_path = artifact
+        .path
+        .clone()
+        .unwrap_or_else(|| format!("{}/artifact.json", artifact.artifact_ref));
+    EvidencePackArtifact {
+        kind: artifact
+            .kind
+            .clone()
+            .unwrap_or_else(|| "artifact".to_string()),
+        title,
+        relative_path,
+        absolute_path: None,
+        bytes: artifact
+            .content
+            .as_ref()
+            .map(String::len)
+            .unwrap_or_default(),
+    }
+}
+
+fn pending_request_count_from_events(events: &[AgentEvent]) -> usize {
+    let mut pending = HashSet::new();
+    let mut resolved = HashSet::new();
+    for event in events {
+        match event.event_type.as_str() {
+            "action.required" => {
+                if let Some(request_id) = event_request_id(&event.payload) {
+                    pending.insert(request_id);
+                }
+            }
+            "action.resolved" | "action.cancelled" | "action.canceled" => {
+                if let Some(request_id) = event_request_id(&event.payload) {
+                    resolved.insert(request_id);
+                }
+            }
+            _ => {}
+        }
+    }
+    pending.difference(&resolved).count()
+}
+
+fn current_objective_completion_audit_summary(
+    objective: &ManagedObjective,
+) -> Option<serde_json::Value> {
+    let decision = managed_objective_completion_audit_decision(objective)?;
+    let mut summary = serde_json::Map::new();
+    summary.insert("decision".to_string(), json!(decision));
+    summary.insert(
+        "status".to_string(),
+        json!(managed_objective_status_value(objective.status)),
+    );
+    if let Some(blocker_reason) = objective.blocker_reason.as_deref() {
+        summary.insert("blockingReasons".to_string(), json!([blocker_reason]));
+    }
+    if let Some(last_audit_summary) = objective.last_audit_summary.as_deref() {
+        summary.insert("summary".to_string(), json!(last_audit_summary));
+        summary.insert("notes".to_string(), json!([last_audit_summary]));
+    }
+    summary.insert(
+        "artifactCount".to_string(),
+        json!(objective.last_artifact_refs.len()),
+    );
+    if !objective.last_artifact_refs.is_empty() {
+        summary.insert(
+            "artifactRefs".to_string(),
+            json!(objective.last_artifact_refs),
+        );
+    }
+    if let Some(evidence_ref) = objective.last_evidence_pack_ref.as_deref() {
+        summary.insert("evidencePackRef".to_string(), json!(evidence_ref));
+    }
+    Some(serde_json::Value::Object(summary))
+}
+
+fn managed_objective_completion_audit_decision(
+    objective: &ManagedObjective,
+) -> Option<&'static str> {
+    match objective.status {
+        ManagedObjectiveStatus::BudgetLimited => Some("budget_limited"),
+        ManagedObjectiveStatus::NeedsInput => Some("needs_input"),
+        ManagedObjectiveStatus::Blocked => Some("blocked"),
+        ManagedObjectiveStatus::Failed => Some("failed"),
+        ManagedObjectiveStatus::Paused => Some("paused"),
+        ManagedObjectiveStatus::Completed => objective
+            .last_audit_summary
+            .as_deref()
+            .is_some_and(|summary| summary.contains("decision=completed"))
+            .then_some("completed"),
+        ManagedObjectiveStatus::Verifying => Some("verifying"),
+        ManagedObjectiveStatus::Active => objective
+            .last_audit_summary
+            .as_deref()
+            .and_then(completion_audit_decision_from_summary),
+    }
+}
+
+fn completion_audit_decision_from_summary(summary: &str) -> Option<&'static str> {
+    if summary.contains("decision=budget_limited") {
+        Some("budget_limited")
+    } else if summary.contains("decision=needs_input") {
+        Some("needs_input")
+    } else if summary.contains("decision=blocked") {
+        Some("blocked")
+    } else if summary.contains("decision=failed") {
+        Some("failed")
+    } else if summary.contains("decision=paused") {
+        Some("paused")
+    } else if summary.contains("decision=verifying") {
+        Some("verifying")
+    } else {
+        None
+    }
+}
+
+fn managed_objective_status_value(status: ManagedObjectiveStatus) -> &'static str {
+    match status {
+        ManagedObjectiveStatus::Active => "active",
+        ManagedObjectiveStatus::Verifying => "verifying",
+        ManagedObjectiveStatus::NeedsInput => "needs_input",
+        ManagedObjectiveStatus::Blocked => "blocked",
+        ManagedObjectiveStatus::BudgetLimited => "budget_limited",
+        ManagedObjectiveStatus::Paused => "paused",
+        ManagedObjectiveStatus::Completed => "completed",
+        ManagedObjectiveStatus::Failed => "failed",
+    }
+}
+
+fn continuation_runtime_preferences_from_read(
+    read: &AgentSessionReadResponse,
+) -> RuntimeContinuationPreferences {
+    let execution_runtime = read
+        .detail
+        .as_ref()
+        .and_then(|detail| detail.get("execution_runtime"))
+        .filter(|value| value.is_object());
+    RuntimeContinuationPreferences {
+        provider_preference: string_field_from_optional_value(
+            execution_runtime,
+            &[
+                "provider_selector",
+                "providerSelector",
+                "provider_name",
+                "providerName",
+            ],
+        ),
+        model_preference: string_field_from_optional_value(
+            execution_runtime,
+            &["model_name", "modelName"],
+        ),
+        provider_config: None,
+        approval_policy: None,
+        sandbox_policy: None,
+        execution_strategy: string_field_from_optional_value(
+            read.session
+                .business_object_ref
+                .as_ref()
+                .and_then(|reference| reference.metadata.as_ref()),
+            &["executionStrategy", "execution_strategy"],
+        ),
+    }
+}
+
+fn runtime_string_from_host_options(
+    host_options: &serde_json::Value,
+    turn_config_keys: &[&str],
+    flat_keys: &[&str],
+) -> Option<String> {
+    let aster_request = host_options.get("asterChatRequest")?;
+    aster_request
+        .get("turn_config")
+        .or_else(|| aster_request.get("turnConfig"))
+        .and_then(|turn_config| string_field_from_value(turn_config, turn_config_keys))
+        .or_else(|| string_field_from_value(aster_request, flat_keys))
+}
+
+fn build_objective_continuation_host_options(
+    message: &str,
+    session_id: &str,
+    event_name: &str,
+    workspace_id: &str,
+    turn_id: &str,
+    queued_turn_id: &str,
+    metadata: &serde_json::Value,
+    runtime_preferences: &RuntimeContinuationPreferences,
+) -> serde_json::Value {
+    let turn_config = json!({
+        "provider_config": runtime_preferences.provider_config.clone(),
+        "provider_preference": runtime_preferences.provider_preference.clone(),
+        "model_preference": runtime_preferences.model_preference.clone(),
+        "reasoning_effort": null,
+        "approval_policy": runtime_preferences.approval_policy.clone(),
+        "sandbox_policy": runtime_preferences.sandbox_policy.clone(),
+        "metadata": metadata.clone(),
+        "execution_strategy": runtime_preferences.execution_strategy.clone(),
+    });
+    json!({
+        "asterChatRequest": {
+            "message": message,
+            "session_id": session_id,
+            "event_name": event_name,
+            "images": null,
+            "provider_config": runtime_preferences.provider_config.clone(),
+            "provider_preference": runtime_preferences.provider_preference.clone(),
+            "model_preference": runtime_preferences.model_preference.clone(),
+            "reasoning_effort": null,
+            "thinking_enabled": null,
+            "approval_policy": runtime_preferences.approval_policy.clone(),
+            "sandbox_policy": runtime_preferences.sandbox_policy.clone(),
+            "project_id": null,
+            "workspace_id": workspace_id,
+            "web_search": null,
+            "search_mode": null,
+            "execution_strategy": runtime_preferences.execution_strategy.clone(),
+            "auto_continue": null,
+            "system_prompt": null,
+            "metadata": metadata,
+            "turn_id": turn_id,
+            "queue_if_busy": false,
+            "queued_turn_id": queued_turn_id,
+            "turn_config": turn_config,
+        }
+    })
+}
+
+fn validate_handoff_session_id(session_id: &str) -> Result<(), RuntimeCoreError> {
+    let mut components = Path::new(session_id).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) => Ok(()),
+        _ => Err(RuntimeCoreError::Backend(format!(
+            "sessionId must be a single path segment for agentSession/handoffBundle/export: {session_id}"
+        ))),
+    }
+}
+
+fn validate_runtime_export_session_id(
+    session_id: &str,
+    method: &str,
+) -> Result<(), RuntimeCoreError> {
+    let mut components = Path::new(session_id).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) => Ok(()),
+        _ => Err(RuntimeCoreError::Backend(format!(
+            "sessionId must be a single path segment for {method}: {session_id}"
+        ))),
+    }
+}
+
+fn required_runtime_export_session_id(
+    session_id: &str,
+    method: &str,
+) -> Result<String, RuntimeCoreError> {
+    let session_id = session_id.trim().to_string();
+    if session_id.is_empty() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "sessionId is required for {method}"
+        )));
+    }
+    validate_runtime_export_session_id(&session_id, method)?;
+    Ok(session_id)
+}
+
+fn resolve_handoff_workspace_root(
+    read: &AgentSessionReadResponse,
+) -> Result<PathBuf, RuntimeCoreError> {
+    let mut candidates = Vec::new();
+    if let Some(metadata) = read
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+    {
+        for key in [
+            "workspaceRoot",
+            "workspace_root",
+            "workingDir",
+            "working_dir",
+        ] {
+            if let Some(value) = metadata_string(Some(metadata), key) {
+                candidates.push(value);
+            }
+        }
+    }
+    if let Some(detail) = read.detail.as_ref() {
+        for key in [
+            "workspaceRoot",
+            "workspace_root",
+            "workingDir",
+            "working_dir",
+            "workspace_root_path",
+        ] {
+            if let Some(value) = string_field(detail, &[key]) {
+                candidates.push(value);
+            }
+        }
+    }
+
+    let first_candidate = candidates.first().cloned();
+    for candidate in candidates {
+        let path = PathBuf::from(candidate.trim());
+        if path.is_absolute() {
+            return Ok(path);
+        }
+    }
+
+    Err(RuntimeCoreError::Backend(match first_candidate {
+        Some(candidate) => format!(
+            "workspaceRoot must be absolute for agentSession/handoffBundle/export: {candidate}"
+        ),
+        None => "workspaceRoot is required for agentSession/handoffBundle/export".to_string(),
+    }))
+}
+
+fn resolve_runtime_export_workspace_root(
+    read: &AgentSessionReadResponse,
+    method: &str,
+) -> Result<PathBuf, RuntimeCoreError> {
+    resolve_handoff_workspace_root(read).map_err(|error| {
+        RuntimeCoreError::Backend(
+            error
+                .to_string()
+                .replace("agentSession/handoffBundle/export", method),
+        )
+    })
+}
+
+fn canonical_runtime_export_workspace_root(
+    read: &AgentSessionReadResponse,
+    method: &str,
+) -> Result<PathBuf, RuntimeCoreError> {
+    let workspace_root = resolve_runtime_export_workspace_root(read, method)?;
+    let workspace_root = workspace_root.canonicalize().map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "workspaceRoot must be an existing directory for {method}: {} ({error})",
+            workspace_root.display()
+        ))
+    })?;
+    if !workspace_root.is_dir() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "workspaceRoot must be a directory for {method}: {}",
+            workspace_root.display()
+        )));
+    }
+    Ok(workspace_root)
+}
+
+fn handoff_metrics(read: &AgentSessionReadResponse) -> HandoffMetrics {
+    let mut metrics = HandoffMetrics {
+        latest_turn_status: read
+            .turns
+            .last()
+            .map(|turn| agent_turn_status_label(turn.status).to_string()),
+        queued_turn_count: read
+            .turns
+            .iter()
+            .filter(|turn| matches!(turn.status, AgentTurnStatus::Queued))
+            .count(),
+        ..HandoffMetrics::default()
+    };
+
+    let Some(detail) = read.detail.as_ref() else {
+        return metrics;
+    };
+    let thread_read = detail.get("thread_read").filter(|value| value.is_object());
+    if let Some(latest_turn_status) = thread_read
+        .and_then(|value| value.get("diagnostics"))
+        .and_then(|value| string_field(value, &["latest_turn_status", "latestTurnStatus"]))
+    {
+        metrics.latest_turn_status = Some(latest_turn_status);
+    }
+    if let Some(pending_requests) = thread_read
+        .and_then(|value| value.get("pending_requests"))
+        .or_else(|| detail.get("pending_requests"))
+        .and_then(serde_json::Value::as_array)
+    {
+        metrics.pending_request_count = pending_requests.len();
+    }
+    if let Some(queued_turns) = thread_read
+        .and_then(|value| value.get("queued_turns"))
+        .or_else(|| detail.get("queued_turns"))
+        .and_then(serde_json::Value::as_array)
+    {
+        metrics.queued_turn_count = queued_turns.len();
+    }
+    if let Some(subagents) = detail
+        .get("child_subagent_sessions")
+        .or_else(|| detail.get("subagents"))
+        .and_then(serde_json::Value::as_array)
+    {
+        metrics.active_subagent_count = subagents
+            .iter()
+            .filter(|item| {
+                string_field(item, &["status", "runtime_status", "runtimeStatus"])
+                    .map(|status| handoff_status_is_active(status.as_str()))
+                    .unwrap_or(true)
+            })
+            .count();
+    }
+    if let Some(todo_items) = detail
+        .get("todo_items")
+        .or_else(|| detail.get("todoItems"))
+        .and_then(serde_json::Value::as_array)
+    {
+        metrics.todo_total = todo_items.len();
+        for item in todo_items {
+            match string_field(item, &["status"])
+                .unwrap_or_else(|| "pending".to_string())
+                .as_str()
+            {
+                "completed" | "complete" | "done" => metrics.todo_completed += 1,
+                "in_progress" | "inProgress" | "running" | "active" => {
+                    metrics.todo_in_progress += 1
+                }
+                _ => metrics.todo_pending += 1,
+            }
+        }
+    }
+    metrics
+}
+
+fn handoff_status_is_active(status: &str) -> bool {
+    matches!(
+        status,
+        "accepted" | "queued" | "running" | "waitingAction" | "waiting_action" | "in_progress"
+    )
+}
+
+fn handoff_recent_artifacts(read: &AgentSessionReadResponse) -> Vec<HandoffRecentArtifact> {
+    let Some(detail) = read.detail.as_ref() else {
+        return Vec::new();
+    };
+    let artifacts = detail
+        .pointer("/thread_read/artifacts")
+        .or_else(|| detail.get("artifacts"))
+        .and_then(serde_json::Value::as_array);
+    let Some(artifacts) = artifacts else {
+        return Vec::new();
+    };
+
+    let mut recent = Vec::new();
+    let mut seen = HashSet::new();
+    for artifact in artifacts.iter().rev() {
+        let path = string_field(artifact, &["path", "relativePath", "relative_path"])
+            .or_else(|| string_field(artifact, &["artifactRef", "artifact_ref"]));
+        let Some(path) = path else {
+            continue;
+        };
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        let title = string_field(artifact, &["title"])
+            .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path.as_str()).to_string());
+        let kind = string_field(artifact, &["kind"]).unwrap_or_else(|| "artifact".to_string());
+        recent.push(HandoffRecentArtifact { title, kind, path });
+        if recent.len() >= HANDOFF_RECENT_ARTIFACT_LIMIT {
+            break;
+        }
+    }
+    recent.reverse();
+    recent
+}
+
+fn write_handoff_bundle_file(
+    bundle_root: &Path,
+    bundle_relative_root: &str,
+    file_name: &str,
+    kind: &str,
+    title: &str,
+    content: String,
+) -> Result<AgentSessionHandoffArtifact, RuntimeCoreError> {
+    let absolute_path = bundle_root.join(file_name);
+    fs::write(&absolute_path, content.as_bytes()).map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "failed to write handoff bundle file {}: {error}",
+            absolute_path.display()
+        ))
+    })?;
+    Ok(AgentSessionHandoffArtifact {
+        kind: kind.to_string(),
+        title: title.to_string(),
+        relative_path: format!("{bundle_relative_root}/{file_name}"),
+        absolute_path: absolute_path.to_string_lossy().to_string(),
+        bytes: content.len(),
+    })
+}
+
+fn write_runtime_export_file(
+    root: &Path,
+    relative_root: &str,
+    file_name: &str,
+    kind: &str,
+    title: &str,
+    content: String,
+) -> Result<AgentSessionHandoffArtifact, RuntimeCoreError> {
+    let absolute_path = root.join(file_name);
+    fs::write(&absolute_path, content.as_bytes()).map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "failed to write runtime export file {}: {error}",
+            absolute_path.display()
+        ))
+    })?;
+    Ok(AgentSessionHandoffArtifact {
+        kind: kind.to_string(),
+        title: title.to_string(),
+        relative_path: format!("{relative_root}/{file_name}"),
+        absolute_path: absolute_path.to_string_lossy().to_string(),
+        bytes: content.len(),
+    })
+}
+
+fn runtime_export_root(workspace_root: &Path, session_id: &str, child: &str) -> (String, PathBuf) {
+    let relative_root = format!("{HANDOFF_BUNDLE_RELATIVE_ROOT}/{session_id}/{child}");
+    let absolute_root = workspace_root
+        .join(".lime")
+        .join("harness")
+        .join("sessions")
+        .join(session_id)
+        .join(child);
+    (relative_root, absolute_root)
+}
+
+fn ensure_runtime_export_root(root: &Path) -> Result<(), RuntimeCoreError> {
+    fs::create_dir_all(root).map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "failed to create runtime export directory {}: {error}",
+            root.display()
+        ))
+    })
+}
+
+fn runtime_export_base_roots(session_id: &str) -> (String, String, String) {
+    (
+        format!("{HANDOFF_BUNDLE_RELATIVE_ROOT}/{session_id}"),
+        format!("{HANDOFF_BUNDLE_RELATIVE_ROOT}/{session_id}/evidence"),
+        format!("{HANDOFF_BUNDLE_RELATIVE_ROOT}/{session_id}/replay"),
+    )
+}
+
+fn sanitized_workspace_root(workspace_root: &Path) -> String {
+    let mut components = workspace_root
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => value.to_str().map(ToString::to_string),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if components.is_empty() {
+        return workspace_root.to_string_lossy().to_string();
+    }
+    if components.len() > 3 {
+        components = components.split_off(components.len() - 3);
+    }
+    components.join("/")
+}
+
+fn json_pretty(value: serde_json::Value, label: &str) -> Result<String, RuntimeCoreError> {
+    serde_json::to_string_pretty(&value)
+        .map_err(|error| RuntimeCoreError::Backend(format!("failed to serialize {label}: {error}")))
+}
+
+fn build_replay_input_json(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    recent_artifacts: &[HandoffRecentArtifact],
+    exported_at: &str,
+) -> Result<String, RuntimeCoreError> {
+    json_pretty(
+        json!({
+            "schemaVersion": "agent-session-replay-case.v1",
+            "sessionId": read.session.session_id,
+            "threadId": read.session.thread_id,
+            "exportedAt": exported_at,
+            "threadStatus": agent_session_status_label(read.session.status),
+            "latestTurnStatus": metrics.latest_turn_status,
+            "turns": read.turns.iter().map(|turn| {
+                json!({
+                    "turnId": turn.turn_id,
+                    "status": agent_turn_status_label(turn.status),
+                    "startedAt": turn.started_at,
+                    "completedAt": turn.completed_at,
+                })
+            }).collect::<Vec<_>>(),
+            "detail": read.detail,
+            "recentArtifacts": recent_artifacts.iter().map(|artifact| {
+                json!({
+                    "title": artifact.title,
+                    "kind": artifact.kind,
+                    "path": artifact.path,
+                })
+            }).collect::<Vec<_>>(),
+        }),
+        "replay input",
+    )
+}
+
+fn build_replay_expected_json(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    exported_at: &str,
+) -> Result<String, RuntimeCoreError> {
+    json_pretty(
+        json!({
+            "schemaVersion": "agent-session-replay-expected.v1",
+            "sessionId": read.session.session_id,
+            "threadId": read.session.thread_id,
+            "exportedAt": exported_at,
+            "expected": {
+                "terminalThreadStatus": agent_session_status_label(read.session.status),
+                "latestTurnStatus": metrics.latest_turn_status,
+                "pendingRequestCount": metrics.pending_request_count,
+                "queuedTurnCount": metrics.queued_turn_count,
+            }
+        }),
+        "replay expected",
+    )
+}
+
+fn build_replay_grader_markdown(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    exported_at: &str,
+) -> String {
+    let mut content = String::new();
+    let _ = writeln!(content, "# Replay Grader");
+    let _ = writeln!(content);
+    let _ = writeln!(content, "- sessionId: `{}`", read.session.session_id);
+    let _ = writeln!(content, "- threadId: `{}`", read.session.thread_id);
+    let _ = writeln!(content, "- exportedAt: `{exported_at}`");
+    let _ = writeln!(
+        content,
+        "- threadStatus: `{}`",
+        agent_session_status_label(read.session.status)
+    );
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## Checks");
+    let _ = writeln!(
+        content,
+        "- pendingRequestCount should remain {} unless intentionally changed.",
+        metrics.pending_request_count
+    );
+    let _ = writeln!(
+        content,
+        "- queuedTurnCount should remain {} unless intentionally changed.",
+        metrics.queued_turn_count
+    );
+    let _ = writeln!(
+        content,
+        "- replay should preserve App Server current read model shape."
+    );
+    content
+}
+
+fn build_replay_evidence_links_json(
+    session_id: &str,
+    handoff_relative_root: &str,
+    evidence_relative_root: &str,
+    recent_artifacts: &[HandoffRecentArtifact],
+    exported_at: &str,
+) -> Result<String, RuntimeCoreError> {
+    json_pretty(
+        json!({
+            "schemaVersion": "agent-session-replay-evidence-links.v1",
+            "sessionId": session_id,
+            "exportedAt": exported_at,
+            "handoffBundleRelativeRoot": handoff_relative_root,
+            "evidencePackRelativeRoot": evidence_relative_root,
+            "recentArtifacts": recent_artifacts.iter().map(|artifact| {
+                json!({
+                    "title": artifact.title,
+                    "kind": artifact.kind,
+                    "path": artifact.path,
+                })
+            }).collect::<Vec<_>>(),
+        }),
+        "replay evidence links",
+    )
+}
+
+fn build_analysis_brief_markdown(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    recent_artifacts: &[HandoffRecentArtifact],
+    exported_at: &str,
+) -> String {
+    let mut content = String::new();
+    let _ = writeln!(content, "# Analysis Handoff");
+    let _ = writeln!(content);
+    let _ = writeln!(content, "- sessionId: `{}`", read.session.session_id);
+    let _ = writeln!(content, "- threadId: `{}`", read.session.thread_id);
+    let _ = writeln!(
+        content,
+        "- threadStatus: `{}`",
+        agent_session_status_label(read.session.status)
+    );
+    if let Some(latest_turn_status) = metrics.latest_turn_status.as_deref() {
+        let _ = writeln!(content, "- latestTurnStatus: `{latest_turn_status}`");
+    }
+    let _ = writeln!(content, "- exportedAt: `{exported_at}`");
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## Focus");
+    let _ = writeln!(
+        content,
+        "- Review the current App Server read model and decide the next implementation slice."
+    );
+    let _ = writeln!(
+        content,
+        "- Do not use legacy `agent_runtime_*` command output as production evidence."
+    );
+    let _ = writeln!(content);
+    write_handoff_todo_summary(&mut content, metrics, handoff_copy(Some("en-US")));
+    let _ = writeln!(content);
+    write_handoff_recent_artifacts(&mut content, recent_artifacts, handoff_copy(Some("en-US")));
+    content
+}
+
+fn build_analysis_context_json(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    workspace_root: &Path,
+    replay_relative_root: &str,
+    handoff_relative_root: &str,
+    evidence_relative_root: &str,
+    exported_at: &str,
+) -> Result<String, RuntimeCoreError> {
+    json_pretty(
+        json!({
+            "schemaVersion": "agent-session-analysis-handoff.v1",
+            "sessionId": read.session.session_id,
+            "threadId": read.session.thread_id,
+            "workspaceId": read.session.workspace_id,
+            "workspaceRoot": workspace_root.to_string_lossy(),
+            "sanitizedWorkspaceRoot": sanitized_workspace_root(workspace_root),
+            "exportedAt": exported_at,
+            "threadStatus": agent_session_status_label(read.session.status),
+            "latestTurnStatus": metrics.latest_turn_status,
+            "pendingRequestCount": metrics.pending_request_count,
+            "queuedTurnCount": metrics.queued_turn_count,
+            "handoffBundleRelativeRoot": handoff_relative_root,
+            "evidencePackRelativeRoot": evidence_relative_root,
+            "replayCaseRelativeRoot": replay_relative_root,
+            "detail": read.detail,
+        }),
+        "analysis context",
+    )
+}
+
+fn build_analysis_copy_prompt(
+    read: &AgentSessionReadResponse,
+    analysis_relative_root: &str,
+    replay_relative_root: &str,
+) -> String {
+    format!(
+        "请基于 App Server current 导出的 `{}` 和 `{}` 分析会话 `{}` 的下一步风险、缺口和回归验证；不要依赖 legacy agent_runtime_* 输出。",
+        analysis_relative_root, replay_relative_root, read.session.session_id
+    )
+}
+
+fn default_review_decision() -> AgentSessionReviewDecision {
+    AgentSessionReviewDecision {
+        decision_status: "pending_review".to_string(),
+        decision_summary: String::new(),
+        chosen_fix_strategy: String::new(),
+        risk_level: "unknown".to_string(),
+        risk_tags: Vec::new(),
+        human_reviewer: String::new(),
+        followup_actions: Vec::new(),
+        regression_requirements: vec![
+            "Run targeted current-path regression before marking accepted.".to_string(),
+        ],
+        notes: String::new(),
+    }
+}
+
+fn review_decision_from_save_params(
+    params: &AgentSessionReviewDecisionSaveParams,
+) -> AgentSessionReviewDecision {
+    AgentSessionReviewDecision {
+        decision_status: normalize_review_decision_status(params.decision_status.as_str()),
+        decision_summary: params.decision_summary.trim().to_string(),
+        chosen_fix_strategy: params.chosen_fix_strategy.trim().to_string(),
+        risk_level: normalize_review_risk_level(params.risk_level.as_str()),
+        risk_tags: trim_string_vec(&params.risk_tags),
+        human_reviewer: params.human_reviewer.trim().to_string(),
+        followup_actions: trim_string_vec(&params.followup_actions),
+        regression_requirements: trim_string_vec(&params.regression_requirements),
+        notes: params.notes.trim().to_string(),
+    }
+}
+
+fn normalize_review_decision_status(value: &str) -> String {
+    match value.trim() {
+        "accepted" | "deferred" | "rejected" | "needs_more_evidence" | "pending_review" => {
+            value.trim().to_string()
+        }
+        _ => "pending_review".to_string(),
+    }
+}
+
+fn normalize_review_risk_level(value: &str) -> String {
+    match value.trim() {
+        "low" | "medium" | "high" | "unknown" => value.trim().to_string(),
+        _ => "unknown".to_string(),
+    }
+}
+
+fn trim_string_vec(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn build_review_decision_markdown(
+    read: &AgentSessionReadResponse,
+    decision: &AgentSessionReviewDecision,
+    analysis_relative_root: &str,
+    replay_relative_root: &str,
+    exported_at: &str,
+) -> String {
+    let mut content = String::new();
+    let _ = writeln!(content, "# Review Decision");
+    let _ = writeln!(content);
+    let _ = writeln!(content, "- sessionId: `{}`", read.session.session_id);
+    let _ = writeln!(content, "- threadId: `{}`", read.session.thread_id);
+    let _ = writeln!(content, "- exportedAt: `{exported_at}`");
+    let _ = writeln!(content, "- decisionStatus: `{}`", decision.decision_status);
+    let _ = writeln!(content, "- riskLevel: `{}`", decision.risk_level);
+    let _ = writeln!(content, "- analysis: `{analysis_relative_root}`");
+    let _ = writeln!(content, "- replay: `{replay_relative_root}`");
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## Summary");
+    let _ = writeln!(
+        content,
+        "{}",
+        if decision.decision_summary.is_empty() {
+            "Pending human review."
+        } else {
+            decision.decision_summary.as_str()
+        }
+    );
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## Follow-up Actions");
+    if decision.followup_actions.is_empty() {
+        let _ = writeln!(content, "- None recorded.");
+    } else {
+        for action in &decision.followup_actions {
+            let _ = writeln!(content, "- {action}");
+        }
+    }
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## Regression Requirements");
+    if decision.regression_requirements.is_empty() {
+        let _ = writeln!(content, "- Run current-path targeted regression.");
+    } else {
+        for item in &decision.regression_requirements {
+            let _ = writeln!(content, "- {item}");
+        }
+    }
+    if !decision.notes.is_empty() {
+        let _ = writeln!(content);
+        let _ = writeln!(content, "## Notes");
+        let _ = writeln!(content, "{}", decision.notes);
+    }
+    content
+}
+
+fn build_review_decision_json(
+    read: &AgentSessionReadResponse,
+    decision: &AgentSessionReviewDecision,
+    analysis_relative_root: &str,
+    replay_relative_root: &str,
+    exported_at: &str,
+) -> Result<String, RuntimeCoreError> {
+    json_pretty(
+        json!({
+            "schemaVersion": "agent-session-review-decision.v1",
+            "sessionId": read.session.session_id,
+            "threadId": read.session.thread_id,
+            "exportedAt": exported_at,
+            "analysisRelativeRoot": analysis_relative_root,
+            "replayCaseRelativeRoot": replay_relative_root,
+            "decision": decision,
+        }),
+        "review decision",
+    )
+}
+
+fn build_handoff_plan_markdown(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    recent_artifacts: &[HandoffRecentArtifact],
+    exported_at: &str,
+    copy: HandoffCopy,
+) -> String {
+    let mut content = String::new();
+    let _ = writeln!(content, "# {}", copy.plan_title);
+    let _ = writeln!(content);
+    write_handoff_header(&mut content, read, metrics, exported_at, copy);
+    let _ = writeln!(content);
+    write_handoff_todo_summary(&mut content, metrics, copy);
+    let _ = writeln!(content);
+    write_handoff_recent_artifacts(&mut content, recent_artifacts, copy);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## {}", copy.next_step_title);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "- {}", copy.next_step_body);
+    content
+}
+
+fn build_handoff_markdown(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    recent_artifacts: &[HandoffRecentArtifact],
+    exported_at: &str,
+    copy: HandoffCopy,
+) -> String {
+    let mut content = String::new();
+    let _ = writeln!(content, "# {}", copy.handoff_title);
+    let _ = writeln!(content);
+    write_handoff_header(&mut content, read, metrics, exported_at, copy);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "## {}", copy.next_step_title);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "- {}", copy.next_step_body);
+    let _ = writeln!(content);
+    write_handoff_recent_artifacts(&mut content, recent_artifacts, copy);
+    content
+}
+
+fn build_handoff_review_summary_markdown(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    recent_artifacts: &[HandoffRecentArtifact],
+    exported_at: &str,
+    copy: HandoffCopy,
+) -> String {
+    let mut content = String::new();
+    let _ = writeln!(content, "# {}", copy.review_summary_title);
+    let _ = writeln!(content);
+    write_handoff_header(&mut content, read, metrics, exported_at, copy);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "{}", copy.review_note);
+    let _ = writeln!(content);
+    write_handoff_todo_summary(&mut content, metrics, copy);
+    let _ = writeln!(content);
+    write_handoff_recent_artifacts(&mut content, recent_artifacts, copy);
+    content
+}
+
+fn build_handoff_progress_json(
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    recent_artifacts: &[HandoffRecentArtifact],
+    workspace_root: &Path,
+    exported_at: &str,
+) -> Result<String, RuntimeCoreError> {
+    let recent_artifacts = recent_artifacts
+        .iter()
+        .map(|artifact| {
+            json!({
+                "title": artifact.title,
+                "kind": artifact.kind,
+                "path": artifact.path,
+            })
+        })
+        .collect::<Vec<_>>();
+    let turns = read
+        .turns
+        .iter()
+        .map(|turn| {
+            json!({
+                "turnId": turn.turn_id,
+                "status": agent_turn_status_label(turn.status),
+                "startedAt": turn.started_at,
+                "completedAt": turn.completed_at,
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::to_string_pretty(&json!({
+        "schemaVersion": "agent-session-handoff-bundle.v1",
+        "sessionId": read.session.session_id,
+        "threadId": read.session.thread_id,
+        "workspaceId": read.session.workspace_id,
+        "workspaceRoot": workspace_root.to_string_lossy(),
+        "exportedAt": exported_at,
+        "status": {
+            "thread": agent_session_status_label(read.session.status),
+            "latestTurn": metrics.latest_turn_status,
+        },
+        "counts": {
+            "pendingRequest": metrics.pending_request_count,
+            "queuedTurn": metrics.queued_turn_count,
+            "activeSubagent": metrics.active_subagent_count,
+        },
+        "todos": {
+            "total": metrics.todo_total,
+            "pending": metrics.todo_pending,
+            "inProgress": metrics.todo_in_progress,
+            "completed": metrics.todo_completed,
+        },
+        "turns": turns,
+        "recentArtifacts": recent_artifacts,
+    }))
+    .map_err(|error| {
+        RuntimeCoreError::Backend(format!("failed to serialize handoff progress: {error}"))
+    })
+}
+
+fn write_handoff_header(
+    content: &mut String,
+    read: &AgentSessionReadResponse,
+    metrics: &HandoffMetrics,
+    exported_at: &str,
+    copy: HandoffCopy,
+) {
+    let _ = writeln!(
+        content,
+        "- {}: `{}`",
+        copy.session_label, read.session.session_id
+    );
+    let _ = writeln!(
+        content,
+        "- {}: `{}`",
+        copy.thread_label, read.session.thread_id
+    );
+    let _ = writeln!(
+        content,
+        "- {}: `{}`",
+        copy.status_label,
+        agent_session_status_label(read.session.status)
+    );
+    if let Some(latest_turn_status) = metrics.latest_turn_status.as_deref() {
+        let _ = writeln!(content, "- latestTurnStatus: `{latest_turn_status}`");
+    }
+    let _ = writeln!(content, "- {}: `{}`", copy.exported_at_label, exported_at);
+}
+
+fn write_handoff_todo_summary(content: &mut String, metrics: &HandoffMetrics, copy: HandoffCopy) {
+    let _ = writeln!(content, "## {}", copy.todo_summary_title);
+    let _ = writeln!(content);
+    let _ = writeln!(content, "- total: {}", metrics.todo_total);
+    let _ = writeln!(content, "- pending: {}", metrics.todo_pending);
+    let _ = writeln!(content, "- inProgress: {}", metrics.todo_in_progress);
+    let _ = writeln!(content, "- completed: {}", metrics.todo_completed);
+    let _ = writeln!(
+        content,
+        "- pendingRequests: {}",
+        metrics.pending_request_count
+    );
+    let _ = writeln!(content, "- queuedTurns: {}", metrics.queued_turn_count);
+    let _ = writeln!(
+        content,
+        "- activeSubagents: {}",
+        metrics.active_subagent_count
+    );
+}
+
+fn write_handoff_recent_artifacts(
+    content: &mut String,
+    recent_artifacts: &[HandoffRecentArtifact],
+    copy: HandoffCopy,
+) {
+    let _ = writeln!(content, "## {}", copy.recent_artifacts_title);
+    let _ = writeln!(content);
+    if recent_artifacts.is_empty() {
+        let _ = writeln!(content, "- {}", copy.no_recent_artifacts);
+        return;
+    }
+    for artifact in recent_artifacts {
+        let _ = writeln!(
+            content,
+            "- `{}` {} ({})",
+            artifact.path, artifact.title, artifact.kind
+        );
+    }
+}
+
+fn handoff_copy(locale: Option<&str>) -> HandoffCopy {
+    match locale.unwrap_or("zh-CN") {
+        value if value.eq_ignore_ascii_case("zh-TW") || value.eq_ignore_ascii_case("zh-HK") => {
+            HandoffCopy {
+                plan_title: "計畫摘要",
+                progress_title: "結構化進度",
+                handoff_title: "交接摘要",
+                review_summary_title: "審查摘要",
+                session_label: "會話",
+                thread_label: "執行緒",
+                status_label: "狀態",
+                exported_at_label: "匯出時間",
+                todo_summary_title: "待辦摘要",
+                recent_artifacts_title: "最近產物",
+                no_recent_artifacts: "目前沒有可引用的最近產物。",
+                next_step_title: "建議接手順序",
+                next_step_body: "先讀 progress.json 確認結構化狀態，再讀 handoff.md 決定下一刀。",
+                review_note: "此摘要來自 App Server current read model；不要把 legacy command 輸出當成交付證據。",
+            }
+        }
+        value if value.eq_ignore_ascii_case("ja-JP") || value.eq_ignore_ascii_case("ja") => {
+            HandoffCopy {
+                plan_title: "計画サマリー",
+                progress_title: "構造化された進捗",
+                handoff_title: "引き継ぎサマリー",
+                review_summary_title: "レビューサマリー",
+                session_label: "セッション",
+                thread_label: "スレッド",
+                status_label: "状態",
+                exported_at_label: "エクスポート時刻",
+                todo_summary_title: "Todo サマリー",
+                recent_artifacts_title: "最近の成果物",
+                no_recent_artifacts: "参照できる最近の成果物はありません。",
+                next_step_title: "推奨される引き継ぎ順序",
+                next_step_body: "まず progress.json で構造化された状態を確認し、次に handoff.md で次の作業を決めてください。",
+                review_note: "このサマリーは App Server current read model から生成されています。legacy command の出力を納品証跡として扱わないでください。",
+            }
+        }
+        value if value.eq_ignore_ascii_case("ko-KR") || value.eq_ignore_ascii_case("ko") => {
+            HandoffCopy {
+                plan_title: "계획 요약",
+                progress_title: "구조화된 진행 상황",
+                handoff_title: "인수인계 요약",
+                review_summary_title: "리뷰 요약",
+                session_label: "세션",
+                thread_label: "스레드",
+                status_label: "상태",
+                exported_at_label: "내보낸 시간",
+                todo_summary_title: "Todo 요약",
+                recent_artifacts_title: "최근 산출물",
+                no_recent_artifacts: "참조할 최근 산출물이 없습니다.",
+                next_step_title: "권장 인수인계 순서",
+                next_step_body: "먼저 progress.json에서 구조화된 상태를 확인한 뒤 handoff.md에서 다음 작업을 결정하세요.",
+                review_note: "이 요약은 App Server current read model에서 생성되었습니다. legacy command 출력을 납품 증거로 사용하지 마세요.",
+            }
+        }
+        value if value.eq_ignore_ascii_case("en-US") || value.eq_ignore_ascii_case("en") => {
+            HandoffCopy {
+                plan_title: "Plan Summary",
+                progress_title: "Structured Progress",
+                handoff_title: "Handoff Summary",
+                review_summary_title: "Review Summary",
+                session_label: "Session",
+                thread_label: "Thread",
+                status_label: "Status",
+                exported_at_label: "Exported At",
+                todo_summary_title: "Todo Summary",
+                recent_artifacts_title: "Recent Artifacts",
+                no_recent_artifacts: "No recent artifacts are available.",
+                next_step_title: "Recommended Handoff Order",
+                next_step_body: "Read progress.json for structured state first, then use handoff.md to choose the next implementation slice.",
+                review_note: "This summary is generated from the App Server current read model; do not treat legacy command output as delivery evidence.",
+            }
+        }
+        _ => HandoffCopy {
+            plan_title: "计划摘要",
+            progress_title: "结构化进度",
+            handoff_title: "交接摘要",
+            review_summary_title: "审查摘要",
+            session_label: "会话",
+            thread_label: "线程",
+            status_label: "状态",
+            exported_at_label: "导出时间",
+            todo_summary_title: "Todo 摘要",
+            recent_artifacts_title: "最近产物",
+            no_recent_artifacts: "当前没有可引用的最近产物。",
+            next_step_title: "推荐接手顺序",
+            next_step_body: "先读 progress.json 确认结构化状态，再读 handoff.md 决定下一刀。",
+            review_note: "此摘要来自 App Server current read model；不要把 legacy command 输出当成交付证据。",
+        },
+    }
+}
+
 impl Default for RuntimeCore {
     fn default() -> Self {
         Self::with_backend(Arc::new(MockBackend))
@@ -2051,7 +4331,7 @@ impl RuntimeCore {
             backend,
             capability_source,
             artifact_content_provider,
-            Arc::new(NoopEvidenceExportProvider),
+            Arc::new(BasicEvidenceExportProvider),
         )
     }
 
@@ -2196,6 +4476,7 @@ impl RuntimeCore {
                 session: session.clone(),
                 turns: Vec::new(),
                 turn_inputs: HashMap::new(),
+                turn_runtime_options: HashMap::new(),
                 events: Vec::new(),
             },
         );
@@ -2268,6 +4549,606 @@ impl RuntimeCore {
                 recent_team_selection: params.recent_team_selection,
             })
             .await
+    }
+
+    pub async fn read_agent_session_objective(
+        &self,
+        params: AgentSessionObjectiveReadParams,
+    ) -> Result<AgentSessionObjectiveReadResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_agent_session_objective(params)
+            .await
+    }
+
+    pub async fn set_agent_session_objective(
+        &self,
+        params: AgentSessionObjectiveSetParams,
+    ) -> Result<AgentSessionObjectiveSetResponse, RuntimeCoreError> {
+        self.app_data_source
+            .set_agent_session_objective(params)
+            .await
+    }
+
+    pub async fn update_agent_session_objective_status(
+        &self,
+        params: AgentSessionObjectiveStatusUpdateParams,
+    ) -> Result<AgentSessionObjectiveStatusUpdateResponse, RuntimeCoreError> {
+        self.app_data_source
+            .update_agent_session_objective_status(params)
+            .await
+    }
+
+    pub async fn clear_agent_session_objective(
+        &self,
+        params: AgentSessionObjectiveClearParams,
+    ) -> Result<AgentSessionObjectiveClearResponse, RuntimeCoreError> {
+        self.app_data_source
+            .clear_agent_session_objective(params)
+            .await
+    }
+
+    pub async fn continue_agent_session_objective(
+        &self,
+        params: AgentSessionObjectiveContinueParams,
+        host: RuntimeHostContext,
+    ) -> Result<RuntimeCoreOutput<AgentSessionObjectiveContinueResponse>, RuntimeCoreError> {
+        let session_id = crate::objective::normalize_required_id(
+            &params.session_id,
+            "sessionId is required for agentSession/objective/continue",
+        )?;
+        let owner = crate::objective::resolve_managed_objective_owner(
+            &session_id,
+            params.owner_kind.as_deref(),
+            params.owner_id.as_deref(),
+        )?;
+        crate::objective::ensure_agent_session_objective_owner(&owner, &session_id)?;
+
+        let objective = self
+            .read_agent_session_objective(AgentSessionObjectiveReadParams {
+                session_id: session_id.clone(),
+            })
+            .await?
+            .objective
+            .ok_or_else(|| RuntimeCoreError::Backend("当前会话还没有目标".to_string()))?;
+        let read = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.clone(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        crate::objective::ensure_objective_can_continue(&objective, &read)?;
+        let turn_id = new_id("turn");
+        let queued_turn_id = new_id("queued");
+        let workspace_id = self
+            .resolve_objective_workspace_id(&session_id, &objective)
+            .await?;
+        let message = crate::objective::managed_objective_continuation_message(&objective);
+        let event_name = crate::objective::managed_objective_event_name(&objective);
+        let metadata = crate::objective::managed_objective_continuation_metadata(&objective);
+        let runtime_preferences = self.resolve_continuation_runtime_preferences(&read);
+        let runtime_provider_preference =
+            runtime_preferences.provider_preference_for_runtime_options();
+        let runtime_model_preference = runtime_preferences.model_preference_for_runtime_options();
+        let host_options = build_objective_continuation_host_options(
+            &message,
+            &session_id,
+            &event_name,
+            &workspace_id,
+            &turn_id,
+            &queued_turn_id,
+            &metadata,
+            &runtime_preferences,
+        );
+
+        let output = self
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: session_id.clone(),
+                    turn_id: Some(turn_id),
+                    input: AgentInput {
+                        text: message,
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: Some(app_server_protocol::RuntimeOptions {
+                        capability_id: None,
+                        stream: true,
+                        event_name: Some(event_name),
+                        provider_preference: runtime_provider_preference,
+                        model_preference: runtime_model_preference,
+                        metadata: Some(metadata),
+                        queued_turn_id: Some(queued_turn_id.clone()),
+                        host_options: Some(host_options),
+                    }),
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                host,
+            )
+            .await?;
+
+        Ok(RuntimeCoreOutput {
+            response: AgentSessionObjectiveContinueResponse {
+                submitted: true,
+                queued_turn_id,
+                objective,
+                turn: output.response.turn,
+            },
+            events: output.events,
+        })
+    }
+
+    pub async fn audit_agent_session_objective(
+        &self,
+        params: AgentSessionObjectiveAuditParams,
+    ) -> Result<AgentSessionObjectiveAuditResponse, RuntimeCoreError> {
+        let session_id = crate::objective::normalize_required_id(
+            &params.session_id,
+            "sessionId is required for agentSession/objective/audit",
+        )?;
+        let owner = crate::objective::resolve_managed_objective_owner(
+            &session_id,
+            params.owner_kind.as_deref(),
+            params.owner_id.as_deref(),
+        )?;
+        let objective = self
+            .app_data_source
+            .read_managed_objective_by_owner(owner.owner_kind.clone(), owner.owner_id.clone())
+            .await?
+            .ok_or_else(|| {
+                if owner.owner_kind == crate::objective::MANAGED_OBJECTIVE_OWNER_AGENT_SESSION {
+                    RuntimeCoreError::Backend("当前会话还没有目标".to_string())
+                } else {
+                    RuntimeCoreError::Backend("当前目标 owner 还没有目标".to_string())
+                }
+            })?;
+        let read = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.clone(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        let evidence = self
+            .export_evidence(EvidenceExportParams {
+                session_id,
+                turn_id: None,
+                include_events: Some(true),
+                include_artifacts: Some(true),
+                include_evidence_pack: Some(true),
+            })
+            .await
+            .ok();
+        let audit_update = crate::objective::build_managed_objective_audit_update(
+            &objective,
+            &read,
+            evidence
+                .as_ref()
+                .and_then(|response| response.evidence_pack.as_ref()),
+        );
+        let objective = self
+            .app_data_source
+            .audit_agent_session_objective(owner.owner_kind, owner.owner_id, audit_update)
+            .await?
+            .ok_or_else(|| RuntimeCoreError::Backend("保存目标审计结果后读取失败".to_string()))?;
+        Ok(AgentSessionObjectiveAuditResponse { objective })
+    }
+
+    async fn resolve_objective_workspace_id(
+        &self,
+        session_id: &str,
+        objective: &ManagedObjective,
+    ) -> Result<String, RuntimeCoreError> {
+        if let Some(workspace_id) = objective
+            .workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Ok(workspace_id.to_string());
+        }
+
+        let read = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        read.session
+            .workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .ok_or_else(|| {
+                RuntimeCoreError::Backend(
+                    "agentSession/objective/continue requires a workspaceId".to_string(),
+                )
+            })
+    }
+
+    pub async fn compact_agent_session(
+        &self,
+        params: AgentSessionCompactParams,
+    ) -> Result<RuntimeCoreOutput<AgentSessionCompactResponse>, RuntimeCoreError> {
+        let session_id = normalize_session_control_id(
+            &params.session_id,
+            "sessionId is required for agentSession/compact",
+        )?;
+        self.ensure_current_timeline_session_hydrated(&session_id)
+            .await?;
+        let (session, turns) = self.session_snapshot(&session_id)?;
+        let event_name = params
+            .event_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("agentSession/compact");
+        let events = self.append_runtime_events(
+            &session.session_id,
+            &session.thread_id,
+            None,
+            vec![
+                RuntimeEvent::new(
+                    "context.compaction.started",
+                    json!({
+                        "source": "agentSession/compact",
+                        "eventName": event_name,
+                        "turnCount": turns.len(),
+                        "trigger": "manual",
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "context.compaction.completed",
+                    json!({
+                        "source": "agentSession/compact",
+                        "eventName": event_name,
+                        "turnCount": turns.len(),
+                        "trigger": "manual",
+                        "summary": "App Server current compaction checkpoint recorded.",
+                    }),
+                ),
+            ],
+        )?;
+        let (session, turns) = self.session_snapshot(&session_id)?;
+
+        Ok(RuntimeCoreOutput {
+            response: AgentSessionCompactResponse {
+                session,
+                turns,
+                compacted: true,
+            },
+            events,
+        })
+    }
+
+    pub async fn resume_agent_session_thread(
+        &self,
+        params: AgentSessionThreadResumeParams,
+        host: RuntimeHostContext,
+    ) -> Result<RuntimeCoreOutput<AgentSessionThreadResumeResponse>, RuntimeCoreError> {
+        let session_id = normalize_session_control_id(
+            &params.session_id,
+            "sessionId is required for agentSession/thread/resume",
+        )?;
+        self.ensure_current_timeline_session_hydrated(&session_id)
+            .await?;
+        let queued = {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get_mut(&session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.clone()))?;
+            if stored
+                .turns
+                .iter()
+                .any(|turn| agent_turn_blocks_queue_resume(turn.status))
+            {
+                let session = stored.session.clone();
+                let turns = stored.turns.clone();
+                return Ok(RuntimeCoreOutput {
+                    response: AgentSessionThreadResumeResponse {
+                        session,
+                        turns,
+                        resumed: false,
+                    },
+                    events: Vec::new(),
+                });
+            }
+            let Some(index) = stored
+                .turns
+                .iter()
+                .position(|turn| matches!(turn.status, AgentTurnStatus::Queued))
+            else {
+                let session = stored.session.clone();
+                let turns = stored.turns.clone();
+                return Ok(RuntimeCoreOutput {
+                    response: AgentSessionThreadResumeResponse {
+                        session,
+                        turns,
+                        resumed: false,
+                    },
+                    events: Vec::new(),
+                });
+            };
+            let turn = stored.turns.remove(index);
+            let input = stored
+                .turn_inputs
+                .remove(&turn.turn_id)
+                .unwrap_or_else(|| AgentInput {
+                    text: String::new(),
+                    attachments: Vec::new(),
+                });
+            (index, turn, input)
+        };
+        let output = match self
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: session_id.clone(),
+                    turn_id: Some(queued.1.turn_id.clone()),
+                    input: queued.2.clone(),
+                    runtime_options: Some(app_server_protocol::RuntimeOptions {
+                        queued_turn_id: Some(queued.1.turn_id.clone()),
+                        ..app_server_protocol::RuntimeOptions::default()
+                    }),
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: true,
+                },
+                host,
+            )
+            .await
+        {
+            Ok(output) => output,
+            Err(error) => {
+                self.restore_queued_turn_if_missing(&session_id, queued.0, queued.1, queued.2);
+                return Err(error);
+            }
+        };
+        let (session, turns) = self.session_snapshot(&session_id)?;
+
+        Ok(RuntimeCoreOutput {
+            response: AgentSessionThreadResumeResponse {
+                session,
+                turns,
+                resumed: true,
+            },
+            events: output.events,
+        })
+    }
+
+    pub async fn remove_agent_session_queued_turn(
+        &self,
+        params: AgentSessionQueuedTurnRemoveParams,
+    ) -> Result<RuntimeCoreOutput<AgentSessionQueuedTurnRemoveResponse>, RuntimeCoreError> {
+        let session_id = normalize_session_control_id(
+            &params.session_id,
+            "sessionId is required for agentSession/queuedTurn/remove",
+        )?;
+        let queued_turn_id = normalize_session_control_id(
+            &params.queued_turn_id,
+            "queuedTurnId is required for agentSession/queuedTurn/remove",
+        )?;
+        self.ensure_current_timeline_session_hydrated(&session_id)
+            .await?;
+        let (session, removed) = {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get_mut(&session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.clone()))?;
+            let before = stored.turns.len();
+            stored.turns.retain(|turn| {
+                !(turn.turn_id == queued_turn_id && matches!(turn.status, AgentTurnStatus::Queued))
+            });
+            let removed = stored.turns.len() != before;
+            if removed {
+                stored.turn_inputs.remove(&queued_turn_id);
+                stored.turn_runtime_options.remove(&queued_turn_id);
+                stored.session.updated_at = timestamp();
+                if !stored
+                    .turns
+                    .iter()
+                    .any(|turn| agent_turn_is_active(turn.status))
+                {
+                    stored.session.status = AgentSessionStatus::Idle;
+                }
+            }
+            (stored.session.clone(), removed)
+        };
+        let events = if removed {
+            self.append_runtime_events(
+                &session.session_id,
+                &session.thread_id,
+                None,
+                vec![RuntimeEvent::new(
+                    "queue.removed",
+                    json!({
+                        "source": "agentSession/queuedTurn/remove",
+                        "queuedTurnId": queued_turn_id,
+                    }),
+                )],
+            )?
+        } else {
+            Vec::new()
+        };
+        let (session, turns) = self.session_snapshot(&session_id)?;
+
+        Ok(RuntimeCoreOutput {
+            response: AgentSessionQueuedTurnRemoveResponse {
+                session,
+                turns,
+                queued_turn_id,
+                removed,
+            },
+            events,
+        })
+    }
+
+    pub async fn promote_agent_session_queued_turn(
+        &self,
+        params: AgentSessionQueuedTurnPromoteParams,
+    ) -> Result<RuntimeCoreOutput<AgentSessionQueuedTurnPromoteResponse>, RuntimeCoreError> {
+        let session_id = normalize_session_control_id(
+            &params.session_id,
+            "sessionId is required for agentSession/queuedTurn/promote",
+        )?;
+        let queued_turn_id = normalize_session_control_id(
+            &params.queued_turn_id,
+            "queuedTurnId is required for agentSession/queuedTurn/promote",
+        )?;
+        self.ensure_current_timeline_session_hydrated(&session_id)
+            .await?;
+        let (session, promoted) = {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get_mut(&session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.clone()))?;
+            let Some(index) = stored.turns.iter().position(|turn| {
+                turn.turn_id == queued_turn_id && matches!(turn.status, AgentTurnStatus::Queued)
+            }) else {
+                return Ok(RuntimeCoreOutput {
+                    response: AgentSessionQueuedTurnPromoteResponse {
+                        session: stored.session.clone(),
+                        turns: stored.turns.clone(),
+                        queued_turn_id,
+                        promoted: false,
+                    },
+                    events: Vec::new(),
+                });
+            };
+            let turn = stored.turns.remove(index);
+            let insert_at = stored
+                .turns
+                .iter()
+                .position(|turn| matches!(turn.status, AgentTurnStatus::Queued))
+                .unwrap_or(stored.turns.len());
+            stored.turns.insert(insert_at, turn);
+            stored.session.updated_at = timestamp();
+            (stored.session.clone(), true)
+        };
+        let events = if promoted {
+            self.append_runtime_events(
+                &session.session_id,
+                &session.thread_id,
+                None,
+                vec![RuntimeEvent::new(
+                    "queue.promoted",
+                    json!({
+                        "source": "agentSession/queuedTurn/promote",
+                        "queuedTurnId": queued_turn_id,
+                    }),
+                )],
+            )?
+        } else {
+            Vec::new()
+        };
+        let (session, turns) = self.session_snapshot(&session_id)?;
+
+        Ok(RuntimeCoreOutput {
+            response: AgentSessionQueuedTurnPromoteResponse {
+                session,
+                turns,
+                queued_turn_id,
+                promoted,
+            },
+            events,
+        })
+    }
+
+    pub async fn list_agent_session_file_checkpoints(
+        &self,
+        params: AgentSessionFileCheckpointListParams,
+    ) -> Result<AgentSessionFileCheckpointListResponse, RuntimeCoreError> {
+        let detail = self
+            .read_current_detail_for_file_checkpoint(&params.session_id)
+            .await?;
+        crate::file_checkpoint::list_file_checkpoints(&detail).map_err(RuntimeCoreError::Backend)
+    }
+
+    pub async fn get_agent_session_file_checkpoint(
+        &self,
+        params: AgentSessionFileCheckpointGetParams,
+    ) -> Result<AgentSessionFileCheckpointDetail, RuntimeCoreError> {
+        let detail = self
+            .read_current_detail_for_file_checkpoint(&params.session_id)
+            .await?;
+        let workspace_root = crate::file_checkpoint::resolve_workspace_root(&detail)
+            .map_err(RuntimeCoreError::Backend)?;
+        crate::file_checkpoint::get_file_checkpoint(
+            &detail,
+            workspace_root.as_path(),
+            &params.checkpoint_id,
+        )
+        .map_err(RuntimeCoreError::Backend)
+    }
+
+    pub async fn diff_agent_session_file_checkpoint(
+        &self,
+        params: AgentSessionFileCheckpointDiffParams,
+    ) -> Result<AgentSessionFileCheckpointDiffResponse, RuntimeCoreError> {
+        let detail = self
+            .read_current_detail_for_file_checkpoint(&params.session_id)
+            .await?;
+        crate::file_checkpoint::diff_file_checkpoint(&detail, &params.checkpoint_id)
+            .map_err(RuntimeCoreError::Backend)
+    }
+
+    pub async fn restore_agent_session_file_checkpoint(
+        &self,
+        params: AgentSessionFileCheckpointRestoreParams,
+    ) -> Result<AgentSessionFileCheckpointRestoreResponse, RuntimeCoreError> {
+        let detail = self
+            .read_current_detail_for_file_checkpoint(&params.session_id)
+            .await?;
+        let workspace_root = crate::file_checkpoint::resolve_workspace_root(&detail)
+            .map_err(RuntimeCoreError::Backend)?;
+        crate::file_checkpoint::restore_file_checkpoint(
+            &detail,
+            workspace_root.as_path(),
+            &params.checkpoint_id,
+            params.confirm_restore,
+            params.create_backup,
+        )
+        .map_err(RuntimeCoreError::Backend)
+    }
+
+    async fn read_current_detail_for_file_checkpoint(
+        &self,
+        session_id: &str,
+    ) -> Result<serde_json::Value, RuntimeCoreError> {
+        let normalized_session_id = session_id.trim();
+        if normalized_session_id.is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "sessionId is required for agentSession/fileCheckpoint".to_string(),
+            ));
+        }
+        let response = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: normalized_session_id.to_string(),
+                history_limit: Some(1_000),
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        response.detail.ok_or_else(|| {
+            RuntimeCoreError::Backend(
+                "agentSession/fileCheckpoint requires current session detail".to_string(),
+            )
+        })
     }
 
     fn update_runtime_core_session_overview(
@@ -2357,6 +5238,159 @@ impl RuntimeCore {
         params: SkillReadParams,
     ) -> Result<SkillReadResponse, RuntimeCoreError> {
         self.app_data_source.read_skill(params).await
+    }
+
+    pub async fn list_management_skills(
+        &self,
+        params: SkillManagementListParams,
+    ) -> Result<SkillListResponse, RuntimeCoreError> {
+        self.app_data_source.list_management_skills(params).await
+    }
+
+    pub async fn install_management_skill(
+        &self,
+        params: SkillManagementInstallParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        self.app_data_source.install_management_skill(params).await
+    }
+
+    pub async fn uninstall_management_skill(
+        &self,
+        params: SkillManagementUninstallParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        self.app_data_source
+            .uninstall_management_skill(params)
+            .await
+    }
+
+    pub async fn list_skill_repositories(
+        &self,
+    ) -> Result<SkillRepositoryListResponse, RuntimeCoreError> {
+        self.app_data_source.list_skill_repositories().await
+    }
+
+    pub async fn save_skill_repository(
+        &self,
+        params: SkillRepositorySaveParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        self.app_data_source.save_skill_repository(params).await
+    }
+
+    pub async fn delete_skill_repository(
+        &self,
+        params: SkillRepositoryDeleteParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        self.app_data_source.delete_skill_repository(params).await
+    }
+
+    pub async fn refresh_skill_cache(
+        &self,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        self.app_data_source.refresh_skill_cache().await
+    }
+
+    pub async fn list_installed_skill_directories(
+        &self,
+    ) -> Result<SkillInstalledDirectoriesListResponse, RuntimeCoreError> {
+        self.app_data_source
+            .list_installed_skill_directories()
+            .await
+    }
+
+    pub async fn inspect_local_skill(
+        &self,
+        params: SkillLocalInspectParams,
+    ) -> Result<SkillLocalInspectResponse, RuntimeCoreError> {
+        self.app_data_source.inspect_local_skill(params).await
+    }
+
+    pub async fn inspect_local_skill_detail(
+        &self,
+        params: SkillLocalDetailInspectParams,
+    ) -> Result<SkillLocalDetailInspectResponse, RuntimeCoreError> {
+        self.app_data_source
+            .inspect_local_skill_detail(params)
+            .await
+    }
+
+    pub async fn create_skill_scaffold(
+        &self,
+        params: SkillScaffoldCreateParams,
+    ) -> Result<SkillScaffoldCreateResponse, RuntimeCoreError> {
+        self.app_data_source.create_skill_scaffold(params).await
+    }
+
+    pub async fn import_local_skill(
+        &self,
+        params: SkillLocalImportParams,
+    ) -> Result<SkillLocalImportResponse, RuntimeCoreError> {
+        self.app_data_source.import_local_skill(params).await
+    }
+
+    pub async fn rename_local_skill(
+        &self,
+        params: SkillLocalRenameParams,
+    ) -> Result<SkillLocalRenameResponse, RuntimeCoreError> {
+        self.app_data_source.rename_local_skill(params).await
+    }
+
+    pub async fn inspect_remote_skill(
+        &self,
+        params: SkillRemoteInspectParams,
+    ) -> Result<SkillRemoteInspectResponse, RuntimeCoreError> {
+        self.app_data_source.inspect_remote_skill(params).await
+    }
+
+    pub async fn inspect_local_skill_package(
+        &self,
+        params: SkillPackageLocalInspectParams,
+    ) -> Result<SkillPackageLocalInspectResponse, RuntimeCoreError> {
+        self.app_data_source
+            .inspect_local_skill_package(params)
+            .await
+    }
+
+    pub async fn install_local_skill_package(
+        &self,
+        params: SkillPackageLocalInstallParams,
+    ) -> Result<SkillPackageLocalInstallResponse, RuntimeCoreError> {
+        self.app_data_source
+            .install_local_skill_package(params)
+            .await
+    }
+
+    pub async fn replace_local_skill_package(
+        &self,
+        params: SkillPackageLocalReplaceParams,
+    ) -> Result<SkillPackageLocalReplaceResponse, RuntimeCoreError> {
+        self.app_data_source
+            .replace_local_skill_package(params)
+            .await
+    }
+
+    pub async fn export_local_skill_package(
+        &self,
+        params: SkillPackageExportParams,
+    ) -> Result<SkillPackageExportResponse, RuntimeCoreError> {
+        self.app_data_source
+            .export_local_skill_package(params)
+            .await
+    }
+
+    pub async fn install_marketplace_skill(
+        &self,
+        params: SkillMarketplaceInstallParams,
+    ) -> Result<SkillMarketplaceInstallResponse, RuntimeCoreError> {
+        self.app_data_source.install_marketplace_skill(params).await
+    }
+
+    pub async fn install_skill_from_download_url(
+        &self,
+        params: SkillDownloadInstallParams,
+    ) -> Result<SkillDownloadInstallResponse, RuntimeCoreError> {
+        self.app_data_source
+            .install_skill_from_download_url(params)
+            .await
     }
 
     pub async fn list_directory(
@@ -2715,6 +5749,210 @@ impl RuntimeCore {
         })
     }
 
+    pub async fn start_gateway_channel(
+        &self,
+        params: GatewayChannelStartParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        self.app_data_source.start_gateway_channel(params).await
+    }
+
+    pub async fn stop_gateway_channel(
+        &self,
+        params: GatewayChannelStopParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        self.app_data_source.stop_gateway_channel(params).await
+    }
+
+    pub async fn read_gateway_channel_status(
+        &self,
+        params: GatewayChannelStatusParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_gateway_channel_status(params)
+            .await
+    }
+
+    pub async fn probe_gateway_tunnel(
+        &self,
+    ) -> Result<GatewayTunnelProbeResponse, RuntimeCoreError> {
+        self.app_data_source.probe_gateway_tunnel().await
+    }
+
+    pub async fn detect_gateway_tunnel_cloudflared(
+        &self,
+    ) -> Result<GatewayTunnelCloudflaredDetectResponse, RuntimeCoreError> {
+        self.app_data_source
+            .detect_gateway_tunnel_cloudflared()
+            .await
+    }
+
+    pub async fn install_gateway_tunnel_cloudflared(
+        &self,
+        params: GatewayTunnelCloudflaredInstallParams,
+    ) -> Result<GatewayTunnelCloudflaredInstallResponse, RuntimeCoreError> {
+        self.app_data_source
+            .install_gateway_tunnel_cloudflared(params)
+            .await
+    }
+
+    pub async fn create_gateway_tunnel(
+        &self,
+        params: GatewayTunnelCreateParams,
+    ) -> Result<GatewayTunnelCreateResponse, RuntimeCoreError> {
+        self.app_data_source.create_gateway_tunnel(params).await
+    }
+
+    pub async fn start_gateway_tunnel(
+        &self,
+    ) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        self.app_data_source.start_gateway_tunnel().await
+    }
+
+    pub async fn stop_gateway_tunnel(
+        &self,
+    ) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        self.app_data_source.stop_gateway_tunnel().await
+    }
+
+    pub async fn restart_gateway_tunnel(
+        &self,
+    ) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        self.app_data_source.restart_gateway_tunnel().await
+    }
+
+    pub async fn read_gateway_tunnel_status(
+        &self,
+    ) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        self.app_data_source.read_gateway_tunnel_status().await
+    }
+
+    pub async fn sync_gateway_tunnel_webhook_url(
+        &self,
+        params: GatewayTunnelSyncWebhookUrlParams,
+    ) -> Result<GatewayTunnelSyncWebhookUrlResponse, RuntimeCoreError> {
+        self.app_data_source
+            .sync_gateway_tunnel_webhook_url(params)
+            .await
+    }
+
+    pub async fn probe_telegram_channel(
+        &self,
+        params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        self.app_data_source.probe_telegram_channel(params).await
+    }
+
+    pub async fn probe_feishu_channel(
+        &self,
+        params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        self.app_data_source.probe_feishu_channel(params).await
+    }
+
+    pub async fn probe_discord_channel(
+        &self,
+        params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        self.app_data_source.probe_discord_channel(params).await
+    }
+
+    pub async fn probe_wechat_channel(
+        &self,
+        params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        self.app_data_source.probe_wechat_channel(params).await
+    }
+
+    pub async fn start_wechat_channel_login(
+        &self,
+        params: WechatLoginStartParams,
+    ) -> Result<WechatLoginStartResponse, RuntimeCoreError> {
+        self.app_data_source
+            .start_wechat_channel_login(params)
+            .await
+    }
+
+    pub async fn wait_wechat_channel_login(
+        &self,
+        params: WechatLoginWaitParams,
+    ) -> Result<WechatLoginWaitResponse, RuntimeCoreError> {
+        self.app_data_source.wait_wechat_channel_login(params).await
+    }
+
+    pub async fn list_wechat_channel_accounts(
+        &self,
+    ) -> Result<WechatChannelAccountListResponse, RuntimeCoreError> {
+        self.app_data_source.list_wechat_channel_accounts().await
+    }
+
+    pub async fn remove_wechat_channel_account(
+        &self,
+        params: WechatChannelAccountRemoveParams,
+    ) -> Result<WechatChannelAccountRemoveResponse, RuntimeCoreError> {
+        self.app_data_source
+            .remove_wechat_channel_account(params)
+            .await
+    }
+
+    pub async fn set_wechat_channel_runtime_model(
+        &self,
+        params: WechatRuntimeModelSetParams,
+    ) -> Result<WechatRuntimeModelSetResponse, RuntimeCoreError> {
+        self.app_data_source
+            .set_wechat_channel_runtime_model(params)
+            .await
+    }
+
+    pub async fn create_image_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactImageCreateParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        self.app_data_source
+            .create_image_media_task_artifact(params)
+            .await
+    }
+
+    pub async fn create_audio_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactAudioCreateParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        self.app_data_source
+            .create_audio_media_task_artifact(params)
+            .await
+    }
+
+    pub async fn complete_audio_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactAudioCompleteParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        self.app_data_source
+            .complete_audio_media_task_artifact(params)
+            .await
+    }
+
+    pub async fn get_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactLookupParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        self.app_data_source.get_media_task_artifact(params).await
+    }
+
+    pub async fn list_media_task_artifacts(
+        &self,
+        params: MediaTaskArtifactListParams,
+    ) -> Result<MediaTaskArtifactListResponse, RuntimeCoreError> {
+        self.app_data_source.list_media_task_artifacts(params).await
+    }
+
+    pub async fn cancel_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactLookupParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        self.app_data_source
+            .cancel_media_task_artifact(params)
+            .await
+    }
+
     pub async fn list_knowledge_packs(
         &self,
         params: KnowledgeListPacksParams,
@@ -3034,6 +6272,122 @@ impl RuntimeCore {
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
         self.app_data_source.read_project_memory(params).await
+    }
+
+    pub async fn list_logs(&self) -> Result<LogListResponse, RuntimeCoreError> {
+        self.app_data_source.list_logs().await
+    }
+
+    pub async fn read_persisted_log_tail(
+        &self,
+        params: LogPersistedTailParams,
+    ) -> Result<LogPersistedTailResponse, RuntimeCoreError> {
+        self.app_data_source.read_persisted_log_tail(params).await
+    }
+
+    pub async fn clear_logs(&self) -> Result<LogClearResponse, RuntimeCoreError> {
+        self.app_data_source.clear_logs().await
+    }
+
+    pub async fn clear_diagnostic_log_history(&self) -> Result<LogClearResponse, RuntimeCoreError> {
+        self.app_data_source.clear_diagnostic_log_history().await
+    }
+
+    pub async fn read_log_storage_diagnostics(
+        &self,
+    ) -> Result<LogStorageDiagnosticsResponse, RuntimeCoreError> {
+        self.app_data_source.read_log_storage_diagnostics().await
+    }
+
+    pub async fn export_support_bundle(
+        &self,
+    ) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
+        self.app_data_source.export_support_bundle().await
+    }
+
+    pub async fn read_server_diagnostics(
+        &self,
+    ) -> Result<ServerDiagnosticsResponse, RuntimeCoreError> {
+        Ok(ServerDiagnosticsResponse {
+            generated_at: timestamp(),
+            running: true,
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            telemetry_summary: DiagnosticsTelemetrySummary::default(),
+            capability_routing: DiagnosticsCapabilityRoutingMetricsSnapshot::default(),
+            response_cache: DiagnosticsResponseCacheDiagnostics {
+                config: DiagnosticsMetricConfig {
+                    enabled: false,
+                    ttl_secs: 0,
+                    max_entries: Some(0),
+                    max_body_bytes: Some(0),
+                    cacheable_status_codes: Vec::new(),
+                    wait_timeout_ms: None,
+                    header_name: None,
+                },
+                stats: json!({
+                    "size": 0,
+                    "hits": 0,
+                    "misses": 0,
+                    "evictions": 0,
+                }),
+                hit_rate_percent: 0.0,
+            },
+            request_dedup: DiagnosticsRequestDedupDiagnostics {
+                config: DiagnosticsMetricConfig {
+                    enabled: false,
+                    ttl_secs: 0,
+                    max_entries: None,
+                    max_body_bytes: None,
+                    cacheable_status_codes: Vec::new(),
+                    wait_timeout_ms: Some(0),
+                    header_name: None,
+                },
+                stats: json!({
+                    "inflight_size": 0,
+                    "completed_size": 0,
+                    "check_new_total": 0,
+                    "check_in_progress_total": 0,
+                    "check_completed_total": 0,
+                    "wait_success_total": 0,
+                    "wait_timeout_total": 0,
+                    "wait_no_result_total": 0,
+                    "complete_total": 0,
+                    "remove_total": 0,
+                }),
+                replay_rate_percent: 0.0,
+            },
+            idempotency: DiagnosticsIdempotencyDiagnostics {
+                config: DiagnosticsMetricConfig {
+                    enabled: false,
+                    ttl_secs: 0,
+                    max_entries: None,
+                    max_body_bytes: None,
+                    cacheable_status_codes: Vec::new(),
+                    wait_timeout_ms: None,
+                    header_name: Some("idempotency-key".to_string()),
+                },
+                stats: json!({
+                    "entries_size": 0,
+                    "in_progress_size": 0,
+                    "completed_size": 0,
+                    "check_new_total": 0,
+                    "check_in_progress_total": 0,
+                    "check_completed_total": 0,
+                    "complete_total": 0,
+                    "remove_total": 0,
+                }),
+                replay_rate_percent: 0.0,
+            },
+        })
+    }
+
+    pub async fn read_windows_startup_diagnostics(
+        &self,
+    ) -> Result<WindowsStartupDiagnosticsResponse, RuntimeCoreError> {
+        self.app_data_source
+            .read_windows_startup_diagnostics()
+            .await
     }
 
     pub async fn read_usage_stats(
@@ -3389,14 +6743,23 @@ impl RuntimeCore {
             }
         }
         let evidence_pack = if params.include_evidence_pack.unwrap_or(true) {
-            self.evidence_export_provider
+            let evidence_pack = self
+                .evidence_export_provider
                 .export_evidence_pack(&EvidencePackRequest {
                     session: session.clone(),
                     turns: turns.clone(),
                     events: events.clone(),
                     artifacts: artifacts.clone(),
                 })
-                .await?
+                .await?;
+            self.with_current_objective_completion_audit_summary(
+                evidence_pack,
+                &session,
+                &turns,
+                &events,
+                &artifacts,
+            )
+            .await
         } else {
             None
         };
@@ -3411,12 +6774,490 @@ impl RuntimeCore {
         })
     }
 
+    async fn with_current_objective_completion_audit_summary(
+        &self,
+        evidence_pack: Option<EvidencePackSummary>,
+        session: &AgentSession,
+        turns: &[AgentTurn],
+        events: &[AgentEvent],
+        artifacts: &[ArtifactSummary],
+    ) -> Option<EvidencePackSummary> {
+        let Some(objective) = self
+            .app_data_source
+            .read_managed_objective_by_owner(
+                crate::objective::MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
+                session.session_id.clone(),
+            )
+            .await
+            .ok()
+            .flatten()
+        else {
+            return evidence_pack;
+        };
+        let Some(completion_audit_summary) = current_objective_completion_audit_summary(&objective)
+        else {
+            return evidence_pack;
+        };
+        let mut pack = evidence_pack.unwrap_or_else(|| {
+            build_runtime_evidence_pack_summary(
+                session,
+                turns,
+                events,
+                artifacts,
+                "current_objective_projection",
+            )
+        });
+        pack.completion_audit_summary = Some(completion_audit_summary);
+        Some(pack)
+    }
+
+    pub async fn export_handoff_bundle(
+        &self,
+        params: AgentSessionHandoffBundleExportParams,
+    ) -> Result<AgentSessionHandoffBundleExportResponse, RuntimeCoreError> {
+        let session_id = params.session_id.trim().to_string();
+        if session_id.is_empty() {
+            return Err(RuntimeCoreError::Backend(
+                "sessionId is required for agentSession/handoffBundle/export".to_string(),
+            ));
+        }
+        validate_handoff_session_id(&session_id)?;
+
+        let read = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.clone(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        let workspace_root = resolve_handoff_workspace_root(&read)?;
+        let workspace_root = workspace_root
+            .canonicalize()
+            .map_err(|error| RuntimeCoreError::Backend(format!(
+                "workspaceRoot must be an existing directory for agentSession/handoffBundle/export: {} ({error})",
+                workspace_root.display()
+            )))?;
+        if !workspace_root.is_dir() {
+            return Err(RuntimeCoreError::Backend(format!(
+                "workspaceRoot must be a directory for agentSession/handoffBundle/export: {}",
+                workspace_root.display()
+            )));
+        }
+
+        let copy = handoff_copy(params.locale.as_deref());
+        let exported_at = timestamp();
+        let bundle_relative_root = format!("{HANDOFF_BUNDLE_RELATIVE_ROOT}/{session_id}");
+        let bundle_absolute_root = workspace_root
+            .join(".lime")
+            .join("harness")
+            .join("sessions")
+            .join(&session_id);
+        fs::create_dir_all(&bundle_absolute_root).map_err(|error| {
+            RuntimeCoreError::Backend(format!(
+                "failed to create handoff bundle directory {}: {error}",
+                bundle_absolute_root.display()
+            ))
+        })?;
+
+        let metrics = handoff_metrics(&read);
+        let recent_artifacts = handoff_recent_artifacts(&read);
+        let artifacts = vec![
+            write_handoff_bundle_file(
+                &bundle_absolute_root,
+                &bundle_relative_root,
+                HANDOFF_PLAN_FILE_NAME,
+                "plan",
+                copy.plan_title,
+                build_handoff_plan_markdown(&read, &metrics, &recent_artifacts, &exported_at, copy),
+            )?,
+            write_handoff_bundle_file(
+                &bundle_absolute_root,
+                &bundle_relative_root,
+                HANDOFF_PROGRESS_FILE_NAME,
+                "progress",
+                copy.progress_title,
+                build_handoff_progress_json(
+                    &read,
+                    &metrics,
+                    &recent_artifacts,
+                    &workspace_root,
+                    &exported_at,
+                )?,
+            )?,
+            write_handoff_bundle_file(
+                &bundle_absolute_root,
+                &bundle_relative_root,
+                HANDOFF_FILE_NAME,
+                "handoff",
+                copy.handoff_title,
+                build_handoff_markdown(&read, &metrics, &recent_artifacts, &exported_at, copy),
+            )?,
+            write_handoff_bundle_file(
+                &bundle_absolute_root,
+                &bundle_relative_root,
+                HANDOFF_REVIEW_SUMMARY_FILE_NAME,
+                "review_summary",
+                copy.review_summary_title,
+                build_handoff_review_summary_markdown(
+                    &read,
+                    &metrics,
+                    &recent_artifacts,
+                    &exported_at,
+                    copy,
+                ),
+            )?,
+        ];
+
+        Ok(AgentSessionHandoffBundleExportResponse {
+            session_id: read.session.session_id,
+            thread_id: read.session.thread_id,
+            workspace_id: read.session.workspace_id,
+            workspace_root: workspace_root.to_string_lossy().to_string(),
+            bundle_relative_root,
+            bundle_absolute_root: bundle_absolute_root.to_string_lossy().to_string(),
+            exported_at,
+            thread_status: agent_session_status_label(read.session.status).to_string(),
+            latest_turn_status: metrics.latest_turn_status,
+            pending_request_count: metrics.pending_request_count,
+            queued_turn_count: metrics.queued_turn_count,
+            active_subagent_count: metrics.active_subagent_count,
+            todo_total: metrics.todo_total,
+            todo_pending: metrics.todo_pending,
+            todo_in_progress: metrics.todo_in_progress,
+            todo_completed: metrics.todo_completed,
+            artifacts,
+        })
+    }
+
+    pub async fn export_replay_case(
+        &self,
+        params: AgentSessionReplayCaseExportParams,
+    ) -> Result<AgentSessionReplayCaseExportResponse, RuntimeCoreError> {
+        const METHOD: &str = "agentSession/replayCase/export";
+        let session_id = required_runtime_export_session_id(&params.session_id, METHOD)?;
+        let read = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.clone(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        let workspace_root = canonical_runtime_export_workspace_root(&read, METHOD)?;
+        let exported_at = timestamp();
+        let metrics = handoff_metrics(&read);
+        let recent_artifacts = handoff_recent_artifacts(&read);
+        let (handoff_relative_root, evidence_relative_root, _) =
+            runtime_export_base_roots(&session_id);
+        let (replay_relative_root, replay_absolute_root) =
+            runtime_export_root(&workspace_root, &session_id, "replay");
+        ensure_runtime_export_root(&replay_absolute_root)?;
+
+        let artifacts = vec![
+            write_runtime_export_file(
+                &replay_absolute_root,
+                &replay_relative_root,
+                REPLAY_CASE_INPUT_FILE_NAME,
+                "input",
+                "Replay input",
+                build_replay_input_json(&read, &metrics, &recent_artifacts, &exported_at)?,
+            )?,
+            write_runtime_export_file(
+                &replay_absolute_root,
+                &replay_relative_root,
+                REPLAY_CASE_EXPECTED_FILE_NAME,
+                "expected",
+                "Replay expected result",
+                build_replay_expected_json(&read, &metrics, &exported_at)?,
+            )?,
+            write_runtime_export_file(
+                &replay_absolute_root,
+                &replay_relative_root,
+                REPLAY_CASE_GRADER_FILE_NAME,
+                "grader",
+                "Replay grader",
+                build_replay_grader_markdown(&read, &metrics, &exported_at),
+            )?,
+            write_runtime_export_file(
+                &replay_absolute_root,
+                &replay_relative_root,
+                REPLAY_CASE_EVIDENCE_LINKS_FILE_NAME,
+                "evidence_links",
+                "Replay evidence links",
+                build_replay_evidence_links_json(
+                    &session_id,
+                    &handoff_relative_root,
+                    &evidence_relative_root,
+                    &recent_artifacts,
+                    &exported_at,
+                )?,
+            )?,
+        ];
+
+        Ok(AgentSessionReplayCaseExportResponse {
+            session_id: read.session.session_id,
+            thread_id: read.session.thread_id,
+            workspace_id: read.session.workspace_id,
+            workspace_root: workspace_root.to_string_lossy().to_string(),
+            replay_relative_root,
+            replay_absolute_root: replay_absolute_root.to_string_lossy().to_string(),
+            handoff_bundle_relative_root: handoff_relative_root,
+            evidence_pack_relative_root: evidence_relative_root,
+            exported_at,
+            thread_status: agent_session_status_label(read.session.status).to_string(),
+            latest_turn_status: metrics.latest_turn_status,
+            pending_request_count: metrics.pending_request_count,
+            queued_turn_count: metrics.queued_turn_count,
+            linked_handoff_artifact_count: 0,
+            linked_evidence_artifact_count: recent_artifacts.len(),
+            recent_artifact_count: recent_artifacts.len(),
+            artifacts,
+        })
+    }
+
+    pub async fn export_analysis_handoff(
+        &self,
+        params: AgentSessionAnalysisHandoffExportParams,
+    ) -> Result<AgentSessionAnalysisHandoffExportResponse, RuntimeCoreError> {
+        const METHOD: &str = "agentSession/analysisHandoff/export";
+        let session_id = required_runtime_export_session_id(&params.session_id, METHOD)?;
+        let read = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.clone(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        let workspace_root = canonical_runtime_export_workspace_root(&read, METHOD)?;
+        let exported_at = timestamp();
+        let metrics = handoff_metrics(&read);
+        let recent_artifacts = handoff_recent_artifacts(&read);
+        let (handoff_relative_root, evidence_relative_root, replay_relative_root) =
+            runtime_export_base_roots(&session_id);
+        let (analysis_relative_root, analysis_absolute_root) =
+            runtime_export_root(&workspace_root, &session_id, "analysis");
+        ensure_runtime_export_root(&analysis_absolute_root)?;
+
+        let title = "External Analysis Handoff".to_string();
+        let copy_prompt =
+            build_analysis_copy_prompt(&read, &analysis_relative_root, &replay_relative_root);
+        let artifacts = vec![
+            write_runtime_export_file(
+                &analysis_absolute_root,
+                &analysis_relative_root,
+                ANALYSIS_BRIEF_FILE_NAME,
+                "analysis_brief",
+                "Analysis brief",
+                build_analysis_brief_markdown(&read, &metrics, &recent_artifacts, &exported_at),
+            )?,
+            write_runtime_export_file(
+                &analysis_absolute_root,
+                &analysis_relative_root,
+                ANALYSIS_CONTEXT_FILE_NAME,
+                "analysis_context",
+                "Analysis context",
+                build_analysis_context_json(
+                    &read,
+                    &metrics,
+                    &workspace_root,
+                    &replay_relative_root,
+                    &handoff_relative_root,
+                    &evidence_relative_root,
+                    &exported_at,
+                )?,
+            )?,
+        ];
+
+        Ok(AgentSessionAnalysisHandoffExportResponse {
+            session_id: read.session.session_id,
+            thread_id: read.session.thread_id,
+            workspace_id: read.session.workspace_id,
+            workspace_root: workspace_root.to_string_lossy().to_string(),
+            sanitized_workspace_root: sanitized_workspace_root(&workspace_root),
+            analysis_relative_root,
+            analysis_absolute_root: analysis_absolute_root.to_string_lossy().to_string(),
+            handoff_bundle_relative_root: handoff_relative_root,
+            evidence_pack_relative_root: evidence_relative_root,
+            replay_case_relative_root: replay_relative_root,
+            exported_at,
+            thread_status: agent_session_status_label(read.session.status).to_string(),
+            latest_turn_status: metrics.latest_turn_status,
+            pending_request_count: metrics.pending_request_count,
+            queued_turn_count: metrics.queued_turn_count,
+            title,
+            copy_prompt,
+            artifacts,
+        })
+    }
+
+    pub async fn export_review_decision_template(
+        &self,
+        params: AgentSessionReviewDecisionTemplateExportParams,
+    ) -> Result<AgentSessionReviewDecisionTemplateExportResponse, RuntimeCoreError> {
+        self.sync_review_decision(
+            params.session_id,
+            params.locale,
+            default_review_decision(),
+            false,
+        )
+        .await
+    }
+
+    pub async fn save_review_decision(
+        &self,
+        params: AgentSessionReviewDecisionSaveParams,
+    ) -> Result<AgentSessionReviewDecisionTemplateExportResponse, RuntimeCoreError> {
+        let decision = review_decision_from_save_params(&params);
+        self.sync_review_decision(params.session_id, params.locale, decision, true)
+            .await
+    }
+
+    async fn sync_review_decision(
+        &self,
+        session_id: String,
+        _locale: Option<String>,
+        decision: AgentSessionReviewDecision,
+        saving: bool,
+    ) -> Result<AgentSessionReviewDecisionTemplateExportResponse, RuntimeCoreError> {
+        let method = if saving {
+            "agentSession/reviewDecision/save"
+        } else {
+            "agentSession/reviewDecisionTemplate/export"
+        };
+        let session_id = required_runtime_export_session_id(&session_id, method)?;
+        let read = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.clone(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        let workspace_root = canonical_runtime_export_workspace_root(&read, method)?;
+        let exported_at = timestamp();
+        let metrics = handoff_metrics(&read);
+        let (handoff_relative_root, evidence_relative_root, replay_relative_root) =
+            runtime_export_base_roots(&session_id);
+        let (analysis_relative_root, analysis_absolute_root) =
+            runtime_export_root(&workspace_root, &session_id, "analysis");
+        ensure_runtime_export_root(&analysis_absolute_root)?;
+        let (review_relative_root, review_absolute_root) =
+            runtime_export_root(&workspace_root, &session_id, "review");
+        ensure_runtime_export_root(&review_absolute_root)?;
+
+        let analysis_artifacts = vec![
+            write_runtime_export_file(
+                &analysis_absolute_root,
+                &analysis_relative_root,
+                ANALYSIS_CONTEXT_FILE_NAME,
+                "analysis_context",
+                "Analysis context",
+                build_analysis_context_json(
+                    &read,
+                    &metrics,
+                    &workspace_root,
+                    &replay_relative_root,
+                    &handoff_relative_root,
+                    &evidence_relative_root,
+                    &exported_at,
+                )?,
+            )?,
+            write_runtime_export_file(
+                &analysis_absolute_root,
+                &analysis_relative_root,
+                ANALYSIS_BRIEF_FILE_NAME,
+                "analysis_brief",
+                "Analysis brief",
+                build_analysis_brief_markdown(
+                    &read,
+                    &metrics,
+                    &handoff_recent_artifacts(&read),
+                    &exported_at,
+                ),
+            )?,
+        ];
+        let artifacts = vec![
+            write_runtime_export_file(
+                &review_absolute_root,
+                &review_relative_root,
+                REVIEW_DECISION_MARKDOWN_FILE_NAME,
+                "review_decision_markdown",
+                "Review decision",
+                build_review_decision_markdown(
+                    &read,
+                    &decision,
+                    &analysis_relative_root,
+                    &replay_relative_root,
+                    &exported_at,
+                ),
+            )?,
+            write_runtime_export_file(
+                &review_absolute_root,
+                &review_relative_root,
+                REVIEW_DECISION_JSON_FILE_NAME,
+                "review_decision_json",
+                "Review decision JSON",
+                build_review_decision_json(
+                    &read,
+                    &decision,
+                    &analysis_relative_root,
+                    &replay_relative_root,
+                    &exported_at,
+                )?,
+            )?,
+        ];
+
+        Ok(AgentSessionReviewDecisionTemplateExportResponse {
+            session_id: read.session.session_id,
+            thread_id: read.session.thread_id,
+            workspace_id: read.session.workspace_id,
+            workspace_root: workspace_root.to_string_lossy().to_string(),
+            review_relative_root,
+            review_absolute_root: review_absolute_root.to_string_lossy().to_string(),
+            analysis_relative_root,
+            analysis_absolute_root: analysis_absolute_root.to_string_lossy().to_string(),
+            handoff_bundle_relative_root: handoff_relative_root,
+            evidence_pack_relative_root: evidence_relative_root,
+            replay_case_relative_root: replay_relative_root,
+            exported_at,
+            thread_status: agent_session_status_label(read.session.status).to_string(),
+            latest_turn_status: metrics.latest_turn_status,
+            pending_request_count: metrics.pending_request_count,
+            queued_turn_count: metrics.queued_turn_count,
+            title: "Review Decision".to_string(),
+            default_decision_status: "pending_review".to_string(),
+            decision,
+            decision_status_options: vec![
+                "pending_review".to_string(),
+                "accepted".to_string(),
+                "deferred".to_string(),
+                "rejected".to_string(),
+                "needs_more_evidence".to_string(),
+            ],
+            risk_level_options: vec![
+                "unknown".to_string(),
+                "low".to_string(),
+                "medium".to_string(),
+                "high".to_string(),
+            ],
+            review_checklist: vec![
+                "Confirm current App Server path evidence.".to_string(),
+                "Confirm no legacy agent_runtime_* production fallback is required.".to_string(),
+                "Run targeted regression before accepting.".to_string(),
+            ],
+            analysis_artifacts,
+            artifacts,
+        })
+    }
+
     pub async fn start_turn(
         &self,
         params: AgentSessionTurnStartParams,
         host: RuntimeHostContext,
     ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError> {
-        self.start_turn_inner(params, host, None).await
+        self.start_turn_inner(params, host, None, true).await
     }
 
     pub(crate) async fn start_turn_with_event_callback(
@@ -3425,7 +7266,7 @@ impl RuntimeCore {
         host: RuntimeHostContext,
         event_callback: &mut RuntimeEventCallback<'_>,
     ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError> {
-        self.start_turn_inner(params, host, Some(event_callback))
+        self.start_turn_inner(params, host, Some(event_callback), true)
             .await
     }
 
@@ -3434,6 +7275,7 @@ impl RuntimeCore {
         params: AgentSessionTurnStartParams,
         host: RuntimeHostContext,
         event_callback: Option<&mut RuntimeEventCallback<'_>>,
+        enable_auto_continuation: bool,
     ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError> {
         self.ensure_current_timeline_session_hydrated(&params.session_id)
             .await?;
@@ -3450,6 +7292,69 @@ impl RuntimeCore {
             self.capability_source
                 .prepare_turn_capabilities(&capability_context, params.runtime_options.as_ref());
             self.ensure_capability_allowed_with_context(&capability_context, capability_id)?;
+        }
+
+        let queued_turn = {
+            let mut state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get_mut(&params.session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
+            let turn_id = optional_id_or_new(params.turn_id.clone(), "turn");
+            if params.queue_if_busy
+                && stored
+                    .turns
+                    .iter()
+                    .any(|turn| agent_turn_is_active(turn.status))
+            {
+                let turn = AgentTurn {
+                    turn_id,
+                    session_id: stored.session.session_id.clone(),
+                    thread_id: stored.session.thread_id.clone(),
+                    status: AgentTurnStatus::Queued,
+                    started_at: Some(timestamp()),
+                    completed_at: None,
+                };
+                stored.session.status = AgentSessionStatus::Running;
+                stored.session.updated_at = timestamp();
+                stored
+                    .turn_inputs
+                    .insert(turn.turn_id.clone(), params.input.clone());
+                if let Some(runtime_options) = params.runtime_options.clone() {
+                    stored
+                        .turn_runtime_options
+                        .insert(turn.turn_id.clone(), runtime_options);
+                }
+                stored.turns.push(turn.clone());
+                Some((stored.session.clone(), turn))
+            } else {
+                None
+            }
+        };
+        if let Some((session, turn)) = queued_turn {
+            let events = self.append_runtime_events(
+                &session.session_id,
+                &session.thread_id,
+                Some(&turn.turn_id),
+                vec![RuntimeEvent::new(
+                    "queue.added",
+                    json!({
+                        "source": "agentSession/turn/start",
+                        "queuedTurnId": params
+                            .runtime_options
+                            .as_ref()
+                            .and_then(|options| options.queued_turn_id.clone())
+                            .unwrap_or_else(|| turn.turn_id.clone()),
+                    }),
+                )],
+            )?;
+            return Ok(RuntimeCoreOutput {
+                response: AgentSessionTurnStartResponse { turn },
+                events,
+            });
         }
 
         let (session, previous_session, turn) = {
@@ -3478,11 +7383,17 @@ impl RuntimeCore {
             stored
                 .turn_inputs
                 .insert(turn.turn_id.clone(), params.input.clone());
+            if let Some(runtime_options) = params.runtime_options.clone() {
+                stored
+                    .turn_runtime_options
+                    .insert(turn.turn_id.clone(), runtime_options);
+            }
             stored.turns.push(turn.clone());
 
             (stored.session.clone(), previous_session, turn)
         };
 
+        let request_host = host.clone();
         let request = ExecutionRequest {
             host,
             session: session.clone(),
@@ -3568,6 +7479,13 @@ impl RuntimeCore {
         let response_turn = self
             .stored_turn(&session.session_id, &turn.turn_id)?
             .unwrap_or(turn);
+        if enable_auto_continuation && agent_turn_is_terminal(response_turn.status) {
+            self.maybe_submit_managed_objective_auto_continuation(
+                &session.session_id,
+                request_host,
+            )
+            .await;
+        }
 
         Ok(RuntimeCoreOutput {
             response: AgentSessionTurnStartResponse {
@@ -3617,6 +7535,7 @@ impl RuntimeCore {
             session: response.session,
             turns: response.turns,
             turn_inputs: HashMap::new(),
+            turn_runtime_options: HashMap::new(),
             events: Vec::new(),
         });
     }
@@ -3641,6 +7560,21 @@ impl RuntimeCore {
             .cloned())
     }
 
+    fn session_snapshot(
+        &self,
+        session_id: &str,
+    ) -> Result<(AgentSession, Vec<AgentTurn>), RuntimeCoreError> {
+        let state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let stored = state
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+        Ok((stored.session.clone(), stored.turns.clone()))
+    }
+
     fn rollback_started_turn(
         &self,
         session_id: &str,
@@ -3653,8 +7587,356 @@ impl RuntimeCore {
             .expect("runtime core state mutex poisoned");
         if let Some(stored) = state.sessions.get_mut(session_id) {
             stored.turns.retain(|turn| turn.turn_id != turn_id);
+            stored.turn_inputs.remove(turn_id);
+            stored.turn_runtime_options.remove(turn_id);
             stored.session = previous_session;
         }
+    }
+
+    fn restore_queued_turn_if_missing(
+        &self,
+        session_id: &str,
+        index: usize,
+        turn: AgentTurn,
+        input: AgentInput,
+    ) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        if let Some(stored) = state.sessions.get_mut(session_id) {
+            if stored.turns.iter().any(|stored_turn| {
+                stored_turn.turn_id == turn.turn_id
+                    && !matches!(stored_turn.status, AgentTurnStatus::Queued)
+            }) {
+                return;
+            }
+            if !stored.turns.iter().any(|stored_turn| {
+                stored_turn.turn_id == turn.turn_id
+                    && matches!(stored_turn.status, AgentTurnStatus::Queued)
+            }) {
+                let insert_at = index.min(stored.turns.len());
+                stored.turns.insert(insert_at, turn.clone());
+            }
+            stored.turn_inputs.insert(turn.turn_id, input);
+        }
+    }
+
+    fn resolve_continuation_runtime_preferences(
+        &self,
+        read: &AgentSessionReadResponse,
+    ) -> RuntimeContinuationPreferences {
+        self.latest_turn_runtime_preferences(&read.session.session_id)
+            .unwrap_or_else(|| continuation_runtime_preferences_from_read(read))
+    }
+
+    fn latest_turn_runtime_preferences(
+        &self,
+        session_id: &str,
+    ) -> Option<RuntimeContinuationPreferences> {
+        let state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let stored = state.sessions.get(session_id)?;
+        stored.turns.iter().rev().find_map(|turn| {
+            let runtime_options = stored.turn_runtime_options.get(&turn.turn_id)?;
+            let host_preferences = runtime_options
+                .host_options
+                .as_ref()
+                .map(|host_options| RuntimeContinuationPreferences {
+                    provider_preference: runtime_string_from_host_options(
+                        host_options,
+                        &["provider_preference", "providerPreference"],
+                        &["provider_preference", "providerPreference"],
+                    ),
+                    model_preference: runtime_string_from_host_options(
+                        host_options,
+                        &["model_preference", "modelPreference"],
+                        &["model_preference", "modelPreference"],
+                    ),
+                    provider_config: runtime_provider_config_from_host_options(host_options),
+                    approval_policy: runtime_string_from_host_options(
+                        host_options,
+                        &["approval_policy", "approvalPolicy"],
+                        &["approval_policy", "approvalPolicy"],
+                    ),
+                    sandbox_policy: runtime_string_from_host_options(
+                        host_options,
+                        &["sandbox_policy", "sandboxPolicy"],
+                        &["sandbox_policy", "sandboxPolicy"],
+                    ),
+                    execution_strategy: runtime_string_from_host_options(
+                        host_options,
+                        &["execution_strategy", "executionStrategy"],
+                        &["execution_strategy", "executionStrategy"],
+                    ),
+                })
+                .unwrap_or_default();
+            let runtime_preferences = RuntimeContinuationPreferences {
+                provider_preference: normalized_optional_string(
+                    runtime_options.provider_preference.as_deref(),
+                ),
+                model_preference: normalized_optional_string(
+                    runtime_options.model_preference.as_deref(),
+                ),
+                provider_config: runtime_options
+                    .host_options
+                    .as_ref()
+                    .and_then(runtime_provider_config_from_host_options),
+                approval_policy: None,
+                sandbox_policy: None,
+                execution_strategy: None,
+            };
+            let preferences = host_preferences.with_fallback(runtime_preferences);
+            preferences.has_any_context().then_some(preferences)
+        })
+    }
+
+    async fn maybe_submit_managed_objective_auto_continuation(
+        &self,
+        session_id: &str,
+        host: RuntimeHostContext,
+    ) {
+        if let Err(error) = self
+            .submit_managed_objective_auto_continuation_until_stopped(session_id, host)
+            .await
+        {
+            tracing::warn!(
+                "[AppServer][Objective] managed objective auto-continuation skipped: session_id={}, error={}",
+                session_id,
+                error
+            );
+        }
+    }
+
+    async fn submit_managed_objective_auto_continuation_until_stopped(
+        &self,
+        session_id: &str,
+        host: RuntimeHostContext,
+    ) -> Result<(), RuntimeCoreError> {
+        const MAX_AUTO_CONTINUATION_ITERATIONS: usize = 8;
+        for _ in 0..MAX_AUTO_CONTINUATION_ITERATIONS {
+            let Some(turn) = self
+                .submit_managed_objective_auto_continuation_once(session_id, host.clone())
+                .await?
+            else {
+                return Ok(());
+            };
+            if !agent_turn_is_terminal(turn.status) {
+                return Ok(());
+            }
+        }
+        Err(RuntimeCoreError::Backend(
+            "managed objective auto-continuation exceeded safety iteration limit".to_string(),
+        ))
+    }
+
+    async fn submit_managed_objective_auto_continuation_once(
+        &self,
+        session_id: &str,
+        host: RuntimeHostContext,
+    ) -> Result<Option<AgentTurn>, RuntimeCoreError> {
+        let objective = self
+            .app_data_source
+            .read_managed_objective_by_owner(
+                crate::objective::MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
+                session_id.to_string(),
+            )
+            .await?;
+        let Some(objective) = objective else {
+            return Ok(None);
+        };
+        let read = self
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await?;
+        let run_summary =
+            self.auto_continuation_run_summary(session_id, &objective.objective_id)?;
+        let (decision, policy) = crate::objective::resolve_auto_continuation_guard(
+            crate::objective::AutoContinuationGuardInput {
+                objective: &objective,
+                read: &read,
+                run_summary: run_summary.clone(),
+                now: Utc::now(),
+            },
+        );
+
+        match decision {
+            crate::objective::AutoContinuationGuardDecision::Allow => {
+                let queued_turn_id = new_id("queued");
+                let turn_id = new_id("turn");
+                let workspace_id = self
+                    .resolve_objective_workspace_id(session_id, &objective)
+                    .await?;
+                let message = crate::objective::managed_objective_continuation_message(&objective);
+                let event_name = crate::objective::managed_objective_auto_event_name(&objective);
+                let metadata = crate::objective::managed_objective_auto_metadata(
+                    &objective,
+                    &run_summary,
+                    &policy,
+                );
+                let runtime_preferences = self.resolve_continuation_runtime_preferences(&read);
+                let runtime_provider_preference =
+                    runtime_preferences.provider_preference_for_runtime_options();
+                let runtime_model_preference =
+                    runtime_preferences.model_preference_for_runtime_options();
+                let host_options = build_objective_continuation_host_options(
+                    &message,
+                    session_id,
+                    &event_name,
+                    &workspace_id,
+                    &turn_id,
+                    &queued_turn_id,
+                    &metadata,
+                    &runtime_preferences,
+                );
+                self.persist_auto_continuation_guard_audit(
+                    session_id,
+                    &objective,
+                    &crate::objective::AutoContinuationGuardDecision::Allow,
+                    &run_summary,
+                    &policy,
+                    Some(queued_turn_id.as_str()),
+                )
+                .await?;
+                let output = Box::pin(self.start_turn_inner(
+                    AgentSessionTurnStartParams {
+                        session_id: session_id.to_string(),
+                        turn_id: Some(turn_id),
+                        input: AgentInput {
+                            text: message,
+                            attachments: Vec::new(),
+                        },
+                        runtime_options: Some(app_server_protocol::RuntimeOptions {
+                            capability_id: None,
+                            stream: true,
+                            event_name: Some(event_name),
+                            provider_preference: runtime_provider_preference,
+                            model_preference: runtime_model_preference,
+                            metadata: Some(metadata),
+                            queued_turn_id: Some(queued_turn_id.clone()),
+                            host_options: Some(host_options),
+                        }),
+                        queue_if_busy: false,
+                        skip_pre_submit_resume: true,
+                    },
+                    host,
+                    None,
+                    false,
+                ))
+                .await?;
+                Ok(Some(output.response.turn))
+            }
+            crate::objective::AutoContinuationGuardDecision::BudgetLimited(_) => {
+                self.persist_auto_continuation_guard_audit(
+                    session_id,
+                    &objective,
+                    &decision,
+                    &run_summary,
+                    &policy,
+                    None,
+                )
+                .await?;
+                Ok(None)
+            }
+            crate::objective::AutoContinuationGuardDecision::Skip(_) => {
+                self.persist_auto_continuation_guard_audit(
+                    session_id,
+                    &objective,
+                    &decision,
+                    &run_summary,
+                    &policy,
+                    None,
+                )
+                .await?;
+                Ok(None)
+            }
+        }
+    }
+
+    async fn persist_auto_continuation_guard_audit(
+        &self,
+        session_id: &str,
+        objective: &ManagedObjective,
+        decision: &crate::objective::AutoContinuationGuardDecision,
+        run_summary: &crate::objective::AutoContinuationRunSummary,
+        policy: &crate::objective::AutoContinuationPolicy,
+        queued_turn_id: Option<&str>,
+    ) -> Result<(), RuntimeCoreError> {
+        let Some(update) = crate::objective::build_auto_continuation_guard_audit_update(
+            objective,
+            decision,
+            run_summary,
+            policy,
+            queued_turn_id,
+        ) else {
+            return Ok(());
+        };
+        self.app_data_source
+            .audit_agent_session_objective(
+                crate::objective::MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
+                session_id.to_string(),
+                update,
+            )
+            .await?;
+        Ok(())
+    }
+
+    fn auto_continuation_run_summary(
+        &self,
+        session_id: &str,
+        objective_id: &str,
+    ) -> Result<crate::objective::AutoContinuationRunSummary, RuntimeCoreError> {
+        let state = self
+            .state
+            .lock()
+            .expect("runtime core state mutex poisoned");
+        let stored = state
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(session_id.to_string()))?;
+        let mut summary = crate::objective::AutoContinuationRunSummary::default();
+        for turn in stored.turns.iter().filter(|turn| {
+            matches!(
+                turn.status,
+                AgentTurnStatus::Completed | AgentTurnStatus::Failed | AgentTurnStatus::Canceled
+            )
+        }) {
+            let Some(metadata) = stored
+                .turn_runtime_options
+                .get(&turn.turn_id)
+                .and_then(|options| options.metadata.as_ref())
+            else {
+                continue;
+            };
+            let Some(managed_objective) = managed_objective_metadata_from_turn(metadata) else {
+                continue;
+            };
+            if string_field_from_value(managed_objective, &["objective_id", "objectiveId"])
+                .as_deref()
+                != Some(objective_id)
+            {
+                continue;
+            }
+            if string_field_from_value(
+                managed_objective,
+                &["continuation_source", "continuationSource"],
+            )
+            .as_deref()
+                == Some("auto_idle")
+            {
+                summary.auto_turn_count += 1;
+            }
+            if let Some(cost) = estimated_total_cost_from_metadata(metadata) {
+                summary.estimated_total_cost += cost;
+            }
+        }
+        Ok(summary)
     }
 
     pub async fn cancel_turn(
@@ -3713,6 +7995,30 @@ impl RuntimeCore {
         Ok(RuntimeCoreOutput {
             response: AgentSessionTurnCancelResponse {},
             events,
+        })
+    }
+
+    pub async fn replay_action(
+        &self,
+        params: AgentSessionActionReplayParams,
+    ) -> Result<RuntimeCoreOutput<AgentSessionActionReplayResponse>, RuntimeCoreError> {
+        self.ensure_current_timeline_session_hydrated(&params.session_id)
+            .await?;
+        let action = {
+            let state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            let stored = state
+                .sessions
+                .get(&params.session_id)
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
+            replayed_action_required_from_stored_session(stored, &params.request_id)
+        };
+
+        Ok(RuntimeCoreOutput {
+            response: AgentSessionActionReplayResponse { action },
+            events: Vec::new(),
         })
     }
 
@@ -3953,6 +8259,45 @@ fn append_runtime_events_to_state(
         events.push(event);
     }
     Ok(events)
+}
+
+fn managed_objective_metadata_from_turn(
+    metadata: &serde_json::Value,
+) -> Option<&serde_json::Value> {
+    metadata
+        .pointer("/request_metadata/harness/managed_objective")
+        .or_else(|| metadata.pointer("/request_metadata/managed_objective"))
+        .or_else(|| metadata.pointer("/harness/managed_objective"))
+        .or_else(|| metadata.get("managed_objective"))
+}
+
+fn estimated_total_cost_from_metadata(metadata: &serde_json::Value) -> Option<f64> {
+    metadata
+        .pointer("/cost_state/estimatedTotalCost")
+        .or_else(|| metadata.pointer("/cost_state/estimated_total_cost"))
+        .or_else(|| {
+            metadata.pointer("/request_metadata/lime_runtime/cost_state/estimatedTotalCost")
+        })
+        .or_else(|| {
+            metadata.pointer("/request_metadata/lime_runtime/cost_state/estimated_total_cost")
+        })
+        .and_then(serde_json::Value::as_f64)
+}
+
+fn string_field_from_value(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn string_field_from_optional_value(
+    value: Option<&serde_json::Value>,
+    keys: &[&str],
+) -> Option<String> {
+    value.and_then(|value| string_field_from_value(value, keys))
 }
 
 fn should_ignore_runtime_event_for_terminal_turn(
@@ -4478,6 +8823,105 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
     })
 }
 
+fn replayed_action_required_from_stored_session(
+    stored: &StoredSession,
+    request_id: &str,
+) -> Option<AgentSessionReplayedActionRequired> {
+    let request_id = request_id.trim();
+    if request_id.is_empty() {
+        return None;
+    }
+
+    let mut resolved = false;
+    for event in stored.events.iter().rev() {
+        if event_request_id(&event.payload).as_deref() != Some(request_id) {
+            continue;
+        }
+        match event.event_type.as_str() {
+            "action.resolved" => {
+                resolved = true;
+            }
+            "action.required" if !resolved => {
+                return replayed_action_required_from_event(stored, event, request_id);
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn replayed_action_required_from_event(
+    stored: &StoredSession,
+    event: &AgentEvent,
+    request_id: &str,
+) -> Option<AgentSessionReplayedActionRequired> {
+    let action_type = event_action_type(&event.payload)?;
+    let data = event.payload.get("data").unwrap_or(&event.payload);
+    let prompt = string_field(data, &["prompt", "message"])
+        .or_else(|| string_field(&event.payload, &["prompt", "message"]));
+    Some(AgentSessionReplayedActionRequired {
+        event_type: "action_required".to_string(),
+        request_id: request_id.to_string(),
+        action_type,
+        tool_name: string_field(data, &["toolName", "tool_name"])
+            .or_else(|| string_field(&event.payload, &["toolName", "tool_name"])),
+        arguments: data
+            .get("arguments")
+            .cloned()
+            .or_else(|| event.payload.get("arguments").cloned()),
+        prompt,
+        questions: data
+            .get("questions")
+            .cloned()
+            .or_else(|| event.payload.get("questions").cloned()),
+        requested_schema: data
+            .get("requestedSchema")
+            .cloned()
+            .or_else(|| data.get("requested_schema").cloned())
+            .or_else(|| event.payload.get("requestedSchema").cloned())
+            .or_else(|| event.payload.get("requested_schema").cloned()),
+        scope: replayed_action_scope(stored, event),
+    })
+}
+
+fn replayed_action_scope(
+    stored: &StoredSession,
+    event: &AgentEvent,
+) -> Option<AgentSessionActionScope> {
+    let scope = event.payload.get("scope");
+    let session_id = scope
+        .and_then(|value| string_field(value, &["sessionId", "session_id"]))
+        .or_else(|| Some(stored.session.session_id.clone()));
+    let thread_id = scope
+        .and_then(|value| string_field(value, &["threadId", "thread_id"]))
+        .or_else(|| event.thread_id.clone())
+        .or_else(|| Some(stored.session.thread_id.clone()));
+    let turn_id = scope
+        .and_then(|value| string_field(value, &["turnId", "turn_id"]))
+        .or_else(|| event.turn_id.clone());
+    if session_id.is_none() && thread_id.is_none() && turn_id.is_none() {
+        return None;
+    }
+    Some(AgentSessionActionScope {
+        session_id,
+        thread_id,
+        turn_id,
+    })
+}
+
+fn event_request_id(payload: &serde_json::Value) -> Option<String> {
+    string_field(payload, &["requestId", "request_id"])
+}
+
+fn event_action_type(payload: &serde_json::Value) -> Option<AgentSessionActionType> {
+    match string_field(payload, &["actionType", "action_type"])?.as_str() {
+        "tool_confirmation" => Some(AgentSessionActionType::ToolConfirmation),
+        "ask_user" => Some(AgentSessionActionType::AskUser),
+        "elicitation" => Some(AgentSessionActionType::Elicitation),
+        _ => None,
+    }
+}
+
 fn tool_calls_from_events(events: &[AgentEvent]) -> Vec<serde_json::Value> {
     let mut calls: Vec<serde_json::Value> = Vec::new();
     for event in events {
@@ -4593,6 +9037,22 @@ fn agent_turn_is_terminal(status: AgentTurnStatus) -> bool {
         status,
         AgentTurnStatus::Completed | AgentTurnStatus::Failed | AgentTurnStatus::Canceled
     )
+}
+
+fn agent_turn_blocks_queue_resume(status: AgentTurnStatus) -> bool {
+    matches!(
+        status,
+        AgentTurnStatus::Accepted | AgentTurnStatus::Running | AgentTurnStatus::WaitingAction
+    )
+}
+
+fn normalize_session_control_id(value: &str, message: &str) -> Result<String, RuntimeCoreError> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        Err(RuntimeCoreError::Backend(message.to_string()))
+    } else {
+        Ok(normalized.to_string())
+    }
 }
 
 fn agent_session_status_label(status: AgentSessionStatus) -> &'static str {
@@ -5441,6 +9901,42 @@ mod tests {
         }
     }
 
+    struct FailBeforeEmitBackend {
+        start_count: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl ExecutionBackend for FailBeforeEmitBackend {
+        async fn start_turn(
+            &self,
+            _request: ExecutionRequest,
+            sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            if self.start_count.fetch_add(1, Ordering::SeqCst) == 0 {
+                return sink.emit(RuntimeEvent::new("turn.accepted", json!({})));
+            }
+            Err(RuntimeCoreError::Backend(
+                "backend unavailable before turn start".to_string(),
+            ))
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: CancelExecutionRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: ActionRespondRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+    }
+
     struct HangingCancelBackend {
         cancel_count: AtomicUsize,
     }
@@ -5462,6 +9958,42 @@ mod tests {
         ) -> Result<(), RuntimeCoreError> {
             self.cancel_count.fetch_add(1, Ordering::SeqCst);
             std::future::pending::<()>().await;
+            Ok(())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: ActionRespondRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+    }
+
+    struct FinalDoneRecordingBackend {
+        requests: Mutex<Vec<ExecutionRequest>>,
+    }
+
+    #[async_trait]
+    impl ExecutionBackend for FinalDoneRecordingBackend {
+        async fn start_turn(
+            &self,
+            request: ExecutionRequest,
+            sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            self.requests
+                .lock()
+                .expect("test backend requests mutex poisoned")
+                .push(request);
+            sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+            sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: CancelExecutionRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
             Ok(())
         }
 
@@ -5530,6 +10062,8 @@ mod tests {
 
     struct TestCurrentTimelineDataSource {
         persisted: Option<AgentSessionReadResponse>,
+        objective: Mutex<Option<ManagedObjective>>,
+        audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
         read_requests: Mutex<Vec<AgentSessionReadParams>>,
         knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
     }
@@ -5538,15 +10072,39 @@ mod tests {
         fn new(persisted: AgentSessionReadResponse) -> Self {
             Self {
                 persisted: Some(persisted),
+                objective: Mutex::new(None),
+                audit_updates: Mutex::new(Vec::new()),
                 read_requests: Mutex::new(Vec::new()),
                 knowledge_compile_requests: Mutex::new(Vec::new()),
             }
+        }
+
+        fn with_objective(self, objective: ManagedObjective) -> Self {
+            *self
+                .objective
+                .lock()
+                .expect("test objective mutex poisoned") = Some(objective);
+            self
         }
 
         fn read_requests(&self) -> Vec<AgentSessionReadParams> {
             self.read_requests
                 .lock()
                 .expect("test current timeline read requests mutex poisoned")
+                .clone()
+        }
+
+        fn objective(&self) -> Option<ManagedObjective> {
+            self.objective
+                .lock()
+                .expect("test objective mutex poisoned")
+                .clone()
+        }
+
+        fn audit_updates(&self) -> Vec<ManagedObjectiveAuditUpdate> {
+            self.audit_updates
+                .lock()
+                .expect("test audit updates mutex poisoned")
                 .clone()
         }
 
@@ -5572,6 +10130,28 @@ mod tests {
             },
             turns: Vec::new(),
             detail: None,
+        }
+    }
+
+    fn managed_objective(session_id: &str) -> ManagedObjective {
+        ManagedObjective {
+            objective_id: "objective-1".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            owner_kind: crate::objective::MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
+            owner_id: session_id.to_string(),
+            objective_text: "完成生产命令 current 迁移".to_string(),
+            success_criteria: vec!["契约通过".to_string()],
+            status: ManagedObjectiveStatus::Active,
+            budget_policy: None,
+            risk_policy: None,
+            approval_policy: None,
+            continuation_policy: None,
+            last_audit_summary: None,
+            last_evidence_pack_ref: None,
+            last_artifact_refs: Vec::new(),
+            blocker_reason: None,
+            created_at: timestamp(),
+            updated_at: timestamp(),
         }
     }
 
@@ -5668,6 +10248,49 @@ mod tests {
                 .await
         }
 
+        async fn read_agent_session_objective(
+            &self,
+            _params: AgentSessionObjectiveReadParams,
+        ) -> Result<AgentSessionObjectiveReadResponse, RuntimeCoreError> {
+            Ok(AgentSessionObjectiveReadResponse {
+                objective: self.objective(),
+            })
+        }
+
+        async fn read_managed_objective_by_owner(
+            &self,
+            owner_kind: String,
+            owner_id: String,
+        ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
+            Ok(self.objective().filter(|objective| {
+                objective.owner_kind == owner_kind && objective.owner_id == owner_id
+            }))
+        }
+
+        async fn audit_agent_session_objective(
+            &self,
+            _owner_kind: String,
+            _owner_id: String,
+            update: ManagedObjectiveAuditUpdate,
+        ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
+            self.audit_updates
+                .lock()
+                .expect("test audit updates mutex poisoned")
+                .push(update.clone());
+            let mut objective = self
+                .objective
+                .lock()
+                .expect("test objective mutex poisoned");
+            if let Some(objective) = objective.as_mut() {
+                objective.status = update.status;
+                objective.last_audit_summary = update.last_audit_summary;
+                objective.last_evidence_pack_ref = update.last_evidence_pack_ref;
+                objective.last_artifact_refs = update.last_artifact_refs;
+                objective.blocker_reason = update.blocker_reason;
+            }
+            Ok(objective.clone())
+        }
+
         async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
             NoopAppDataSource.list_workspaces().await
         }
@@ -5727,6 +10350,64 @@ mod tests {
             params: SkillReadParams,
         ) -> Result<SkillReadResponse, RuntimeCoreError> {
             NoopAppDataSource.read_skill(params).await
+        }
+
+        async fn inspect_local_skill_detail(
+            &self,
+            params: SkillLocalDetailInspectParams,
+        ) -> Result<SkillLocalDetailInspectResponse, RuntimeCoreError> {
+            NoopAppDataSource.inspect_local_skill_detail(params).await
+        }
+
+        async fn rename_local_skill(
+            &self,
+            params: SkillLocalRenameParams,
+        ) -> Result<SkillLocalRenameResponse, RuntimeCoreError> {
+            NoopAppDataSource.rename_local_skill(params).await
+        }
+
+        async fn inspect_local_skill_package(
+            &self,
+            params: SkillPackageLocalInspectParams,
+        ) -> Result<SkillPackageLocalInspectResponse, RuntimeCoreError> {
+            NoopAppDataSource.inspect_local_skill_package(params).await
+        }
+
+        async fn install_local_skill_package(
+            &self,
+            params: SkillPackageLocalInstallParams,
+        ) -> Result<SkillPackageLocalInstallResponse, RuntimeCoreError> {
+            NoopAppDataSource.install_local_skill_package(params).await
+        }
+
+        async fn replace_local_skill_package(
+            &self,
+            params: SkillPackageLocalReplaceParams,
+        ) -> Result<SkillPackageLocalReplaceResponse, RuntimeCoreError> {
+            NoopAppDataSource.replace_local_skill_package(params).await
+        }
+
+        async fn export_local_skill_package(
+            &self,
+            params: SkillPackageExportParams,
+        ) -> Result<SkillPackageExportResponse, RuntimeCoreError> {
+            NoopAppDataSource.export_local_skill_package(params).await
+        }
+
+        async fn install_marketplace_skill(
+            &self,
+            params: SkillMarketplaceInstallParams,
+        ) -> Result<SkillMarketplaceInstallResponse, RuntimeCoreError> {
+            NoopAppDataSource.install_marketplace_skill(params).await
+        }
+
+        async fn install_skill_from_download_url(
+            &self,
+            params: SkillDownloadInstallParams,
+        ) -> Result<SkillDownloadInstallResponse, RuntimeCoreError> {
+            NoopAppDataSource
+                .install_skill_from_download_url(params)
+                .await
         }
 
         async fn list_workspace_skill_bindings(
@@ -5887,6 +10568,43 @@ mod tests {
             NoopAppDataSource.read_project_memory(params).await
         }
 
+        async fn list_logs(&self) -> Result<LogListResponse, RuntimeCoreError> {
+            NoopAppDataSource.list_logs().await
+        }
+
+        async fn read_persisted_log_tail(
+            &self,
+            params: LogPersistedTailParams,
+        ) -> Result<LogPersistedTailResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_persisted_log_tail(params).await
+        }
+
+        async fn clear_logs(&self) -> Result<LogClearResponse, RuntimeCoreError> {
+            NoopAppDataSource.clear_logs().await
+        }
+
+        async fn clear_diagnostic_log_history(&self) -> Result<LogClearResponse, RuntimeCoreError> {
+            NoopAppDataSource.clear_diagnostic_log_history().await
+        }
+
+        async fn read_log_storage_diagnostics(
+            &self,
+        ) -> Result<LogStorageDiagnosticsResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_log_storage_diagnostics().await
+        }
+
+        async fn export_support_bundle(
+            &self,
+        ) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
+            NoopAppDataSource.export_support_bundle().await
+        }
+
+        async fn read_windows_startup_diagnostics(
+            &self,
+        ) -> Result<WindowsStartupDiagnosticsResponse, RuntimeCoreError> {
+            NoopAppDataSource.read_windows_startup_diagnostics().await
+        }
+
         async fn read_usage_stats(
             &self,
             params: UsageStatsRangeParams,
@@ -6033,6 +10751,7 @@ mod tests {
     struct TestEvidenceExportProvider {
         call_count: AtomicUsize,
         requests: Mutex<Vec<EvidencePackRequest>>,
+        completion_audit_summary: Option<serde_json::Value>,
     }
 
     #[async_trait]
@@ -6063,9 +10782,13 @@ mod tests {
                 observability_summary: Some(json!({
                     "schema_version": "runtime-evidence-pack.v1"
                 })),
-                completion_audit_summary: Some(json!({
-                    "decision": "in_progress"
-                })),
+                completion_audit_summary: Some(
+                    self.completion_audit_summary.clone().unwrap_or_else(|| {
+                        json!({
+                            "decision": "in_progress"
+                        })
+                    }),
+                ),
                 artifacts: vec![EvidencePackArtifact {
                     kind: "summary".to_string(),
                     title: "Evidence Summary".to_string(),
@@ -6148,6 +10871,251 @@ mod tests {
             response.sessions[0].execution_strategy.as_deref(),
             Some("runtime-core")
         );
+    }
+
+    #[tokio::test]
+    async fn queue_session_controls_use_current_runtime_core_read_model() {
+        let core = RuntimeCore::default();
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_queue".to_string()),
+            thread_id: Some("thread_queue".to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: Some("workspace-current".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_queue".to_string(),
+                turn_id: Some("turn_running".to_string()),
+                input: AgentInput {
+                    text: "running".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    host_options: Some(json!({
+                        "asterChatRequest": {
+                            "provider_config": {
+                                "provider_id": "fixture-provider",
+                                "provider_name": "openai",
+                                "model_name": "fixture-model",
+                                "api_key": "fixture-key",
+                                "base_url": "http://127.0.0.1:65535"
+                            }
+                        }
+                    })),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("running turn");
+        let queued = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: "sess_queue".to_string(),
+                    turn_id: Some("turn_queued".to_string()),
+                    input: AgentInput {
+                        text: "queued".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: true,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("queued turn");
+        assert_eq!(queued.response.turn.status, AgentTurnStatus::Queued);
+        assert!(queued
+            .events
+            .iter()
+            .any(|event| event.event_type == "queue.added"));
+
+        let promoted = core
+            .promote_agent_session_queued_turn(AgentSessionQueuedTurnPromoteParams {
+                session_id: "sess_queue".to_string(),
+                queued_turn_id: "turn_queued".to_string(),
+            })
+            .await
+            .expect("promote");
+        assert!(promoted.response.promoted);
+        assert_eq!(
+            promoted.response.turns[1].turn_id, "turn_queued",
+            "only one queued turn keeps its position after active turn"
+        );
+
+        let blocked_resume = core
+            .resume_agent_session_thread(
+                AgentSessionThreadResumeParams {
+                    session_id: "sess_queue".to_string(),
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("blocked resume");
+        assert!(!blocked_resume.response.resumed);
+
+        core.append_external_runtime_events(
+            "sess_queue",
+            Some("turn_running"),
+            vec![RuntimeEvent::new("turn.completed", json!({}))],
+        )
+        .expect("complete running");
+        let resumed = core
+            .resume_agent_session_thread(
+                AgentSessionThreadResumeParams {
+                    session_id: "sess_queue".to_string(),
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("resume queued");
+        assert!(resumed.response.resumed);
+        assert!(resumed
+            .response
+            .turns
+            .iter()
+            .any(|turn| turn.turn_id == "turn_queued" && turn.status == AgentTurnStatus::Accepted));
+
+        let second_queued = core
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: "sess_queue".to_string(),
+                    turn_id: Some("turn_remove".to_string()),
+                    input: AgentInput {
+                        text: "remove".to_string(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: None,
+                    queue_if_busy: true,
+                    skip_pre_submit_resume: false,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("second queued");
+        assert_eq!(second_queued.response.turn.status, AgentTurnStatus::Queued);
+        let removed = core
+            .remove_agent_session_queued_turn(AgentSessionQueuedTurnRemoveParams {
+                session_id: "sess_queue".to_string(),
+                queued_turn_id: "turn_remove".to_string(),
+            })
+            .await
+            .expect("remove queued");
+        assert!(removed.response.removed);
+        assert!(!removed
+            .response
+            .turns
+            .iter()
+            .any(|turn| turn.turn_id == "turn_remove"));
+    }
+
+    #[tokio::test]
+    async fn resume_queued_turn_restores_queue_when_backend_fails_before_emit() {
+        let core = RuntimeCore::with_backend(Arc::new(FailBeforeEmitBackend {
+            start_count: AtomicUsize::new(0),
+        }));
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_queue_rollback".to_string()),
+            thread_id: Some("thread_queue_rollback".to_string()),
+            app_id: "agent-chat".to_string(),
+            workspace_id: Some("workspace-current".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_queue_rollback".to_string(),
+                turn_id: Some("turn_running".to_string()),
+                input: AgentInput {
+                    text: "running".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    host_options: Some(json!({
+                        "asterChatRequest": {
+                            "provider_config": {
+                                "provider_id": "fixture-provider",
+                                "provider_name": "openai",
+                                "model_name": "fixture-model",
+                                "api_key": "fixture-key",
+                                "base_url": "http://127.0.0.1:65535"
+                            }
+                        }
+                    })),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("running turn");
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_queue_rollback".to_string(),
+                turn_id: Some("turn_queued".to_string()),
+                input: AgentInput {
+                    text: "queued".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: true,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("queued turn");
+        core.append_external_runtime_events(
+            "sess_queue_rollback",
+            Some("turn_running"),
+            vec![RuntimeEvent::new("turn.completed", json!({}))],
+        )
+        .expect("complete running");
+
+        let error = core
+            .resume_agent_session_thread(
+                AgentSessionThreadResumeParams {
+                    session_id: "sess_queue_rollback".to_string(),
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect_err("resume should fail before backend emits");
+        assert!(matches!(error, RuntimeCoreError::Backend(_)));
+
+        let read = core
+            .read_session_current(AgentSessionReadParams {
+                session_id: "sess_queue_rollback".to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await
+            .expect("read session");
+        assert!(read
+            .turns
+            .iter()
+            .any(|turn| turn.turn_id == "turn_queued" && turn.status == AgentTurnStatus::Queued));
     }
 
     #[tokio::test]
@@ -6237,6 +11205,674 @@ mod tests {
             error.into_jsonrpc_error().code,
             error_codes::SESSION_NOT_FOUND
         );
+    }
+
+    #[tokio::test]
+    async fn objective_continue_fails_closed_when_pending_requests_exist() {
+        let mut persisted = empty_agent_session_read_response("sess_objective_continue");
+        persisted.session.workspace_id = Some("workspace-main".to_string());
+        persisted.detail = Some(json!({
+            "thread_read": {
+                "pending_requests": [
+                    {
+                        "id": "request-1",
+                        "type": "ask_user"
+                    }
+                ],
+                "queued_turns": []
+            }
+        }));
+        let app_data_source = Arc::new(
+            TestCurrentTimelineDataSource::new(persisted)
+                .with_objective(managed_objective("sess_objective_continue")),
+        );
+        let backend = Arc::new(RecordingBackend::default());
+        let core = RuntimeCore::with_backend(backend.clone())
+            .with_app_data_source(app_data_source.clone());
+
+        let error = core
+            .continue_agent_session_objective(
+                AgentSessionObjectiveContinueParams {
+                    session_id: "sess_objective_continue".to_string(),
+                    owner_kind: None,
+                    owner_id: None,
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect_err("pending request should block objective continuation");
+
+        assert!(error
+            .to_string()
+            .contains("当前会话还有 1 个待处理请求，不能继续推进目标"));
+        assert!(backend
+            .requests
+            .lock()
+            .expect("test backend requests mutex poisoned")
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn objective_continue_uses_host_provider_config_without_runtime_explicit_preferences() {
+        let session_id = "sess_objective_continue_provider_config";
+        let mut persisted = empty_agent_session_read_response(session_id);
+        persisted.session.workspace_id = Some("workspace-main".to_string());
+        let app_data_source = Arc::new(
+            TestCurrentTimelineDataSource::new(persisted)
+                .with_objective(managed_objective(session_id)),
+        );
+        let backend = Arc::new(FinalDoneRecordingBackend {
+            requests: Mutex::new(Vec::new()),
+        });
+        let core = RuntimeCore::with_backend(backend.clone())
+            .with_app_data_source(app_data_source.clone());
+        core.start_session(AgentSessionStartParams {
+            session_id: Some(session_id.to_string()),
+            thread_id: Some("thread_objective_continue_provider_config".to_string()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session_id.to_string(),
+                turn_id: Some("turn_initial".to_string()),
+                input: AgentInput {
+                    text: "首轮".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    host_options: Some(json!({
+                        "asterChatRequest": {
+                            "turnConfig": {
+                                "providerConfig": {
+                                    "provider_id": "fixture-provider",
+                                    "provider_name": "openai",
+                                    "model_name": "fixture-model",
+                                    "api_key": "fixture-key",
+                                    "base_url": "http://127.0.0.1:65535"
+                                },
+                                "providerPreference": "fixture-provider",
+                                "modelPreference": "fixture-model",
+                                "approvalPolicy": "never",
+                                "sandboxPolicy": "read-only"
+                            }
+                        }
+                    })),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("initial turn");
+
+        core.continue_agent_session_objective(
+            AgentSessionObjectiveContinueParams {
+                session_id: session_id.to_string(),
+                owner_kind: None,
+                owner_id: None,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("continue objective");
+
+        let requests = backend
+            .requests
+            .lock()
+            .expect("test backend requests mutex poisoned");
+        assert_eq!(requests.len(), 2);
+        let continuation_request = &requests[1];
+        assert_eq!(continuation_request.provider_preference, None);
+        assert_eq!(continuation_request.model_preference, None);
+        let runtime_options = continuation_request
+            .runtime_options
+            .as_ref()
+            .expect("runtime options");
+        assert_eq!(runtime_options.provider_preference, None);
+        assert_eq!(runtime_options.model_preference, None);
+        let host_options = runtime_options.host_options.as_ref().expect("host options");
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/provider_config/base_url")
+                .and_then(serde_json::Value::as_str),
+            Some("http://127.0.0.1:65535")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/provider_config/base_url")
+                .and_then(serde_json::Value::as_str),
+            Some("http://127.0.0.1:65535")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/provider_preference")
+                .and_then(serde_json::Value::as_str),
+            Some("fixture-provider")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/approval_policy")
+                .and_then(serde_json::Value::as_str),
+            Some("never")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/sandbox_policy")
+                .and_then(serde_json::Value::as_str),
+            Some("read-only")
+        );
+    }
+
+    #[tokio::test]
+    async fn managed_objective_auto_continuation_submits_current_turn_after_terminal_turn() {
+        let mut persisted = empty_agent_session_read_response("sess_objective_auto_allow");
+        persisted.session.workspace_id = Some("workspace-main".to_string());
+        let mut objective = managed_objective("sess_objective_auto_allow");
+        objective.risk_policy = Some(json!({ "allowAutoContinuation": true }));
+        objective.continuation_policy = Some(json!({
+            "autoIdle": true,
+            "maxAutoTurns": 1,
+            "maxElapsedMs": 180000
+        }));
+        objective.budget_policy = Some(json!({ "maxTurns": 1 }));
+        let app_data_source =
+            Arc::new(TestCurrentTimelineDataSource::new(persisted).with_objective(objective));
+        let backend = Arc::new(RecordingBackend::default());
+        let core = RuntimeCore::with_backend(backend.clone())
+            .with_app_data_source(app_data_source.clone());
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_objective_auto_allow".to_string()),
+            thread_id: Some("thread_objective_auto_allow".to_string()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_objective_auto_allow".to_string(),
+                turn_id: Some("turn_initial".to_string()),
+                input: AgentInput {
+                    text: "首轮".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    host_options: Some(json!({
+                        "asterChatRequest": {
+                            "turnConfig": {
+                                "providerConfig": {
+                                    "provider_id": "fixture-provider",
+                                    "provider_name": "openai",
+                                    "model_name": "fixture-model",
+                                    "api_key": "fixture-key",
+                                    "base_url": "http://127.0.0.1:65535"
+                                },
+                                "providerPreference": "fixture-provider",
+                                "modelPreference": "fixture-model",
+                                "approvalPolicy": "never",
+                                "sandboxPolicy": "read-only"
+                            }
+                        }
+                    })),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("initial turn");
+        core.append_external_runtime_events(
+            "sess_objective_auto_allow",
+            Some("turn_initial"),
+            vec![RuntimeEvent::new("turn.completed", json!({}))],
+        )
+        .expect("complete initial turn");
+        core.maybe_submit_managed_objective_auto_continuation(
+            "sess_objective_auto_allow",
+            RuntimeHostContext::default(),
+        )
+        .await;
+
+        let audit_updates = app_data_source.audit_updates();
+        assert_eq!(audit_updates.len(), 1);
+        let summary = audit_updates[0]
+            .last_audit_summary
+            .as_deref()
+            .unwrap_or_default();
+        assert!(summary.contains("auto_continuation_guard decision=allow"));
+        assert!(summary.contains("queued_turn_id="));
+
+        let requests = backend
+            .requests
+            .lock()
+            .expect("test backend requests mutex poisoned");
+        assert_eq!(requests.len(), 2);
+        let auto_request = &requests[1];
+        assert_eq!(auto_request.session.session_id, "sess_objective_auto_allow");
+        assert_eq!(auto_request.queue_if_busy, false);
+        assert_eq!(auto_request.provider_preference, None);
+        assert_eq!(auto_request.model_preference, None);
+        let runtime_options = auto_request
+            .runtime_options
+            .as_ref()
+            .expect("runtime options");
+        assert_eq!(runtime_options.provider_preference, None);
+        assert_eq!(runtime_options.model_preference, None);
+        let host_options = runtime_options.host_options.as_ref().expect("host options");
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/provider_config/base_url")
+                .and_then(serde_json::Value::as_str),
+            Some("http://127.0.0.1:65535")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/provider_config/base_url")
+                .and_then(serde_json::Value::as_str),
+            Some("http://127.0.0.1:65535")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/provider_preference")
+                .and_then(serde_json::Value::as_str),
+            Some("fixture-provider")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/approval_policy")
+                .and_then(serde_json::Value::as_str),
+            Some("never")
+        );
+        let managed_objective = auto_request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.pointer("/harness/managed_objective"))
+            .expect("managed objective metadata");
+        assert_eq!(
+            managed_objective
+                .get("continuation_source")
+                .and_then(serde_json::Value::as_str),
+            Some("auto_idle")
+        );
+        assert!(managed_objective.get("auto_continuation_guard").is_some());
+    }
+
+    #[tokio::test]
+    async fn managed_objective_auto_continuation_stops_at_budget_after_auto_turn() {
+        let mut persisted = empty_agent_session_read_response("sess_objective_auto_budget");
+        persisted.session.workspace_id = Some("workspace-main".to_string());
+        let mut objective = managed_objective("sess_objective_auto_budget");
+        objective.risk_policy = Some(json!({ "allowAutoContinuation": true }));
+        objective.continuation_policy = Some(json!({
+            "autoIdle": true,
+            "maxAutoTurns": 1,
+            "maxElapsedMs": 180000
+        }));
+        objective.budget_policy = Some(json!({ "maxTurns": 1 }));
+        let app_data_source =
+            Arc::new(TestCurrentTimelineDataSource::new(persisted).with_objective(objective));
+        let backend = Arc::new(FinalDoneRecordingBackend {
+            requests: Mutex::new(Vec::new()),
+        });
+        let core = RuntimeCore::with_backend(backend.clone())
+            .with_app_data_source(app_data_source.clone());
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_objective_auto_budget".to_string()),
+            thread_id: Some("thread_objective_auto_budget".to_string()),
+            app_id: "desktop".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_objective_auto_budget".to_string(),
+                turn_id: Some("turn_initial".to_string()),
+                input: AgentInput {
+                    text: "首轮".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("initial turn with auto continuation");
+
+        let objective = app_data_source.objective().expect("objective");
+        assert_eq!(objective.status, ManagedObjectiveStatus::BudgetLimited);
+        let summary = objective.last_audit_summary.as_deref().unwrap_or_default();
+        assert!(summary.contains("auto_continuation_guard decision=budget_limited"));
+        assert!(summary.contains("decision=allow"));
+        assert!(summary.contains("auto_turns=1/1"));
+
+        let requests = backend
+            .requests
+            .lock()
+            .expect("test backend requests mutex poisoned");
+        assert_eq!(requests.len(), 2);
+        assert!(requests[1]
+            .metadata
+            .as_ref()
+            .and_then(
+                |metadata| metadata.pointer("/harness/managed_objective/auto_continuation_guard")
+            )
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn action_replay_rebuilds_current_pending_action_from_runtime_events() {
+        let core = RuntimeCore::default();
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_action_replay".to_string()),
+            thread_id: Some("thread_action_replay".to_string()),
+            app_id: "agent-runtime".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+        core.append_external_runtime_events(
+            "sess_action_replay",
+            None,
+            vec![RuntimeEvent::new(
+                "action.required",
+                json!({
+                    "requestId": "req-replay",
+                    "actionType": "elicitation",
+                    "data": {
+                        "message": "请补充发布渠道",
+                        "requestedSchema": {
+                            "type": "object",
+                            "properties": {
+                                "channel": { "type": "string" }
+                            }
+                        }
+                    },
+                    "scope": {
+                        "sessionId": "sess_action_replay",
+                        "threadId": "thread_action_replay",
+                        "turnId": "turn_action_replay"
+                    }
+                }),
+            )],
+        )
+        .expect("append action event");
+
+        let response = core
+            .replay_action(AgentSessionActionReplayParams {
+                session_id: "sess_action_replay".to_string(),
+                request_id: "req-replay".to_string(),
+            })
+            .await
+            .expect("replay action");
+        let action = response
+            .response
+            .action
+            .expect("pending action should be replayed");
+
+        assert_eq!(action.event_type, "action_required");
+        assert_eq!(action.request_id, "req-replay");
+        assert_eq!(action.action_type, AgentSessionActionType::Elicitation);
+        assert_eq!(action.prompt.as_deref(), Some("请补充发布渠道"));
+        assert!(action.requested_schema.is_some());
+        assert_eq!(
+            action.scope.and_then(|scope| scope.turn_id),
+            Some("turn_action_replay".to_string())
+        );
+
+        core.append_external_runtime_events(
+            "sess_action_replay",
+            None,
+            vec![RuntimeEvent::new(
+                "action.resolved",
+                json!({
+                    "requestId": "req-replay",
+                    "actionType": "elicitation",
+                    "confirmed": true
+                }),
+            )],
+        )
+        .expect("append resolved event");
+
+        let resolved = core
+            .replay_action(AgentSessionActionReplayParams {
+                session_id: "sess_action_replay".to_string(),
+                request_id: "req-replay".to_string(),
+            })
+            .await
+            .expect("replay resolved action");
+        assert!(resolved.response.action.is_none());
+    }
+
+    #[tokio::test]
+    async fn managed_objective_auto_continuation_submits_and_budget_limits_on_current_path() {
+        let session_id = "sess_auto_objective";
+        let mut objective = managed_objective(session_id);
+        objective.continuation_policy = Some(json!({
+            "autoIdle": true,
+            "maxAutoTurns": 1,
+            "maxElapsedMs": 180000,
+            "maxEstimatedTotalCost": 1.0
+        }));
+        objective.budget_policy = Some(json!({
+            "maxTurns": 1
+        }));
+        objective.risk_policy = Some(json!({
+            "allowAutoContinuation": true
+        }));
+        let mut persisted = empty_agent_session_read_response(session_id);
+        persisted.session.workspace_id = Some("workspace-main".to_string());
+        let app_data_source =
+            Arc::new(TestCurrentTimelineDataSource::new(persisted).with_objective(objective));
+        let backend = Arc::new(FinalDoneBackend);
+        let core = RuntimeCore::with_backend(backend).with_app_data_source(app_data_source.clone());
+        core.start_session(AgentSessionStartParams {
+            session_id: Some(session_id.to_string()),
+            thread_id: Some("thread_auto_objective".to_string()),
+            app_id: "agent-runtime".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session_id.to_string(),
+                turn_id: Some("turn_initial".to_string()),
+                input: AgentInput {
+                    text: "initial".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    provider_preference: Some("fixture-provider".to_string()),
+                    model_preference: Some("fixture-model".to_string()),
+                    metadata: Some(json!({
+                        "harness": {
+                            "managed_objective_smoke": {
+                                "source": "unit"
+                            }
+                        }
+                    })),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: true,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("initial turn");
+
+        let read_after_initial = core
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await
+            .expect("read after initial");
+        assert_eq!(read_after_initial.turns.len(), 2);
+        assert!(read_after_initial
+            .turns
+            .iter()
+            .all(|turn| { matches!(turn.status, AgentTurnStatus::Completed) }));
+
+        let final_objective = app_data_source.objective().expect("final objective");
+        assert_eq!(
+            final_objective.status,
+            ManagedObjectiveStatus::BudgetLimited
+        );
+        assert!(final_objective
+            .last_audit_summary
+            .as_deref()
+            .unwrap_or_default()
+            .contains("auto_continuation_guard decision=budget_limited"));
+        assert!(final_objective
+            .last_audit_summary
+            .as_deref()
+            .unwrap_or_default()
+            .contains("decision=allow"));
+        assert!(final_objective
+            .last_audit_summary
+            .as_deref()
+            .unwrap_or_default()
+            .contains("auto_turns=1/1"));
+        assert!(final_objective
+            .blocker_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("最大轮数"));
+
+        let final_read = core
+            .read_session_current(AgentSessionReadParams {
+                session_id: session_id.to_string(),
+                history_limit: None,
+                history_offset: None,
+                history_before_message_id: None,
+            })
+            .await
+            .expect("final read");
+        assert_eq!(final_read.turns.len(), 2);
+        assert!(final_read.turns.iter().any(|turn| {
+            turn.turn_id != "turn_initial" && matches!(turn.status, AgentTurnStatus::Completed)
+        }));
+
+        let evidence = core
+            .export_evidence(EvidenceExportParams {
+                session_id: session_id.to_string(),
+                turn_id: None,
+                include_events: Some(true),
+                include_artifacts: Some(true),
+                include_evidence_pack: Some(true),
+            })
+            .await
+            .expect("export evidence");
+        let evidence_pack = evidence.evidence_pack.expect("objective evidence pack");
+        assert_eq!(
+            evidence_pack
+                .completion_audit_summary
+                .as_ref()
+                .and_then(|summary| summary.get("decision"))
+                .and_then(serde_json::Value::as_str),
+            Some("budget_limited")
+        );
+        assert_eq!(evidence_pack.turn_count, 2);
+    }
+
+    #[tokio::test]
+    async fn objective_audit_writes_current_evidence_pack_decision() {
+        let provider = Arc::new(TestEvidenceExportProvider {
+            completion_audit_summary: Some(json!({
+                "decision": "completed",
+                "artifactCount": 1,
+                "checkedCriteria": [
+                    {
+                        "criterion": "契约通过",
+                        "satisfied": true
+                    }
+                ]
+            })),
+            ..TestEvidenceExportProvider::default()
+        });
+        let mut persisted = empty_agent_session_read_response("sess_objective_audit");
+        persisted.session.workspace_id = Some("workspace-main".to_string());
+        let app_data_source = Arc::new(
+            TestCurrentTimelineDataSource::new(persisted)
+                .with_objective(managed_objective("sess_objective_audit")),
+        );
+        let core = RuntimeCore::with_backend_capability_source_artifact_content_provider_and_evidence_export_provider(
+            Arc::new(MockBackend),
+            Arc::new(CapabilityInventorySource::default()),
+            Arc::new(InlineArtifactContentProvider),
+            provider.clone(),
+        )
+        .with_app_data_source(app_data_source.clone());
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_objective_audit".to_string()),
+            thread_id: Some("thread_objective_audit".to_string()),
+            app_id: "agent-runtime".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+        core.append_external_runtime_events(
+            "sess_objective_audit",
+            None,
+            vec![RuntimeEvent::new(
+                "artifact.snapshot",
+                json!({
+                    "artifactId": "artifact-report",
+                    "path": ".lime/artifacts/report.md"
+                }),
+            )],
+        )
+        .expect("append evidence event");
+
+        let response = core
+            .audit_agent_session_objective(AgentSessionObjectiveAuditParams {
+                session_id: "sess_objective_audit".to_string(),
+                owner_kind: None,
+                owner_id: None,
+            })
+            .await
+            .expect("audit objective");
+
+        assert_eq!(provider.call_count.load(Ordering::SeqCst), 1);
+        assert_eq!(response.objective.status, ManagedObjectiveStatus::Completed);
+        assert!(response
+            .objective
+            .last_audit_summary
+            .as_deref()
+            .unwrap_or_default()
+            .contains("decision=completed"));
+        assert_eq!(
+            response.objective.last_evidence_pack_ref.as_deref(),
+            Some("/workspace/.lime/harness/sessions/sess_evidence/evidence")
+        );
+        assert_eq!(app_data_source.audit_updates().len(), 1);
     }
 
     #[tokio::test]
@@ -6652,6 +12288,8 @@ mod tests {
     async fn start_turn_missing_current_timeline_session_still_fails_closed() {
         let app_data_source = Arc::new(TestCurrentTimelineDataSource {
             persisted: None,
+            objective: Mutex::new(None),
+            audit_updates: Mutex::new(Vec::new()),
             read_requests: Mutex::new(Vec::new()),
             knowledge_compile_requests: Mutex::new(Vec::new()),
         });
@@ -7254,7 +12892,23 @@ mod tests {
             ArtifactContentStatus::NotRequested
         );
         assert!(!response.exported_at.is_empty());
-        assert_eq!(response.evidence_pack, None);
+        let evidence_pack = response.evidence_pack.expect("basic evidence pack");
+        assert_eq!(evidence_pack.thread_status, "running");
+        assert_eq!(
+            evidence_pack.latest_turn_status.as_deref(),
+            Some("accepted")
+        );
+        assert_eq!(evidence_pack.turn_count, 1);
+        assert_eq!(evidence_pack.item_count, 3);
+        assert_eq!(evidence_pack.recent_artifact_count, 1);
+        assert_eq!(
+            evidence_pack
+                .completion_audit_summary
+                .as_ref()
+                .and_then(|summary| summary.get("decision"))
+                .and_then(serde_json::Value::as_str),
+            Some("in_progress")
+        );
 
         let summary_only = core
             .export_evidence(EvidenceExportParams {
@@ -7270,6 +12924,224 @@ mod tests {
         assert_eq!(summary_only.artifacts.len(), 0);
         assert_eq!(summary_only.turns.len(), 1);
         assert_eq!(summary_only.evidence_pack, None);
+    }
+
+    #[tokio::test]
+    async fn export_handoff_bundle_writes_current_session_bundle_to_workspace() {
+        let temp = tempfile::tempdir().expect("workspace");
+        let workspace_root = temp.path().to_string_lossy().to_string();
+        let core = RuntimeCore::default();
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_handoff".to_string()),
+            thread_id: Some("thread_handoff".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: "sess_handoff".to_string(),
+                title: Some("Current Handoff".to_string()),
+                uri: None,
+                metadata: Some(json!({
+                    "workspaceRoot": workspace_root,
+                    "model": "gpt-test",
+                    "executionStrategy": "runtime-core"
+                })),
+            }),
+            locale: None,
+        })
+        .expect("session");
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_handoff".to_string(),
+                turn_id: Some("turn_handoff".to_string()),
+                input: AgentInput {
+                    text: "生成 handoff".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+        core.append_external_runtime_events(
+            "sess_handoff",
+            Some("turn_handoff"),
+            vec![
+                RuntimeEvent::new(
+                    "artifact.snapshot",
+                    json!({
+                        "artifactId": "artifact-handoff",
+                        "path": ".app-server/artifacts/handoff.md",
+                        "title": "Handoff Draft",
+                        "kind": "markdown"
+                    }),
+                ),
+                RuntimeEvent::new("turn.final_done", json!({})),
+            ],
+        )
+        .expect("append events");
+
+        let response = core
+            .export_handoff_bundle(AgentSessionHandoffBundleExportParams {
+                session_id: " sess_handoff ".to_string(),
+                locale: Some("en-US".to_string()),
+            })
+            .await
+            .expect("export handoff bundle");
+
+        assert_eq!(response.session_id, "sess_handoff");
+        assert_eq!(response.thread_id, "thread_handoff");
+        assert_eq!(
+            response.bundle_relative_root,
+            ".lime/harness/sessions/sess_handoff"
+        );
+        assert_eq!(response.thread_status, "completed");
+        assert_eq!(response.latest_turn_status.as_deref(), Some("completed"));
+        assert_eq!(response.artifacts.len(), 4);
+        let kinds = response
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.kind.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(kinds, vec!["plan", "progress", "handoff", "review_summary"]);
+        for artifact in &response.artifacts {
+            assert!(Path::new(&artifact.absolute_path).is_file());
+            assert!(artifact
+                .relative_path
+                .starts_with(".lime/harness/sessions/sess_handoff/"));
+            assert!(artifact.bytes > 0);
+        }
+        let progress_path = temp
+            .path()
+            .join(".lime")
+            .join("harness")
+            .join("sessions")
+            .join("sess_handoff")
+            .join("progress.json");
+        let progress = fs::read_to_string(progress_path).expect("progress.json");
+        assert!(progress.contains("\"schemaVersion\": \"agent-session-handoff-bundle.v1\""));
+        assert!(progress.contains(".app-server/artifacts/handoff.md"));
+    }
+
+    #[tokio::test]
+    async fn export_runtime_review_residuals_write_current_session_artifacts() {
+        let temp = tempfile::tempdir().expect("workspace");
+        let workspace_root = temp.path().to_string_lossy().to_string();
+        let core = RuntimeCore::default();
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_review_export".to_string()),
+            thread_id: Some("thread_review_export".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+                kind: "agent.session".to_string(),
+                id: "sess_review_export".to_string(),
+                title: Some("Review Export".to_string()),
+                uri: None,
+                metadata: Some(json!({
+                    "workspaceRoot": workspace_root,
+                })),
+            }),
+            locale: None,
+        })
+        .expect("session");
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_review_export".to_string(),
+                turn_id: Some("turn_review_export".to_string()),
+                input: AgentInput {
+                    text: "生成 review export".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+        core.append_external_runtime_events(
+            "sess_review_export",
+            Some("turn_review_export"),
+            vec![
+                RuntimeEvent::new(
+                    "artifact.snapshot",
+                    json!({
+                        "artifactId": "artifact-review",
+                        "path": ".app-server/artifacts/review.md",
+                        "title": "Review Draft",
+                        "kind": "markdown"
+                    }),
+                ),
+                RuntimeEvent::new("turn.final_done", json!({})),
+            ],
+        )
+        .expect("append events");
+
+        let replay = core
+            .export_replay_case(AgentSessionReplayCaseExportParams {
+                session_id: "sess_review_export".to_string(),
+                locale: None,
+            })
+            .await
+            .expect("replay");
+        assert_eq!(replay.artifacts.len(), 4);
+        assert_eq!(replay.artifacts[0].kind, "input");
+        assert!(Path::new(&replay.artifacts[0].absolute_path).is_file());
+
+        let analysis = core
+            .export_analysis_handoff(AgentSessionAnalysisHandoffExportParams {
+                session_id: "sess_review_export".to_string(),
+                locale: None,
+            })
+            .await
+            .expect("analysis");
+        assert_eq!(analysis.artifacts.len(), 2);
+        assert_eq!(analysis.artifacts[0].kind, "analysis_brief");
+        assert!(analysis.copy_prompt.contains("sess_review_export"));
+
+        let review = core
+            .export_review_decision_template(AgentSessionReviewDecisionTemplateExportParams {
+                session_id: "sess_review_export".to_string(),
+                locale: None,
+            })
+            .await
+            .expect("review template");
+        assert_eq!(review.artifacts.len(), 2);
+        assert_eq!(review.decision.decision_status, "pending_review");
+
+        let saved = core
+            .save_review_decision(AgentSessionReviewDecisionSaveParams {
+                session_id: "sess_review_export".to_string(),
+                decision_status: "accepted".to_string(),
+                decision_summary: "current path accepted".to_string(),
+                chosen_fix_strategy: "keep app server path".to_string(),
+                risk_level: "low".to_string(),
+                risk_tags: vec!["runtime".to_string()],
+                human_reviewer: "reviewer".to_string(),
+                followup_actions: vec!["run contracts".to_string()],
+                regression_requirements: vec!["npm run test:contracts".to_string()],
+                notes: "done".to_string(),
+                locale: None,
+            })
+            .await
+            .expect("save review");
+        assert_eq!(saved.decision.decision_status, "accepted");
+        let review_json = fs::read_to_string(
+            temp.path()
+                .join(".lime")
+                .join("harness")
+                .join("sessions")
+                .join("sess_review_export")
+                .join("review")
+                .join("review-decision.json"),
+        )
+        .expect("review decision json");
+        assert!(review_json.contains("current path accepted"));
     }
 
     #[tokio::test]
@@ -7391,6 +13263,70 @@ mod tests {
 
         assert_eq!(provider.call_count.load(Ordering::SeqCst), 0);
         assert_eq!(response.evidence_pack, None);
+    }
+
+    #[tokio::test]
+    async fn default_runtime_exports_basic_evidence_pack_without_desktop_provider() {
+        let core = RuntimeCore::default();
+        core.start_session(AgentSessionStartParams {
+            session_id: Some("sess_basic_evidence".to_string()),
+            thread_id: Some("thread_basic_evidence".to_string()),
+            app_id: "agent-runtime".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session");
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_basic_evidence".to_string(),
+                turn_id: Some("turn_basic_evidence".to_string()),
+                input: AgentInput {
+                    text: "生成基础 evidence".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+
+        let response = core
+            .export_evidence(EvidenceExportParams {
+                session_id: "sess_basic_evidence".to_string(),
+                turn_id: None,
+                include_events: Some(true),
+                include_artifacts: Some(true),
+                include_evidence_pack: Some(true),
+            })
+            .await
+            .expect("export evidence");
+
+        let evidence_pack = response.evidence_pack.expect("basic evidence pack");
+        assert_eq!(
+            evidence_pack.pack_relative_root,
+            ".lime/harness/sessions/sess_basic_evidence/evidence"
+        );
+        assert_eq!(evidence_pack.thread_status, "running");
+        assert_eq!(
+            evidence_pack
+                .completion_audit_summary
+                .as_ref()
+                .and_then(|summary| summary.get("decision"))
+                .and_then(serde_json::Value::as_str),
+            Some("in_progress")
+        );
+        assert_eq!(
+            evidence_pack
+                .observability_summary
+                .as_ref()
+                .and_then(|summary| summary.get("source"))
+                .and_then(serde_json::Value::as_str),
+            Some("app-server-basic")
+        );
     }
 
     #[test]

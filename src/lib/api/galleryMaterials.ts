@@ -31,6 +31,16 @@ function getDiagnosticFacadeMeta(value: unknown): DiagnosticFacadeMeta | null {
   return diagnostic ? (diagnostic as DiagnosticFacadeMeta) : null;
 }
 
+function assertNotErrorEnvelope(command: string, value: unknown): void {
+  const hasErrorEnvelope =
+    (isRecord(value) && "error" in value) ||
+    (Array.isArray(value) &&
+      value.some((item) => isRecord(item) && "error" in item));
+  if (hasErrorEnvelope) {
+    throw new Error(`${command} returned an error envelope`);
+  }
+}
+
 async function invokeGalleryCommand<T>(
   command: string,
   args: Record<string, unknown>,
@@ -43,6 +53,7 @@ async function invokeGalleryCommand<T>(
       `${command} 尚未接入真实图库材料 current 通道，收到 ${source} 诊断返回。`,
     );
   }
+  assertNotErrorEnvelope(command, result);
 
   return result as T;
 }

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "credentialsFile": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "dnsName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "publicBaseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "tunnelId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "tunnelName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "message",
+    "ok",
+    "tunnelName"
+  ],
+  "title": "GatewayTunnelCreateResult",
+  "type": "object"
+}

@@ -81,7 +81,46 @@ describe("layeredDesignProject API", () => {
   });
 
   it("saveLayeredDesignProjectExport 收到非导出结果时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        error:
+          "Electron host command is not supported: save_layered_design_project_export",
+      });
+
+    const request = {
+      projectRootPath: "/workspace",
+      documentId: "doc",
+      title: "Document",
+      files: [],
+    };
+
+    await expect(saveLayeredDesignProjectExport(request)).rejects.toThrow(
+      "save_layered_design_project_export did not return a layered design project export result",
+    );
+    await expect(saveLayeredDesignProjectExport(request)).rejects.toThrow(
+      "save_layered_design_project_export returned an error envelope",
+    );
+  });
+
+  it("saveLayeredDesignProjectExport 收到带 error 的伪导出结果时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      projectRootPath: "/workspace",
+      exportDirectoryPath: "/workspace/.lime/layered-designs/doc.layered-design",
+      exportDirectoryRelativePath: ".lime/layered-designs/doc.layered-design",
+      designPath:
+        "/workspace/.lime/layered-designs/doc.layered-design/design.json",
+      manifestPath:
+        "/workspace/.lime/layered-designs/doc.layered-design/export-manifest.json",
+      assetCount: 0,
+      fileCount: 1,
+      bytesWritten: 128,
+      remoteReferenceAssetCount: 0,
+      cachedRemoteAssetCount: 0,
+      uncachedRemoteAssetCount: 0,
+      error:
+        "Electron host command is not supported: save_layered_design_project_export",
+    });
 
     await expect(
       saveLayeredDesignProjectExport({
@@ -91,7 +130,7 @@ describe("layeredDesignProject API", () => {
         files: [],
       }),
     ).rejects.toThrow(
-      "save_layered_design_project_export did not return a layered design project export result",
+      "save_layered_design_project_export returned an error envelope",
     );
   });
 
@@ -140,20 +179,52 @@ describe("layeredDesignProject API", () => {
   });
 
   it("readLayeredDesignProjectExport 收到非工程文档时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        projectRootPath: "/workspace",
+        exportDirectoryPath:
+          "/workspace/.lime/layered-designs/doc.layered-design",
+        exportDirectoryRelativePath: ".lime/layered-designs/doc.layered-design",
+        designPath:
+          "/workspace/.lime/layered-designs/doc.layered-design/design.json",
+        assetCount: 0,
+        fileCount: 1,
+      })
+      .mockResolvedValueOnce({
+        error:
+          "Electron host command is not supported: read_layered_design_project_export",
+      });
+
+    await expect(
+      readLayeredDesignProjectExport({ projectRootPath: "/workspace" }),
+    ).rejects.toThrow(
+      "read_layered_design_project_export did not return a layered design project export document",
+    );
+    await expect(
+      readLayeredDesignProjectExport({ projectRootPath: "/workspace" }),
+    ).rejects.toThrow(
+      "read_layered_design_project_export returned an error envelope",
+    );
+  });
+
+  it("readLayeredDesignProjectExport 收到带 error 的伪工程文档时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       projectRootPath: "/workspace",
       exportDirectoryPath: "/workspace/.lime/layered-designs/doc.layered-design",
       exportDirectoryRelativePath: ".lime/layered-designs/doc.layered-design",
       designPath:
         "/workspace/.lime/layered-designs/doc.layered-design/design.json",
+      designJson: "{}",
       assetCount: 0,
       fileCount: 1,
+      error:
+        "Electron host command is not supported: read_layered_design_project_export",
     });
 
     await expect(
       readLayeredDesignProjectExport({ projectRootPath: "/workspace" }),
     ).rejects.toThrow(
-      "read_layered_design_project_export did not return a layered design project export document",
+      "read_layered_design_project_export returned an error envelope",
     );
   });
 });

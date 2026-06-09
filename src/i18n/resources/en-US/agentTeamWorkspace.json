@@ -398,6 +398,7 @@
   "agentChat.teamWorkspace.control.sendInput.sentInterrupt": "Interrupted current execution and sent new instructions",
   "agentChat.teamWorkspace.control.sendInput.sent": "Sent follow-up instructions to this task",
   "agentChat.teamWorkspace.control.sendInput.failedFallback": "Failed to send task instructions",
+  "agentChat.teamWorkspace.control.unavailable": "Team task controls are moving to the new runtime path and are temporarily unavailable.",
   "agentChat.teamWorkspace.control.stop.pausedCount": "Paused {{formattedCount}} tasks",
   "agentChat.teamWorkspace.control.stop.pausedOne": "Paused this task",
   "agentChat.teamWorkspace.control.stop.requestedCount": "Sent pause requests to {{formattedCount}} tasks",

@@ -67,4 +67,27 @@ describe("hintRoutes API", () => {
       "get_hint_routes 尚未接入真实提示路由 current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
+
+  it("旧命令返回 error envelope 时应 fail closed", async () => {
+    vi.mocked(isOptionalLegacyUxCommandAvailable).mockReturnValue(true);
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        error: "Electron host command is not supported: get_hint_routes",
+      })
+      .mockResolvedValueOnce([
+        {
+          hint: "快",
+          provider: "openai",
+          model: "gpt-4.1-mini",
+          error: "fallback route",
+        },
+      ]);
+
+    await expect(listHintRoutes()).rejects.toThrow(
+      "get_hint_routes returned an error envelope",
+    );
+    await expect(listHintRoutes()).rejects.toThrow(
+      "get_hint_routes returned an error envelope",
+    );
+  });
 });

@@ -1,0 +1,211 @@
+{
+  "$defs": {
+    "AgentSessionHandoffArtifact": {
+      "properties": {
+        "absolutePath": {
+          "type": "string"
+        },
+        "bytes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "absolutePath",
+        "bytes",
+        "kind",
+        "relativePath",
+        "title"
+      ],
+      "type": "object"
+    },
+    "AgentSessionReviewDecision": {
+      "properties": {
+        "chosenFixStrategy": {
+          "default": "",
+          "type": "string"
+        },
+        "decisionStatus": {
+          "type": "string"
+        },
+        "decisionSummary": {
+          "default": "",
+          "type": "string"
+        },
+        "followupActions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "humanReviewer": {
+          "default": "",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "type": "string"
+        },
+        "regressionRequirements": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "riskLevel": {
+          "type": "string"
+        },
+        "riskTags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "decisionStatus",
+        "riskLevel"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "analysisAbsoluteRoot": {
+      "type": "string"
+    },
+    "analysisArtifacts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentSessionHandoffArtifact"
+      },
+      "type": "array"
+    },
+    "analysisRelativeRoot": {
+      "type": "string"
+    },
+    "artifacts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentSessionHandoffArtifact"
+      },
+      "type": "array"
+    },
+    "decision": {
+      "$ref": "#/$defs/AgentSessionReviewDecision"
+    },
+    "decisionStatusOptions": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "defaultDecisionStatus": {
+      "type": "string"
+    },
+    "evidencePackRelativeRoot": {
+      "type": "string"
+    },
+    "exportedAt": {
+      "type": "string"
+    },
+    "handoffBundleRelativeRoot": {
+      "type": "string"
+    },
+    "latestTurnStatus": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "pendingRequestCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "queuedTurnCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "replayCaseRelativeRoot": {
+      "type": "string"
+    },
+    "reviewAbsoluteRoot": {
+      "type": "string"
+    },
+    "reviewChecklist": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "reviewRelativeRoot": {
+      "type": "string"
+    },
+    "riskLevelOptions": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "threadStatus": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceRoot": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "analysisAbsoluteRoot",
+    "analysisRelativeRoot",
+    "decision",
+    "defaultDecisionStatus",
+    "evidencePackRelativeRoot",
+    "exportedAt",
+    "handoffBundleRelativeRoot",
+    "pendingRequestCount",
+    "queuedTurnCount",
+    "replayCaseRelativeRoot",
+    "reviewAbsoluteRoot",
+    "reviewRelativeRoot",
+    "sessionId",
+    "threadId",
+    "threadStatus",
+    "title",
+    "workspaceRoot"
+  ],
+  "title": "AgentSessionReviewDecisionTemplateExportResponse",
+  "type": "object"
+}

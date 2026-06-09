@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "AgentSessionActionScope": {
+      "properties": {
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AgentSessionActionType": {
+      "enum": [
+        "ask_user",
+        "elicitation",
+        "tool_confirmation"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "actionType": {
+      "$ref": "#/$defs/AgentSessionActionType"
+    },
+    "arguments": true,
+    "prompt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "questions": true,
+    "requestId": {
+      "type": "string"
+    },
+    "requestedSchema": true,
+    "scope": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AgentSessionActionScope"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "toolName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "type": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "actionType",
+    "requestId",
+    "type"
+  ],
+  "title": "AgentSessionReplayedActionRequired",
+  "type": "object"
+}

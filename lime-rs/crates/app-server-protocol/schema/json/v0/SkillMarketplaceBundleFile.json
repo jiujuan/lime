@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "content": {
+      "type": "string"
+    },
+    "encoding": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "path": {
+      "type": "string"
+    },
+    "sha256": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "content",
+    "path"
+  ],
+  "title": "SkillMarketplaceBundleFile",
+  "type": "object"
+}

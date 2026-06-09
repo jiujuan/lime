@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "SkillMarketplaceBundleFile": {
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "encoding": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "content",
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "aliases": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "app": {
+      "type": "string"
+    },
+    "contentHash": {
+      "default": "",
+      "type": "string"
+    },
+    "fileCount": {
+      "default": 0,
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "files": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SkillMarketplaceBundleFile"
+      },
+      "type": "array"
+    },
+    "manifestVersion": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "app",
+    "manifestVersion",
+    "name",
+    "version"
+  ],
+  "title": "SkillMarketplaceInstallParams",
+  "type": "object"
+}

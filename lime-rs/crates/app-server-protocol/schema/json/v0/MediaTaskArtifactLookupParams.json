@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "projectRootPath": {
+      "type": "string"
+    },
+    "taskRef": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "projectRootPath",
+    "taskRef"
+  ],
+  "title": "MediaTaskArtifactLookupParams",
+  "type": "object"
+}

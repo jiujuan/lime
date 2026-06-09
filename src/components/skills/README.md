@@ -4,11 +4,10 @@
 
 ## 架构说明
 
-Skills 组件模块提供 Skill 管理和执行的 UI 界面，包括：
+Skills 组件模块提供 Skill 管理、查看和脚手架创建的 UI 界面，包括：
 
 - Built-in / Local / Remote Skills 分组展示与管理
 - Skill 仓库管理
-- Skill 执行对话框
 - Workflow 执行进度展示
 
 ## 文件索引
@@ -23,7 +22,6 @@ Skills 组件模块提供 Skill 管理和执行的 UI 界面，包括：
 | `SkillScaffoldDialog.tsx`  | 标准 Skill 脚手架对话框                   |
 | `SkillScaffoldDialog.test.tsx` | 脚手架对话框测试                     |
 | `RepoManagerPanel.tsx`     | Skill 仓库管理面板                         |
-| `SkillExecutionDialog.tsx` | Skill 执行对话框，显示详情、输入表单和进度 |
 | `WorkflowProgress.tsx`     | Workflow 进度展示组件                      |
 
 ## 组件依赖关系
@@ -33,8 +31,7 @@ SkillsPage
 ├── SkillCard (Skill 列表项)
 ├── SkillScaffoldDialog (标准脚手架)
 ├── RepoManagerPanel (仓库管理)
-└── SkillExecutionDialog (执行对话框)
-    └── WorkflowProgress (执行进度)
+└── SkillContentDialog (内容查看)
 ```
 
 ## 当前行为

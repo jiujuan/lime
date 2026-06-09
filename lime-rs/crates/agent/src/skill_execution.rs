@@ -490,12 +490,14 @@ mod tests {
     };
     use lime_skills::LoadedSkillDefinition;
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     fn build_loaded_skill(allowed_tools: Option<Vec<&str>>) -> LoadedSkillDefinition {
         LoadedSkillDefinition {
             skill_name: "image_generate".to_string(),
             display_name: "配图".to_string(),
             description: "测试 skill".to_string(),
+            local_directory_path: PathBuf::from("/tmp/image_generate"),
             markdown_content: "test".to_string(),
             license: None,
             compatibility: None,

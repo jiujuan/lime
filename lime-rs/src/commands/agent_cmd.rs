@@ -16,7 +16,6 @@ use crate::services::runtime_auxiliary_projection_service::{
     project_auxiliary_runtime_to_parent_session, AuxiliaryRuntimeProjectionInput,
     AuxiliaryRuntimeProjectionResult,
 };
-use crate::AppState;
 use aster::conversation::message::Message;
 use futures::StreamExt;
 use lime_agent::merge_system_prompt_with_runtime_agents;
@@ -539,93 +538,6 @@ async fn generate_title_with_agent(
     result
 }
 
-/// Agent 进程状态响应
-#[derive(Debug, Serialize)]
-pub struct AgentProcessStatus {
-    pub running: bool,
-    pub base_url: Option<String>,
-    pub port: Option<u16>,
-}
-
-/// 启动 Agent（使用 Aster 实现）
-#[tauri::command]
-pub async fn agent_start_process(
-    agent_state: State<'_, AsterAgentState>,
-    app_state: State<'_, AppState>,
-    db: State<'_, DbConnection>,
-    _port: Option<u16>,
-) -> Result<AgentProcessStatus, String> {
-    tracing::info!("[Agent] 初始化 Aster Agent");
-
-    let (host, port, gateway_running) = {
-        let state = app_state.read().await;
-        (
-            state.config.server.host.clone(),
-            state.config.server.port,
-            state.running,
-        )
-    };
-
-    agent_state.init_agent_with_db(&db).await?;
-    ensure_browser_mcp_tools_registered(agent_state.inner(), &db).await?;
-    let base_url = if gateway_running {
-        Some(format!("http://{host}:{port}"))
-    } else {
-        None
-    };
-    let exposed_port = if gateway_running { Some(port) } else { None };
-
-    Ok(AgentProcessStatus {
-        running: true,
-        base_url,
-        port: exposed_port,
-    })
-}
-
-/// 停止 Agent
-#[tauri::command]
-pub async fn agent_stop_process(_agent_state: State<'_, AsterAgentState>) -> Result<(), String> {
-    tracing::info!("[Agent] 停止 Aster Agent（无操作，Agent 保持活跃）");
-    // Aster Agent 不需要显式停止
-    Ok(())
-}
-
-/// 获取 Agent 状态
-#[tauri::command]
-pub async fn agent_get_process_status(
-    agent_state: State<'_, AsterAgentState>,
-    app_state: State<'_, AppState>,
-) -> Result<AgentProcessStatus, String> {
-    let initialized = agent_state.is_initialized().await;
-
-    if initialized {
-        let state = app_state.read().await;
-        let gateway_running = state.running;
-        let base_url = if gateway_running {
-            Some(format!(
-                "http://{}:{}",
-                state.config.server.host, state.config.server.port
-            ))
-        } else {
-            None
-        };
-        Ok(AgentProcessStatus {
-            running: true,
-            base_url,
-            port: if gateway_running {
-                Some(state.config.server.port)
-            } else {
-                None
-            },
-        })
-    } else {
-        Ok(AgentProcessStatus {
-            running: false,
-            base_url: None,
-            port: None,
-        })
-    }
-}
 /// 生成智能标题
 ///
 /// 根据对话内容生成一个简洁的标题

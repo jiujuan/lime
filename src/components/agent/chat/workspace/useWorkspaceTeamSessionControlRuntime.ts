@@ -1,21 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { AsterSubagentSessionInfo } from "@/lib/api/agentRuntime";
 import {
-  closeAgentRuntimeSubagent,
-  resumeAgentRuntimeSubagent,
-  sendAgentRuntimeSubagentInput,
-  waitAgentRuntimeSubagents,
-} from "@/lib/api/agentRuntime";
-import {
   isTeamWorkspaceActiveStatus,
-  isTeamWorkspaceTerminalStatus,
-  resolveTeamWorkspaceRuntimeStatusLabel,
   type TeamWorkspaceControlSummary,
   type TeamWorkspaceLiveRuntimeState,
   type TeamWorkspaceWaitSummary,
 } from "../teamWorkspaceRuntime";
-import { recordTeamControlAgentUiProjection } from "../projection/teamControlAgentUiProjection";
 
 function normalizeUniqueSessionIds(ids: string[]): string[] {
   return Array.from(
@@ -23,23 +15,10 @@ function normalizeUniqueSessionIds(ids: string[]): string[] {
   );
 }
 
-function buildTeamControlSummary(params: {
-  action: TeamWorkspaceControlSummary["action"];
-  requestedSessionIds: string[];
-  cascadeSessionIds?: string[];
-  affectedSessionIds?: string[];
-}): TeamWorkspaceControlSummary {
-  return {
-    action: params.action,
-    requestedSessionIds: normalizeUniqueSessionIds(params.requestedSessionIds),
-    cascadeSessionIds: normalizeUniqueSessionIds(
-      params.cascadeSessionIds ?? [],
-    ),
-    affectedSessionIds: normalizeUniqueSessionIds(
-      params.affectedSessionIds ?? [],
-    ),
-    updatedAt: Date.now(),
-  };
+function throwTeamSubagentControlUnavailable(message: string): never {
+  const error = new Error(message);
+  toast.error(error.message);
+  throw error;
 }
 
 interface UseWorkspaceTeamSessionControlRuntimeParams {
@@ -50,204 +29,54 @@ interface UseWorkspaceTeamSessionControlRuntimeParams {
 }
 
 export function useWorkspaceTeamSessionControlRuntime({
-  sessionId,
   childSubagentSessions,
   liveRuntimeBySessionId,
   stopSending,
 }: UseWorkspaceTeamSessionControlRuntimeParams) {
-  const [teamWaitSummary, setTeamWaitSummary] =
-    useState<TeamWorkspaceWaitSummary | null>(null);
-  const [teamControlSummary, setTeamControlSummary] =
-    useState<TeamWorkspaceControlSummary | null>(null);
-  const recordTeamControlProjection = useCallback(
-    (input: Parameters<typeof recordTeamControlAgentUiProjection>[0]) =>
-      recordTeamControlAgentUiProjection(input, { sessionId }),
-    [sessionId],
+  const { t } = useTranslation("agent");
+  const teamWaitSummary: TeamWorkspaceWaitSummary | null = null;
+  const teamControlSummary: TeamWorkspaceControlSummary | null = null;
+  const controlUnavailableMessage = t(
+    "agentChat.teamWorkspace.control.unavailable",
   );
 
   const handleCloseSubagentSession = useCallback(
-    async (subagentSessionId: string) => {
-      try {
-        const response = await closeAgentRuntimeSubagent({
-          id: subagentSessionId,
-        });
-        const summary = buildTeamControlSummary({
-          action: "close",
-          requestedSessionIds: [subagentSessionId],
-          cascadeSessionIds: response.cascade_session_ids,
-          affectedSessionIds: response.changed_session_ids,
-        });
-        recordTeamControlProjection({
-          action: "close",
-          requestedSessionIds: summary.requestedSessionIds,
-          cascadeSessionIds: summary.cascadeSessionIds,
-          affectedSessionIds: summary.affectedSessionIds,
-        });
-        if (summary.affectedSessionIds.length > 0) {
-          setTeamControlSummary(summary);
-        }
-
-        if (summary.affectedSessionIds.length > 1) {
-          toast.success(
-            `已级联停止 ${summary.affectedSessionIds.length} 项任务`,
-          );
-        } else if (summary.affectedSessionIds.length === 1) {
-          toast.success("这项任务已停止");
-        } else {
-          toast.info(
-            `当前任务状态为${resolveTeamWorkspaceRuntimeStatusLabel(response.previous_status.kind)}，未发生新的停止变更`,
-          );
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "停止任务失败";
-        toast.error(message);
-        throw error;
-      }
+    async (_subagentSessionId: string) => {
+      throwTeamSubagentControlUnavailable(controlUnavailableMessage);
     },
-    [recordTeamControlProjection],
+    [controlUnavailableMessage],
   );
 
   const handleResumeSubagentSession = useCallback(
-    async (subagentSessionId: string) => {
-      try {
-        const response = await resumeAgentRuntimeSubagent({
-          id: subagentSessionId,
-        });
-        const summary = buildTeamControlSummary({
-          action: "resume",
-          requestedSessionIds: [subagentSessionId],
-          cascadeSessionIds: response.cascade_session_ids,
-          affectedSessionIds: response.changed_session_ids,
-        });
-        recordTeamControlProjection({
-          action: "resume",
-          requestedSessionIds: summary.requestedSessionIds,
-          cascadeSessionIds: summary.cascadeSessionIds,
-          affectedSessionIds: summary.affectedSessionIds,
-        });
-        if (summary.affectedSessionIds.length > 0) {
-          setTeamControlSummary(summary);
-        }
-
-        if (summary.affectedSessionIds.length > 1) {
-          toast.success(
-            `已级联恢复 ${summary.affectedSessionIds.length} 项任务`,
-          );
-        } else if (summary.affectedSessionIds.length === 1) {
-          toast.success("这项任务已恢复");
-        } else {
-          toast.info(
-            `当前任务状态为${resolveTeamWorkspaceRuntimeStatusLabel(response.status.kind)}，未发生新的恢复变更`,
-          );
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "恢复任务失败";
-        toast.error(message);
-        throw error;
-      }
+    async (_subagentSessionId: string) => {
+      throwTeamSubagentControlUnavailable(controlUnavailableMessage);
     },
-    [recordTeamControlProjection],
+    [controlUnavailableMessage],
   );
 
   const handleWaitSubagentSession = useCallback(
-    async (subagentSessionId: string, timeoutMs = 30_000) => {
-      try {
-        const response = await waitAgentRuntimeSubagents({
-          ids: [subagentSessionId],
-          timeout_ms: timeoutMs,
-        });
-        recordTeamControlProjection({
-          action: "wait",
-          requestedSessionIds: [subagentSessionId],
-          affectedSessionIds: [subagentSessionId],
-          resolvedSessionId: subagentSessionId,
-          resolvedStatus: response.status[subagentSessionId]?.kind,
-          timedOut: response.timed_out,
-        });
-        if (response.timed_out) {
-          toast.info("等待超时，这项任务仍未进入最终状态");
-          return;
-        }
-
-        const status = response.status[subagentSessionId];
-        toast.success(
-          `这项任务已进入${resolveTeamWorkspaceRuntimeStatusLabel(status?.kind)}状态`,
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "等待任务失败";
-        toast.error(message);
-        throw error;
-      }
+    async (_subagentSessionId: string, _timeoutMs = 30_000) => {
+      throwTeamSubagentControlUnavailable(controlUnavailableMessage);
     },
-    [recordTeamControlProjection],
+    [controlUnavailableMessage],
   );
 
   const handleWaitActiveTeamSessions = useCallback(
-    async (subagentSessionIds: string[], timeoutMs = 30_000) => {
+    async (subagentSessionIds: string[], _timeoutMs = 30_000) => {
       const normalizedSessionIds =
         normalizeUniqueSessionIds(subagentSessionIds);
 
       if (normalizedSessionIds.length === 0) {
-        const error = new Error("没有可等待的活跃任务");
+        const error = new Error(
+          t("agentChat.teamWorkspace.control.wait.noActiveError"),
+        );
         toast.error(error.message);
         throw error;
       }
 
-      try {
-        const response = await waitAgentRuntimeSubagents({
-          ids: normalizedSessionIds,
-          timeout_ms: timeoutMs,
-        });
-        if (response.timed_out) {
-          recordTeamControlProjection({
-            action: "wait",
-            requestedSessionIds: normalizedSessionIds,
-            affectedSessionIds: normalizedSessionIds,
-            timedOut: true,
-          });
-          setTeamWaitSummary({
-            awaitedSessionIds: normalizedSessionIds,
-            timedOut: true,
-            updatedAt: Date.now(),
-          });
-          toast.info("等待超时，团队内活跃任务仍未进入最终状态");
-          return;
-        }
-
-        const resolvedSessionId =
-          normalizedSessionIds.find((sessionId) =>
-            isTeamWorkspaceTerminalStatus(response.status[sessionId]?.kind),
-          ) ?? normalizedSessionIds[0];
-        const resolvedStatus = resolvedSessionId
-          ? response.status[resolvedSessionId]?.kind
-          : undefined;
-        recordTeamControlProjection({
-          action: "wait",
-          requestedSessionIds: normalizedSessionIds,
-          affectedSessionIds: normalizedSessionIds,
-          resolvedSessionId,
-          resolvedStatus,
-          timedOut: false,
-        });
-
-        setTeamWaitSummary({
-          awaitedSessionIds: normalizedSessionIds,
-          timedOut: false,
-          resolvedSessionId,
-          resolvedStatus,
-          updatedAt: Date.now(),
-        });
-        toast.success(
-          `团队任务已进入${resolveTeamWorkspaceRuntimeStatusLabel(resolvedStatus)}状态`,
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "等待团队任务失败";
-        toast.error(message);
-        throw error;
-      }
+      throwTeamSubagentControlUnavailable(controlUnavailableMessage);
     },
-    [recordTeamControlProjection],
+    [controlUnavailableMessage, t],
   );
 
   const handleCloseCompletedTeamSessions = useCallback(
@@ -256,118 +85,36 @@ export function useWorkspaceTeamSessionControlRuntime({
         normalizeUniqueSessionIds(subagentSessionIds);
 
       if (normalizedSessionIds.length === 0) {
-        const error = new Error("没有可关闭的已完成任务");
+        const error = new Error(
+          t("agentChat.teamWorkspace.control.closeCompleted.noCompletedError"),
+        );
         toast.error(error.message);
         throw error;
       }
 
-      const results = await Promise.allSettled(
-        normalizedSessionIds.map((sessionId) =>
-          closeAgentRuntimeSubagent({ id: sessionId }),
-        ),
-      );
-      const successfulResponses = results
-        .filter(
-          (
-            result,
-          ): result is PromiseFulfilledResult<
-            Awaited<ReturnType<typeof closeAgentRuntimeSubagent>>
-          > => result.status === "fulfilled",
-        )
-        .map((result) => result.value);
-      const succeededCount = results.filter(
-        (result) => result.status === "fulfilled",
-      ).length;
-      const affectedSessionIds = normalizeUniqueSessionIds(
-        successfulResponses.flatMap((response) => response.changed_session_ids),
-      );
-      const cascadeSessionIds = normalizeUniqueSessionIds(
-        successfulResponses.flatMap((response) => response.cascade_session_ids),
-      );
-      const failedResults = results.filter(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
-
-      if (successfulResponses.length > 0) {
-        const summary = buildTeamControlSummary({
-          action: "close_completed",
-          requestedSessionIds: normalizedSessionIds,
-          cascadeSessionIds,
-          affectedSessionIds,
-        });
-        recordTeamControlProjection({
-          action: "close_completed",
-          requestedSessionIds: summary.requestedSessionIds,
-          cascadeSessionIds: summary.cascadeSessionIds,
-          affectedSessionIds: summary.affectedSessionIds,
-        });
-        setTeamControlSummary(summary);
-      }
-
-      if (succeededCount > 0) {
-        toast.success(
-          affectedSessionIds.length > 0
-            ? `已级联收起 ${affectedSessionIds.length} 项任务`
-            : `已收起 ${succeededCount} 项已完成任务`,
-        );
-      }
-
-      if (failedResults.length > 0) {
-        const firstFailure = failedResults[0]?.reason;
-        const message =
-          firstFailure instanceof Error
-            ? firstFailure.message
-            : "部分已完成任务收起失败";
-        toast.error(message);
-        if (succeededCount === 0) {
-          throw firstFailure instanceof Error
-            ? firstFailure
-            : new Error(message);
-        }
-      }
+      throwTeamSubagentControlUnavailable(controlUnavailableMessage);
     },
-    [recordTeamControlProjection],
+    [controlUnavailableMessage, t],
   );
 
   const handleSendSubagentInput = useCallback(
     async (
-      subagentSessionId: string,
+      _subagentSessionId: string,
       message: string,
-      options?: { interrupt?: boolean },
+      _options?: { interrupt?: boolean },
     ) => {
       const normalizedMessage = message.trim();
       if (!normalizedMessage) {
-        const error = new Error("请输入要发送给这项任务的内容");
+        const error = new Error(
+          t("agentChat.teamWorkspace.control.sendInput.emptyError"),
+        );
         toast.error(error.message);
         throw error;
       }
 
-      try {
-        await sendAgentRuntimeSubagentInput({
-          id: subagentSessionId,
-          message: normalizedMessage,
-          interrupt: options?.interrupt === true,
-        });
-        recordTeamControlProjection({
-          action: "send_input",
-          requestedSessionIds: [subagentSessionId],
-          affectedSessionIds: [subagentSessionId],
-          messagePreview: normalizedMessage,
-        });
-        toast.success(
-          options?.interrupt === true
-            ? "已中断当前执行并发送新说明"
-            : "已向这项任务发送补充说明",
-        );
-      } catch (error) {
-        const messageText =
-          error instanceof Error ? error.message : "发送任务说明失败";
-        toast.error(messageText);
-        throw error;
-      }
+      throwTeamSubagentControlUnavailable(controlUnavailableMessage);
     },
-    [recordTeamControlProjection],
+    [controlUnavailableMessage, t],
   );
 
   const handleStopSending = useCallback(async () => {
@@ -392,74 +139,11 @@ export function useWorkspaceTeamSessionControlRuntime({
       return;
     }
 
-    const results = await Promise.allSettled(
-      activeTeamSessionIds.map((subagentSessionId) =>
-        closeAgentRuntimeSubagent({
-          id: subagentSessionId,
-        }),
-      ),
-    );
-
-    const successfulResponses = results
-      .filter(
-        (
-          result,
-        ): result is PromiseFulfilledResult<
-          Awaited<ReturnType<typeof closeAgentRuntimeSubagent>>
-        > => result.status === "fulfilled",
-      )
-      .map((result) => result.value);
-    const failedResults = results.filter(
-      (result): result is PromiseRejectedResult => result.status === "rejected",
-    );
-    const affectedSessionIds = normalizeUniqueSessionIds(
-      successfulResponses.flatMap((response) => response.changed_session_ids),
-    );
-    const cascadeSessionIds = normalizeUniqueSessionIds(
-      successfulResponses.flatMap((response) => response.cascade_session_ids),
-    );
-
-    if (successfulResponses.length > 0) {
-      const summary = buildTeamControlSummary({
-        action: "close",
-        requestedSessionIds: activeTeamSessionIds,
-        cascadeSessionIds,
-        affectedSessionIds,
-      });
-      recordTeamControlProjection({
-        action: "stop",
-        requestedSessionIds: summary.requestedSessionIds,
-        cascadeSessionIds: summary.cascadeSessionIds,
-        affectedSessionIds: summary.affectedSessionIds,
-      });
-      if (summary.affectedSessionIds.length > 0) {
-        setTeamControlSummary(summary);
-      }
-
-      toast.success(
-        affectedSessionIds.length > 1
-          ? `已暂停 ${affectedSessionIds.length} 项任务的处理`
-          : affectedSessionIds.length === 1
-            ? "已暂停这项任务的处理"
-            : activeTeamSessionIds.length > 1
-              ? `已向 ${activeTeamSessionIds.length} 项任务发送暂停请求`
-              : "已向这项任务发送暂停请求",
-      );
-    }
-
-    if (failedResults.length > 0) {
-      const firstFailure = failedResults[0]?.reason;
-      const message =
-        firstFailure instanceof Error ? firstFailure.message : "停止任务失败";
-      toast.error(message);
-      if (successfulResponses.length === 0) {
-        throw firstFailure instanceof Error ? firstFailure : new Error(message);
-      }
-    }
+    toast.info(controlUnavailableMessage);
   }, [
     childSubagentSessions,
+    controlUnavailableMessage,
     liveRuntimeBySessionId,
-    recordTeamControlProjection,
     stopSending,
   ]);
 

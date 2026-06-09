@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "app": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "targetPath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "app",
+    "directory",
+    "targetPath"
+  ],
+  "title": "SkillPackageExportParams",
+  "type": "object"
+}

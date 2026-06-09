@@ -6,9 +6,14 @@ const FORBIDDEN_HOST_SURFACES: &[&str] = &[
     concat!("ta", "uri"),
     "AppHandle",
     "State<",
-    "Emitter",
-    "Manager",
-    "Window",
+    "tauri::Emitter",
+    "tauri::Manager",
+    "tauri::Window",
+    "WindowEvent",
+    "WebviewWindow",
+    "BrowserWindow",
+    "electron",
+    "Electron",
 ];
 
 const FORBIDDEN_DEFAULT_EVENT_SURFACES: &[&str] = &[
@@ -30,20 +35,34 @@ fn app_server_crate_must_not_depend_on_desktop_host_surfaces() {
 
     let mut offenders = Vec::new();
     collect_rust_files(&crate_root.join("src"), &mut offenders);
-    offenders.retain(|path| {
-        let content = fs::read_to_string(path).unwrap_or_default();
-        FORBIDDEN_HOST_SURFACES
-            .iter()
-            .any(|surface| content.contains(surface))
-    });
+    let offenders = offenders
+        .into_iter()
+        .filter_map(|path| {
+            let content = fs::read_to_string(&path).unwrap_or_default();
+            let matches = FORBIDDEN_HOST_SURFACES
+                .iter()
+                .filter(|surface| content.contains(**surface))
+                .map(|surface| (*surface).to_string())
+                .collect::<Vec<_>>();
+            if matches.is_empty() {
+                None
+            } else {
+                Some((path, matches))
+            }
+        })
+        .collect::<Vec<_>>();
 
     let offender_paths: Vec<String> = offenders
         .into_iter()
-        .map(|path| {
-            path.strip_prefix(&crate_root)
-                .expect("相对路径转换失败")
-                .to_string_lossy()
-                .replace('\\', "/")
+        .map(|(path, surfaces)| {
+            format!(
+                "{} contains {}",
+                path.strip_prefix(&crate_root)
+                    .expect("相对路径转换失败")
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+                surfaces.join(", ")
+            )
         })
         .collect();
 

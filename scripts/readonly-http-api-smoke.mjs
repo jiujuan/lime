@@ -4,7 +4,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { buildReadonlyHttpApiCreateRequest } from "./lib/readonly-http-api-draft-template.mjs";
+import { buildReadonlyHttpApiGeneratedFiles } from "./lib/readonly-http-api-draft-template.mjs";
+import {
+  findWorkspaceRegisteredSkill,
+  findWorkspaceSkillBinding,
+  workspaceSkillDirectoryFromName,
+  writeWorkspaceSkillFixture,
+} from "./lib/workspace-skill-fixture.mjs";
 
 const DEFAULTS = {
   healthUrl: "http://127.0.0.1:3030/health",
@@ -15,14 +21,29 @@ const DEFAULTS = {
   cleanup: false,
   json: false,
 };
+const RETIRED_AUTHORING_COMMANDS = [
+  ["capability", "draft", "create"].join("_"),
+  ["capability", "draft", "verify"].join("_"),
+];
+const CAPABILITY_DRAFT_BOUNDARY = {
+  registrationSurface: "direct-workspace-skill-fixture",
+  retiredCommandSurface: RETIRED_AUTHORING_COMMANDS.join("|"),
+  classification: "dead/guard-only",
+  currentReadMethods: [
+    "workspaceRegisteredSkills/list",
+    "workspaceSkillBindings/list",
+  ],
+  exitCondition:
+    "do not restore retired authoring commands; keep smoke evidence on App Server current read methods",
+};
 
 function printHelp() {
   console.log(`
-Read-Only HTTP API Capability Draft Smoke
+Read-Only HTTP API Current Smoke
 
 用途:
-  用临时 workspace 验证 P6 第一刀：只读 HTTP API draft 必须声明网络只读权限。
-  该 smoke 只走 capability_draft_create -> capability_draft_verify，不发真实 HTTP 请求、不注册、不进入 runtime。
+  验证只读 HTTP API 技能模板仍保持离线 fixture / expected output / session policy gate，
+  并通过 App Server workspaceRegisteredSkills/list 与 workspaceSkillBindings/list current 读链发现临时 workspace skill。
 
 用法:
   node scripts/readonly-http-api-smoke.mjs [选项]
@@ -106,22 +127,6 @@ function pickString(target, ...keys) {
   return "";
 }
 
-function pickArray(target, ...keys) {
-  for (const key of keys) {
-    const value = target?.[key];
-    if (Array.isArray(value)) {
-      return value;
-    }
-  }
-  return [];
-}
-
-function collectEvidenceKeys(check) {
-  return pickArray(check, "evidence")
-    .map((item) => pickString(item, "key"))
-    .filter(Boolean);
-}
-
 async function checkHealth(url) {
   const response = await fetch(url, { method: "GET" });
   const text = await response.text();
@@ -138,7 +143,9 @@ async function waitForHealth(options) {
     try {
       const payload = await checkHealth(options.healthUrl);
       if (!options.json) {
-        console.log(`[readonly-http-api:p6-smoke] DevBridge 已就绪 (${Date.now() - startedAt}ms)`);
+        console.log(
+          `[readonly-http-api:p6-smoke] DevBridge 已就绪 (${Date.now() - startedAt}ms)`,
+        );
       }
       return payload;
     } catch (error) {
@@ -169,12 +176,36 @@ async function invoke(invokeUrl, cmd, args = {}) {
   return payload?.result;
 }
 
-function buildCreateRequest(workspaceRoot, permissionSummary, options = {}) {
-  return buildReadonlyHttpApiCreateRequest(
-    workspaceRoot,
-    permissionSummary,
-    options,
-  );
+async function invokeAppServer(invokeUrl, method, params = {}) {
+  const response = await invoke(invokeUrl, "app_server_handle_json_lines", {
+    request: {
+      lines: [
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          params,
+        }),
+      ],
+    },
+  });
+  const responseLines = response?.result?.lines ?? response?.lines;
+  const lines = Array.isArray(responseLines) ? responseLines : [];
+  for (const line of lines) {
+    const text = typeof line === "string" ? line.trim() : "";
+    if (!text) {
+      continue;
+    }
+    const message = JSON.parse(text);
+    if (message?.id !== 1) {
+      continue;
+    }
+    if (message.error) {
+      throw new Error(`${method} failed: ${JSON.stringify(message.error)}`);
+    }
+    return message.result;
+  }
+  throw new Error(`${method} did not return a JSON-RPC response`);
 }
 
 async function prepareWorkspace(options) {
@@ -182,28 +213,122 @@ async function prepareWorkspace(options) {
     await fs.mkdir(options.workspaceRoot, { recursive: true });
     return { workspaceRoot: options.workspaceRoot, createdTemp: false };
   }
-  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lime-readonly-http-api-p6-"));
+  const workspaceRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), "lime-readonly-http-api-p6-"),
+  );
   return { workspaceRoot, createdTemp: true };
 }
 
-async function createAndVerify(options, workspaceRoot, permissionSummary, draftOptions = {}) {
-  const draft = await invoke(options.invokeUrl, "capability_draft_create", {
-    request: buildCreateRequest(workspaceRoot, permissionSummary, draftOptions),
-  });
-  const draftId = pickString(draft, "draftId", "draft_id");
-  assert(draftId, "capability_draft_create 未返回 draftId");
-
-  const verification = await invoke(options.invokeUrl, "capability_draft_verify", {
-    request: { workspaceRoot, draftId },
-  });
-  const verificationStatus = pickString(
-    verification?.draft,
-    "verificationStatus",
-    "verification_status",
+function fileContentByPath(files) {
+  return new Map(
+    files.map((file) => [file.relativePath, String(file.content ?? "")]),
   );
-  const checks = pickArray(verification?.report, "checks");
-  const failedChecks = checks.filter((check) => pickString(check, "status") === "failed");
-  return { draftId, verificationStatus, checks, failedChecks };
+}
+
+function assertReadonlyTemplateGate() {
+  const positiveFiles = buildReadonlyHttpApiGeneratedFiles();
+  const positive = fileContentByPath(positiveFiles);
+  assert(positive.has("SKILL.md"), "只读 HTTP API 模板缺少 SKILL.md");
+  assert(positive.has("tests/fixture.json"), "只读 HTTP API 模板缺少 fixture");
+  assert(
+    positive.has("tests/expected-output.json"),
+    "只读 HTTP API 模板缺少 expected output",
+  );
+  assert(
+    positive.has("policy/readonly-http-session.json"),
+    "只读 HTTP API 模板缺少 session authorization policy",
+  );
+  const dryRun = positive.get("scripts/dry-run.mjs") || "";
+  assert(
+    dryRun.includes("tests/expected-output.json"),
+    "dry-run 未绑定 expected output",
+  );
+  assert(!dryRun.includes("fetch("), "默认 dry-run 不应发真实网络请求");
+  assert(!dryRun.includes("https://"), "默认 dry-run 不应包含真实 endpoint");
+
+  const negativeChecks = [
+    [
+      "missingFixture",
+      () => buildReadonlyHttpApiGeneratedFiles({ includeFixture: false }),
+      (files) => !files.some((file) => file.relativePath === "tests/fixture.json"),
+    ],
+    [
+      "missingExpectedOutput",
+      () => buildReadonlyHttpApiGeneratedFiles({ includeExpectedOutput: false }),
+      (files) =>
+        !files.some((file) => file.relativePath === "tests/expected-output.json"),
+    ],
+    [
+      "missingFixtureInput",
+      () => buildReadonlyHttpApiGeneratedFiles({ includeFixtureInput: false }),
+      (files) =>
+        !(fileContentByPath(files).get("contract/input.schema.json") || "").includes(
+          "fixture_path",
+        ),
+    ],
+    [
+      "missingDryRunEntry",
+      () => buildReadonlyHttpApiGeneratedFiles({ includeDryRunEntry: false }),
+      (files) => !files.some((file) => file.relativePath === "scripts/dry-run.mjs"),
+    ],
+    [
+      "missingDryRunExpectedOutputBinding",
+      () =>
+        buildReadonlyHttpApiGeneratedFiles({
+          includeDryRunExpectedOutputBinding: false,
+        }),
+      (files) =>
+        !(fileContentByPath(files).get("scripts/dry-run.mjs") || "").includes(
+          "tests/expected-output.json",
+        ),
+    ],
+    [
+      "networkedDryRun",
+      () => buildReadonlyHttpApiGeneratedFiles({ includeNetworkedDryRun: true }),
+      (files) =>
+        (fileContentByPath(files).get("scripts/dry-run.mjs") || "").includes(
+          "fetch(",
+        ),
+    ],
+    [
+      "credentialHeader",
+      () => buildReadonlyHttpApiGeneratedFiles({ includeCredentialHeader: true }),
+      (files) =>
+        (fileContentByPath(files).get("scripts/client.ts") || "").includes(
+          "Authorization",
+        ),
+    ],
+  ];
+
+  const negativeResults = {};
+  for (const [key, buildFiles, predicate] of negativeChecks) {
+    const files = buildFiles();
+    negativeResults[key] = Boolean(predicate(files));
+    assert(negativeResults[key], `只读 HTTP API 负向模板 gate 未命中: ${key}`);
+  }
+
+  return {
+    positiveFilePaths: positiveFiles.map((file) => file.relativePath),
+    dryRunOffline: !dryRun.includes("fetch(") && !dryRun.includes("https://"),
+    dryRunBindsExpectedOutput: dryRun.includes("tests/expected-output.json"),
+    negativeResults,
+  };
+}
+
+function buildReadonlyHttpApiRegistration(fileCount) {
+  const timestamp = new Date().toISOString();
+  return {
+    registrationId: `smoke-capreg-readonly-http-api-${Date.now()}`,
+    registeredAt: timestamp,
+    sourceDraftId: "smoke-capdraft-readonly-http-api-fixture",
+    sourceVerificationReportId: "smoke-capver-readonly-http-api-fixture",
+    generatedFileCount: fileCount,
+    permissionSummary: [
+      "Level 0 只读发现",
+      "允许只读 HTTP API GET 请求，不做外部写操作",
+    ],
+    source: "readonly_http_api_smoke_fixture",
+  };
 }
 
 async function runSmoke(options) {
@@ -212,317 +337,53 @@ async function runSmoke(options) {
   const startedAt = new Date().toISOString();
 
   try {
-    const positive = await createAndVerify(options, workspace.workspaceRoot, [
-      "Level 0 只读发现",
-      "允许只读 HTTP API GET 请求，不做外部写操作",
-    ]);
-    assert(
-      positive.verificationStatus === "verified_pending_registration",
-      `正向 draft 未进入 pending registration: ${positive.verificationStatus}`,
-    );
-    assert(
-      positive.failedChecks.length === 0,
-      `正向 draft 存在失败项: ${JSON.stringify(positive.failedChecks)}`,
-    );
-    const positiveDryRunExecutionCheck = positive.checks.find(
-      (check) => pickString(check, "id") === "readonly_http_fixture_dry_run_execute",
-    );
-    assert(
-      positiveDryRunExecutionCheck,
-      "正向 draft 未返回 readonly_http_fixture_dry_run_execute check",
-    );
-    const positiveDryRunExecuteEvidenceKeys = collectEvidenceKeys(positiveDryRunExecutionCheck);
-    for (const key of [
-      "scriptPath",
-      "expectedOutputPath",
-      "durationMs",
-      "actualSha256",
-      "expectedSha256",
-      "stdoutPreview",
-    ]) {
-      assert(
-        positiveDryRunExecuteEvidenceKeys.includes(key),
-        `正向 dry-run execute 缺少 evidence key: ${key}`,
-      );
-    }
-    const positivePreflightCheck = positive.checks.find(
-      (check) => pickString(check, "id") === "readonly_http_execution_preflight",
-    );
-    assert(
-      positivePreflightCheck,
-      "正向 draft 未返回 readonly_http_execution_preflight check",
-    );
-    const positivePreflightEvidenceKeys = collectEvidenceKeys(positivePreflightCheck);
-    for (const key of [
-      "preflightMode",
-      "endpointSource",
-      "method",
-      "credentialReferenceId",
-      "evidenceSchema",
-    ]) {
-      assert(
-        positivePreflightEvidenceKeys.includes(key),
-        `正向 execution preflight 缺少 evidence key: ${key}`,
-      );
-    }
+    const templateGate = assertReadonlyTemplateGate();
+    const skillName = "只读 HTTP API 每日报告";
+    const skillDirectory = workspaceSkillDirectoryFromName(skillName);
+    const generatedFiles = buildReadonlyHttpApiGeneratedFiles();
+    const { registeredSkillDirectory, registration } =
+      await writeWorkspaceSkillFixture({
+        workspaceRoot: workspace.workspaceRoot,
+        directory: skillDirectory,
+        generatedFiles,
+        registration: buildReadonlyHttpApiRegistration(generatedFiles.length),
+      });
 
-    const negative = await createAndVerify(options, workspace.workspaceRoot, ["Level 0 只读发现"]);
-    assert(
-      negative.verificationStatus === "verification_failed",
-      `负向 draft 未失败: ${negative.verificationStatus}`,
+    const registeredSkillsResult = await invokeAppServer(
+      options.invokeUrl,
+      "workspaceRegisteredSkills/list",
+      { workspaceRoot: workspace.workspaceRoot },
     );
-    const riskCheck = negative.failedChecks.find(
-      (check) => pickString(check, "id") === "static_risk_scan",
+    const registeredSkill = findWorkspaceRegisteredSkill(
+      registeredSkillsResult,
+      registeredSkillDirectory,
+      skillName,
     );
-    assert(riskCheck, "负向 draft 未命中 static_risk_scan");
     assert(
-      String(riskCheck.message ?? "").includes("网络只读权限"),
-      `负向 draft 风险信息不包含网络只读权限: ${String(riskCheck.message ?? "")}`,
+      registeredSkill,
+      "registered discovery 未找到只读 HTTP API fixture skill",
     );
 
-    const missingFixture = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeFixture: false },
+    const bindingSnapshot = await invokeAppServer(
+      options.invokeUrl,
+      "workspaceSkillBindings/list",
+      {
+        workspaceRoot: workspace.workspaceRoot,
+        caller: "assistant",
+        workbench: true,
+        browserAssist: false,
+      },
     );
+    const binding = findWorkspaceSkillBinding(
+      bindingSnapshot,
+      registeredSkillDirectory,
+      skillDirectory,
+    );
+    assert(binding, "runtime binding readiness 未找到只读 HTTP API fixture skill");
     assert(
-      missingFixture.verificationStatus === "verification_failed",
-      `缺 fixture draft 未失败: ${missingFixture.verificationStatus}`,
-    );
-    const fixtureCheck = missingFixture.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_fixture",
-    );
-    assert(fixtureCheck, "缺 fixture draft 未命中 readonly_http_fixture");
-    assert(
-      String(fixtureCheck.message ?? "").includes("fixture"),
-      `缺 fixture draft 风险信息不包含 fixture: ${String(fixtureCheck.message ?? "")}`,
-    );
-
-    const missingExpectedOutput = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeExpectedOutput: false },
-    );
-    assert(
-      missingExpectedOutput.verificationStatus === "verification_failed",
-      `缺 expected output draft 未失败: ${missingExpectedOutput.verificationStatus}`,
-    );
-    const expectedOutputCheck = missingExpectedOutput.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_expected_output",
-    );
-    assert(expectedOutputCheck, "缺 expected output draft 未命中 readonly_http_expected_output");
-    assert(
-      String(expectedOutputCheck.message ?? "").includes("expected output"),
-      `缺 expected output draft 风险信息不包含 expected output: ${String(
-        expectedOutputCheck.message ?? "",
-      )}`,
-    );
-
-    const missingFixtureInput = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeFixtureInput: false },
-    );
-    assert(
-      missingFixtureInput.verificationStatus === "verification_failed",
-      `缺 fixture input draft 未失败: ${missingFixtureInput.verificationStatus}`,
-    );
-    const fixtureInputCheck = missingFixtureInput.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_fixture_input",
-    );
-    assert(fixtureInputCheck, "缺 fixture input draft 未命中 readonly_http_fixture_input");
-    assert(
-      String(fixtureInputCheck.message ?? "").includes("fixture"),
-      `缺 fixture input draft 风险信息不包含 fixture: ${String(
-        fixtureInputCheck.message ?? "",
-      )}`,
-    );
-
-    const missingDryRunEntry = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeDryRunEntry: false },
-    );
-    assert(
-      missingDryRunEntry.verificationStatus === "verification_failed",
-      `缺 fixture dry-run 入口 draft 未失败: ${missingDryRunEntry.verificationStatus}`,
-    );
-    const dryRunCheck = missingDryRunEntry.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_fixture_dry_run",
-    );
-    assert(dryRunCheck, "缺 fixture dry-run 入口 draft 未命中 readonly_http_fixture_dry_run");
-    assert(
-      String(dryRunCheck.message ?? "").includes("dry-run"),
-      `缺 fixture dry-run 入口 draft 风险信息不包含 dry-run: ${String(
-        dryRunCheck.message ?? "",
-      )}`,
-    );
-
-    const missingDryRunExpectedOutputBinding = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeDryRunExpectedOutputBinding: false },
-    );
-    assert(
-      missingDryRunExpectedOutputBinding.verificationStatus === "verification_failed",
-      `dry-run 未绑定 expected output draft 未失败: ${missingDryRunExpectedOutputBinding.verificationStatus}`,
-    );
-    const dryRunExpectedOutputBindingCheck = missingDryRunExpectedOutputBinding.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_fixture_dry_run_expected_output",
-    );
-    assert(
-      dryRunExpectedOutputBindingCheck,
-      "dry-run 未绑定 expected output draft 未命中 readonly_http_fixture_dry_run_expected_output",
-    );
-    assert(
-      String(dryRunExpectedOutputBindingCheck.message ?? "").includes("expected output"),
-      `dry-run 未绑定 expected output draft 风险信息不包含 expected output: ${String(
-        dryRunExpectedOutputBindingCheck.message ?? "",
-      )}`,
-    );
-
-    const mismatchedDryRun = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeDryRunMismatch: true },
-    );
-    assert(
-      mismatchedDryRun.verificationStatus === "verification_failed",
-      `dry-run actual/expected 不一致 draft 未失败: ${mismatchedDryRun.verificationStatus}`,
-    );
-    const dryRunExecutionCheck = mismatchedDryRun.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_fixture_dry_run_execute",
-    );
-    assert(
-      dryRunExecutionCheck,
-      "dry-run actual/expected 不一致 draft 未命中 readonly_http_fixture_dry_run_execute",
-    );
-    assert(
-      String(dryRunExecutionCheck.message ?? "").includes("dry-run"),
-      `dry-run actual/expected 不一致 draft 风险信息不包含 dry-run: ${String(
-        dryRunExecutionCheck.message ?? "",
-      )}`,
-    );
-
-    const networkedDryRun = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeNetworkedDryRun: true },
-    );
-    assert(
-      networkedDryRun.verificationStatus === "verification_failed",
-      `真实联网 dry-run draft 未失败: ${networkedDryRun.verificationStatus}`,
-    );
-    const dryRunOfflineCheck = networkedDryRun.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_fixture_dry_run_offline",
-    );
-    assert(dryRunOfflineCheck, "真实联网 dry-run draft 未命中 readonly_http_fixture_dry_run_offline");
-    assert(
-      String(dryRunOfflineCheck.message ?? "").includes("真实联网"),
-      `真实联网 dry-run draft 风险信息不包含真实联网: ${String(
-        dryRunOfflineCheck.message ?? "",
-      )}`,
-    );
-
-    const credentialDraft = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeCredentialHeader: true },
-    );
-    assert(
-      credentialDraft.verificationStatus === "verification_failed",
-      `凭证字段 draft 未失败: ${credentialDraft.verificationStatus}`,
-    );
-    const credentialCheck = credentialDraft.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_no_credentials",
-    );
-    assert(credentialCheck, "凭证字段 draft 未命中 readonly_http_no_credentials");
-    assert(
-      String(credentialCheck.message ?? "").includes("凭证"),
-      `凭证字段 draft 风险信息不包含凭证: ${String(credentialCheck.message ?? "")}`,
-    );
-
-    const missingSessionAuthorization = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeSessionAuthorization: false },
-    );
-    assert(
-      missingSessionAuthorization.verificationStatus === "verification_failed",
-      `缺 session authorization policy draft 未失败: ${missingSessionAuthorization.verificationStatus}`,
-    );
-    const sessionAuthorizationCheck = missingSessionAuthorization.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_session_authorization",
-    );
-    assert(
-      sessionAuthorizationCheck,
-      "缺 session authorization policy draft 未命中 readonly_http_session_authorization",
-    );
-    assert(
-      String(sessionAuthorizationCheck.message ?? "").includes("authorization") ||
-        String(sessionAuthorizationCheck.message ?? "").includes("授权"),
-      `缺 session authorization policy draft 风险信息不包含授权: ${String(
-        sessionAuthorizationCheck.message ?? "",
-      )}`,
-    );
-
-    const missingCredentialReference = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeCredentialReference: false },
-    );
-    assert(
-      missingCredentialReference.verificationStatus === "verification_failed",
-      `缺 credential_reference draft 未失败: ${missingCredentialReference.verificationStatus}`,
-    );
-    const credentialReferenceCheck = missingCredentialReference.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_credential_reference",
-    );
-    assert(
-      credentialReferenceCheck,
-      "缺 credential_reference draft 未命中 readonly_http_credential_reference",
-    );
-    assert(
-      String(credentialReferenceCheck.message ?? "").includes("credential_reference") ||
-        String(credentialReferenceCheck.message ?? "").includes("凭证引用"),
-      `缺 credential_reference draft 风险信息不包含凭证引用: ${String(
-        credentialReferenceCheck.message ?? "",
-      )}`,
-    );
-
-    const missingExecutionPreflight = await createAndVerify(
-      options,
-      workspace.workspaceRoot,
-      ["Level 0 只读发现", "允许只读 HTTP API GET 请求，不做外部写操作"],
-      { includeExecutionPreflight: false },
-    );
-    assert(
-      missingExecutionPreflight.verificationStatus === "verification_failed",
-      `缺 execution_preflight draft 未失败: ${missingExecutionPreflight.verificationStatus}`,
-    );
-    const executionPreflightCheck = missingExecutionPreflight.failedChecks.find(
-      (check) => pickString(check, "id") === "readonly_http_execution_preflight",
-    );
-    assert(
-      executionPreflightCheck,
-      "缺 execution_preflight draft 未命中 readonly_http_execution_preflight",
-    );
-    assert(
-      String(executionPreflightCheck.message ?? "").includes("execution_preflight") ||
-        String(executionPreflightCheck.message ?? "").includes("preflight"),
-      `缺 execution_preflight draft 风险信息不包含 preflight: ${String(
-        executionPreflightCheck.message ?? "",
-      )}`,
+      pickString(binding, "binding_status", "bindingStatus") ===
+        "ready_for_manual_enable",
+      `binding 未 ready_for_manual_enable: ${pickString(binding, "binding_status", "bindingStatus")}`,
     );
 
     const summary = {
@@ -530,53 +391,18 @@ async function runSmoke(options) {
       startedAt,
       finishedAt: new Date().toISOString(),
       workspaceRoot: workspace.workspaceRoot,
-      positiveDraftId: positive.draftId,
-      positiveVerificationStatus: positive.verificationStatus,
-      positiveDryRunExecuteEvidenceKeys,
-      positivePreflightEvidenceKeys,
-      negativeDraftId: negative.draftId,
-      negativeVerificationStatus: negative.verificationStatus,
-      negativeFailedCheck: pickString(riskCheck, "id"),
-      missingFixtureDraftId: missingFixture.draftId,
-      missingFixtureVerificationStatus: missingFixture.verificationStatus,
-      missingFixtureFailedCheck: pickString(fixtureCheck, "id"),
-      missingExpectedOutputDraftId: missingExpectedOutput.draftId,
-      missingExpectedOutputVerificationStatus: missingExpectedOutput.verificationStatus,
-      missingExpectedOutputFailedCheck: pickString(expectedOutputCheck, "id"),
-      missingFixtureInputDraftId: missingFixtureInput.draftId,
-      missingFixtureInputVerificationStatus: missingFixtureInput.verificationStatus,
-      missingFixtureInputFailedCheck: pickString(fixtureInputCheck, "id"),
-      missingDryRunEntryDraftId: missingDryRunEntry.draftId,
-      missingDryRunEntryVerificationStatus: missingDryRunEntry.verificationStatus,
-      missingDryRunEntryFailedCheck: pickString(dryRunCheck, "id"),
-      missingDryRunExpectedOutputBindingDraftId: missingDryRunExpectedOutputBinding.draftId,
-      missingDryRunExpectedOutputBindingVerificationStatus:
-        missingDryRunExpectedOutputBinding.verificationStatus,
-      missingDryRunExpectedOutputBindingFailedCheck: pickString(
-        dryRunExpectedOutputBindingCheck,
-        "id",
+      sourceDraftId: pickString(registration, "sourceDraftId"),
+      verificationStatus: "retired_authoring_not_invoked",
+      verificationReportId: pickString(
+        registration,
+        "sourceVerificationReportId",
       ),
-      mismatchedDryRunDraftId: mismatchedDryRun.draftId,
-      mismatchedDryRunVerificationStatus: mismatchedDryRun.verificationStatus,
-      mismatchedDryRunFailedCheck: pickString(dryRunExecutionCheck, "id"),
-      networkedDryRunDraftId: networkedDryRun.draftId,
-      networkedDryRunVerificationStatus: networkedDryRun.verificationStatus,
-      networkedDryRunFailedCheck: pickString(dryRunOfflineCheck, "id"),
-      credentialDraftId: credentialDraft.draftId,
-      credentialVerificationStatus: credentialDraft.verificationStatus,
-      credentialFailedCheck: pickString(credentialCheck, "id"),
-      missingSessionAuthorizationDraftId: missingSessionAuthorization.draftId,
-      missingSessionAuthorizationVerificationStatus:
-        missingSessionAuthorization.verificationStatus,
-      missingSessionAuthorizationFailedCheck: pickString(sessionAuthorizationCheck, "id"),
-      missingCredentialReferenceDraftId: missingCredentialReference.draftId,
-      missingCredentialReferenceVerificationStatus:
-        missingCredentialReference.verificationStatus,
-      missingCredentialReferenceFailedCheck: pickString(credentialReferenceCheck, "id"),
-      missingExecutionPreflightDraftId: missingExecutionPreflight.draftId,
-      missingExecutionPreflightVerificationStatus:
-        missingExecutionPreflight.verificationStatus,
-      missingExecutionPreflightFailedCheck: pickString(executionPreflightCheck, "id"),
+      templateGate,
+      registeredSkillDirectory,
+      registeredSkillName: pickString(registeredSkill, "name"),
+      bindingStatus: pickString(binding, "binding_status", "bindingStatus"),
+      nextGate: pickString(binding, "next_gate", "nextGate"),
+      capabilityDraftBoundary: CAPABILITY_DRAFT_BOUNDARY,
       cleanup: options.cleanup && workspace.createdTemp,
     };
 

@@ -75,6 +75,42 @@ async function invokeFileBrowserCommand<T>(
   return result as T;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isFileManagerLocation(value: unknown): value is FileManagerLocation {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.trim().length > 0 &&
+    typeof value.label === "string" &&
+    value.label.trim().length > 0 &&
+    typeof value.path === "string" &&
+    value.path.trim().length > 0 &&
+    typeof value.kind === "string" &&
+    value.kind.trim().length > 0
+  );
+}
+
+function assertFileManagerLocations(
+  value: unknown,
+): asserts value is FileManagerLocation[] {
+  if (!Array.isArray(value) || !value.every(isFileManagerLocation)) {
+    throw new Error(
+      "get_file_manager_locations did not return file manager locations",
+    );
+  }
+}
+
+function assertFileIconDataUrl(
+  value: unknown,
+): asserts value is string | null {
+  if (value !== null && typeof value !== "string") {
+    throw new Error("get_file_icon_data_url did not return file icon data URL");
+  }
+}
+
 function normalizeDirectoryListing(
   listing: AppServerFileSystemDirectoryListing,
 ): DirectoryListing {
@@ -103,15 +139,22 @@ export async function listDirectory(path: string): Promise<DirectoryListing> {
 export async function getFileManagerLocations(): Promise<
   FileManagerLocation[]
 > {
-  return invokeFileBrowserCommand<FileManagerLocation[]>(
+  const result = await invokeFileBrowserCommand<unknown>(
     "get_file_manager_locations",
   );
+  assertFileManagerLocations(result);
+  return result;
 }
 
 export async function getFileIconDataUrl(path: string): Promise<string | null> {
-  return invokeFileBrowserCommand<string | null>("get_file_icon_data_url", {
-    path,
-  });
+  const result = await invokeFileBrowserCommand<unknown>(
+    "get_file_icon_data_url",
+    {
+      path,
+    },
+  );
+  assertFileIconDataUrl(result);
+  return result;
 }
 
 export async function readFilePreview(

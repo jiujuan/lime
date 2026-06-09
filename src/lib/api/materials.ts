@@ -183,6 +183,9 @@ export async function deleteMaterial(id: string): Promise<void> {
     result,
     "真实 Materials current 通道",
   );
+  if (result !== null && result !== undefined) {
+    throw new Error("delete_material did not return void");
+  }
 }
 
 export async function getMaterialContent(id: string): Promise<string> {

@@ -15,6 +15,33 @@ describe("agentRuntimeMocks", () => {
     );
   });
 
+  it("App Server session update / delete current 命令不再注册默认 mock", () => {
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_update_session",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_delete_session",
+    );
+  });
+
+  it("App Server evidence export current 命令不再注册默认 mock", () => {
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_export_evidence_pack",
+    );
+  });
+
+  it("process / Aster legacy residual 不再注册 desktop-host 默认 mock", () => {
+    expect(agentRuntimeMocks).not.toHaveProperty("agent_get_process_status");
+    expect(agentRuntimeMocks).not.toHaveProperty("agent_start_process");
+    expect(agentRuntimeMocks).not.toHaveProperty("agent_stop_process");
+    expect(agentRuntimeMocks).not.toHaveProperty("aster_agent_init");
+    expect(agentRuntimeMocks).not.toHaveProperty("aster_agent_status");
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "aster_agent_configure_provider",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty("aster_agent_reset");
+  });
+
   it("subagent 公开 compat facade 不再注册 desktop-host 默认 mock", () => {
     expect(agentRuntimeMocks).not.toHaveProperty(
       "agent_runtime_spawn_subagent",
@@ -33,23 +60,36 @@ describe("agentRuntimeMocks", () => {
     );
   });
 
-  it("checkpoint / handoff / review / replay residual mock 不再伪造成功结果", () => {
-    const commands = [
+  it("App Server file checkpoint current 命令不再注册 desktop-host 默认 mock", () => {
+    expect(agentRuntimeMocks).not.toHaveProperty(
       "agent_runtime_list_file_checkpoints",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
       "agent_runtime_get_file_checkpoint",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
       "agent_runtime_diff_file_checkpoint",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
       "agent_runtime_restore_file_checkpoint",
-      "agent_runtime_export_analysis_handoff",
-      "agent_runtime_export_handoff_bundle",
-      "agent_runtime_export_review_decision_template",
-      "agent_runtime_save_review_decision",
-      "agent_runtime_export_replay_case",
-    ];
+    );
+  });
 
-    for (const command of commands) {
-      expect(() => agentRuntimeMocks[command]?.()).toThrow(
-        `${command} 仍属于 P9 Agent Runtime`,
-      );
-    }
+  it("App Server current export 命令不再注册 desktop-host 默认 mock", () => {
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_export_analysis_handoff",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_export_handoff_bundle",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_export_review_decision_template",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_save_review_decision",
+    );
+    expect(agentRuntimeMocks).not.toHaveProperty(
+      "agent_runtime_export_replay_case",
+    );
   });
 });

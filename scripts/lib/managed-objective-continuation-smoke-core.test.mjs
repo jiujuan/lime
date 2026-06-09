@@ -1,17 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  auditAgentSessionObjectiveCurrent,
   buildSmokeEvidence,
+  continueAgentSessionObjectiveCurrent,
   createAgentSessionCurrent,
   evidencePackExplainsObjectiveStop,
+  exportAgentSessionEvidencePackCurrent,
   guardDecisionFromSummary,
+  objectivePollFailureReason,
   objectiveReachedBudgetLimit,
   objectiveStopState,
+  readAgentSessionObjectiveCurrent,
   readAgentRuntimeThreadCurrent,
   readAgentSessionDetailCurrent,
   respondAgentSessionActionCurrent,
+  setAgentSessionObjectiveCurrent,
   startAgentSessionTurnCurrent,
   updateAgentSessionRuntimeCurrent,
+  waitForObjectiveState,
 } from "./managed-objective-continuation-smoke-core.mjs";
 
 function options() {
@@ -249,6 +256,138 @@ describe("managed-objective-continuation-smoke-core", () => {
     );
   });
 
+  it("waitForObjectiveState 开启 failFast 时应在 failed turn 立即失败", async () => {
+    const originalFetch = globalThis.fetch;
+    const observedMethods = [];
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body || "{}"));
+      expect(body.cmd).toBe("app_server_handle_json_lines");
+      const line = JSON.parse(String(body.args?.request?.lines?.[0] || "{}"));
+      observedMethods.push(line.method);
+      const resultByMethod = {
+        "agentSession/read": {
+          session: {
+            sessionId: "session-failed",
+            threadId: "thread-failed",
+            appId: "desktop",
+            status: "failed",
+          },
+          turns: [
+            {
+              turnId: "turn-failed",
+              sessionId: "session-failed",
+              status: "failed",
+              completedAt: "2026-05-25T00:00:01.000Z",
+              errorMessage: "fixture provider disconnected",
+            },
+          ],
+          detail: {
+            id: "session-failed",
+            thread_read: {
+              status: "failed",
+              active_turn_id: null,
+              turns: [
+                {
+                  id: "turn-failed",
+                  status: "failed",
+                  error: "fixture provider disconnected",
+                },
+              ],
+              diagnostics: {
+                latest_turn_status: "failed",
+              },
+            },
+            turns: [
+              {
+                id: "turn-failed",
+                status: "failed",
+                error: "fixture provider disconnected",
+              },
+            ],
+            messages: [],
+            items: [],
+          },
+        },
+        "agentSession/objective/read": {
+          objective: {
+            objective_id: "objective-current",
+            owner_kind: "agent_session",
+            owner_id: "session-failed",
+            status: "active",
+            objective_text: "推进 current objective",
+          },
+        },
+      };
+      return new Response(
+        JSON.stringify({
+          result: {
+            lines: [
+              JSON.stringify({
+                id: line.id,
+                result: resultByMethod[line.method],
+              }),
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    };
+
+    try {
+      await expect(
+        waitForObjectiveState(
+          {
+            invokeUrl: "http://127.0.0.1:3030/invoke",
+            timeoutMs: 60_000,
+            intervalMs: 1_000,
+            logPrefix: "[test]",
+          },
+          "session-failed",
+          () => false,
+          "wait auto continuation allow guard",
+          { failFast: true },
+        ),
+      ).rejects.toThrow(
+        /wait auto continuation allow guard failed early: latest_turn_status=failed/,
+      );
+      expect(observedMethods).toEqual([
+        "agentSession/read",
+        "agentSession/objective/read",
+        "agentSession/read",
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("objectivePollFailureReason 应抽取 session turn failed 详情", () => {
+    expect(
+      objectivePollFailureReason({
+        threadRead: {
+          status: "idle",
+          runtime_summary: {
+            latestTurnStatus: "completed",
+          },
+        },
+        sessionDetail: {
+          turns: [
+            {
+              turnId: "turn-1",
+              status: "failed",
+              errorMessage: "provider connection refused",
+            },
+          ],
+        },
+        objective: {
+          status: "active",
+        },
+      }),
+    ).toBe("turn_status=failed turn_id=turn-1 error=provider connection refused");
+  });
+
   it("session helper 应只经 App Server JSON-RPC current 方法读写会话", async () => {
     const originalFetch = globalThis.fetch;
     const observedParams = [];
@@ -279,6 +418,47 @@ describe("managed-objective-continuation-smoke-core", () => {
             messagesCount: 0,
           },
         },
+        "agentSession/objective/set": {
+          objective: {
+            objective_id: "objective-current",
+            owner_kind: "agent_session",
+            owner_id: "session-current",
+            status: "active",
+            objective_text: "推进 current objective",
+          },
+        },
+        "agentSession/objective/read": {
+          objective: {
+            objective_id: "objective-current",
+            owner_kind: "agent_session",
+            owner_id: "session-current",
+            status: "active",
+            objective_text: "推进 current objective",
+          },
+        },
+        "agentSession/objective/continue": {
+          submitted: true,
+          queuedTurnId: "queued-current",
+          objective: {
+            objective_id: "objective-current",
+            owner_kind: "agent_session",
+            owner_id: "session-current",
+            status: "active",
+          },
+          turn: {
+            turnId: "turn-objective-current",
+            sessionId: "session-current",
+            status: "accepted",
+          },
+        },
+        "agentSession/objective/audit": {
+          objective: {
+            objective_id: "objective-current",
+            owner_kind: "agent_session",
+            owner_id: "session-current",
+            status: "completed",
+          },
+        },
         "agentSession/read": {
           session: {
             sessionId: "session-current",
@@ -306,6 +486,35 @@ describe("managed-objective-continuation-smoke-core", () => {
         },
         "agentSession/action/respond": {},
         "agentSession/turn/cancel": {},
+        "evidence/export": {
+          session: {
+            sessionId: "session-current",
+            threadId: "thread-current",
+            appId: "desktop",
+            status: "completed",
+            createdAt: "2026-05-25T00:00:00.000Z",
+            updatedAt: "2026-05-25T00:00:00.000Z",
+          },
+          turns: [],
+          events: [],
+          artifacts: [],
+          exportedAt: "2026-05-25T00:00:00.000Z",
+          evidencePack: {
+            packRelativeRoot: ".lime/harness/sessions/session-current/evidence",
+            exportedAt: "2026-05-25T00:00:00.000Z",
+            threadStatus: "completed",
+            turnCount: 2,
+            itemCount: 4,
+            pendingRequestCount: 0,
+            queuedTurnCount: 0,
+            recentArtifactCount: 1,
+            knownGaps: [],
+            completionAuditSummary: {
+              decision: "completed",
+            },
+            artifacts: [],
+          },
+        },
       };
       return new Response(
         JSON.stringify({
@@ -345,6 +554,28 @@ describe("managed-objective-continuation-smoke-core", () => {
         sessionId,
         provider: provider(),
       });
+      const objective = await setAgentSessionObjectiveCurrent(smokeOptions, {
+        sessionId,
+        workspaceId: "workspace-current",
+        objectiveText: "推进 current objective",
+        successCriteria: ["只走 App Server current JSON-RPC"],
+      });
+      const readObjective = await readAgentSessionObjectiveCurrent(
+        smokeOptions,
+        sessionId,
+      );
+      const continuation = await continueAgentSessionObjectiveCurrent(
+        smokeOptions,
+        {
+          sessionId,
+        },
+      );
+      const auditedObjective = await auditAgentSessionObjectiveCurrent(
+        smokeOptions,
+        {
+          sessionId,
+        },
+      );
       await startAgentSessionTurnCurrent(smokeOptions, {
         sessionId,
         workspaceId: "workspace-current",
@@ -380,28 +611,66 @@ describe("managed-objective-continuation-smoke-core", () => {
         sessionId,
         { historyLimit: 80 },
       );
+      const evidencePack = await exportAgentSessionEvidencePackCurrent(
+        smokeOptions,
+        {
+          sessionId,
+        },
+      );
 
       expect(sessionId).toBe("session-current");
       expect(detail.id).toBe("session-current");
+      expect(objective?.objective_id).toBe("objective-current");
+      expect(readObjective?.objective_id).toBe("objective-current");
+      expect(continuation?.submitted).toBe(true);
+      expect(auditedObjective?.status).toBe("completed");
+      expect(evidencePack?.packRelativeRoot).toBe(
+        ".lime/harness/sessions/session-current/evidence",
+      );
       expect(observedMethods).toEqual([
         "agentSession/start",
         "agentSession/update",
+        "agentSession/objective/set",
+        "agentSession/objective/read",
+        "agentSession/objective/continue",
+        "agentSession/objective/audit",
         "agentSession/turn/start",
         "agentSession/action/respond",
         "agentSession/read",
         "agentSession/read",
+        "evidence/export",
       ]);
       expect(observedMethods).not.toContain("agent_runtime_create_session");
       expect(observedMethods).not.toContain("agent_runtime_update_session");
       expect(observedMethods).not.toContain("agent_runtime_get_session");
       expect(observedMethods).not.toContain("agent_runtime_submit_turn");
       expect(observedMethods).not.toContain("agent_runtime_respond_action");
+      expect(observedMethods).not.toContain("agent_runtime_set_objective");
+      expect(observedMethods).not.toContain("agent_runtime_get_objective");
+      expect(observedMethods).not.toContain("agent_runtime_continue_objective");
+      expect(observedMethods).not.toContain("agent_runtime_audit_objective");
+      expect(observedMethods).not.toContain("agent_runtime_export_evidence_pack");
       expect(observedParams[0].businessObjectRef.metadata.harness).toEqual({
         hiddenFromUserRecents: true,
         source: "smoke:agent-runtime-tool-execution",
         scenarioId: "safe-core-tools",
       });
       expect(observedParams[2]).toMatchObject({
+        sessionId: "session-current",
+        workspaceId: "workspace-current",
+        objectiveText: "推进 current objective",
+        successCriteria: ["只走 App Server current JSON-RPC"],
+      });
+      expect(observedParams[3]).toEqual({
+        sessionId: "session-current",
+      });
+      expect(observedParams[4]).toEqual({
+        sessionId: "session-current",
+      });
+      expect(observedParams[5]).toEqual({
+        sessionId: "session-current",
+      });
+      expect(observedParams[6]).toMatchObject({
         sessionId: "session-current",
         turnId: "turn-current",
         input: {
@@ -429,7 +698,7 @@ describe("managed-objective-continuation-smoke-core", () => {
         },
         skipPreSubmitResume: true,
       });
-      expect(observedParams[3]).toMatchObject({
+      expect(observedParams[7]).toMatchObject({
         sessionId: "session-current",
         requestId: "request-current",
         actionType: "elicitation",
@@ -440,9 +709,15 @@ describe("managed-objective-continuation-smoke-core", () => {
           turnId: "turn-current",
         },
       });
-      expect(observedParams[5]).toMatchObject({
+      expect(observedParams[9]).toMatchObject({
         sessionId: "session-current",
         historyLimit: 80,
+      });
+      expect(observedParams[10]).toEqual({
+        sessionId: "session-current",
+        includeEvents: true,
+        includeArtifacts: true,
+        includeEvidencePack: true,
       });
     } finally {
       globalThis.fetch = originalFetch;

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "active",
+    "blocked",
+    "budget_limited",
+    "completed",
+    "failed",
+    "needs_input",
+    "paused",
+    "verifying"
+  ],
+  "title": "ManagedObjectiveStatus",
+  "type": "string"
+}

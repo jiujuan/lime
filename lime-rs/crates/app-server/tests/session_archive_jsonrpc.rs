@@ -238,6 +238,48 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
         NoopAppDataSource.read_skill(params).await
     }
 
+    async fn inspect_local_skill_detail(
+        &self,
+        params: SkillLocalDetailInspectParams,
+    ) -> Result<SkillLocalDetailInspectResponse, RuntimeCoreError> {
+        NoopAppDataSource.inspect_local_skill_detail(params).await
+    }
+
+    async fn rename_local_skill(
+        &self,
+        params: SkillLocalRenameParams,
+    ) -> Result<SkillLocalRenameResponse, RuntimeCoreError> {
+        NoopAppDataSource.rename_local_skill(params).await
+    }
+
+    async fn inspect_local_skill_package(
+        &self,
+        params: SkillPackageLocalInspectParams,
+    ) -> Result<SkillPackageLocalInspectResponse, RuntimeCoreError> {
+        NoopAppDataSource.inspect_local_skill_package(params).await
+    }
+
+    async fn install_local_skill_package(
+        &self,
+        params: SkillPackageLocalInstallParams,
+    ) -> Result<SkillPackageLocalInstallResponse, RuntimeCoreError> {
+        NoopAppDataSource.install_local_skill_package(params).await
+    }
+
+    async fn replace_local_skill_package(
+        &self,
+        params: SkillPackageLocalReplaceParams,
+    ) -> Result<SkillPackageLocalReplaceResponse, RuntimeCoreError> {
+        NoopAppDataSource.replace_local_skill_package(params).await
+    }
+
+    async fn export_local_skill_package(
+        &self,
+        params: SkillPackageExportParams,
+    ) -> Result<SkillPackageExportResponse, RuntimeCoreError> {
+        NoopAppDataSource.export_local_skill_package(params).await
+    }
+
     async fn list_workspace_skill_bindings(
         &self,
         params: WorkspaceSkillBindingsListParams,

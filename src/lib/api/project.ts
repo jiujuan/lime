@@ -5,10 +5,8 @@
  */
 
 import { AppServerClient } from "@/lib/api/appServer";
-import { safeInvoke } from "@/lib/dev-bridge";
 import { normalizeThemeType } from "@/lib/workspace/workbenchContract";
 import type { WorkspaceSettings } from "@/types/workspace";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import {
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
@@ -51,17 +49,10 @@ async function requestProjectAppServer<T>(
   return response.result;
 }
 
-async function invokeProjectCommand<T>(
-  command: string,
-  args: Record<string, unknown>,
-): Promise<T> {
-  const result = await safeInvoke<unknown>(command, args);
-  assertNotDiagnosticFacade(
-    command,
-    result,
-    "真实 Workspace / Content / General Workbench current 通道",
+function rejectRetiredWorkspaceContentCommand(command: string): never {
+  throw new Error(
+    `${command} is retired until Workspace writes and Content CRUD move to App Server current methods`,
   );
-  return result as T;
 }
 
 // ==================== 类型定义 ====================
@@ -213,171 +204,6 @@ function writeCachedProjectDetail(key: string, value: Project | null): void {
   });
 }
 
-function invalidateProjectDetailCache(id: string): void {
-  projectDetailCache.delete(resolveProjectDetailCacheKey(id));
-  projectDetailInflight.delete(resolveProjectDetailCacheKey(id));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || typeof value === "string";
-}
-
-function isOptionalRecordOrNull(
-  value: unknown,
-): value is Record<string, unknown> | null | undefined {
-  return value === undefined || value === null || isRecord(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isRawProject(value: unknown): value is RawProject {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    isOptionalString(value.workspaceType) &&
-    isOptionalString(value.workspace_type) &&
-    isOptionalString(value.rootPath) &&
-    isOptionalString(value.root_path) &&
-    (value.isDefault === undefined || typeof value.isDefault === "boolean") &&
-    (value.is_default === undefined || typeof value.is_default === "boolean") &&
-    (value.createdAt === undefined || isFiniteNumber(value.createdAt)) &&
-    (value.created_at === undefined || isFiniteNumber(value.created_at)) &&
-    (value.updatedAt === undefined || isFiniteNumber(value.updatedAt)) &&
-    (value.updated_at === undefined || isFiniteNumber(value.updated_at)) &&
-    (value.isFavorite === undefined || typeof value.isFavorite === "boolean") &&
-    (value.is_favorite === undefined ||
-      typeof value.is_favorite === "boolean") &&
-    (value.isArchived === undefined || typeof value.isArchived === "boolean") &&
-    (value.is_archived === undefined ||
-      typeof value.is_archived === "boolean") &&
-    (value.tags === undefined || isStringArray(value.tags))
-  );
-}
-
-function isContentListItem(value: unknown): value is ContentListItem {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.project_id === "string" &&
-    typeof value.title === "string" &&
-    typeof value.content_type === "string" &&
-    typeof value.status === "string" &&
-    isFiniteNumber(value.order) &&
-    isFiniteNumber(value.word_count) &&
-    isOptionalRecordOrNull(value.metadata) &&
-    isFiniteNumber(value.created_at) &&
-    isFiniteNumber(value.updated_at)
-  );
-}
-
-function isContentDetail(value: unknown): value is ContentDetail {
-  return (
-    isContentListItem(value) &&
-    isRecord(value) &&
-    typeof value.body === "string"
-  );
-}
-
-function isGeneralWorkbenchVersionState(
-  value: unknown,
-): value is GeneralWorkbenchVersionState {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    isFiniteNumber(value.created_at) &&
-    (value.description === undefined ||
-      typeof value.description === "string") &&
-    (value.status === undefined ||
-      value.status === "in_progress" ||
-      value.status === "pending" ||
-      value.status === "merged" ||
-      value.status === "candidate") &&
-    typeof value.is_current === "boolean"
-  );
-}
-
-function isGeneralWorkbenchDocumentState(
-  value: unknown,
-): value is GeneralWorkbenchDocumentState {
-  return (
-    isRecord(value) &&
-    typeof value.content_id === "string" &&
-    typeof value.current_version_id === "string" &&
-    isFiniteNumber(value.version_count) &&
-    Array.isArray(value.versions) &&
-    value.versions.every(isGeneralWorkbenchVersionState)
-  );
-}
-
-function assertRawProject(command: string, value: unknown): asserts value is RawProject {
-  if (!isRawProject(value)) {
-    throw new Error(`${command} did not return workspace`);
-  }
-}
-
-function assertContentDetailOrNull(
-  command: string,
-  value: unknown,
-): asserts value is ContentDetail | null {
-  if (value !== null && !isContentDetail(value)) {
-    throw new Error(`${command} did not return content detail`);
-  }
-}
-
-function assertContentList(
-  command: string,
-  value: unknown,
-): asserts value is ContentListItem[] {
-  if (!Array.isArray(value) || !value.every(isContentListItem)) {
-    throw new Error(`${command} did not return content list`);
-  }
-}
-
-function assertGeneralWorkbenchDocumentStateOrNull(
-  command: string,
-  value: unknown,
-): asserts value is GeneralWorkbenchDocumentState | null {
-  if (value !== null && !isGeneralWorkbenchDocumentState(value)) {
-    throw new Error(`${command} did not return general workbench document state`);
-  }
-}
-
-function assertBooleanResult(command: string, value: unknown): asserts value is boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${command} did not return boolean result`);
-  }
-}
-
-function assertVoidResult(command: string, value: unknown): void {
-  if (value !== undefined && value !== null) {
-    throw new Error(`${command} did not return void result`);
-  }
-}
-
-function assertContentStats(
-  command: string,
-  value: unknown,
-): asserts value is [number, number, number] {
-  if (
-    !Array.isArray(value) ||
-    value.length !== 3 ||
-    !value.every(isFiniteNumber)
-  ) {
-    throw new Error(`${command} did not return content stats`);
-  }
-}
-
 export function clearProjectDetailCacheForTests(): void {
   projectDetailCache.clear();
   projectDetailInflight.clear();
@@ -488,12 +314,8 @@ export interface ListContentQuery {
 export async function createProject(
   request: CreateProjectRequest,
 ): Promise<Project> {
-  const command = "workspace_create";
-  const project = await invokeProjectCommand<unknown>(command, {
-    request,
-  });
-  assertRawProject(command, project);
-  return normalizeProject(project);
+  void request;
+  return rejectRetiredWorkspaceContentCommand("workspace_create");
 }
 
 /** 获取统一 workspace 项目根目录 */
@@ -636,9 +458,8 @@ async function ensureDefaultProjectThroughAppServer(): Promise<Project> {
 
 /** 设置默认项目 */
 export async function setDefaultProject(id: string): Promise<void> {
-  const command = "workspace_set_default";
-  const result = await invokeProjectCommand<unknown>(command, { id });
-  assertVoidResult(command, result);
+  void id;
+  return rejectRetiredWorkspaceContentCommand("workspace_set_default");
 }
 
 /** 获取或创建默认项目 */
@@ -755,15 +576,9 @@ export async function updateProject(
   id: string,
   request: UpdateProjectRequest,
 ): Promise<Project> {
-  invalidateProjectDetailCache(id);
-  const command = "workspace_update";
-  const project = await invokeProjectCommand<unknown>(command, {
-    id,
-    request,
-  });
-  assertRawProject(command, project);
-  invalidateProjectDetailCache(id);
-  return normalizeProject(project);
+  void id;
+  void request;
+  return rejectRetiredWorkspaceContentCommand("workspace_update");
 }
 
 /** 删除项目 */
@@ -771,15 +586,9 @@ export async function deleteProject(
   id: string,
   deleteDirectory?: boolean,
 ): Promise<boolean> {
-  invalidateProjectDetailCache(id);
-  const command = "workspace_delete";
-  const deleted = await invokeProjectCommand<unknown>(command, {
-    id,
-    deleteDirectory,
-  });
-  assertBooleanResult(command, deleted);
-  invalidateProjectDetailCache(id);
-  return deleted;
+  void id;
+  void deleteDirectory;
+  return rejectRetiredWorkspaceContentCommand("workspace_delete");
 }
 
 // ==================== 内容 API ====================
@@ -788,31 +597,24 @@ export async function deleteProject(
 export async function createContent(
   request: CreateContentRequest,
 ): Promise<ContentDetail> {
-  const command = "content_create";
-  const content = await invokeProjectCommand<unknown>(command, { request });
-  assertContentDetailOrNull(command, content);
-  if (!content) {
-    throw new Error(`${command} did not return content detail`);
-  }
-  return content;
+  void request;
+  return rejectRetiredWorkspaceContentCommand("content_create");
 }
 
 /** 获取内容详情 */
 export async function getContent(id: string): Promise<ContentDetail | null> {
-  const command = "content_get";
-  const content = await invokeProjectCommand<unknown>(command, { id });
-  assertContentDetailOrNull(command, content);
-  return content;
+  void id;
+  return rejectRetiredWorkspaceContentCommand("content_get");
 }
 
 /** 获取工作区文稿版本状态（后端解析 content.metadata，并兼容旧协议元数据键） */
 export async function getGeneralWorkbenchDocumentState(
   id: string,
 ): Promise<GeneralWorkbenchDocumentState | null> {
-  const command = "content_get_general_workbench_document_state";
-  const state = await invokeProjectCommand<unknown>(command, { id });
-  assertGeneralWorkbenchDocumentStateOrNull(command, state);
-  return state;
+  void id;
+  return rejectRetiredWorkspaceContentCommand(
+    "content_get_general_workbench_document_state",
+  );
 }
 
 /** 获取项目的内容列表 */
@@ -820,13 +622,9 @@ export async function listContents(
   projectId: string,
   query?: ListContentQuery,
 ): Promise<ContentListItem[]> {
-  const command = "content_list";
-  const contents = await invokeProjectCommand<unknown>(command, {
-    projectId,
-    query,
-  });
-  assertContentList(command, contents);
-  return contents;
+  void projectId;
+  void query;
+  return rejectRetiredWorkspaceContentCommand("content_list");
 }
 
 /** 更新内容 */
@@ -834,21 +632,15 @@ export async function updateContent(
   id: string,
   request: UpdateContentRequest,
 ): Promise<ContentDetail> {
-  const command = "content_update";
-  const content = await invokeProjectCommand<unknown>(command, { id, request });
-  assertContentDetailOrNull(command, content);
-  if (!content) {
-    throw new Error(`${command} did not return content detail`);
-  }
-  return content;
+  void id;
+  void request;
+  return rejectRetiredWorkspaceContentCommand("content_update");
 }
 
 /** 删除内容 */
 export async function deleteContent(id: string): Promise<boolean> {
-  const command = "content_delete";
-  const deleted = await invokeProjectCommand<unknown>(command, { id });
-  assertBooleanResult(command, deleted);
-  return deleted;
+  void id;
+  return rejectRetiredWorkspaceContentCommand("content_delete");
 }
 
 /** 重新排序内容 */
@@ -856,24 +648,17 @@ export async function reorderContents(
   projectId: string,
   contentIds: string[],
 ): Promise<void> {
-  const command = "content_reorder";
-  const result = await invokeProjectCommand<unknown>(command, {
-    projectId,
-    contentIds,
-  });
-  assertVoidResult(command, result);
+  void projectId;
+  void contentIds;
+  return rejectRetiredWorkspaceContentCommand("content_reorder");
 }
 
 /** 获取项目内容统计 */
 export async function getContentStats(
   projectId: string,
 ): Promise<[number, number, number]> {
-  const command = "content_stats";
-  const stats = await invokeProjectCommand<unknown>(command, {
-    projectId,
-  });
-  assertContentStats(command, stats);
-  return stats;
+  void projectId;
+  return rejectRetiredWorkspaceContentCommand("content_stats");
 }
 
 // ==================== 辅助函数 ====================

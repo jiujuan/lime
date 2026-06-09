@@ -15,6 +15,8 @@ pub mod system_providers;
 
 use crate::app_paths;
 use rusqlite::Connection;
+use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -68,6 +70,24 @@ pub fn get_db_path() -> Result<PathBuf, String> {
 /// 初始化数据库连接
 pub fn init_database() -> Result<DbConnection, String> {
     let db_path = get_db_path()?;
+    init_database_at_path(&db_path)
+}
+
+/// 在指定数据根下初始化数据库连接。
+pub fn init_database_with_data_dir(data_dir: impl AsRef<Path>) -> Result<DbConnection, String> {
+    let data_dir = data_dir.as_ref();
+    fs::create_dir_all(data_dir)
+        .map_err(|e| format!("无法创建数据库数据目录 {}: {e}", data_dir.display()))?;
+    init_database_at_path(&data_dir.join("lime.db"))
+}
+
+/// 在指定路径初始化数据库连接。
+pub fn init_database_at_path(db_path: impl AsRef<Path>) -> Result<DbConnection, String> {
+    let db_path = db_path.as_ref();
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("无法创建数据库目录 {}: {e}", parent.display()))?;
+    }
     let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
 
     // 设置 busy_timeout 为 5 秒，避免 "database is locked" 错误

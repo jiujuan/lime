@@ -13,6 +13,8 @@
  */
 
 const BRIDGE_URL = "http://127.0.0.1:3030/invoke";
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const METHOD_DIAGNOSTICS_SERVER_READ = "diagnostics/server/read";
 
 function printUsage() {
   console.log(`
@@ -106,6 +108,39 @@ async function invoke(cmd, args) {
   }
 
   return payload.result;
+}
+
+let appServerRequestId = 1;
+
+async function invokeAppServerJsonRpc(method, params = {}) {
+  const id = `social-workbench-${appServerRequestId++}`;
+  const result = await invoke(APP_SERVER_HANDLE_JSON_LINES_COMMAND, {
+    request: {
+      lines: [`${JSON.stringify({ id, method, params })}\n`],
+    },
+  });
+  const lines = Array.isArray(result?.lines) ? result.lines : [];
+  for (const line of lines) {
+    let message = null;
+    try {
+      message = JSON.parse(String(line));
+    } catch {
+      continue;
+    }
+    if (message?.id !== id) {
+      continue;
+    }
+    if (message.error) {
+      const detail =
+        message.error?.message || JSON.stringify(message.error);
+      throw new Error(`${method}: ${detail}`);
+    }
+    if (Object.hasOwn(message, "result")) {
+      return message.result;
+    }
+  }
+
+  throw new Error(`${method}: missing App Server response`);
 }
 
 function sleep(ms) {
@@ -340,10 +375,12 @@ async function main() {
 
   console.log(`[Smoke] 开始校验 session: ${args.sessionId}`);
 
-  const diagnostics = await invoke("get_server_diagnostics");
+  const diagnostics = await invokeAppServerJsonRpc(
+    METHOD_DIAGNOSTICS_SERVER_READ,
+  );
   assert(
     diagnostics && typeof diagnostics.running === "boolean",
-    "get_server_diagnostics 返回格式异常",
+    "diagnostics/server/read 返回格式异常",
   );
   console.log("[Smoke] Dev Bridge 可用");
 

@@ -6,8 +6,6 @@ import {
   invalidateAppConfigCache,
   getEnvironmentPreview,
   saveConfig,
-  setDefaultProvider,
-  updateProviderEnvVars,
 } from "./appConfig";
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -83,88 +81,61 @@ describe("appConfig API", () => {
   });
 
   it("默认 Provider 命令遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        diagnostic: {
-          source: "electron-host-diagnostic",
-          command: "get_default_provider",
-          status: "degraded",
-        },
-      })
-      .mockResolvedValueOnce({
-        diagnostic: {
-          source: "electron-host-diagnostic",
-          command: "set_default_provider",
-          status: "degraded",
-        },
-      });
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "get_default_provider",
+        status: "degraded",
+      },
+    });
 
     await expect(getDefaultProvider()).rejects.toThrow(
       "get_default_provider 尚未接入真实默认 Provider current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
-    await expect(setDefaultProvider("gemini")).rejects.toThrow(
-      "set_default_provider 尚未接入真实默认 Provider current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
 
   it("默认 Provider 命令应校验返回形态", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce("")
-      .mockResolvedValueOnce("   ");
+      .mockResolvedValueOnce("");
 
     await expect(getDefaultProvider()).rejects.toThrow(
       "get_default_provider 未返回有效默认 Provider",
     );
-    await expect(setDefaultProvider("gemini")).rejects.toThrow(
-      "set_default_provider 未返回有效默认 Provider",
-    );
-    await expect(setDefaultProvider("gemini")).rejects.toThrow(
-      "set_default_provider 未返回有效默认 Provider",
+    await expect(getDefaultProvider()).rejects.toThrow(
+      "get_default_provider 未返回有效默认 Provider",
     );
   });
 
   it("写配置命令遇到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        diagnostic: {
-          source: "electron-host-diagnostic",
-          command: "save_config",
-          status: "degraded",
-        },
-      })
-      .mockResolvedValueOnce({
-        diagnostic: {
-          source: "electron-host-diagnostic",
-          command: "update_provider_env_vars",
-          status: "degraded",
-        },
-      });
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      diagnostic: {
+        source: "electron-host-diagnostic",
+        command: "save_config",
+        status: "degraded",
+      },
+    });
 
     await expect(
       saveConfig({ default_provider: "claude" } as never),
     ).rejects.toThrow(
       "save_config 尚未接入真实配置 current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
-    await expect(
-      updateProviderEnvVars("openai", "https://example.com", "key"),
-    ).rejects.toThrow(
-      "update_provider_env_vars 尚未接入真实 Provider 环境变量 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
   });
 
-  it("应代理写配置命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce("gemini")
-      .mockResolvedValueOnce(undefined);
+  it("写配置命令遇到 mock-like payload 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
 
     await expect(
       saveConfig({ default_provider: "claude" } as never),
-    ).resolves.toBeUndefined();
-    await expect(setDefaultProvider("gemini")).resolves.toBe("gemini");
+    ).rejects.toThrow("save_config did not return void result");
+  });
+
+  it("应代理写配置命令", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
+
     await expect(
-      updateProviderEnvVars("openai", "https://example.com", "key"),
+      saveConfig({ default_provider: "claude" } as never),
     ).resolves.toBeUndefined();
   });
 
@@ -341,44 +312,4 @@ describe("appConfig API", () => {
     expect(vi.mocked(safeInvoke)).toHaveBeenCalledTimes(1);
   });
 
-  it("setDefaultProvider 应更新已缓存配置中的 default_provider", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        default_provider: "claude",
-        navigation: { schema_version: 3, enabled_items: ["companion"] },
-      })
-      .mockResolvedValueOnce("gemini");
-
-    await getConfig();
-    await expect(setDefaultProvider("gemini")).resolves.toBe("gemini");
-    await expect(getConfig()).resolves.toEqual(
-      expect.objectContaining({ default_provider: "gemini" }),
-    );
-
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledTimes(2);
-  });
-
-  it("updateProviderEnvVars 后应失效缓存并触发下一次重新读取", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        default_provider: "claude",
-        navigation: { schema_version: 3, enabled_items: ["companion"] },
-      })
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({
-        default_provider: "openai",
-        navigation: { schema_version: 3, enabled_items: ["companion"] },
-      });
-
-    await getConfig();
-    await updateProviderEnvVars("openai", "https://example.com", "key");
-    await expect(getConfig()).resolves.toEqual(
-      expect.objectContaining({
-        default_provider: "openai",
-        navigation: { schema_version: 3, enabled_items: ["companion"] },
-      }),
-    );
-
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledTimes(3);
-  });
 });

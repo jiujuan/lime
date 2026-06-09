@@ -218,16 +218,98 @@ export interface UnifiedMemoryAnalysisResult {
   deduplicated_entries: number;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every(isFiniteNumber);
+}
+
+function isMemoryType(value: unknown): value is MemoryType {
+  return value === "conversation" || value === "project";
+}
+
+function isMemoryCategory(value: unknown): value is MemoryCategory {
+  return (
+    value === "identity" ||
+    value === "context" ||
+    value === "preference" ||
+    value === "experience" ||
+    value === "activity"
+  );
+}
+
+function isMemorySource(value: unknown): value is MemorySource {
+  return (
+    value === "auto_extracted" || value === "manual" || value === "imported"
+  );
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isMemoryMetadata(value: unknown): value is MemoryMetadata {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.confidence) &&
+    isFiniteNumber(value.importance) &&
+    isFiniteNumber(value.access_count) &&
+    (value.last_accessed_at === null || isFiniteNumber(value.last_accessed_at)) &&
+    isMemorySource(value.source) &&
+    (value.embedding === null || isNumberArray(value.embedding))
+  );
+}
+
+function isUnifiedMemory(value: unknown): value is UnifiedMemory {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.session_id === "string" &&
+    isMemoryType(value.memory_type) &&
+    isMemoryCategory(value.category) &&
+    typeof value.title === "string" &&
+    typeof value.content === "string" &&
+    typeof value.summary === "string" &&
+    isStringArray(value.tags) &&
+    isMemoryMetadata(value.metadata) &&
+    isFiniteNumber(value.created_at) &&
+    isFiniteNumber(value.updated_at) &&
+    typeof value.archived === "boolean"
+  );
+}
+
+function isUnifiedMemoryStats(value: unknown): value is UnifiedMemoryStatsResponse {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.total_entries) &&
+    isFiniteNumber(value.storage_used) &&
+    isFiniteNumber(value.memory_count) &&
+    Array.isArray(value.categories) &&
+    value.categories.every(
+      (item) =>
+        isRecord(item) &&
+        isMemoryCategory(item.category) &&
+        isFiniteNumber(item.count),
+    )
+  );
+}
+
 const assertMemoryArrayResult = (
   command: string,
   value: unknown,
 ): UnifiedMemory[] => {
   assertNotDiagnosticFacade(command, value, "真实统一记忆 current 通道");
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(value) || !value.every(isUnifiedMemory)) {
     throw new Error(`${command} did not return a memories array`);
   }
 
-  return value as UnifiedMemory[];
+  return value;
 };
 
 const assertMemoryObjectResult = (
@@ -235,11 +317,38 @@ const assertMemoryObjectResult = (
   value: unknown,
 ): UnifiedMemory => {
   assertNotDiagnosticFacade(command, value, "真实统一记忆 current 通道");
-  if (!value || typeof value !== "object") {
+  if (!isUnifiedMemory(value)) {
     throw new Error(`${command} did not return a memory object`);
   }
 
-  return value as UnifiedMemory;
+  return value;
+};
+
+const assertNullableMemoryObjectResult = (
+  command: string,
+  value: unknown,
+): UnifiedMemory | null => {
+  assertNotDiagnosticFacade(command, value, "真实统一记忆 current 通道");
+  if (value === null) {
+    return null;
+  }
+  if (!isUnifiedMemory(value)) {
+    throw new Error(`${command} did not return a memory object or null`);
+  }
+
+  return value;
+};
+
+const assertStatsResult = (
+  command: string,
+  value: unknown,
+): UnifiedMemoryStatsResponse => {
+  assertNotDiagnosticFacade(command, value, "真实统一记忆统计 current 通道");
+  if (!isUnifiedMemoryStats(value)) {
+    throw new Error(`${command} did not return unified memory stats`);
+  }
+
+  return value;
 };
 
 const assertAnalysisResult = (value: unknown): UnifiedMemoryAnalysisResult => {
@@ -335,17 +444,10 @@ export async function getUnifiedMemory(
   const result = await safeInvoke<UnifiedMemory | null>("unified_memory_get", {
     id,
   });
-  assertNotDiagnosticFacade(
-    "unified_memory_get",
-    result,
-    "真实统一记忆 current 通道",
-  );
-  if (result !== null && typeof result !== "object") {
-    throw new Error("unified_memory_get did not return a memory object or null");
-  }
+  const memory = assertNullableMemoryObjectResult("unified_memory_get", result);
 
-  console.log("[获取记忆] Result:", result);
-  return result;
+  console.log("[获取记忆] Result:", memory);
+  return memory;
 }
 
 /**
@@ -422,12 +524,7 @@ export async function getUnifiedMemoryStats(): Promise<UnifiedMemoryStatsRespons
   const result = await safeInvoke<UnifiedMemoryStatsResponse>(
     "unified_memory_stats",
   );
-  assertNotDiagnosticFacade(
-    "unified_memory_stats",
-    result,
-    "真实统一记忆统计 current 通道",
-  );
-  return result;
+  return assertStatsResult("unified_memory_stats", result);
 }
 
 /**

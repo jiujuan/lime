@@ -398,6 +398,7 @@
   "agentChat.teamWorkspace.control.sendInput.sentInterrupt": "已中斷目前執行並傳送新說明",
   "agentChat.teamWorkspace.control.sendInput.sent": "已向這項任務傳送補充說明",
   "agentChat.teamWorkspace.control.sendInput.failedFallback": "傳送任務說明失敗",
+  "agentChat.teamWorkspace.control.unavailable": "團隊任務控制正在遷移到新的執行鏈路，暫時不能直接操作子任務",
   "agentChat.teamWorkspace.control.stop.pausedCount": "已暫停 {{formattedCount}} 項任務的處理",
   "agentChat.teamWorkspace.control.stop.pausedOne": "已暫停這項任務的處理",
   "agentChat.teamWorkspace.control.stop.requestedCount": "已向 {{formattedCount}} 項任務傳送暫停請求",

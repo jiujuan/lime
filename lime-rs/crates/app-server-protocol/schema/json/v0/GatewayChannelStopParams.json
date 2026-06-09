@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "accountId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "channel": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "channel"
+  ],
+  "title": "GatewayChannelStopParams",
+  "type": "object"
+}

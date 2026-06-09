@@ -208,14 +208,18 @@ export async function skipUpdateVersion(version: string): Promise<void> {
 async function invokeUpdateCommand<T = void>(
   command: string,
   args?: Record<string, unknown>,
-  validate?: (command: string, value: unknown) => asserts value is T,
+  validate?: (command: string, value: unknown) => void,
 ): Promise<T> {
   const result =
     args === undefined
       ? await safeInvoke<unknown>(command)
       : await safeInvoke<unknown>(command, args);
   assertNotDiagnosticFacade(command, result, "真实 updater current 通道");
-  validate?.(command, result);
+  if (validate) {
+    validate(command, result);
+  } else {
+    assertVoidResult(command, result);
+  }
   return result as T;
 }
 
@@ -311,6 +315,12 @@ function assertNumberResult(
 ): asserts value is number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`${command} did not return a finite number`);
+  }
+}
+
+function assertVoidResult(command: string, value: unknown): void {
+  if (value !== null && value !== undefined) {
+    throw new Error(`${command} did not return void result`);
   }
 }
 

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "binary": {
+      "type": "string"
+    },
+    "commandPreview": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "connectorActive": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "connectorMessage": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "lastError": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "lastExit": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "localUrl": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string"
+    },
+    "pid": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "provider": {
+      "type": "string"
+    },
+    "publicBaseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "running": {
+      "type": "boolean"
+    },
+    "startedAt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "binary",
+    "localUrl",
+    "mode",
+    "provider",
+    "running"
+  ],
+  "title": "GatewayTunnelStatusResponse",
+  "type": "object"
+}

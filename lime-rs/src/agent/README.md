@@ -48,7 +48,7 @@ aster-rust 的 `SkillTool` 会从 `global_registry` 读取可用 Skills，AI 可
 安装/卸载 Skills 后自动刷新：
 
 ```rust
-// skill_cmd.rs 中调用
+// App Server Skill 管理 current 链路中调用
 AsterAgentState::reload_lime_skills();
 ```
 
@@ -117,13 +117,12 @@ let stream = agent.reply(user_message, session_config, Some(cancel_token)).await
 | 命令 | 说明 |
 |------|------|
 | `aster_agent_init` | 初始化 Agent |
-| `aster_agent_configure_provider` | 手动配置 Provider |
-| `aster_agent_configure_provider` | 从 API Key Provider / configured providers 配置 Provider |
 | `agent_runtime_submit_turn` | 统一提交 turn |
 | `agent_runtime_interrupt_turn` | 统一中断 turn |
 | `agent_runtime_create/list/get/update/delete_session` | 统一会话管理 |
-| `agent_runtime_spawn_subagent / agent_runtime_send_subagent_input / agent_runtime_wait_subagents / agent_runtime_resume_subagent / agent_runtime_close_subagent` | subagent 控制面 |
 | `agent_runtime_respond_action` | 统一响应工具确认 / ask / elicitation |
+
+`aster_agent_configure_provider`、Aster status / reset、process status 与 public subagent command facade 已退场；后续不得把它们作为 current Tauri 命令目标恢复，新能力应进入 App Server JSON-RPC 或 Electron Desktop Host。
 
 ## Provider 桥接
 

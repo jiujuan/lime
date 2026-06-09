@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "cacheableStatusCodes": {
+      "default": [],
+      "items": {
+        "format": "uint16",
+        "maximum": 65535,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "headerName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "maxBodyBytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "maxEntries": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "ttlSecs": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "waitTimeoutMs": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "enabled",
+    "ttlSecs"
+  ],
+  "title": "DiagnosticsMetricConfig",
+  "type": "object"
+}

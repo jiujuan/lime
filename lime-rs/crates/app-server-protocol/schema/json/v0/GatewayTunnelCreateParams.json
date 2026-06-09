@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "dnsName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "persist": {
+      "default": true,
+      "type": "boolean"
+    },
+    "tunnelName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "GatewayTunnelCreateParams",
+  "type": "object"
+}

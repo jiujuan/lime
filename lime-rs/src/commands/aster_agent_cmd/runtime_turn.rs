@@ -181,8 +181,7 @@ use runtime_turn_skill_launch::{
 };
 use runtime_turn_skill_launch::{
     emit_service_skill_preload_runtime_events, execute_agent_app_required_skill_contract,
-    execute_image_skill_launch_direct_task, RuntimeSideEventHostContext,
-    RuntimeSkillLaunchHostContext,
+    RuntimeSideEventHostContext, RuntimeSkillLaunchHostContext,
 };
 use runtime_turn_status::{
     build_runtime_model_recovery_failure_message, describe_provider_request_attempt,

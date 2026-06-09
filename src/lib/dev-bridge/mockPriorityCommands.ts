@@ -1,4 +1,7 @@
-import { isBridgeTruthCommand, isBridgeTruthEvent } from "./commandPolicy";
+import {
+  isBridgeTruthEvent,
+  shouldDisallowMockFallbackCommand,
+} from "./commandPolicy";
 
 /**
  * 产品路径不再允许浏览器模式优先走 mock。
@@ -13,7 +16,7 @@ export function shouldPreferMockInBrowser(cmd: string): boolean {
 }
 
 export function shouldDisallowMockFallbackInBrowser(cmd: string): boolean {
-  return isBridgeTruthCommand(cmd);
+  return shouldDisallowMockFallbackCommand(cmd);
 }
 
 export function shouldDisallowMockEventFallbackInBrowser(

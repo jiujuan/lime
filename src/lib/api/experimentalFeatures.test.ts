@@ -90,4 +90,26 @@ describe("experimentalFeatures API", () => {
       "save_experimental_config 尚未接入真实 Experimental config current 通道",
     );
   });
+
+  it("保存实验配置遇到 mock-like 返回时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      });
+
+    await expect(
+      saveExperimentalConfig({
+        webmcp: { enabled: true },
+      }),
+    ).rejects.toThrow("save_experimental_config did not return void result");
+    await expect(
+      saveExperimentalConfig({
+        webmcp: { enabled: true },
+      }),
+    ).rejects.toThrow("save_experimental_config did not return void result");
+  });
 });

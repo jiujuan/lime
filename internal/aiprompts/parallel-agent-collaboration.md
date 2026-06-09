@@ -8,7 +8,8 @@
 2. **先只读盘点** - 在目标范围内执行 `git status --short -- <scope>` 和 `git diff --name-only -- <scope>`；不要先改文件。
 3. **声明写集** - 在动手前明确说出“我认领哪些文件 / 目录”“我只读哪些文件 / 目录”“我不碰哪些文件 / 目录”。
 4. **写集要窄** - 优先按垂直切片认领最少文件；不能用“整个 `src/features/agent-app`”替代真实写集，除非任务确实需要。
-5. **测试可共享** - 定向测试、`typecheck`、`git diff --check` 可以由任一进程执行，但报告时要说明它验证的是当前工作树，不代表改动归属。
+5. **DevBridge 先分类再认领** - 涉及 `src/lib/dev-bridge/**` 时，先声明本轮触碰的是 `current` renderer bridge（`safeInvoke`、HTTP client、`app_server_handle_json_lines`、事件监听、可用性探测）还是 `compat / deprecated` 命令 policy / mock fallback。不要把整个目录当成旧 Rust DevBridge 的删除写集；清旧命令只认领对应命令组的 `commandPolicy`、`mockPriorityCommands`、负向测试和 contract guard。
+6. **测试可共享** - 定向测试、`typecheck`、`git diff --check` 可以由任一进程执行，但报告时要说明它验证的是当前工作树，不代表改动归属。
 
 ## 冲突处理
 
@@ -17,6 +18,7 @@
 3. **必须改同一文件时先汇报补丁点** - 如果主线必须触碰对方写集，先给出文件、函数、最小补丁意图和验证命令，等待合并窗口。
 4. **发现意外变化立即停下** - 修改过程中若同一文件出现非本人改动，停止写入并询问如何继续；不要用 checkout / reset 抹平。
 5. **不要抢占外部仓库** - 跨仓库联动时，除非用户明确授权当前进程负责外部仓库，否则只读外部仓库并把需要的变更写成 handoff。
+6. **共享热区先登记治理，不夹写** - App Server protocol / runtime / client、`src/lib/api/appServer.ts`、`src/lib/api/channelsRuntime.ts`、`scripts/check-command-contracts.mjs` 等命令迁移热区已被其它进程持有时，本进程只能做只读审计、边界测试或文档治理登记；需要修改的命令名、文件、退出条件必须回写到对应执行计划或 `internal/exec-plans/tech-debt-tracker.md`。
 
 ## 汇报格式
 
@@ -26,3 +28,4 @@
 - **避让写集**：列出发现但没有触碰的并行文件或未跟踪产物。
 - **验证口径**：说明跑过的命令验证了哪些边界。
 - **下一刀归属**：说明下一步适合由当前进程做，还是应交给正在持有相关写集的进程。
+- **治理分类**：如果涉及命令迁移或 `src/lib/dev-bridge/**`，必须说明残留 surface 属于 `current`、`compat / deprecated`、`dead / retired guard-only` 还是 `test-only`，以及是否已回挂 `CCD-012` 或当前执行计划。

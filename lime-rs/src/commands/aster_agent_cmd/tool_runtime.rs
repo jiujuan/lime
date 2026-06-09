@@ -6,8 +6,6 @@ mod agent_app_tool_execution;
 mod browser_tools;
 #[path = "tool_runtime/connector_tools.rs"]
 mod connector_tools;
-#[path = "tool_runtime/creation_tools.rs"]
-mod creation_tools;
 #[path = "tool_runtime/lime_cli_runtime.rs"]
 mod lime_cli_runtime;
 #[path = "tool_runtime/mcp_resource_tools.rs"]
@@ -38,9 +36,6 @@ pub(crate) use browser_tools::ensure_browser_mcp_tools_registered;
 pub(crate) use browser_tools::LimeBrowserMcpTool;
 #[cfg(test)]
 pub(crate) use connector_tools::register_agent_app_connector_preview_tools;
-pub(crate) use creation_tools::{
-    ensure_creation_task_tools_registered, submit_image_generation_task_value,
-};
 pub(crate) use mcp_resource_tools::ensure_mcp_resource_tools_registered;
 #[allow(unused_imports)]
 pub(crate) use mcp_resource_tools::{ListMcpResourcesBridgeTool, ReadMcpResourceBridgeTool};
@@ -304,7 +299,6 @@ fn sync_workspace_mode_native_tool_surface(
     registry: &mut aster::tools::ToolRegistry,
     surface: WorkspaceToolSurface,
     db: DbConnection,
-    api_key_provider_service: Arc<ApiKeyProviderService>,
     app_handle: AppHandle,
     config_manager: Arc<GlobalConfigManager>,
 ) {
@@ -323,12 +317,6 @@ fn sync_workspace_mode_native_tool_surface(
             app_handle.clone(),
         );
         service_skill_tools::register_service_skill_tools_to_registry(registry);
-        creation_tools::register_creation_task_tools_to_registry(
-            registry,
-            db,
-            api_key_provider_service,
-            app_handle,
-        );
     } else {
         let workbench_tools = workbench_tool_names();
         unregister_named_tools(registry, &workbench_tools);
@@ -560,7 +548,6 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
         &mut registry,
         tool_surface,
         db.clone(),
-        api_key_provider_service.0.clone(),
         app_handle.clone(),
         config_manager.0.clone(),
     );
@@ -603,7 +590,7 @@ pub(crate) async fn ensure_runtime_support_tools_registered(
 ) -> Result<(), String> {
     ensure_tool_search_tool_registered(state).await?;
     ensure_mcp_resource_tools_registered(state, mcp_manager).await?;
-    ensure_creation_task_tools_registered(state, db, api_key_provider_service, app_handle).await?;
+    let _ = (app_handle, db, api_key_provider_service);
     Ok(())
 }
 

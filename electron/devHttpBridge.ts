@@ -25,7 +25,7 @@ type DevHttpBridgeClient = {
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3030;
-const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_BODY_BYTES = 32 * 1024 * 1024;
 
 export class ElectronDevHttpBridge {
   readonly #invoke: DevHttpBridgeInvoke;

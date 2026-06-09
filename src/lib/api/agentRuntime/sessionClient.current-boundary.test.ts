@@ -61,4 +61,21 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
     });
     expect(appServerClient.request).not.toHaveBeenCalled();
   });
+
+  it("delete projection 不应直接请求 App Server 通用 request 或 legacy bridge", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createSessionClient({
+      appServerClient,
+    });
+
+    await expect(
+      client.deleteAgentRuntimeSession(" session-deleted "),
+    ).resolves.toBeUndefined();
+
+    expect(appServerClient.updateSession).toHaveBeenCalledWith({
+      sessionId: "session-deleted",
+      archived: true,
+    });
+    expect(appServerClient.request).not.toHaveBeenCalled();
+  });
 });

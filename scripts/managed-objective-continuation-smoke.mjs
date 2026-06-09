@@ -9,10 +9,12 @@ import {
   assertSmoke,
   buildSmokeEvidence,
   createAgentSessionCurrent,
+  exportAgentSessionEvidencePackCurrent,
   guardSummaryText,
   invokeDevBridge,
   objectiveReachedBudgetLimit,
   resolveProviderPreference,
+  setAgentSessionObjectiveCurrent,
   startAgentSessionTurnCurrent,
   threadSettled,
   updateAgentSessionRuntimeCurrent,
@@ -278,30 +280,24 @@ async function createManagedObjectiveSession(options, provider) {
 
   await updateAgentSessionRuntimeCurrent(options, { sessionId, provider });
 
-  const objective = await invokeDevBridge(
-    options,
-    "agent_runtime_set_objective",
-    {
-      request: {
-        sessionId,
-        workspaceId,
-        objectiveText:
-          "Managed Objective 自动续跑 smoke：完成首轮、自动续跑一轮，并在预算限制下停止。",
-        successCriteria: [
-          "首轮 agentSession/turn/start current JSON-RPC 完成",
-          "空闲后自动 continuation 至少提交一次",
-          "达到 maxAutoTurns 后目标进入 budget_limited",
-        ],
-        continuationPolicy: buildObjectivePolicy(options),
-        budgetPolicy: {
-          maxTurns: options.maxAutoTurns,
-        },
-        riskPolicy: {
-          allowAutoContinuation: true,
-        },
-      },
+  const objective = await setAgentSessionObjectiveCurrent(options, {
+    sessionId,
+    workspaceId,
+    objectiveText:
+      "Managed Objective 自动续跑 smoke：完成首轮、自动续跑一轮，并在预算限制下停止。",
+    successCriteria: [
+      "首轮 agentSession/turn/start current JSON-RPC 完成",
+      "空闲后自动 continuation 至少提交一次",
+      "达到 maxAutoTurns 后目标进入 budget_limited",
+    ],
+    continuationPolicy: buildObjectivePolicy(options),
+    budgetPolicy: {
+      maxTurns: options.maxAutoTurns,
     },
-  );
+    riskPolicy: {
+      allowAutoContinuation: true,
+    },
+  });
 
   return { workspace, workspaceId, sessionId, objective };
 }
@@ -347,6 +343,7 @@ async function waitForAutoContinuationAllow(options, sessionId) {
       );
     },
     "wait auto continuation allow guard",
+    { failFast: true },
   );
 }
 
@@ -365,6 +362,7 @@ async function waitForBudgetLimitedStop(options, sessionId) {
       );
     },
     "wait budget limited guard",
+    { failFast: true },
   );
 }
 
@@ -396,13 +394,9 @@ async function runSmoke(options) {
     const finalState = await waitForBudgetLimitedStop(options, sessionId);
 
     console.log(`${LOG_PREFIX} stage=export-evidence-pack`);
-    const evidencePack = await invokeDevBridge(
-      options,
-      "agent_runtime_export_evidence_pack",
-      {
-        sessionId,
-      },
-    );
+    const evidencePack = await exportAgentSessionEvidencePackCurrent(options, {
+      sessionId,
+    });
 
     const evidence = buildSmokeEvidence({
       generatedAt: new Date().toISOString(),

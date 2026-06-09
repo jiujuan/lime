@@ -77,6 +77,7 @@ pub struct LoadedSkillDefinition {
     pub skill_name: String,
     pub display_name: String,
     pub description: String,
+    pub local_directory_path: PathBuf,
     pub markdown_content: String,
     pub license: Option<String>,
     pub compatibility: Option<String>,
@@ -309,6 +310,9 @@ pub fn load_skill_from_file(
         .clone()
         .unwrap_or_else(|| skill_name.to_string());
     let description = frontmatter.description.clone().unwrap_or_default();
+    let local_directory_path = base_dir
+        .canonicalize()
+        .unwrap_or_else(|_| base_dir.to_path_buf());
     let allowed_tools = frontmatter.allowed_tools.clone().or_else(|| {
         parse_allowed_tools(
             frontmatter
@@ -347,6 +351,7 @@ pub fn load_skill_from_file(
         skill_name: skill_name.to_string(),
         display_name,
         description,
+        local_directory_path,
         markdown_content,
         license: inspection.license,
         compatibility: inspection.compatibility,

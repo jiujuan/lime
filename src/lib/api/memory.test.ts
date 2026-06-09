@@ -109,133 +109,88 @@ describe("memory API", () => {
     vi.clearAllMocks();
   });
 
-  it("应代理角色 CRUD 命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([createCharacterFixture()])
-      .mockResolvedValueOnce(createCharacterFixture())
-      .mockResolvedValueOnce(
-        createCharacterFixture({ id: "c2", name: "角色2" }),
-      )
-      .mockResolvedValueOnce(
-        createCharacterFixture({ id: "c2", name: "角色2-更新" }),
-      )
-      .mockResolvedValueOnce(true);
+  it("角色 CRUD 默认 fail closed，不能回到旧 native 命令", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce([createCharacterFixture()]);
 
-    await expect(listCharacters("project-1")).resolves.toEqual([
-      expect.objectContaining({ id: "c1" }),
-    ]);
-    await expect(getCharacter("c1")).resolves.toEqual(
-      expect.objectContaining({ id: "c1" }),
+    await expect(listCharacters("project-1")).rejects.toThrow(
+      "character_list is retired until Memory CRUD moves to App Server current methods",
+    );
+    await expect(getCharacter("c1")).rejects.toThrow(
+      "character_get is retired until Memory CRUD moves to App Server current methods",
     );
     await expect(
       createCharacter({ project_id: "project-1", name: "角色2" }),
-    ).resolves.toEqual(expect.objectContaining({ id: "c2" }));
+    ).rejects.toThrow(
+      "character_create is retired until Memory CRUD moves to App Server current methods",
+    );
     await expect(
       updateCharacter("c2", { name: "角色2-更新" }),
-    ).resolves.toEqual(expect.objectContaining({ id: "c2" }));
-    await expect(deleteCharacter("c2")).resolves.toBe(true);
+    ).rejects.toThrow(
+      "character_update is retired until Memory CRUD moves to App Server current methods",
+    );
+    await expect(deleteCharacter("c2")).rejects.toThrow(
+      "character_delete is retired until Memory CRUD moves to App Server current methods",
+    );
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "character_list", {
-      projectId: "project-1",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "character_get", {
-      id: "c1",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(3, "character_create", {
-      request: { project_id: "project-1", name: "角色2" },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(4, "character_update", {
-      id: "c2",
-      request: { name: "角色2-更新" },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(5, "character_delete", {
-      id: "c2",
-    });
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("应代理世界观命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce(createWorldBuildingFixture())
-      .mockResolvedValueOnce(
-        createWorldBuildingFixture({ description: "更新后的世界观" }),
-      );
+  it("世界观 CRUD 默认 fail closed，不能回到旧 native 命令", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce(createWorldBuildingFixture());
 
-    await expect(getWorldBuilding("project-1")).resolves.toEqual(
-      expect.objectContaining({ description: "世界观" }),
+    await expect(getWorldBuilding("project-1")).rejects.toThrow(
+      "world_building_get is retired until Memory CRUD moves to App Server current methods",
     );
     await expect(
       updateWorldBuilding("project-1", { description: "更新后的世界观" }),
-    ).resolves.toEqual(
-      expect.objectContaining({ description: "更新后的世界观" }),
+    ).rejects.toThrow(
+      "world_building_update is retired until Memory CRUD moves to App Server current methods",
     );
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "world_building_get", {
-      projectId: "project-1",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "world_building_update", {
-      projectId: "project-1",
-      request: { description: "更新后的世界观" },
-    });
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("应代理大纲与项目记忆命令", async () => {
-    const projectMemory = createProjectMemoryFixture();
-    const appServerClient = createProjectMemoryClient(projectMemory);
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([createOutlineNodeFixture()])
-      .mockResolvedValueOnce(createOutlineNodeFixture())
-      .mockResolvedValueOnce(
-        createOutlineNodeFixture({ id: "n2", title: "第二章", order: 2 }),
-      )
-      .mockResolvedValueOnce(
-        createOutlineNodeFixture({
-          id: "n2",
-          title: "第二章-修订",
-          order: 2,
-        }),
-      )
-      .mockResolvedValueOnce(true);
+  it("大纲 CRUD 默认 fail closed，不能回到旧 native 命令", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce([createOutlineNodeFixture()]);
 
-    await expect(listOutlineNodes("project-1")).resolves.toEqual([
-      expect.objectContaining({ id: "n1" }),
-    ]);
-    await expect(getOutlineNode("n1")).resolves.toEqual(
-      expect.objectContaining({ id: "n1" }),
+    await expect(listOutlineNodes("project-1")).rejects.toThrow(
+      "outline_node_list is retired until Memory CRUD moves to App Server current methods",
+    );
+    await expect(getOutlineNode("n1")).rejects.toThrow(
+      "outline_node_get is retired until Memory CRUD moves to App Server current methods",
     );
     await expect(
       createOutlineNode({ project_id: "project-1", title: "第二章" }),
-    ).resolves.toEqual(expect.objectContaining({ id: "n2" }));
+    ).rejects.toThrow(
+      "outline_node_create is retired until Memory CRUD moves to App Server current methods",
+    );
     await expect(
       updateOutlineNode("n2", { title: "第二章-修订" }),
-    ).resolves.toEqual(expect.objectContaining({ id: "n2" }));
-    await expect(deleteOutlineNode("n2")).resolves.toBe(true);
+    ).rejects.toThrow(
+      "outline_node_update is retired until Memory CRUD moves to App Server current methods",
+    );
+    await expect(deleteOutlineNode("n2")).rejects.toThrow(
+      "outline_node_delete is retired until Memory CRUD moves to App Server current methods",
+    );
+
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("项目记忆读取应走 App Server current，不回退 legacy native", async () => {
+    const projectMemory = createProjectMemoryFixture();
+    const appServerClient = createProjectMemoryClient(projectMemory);
+
     await expect(
       getProjectMemory("project-1", { appServerClient }),
     ).resolves.toEqual(projectMemory);
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "outline_node_list", {
-      projectId: "project-1",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "outline_node_get", {
-      id: "n1",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(3, "outline_node_create", {
-      request: { project_id: "project-1", title: "第二章" },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(4, "outline_node_update", {
-      id: "n2",
-      request: { title: "第二章-修订" },
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(5, "outline_node_delete", {
-      id: "n2",
-    });
-    expect(safeInvoke).toHaveBeenCalledTimes(5);
     expect(appServerClient.request).toHaveBeenCalledWith("projectMemory/read", {
       projectId: "project-1",
     });
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("角色、世界观与大纲 CRUD 遇到 diagnostic facade 时应 fail closed", async () => {
+  it("角色、世界观与大纲 CRUD 应在 diagnostic facade 前 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValue({
       diagnostic: {
         source: "electron-host-diagnostic",
@@ -244,25 +199,21 @@ describe("memory API", () => {
     });
 
     await expect(listCharacters("project-1")).rejects.toThrow(
-      "character_list 尚未接入真实 Memory CRUD current 通道",
+      "character_list is retired until Memory CRUD moves to App Server current methods",
     );
     await expect(getWorldBuilding("project-1")).rejects.toThrow(
-      "world_building_get 尚未接入真实 Memory CRUD current 通道",
+      "world_building_get is retired until Memory CRUD moves to App Server current methods",
     );
     await expect(
       createOutlineNode({ project_id: "project-1", title: "第二章" }),
     ).rejects.toThrow(
-      "outline_node_create 尚未接入真实 Memory CRUD current 通道",
+      "outline_node_create is retired until Memory CRUD moves to App Server current methods",
     );
 
-    expect(vi.mocked(safeInvoke).mock.calls.map(([cmd]) => cmd)).toEqual([
-      "character_list",
-      "world_building_get",
-      "outline_node_create",
-    ]);
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("角色、世界观与大纲 CRUD 收到错误形态时应 fail closed", async () => {
+  it("角色、世界观与大纲 CRUD 不接受旧 native 错误形态", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce([{ id: "c1", name: "角色1" }])
       .mockResolvedValueOnce({ success: true })
@@ -272,24 +223,19 @@ describe("memory API", () => {
       .mockResolvedValueOnce({ ok: true });
 
     await expect(listCharacters("project-1")).rejects.toThrow(
-      "character_list did not return characters",
+      "character_list is retired until Memory CRUD moves to App Server current methods",
     );
     await expect(getWorldBuilding("project-1")).rejects.toThrow(
-      "world_building_get did not return world building",
+      "world_building_get is retired until Memory CRUD moves to App Server current methods",
     );
     await expect(getOutlineNode("n1")).rejects.toThrow(
-      "outline_node_get did not return an outline node",
+      "outline_node_get is retired until Memory CRUD moves to App Server current methods",
     );
     await expect(deleteOutlineNode("n1")).rejects.toThrow(
-      "outline_node_delete did not return a boolean",
+      "outline_node_delete is retired until Memory CRUD moves to App Server current methods",
     );
 
-    expect(vi.mocked(safeInvoke).mock.calls.map(([cmd]) => cmd)).toEqual([
-      "character_list",
-      "world_building_get",
-      "outline_node_get",
-      "outline_node_delete",
-    ]);
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("并发读取同一项目记忆时应复用同一个 projectMemory/read", async () => {

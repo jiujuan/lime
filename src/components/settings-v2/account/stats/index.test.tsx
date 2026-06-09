@@ -229,4 +229,18 @@ describe("StatsSettings", () => {
     );
     await leaveTip(observeTip);
   });
+
+  it("加载失败时不应把旧 usage stats 命令名暴露到界面", async () => {
+    mockGetUsageStats.mockRejectedValueOnce(
+      new Error("get_usage_stats 未返回有效使用统计数据"),
+    );
+
+    const container = renderComponent();
+    await waitForLoad();
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("加载统计数据失败");
+    expect(text).toContain("重新加载");
+    expect(text).not.toContain("get_usage_stats");
+  });
 });

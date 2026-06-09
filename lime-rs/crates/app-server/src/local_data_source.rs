@@ -1,4 +1,7 @@
+use crate::gateway_tunnel;
+use crate::media_task;
 use crate::AppDataSource;
+use crate::ManagedObjectiveAuditUpdate;
 use crate::RuntimeCoreError;
 use app_server_protocol::AgentAppCloudReleaseDescriptor;
 use app_server_protocol::AgentAppFetchCloudPackageParams;
@@ -17,6 +20,14 @@ use app_server_protocol::AgentAppUninstallResponse;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionListResponse;
+use app_server_protocol::AgentSessionObjectiveClearParams;
+use app_server_protocol::AgentSessionObjectiveClearResponse;
+use app_server_protocol::AgentSessionObjectiveReadParams;
+use app_server_protocol::AgentSessionObjectiveReadResponse;
+use app_server_protocol::AgentSessionObjectiveSetParams;
+use app_server_protocol::AgentSessionObjectiveSetResponse;
+use app_server_protocol::AgentSessionObjectiveStatusUpdateParams;
+use app_server_protocol::AgentSessionObjectiveStatusUpdateResponse;
 use app_server_protocol::AgentSessionOverview;
 use app_server_protocol::AgentSessionReadParams;
 use app_server_protocol::AgentSessionReadResponse;
@@ -45,6 +56,8 @@ use app_server_protocol::AutomationSchedulerConfigUpdateParams;
 use app_server_protocol::AutomationSchedulerConfigUpdateResponse;
 use app_server_protocol::AutomationSchedulerStatusResponse;
 use app_server_protocol::BusinessObjectRef;
+use app_server_protocol::ChannelProbeParams;
+use app_server_protocol::ChannelProbeResponse;
 use app_server_protocol::ConnectCallbackSendParams;
 use app_server_protocol::ConnectCallbackSendResponse;
 use app_server_protocol::ConnectCallbackStatus;
@@ -55,6 +68,19 @@ use app_server_protocol::ConnectOpenDeepLinkResolveResponse;
 use app_server_protocol::ConnectPayload;
 use app_server_protocol::ConnectRelayApiKeySaveParams;
 use app_server_protocol::ConnectRelayApiKeySaveResponse;
+use app_server_protocol::GatewayChannelStartParams;
+use app_server_protocol::GatewayChannelStatusParams;
+use app_server_protocol::GatewayChannelStatusResponse;
+use app_server_protocol::GatewayChannelStopParams;
+use app_server_protocol::GatewayTunnelCloudflaredDetectResponse;
+use app_server_protocol::GatewayTunnelCloudflaredInstallParams;
+use app_server_protocol::GatewayTunnelCloudflaredInstallResponse;
+use app_server_protocol::GatewayTunnelCreateParams;
+use app_server_protocol::GatewayTunnelCreateResponse;
+use app_server_protocol::GatewayTunnelProbeResponse;
+use app_server_protocol::GatewayTunnelStatusResponse;
+use app_server_protocol::GatewayTunnelSyncWebhookUrlParams;
+use app_server_protocol::GatewayTunnelSyncWebhookUrlResponse;
 use app_server_protocol::KnowledgeCompilePackResponse;
 use app_server_protocol::KnowledgeContextResolutionResponse;
 use app_server_protocol::KnowledgeImportSourceParams;
@@ -71,6 +97,15 @@ use app_server_protocol::KnowledgeUpdatePackStatusParams;
 use app_server_protocol::KnowledgeUpdatePackStatusResponse;
 use app_server_protocol::KnowledgeValidateContextRunParams;
 use app_server_protocol::KnowledgeValidateContextRunResponse;
+use app_server_protocol::LogArtifactEntry;
+use app_server_protocol::LogClearResponse;
+use app_server_protocol::LogEntry;
+use app_server_protocol::LogListResponse;
+use app_server_protocol::LogPersistedTailParams;
+use app_server_protocol::LogPersistedTailResponse;
+use app_server_protocol::LogStorageDiagnosticsResponse;
+use app_server_protocol::ManagedObjective;
+use app_server_protocol::ManagedObjectiveStatus;
 use app_server_protocol::McpContent;
 use app_server_protocol::McpPromptGetParams;
 use app_server_protocol::McpPromptGetResponse;
@@ -96,6 +131,13 @@ use app_server_protocol::McpToolCallWithCallerParams;
 use app_server_protocol::McpToolListForContextParams;
 use app_server_protocol::McpToolListResponse;
 use app_server_protocol::McpToolSearchParams;
+use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
+use app_server_protocol::MediaTaskArtifactAudioCreateParams;
+use app_server_protocol::MediaTaskArtifactImageCreateParams;
+use app_server_protocol::MediaTaskArtifactListParams;
+use app_server_protocol::MediaTaskArtifactListResponse;
+use app_server_protocol::MediaTaskArtifactLookupParams;
+use app_server_protocol::MediaTaskArtifactResponse;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelListResponse;
 use app_server_protocol::ModelPreferencesListResponse;
@@ -138,9 +180,44 @@ use app_server_protocol::ModelSyncStateReadResponse;
 use app_server_protocol::OpenDeepLinkPayload;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ProjectMemoryReadResponse;
+use app_server_protocol::SkillDownloadInstallParams;
+use app_server_protocol::SkillDownloadInstallResponse;
+use app_server_protocol::SkillInstalledDirectoriesListResponse;
 use app_server_protocol::SkillListResponse;
+use app_server_protocol::SkillLocalDetailInspectParams;
+use app_server_protocol::SkillLocalDetailInspectResponse;
+use app_server_protocol::SkillLocalImportParams;
+use app_server_protocol::SkillLocalImportResponse;
+use app_server_protocol::SkillLocalInspectParams;
+use app_server_protocol::SkillLocalInspectResponse;
+use app_server_protocol::SkillLocalRenameParams;
+use app_server_protocol::SkillLocalRenameResponse;
+use app_server_protocol::SkillManagementInstallParams;
+use app_server_protocol::SkillManagementListParams;
+use app_server_protocol::SkillManagementUninstallParams;
+use app_server_protocol::SkillManagementWriteResponse;
+use app_server_protocol::SkillMarketplaceBundleFile;
+use app_server_protocol::SkillMarketplaceInstallParams;
+use app_server_protocol::SkillMarketplaceInstallResponse;
+use app_server_protocol::SkillPackageExportParams;
+use app_server_protocol::SkillPackageExportResponse;
+use app_server_protocol::SkillPackageLocalInspectParams;
+use app_server_protocol::SkillPackageLocalInspectResponse;
+use app_server_protocol::SkillPackageLocalInstallParams;
+use app_server_protocol::SkillPackageLocalInstallResponse;
+use app_server_protocol::SkillPackageLocalReplaceParams;
+use app_server_protocol::SkillPackageLocalReplaceResponse;
 use app_server_protocol::SkillReadParams;
 use app_server_protocol::SkillReadResponse;
+use app_server_protocol::SkillRemoteInspectParams;
+use app_server_protocol::SkillRemoteInspectResponse;
+use app_server_protocol::SkillRepositoryDeleteParams;
+use app_server_protocol::SkillRepositoryEntry;
+use app_server_protocol::SkillRepositoryListResponse;
+use app_server_protocol::SkillRepositorySaveParams;
+use app_server_protocol::SkillScaffoldCreateParams;
+use app_server_protocol::SkillScaffoldCreateResponse;
+use app_server_protocol::SupportBundleExportResponse;
 use app_server_protocol::UsageStatsDailyTrendsListResponse;
 use app_server_protocol::UsageStatsDailyUsage;
 use app_server_protocol::UsageStatsModelRankingListResponse;
@@ -148,6 +225,18 @@ use app_server_protocol::UsageStatsModelUsage;
 use app_server_protocol::UsageStatsRangeParams;
 use app_server_protocol::UsageStatsReadResponse;
 use app_server_protocol::UsageStatsSummary;
+use app_server_protocol::WechatChannelAccountListResponse;
+use app_server_protocol::WechatChannelAccountRemoveParams;
+use app_server_protocol::WechatChannelAccountRemoveResponse;
+use app_server_protocol::WechatConfiguredAccount;
+use app_server_protocol::WechatLoginStartParams;
+use app_server_protocol::WechatLoginStartResponse;
+use app_server_protocol::WechatLoginWaitParams;
+use app_server_protocol::WechatLoginWaitResponse;
+use app_server_protocol::WechatRuntimeModelSetParams;
+use app_server_protocol::WechatRuntimeModelSetResponse;
+use app_server_protocol::WindowsStartupCheck;
+use app_server_protocol::WindowsStartupDiagnosticsResponse;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspaceEnsureReadyResponse;
 use app_server_protocol::WorkspaceListResponse;
@@ -164,8 +253,12 @@ use app_server_protocol::WorkspaceSkillBindingsListResponse;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Duration;
+use chrono::NaiveDateTime;
 use chrono::Timelike;
 use chrono::Utc;
+use flate2::read::GzDecoder;
+use lime_agent::initialize_aster_runtime;
+use lime_agent::AsterAgentState;
 use lime_core::app_paths;
 use lime_core::config::load_config;
 use lime_core::config::save_config;
@@ -189,11 +282,36 @@ use lime_core::database::dao::api_key_provider::ApiProviderType;
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
 use lime_core::database::dao::automation_job::AutomationJob;
 use lime_core::database::dao::automation_job::AutomationJobDao;
+use lime_core::database::dao::skills::SkillDao;
+use lime_core::database::managed_objective_repository::clear_objective_by_owner;
+use lime_core::database::managed_objective_repository::get_agent_session_workspace_id;
+use lime_core::database::managed_objective_repository::get_objective_by_owner;
+use lime_core::database::managed_objective_repository::update_objective_audit_by_owner;
+use lime_core::database::managed_objective_repository::update_objective_status_by_owner;
+use lime_core::database::managed_objective_repository::upsert_objective;
+use lime_core::database::managed_objective_repository::ManagedObjectiveRecord as CoreManagedObjectiveRecord;
+use lime_core::database::managed_objective_repository::ManagedObjectiveStatus as CoreManagedObjectiveStatus;
+use lime_core::database::managed_objective_repository::ManagedObjectiveUpsert;
+use lime_core::database::managed_objective_repository::MANAGED_OBJECTIVE_OWNER_AGENT_SESSION;
 use lime_core::database::system_providers::get_system_providers;
 use lime_core::database::system_providers::SystemProviderDef;
 use lime_core::database::DbConnection;
+use lime_core::logger;
 use lime_core::models::model_registry::ModelTier;
+use lime_core::models::skill_model::SkillCatalogSource;
+use lime_core::models::skill_model::SkillRepo;
+use lime_core::models::skill_model::SkillState;
 use lime_core::models::McpServer;
+use lime_gateway::discord;
+use lime_gateway::discord::DiscordGatewayState;
+use lime_gateway::feishu;
+use lime_gateway::feishu::FeishuGatewayState;
+use lime_gateway::telegram;
+use lime_gateway::telegram::TelegramGatewayState;
+use lime_gateway::tunnel::GatewayTunnelState;
+use lime_gateway::wechat;
+use lime_gateway::wechat::WechatGatewayState;
+use lime_gateway::wechat::WechatLoginState;
 use lime_mcp::McpClientManager;
 use lime_mcp::McpError;
 use lime_mcp::McpManagerState;
@@ -202,6 +320,7 @@ use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::mcp_service::McpService;
 use lime_services::model_registry_service::FetchModelsResult;
 use lime_services::model_registry_service::ModelRegistryService;
+use lime_services::skill_service::SkillService;
 use lime_services::usage_statistics_service;
 use lime_skills::find_skill_by_name;
 use lime_skills::get_skill_roots;
@@ -212,22 +331,31 @@ use rusqlite::params;
 use rusqlite::OptionalExtension;
 use rusqlite::Row;
 use serde::Deserialize;
+use serde::Serialize;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
 use sha2::Digest;
 use sha2::Sha256;
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::io::Cursor;
+use std::io::Read;
+use std::io::Write;
+use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::UNIX_EPOCH;
 use tokio::sync::Mutex as TokioMutex;
 use url::Url;
 use uuid::Uuid;
+use zip::write::FileOptions;
+use zip::CompressionMethod;
 use zip::ZipArchive;
+use zip::ZipWriter;
 
 const CURRENT_TIMELINE_LIST_MAX_LIMIT: usize = 1_000;
 const CURRENT_TIMELINE_HISTORY_DEFAULT_LIMIT: usize = 320;
@@ -251,25 +379,83 @@ const AGENT_APP_VALUE_LAYER_FILES: &[(&str, &str, &str)] = &[
     ("evals/readiness.yaml", "readiness", "readiness"),
     ("evals/health.yaml", "health", "health"),
 ];
+const MAX_SKILL_PACKAGE_BYTES: usize = 20 * 1024 * 1024;
+const MAX_SKILL_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
+const SKILL_PACKAGE_EXTENSIONS: &[&str] = &["skill", "skills"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkillPackageApp {
+    Lime,
+    Claude,
+    Codex,
+    Gemini,
+}
+
+#[derive(Debug)]
+struct SkillZipPackageFile {
+    path: PathBuf,
+    content: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct SkillZipPackage {
+    files: Vec<SkillZipPackageFile>,
+    shared_zip_root: Option<String>,
+    should_strip_directory: bool,
+}
+
+#[derive(Debug, Clone)]
+struct SkillPackageExportFile {
+    source_path: PathBuf,
+    archive_path: String,
+}
 
 pub struct LocalAppDataSource {
     db: DbConnection,
+    logs: std::sync::Arc<tokio::sync::RwLock<lime_core::logger::LogStore>>,
+    aster_agent_state: AsterAgentState,
     api_key_provider_service: ApiKeyProviderService,
     model_registry_service: ModelRegistryService,
     mcp_manager: McpManagerState,
+    telegram_gateway_state: TelegramGatewayState,
+    feishu_gateway_state: FeishuGatewayState,
+    discord_gateway_state: DiscordGatewayState,
+    wechat_gateway_state: WechatGatewayState,
+    gateway_tunnel_state: GatewayTunnelState,
+    wechat_login_state: WechatLoginState,
 }
 
 impl LocalAppDataSource {
     pub async fn initialize() -> Result<Self, String> {
         let db = database::init_database()?;
+        Self::initialize_with_db(db).await
+    }
+
+    pub async fn initialize_with_db(db: DbConnection) -> Result<Self, String> {
+        initialize_aster_runtime(db.clone())
+            .map_err(|error| format!("初始化 App Server Channels Aster runtime 失败: {error}"))?;
+        let config = load_config().map_err(|error| error.to_string())?;
+        let logs = std::sync::Arc::new(tokio::sync::RwLock::new(
+            logger::create_log_store_from_config(&config.logging),
+        ));
         let api_key_provider_service = ApiKeyProviderService::new();
         let model_registry_service = ModelRegistryService::new(db.clone());
         model_registry_service.initialize().await?;
+        let gateway_tunnel_state = GatewayTunnelState::default();
+        gateway_tunnel::spawn_gateway_tunnel_daemon(gateway_tunnel_state.clone(), logs.clone());
         Ok(Self {
             db,
+            logs,
+            aster_agent_state: AsterAgentState::new(),
             api_key_provider_service,
             model_registry_service,
             mcp_manager: Arc::new(TokioMutex::new(McpClientManager::new(None))),
+            telegram_gateway_state: TelegramGatewayState::default(),
+            feishu_gateway_state: FeishuGatewayState::default(),
+            discord_gateway_state: DiscordGatewayState::default(),
+            wechat_gateway_state: WechatGatewayState::default(),
+            gateway_tunnel_state,
+            wechat_login_state: WechatLoginState::default(),
         })
     }
 }
@@ -430,6 +616,123 @@ impl AppDataSource for LocalAppDataSource {
         })
     }
 
+    async fn read_agent_session_objective(
+        &self,
+        params: AgentSessionObjectiveReadParams,
+    ) -> Result<AgentSessionObjectiveReadResponse, RuntimeCoreError> {
+        let session_id = normalize_agent_session_objective_id(&params.session_id)?;
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let objective =
+            get_objective_by_owner(&conn, MANAGED_OBJECTIVE_OWNER_AGENT_SESSION, &session_id)
+                .map_err(data_error)?
+                .map(managed_objective_to_protocol);
+        Ok(AgentSessionObjectiveReadResponse { objective })
+    }
+
+    async fn set_agent_session_objective(
+        &self,
+        params: AgentSessionObjectiveSetParams,
+    ) -> Result<AgentSessionObjectiveSetResponse, RuntimeCoreError> {
+        let session_id = normalize_agent_session_objective_id(&params.session_id)?;
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let workspace_id = match params.workspace_id {
+            Some(workspace_id) if !workspace_id.trim().is_empty() => Some(workspace_id),
+            _ => get_agent_session_workspace_id(&conn, &session_id).map_err(data_error)?,
+        };
+        let objective = upsert_objective(
+            &conn,
+            ManagedObjectiveUpsert {
+                workspace_id,
+                owner_kind: MANAGED_OBJECTIVE_OWNER_AGENT_SESSION.to_string(),
+                owner_id: session_id,
+                objective_text: params.objective_text,
+                success_criteria: params.success_criteria,
+                budget_policy: params.budget_policy,
+                risk_policy: params.risk_policy,
+                approval_policy: params.approval_policy,
+                continuation_policy: params.continuation_policy,
+            },
+        )
+        .map_err(data_error)?;
+        Ok(AgentSessionObjectiveSetResponse {
+            objective: managed_objective_to_protocol(objective),
+        })
+    }
+
+    async fn update_agent_session_objective_status(
+        &self,
+        params: AgentSessionObjectiveStatusUpdateParams,
+    ) -> Result<AgentSessionObjectiveStatusUpdateResponse, RuntimeCoreError> {
+        let session_id = normalize_agent_session_objective_id(&params.session_id)?;
+        let blocker_reason = params
+            .blocker_reason
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let objective = update_objective_status_by_owner(
+            &conn,
+            MANAGED_OBJECTIVE_OWNER_AGENT_SESSION,
+            &session_id,
+            protocol_objective_status_to_core(params.status),
+            blocker_reason,
+        )
+        .map_err(data_error)?
+        .map(managed_objective_to_protocol);
+        Ok(AgentSessionObjectiveStatusUpdateResponse { objective })
+    }
+
+    async fn clear_agent_session_objective(
+        &self,
+        params: AgentSessionObjectiveClearParams,
+    ) -> Result<AgentSessionObjectiveClearResponse, RuntimeCoreError> {
+        let session_id = normalize_agent_session_objective_id(&params.session_id)?;
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let cleared =
+            clear_objective_by_owner(&conn, MANAGED_OBJECTIVE_OWNER_AGENT_SESSION, &session_id)
+                .map_err(data_error)?;
+        Ok(AgentSessionObjectiveClearResponse { cleared })
+    }
+
+    async fn read_managed_objective_by_owner(
+        &self,
+        owner_kind: String,
+        owner_id: String,
+    ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
+        let owner_kind = normalize_managed_objective_owner_kind(&owner_kind)?;
+        let owner_id = normalize_managed_objective_owner_id(&owner_id)?;
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        get_objective_by_owner(&conn, &owner_kind, &owner_id)
+            .map_err(data_error)
+            .map(|objective| objective.map(managed_objective_to_protocol))
+    }
+
+    async fn audit_agent_session_objective(
+        &self,
+        owner_kind: String,
+        owner_id: String,
+        update: ManagedObjectiveAuditUpdate,
+    ) -> Result<Option<ManagedObjective>, RuntimeCoreError> {
+        let owner_kind = normalize_managed_objective_owner_kind(&owner_kind)?;
+        let owner_id = normalize_managed_objective_owner_id(&owner_id)?;
+        let conn = database::lock_db(&self.db).map_err(data_error)?;
+        let objective = update_objective_audit_by_owner(
+            &conn,
+            &owner_kind,
+            &owner_id,
+            lime_core::database::managed_objective_repository::ManagedObjectiveAuditUpdate {
+                status: protocol_objective_status_to_core(update.status),
+                last_audit_summary: update.last_audit_summary,
+                last_evidence_pack_ref: update.last_evidence_pack_ref,
+                last_artifact_refs: update.last_artifact_refs,
+                blocker_reason: update.blocker_reason,
+            },
+        )
+        .map_err(data_error)?
+        .map(managed_objective_to_protocol);
+        Ok(objective)
+    }
+
     async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
         let conn = database::lock_db(&self.db).map_err(data_error)?;
         let mut stmt = conn
@@ -575,6 +878,599 @@ impl AppDataSource for LocalAppDataSource {
         Ok(SkillReadResponse {
             skill: skill_to_detail_value(skill),
         })
+    }
+
+    async fn list_management_skills(
+        &self,
+        params: SkillManagementListParams,
+    ) -> Result<SkillListResponse, RuntimeCoreError> {
+        list_management_skills(self.db.clone(), params)
+            .await
+            .map_err(data_error)
+    }
+
+    async fn install_management_skill(
+        &self,
+        params: SkillManagementInstallParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        install_management_skill(self.db.clone(), params)
+            .await
+            .map_err(data_error)
+    }
+
+    async fn uninstall_management_skill(
+        &self,
+        params: SkillManagementUninstallParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        uninstall_management_skill(self.db.clone(), params).map_err(data_error)
+    }
+
+    async fn list_skill_repositories(
+        &self,
+    ) -> Result<SkillRepositoryListResponse, RuntimeCoreError> {
+        list_skill_repositories(self.db.clone()).map_err(data_error)
+    }
+
+    async fn save_skill_repository(
+        &self,
+        params: SkillRepositorySaveParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        save_skill_repository(self.db.clone(), params).map_err(data_error)
+    }
+
+    async fn delete_skill_repository(
+        &self,
+        params: SkillRepositoryDeleteParams,
+    ) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        delete_skill_repository(self.db.clone(), params).map_err(data_error)
+    }
+
+    async fn refresh_skill_cache(&self) -> Result<SkillManagementWriteResponse, RuntimeCoreError> {
+        SkillService::new()
+            .map_err(|error| data_error(error.to_string()))?
+            .refresh_cache();
+        Ok(SkillManagementWriteResponse { success: true })
+    }
+
+    async fn list_installed_skill_directories(
+        &self,
+    ) -> Result<SkillInstalledDirectoriesListResponse, RuntimeCoreError> {
+        list_installed_skill_directories().map_err(data_error)
+    }
+
+    async fn inspect_local_skill(
+        &self,
+        params: SkillLocalInspectParams,
+    ) -> Result<SkillLocalInspectResponse, RuntimeCoreError> {
+        inspect_local_skill(params).map_err(data_error)
+    }
+
+    async fn inspect_local_skill_detail(
+        &self,
+        params: SkillLocalDetailInspectParams,
+    ) -> Result<SkillLocalDetailInspectResponse, RuntimeCoreError> {
+        inspect_local_skill_detail(params).map_err(data_error)
+    }
+
+    async fn create_skill_scaffold(
+        &self,
+        params: SkillScaffoldCreateParams,
+    ) -> Result<SkillScaffoldCreateResponse, RuntimeCoreError> {
+        create_skill_scaffold(params).map_err(data_error)
+    }
+
+    async fn import_local_skill(
+        &self,
+        params: SkillLocalImportParams,
+    ) -> Result<SkillLocalImportResponse, RuntimeCoreError> {
+        import_local_skill(params).map_err(data_error)
+    }
+
+    async fn rename_local_skill(
+        &self,
+        params: SkillLocalRenameParams,
+    ) -> Result<SkillLocalRenameResponse, RuntimeCoreError> {
+        rename_local_skill(params).map_err(data_error)
+    }
+
+    async fn inspect_remote_skill(
+        &self,
+        params: SkillRemoteInspectParams,
+    ) -> Result<SkillRemoteInspectResponse, RuntimeCoreError> {
+        inspect_remote_skill(params).await.map_err(data_error)
+    }
+
+    async fn inspect_local_skill_package(
+        &self,
+        params: SkillPackageLocalInspectParams,
+    ) -> Result<SkillPackageLocalInspectResponse, RuntimeCoreError> {
+        inspect_local_skill_package(params).map_err(data_error)
+    }
+
+    async fn install_local_skill_package(
+        &self,
+        params: SkillPackageLocalInstallParams,
+    ) -> Result<SkillPackageLocalInstallResponse, RuntimeCoreError> {
+        install_local_skill_package(params).map_err(data_error)
+    }
+
+    async fn replace_local_skill_package(
+        &self,
+        params: SkillPackageLocalReplaceParams,
+    ) -> Result<SkillPackageLocalReplaceResponse, RuntimeCoreError> {
+        replace_local_skill_package(params).map_err(data_error)
+    }
+
+    async fn export_local_skill_package(
+        &self,
+        params: SkillPackageExportParams,
+    ) -> Result<SkillPackageExportResponse, RuntimeCoreError> {
+        export_local_skill_package(params).map_err(data_error)
+    }
+
+    async fn install_marketplace_skill(
+        &self,
+        params: SkillMarketplaceInstallParams,
+    ) -> Result<SkillMarketplaceInstallResponse, RuntimeCoreError> {
+        install_marketplace_skill(params).map_err(data_error)
+    }
+
+    async fn install_skill_from_download_url(
+        &self,
+        params: SkillDownloadInstallParams,
+    ) -> Result<SkillDownloadInstallResponse, RuntimeCoreError> {
+        install_skill_from_download_url(params)
+            .await
+            .map_err(data_error)
+    }
+
+    async fn start_gateway_channel(
+        &self,
+        params: GatewayChannelStartParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        let channel = normalize_gateway_channel(&params.channel)?;
+        let account_id = optional_trimmed(params.account_id);
+        let config = load_config().map_err(data_error)?;
+        self.logs.write().await.add(
+            "info",
+            &format!(
+                "[GatewayChannel] App Server start channel={} account={}",
+                channel,
+                account_id.as_deref().unwrap_or("<auto>")
+            ),
+        );
+        let status = match channel.as_str() {
+            "telegram" => telegram::start_gateway(
+                &self.telegram_gateway_state,
+                self.db.clone(),
+                self.logs.clone(),
+                config,
+                account_id,
+                params.poll_timeout_secs,
+            )
+            .await
+            .map_err(data_error)
+            .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "feishu" => feishu::start_gateway(
+                &self.feishu_gateway_state,
+                self.db.clone(),
+                self.logs.clone(),
+                config,
+                account_id,
+                params.poll_timeout_secs,
+            )
+            .await
+            .map_err(data_error)
+            .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "discord" => discord::start_gateway(
+                &self.discord_gateway_state,
+                self.db.clone(),
+                self.logs.clone(),
+                config,
+                account_id,
+                params.poll_timeout_secs,
+            )
+            .await
+            .map_err(data_error)
+            .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "wechat" => {
+                self.aster_agent_state
+                    .init_agent_with_db(&self.db)
+                    .await
+                    .map_err(data_error)?;
+                wechat::start_gateway(
+                    &self.wechat_gateway_state,
+                    self.db.clone(),
+                    self.aster_agent_state.clone(),
+                    self.logs.clone(),
+                    config,
+                    account_id,
+                    params.poll_timeout_secs,
+                )
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?
+            }
+            _ => unreachable!("normalize_gateway_channel restricts channel values"),
+        };
+        Ok(GatewayChannelStatusResponse { channel, status })
+    }
+
+    async fn stop_gateway_channel(
+        &self,
+        params: GatewayChannelStopParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        let channel = normalize_gateway_channel(&params.channel)?;
+        let account_id = optional_trimmed(params.account_id);
+        let status = match channel.as_str() {
+            "telegram" => telegram::stop_gateway(&self.telegram_gateway_state, account_id)
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "feishu" => feishu::stop_gateway(&self.feishu_gateway_state, account_id)
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "discord" => discord::stop_gateway(&self.discord_gateway_state, account_id)
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "wechat" => wechat::stop_gateway(&self.wechat_gateway_state, account_id)
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            _ => unreachable!("normalize_gateway_channel restricts channel values"),
+        };
+        Ok(GatewayChannelStatusResponse { channel, status })
+    }
+
+    async fn read_gateway_channel_status(
+        &self,
+        params: GatewayChannelStatusParams,
+    ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
+        let channel = normalize_gateway_channel(&params.channel)?;
+        let status = match channel.as_str() {
+            "telegram" => telegram::status_gateway(&self.telegram_gateway_state)
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "feishu" => feishu::status_gateway(&self.feishu_gateway_state)
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "discord" => discord::status_gateway(&self.discord_gateway_state)
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            "wechat" => wechat::status_gateway(&self.wechat_gateway_state)
+                .await
+                .map_err(data_error)
+                .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
+            _ => unreachable!("normalize_gateway_channel restricts channel values"),
+        };
+        Ok(GatewayChannelStatusResponse { channel, status })
+    }
+
+    async fn probe_gateway_tunnel(&self) -> Result<GatewayTunnelProbeResponse, RuntimeCoreError> {
+        gateway_tunnel::probe_gateway_tunnel()
+            .await
+            .map_err(data_error)
+    }
+
+    async fn detect_gateway_tunnel_cloudflared(
+        &self,
+    ) -> Result<GatewayTunnelCloudflaredDetectResponse, RuntimeCoreError> {
+        gateway_tunnel::detect_gateway_tunnel_cloudflared()
+            .await
+            .map_err(data_error)
+    }
+
+    async fn install_gateway_tunnel_cloudflared(
+        &self,
+        params: GatewayTunnelCloudflaredInstallParams,
+    ) -> Result<GatewayTunnelCloudflaredInstallResponse, RuntimeCoreError> {
+        gateway_tunnel::install_gateway_tunnel_cloudflared(params)
+            .await
+            .map_err(data_error)
+    }
+
+    async fn create_gateway_tunnel(
+        &self,
+        params: GatewayTunnelCreateParams,
+    ) -> Result<GatewayTunnelCreateResponse, RuntimeCoreError> {
+        gateway_tunnel::create_gateway_tunnel(&self.gateway_tunnel_state, self.logs.clone(), params)
+            .await
+            .map_err(data_error)
+    }
+
+    async fn start_gateway_tunnel(&self) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        gateway_tunnel::start_gateway_tunnel(&self.gateway_tunnel_state, self.logs.clone())
+            .await
+            .map_err(data_error)
+    }
+
+    async fn stop_gateway_tunnel(&self) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        gateway_tunnel::stop_gateway_tunnel(&self.gateway_tunnel_state, self.logs.clone())
+            .await
+            .map_err(data_error)
+    }
+
+    async fn restart_gateway_tunnel(
+        &self,
+    ) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        gateway_tunnel::restart_gateway_tunnel(&self.gateway_tunnel_state, self.logs.clone())
+            .await
+            .map_err(data_error)
+    }
+
+    async fn read_gateway_tunnel_status(
+        &self,
+    ) -> Result<GatewayTunnelStatusResponse, RuntimeCoreError> {
+        gateway_tunnel::read_gateway_tunnel_status(&self.gateway_tunnel_state, self.logs.clone())
+            .await
+            .map_err(data_error)
+    }
+
+    async fn sync_gateway_tunnel_webhook_url(
+        &self,
+        params: GatewayTunnelSyncWebhookUrlParams,
+    ) -> Result<GatewayTunnelSyncWebhookUrlResponse, RuntimeCoreError> {
+        gateway_tunnel::sync_gateway_tunnel_webhook_url(params)
+            .await
+            .map_err(data_error)
+    }
+
+    async fn probe_telegram_channel(
+        &self,
+        params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        let config = load_config().map_err(data_error)?;
+        let result = telegram::probe_gateway_account(&config, optional_trimmed(params.account_id))
+            .await
+            .map_err(data_error)?;
+        channel_probe_response_from_value(result)
+    }
+
+    async fn probe_feishu_channel(
+        &self,
+        params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        let config = load_config().map_err(data_error)?;
+        let result = feishu::probe_gateway_account(&config, optional_trimmed(params.account_id))
+            .await
+            .map_err(data_error)?;
+        channel_probe_response_from_value(result)
+    }
+
+    async fn probe_discord_channel(
+        &self,
+        params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        let config = load_config().map_err(data_error)?;
+        let result = discord::probe_gateway_account(&config, optional_trimmed(params.account_id))
+            .await
+            .map_err(data_error)?;
+        channel_probe_response_from_value(result)
+    }
+
+    async fn probe_wechat_channel(
+        &self,
+        params: ChannelProbeParams,
+    ) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+        let config = load_config().map_err(data_error)?;
+        let result = wechat::probe_gateway_account(&config, optional_trimmed(params.account_id))
+            .await
+            .map_err(data_error)?;
+        channel_probe_response_from_value(result)
+    }
+
+    async fn start_wechat_channel_login(
+        &self,
+        params: WechatLoginStartParams,
+    ) -> Result<WechatLoginStartResponse, RuntimeCoreError> {
+        self.logs.write().await.add(
+            "info",
+            &format!(
+                "[WechatChannel] App Server login/start base_url={} bot_type={}",
+                params.base_url.as_deref().unwrap_or("<default>"),
+                params.bot_type.as_deref().unwrap_or("<default>")
+            ),
+        );
+        let client = reqwest::Client::new();
+        let result = wechat::start_login(
+            &self.wechat_login_state,
+            &client,
+            params.base_url.as_deref(),
+            params.bot_type.as_deref(),
+            params.session_key.as_deref(),
+        )
+        .await
+        .map_err(data_error)?;
+        Ok(WechatLoginStartResponse {
+            session_key: result.session_key,
+            qrcode_url: result.qrcode_url,
+            message: result.message,
+        })
+    }
+
+    async fn wait_wechat_channel_login(
+        &self,
+        params: WechatLoginWaitParams,
+    ) -> Result<WechatLoginWaitResponse, RuntimeCoreError> {
+        let client = reqwest::Client::new();
+        let result = wechat::wait_login(
+            &self.wechat_login_state,
+            &client,
+            &params.session_key,
+            params.base_url.as_deref(),
+            params.bot_type.as_deref(),
+            params.timeout_ms,
+        )
+        .await
+        .map_err(data_error)?;
+
+        if result.connected {
+            let account_id = result
+                .account_id
+                .clone()
+                .ok_or_else(|| data_error("登录成功但缺少 accountId"))?;
+            let bot_token = result
+                .bot_token
+                .clone()
+                .ok_or_else(|| data_error("登录成功但缺少 botToken"))?;
+            let mut config = load_config().map_err(data_error)?;
+            let accounts = &mut config.channels.wechat.accounts;
+            let account = accounts
+                .entry(account_id.clone())
+                .or_insert_with(lime_core::config::WechatAccountConfig::default);
+            account.enabled = true;
+            account.name = params
+                .account_name
+                .clone()
+                .filter(|value| !value.trim().is_empty());
+            account.base_url = result.base_url.clone();
+            account.cdn_base_url = Some(wechat::DEFAULT_CDN_BASE_URL.to_string());
+            account.bot_token = Some(bot_token);
+            account.scanner_user_id = result.user_id.clone();
+            let default_account = config
+                .channels
+                .wechat
+                .default_account
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            if default_account.is_none()
+                || default_account == Some("default")
+                || !accounts.contains_key(default_account.unwrap_or_default())
+            {
+                config.channels.wechat.default_account = Some(account_id.clone());
+            }
+            if config.channels.wechat.base_url.trim().is_empty() {
+                config.channels.wechat.base_url = result
+                    .base_url
+                    .clone()
+                    .unwrap_or_else(|| params.base_url.clone().unwrap_or_default());
+            }
+            if config.channels.wechat.cdn_base_url.trim().is_empty() {
+                config.channels.wechat.cdn_base_url = wechat::DEFAULT_CDN_BASE_URL.to_string();
+            }
+            if config.channels.wechat.scanner_user_id.is_none() {
+                config.channels.wechat.scanner_user_id = result.user_id.clone();
+            }
+            config.channels.wechat.enabled = true;
+            save_config(&config).map_err(data_error)?;
+            self.aster_agent_state
+                .init_agent_with_db(&self.db)
+                .await
+                .map_err(data_error)?;
+            wechat::start_gateway(
+                &self.wechat_gateway_state,
+                self.db.clone(),
+                self.aster_agent_state.clone(),
+                self.logs.clone(),
+                config,
+                Some(account_id),
+                None,
+            )
+            .await
+            .map_err(|error| data_error(format!("微信登录成功，但自动启动网关失败: {error}")))?;
+        }
+
+        Ok(WechatLoginWaitResponse {
+            connected: result.connected,
+            message: result.message,
+            bot_token: result.bot_token,
+            account_id: result.account_id,
+            user_id: result.user_id,
+            base_url: result.base_url,
+        })
+    }
+
+    async fn list_wechat_channel_accounts(
+        &self,
+    ) -> Result<WechatChannelAccountListResponse, RuntimeCoreError> {
+        Ok(WechatChannelAccountListResponse {
+            accounts: list_wechat_configured_accounts_from_config()?,
+        })
+    }
+
+    async fn remove_wechat_channel_account(
+        &self,
+        params: WechatChannelAccountRemoveParams,
+    ) -> Result<WechatChannelAccountRemoveResponse, RuntimeCoreError> {
+        let account_id = params.account_id.trim();
+        if account_id.is_empty() {
+            return Err(data_error("accountId 不能为空"));
+        }
+        let _ =
+            wechat::stop_gateway(&self.wechat_gateway_state, Some(account_id.to_string())).await;
+        let mut config = load_config().map_err(data_error)?;
+        config.channels.wechat.accounts.remove(account_id);
+        if config.channels.wechat.default_account.as_deref() == Some(account_id) {
+            config.channels.wechat.default_account = None;
+        }
+        save_config(&config).map_err(data_error)?;
+        if params.purge_data {
+            wechat::purge_account_data(account_id).map_err(data_error)?;
+        }
+        Ok(WechatChannelAccountRemoveResponse {})
+    }
+
+    async fn set_wechat_channel_runtime_model(
+        &self,
+        params: WechatRuntimeModelSetParams,
+    ) -> Result<WechatRuntimeModelSetResponse, RuntimeCoreError> {
+        let response = save_wechat_runtime_model(params)?;
+        self.logs.write().await.add(
+            "info",
+            &format!(
+                "[WechatChannel] App Server runtime model set stored={}",
+                response.runtime_model
+            ),
+        );
+        Ok(response)
+    }
+
+    async fn create_image_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactImageCreateParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        media_task::create_image_generation_task_artifact(params).map_err(data_error)
+    }
+
+    async fn create_audio_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactAudioCreateParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        media_task::create_audio_generation_task_artifact(params).map_err(data_error)
+    }
+
+    async fn complete_audio_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactAudioCompleteParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        media_task::complete_audio_generation_task_artifact(params).map_err(data_error)
+    }
+
+    async fn get_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactLookupParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        media_task::get_media_task_artifact(params).map_err(data_error)
+    }
+
+    async fn list_media_task_artifacts(
+        &self,
+        params: MediaTaskArtifactListParams,
+    ) -> Result<MediaTaskArtifactListResponse, RuntimeCoreError> {
+        media_task::list_media_task_artifacts(params).map_err(data_error)
+    }
+
+    async fn cancel_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactLookupParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        media_task::cancel_media_task_artifact(params).map_err(data_error)
     }
 
     async fn list_workspace_skill_bindings(
@@ -1314,6 +2210,48 @@ impl AppDataSource for LocalAppDataSource {
         })
     }
 
+    async fn list_logs(&self) -> Result<LogListResponse, RuntimeCoreError> {
+        Ok(LogListResponse {
+            entries: read_persisted_logs_tail(1_000).map_err(data_error)?,
+        })
+    }
+
+    async fn read_persisted_log_tail(
+        &self,
+        params: LogPersistedTailParams,
+    ) -> Result<LogPersistedTailResponse, RuntimeCoreError> {
+        let limit = params.lines.unwrap_or(200).clamp(20, 1_000);
+        Ok(LogPersistedTailResponse {
+            entries: read_persisted_logs_tail(limit).map_err(data_error)?,
+        })
+    }
+
+    async fn clear_logs(&self) -> Result<LogClearResponse, RuntimeCoreError> {
+        clear_persisted_log_artifacts().map_err(data_error)?;
+        Ok(LogClearResponse { cleared: true })
+    }
+
+    async fn clear_diagnostic_log_history(&self) -> Result<LogClearResponse, RuntimeCoreError> {
+        clear_diagnostic_log_artifacts().map_err(data_error)?;
+        Ok(LogClearResponse { cleared: true })
+    }
+
+    async fn read_log_storage_diagnostics(
+        &self,
+    ) -> Result<LogStorageDiagnosticsResponse, RuntimeCoreError> {
+        Ok(read_log_storage_diagnostics().map_err(data_error)?)
+    }
+
+    async fn export_support_bundle(&self) -> Result<SupportBundleExportResponse, RuntimeCoreError> {
+        export_support_bundle().map_err(data_error)
+    }
+
+    async fn read_windows_startup_diagnostics(
+        &self,
+    ) -> Result<WindowsStartupDiagnosticsResponse, RuntimeCoreError> {
+        read_windows_startup_diagnostics().map_err(data_error)
+    }
+
     async fn read_usage_stats(
         &self,
         params: UsageStatsRangeParams,
@@ -1951,6 +2889,84 @@ impl AppDataSource for LocalAppDataSource {
         }
 
         Ok(ConnectCallbackSendResponse { delivered: true })
+    }
+}
+
+fn normalize_agent_session_objective_id(value: &str) -> Result<String, RuntimeCoreError> {
+    let session_id = value.trim();
+    if session_id.is_empty() {
+        return Err(RuntimeCoreError::Backend(
+            "sessionId is required for agentSession/objective".to_string(),
+        ));
+    }
+    Ok(session_id.to_string())
+}
+
+fn normalize_managed_objective_owner_kind(value: &str) -> Result<String, RuntimeCoreError> {
+    let owner_kind = value.trim();
+    if owner_kind.is_empty() {
+        return Err(RuntimeCoreError::Backend(
+            "ownerKind is required for agentSession/objective/audit".to_string(),
+        ));
+    }
+    Ok(owner_kind.to_string())
+}
+
+fn normalize_managed_objective_owner_id(value: &str) -> Result<String, RuntimeCoreError> {
+    let owner_id = value.trim();
+    if owner_id.is_empty() {
+        return Err(RuntimeCoreError::Backend(
+            "ownerId is required for agentSession/objective/audit".to_string(),
+        ));
+    }
+    Ok(owner_id.to_string())
+}
+
+fn protocol_objective_status_to_core(status: ManagedObjectiveStatus) -> CoreManagedObjectiveStatus {
+    match status {
+        ManagedObjectiveStatus::Active => CoreManagedObjectiveStatus::Active,
+        ManagedObjectiveStatus::Verifying => CoreManagedObjectiveStatus::Verifying,
+        ManagedObjectiveStatus::NeedsInput => CoreManagedObjectiveStatus::NeedsInput,
+        ManagedObjectiveStatus::Blocked => CoreManagedObjectiveStatus::Blocked,
+        ManagedObjectiveStatus::BudgetLimited => CoreManagedObjectiveStatus::BudgetLimited,
+        ManagedObjectiveStatus::Paused => CoreManagedObjectiveStatus::Paused,
+        ManagedObjectiveStatus::Completed => CoreManagedObjectiveStatus::Completed,
+        ManagedObjectiveStatus::Failed => CoreManagedObjectiveStatus::Failed,
+    }
+}
+
+fn core_objective_status_to_protocol(status: CoreManagedObjectiveStatus) -> ManagedObjectiveStatus {
+    match status {
+        CoreManagedObjectiveStatus::Active => ManagedObjectiveStatus::Active,
+        CoreManagedObjectiveStatus::Verifying => ManagedObjectiveStatus::Verifying,
+        CoreManagedObjectiveStatus::NeedsInput => ManagedObjectiveStatus::NeedsInput,
+        CoreManagedObjectiveStatus::Blocked => ManagedObjectiveStatus::Blocked,
+        CoreManagedObjectiveStatus::BudgetLimited => ManagedObjectiveStatus::BudgetLimited,
+        CoreManagedObjectiveStatus::Paused => ManagedObjectiveStatus::Paused,
+        CoreManagedObjectiveStatus::Completed => ManagedObjectiveStatus::Completed,
+        CoreManagedObjectiveStatus::Failed => ManagedObjectiveStatus::Failed,
+    }
+}
+
+fn managed_objective_to_protocol(record: CoreManagedObjectiveRecord) -> ManagedObjective {
+    ManagedObjective {
+        objective_id: record.objective_id,
+        workspace_id: record.workspace_id,
+        owner_kind: record.owner_kind,
+        owner_id: record.owner_id,
+        objective_text: record.objective_text,
+        success_criteria: record.success_criteria,
+        status: core_objective_status_to_protocol(record.status),
+        budget_policy: record.budget_policy,
+        risk_policy: record.risk_policy,
+        approval_policy: record.approval_policy,
+        continuation_policy: record.continuation_policy,
+        last_audit_summary: record.last_audit_summary,
+        last_evidence_pack_ref: record.last_evidence_pack_ref,
+        last_artifact_refs: record.last_artifact_refs,
+        blocker_reason: record.blocker_reason,
+        created_at: record.created_at,
+        updated_at: record.updated_at,
     }
 }
 
@@ -2720,6 +3736,7 @@ fn skill_to_executable_value(skill: LoadedSkillDefinition) -> Value {
         "name": skill.skill_name,
         "display_name": skill.display_name,
         "description": skill.description,
+        "local_directory_path": skill.local_directory_path.to_string_lossy().to_string(),
         "execution_mode": skill.execution_mode,
         "has_workflow": skill.execution_mode == "workflow",
         "provider": skill.provider,
@@ -2750,6 +3767,7 @@ fn skill_to_detail_value(skill: LoadedSkillDefinition) -> Value {
         "name": skill.skill_name,
         "display_name": skill.display_name,
         "description": skill.description,
+        "local_directory_path": skill.local_directory_path.to_string_lossy().to_string(),
         "execution_mode": skill.execution_mode,
         "has_workflow": skill.execution_mode == "workflow",
         "provider": skill.provider,
@@ -2759,6 +3777,2051 @@ fn skill_to_detail_value(skill: LoadedSkillDefinition) -> Value {
         "workflow_steps": workflow_steps,
         "allowed_tools": skill.allowed_tools,
         "when_to_use": skill.when_to_use,
+    })
+}
+
+fn parse_skill_package_app(value: &str) -> Result<SkillPackageApp, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "lime" => Ok(SkillPackageApp::Lime),
+        "claude" => Ok(SkillPackageApp::Claude),
+        "codex" => Ok(SkillPackageApp::Codex),
+        "gemini" => Ok(SkillPackageApp::Gemini),
+        _ => Err(format!("Unsupported skill package app: {}", value.trim())),
+    }
+}
+
+fn skill_package_app_to_core_app(app: SkillPackageApp) -> lime_core::models::app_type::AppType {
+    match app {
+        SkillPackageApp::Lime => lime_core::models::app_type::AppType::Lime,
+        SkillPackageApp::Claude => lime_core::models::app_type::AppType::Claude,
+        SkillPackageApp::Codex => lime_core::models::app_type::AppType::Codex,
+        SkillPackageApp::Gemini => lime_core::models::app_type::AppType::Gemini,
+    }
+}
+
+fn skill_package_app_key_prefix(app: SkillPackageApp) -> &'static str {
+    match app {
+        SkillPackageApp::Lime => "lime",
+        SkillPackageApp::Claude => "claude",
+        SkillPackageApp::Codex => "codex",
+        SkillPackageApp::Gemini => "gemini",
+    }
+}
+
+fn skill_state_key(app: SkillPackageApp, directory: &str) -> String {
+    format!("{}:{directory}", skill_package_app_key_prefix(app))
+}
+
+fn normalize_gateway_channel(channel: &str) -> Result<String, RuntimeCoreError> {
+    let normalized = channel.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "telegram" | "feishu" | "discord" | "wechat" => Ok(normalized),
+        _ => Err(data_error(format!(
+            "暂不支持的渠道: {}（当前支持 telegram / feishu / discord / wechat）",
+            channel
+        ))),
+    }
+}
+
+fn optional_trimmed(value: Option<String>) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn channel_probe_response_from_value(
+    value: impl Serialize,
+) -> Result<ChannelProbeResponse, RuntimeCoreError> {
+    let mut object = match serde_json::to_value(value).map_err(data_error)? {
+        serde_json::Value::Object(object) => object,
+        _ => return Err(data_error("渠道探测结果不是对象")),
+    };
+    let account_id = object
+        .remove("accountId")
+        .or_else(|| object.remove("account_id"))
+        .and_then(|value| value.as_str().map(str::to_string));
+    let ok = object
+        .remove("ok")
+        .and_then(|value| value.as_bool())
+        .ok_or_else(|| data_error("渠道探测结果缺少 ok"))?;
+    let message = object
+        .remove("message")
+        .and_then(|value| value.as_str().map(str::to_string))
+        .ok_or_else(|| data_error("渠道探测结果缺少 message"))?;
+    Ok(ChannelProbeResponse {
+        account_id,
+        ok,
+        message,
+        extra: object,
+    })
+}
+
+fn save_wechat_runtime_model(
+    params: WechatRuntimeModelSetParams,
+) -> Result<WechatRuntimeModelSetResponse, RuntimeCoreError> {
+    let provider_id = params.provider_id.trim();
+    if provider_id.is_empty() {
+        return Err(data_error("providerId 不能为空"));
+    }
+    let model_id = params.model_id.trim();
+    if model_id.is_empty() {
+        return Err(data_error("modelId 不能为空"));
+    }
+
+    let runtime_model = format!("{provider_id}/{model_id}");
+    let mut config = load_config().map_err(data_error)?;
+    config.channels.wechat.default_model = Some(runtime_model.clone());
+
+    let mut bound_account_id = config
+        .channels
+        .wechat
+        .default_account
+        .clone()
+        .filter(|value| config.channels.wechat.accounts.contains_key(value));
+
+    if bound_account_id.is_none() && config.channels.wechat.accounts.len() == 1 {
+        bound_account_id = config.channels.wechat.accounts.keys().next().cloned();
+    }
+
+    if let Some(account_id) = bound_account_id.as_deref() {
+        if let Some(account) = config.channels.wechat.accounts.get_mut(account_id) {
+            account.default_model = Some(runtime_model.clone());
+        }
+    }
+
+    save_config(&config).map_err(data_error)?;
+    Ok(WechatRuntimeModelSetResponse { runtime_model })
+}
+
+fn list_wechat_configured_accounts_from_config(
+) -> Result<Vec<WechatConfiguredAccount>, RuntimeCoreError> {
+    let config = load_config().map_err(data_error)?;
+    let mut accounts = config
+        .channels
+        .wechat
+        .accounts
+        .into_iter()
+        .map(|(account_id, account)| WechatConfiguredAccount {
+            account_id,
+            enabled: account.enabled,
+            name: account.name,
+            base_url: account.base_url,
+            cdn_base_url: account.cdn_base_url,
+            has_token: account
+                .bot_token
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_some(),
+            scanner_user_id: account.scanner_user_id,
+        })
+        .collect::<Vec<_>>();
+    accounts.sort_by(|left, right| left.account_id.cmp(&right.account_id));
+    Ok(accounts)
+}
+
+fn skill_package_app_root(app: SkillPackageApp) -> Result<PathBuf, String> {
+    match app {
+        SkillPackageApp::Lime => app_paths::resolve_skills_dir(),
+        SkillPackageApp::Claude => home_skill_root(".claude"),
+        SkillPackageApp::Codex => home_skill_root(".codex"),
+        SkillPackageApp::Gemini => home_skill_root(".gemini"),
+    }
+}
+
+fn skill_package_app_lookup_roots(app: SkillPackageApp) -> Result<Vec<PathBuf>, String> {
+    match app {
+        SkillPackageApp::Lime => app_paths::resolve_lime_skill_roots(),
+        _ => Ok(vec![skill_package_app_root(app)?]),
+    }
+}
+
+fn home_skill_root(app_dir_name: &str) -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .ok_or_else(|| "Failed to get home directory".to_string())
+        .map(|home| home.join(app_dir_name).join("skills"))
+}
+
+fn scan_installed_skill_directories(skills_dir: &Path) -> Vec<String> {
+    if !skills_dir.exists() {
+        return Vec::new();
+    }
+
+    let mut directories = Vec::new();
+    let Ok(entries) = fs::read_dir(skills_dir) else {
+        return directories;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() || !path.join("SKILL.md").is_file() {
+            continue;
+        }
+        if let Some(directory) = entry.file_name().to_str() {
+            if !directories.iter().any(|value| value == directory) {
+                directories.push(directory.to_string());
+            }
+        }
+    }
+    directories
+}
+
+fn scan_installed_skill_directories_from_roots(skill_roots: &[PathBuf]) -> Vec<String> {
+    let mut directories = Vec::new();
+    for root in skill_roots {
+        for directory in scan_installed_skill_directories(root) {
+            if !directories.iter().any(|value| value == &directory) {
+                directories.push(directory);
+            }
+        }
+    }
+    directories
+}
+
+fn validate_skill_package_directory(directory: &str) -> Result<(), String> {
+    if directory.trim().is_empty() {
+        return Err("Skill directory is required".to_string());
+    }
+    if directory.contains("..") || directory.contains('/') || directory.contains('\\') {
+        return Err("Invalid skill directory".to_string());
+    }
+
+    let mut components = Path::new(directory).components();
+    let first = components
+        .next()
+        .ok_or_else(|| "Skill directory is required".to_string())?;
+    if components.next().is_some() {
+        return Err("Invalid skill directory".to_string());
+    }
+    match first {
+        Component::Normal(_) => Ok(()),
+        _ => Err("Invalid skill directory".to_string()),
+    }
+}
+
+fn try_resolve_skill_package_dir(
+    skills_root: &Path,
+    directory: &str,
+) -> Result<Option<PathBuf>, String> {
+    validate_skill_package_directory(directory)?;
+
+    if !skills_root.exists() {
+        return Ok(None);
+    }
+
+    let canonical_skills_root = skills_root
+        .canonicalize()
+        .map_err(|error| format!("Failed to resolve skills directory: {error}"))?;
+    let skill_dir = skills_root.join(directory);
+    if !skill_dir.exists() {
+        return Ok(None);
+    }
+
+    let canonical_skill_dir = skill_dir
+        .canonicalize()
+        .map_err(|error| format!("Failed to resolve skill directory: {error}"))?;
+    if !canonical_skill_dir.starts_with(&canonical_skills_root) {
+        return Err("Invalid skill directory path".to_string());
+    }
+    if !canonical_skill_dir.join("SKILL.md").is_file() {
+        return Ok(None);
+    }
+
+    Ok(Some(canonical_skill_dir))
+}
+
+fn resolve_skill_package_dir(skill_roots: &[PathBuf], directory: &str) -> Result<PathBuf, String> {
+    validate_skill_package_directory(directory)?;
+
+    for root in skill_roots {
+        if let Some(skill_dir) = try_resolve_skill_package_dir(root, directory)? {
+            return Ok(skill_dir);
+        }
+    }
+
+    Err(format!("Skill not found: {directory}"))
+}
+
+fn validate_skill_package_file_path(path: &str) -> Result<PathBuf, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("Skill package file path is required".to_string());
+    }
+    if path.contains('\\') || path.starts_with('/') || path.contains("..") {
+        return Err(format!("Invalid skill package file path: {path}"));
+    }
+
+    let mut normalized = PathBuf::new();
+    let mut has_component = false;
+    for component in Path::new(path).components() {
+        match component {
+            Component::Normal(value) => {
+                has_component = true;
+                normalized.push(value);
+            }
+            _ => return Err(format!("Invalid skill package file path: {path}")),
+        }
+    }
+    if !has_component {
+        return Err("Skill package file path is required".to_string());
+    }
+    Ok(normalized)
+}
+
+fn validate_marketplace_skill_file_path(path: &str) -> Result<PathBuf, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("Marketplace skill file path is required".to_string());
+    }
+    if path.contains('\\') || path.starts_with('/') || path.contains("..") {
+        return Err(format!("Invalid marketplace skill file path: {path}"));
+    }
+
+    let mut normalized = PathBuf::new();
+    let mut has_component = false;
+    for component in Path::new(path).components() {
+        match component {
+            Component::Normal(value) => {
+                has_component = true;
+                normalized.push(value);
+            }
+            _ => return Err(format!("Invalid marketplace skill file path: {path}")),
+        }
+    }
+    if !has_component {
+        return Err("Marketplace skill file path is required".to_string());
+    }
+    Ok(normalized)
+}
+
+fn normalize_bundle_sha256(value: &str) -> String {
+    value
+        .trim()
+        .strip_prefix("sha256:")
+        .unwrap_or_else(|| value.trim())
+        .to_ascii_lowercase()
+}
+
+fn verify_marketplace_skill_file_checksum(file: &SkillMarketplaceBundleFile) -> Result<(), String> {
+    let Some(expected) = file.sha256.as_deref() else {
+        return Ok(());
+    };
+    let expected = normalize_bundle_sha256(expected);
+    if expected.is_empty() {
+        return Ok(());
+    }
+
+    let actual = hex::encode(Sha256::digest(file.content.as_bytes()));
+    if actual != expected {
+        return Err(format!(
+            "Marketplace skill file checksum mismatch: {}",
+            file.path
+        ));
+    }
+    Ok(())
+}
+
+fn is_skill_package_extension(extension: &str) -> bool {
+    SKILL_PACKAGE_EXTENSIONS
+        .iter()
+        .any(|supported| extension.eq_ignore_ascii_case(supported))
+}
+
+fn normalize_skill_package_output_path(target_path: &str) -> Result<PathBuf, String> {
+    let target_path = target_path.trim();
+    if target_path.is_empty() {
+        return Err("Skill package export path is required".to_string());
+    }
+
+    let path = PathBuf::from(target_path);
+    let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+        return Err("Skill package export path must end with .skill or .skills".to_string());
+    };
+    if !is_skill_package_extension(extension) {
+        return Err("Skill package export path must end with .skill or .skills".to_string());
+    }
+
+    Ok(path)
+}
+
+fn path_to_skill_package_archive_path(path: &Path) -> Result<String, String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                let text = value
+                    .to_str()
+                    .ok_or_else(|| "Skill package path must be valid UTF-8".to_string())?;
+                parts.push(text.to_string());
+            }
+            _ => return Err(format!("Invalid skill package path: {}", path.display())),
+        }
+    }
+    if parts.is_empty() {
+        return Err("Skill package path is required".to_string());
+    }
+    Ok(parts.join("/"))
+}
+
+fn is_ignorable_skill_package_export_entry(path: &Path) -> bool {
+    path.file_name()
+        .map(|value| value.to_string_lossy() == ".DS_Store")
+        .unwrap_or(false)
+}
+
+fn collect_skill_package_export_files(
+    root_dir: &Path,
+    current_dir: &Path,
+    directory: &str,
+    files: &mut Vec<SkillPackageExportFile>,
+    total_size: &mut u64,
+) -> Result<(), String> {
+    let mut entries = fs::read_dir(current_dir)
+        .map_err(|error| {
+            format!(
+                "Failed to read skill directory {}: {error}",
+                current_dir.display()
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to read skill directory entry: {error}"))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if is_ignorable_skill_package_export_entry(&path) {
+            continue;
+        }
+
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("Failed to read skill file {}: {error}", path.display()))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "Skill package export does not support symlinks: {}",
+                path.display()
+            ));
+        }
+        if metadata.is_dir() {
+            collect_skill_package_export_files(root_dir, &path, directory, files, total_size)?;
+            continue;
+        }
+        if !metadata.is_file() {
+            return Err(format!(
+                "Unsupported skill package export entry: {}",
+                path.display()
+            ));
+        }
+
+        let next_total = total_size
+            .checked_add(metadata.len())
+            .ok_or_else(|| "Skill package is too large".to_string())?;
+        if next_total > MAX_SKILL_PACKAGE_BYTES as u64 {
+            return Err("Skill package is too large".to_string());
+        }
+        *total_size = next_total;
+
+        let relative_path = path.strip_prefix(root_dir).map_err(|error| {
+            format!(
+                "Failed to resolve skill package relative path {}: {error}",
+                path.display()
+            )
+        })?;
+        let archive_path =
+            path_to_skill_package_archive_path(&Path::new(directory).join(relative_path))?;
+        files.push(SkillPackageExportFile {
+            source_path: path,
+            archive_path,
+        });
+    }
+
+    Ok(())
+}
+
+fn ensure_skill_package_export_target_allowed(
+    skill_dir: &Path,
+    target_path: &Path,
+) -> Result<(), String> {
+    let Some(parent) = target_path.parent() else {
+        return Ok(());
+    };
+    if parent.as_os_str().is_empty() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "Failed to create skill package export directory {}: {error}",
+            parent.display()
+        )
+    })?;
+
+    let canonical_parent = parent.canonicalize().map_err(|error| {
+        format!(
+            "Failed to resolve skill package export directory {}: {error}",
+            parent.display()
+        )
+    })?;
+    if canonical_parent.starts_with(skill_dir) {
+        return Err("Skill package export path cannot be inside the Skill directory".to_string());
+    }
+    Ok(())
+}
+
+fn normalize_zip_entry_path(path: &Path) -> Result<PathBuf, String> {
+    let mut normalized = PathBuf::new();
+    let mut has_component = false;
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                has_component = true;
+                normalized.push(value);
+            }
+            _ => return Err(format!("Invalid skill zip entry path: {}", path.display())),
+        }
+    }
+    if !has_component {
+        return Err("Skill zip entry path is required".to_string());
+    }
+    Ok(normalized)
+}
+
+fn is_ignorable_zip_entry(path: &Path) -> bool {
+    let mut components = path.components();
+    let Some(first) = components.next() else {
+        return true;
+    };
+    if first.as_os_str().to_string_lossy() == "__MACOSX" {
+        return true;
+    }
+    path.file_name()
+        .map(|value| value.to_string_lossy() == ".DS_Store")
+        .unwrap_or(false)
+}
+
+fn first_zip_component(path: &Path) -> Option<String> {
+    path.components()
+        .next()
+        .and_then(|component| match component {
+            Component::Normal(value) => Some(value.to_string_lossy().to_string()),
+            _ => None,
+        })
+}
+
+fn strip_first_zip_component(path: &Path) -> Result<PathBuf, String> {
+    let mut stripped = PathBuf::new();
+    let mut components = path.components();
+    let _ = components.next();
+    for component in components {
+        match component {
+            Component::Normal(value) => stripped.push(value),
+            _ => return Err(format!("Invalid skill zip entry path: {}", path.display())),
+        }
+    }
+    if stripped.as_os_str().is_empty() {
+        return Err("Skill zip entry path is required".to_string());
+    }
+    Ok(stripped)
+}
+
+fn read_skill_zip_package(bytes: &[u8]) -> Result<SkillZipPackage, String> {
+    if bytes.is_empty() {
+        return Err("Skill package is empty".to_string());
+    }
+
+    let cursor = Cursor::new(bytes);
+    let mut archive =
+        ZipArchive::new(cursor).map_err(|error| format!("Invalid skill zip package: {error}"))?;
+    let mut files = Vec::new();
+    for index in 0..archive.len() {
+        let mut file = archive
+            .by_index(index)
+            .map_err(|error| format!("Failed to read skill zip entry: {error}"))?;
+        if file.is_dir() {
+            continue;
+        }
+        if file.name().contains('\\') {
+            return Err(format!("Invalid skill zip entry path: {}", file.name()));
+        }
+        let enclosed = file
+            .enclosed_name()
+            .ok_or_else(|| format!("Invalid skill zip entry path: {}", file.name()))?;
+        let normalized = normalize_zip_entry_path(enclosed)?;
+        if is_ignorable_zip_entry(&normalized) {
+            continue;
+        }
+        if file.size() > MAX_SKILL_PACKAGE_BYTES as u64 {
+            return Err("Skill package file is too large".to_string());
+        }
+
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)
+            .map_err(|error| format!("Failed to read skill zip entry {}: {error}", file.name()))?;
+        if content.len() > MAX_SKILL_PACKAGE_BYTES {
+            return Err("Skill package file is too large".to_string());
+        }
+        files.push(SkillZipPackageFile {
+            path: normalized,
+            content,
+        });
+    }
+
+    if files.is_empty() {
+        return Err("Skill package contains no files".to_string());
+    }
+
+    let root_skill_md = Path::new("SKILL.md");
+    let has_root_skill_md = files.iter().any(|file| file.path == root_skill_md);
+    let shared_zip_root = files
+        .first()
+        .and_then(|file| first_zip_component(&file.path));
+    let should_strip_directory = shared_zip_root
+        .as_deref()
+        .map(|root| {
+            let nested_skill_md = Path::new(root).join("SKILL.md");
+            !has_root_skill_md
+                && files.iter().any(|file| file.path == nested_skill_md)
+                && files
+                    .iter()
+                    .all(|file| first_zip_component(&file.path).as_deref() == Some(root))
+        })
+        .unwrap_or(false);
+
+    Ok(SkillZipPackage {
+        files,
+        shared_zip_root,
+        should_strip_directory,
+    })
+}
+
+fn normalize_skill_zip_relative_path(
+    path: &Path,
+    should_strip_directory: bool,
+) -> Result<PathBuf, String> {
+    let relative_path = if should_strip_directory {
+        strip_first_zip_component(path)?
+    } else {
+        path.to_path_buf()
+    };
+    let relative_path_text = relative_path
+        .to_str()
+        .ok_or_else(|| "Skill zip entry path must be valid UTF-8".to_string())?;
+    validate_skill_package_file_path(relative_path_text)
+}
+
+fn skill_zip_path_to_display_path(path: &Path) -> Result<String, String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                let text = value
+                    .to_str()
+                    .ok_or_else(|| "Skill zip entry path must be valid UTF-8".to_string())?;
+                parts.push(text.to_string());
+            }
+            _ => return Err(format!("Invalid skill zip entry path: {}", path.display())),
+        }
+    }
+    if parts.is_empty() {
+        return Err("Skill zip entry path is required".to_string());
+    }
+    Ok(parts.join("/"))
+}
+
+fn build_skill_package_file_entries(package: &SkillZipPackage) -> Result<Vec<Value>, String> {
+    let mut directories = BTreeSet::new();
+    let mut files = Vec::new();
+
+    for file in &package.files {
+        let relative_path =
+            normalize_skill_zip_relative_path(&file.path, package.should_strip_directory)?;
+        let display_path = skill_zip_path_to_display_path(&relative_path)?;
+
+        let mut current = PathBuf::new();
+        let mut components = relative_path.components().peekable();
+        while let Some(component) = components.next() {
+            if components.peek().is_none() {
+                break;
+            }
+            match component {
+                Component::Normal(value) => {
+                    current.push(value);
+                    directories.insert(skill_zip_path_to_display_path(&current)?);
+                }
+                _ => {
+                    return Err(format!(
+                        "Invalid skill zip entry path: {}",
+                        relative_path.display()
+                    ))
+                }
+            }
+        }
+
+        files.push(json!({
+            "path": display_path,
+            "isDirectory": false,
+            "size": file.content.len() as u64,
+            "content": String::from_utf8(file.content.clone()).ok(),
+        }));
+    }
+
+    let mut entries: Vec<Value> = directories
+        .into_iter()
+        .map(|path| {
+            json!({
+                "path": path,
+                "isDirectory": true,
+                "size": 0,
+                "content": Value::Null,
+            })
+        })
+        .collect();
+    entries.extend(files);
+    Ok(entries)
+}
+
+fn collect_local_skill_detail_file_entries(
+    root: &Path,
+    current: &Path,
+    directories: &mut BTreeSet<String>,
+    files: &mut Vec<Value>,
+) -> Result<(), String> {
+    let mut entries = fs::read_dir(current)
+        .map_err(|error| {
+            format!(
+                "Failed to read skill directory {}: {error}",
+                current.display()
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to read skill directory entry: {error}"))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if is_ignorable_skill_package_export_entry(&path) {
+            continue;
+        }
+
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("Failed to inspect skill file {}: {error}", path.display()))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "Local skill inspection does not support symlinks: {}",
+                path.display()
+            ));
+        }
+        let relative_path = path.strip_prefix(root).map_err(|error| {
+            format!(
+                "Failed to resolve skill file path {}: {error}",
+                path.display()
+            )
+        })?;
+        let display_path = path_to_skill_package_archive_path(relative_path)?;
+
+        if metadata.is_dir() {
+            directories.insert(display_path);
+            collect_local_skill_detail_file_entries(root, &path, directories, files)?;
+            continue;
+        }
+
+        if !metadata.is_file() {
+            continue;
+        }
+        if metadata.len() > MAX_SKILL_PACKAGE_BYTES as u64 {
+            return Err("Skill file is too large".to_string());
+        }
+
+        let content = fs::read(&path)
+            .map_err(|error| format!("Failed to read skill file {}: {error}", path.display()))?;
+        if content.len() > MAX_SKILL_PACKAGE_BYTES {
+            return Err("Skill file is too large".to_string());
+        }
+        files.push(json!({
+            "path": display_path,
+            "isDirectory": false,
+            "size": content.len() as u64,
+            "content": String::from_utf8(content).ok(),
+        }));
+    }
+
+    Ok(())
+}
+
+fn write_skill_zip_package_files(
+    target_dir: &Path,
+    package: &SkillZipPackage,
+) -> Result<(), String> {
+    let root_skill_md = Path::new("SKILL.md");
+    let mut has_skill_md = false;
+
+    for file in &package.files {
+        let relative_path =
+            normalize_skill_zip_relative_path(&file.path, package.should_strip_directory)?;
+        if relative_path == root_skill_md {
+            has_skill_md = true;
+        }
+        let destination = target_dir.join(relative_path);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "Failed to create skill file parent {}: {error}",
+                    parent.display()
+                )
+            })?;
+        }
+        fs::write(&destination, &file.content).map_err(|error| {
+            format!(
+                "Failed to write skill package file {}: {error}",
+                destination.display()
+            )
+        })?;
+    }
+
+    if !has_skill_md {
+        return Err("Skill package missing SKILL.md".to_string());
+    }
+
+    Ok(())
+}
+
+fn resolve_skill_package_directory_name(
+    package: &SkillZipPackage,
+    fallback_name: &str,
+) -> Result<String, String> {
+    let directory = if package.should_strip_directory {
+        package.shared_zip_root.as_deref().unwrap_or(fallback_name)
+    } else {
+        fallback_name
+    }
+    .trim();
+    validate_skill_package_directory(directory)?;
+    Ok(directory.to_string())
+}
+
+fn resolve_local_skill_package_fallback_name(source_path: &Path) -> Result<String, String> {
+    let fallback = source_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Failed to resolve skill package file name".to_string())?
+        .trim();
+    validate_skill_package_directory(fallback)?;
+    Ok(fallback.to_string())
+}
+
+fn read_local_skill_package_file(source_path: &Path) -> Result<(PathBuf, Vec<u8>), String> {
+    let canonical_source = source_path.canonicalize().map_err(|error| {
+        format!(
+            "Failed to resolve skill package source {}: {error}",
+            source_path.display()
+        )
+    })?;
+    if !canonical_source.is_file() {
+        return Err("Skill package source path must be a file".to_string());
+    }
+
+    let metadata = fs::metadata(&canonical_source).map_err(|error| {
+        format!(
+            "Failed to read skill package metadata {}: {error}",
+            canonical_source.display()
+        )
+    })?;
+    if metadata.len() > MAX_SKILL_PACKAGE_BYTES as u64 {
+        return Err("Skill package is too large".to_string());
+    }
+
+    let bytes = fs::read(&canonical_source).map_err(|error| {
+        format!(
+            "Failed to read skill package {}: {error}",
+            canonical_source.display()
+        )
+    })?;
+    if bytes.len() > MAX_SKILL_PACKAGE_BYTES {
+        return Err("Skill package is too large".to_string());
+    }
+
+    Ok((canonical_source, bytes))
+}
+
+fn inspect_skill_zip_package(
+    fallback_name: &str,
+    bytes: &[u8],
+) -> Result<SkillPackageLocalInspectResponse, String> {
+    let package = read_skill_zip_package(bytes)?;
+    let directory = resolve_skill_package_directory_name(&package, fallback_name)?;
+    let files = build_skill_package_file_entries(&package)?;
+    let temp_dir = tempfile::TempDir::new()
+        .map_err(|error| format!("Failed to create skill package preview: {error}"))?;
+    let target_dir = temp_dir.path().join(&directory);
+    fs::create_dir_all(&target_dir).map_err(|error| {
+        format!(
+            "Failed to create skill package preview directory {}: {error}",
+            target_dir.display()
+        )
+    })?;
+    write_skill_zip_package_files(&target_dir, &package)?;
+    let inspection = SkillService::inspect_skill_dir(&target_dir)
+        .map_err(|error| format!("Skill package failed inspection: {error}"))?;
+
+    Ok(SkillPackageLocalInspectResponse {
+        directory,
+        inspection: serde_json::to_value(inspection)
+            .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
+        files,
+    })
+}
+
+fn install_skill_zip_package_into_root(
+    skills_root: &Path,
+    skill_name: &str,
+    package: SkillZipPackage,
+) -> Result<SkillPackageLocalInstallResponse, String> {
+    let directory = skill_name.trim();
+    validate_skill_package_directory(directory)?;
+
+    fs::create_dir_all(skills_root).map_err(|error| {
+        format!(
+            "Failed to create skills root {}: {error}",
+            skills_root.display()
+        )
+    })?;
+    let target_dir = skills_root.join(directory);
+    if target_dir.exists() {
+        return Err(format!("Skill directory already exists: {directory}"));
+    }
+    fs::create_dir_all(&target_dir).map_err(|error| {
+        format!(
+            "Failed to create skill directory {}: {error}",
+            target_dir.display()
+        )
+    })?;
+
+    if let Err(error) = write_skill_zip_package_files(&target_dir, &package) {
+        let _ = fs::remove_dir_all(&target_dir);
+        return Err(error);
+    }
+
+    match SkillService::inspect_skill_dir(&target_dir) {
+        Ok(inspection) if inspection.standard_compliance.validation_errors.is_empty() => {
+            Ok(SkillPackageLocalInstallResponse {
+                directory: directory.to_string(),
+                inspection: serde_json::to_value(inspection)
+                    .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
+            })
+        }
+        Ok(inspection) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!(
+                "Installed skill package is not Agent Skills compliant: {}",
+                inspection.standard_compliance.validation_errors.join("; ")
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!(
+                "Installed skill package failed inspection: {error}"
+            ))
+        }
+    }
+}
+
+fn install_skill_zip_package_into_staged_dir(
+    target_dir: &Path,
+    directory: &str,
+    package: SkillZipPackage,
+) -> Result<SkillPackageLocalReplaceResponse, String> {
+    validate_skill_package_directory(directory)?;
+
+    fs::create_dir_all(target_dir).map_err(|error| {
+        format!(
+            "Failed to create replacement skill directory {}: {error}",
+            target_dir.display()
+        )
+    })?;
+
+    if let Err(error) = write_skill_zip_package_files(target_dir, &package) {
+        let _ = fs::remove_dir_all(target_dir);
+        return Err(error);
+    }
+
+    match SkillService::inspect_skill_dir(target_dir) {
+        Ok(inspection) if inspection.standard_compliance.validation_errors.is_empty() => {
+            Ok(SkillPackageLocalReplaceResponse {
+                directory: directory.to_string(),
+                inspection: serde_json::to_value(inspection)
+                    .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
+            })
+        }
+        Ok(inspection) => {
+            let _ = fs::remove_dir_all(target_dir);
+            Err(format!(
+                "Replacement skill is not Agent Skills compliant: {}",
+                inspection.standard_compliance.validation_errors.join("; ")
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(target_dir);
+            Err(format!("Replacement skill failed inspection: {error}"))
+        }
+    }
+}
+
+fn export_local_skill_package_to_path(
+    skill_roots: &[PathBuf],
+    directory: &str,
+    target_path: &Path,
+) -> Result<SkillPackageExportResponse, String> {
+    validate_skill_package_directory(directory)?;
+    let skill_dir = resolve_skill_package_dir(skill_roots, directory)?;
+    let inspection = SkillService::inspect_skill_dir(&skill_dir)
+        .map_err(|error| format!("Skill failed inspection before export: {error}"))?;
+    if !inspection.standard_compliance.validation_errors.is_empty() {
+        return Err(format!(
+            "Skill is not Agent Skills compliant: {}",
+            inspection.standard_compliance.validation_errors.join("; ")
+        ));
+    }
+
+    ensure_skill_package_export_target_allowed(&skill_dir, target_path)?;
+
+    let mut files = Vec::new();
+    let mut total_size = 0;
+    collect_skill_package_export_files(
+        &skill_dir,
+        &skill_dir,
+        directory,
+        &mut files,
+        &mut total_size,
+    )?;
+    if files.is_empty() {
+        return Err("Skill package export contains no files".to_string());
+    }
+
+    let export_file = fs::File::create(target_path).map_err(|error| {
+        format!(
+            "Failed to create skill package export {}: {error}",
+            target_path.display()
+        )
+    })?;
+    let mut writer = ZipWriter::new(export_file);
+    let file_options = FileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+
+    for file in &files {
+        writer
+            .start_file(&file.archive_path, file_options)
+            .map_err(|error| {
+                format!(
+                    "Failed to write skill package entry {}: {error}",
+                    file.archive_path
+                )
+            })?;
+        let mut source_file = fs::File::open(&file.source_path).map_err(|error| {
+            format!(
+                "Failed to open skill package file {}: {error}",
+                file.source_path.display()
+            )
+        })?;
+        io::copy(&mut source_file, &mut writer).map_err(|error| {
+            format!(
+                "Failed to compress skill package file {}: {error}",
+                file.source_path.display()
+            )
+        })?;
+    }
+
+    writer.finish().map_err(|error| {
+        let _ = fs::remove_file(target_path);
+        format!(
+            "Failed to finish skill package export {}: {error}",
+            target_path.display()
+        )
+    })?;
+    let bytes_written = fs::metadata(target_path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(total_size);
+
+    Ok(SkillPackageExportResponse {
+        directory: directory.to_string(),
+        output_path: target_path.to_string_lossy().to_string(),
+        file_count: files.len() as u64,
+        bytes_written,
+    })
+}
+
+fn inspect_local_skill_package(
+    params: SkillPackageLocalInspectParams,
+) -> Result<SkillPackageLocalInspectResponse, String> {
+    let _app = parse_skill_package_app(&params.app)?;
+    let (canonical_source, bytes) = read_local_skill_package_file(Path::new(&params.source_path))?;
+    let fallback_name = resolve_local_skill_package_fallback_name(&canonical_source)?;
+    inspect_skill_zip_package(&fallback_name, &bytes)
+}
+
+fn inspect_local_skill_detail(
+    params: SkillLocalDetailInspectParams,
+) -> Result<SkillLocalDetailInspectResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let skill_roots = skill_package_app_lookup_roots(app)?;
+    let skill_dir = resolve_skill_package_dir(&skill_roots, &params.directory)?;
+    let inspection = SkillService::inspect_skill_dir(&skill_dir)
+        .map_err(|error| format!("Skill failed inspection: {error}"))?;
+
+    let mut directories = BTreeSet::new();
+    let mut files = Vec::new();
+    collect_local_skill_detail_file_entries(&skill_dir, &skill_dir, &mut directories, &mut files)?;
+
+    let mut entries: Vec<Value> = directories
+        .into_iter()
+        .map(|path| {
+            json!({
+                "path": path,
+                "isDirectory": true,
+                "size": 0,
+                "content": Value::Null,
+            })
+        })
+        .collect();
+    files.sort_by(|left, right| {
+        left.get("path")
+            .and_then(Value::as_str)
+            .cmp(&right.get("path").and_then(Value::as_str))
+    });
+    entries.extend(files);
+
+    Ok(SkillLocalDetailInspectResponse {
+        directory: params.directory,
+        inspection: serde_json::to_value(inspection)
+            .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
+        files: entries,
+    })
+}
+
+fn validate_skill_rename_directory(old_directory: &str, new_directory: &str) -> Result<(), String> {
+    validate_skill_package_directory(old_directory)?;
+    validate_skill_package_directory(new_directory)?;
+    if old_directory == new_directory {
+        return Err("New skill directory must be different".to_string());
+    }
+    Ok(())
+}
+
+fn rename_local_skill(params: SkillLocalRenameParams) -> Result<SkillLocalRenameResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    validate_skill_rename_directory(&params.directory, &params.new_directory)?;
+    let skills_root = skill_package_app_root(app)?;
+    let source_dir = resolve_skill_package_dir(&[skills_root.clone()], &params.directory)?;
+    let target_dir = skills_root.join(&params.new_directory);
+
+    if target_dir.exists() {
+        return Err(format!(
+            "Skill directory already exists: {}",
+            params.new_directory
+        ));
+    }
+
+    fs::rename(&source_dir, &target_dir).map_err(|error| {
+        format!(
+            "Failed to rename skill directory {} -> {}: {error}",
+            source_dir.display(),
+            target_dir.display()
+        )
+    })?;
+
+    Ok(SkillLocalRenameResponse {
+        directory: params.new_directory,
+    })
+}
+
+async fn list_management_skills(
+    db: DbConnection,
+    params: SkillManagementListParams,
+) -> Result<SkillListResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let app_type = skill_package_app_to_core_app(app);
+    let (repos, installed_states) = {
+        let conn = db.lock().map_err(|error| error.to_string())?;
+        let repos = SkillDao::get_skill_repos(&conn).map_err(|error| error.to_string())?;
+        let installed_states = SkillDao::get_skills(&conn).map_err(|error| error.to_string())?;
+        (repos, installed_states)
+    };
+    let service = SkillService::new().map_err(|error| error.to_string())?;
+    let skills = service
+        .list_skills(&app_type, &repos, &installed_states)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    {
+        let conn = db.lock().map_err(|error| error.to_string())?;
+        let existing_states = SkillDao::get_skills(&conn).map_err(|error| error.to_string())?;
+        for skill in &skills {
+            if skill.installed && skill.catalog_source != SkillCatalogSource::Project {
+                let key = skill_state_key(app, &skill.directory);
+                if !existing_states.contains_key(&key) {
+                    SkillDao::update_skill_state(
+                        &conn,
+                        &key,
+                        &SkillState {
+                            installed: true,
+                            installed_at: Utc::now(),
+                        },
+                    )
+                    .map_err(|error| error.to_string())?;
+                }
+            }
+        }
+    }
+
+    Ok(SkillListResponse {
+        skills: skills
+            .into_iter()
+            .map(serde_json::to_value)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Failed to serialize skill list: {error}"))?,
+    })
+}
+
+async fn install_management_skill(
+    db: DbConnection,
+    params: SkillManagementInstallParams,
+) -> Result<SkillManagementWriteResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    validate_skill_package_directory(&params.directory)?;
+    let app_type = skill_package_app_to_core_app(app);
+    let (repos, installed_states) = {
+        let conn = db.lock().map_err(|error| error.to_string())?;
+        let repos = SkillDao::get_skill_repos(&conn).map_err(|error| error.to_string())?;
+        let installed_states = SkillDao::get_skills(&conn).map_err(|error| error.to_string())?;
+        (repos, installed_states)
+    };
+    let service = SkillService::new().map_err(|error| error.to_string())?;
+    let skills = service
+        .list_skills(&app_type, &repos, &installed_states)
+        .await
+        .map_err(|error| error.to_string())?;
+    let skill = skills
+        .iter()
+        .find(|skill| skill.directory == params.directory)
+        .ok_or_else(|| format!("Skill not found: {}", params.directory))?;
+    let repo_owner = skill
+        .repo_owner
+        .as_deref()
+        .ok_or_else(|| "Missing repo owner".to_string())?;
+    let repo_name = skill
+        .repo_name
+        .as_deref()
+        .ok_or_else(|| "Missing repo name".to_string())?;
+    let repo_branch = skill
+        .repo_branch
+        .as_deref()
+        .ok_or_else(|| "Missing repo branch".to_string())?;
+    service
+        .install_skill(
+            &app_type,
+            repo_owner,
+            repo_name,
+            repo_branch,
+            &params.directory,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let key = skill_state_key(app, &params.directory);
+    {
+        let conn = db.lock().map_err(|error| error.to_string())?;
+        SkillDao::update_skill_state(
+            &conn,
+            &key,
+            &SkillState {
+                installed: true,
+                installed_at: Utc::now(),
+            },
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    if matches!(app, SkillPackageApp::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+    Ok(SkillManagementWriteResponse { success: true })
+}
+
+fn uninstall_management_skill(
+    db: DbConnection,
+    params: SkillManagementUninstallParams,
+) -> Result<SkillManagementWriteResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    validate_skill_package_directory(&params.directory)?;
+    let app_type = skill_package_app_to_core_app(app);
+    SkillService::uninstall_skill(&app_type, &params.directory)
+        .map_err(|error| error.to_string())?;
+    let key = skill_state_key(app, &params.directory);
+    let conn = db.lock().map_err(|error| error.to_string())?;
+    SkillDao::update_skill_state(
+        &conn,
+        &key,
+        &SkillState {
+            installed: false,
+            installed_at: Utc::now(),
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    if matches!(app, SkillPackageApp::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+    Ok(SkillManagementWriteResponse { success: true })
+}
+
+fn list_skill_repositories(db: DbConnection) -> Result<SkillRepositoryListResponse, String> {
+    let conn = db.lock().map_err(|error| error.to_string())?;
+    let repos = SkillDao::get_skill_repos(&conn).map_err(|error| error.to_string())?;
+    Ok(SkillRepositoryListResponse {
+        repos: repos
+            .into_iter()
+            .map(|repo| SkillRepositoryEntry {
+                owner: repo.owner,
+                name: repo.name,
+                branch: repo.branch,
+                enabled: repo.enabled,
+            })
+            .collect(),
+    })
+}
+
+fn save_skill_repository(
+    db: DbConnection,
+    params: SkillRepositorySaveParams,
+) -> Result<SkillManagementWriteResponse, String> {
+    let repo = params.repo;
+    let conn = db.lock().map_err(|error| error.to_string())?;
+    SkillDao::save_skill_repo(
+        &conn,
+        &SkillRepo {
+            owner: repo.owner,
+            name: repo.name,
+            branch: repo.branch,
+            enabled: repo.enabled,
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(SkillManagementWriteResponse { success: true })
+}
+
+fn delete_skill_repository(
+    db: DbConnection,
+    params: SkillRepositoryDeleteParams,
+) -> Result<SkillManagementWriteResponse, String> {
+    let conn = db.lock().map_err(|error| error.to_string())?;
+    SkillDao::delete_skill_repo(&conn, &params.owner, &params.name)
+        .map_err(|error| error.to_string())?;
+    Ok(SkillManagementWriteResponse { success: true })
+}
+
+fn list_installed_skill_directories() -> Result<SkillInstalledDirectoriesListResponse, String> {
+    Ok(SkillInstalledDirectoriesListResponse {
+        directories: scan_installed_skill_directories_from_roots(&skill_package_app_lookup_roots(
+            SkillPackageApp::Lime,
+        )?),
+    })
+}
+
+fn inspect_local_skill(
+    params: SkillLocalInspectParams,
+) -> Result<SkillLocalInspectResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let skill_roots = skill_package_app_lookup_roots(app)?;
+    let skill_dir = resolve_skill_package_dir(&skill_roots, &params.directory)?;
+    let inspection = SkillService::inspect_skill_dir(&skill_dir)
+        .map_err(|error| format!("Skill failed inspection: {error}"))?;
+    Ok(SkillLocalInspectResponse {
+        inspection: serde_json::to_value(inspection)
+            .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkillScaffoldTarget {
+    Project,
+    User,
+}
+
+impl SkillScaffoldTarget {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "project" => Ok(Self::Project),
+            "user" => Ok(Self::User),
+            _ => Err(format!("Unsupported scaffold target: {value}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateSkillScaffoldRequest {
+    target: String,
+    directory: String,
+    name: String,
+    description: String,
+    #[serde(default)]
+    when_to_use: Vec<String>,
+    #[serde(default)]
+    inputs: Vec<String>,
+    #[serde(default)]
+    outputs: Vec<String>,
+    #[serde(default)]
+    steps: Vec<String>,
+    #[serde(default)]
+    fallback_strategy: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct SkillScaffoldFrontmatter<'a> {
+    name: &'a str,
+    description: &'a str,
+}
+
+struct SkillScaffoldSections {
+    when_to_use: Vec<String>,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+    steps: Vec<String>,
+    fallback_strategy: Vec<String>,
+}
+
+fn normalize_scaffold_items(items: &[String], fallback: &[&str]) -> Vec<String> {
+    let normalized: Vec<String> = items
+        .iter()
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .map(ToOwned::to_owned)
+        .collect();
+
+    if normalized.is_empty() {
+        return fallback.iter().map(|item| (*item).to_string()).collect();
+    }
+
+    normalized
+}
+
+fn build_skill_scaffold_sections(request: &CreateSkillScaffoldRequest) -> SkillScaffoldSections {
+    SkillScaffoldSections {
+        when_to_use: normalize_scaffold_items(
+            &request.when_to_use,
+            &[
+                "当你需要重复完成这类任务时使用。",
+                "适合把一次成功结果沉淀成稳定可复用的工作流。",
+            ],
+        ),
+        inputs: normalize_scaffold_items(
+            &request.inputs,
+            &[
+                "用户目标、主题与成功标准。",
+                "受众、风格、篇幅、平台或交付格式等约束。",
+                "如有参考资料、示例或素材，请一并提供。",
+            ],
+        ),
+        outputs: normalize_scaffold_items(
+            &request.outputs,
+            &[
+                "交付一份可直接使用的完整结果。",
+                "保留清晰的结构层级、重点信息与必要说明。",
+            ],
+        ),
+        steps: normalize_scaffold_items(
+            &request.steps,
+            &[
+                "先确认目标、边界与交付格式。",
+                "提炼可复用的结构骨架，再补齐关键信息。",
+                "输出可直接交付的首版结果，并为后续迭代留好锚点。",
+            ],
+        ),
+        fallback_strategy: normalize_scaffold_items(
+            &request.fallback_strategy,
+            &[
+                "信息不足时，先补问最关键的约束，不要自行假设事实。",
+                "原结果不可直接复用时，先提炼最小骨架，再继续展开。",
+            ],
+        ),
+    }
+}
+
+fn render_bullet_list(items: &[String]) -> String {
+    items.iter().map(|item| format!("- {item}\n")).collect()
+}
+
+fn render_ordered_list(items: &[String]) -> String {
+    items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| format!("{}. {item}\n", index + 1))
+        .collect()
+}
+
+fn resolve_skill_scaffold_root(
+    app: SkillPackageApp,
+    target: SkillScaffoldTarget,
+) -> Result<PathBuf, String> {
+    match target {
+        SkillScaffoldTarget::User => skill_package_app_root(app),
+        SkillScaffoldTarget::Project => match app {
+            SkillPackageApp::Lime => app_paths::resolve_project_skills_dir()
+                .ok_or_else(|| "Failed to resolve project skills directory".to_string()),
+            _ => Err("Project skill scaffold is only supported for lime".to_string()),
+        },
+    }
+}
+
+fn build_skill_scaffold_content(request: &CreateSkillScaffoldRequest) -> Result<String, String> {
+    let name = request.name.trim();
+    let description = request.description.trim();
+    let sections = build_skill_scaffold_sections(request);
+    let frontmatter = serde_yaml::to_string(&SkillScaffoldFrontmatter { name, description })
+        .map_err(|error| format!("Failed to build skill frontmatter: {error}"))?;
+    let frontmatter = frontmatter.strip_prefix("---\n").unwrap_or(&frontmatter);
+
+    Ok(format!(
+        "---\n{frontmatter}---\n\n# {name}\n\n## 何时使用\n{when_to_use}\n## 输入\n{inputs}\n## 执行步骤\n{steps}\n## 输出\n{outputs}\n## 失败回退\n{fallback_strategy}\n## 维护提示\n- 如需引用资料，请将文件放到 `references/` 目录。\n- 如需脚本或素材，请分别放到 `scripts/` 与 `assets/` 目录。\n- 如需长期沉淀模板或示例，优先放到相邻目录，不要把所有细节都塞进主文件。\n",
+        when_to_use = render_bullet_list(&sections.when_to_use),
+        inputs = render_bullet_list(&sections.inputs),
+        steps = render_ordered_list(&sections.steps),
+        outputs = render_bullet_list(&sections.outputs),
+        fallback_strategy = render_bullet_list(&sections.fallback_strategy),
+    ))
+}
+
+fn create_skill_scaffold_in_root(
+    skills_root: &Path,
+    request: &CreateSkillScaffoldRequest,
+) -> Result<lime_core::models::skill_model::SkillPackageInspection, String> {
+    let directory = request.directory.trim();
+    validate_skill_package_directory(directory)?;
+
+    let name = request.name.trim();
+    if name.is_empty() {
+        return Err("Skill name is required".to_string());
+    }
+
+    let description = request.description.trim();
+    if description.is_empty() {
+        return Err("Skill description is required".to_string());
+    }
+
+    fs::create_dir_all(skills_root).map_err(|error| {
+        format!(
+            "Failed to create skills root {}: {error}",
+            skills_root.display()
+        )
+    })?;
+
+    let skill_dir = skills_root.join(directory);
+    if skill_dir.exists() {
+        return Err(format!("Skill directory already exists: {directory}"));
+    }
+
+    fs::create_dir_all(&skill_dir).map_err(|error| {
+        format!(
+            "Failed to create skill directory {}: {error}",
+            skill_dir.display()
+        )
+    })?;
+
+    let skill_md_content = build_skill_scaffold_content(request)?;
+    let skill_md_path = skill_dir.join("SKILL.md");
+    if let Err(error) = fs::write(&skill_md_path, skill_md_content) {
+        let _ = fs::remove_dir_all(&skill_dir);
+        return Err(format!(
+            "Failed to write scaffold file {}: {error}",
+            skill_md_path.display()
+        ));
+    }
+
+    match SkillService::inspect_skill_dir(&skill_dir) {
+        Ok(inspection) => Ok(inspection),
+        Err(error) => {
+            let _ = fs::remove_dir_all(&skill_dir);
+            Err(format!("Created scaffold failed inspection: {error}"))
+        }
+    }
+}
+
+fn copy_skill_directory_recursive(source: &Path, destination: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(source)
+        .map_err(|error| format!("Failed to read skill source {}: {error}", source.display()))?;
+
+    if metadata.file_type().is_symlink() {
+        return Err(format!(
+            "Skill package contains unsupported symlink: {}",
+            source.display()
+        ));
+    }
+
+    if metadata.is_dir() {
+        fs::create_dir_all(destination).map_err(|error| {
+            format!(
+                "Failed to create target directory {}: {error}",
+                destination.display()
+            )
+        })?;
+
+        for entry in fs::read_dir(source).map_err(|error| {
+            format!(
+                "Failed to read skill directory {}: {error}",
+                source.display()
+            )
+        })? {
+            let entry = entry.map_err(|error| format!("Failed to read skill entry: {error}"))?;
+            copy_skill_directory_recursive(&entry.path(), &destination.join(entry.file_name()))?;
+        }
+        return Ok(());
+    }
+
+    if metadata.is_file() {
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "Failed to create target parent directory {}: {error}",
+                    parent.display()
+                )
+            })?;
+        }
+        fs::copy(source, destination).map_err(|error| {
+            format!(
+                "Failed to copy skill file {} -> {}: {error}",
+                source.display(),
+                destination.display()
+            )
+        })?;
+        return Ok(());
+    }
+
+    Err(format!(
+        "Unsupported skill package entry: {}",
+        source.display()
+    ))
+}
+
+fn import_local_skill_into_root(skills_root: &Path, source_path: &Path) -> Result<String, String> {
+    let canonical_source = source_path.canonicalize().map_err(|error| {
+        format!(
+            "Failed to resolve skill source {}: {error}",
+            source_path.display()
+        )
+    })?;
+
+    if !canonical_source.is_dir() {
+        return Err("Skill source path must be a directory".to_string());
+    }
+
+    let inspection = SkillService::inspect_skill_dir(&canonical_source).map_err(|error| {
+        format!(
+            "Skill source is invalid {}: {error}",
+            canonical_source.display()
+        )
+    })?;
+
+    if !inspection.standard_compliance.validation_errors.is_empty() {
+        return Err(format!(
+            "Skill package is not Agent Skills compliant: {}",
+            inspection.standard_compliance.validation_errors.join("; ")
+        ));
+    }
+
+    let directory = canonical_source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Failed to resolve skill directory name".to_string())?;
+    validate_skill_package_directory(directory)?;
+
+    fs::create_dir_all(skills_root).map_err(|error| {
+        format!(
+            "Failed to create skills root {}: {error}",
+            skills_root.display()
+        )
+    })?;
+
+    let target_dir = skills_root.join(directory);
+    if target_dir.exists() {
+        return Err(format!("Skill directory already exists: {directory}"));
+    }
+
+    if let Err(error) = copy_skill_directory_recursive(&canonical_source, &target_dir) {
+        let _ = fs::remove_dir_all(&target_dir);
+        return Err(error);
+    }
+
+    match SkillService::inspect_skill_dir(&target_dir) {
+        Ok(imported_inspection)
+            if imported_inspection
+                .standard_compliance
+                .validation_errors
+                .is_empty() =>
+        {
+            Ok(directory.to_string())
+        }
+        Ok(imported_inspection) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!(
+                "Imported skill is not Agent Skills compliant: {}",
+                imported_inspection
+                    .standard_compliance
+                    .validation_errors
+                    .join("; ")
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!("Imported skill failed inspection: {error}"))
+        }
+    }
+}
+
+fn validate_remote_skill_directory(directory: &str) -> Result<(), String> {
+    let directory = directory.trim();
+    if directory.is_empty() {
+        return Err("Skill directory is required".to_string());
+    }
+
+    if directory.contains("..")
+        || directory.contains('\\')
+        || directory.starts_with('/')
+        || directory.starts_with("./")
+        || directory.ends_with("/.")
+        || directory.contains("/./")
+        || directory.split('/').any(str::is_empty)
+    {
+        return Err("Invalid skill directory".to_string());
+    }
+
+    let mut has_component = false;
+    for component in Path::new(directory).components() {
+        match component {
+            Component::Normal(_) => has_component = true,
+            _ => return Err("Invalid skill directory".to_string()),
+        }
+    }
+
+    if has_component {
+        Ok(())
+    } else {
+        Err("Skill directory is required".to_string())
+    }
+}
+
+fn create_skill_scaffold(
+    params: SkillScaffoldCreateParams,
+) -> Result<SkillScaffoldCreateResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let request: CreateSkillScaffoldRequest = serde_json::from_value(params.request)
+        .map_err(|error| format!("Invalid skill scaffold request: {error}"))?;
+    let target = SkillScaffoldTarget::parse(&request.target)?;
+    let skills_root = resolve_skill_scaffold_root(app, target)?;
+    let inspection = create_skill_scaffold_in_root(&skills_root, &request)?;
+    if matches!(app, SkillPackageApp::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+    Ok(SkillScaffoldCreateResponse {
+        inspection: serde_json::to_value(inspection)
+            .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
+    })
+}
+
+fn import_local_skill(params: SkillLocalImportParams) -> Result<SkillLocalImportResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let skills_root = skill_package_app_root(app)?;
+    let directory = import_local_skill_into_root(&skills_root, Path::new(&params.source_path))?;
+    if matches!(app, SkillPackageApp::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+    Ok(SkillLocalImportResponse { directory })
+}
+
+async fn inspect_remote_skill(
+    params: SkillRemoteInspectParams,
+) -> Result<SkillRemoteInspectResponse, String> {
+    validate_remote_skill_directory(&params.directory)?;
+    let service = SkillService::new().map_err(|error| error.to_string())?;
+    let inspection = service
+        .inspect_remote_skill(
+            &params.owner,
+            &params.name,
+            &params.branch,
+            &params.directory,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(SkillRemoteInspectResponse {
+        inspection: serde_json::to_value(inspection)
+            .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
+    })
+}
+
+fn install_local_skill_package(
+    params: SkillPackageLocalInstallParams,
+) -> Result<SkillPackageLocalInstallResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let (canonical_source, bytes) = read_local_skill_package_file(Path::new(&params.source_path))?;
+    let fallback_name = resolve_local_skill_package_fallback_name(&canonical_source)?;
+    let package = read_skill_zip_package(&bytes)?;
+    let directory = match params
+        .skill_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(value) => {
+            validate_skill_package_directory(value)?;
+            value.to_string()
+        }
+        None => resolve_skill_package_directory_name(&package, &fallback_name)?,
+    };
+    let skills_root = skill_package_app_root(app)?;
+    install_skill_zip_package_into_root(&skills_root, &directory, package)
+}
+
+fn replace_local_skill_package(
+    params: SkillPackageLocalReplaceParams,
+) -> Result<SkillPackageLocalReplaceResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    validate_skill_package_directory(&params.directory)?;
+    let skills_root = skill_package_app_root(app)?;
+    let existing_dir = resolve_skill_package_dir(&[skills_root.clone()], &params.directory)?;
+    let (_canonical_source, bytes) = read_local_skill_package_file(Path::new(&params.source_path))?;
+    let package = read_skill_zip_package(&bytes)?;
+
+    fs::create_dir_all(&skills_root).map_err(|error| {
+        format!(
+            "Failed to create skills root {}: {error}",
+            skills_root.display()
+        )
+    })?;
+    let staging_parent = tempfile::TempDir::new_in(&skills_root)
+        .map_err(|error| format!("Failed to create replacement staging directory: {error}"))?;
+    let staged_dir = staging_parent.path().join(&params.directory);
+    let staged_result =
+        install_skill_zip_package_into_staged_dir(&staged_dir, &params.directory, package)?;
+
+    let backup_dir = skills_root.join(format!(
+        ".{}.replace-backup-{}",
+        params.directory,
+        Utc::now().timestamp_millis()
+    ));
+    fs::rename(&existing_dir, &backup_dir).map_err(|error| {
+        format!(
+            "Failed to backup existing skill directory {}: {error}",
+            existing_dir.display()
+        )
+    })?;
+
+    if let Err(error) = fs::rename(&staged_dir, &existing_dir) {
+        let _ = fs::remove_dir_all(&existing_dir);
+        let _ = fs::rename(&backup_dir, &existing_dir);
+        return Err(format!(
+            "Failed to replace skill directory {}: {error}",
+            existing_dir.display()
+        ));
+    }
+
+    if let Err(error) = fs::remove_dir_all(&backup_dir) {
+        tracing::warn!(
+            "[Skill Package] failed to remove replacement backup {}: {}",
+            backup_dir.display(),
+            error
+        );
+    }
+
+    Ok(staged_result)
+}
+
+fn export_local_skill_package(
+    params: SkillPackageExportParams,
+) -> Result<SkillPackageExportResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let skill_roots = skill_package_app_lookup_roots(app)?;
+    let target_path = normalize_skill_package_output_path(&params.target_path)?;
+    export_local_skill_package_to_path(&skill_roots, &params.directory, &target_path)
+}
+
+fn install_marketplace_skill_bundle_into_root(
+    skills_root: &Path,
+    params: SkillMarketplaceInstallParams,
+) -> Result<SkillMarketplaceInstallResponse, String> {
+    let directory = params.name.trim();
+    validate_skill_package_directory(directory)?;
+
+    if !params.manifest_version.trim().is_empty()
+        && params.manifest_version.trim() != "agentskills.v1"
+    {
+        return Err(format!(
+            "Unsupported marketplace skill manifest version: {}",
+            params.manifest_version
+        ));
+    }
+    if params.files.is_empty() {
+        return Err("Marketplace skill bundle is empty".to_string());
+    }
+    if params.file_count > 0 && params.file_count != params.files.len() as u64 {
+        return Err("Marketplace skill bundle file count mismatch".to_string());
+    }
+
+    fs::create_dir_all(skills_root).map_err(|error| {
+        format!(
+            "Failed to create skills root {}: {error}",
+            skills_root.display()
+        )
+    })?;
+    let target_dir = skills_root.join(directory);
+    if target_dir.exists() {
+        return Err(format!("Skill directory already exists: {directory}"));
+    }
+    fs::create_dir_all(&target_dir).map_err(|error| {
+        format!(
+            "Failed to create skill directory {}: {error}",
+            target_dir.display()
+        )
+    })?;
+
+    let mut has_skill_md = false;
+    for file in &params.files {
+        let encoding = file
+            .encoding
+            .as_deref()
+            .unwrap_or("utf-8")
+            .trim()
+            .to_ascii_lowercase();
+        if encoding != "utf-8" && encoding != "utf8" {
+            let _ = fs::remove_dir_all(&target_dir);
+            return Err(format!(
+                "Unsupported marketplace skill file encoding: {}",
+                file.path
+            ));
+        }
+        if file.path.trim() == "SKILL.md" {
+            has_skill_md = true;
+        }
+        if let Err(error) = verify_marketplace_skill_file_checksum(file) {
+            let _ = fs::remove_dir_all(&target_dir);
+            return Err(error);
+        }
+
+        let relative_path = match validate_marketplace_skill_file_path(&file.path) {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = fs::remove_dir_all(&target_dir);
+                return Err(error);
+            }
+        };
+        let destination = target_dir.join(relative_path);
+        if let Some(parent) = destination.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                let _ = fs::remove_dir_all(&target_dir);
+                return Err(format!(
+                    "Failed to create skill file parent {}: {error}",
+                    parent.display()
+                ));
+            }
+        }
+        if let Err(error) = fs::write(&destination, &file.content) {
+            let _ = fs::remove_dir_all(&target_dir);
+            return Err(format!(
+                "Failed to write marketplace skill file {}: {error}",
+                destination.display()
+            ));
+        }
+    }
+
+    if !has_skill_md {
+        let _ = fs::remove_dir_all(&target_dir);
+        return Err("Marketplace skill bundle missing SKILL.md".to_string());
+    }
+
+    match SkillService::inspect_skill_dir(&target_dir) {
+        Ok(inspection) if inspection.standard_compliance.validation_errors.is_empty() => {
+            Ok(SkillMarketplaceInstallResponse {
+                directory: directory.to_string(),
+                inspection: serde_json::to_value(inspection)
+                    .map_err(|error| format!("Failed to serialize skill inspection: {error}"))?,
+            })
+        }
+        Ok(inspection) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!(
+                "Marketplace skill is not Agent Skills compliant: {}",
+                inspection.standard_compliance.validation_errors.join("; ")
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!("Marketplace skill failed inspection: {error}"))
+        }
+    }
+}
+
+fn install_marketplace_skill(
+    params: SkillMarketplaceInstallParams,
+) -> Result<SkillMarketplaceInstallResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let skills_root = skill_package_app_root(app)?;
+    install_marketplace_skill_bundle_into_root(&skills_root, params)
+}
+
+fn validate_skill_download_url(value: &str) -> Result<String, String> {
+    let url =
+        Url::parse(value.trim()).map_err(|error| format!("Invalid skill download URL: {error}"))?;
+    if url.scheme() != "https" {
+        return Err("Skill download URL must use https".to_string());
+    }
+    Ok(url.to_string())
+}
+
+async fn download_skill_package_zip(download_url: &str) -> Result<Vec<u8>, String> {
+    let download_url = validate_skill_download_url(download_url)?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|error| format!("Failed to create skill download client: {error}"))?;
+    let response = client
+        .get(download_url)
+        .send()
+        .await
+        .map_err(|error| format!("Failed to download skill package: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!(
+            "Skill package download failed with status {status}"
+        ));
+    }
+    if let Some(content_length) = response.content_length() {
+        if content_length > MAX_SKILL_DOWNLOAD_BYTES as u64 {
+            return Err("Skill package is too large".to_string());
+        }
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Failed to read skill package: {error}"))?;
+    if bytes.len() > MAX_SKILL_DOWNLOAD_BYTES {
+        return Err("Skill package is too large".to_string());
+    }
+    Ok(bytes.to_vec())
+}
+
+async fn install_skill_from_download_url(
+    params: SkillDownloadInstallParams,
+) -> Result<SkillDownloadInstallResponse, String> {
+    let app = parse_skill_package_app(&params.app)?;
+    let skill_name = params.skill_name.trim();
+    validate_skill_package_directory(skill_name)?;
+    let bytes = download_skill_package_zip(&params.download_url).await?;
+    let skills_root = skill_package_app_root(app)?;
+    let result = install_skill_zip_package_into_root(
+        &skills_root,
+        skill_name,
+        read_skill_zip_package(&bytes)?,
+    )?;
+    Ok(SkillDownloadInstallResponse {
+        directory: result.directory,
+        inspection: result.inspection,
     })
 }
 
@@ -3207,9 +6270,14 @@ fn now_iso() -> String {
 }
 
 fn list_agent_app_installed_state() -> Result<AgentAppInstalledListResponse, String> {
-    let installed_dir = app_paths::preferred_data_dir()?
-        .join(AGENT_APP_DATA_DIR)
-        .join("installed");
+    let data_root = agent_app_data_dir()?;
+    list_agent_app_installed_state_from_data_root(&data_root)
+}
+
+fn list_agent_app_installed_state_from_data_root(
+    data_root: &Path,
+) -> Result<AgentAppInstalledListResponse, String> {
+    let installed_dir = installed_agent_app_dir_from_data_root(data_root);
     fs::create_dir_all(&installed_dir)
         .map_err(|error| format!("创建 Agent App installed 目录失败: {error}"))?;
 
@@ -3447,7 +6515,16 @@ fn set_agent_app_installed_disabled(
 fn uninstall_agent_app(
     params: AgentAppUninstallParams,
 ) -> Result<AgentAppUninstallResponse, String> {
-    let rehearsal = build_agent_app_uninstall_rehearsal(params.app_id, params.mode)?;
+    let data_root = agent_app_data_dir()?;
+    uninstall_agent_app_from_data_root(params, &data_root)
+}
+
+fn uninstall_agent_app_from_data_root(
+    params: AgentAppUninstallParams,
+    data_root: &Path,
+) -> Result<AgentAppUninstallResponse, String> {
+    let rehearsal =
+        build_agent_app_uninstall_rehearsal_from_data_root(params.app_id, params.mode, data_root)?;
     let mut blocker_codes = if rehearsal.mode == "delete-data" {
         let expected = build_agent_app_delete_data_confirmation_phrase(
             &rehearsal.app_id,
@@ -3467,7 +6544,7 @@ fn uninstall_agent_app(
 
     let (removed_target_count, missing_target_count) =
         if rehearsal.mode == "keep-data" && blocker_codes.is_empty() {
-            remove_agent_app_install_references(&rehearsal.app_id)?
+            remove_agent_app_install_references_from_data_root(&rehearsal.app_id, data_root)?
         } else {
             (0, 0)
         };
@@ -3488,7 +6565,7 @@ fn uninstall_agent_app(
     Ok(AgentAppUninstallResponse {
         status: status.to_string(),
         rehearsal,
-        list: list_agent_app_installed_state()?,
+        list: list_agent_app_installed_state_from_data_root(data_root)?,
         removed_target_count,
         missing_target_count,
         blocker_codes,
@@ -3500,12 +6577,21 @@ fn build_agent_app_uninstall_rehearsal(
     app_id: String,
     mode: String,
 ) -> Result<AgentAppUninstallRehearsalResponse, String> {
+    let data_root = agent_app_data_dir()?;
+    build_agent_app_uninstall_rehearsal_from_data_root(app_id, mode, &data_root)
+}
+
+fn build_agent_app_uninstall_rehearsal_from_data_root(
+    app_id: String,
+    mode: String,
+    data_root: &Path,
+) -> Result<AgentAppUninstallRehearsalResponse, String> {
     validate_agent_app_id_for_storage(&app_id)?;
     let mode = match mode.as_str() {
         "keep-data" | "delete-data" => mode,
         other => return Err(format!("不支持的 Agent App 卸载演练模式: {other}")),
     };
-    let path = installed_agent_app_state_path(&app_id)?;
+    let path = installed_agent_app_state_path_from_data_root(data_root, &app_id)?;
     let Some(state) = read_agent_app_installed_state_path(&path)? else {
         return Err(format!("Agent App 未安装: {}", app_id));
     };
@@ -3515,7 +6601,7 @@ fn build_agent_app_uninstall_rehearsal(
     let package_hash_path_segment = safe_hash_path_segment(&package_hash);
     let storage_namespace = read_json_string(&state, &["projection", "storage", "namespace"])
         .unwrap_or_else(|| app_id.clone());
-    let base = agent_app_data_dir()?.to_string_lossy().to_string();
+    let base = data_root.to_string_lossy().to_string();
 
     let install_reference_action = "delete";
     let derived_runtime_action = if mode == "delete-data" {
@@ -3619,10 +6705,13 @@ fn build_agent_app_delete_data_confirmation_phrase(app_id: &str, package_hash: &
     format!("DELETE_AGENT_APP_DATA {app_id} {package_hash}")
 }
 
-fn remove_agent_app_install_references(app_id: &str) -> Result<(usize, usize), String> {
+fn remove_agent_app_install_references_from_data_root(
+    app_id: &str,
+    data_root: &Path,
+) -> Result<(usize, usize), String> {
     let paths = [
-        installed_agent_app_state_path(app_id)?,
-        setup_agent_app_state_path(app_id)?,
+        installed_agent_app_state_path_from_data_root(data_root, app_id)?,
+        setup_agent_app_state_path_from_data_root(data_root, app_id)?,
     ];
     remove_agent_app_install_reference_paths(&paths)
 }
@@ -4044,21 +7133,47 @@ fn agent_app_package_cache_dir(package_hash: &str) -> Result<PathBuf, String> {
 }
 
 fn installed_agent_app_dir() -> Result<PathBuf, String> {
-    Ok(agent_app_data_dir()?.join("installed"))
+    Ok(installed_agent_app_dir_from_data_root(
+        &agent_app_data_dir()?
+    ))
 }
 
 fn setup_agent_app_dir() -> Result<PathBuf, String> {
-    Ok(agent_app_data_dir()?.join("setup"))
+    Ok(setup_agent_app_dir_from_data_root(&agent_app_data_dir()?))
+}
+
+fn installed_agent_app_dir_from_data_root(data_root: &Path) -> PathBuf {
+    data_root.join("installed")
+}
+
+fn setup_agent_app_dir_from_data_root(data_root: &Path) -> PathBuf {
+    data_root.join("setup")
 }
 
 fn installed_agent_app_state_path(app_id: &str) -> Result<PathBuf, String> {
-    validate_agent_app_id_for_storage(app_id)?;
-    Ok(installed_agent_app_dir()?.join(format!("{app_id}.json")))
+    let data_root = agent_app_data_dir()?;
+    installed_agent_app_state_path_from_data_root(&data_root, app_id)
 }
 
 fn setup_agent_app_state_path(app_id: &str) -> Result<PathBuf, String> {
+    let data_root = agent_app_data_dir()?;
+    setup_agent_app_state_path_from_data_root(&data_root, app_id)
+}
+
+fn installed_agent_app_state_path_from_data_root(
+    data_root: &Path,
+    app_id: &str,
+) -> Result<PathBuf, String> {
     validate_agent_app_id_for_storage(app_id)?;
-    Ok(setup_agent_app_dir()?.join(format!("{app_id}.json")))
+    Ok(installed_agent_app_dir_from_data_root(data_root).join(format!("{app_id}.json")))
+}
+
+fn setup_agent_app_state_path_from_data_root(
+    data_root: &Path,
+    app_id: &str,
+) -> Result<PathBuf, String> {
+    validate_agent_app_id_for_storage(app_id)?;
+    Ok(setup_agent_app_dir_from_data_root(data_root).join(format!("{app_id}.json")))
 }
 
 fn validate_agent_app_id_for_storage(app_id: &str) -> Result<(), String> {
@@ -4964,6 +8079,826 @@ fn build_automation_alerts(
     alerts
 }
 
+fn current_log_path() -> Result<PathBuf, String> {
+    Ok(app_paths::resolve_logs_dir()?.join("lime.log"))
+}
+
+fn parse_persisted_log_line(line: &str) -> Option<LogEntry> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Some((timestamp, rest)) = trimmed.split_once(" [") {
+        if let Some((level, message)) = rest.split_once("] ") {
+            return Some(LogEntry {
+                timestamp: timestamp.trim().to_string(),
+                level: level.trim().to_lowercase(),
+                message: message.trim().to_string(),
+            });
+        }
+    }
+
+    Some(LogEntry {
+        timestamp: Utc::now().to_rfc3339(),
+        level: "info".to_string(),
+        message: trimmed.to_string(),
+    })
+}
+
+fn to_rfc3339(system_time: std::time::SystemTime) -> String {
+    DateTime::<Utc>::from(system_time).to_rfc3339()
+}
+
+fn parse_rotated_log_timestamp(current_log_path: &Path, candidate: &Path) -> Option<i64> {
+    let current_name = current_log_path.file_name()?.to_str()?;
+    let candidate_name = candidate.file_name()?.to_str()?;
+
+    if candidate_name == current_name {
+        return Some(i64::MAX);
+    }
+
+    let prefix = format!("{current_name}.");
+    let suffix = candidate_name.strip_prefix(&prefix)?;
+    let suffix = suffix.strip_suffix(".gz").unwrap_or(suffix);
+    let parsed = NaiveDateTime::parse_from_str(suffix, "%Y%m%d-%H%M%S").ok()?;
+    parsed.and_utc().timestamp_nanos_opt()
+}
+
+fn path_sort_key(current_log_path: &Path, path: &Path) -> (i64, String) {
+    let logical_ts = parse_rotated_log_timestamp(current_log_path, path).unwrap_or_else(|| {
+        fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| DateTime::<Utc>::from(modified).timestamp_nanos_opt())
+            .unwrap_or_else(|| {
+                DateTime::<Utc>::from(UNIX_EPOCH)
+                    .timestamp_nanos_opt()
+                    .unwrap_or(0)
+            })
+    });
+
+    (logical_ts, path.to_string_lossy().to_string())
+}
+
+fn collect_related_log_paths(current_log_path: &Path) -> Vec<PathBuf> {
+    let Some(log_dir) = current_log_path.parent() else {
+        return Vec::new();
+    };
+    let Some(file_name) = current_log_path.file_name().and_then(|name| name.to_str()) else {
+        return Vec::new();
+    };
+    let prefix = format!("{file_name}.");
+    let mut candidates = Vec::new();
+
+    if current_log_path.exists() {
+        candidates.push(current_log_path.to_path_buf());
+    }
+
+    let Ok(entries) = fs::read_dir(log_dir) else {
+        return candidates;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if (name == file_name || name.starts_with(&prefix))
+            && !candidates.iter().any(|candidate| candidate == &path)
+        {
+            candidates.push(path);
+        }
+    }
+
+    candidates.sort_by_key(|path| path_sort_key(current_log_path, path));
+    candidates
+}
+
+fn collect_raw_response_paths(current_log_path: &Path) -> Vec<PathBuf> {
+    let Some(log_dir) = current_log_path.parent() else {
+        return Vec::new();
+    };
+    let Ok(entries) = fs::read_dir(log_dir) else {
+        return Vec::new();
+    };
+
+    let mut candidates: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(|name| name.starts_with("raw_response_") && name.ends_with(".txt"))
+        })
+        .collect();
+    candidates.sort_by_key(|path| path_sort_key(current_log_path, path));
+    candidates.reverse();
+    candidates
+}
+
+fn read_log_file_content(path: &Path) -> Option<String> {
+    if path.extension().and_then(|ext| ext.to_str()) == Some("gz") {
+        let file = fs::File::open(path).ok()?;
+        let mut decoder = GzDecoder::new(file);
+        let mut content = String::new();
+        decoder.read_to_string(&mut content).ok()?;
+        return Some(content);
+    }
+
+    fs::read_to_string(path).ok()
+}
+
+fn read_persisted_logs_tail_from_path(current_log_path: &Path, lines: usize) -> Vec<LogEntry> {
+    let safe_limit = lines.clamp(1, 1_000);
+    let related_paths = collect_related_log_paths(current_log_path);
+    if related_paths.is_empty() {
+        return Vec::new();
+    }
+
+    let mut parsed = Vec::new();
+    for log_path in related_paths.into_iter().rev() {
+        let remaining = safe_limit.saturating_sub(parsed.len());
+        if remaining == 0 {
+            break;
+        }
+
+        let Some(content) = read_log_file_content(&log_path) else {
+            continue;
+        };
+
+        parsed.extend(
+            content
+                .lines()
+                .rev()
+                .take(remaining)
+                .filter_map(parse_persisted_log_line),
+        );
+    }
+
+    parsed.reverse();
+    parsed
+}
+
+fn read_persisted_logs_tail(lines: usize) -> Result<Vec<LogEntry>, String> {
+    let current_path = current_log_path()?;
+    Ok(read_persisted_logs_tail_from_path(&current_path, lines))
+}
+
+fn build_log_artifact_entry(path: &Path) -> Option<LogArtifactEntry> {
+    let metadata = fs::metadata(path).ok()?;
+    let modified_at = metadata.modified().ok().map(to_rfc3339);
+    let file_name = path.file_name()?.to_string_lossy().to_string();
+
+    Some(LogArtifactEntry {
+        file_name,
+        path: path.to_string_lossy().to_string(),
+        size_bytes: metadata.len(),
+        modified_at,
+        compressed: path.extension().and_then(|ext| ext.to_str()) == Some("gz"),
+    })
+}
+
+fn read_log_storage_diagnostics_from_path(
+    current_log_path: &Path,
+    in_memory_log_count: usize,
+) -> LogStorageDiagnosticsResponse {
+    let current_log_exists = current_log_path.exists();
+    let current_log_size_bytes = fs::metadata(current_log_path)
+        .ok()
+        .map(|metadata| metadata.len());
+    let log_directory = current_log_path
+        .parent()
+        .map(|path| path.to_string_lossy().to_string());
+    let related_log_files = collect_related_log_paths(current_log_path)
+        .into_iter()
+        .rev()
+        .take(12)
+        .filter_map(|path| build_log_artifact_entry(&path))
+        .collect();
+    let raw_response_files = collect_raw_response_paths(current_log_path)
+        .into_iter()
+        .take(12)
+        .filter_map(|path| build_log_artifact_entry(&path))
+        .collect();
+
+    LogStorageDiagnosticsResponse {
+        log_directory,
+        current_log_path: Some(current_log_path.to_string_lossy().to_string()),
+        current_log_exists,
+        current_log_size_bytes,
+        in_memory_log_count,
+        related_log_files,
+        raw_response_files,
+    }
+}
+
+fn read_log_storage_diagnostics() -> Result<LogStorageDiagnosticsResponse, String> {
+    let current_path = current_log_path()?;
+    Ok(read_log_storage_diagnostics_from_path(&current_path, 0))
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SupportBundlePathMetadata {
+    path: String,
+    exists: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_write_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SupportBundleTreeEntry {
+    relative_path: String,
+    is_directory: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    modified_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SupportBundleManifest {
+    generated_at: String,
+    app_version: String,
+    platform: String,
+    arch: String,
+    username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    app_data_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    legacy_data_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    database_path: Option<String>,
+    path_checks: Vec<SupportBundlePathMetadata>,
+    log_storage_diagnostics: LogStorageDiagnosticsResponse,
+    persisted_log_tail_lines: usize,
+    included_sections: Vec<String>,
+    omitted_sections: Vec<String>,
+}
+
+fn default_support_bundle_output_dir() -> PathBuf {
+    dirs::download_dir()
+        .or_else(dirs::desktop_dir)
+        .unwrap_or_else(std::env::temp_dir)
+}
+
+fn support_bundle_username() -> String {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "unknown".to_string())
+}
+
+fn config_path_guess() -> Option<PathBuf> {
+    dirs::config_dir().map(|dir| dir.join("lime").join("config.yaml"))
+}
+
+fn legacy_data_dir_guess() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".lime"))
+}
+
+fn collect_support_path_metadata(path: Option<&Path>) -> SupportBundlePathMetadata {
+    let Some(path) = path else {
+        return SupportBundlePathMetadata {
+            path: String::new(),
+            exists: false,
+            kind: None,
+            last_write_time: None,
+            size_bytes: None,
+        };
+    };
+
+    let path_string = path.to_string_lossy().to_string();
+    let Ok(metadata) = fs::metadata(path) else {
+        return SupportBundlePathMetadata {
+            path: path_string,
+            exists: false,
+            kind: None,
+            last_write_time: None,
+            size_bytes: None,
+        };
+    };
+
+    let kind = if metadata.is_dir() {
+        Some("directory".to_string())
+    } else if metadata.is_file() {
+        Some("file".to_string())
+    } else {
+        Some("other".to_string())
+    };
+
+    SupportBundlePathMetadata {
+        path: path_string,
+        exists: true,
+        kind,
+        last_write_time: metadata.modified().ok().map(to_rfc3339),
+        size_bytes: if metadata.is_dir() {
+            None
+        } else {
+            Some(metadata.len())
+        },
+    }
+}
+
+fn should_exclude_support_listing(relative_path: &Path) -> bool {
+    relative_path
+        .components()
+        .next()
+        .and_then(|component| component.as_os_str().to_str())
+        .is_some_and(|name| matches!(name, "credentials" | "auth"))
+}
+
+fn collect_directory_tree_entries(root: &Path) -> Vec<SupportBundleTreeEntry> {
+    fn walk(base: &Path, current: &Path, entries: &mut Vec<SupportBundleTreeEntry>) {
+        let Ok(children) = fs::read_dir(current) else {
+            return;
+        };
+
+        for child in children.flatten() {
+            let path = child.path();
+            let Ok(relative_path) = path.strip_prefix(base) else {
+                continue;
+            };
+            if should_exclude_support_listing(relative_path) {
+                continue;
+            }
+            let Ok(metadata) = child.metadata() else {
+                continue;
+            };
+            let is_directory = metadata.is_dir();
+            entries.push(SupportBundleTreeEntry {
+                relative_path: relative_path.to_string_lossy().to_string(),
+                is_directory,
+                size_bytes: if is_directory {
+                    None
+                } else {
+                    Some(metadata.len())
+                },
+                modified_at: metadata.modified().ok().map(to_rfc3339),
+            });
+
+            if is_directory {
+                walk(base, &path, entries);
+            }
+        }
+    }
+
+    if !root.exists() {
+        return Vec::new();
+    }
+
+    let mut entries = Vec::new();
+    walk(root, root, &mut entries);
+    entries
+}
+
+fn write_support_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    let content = serde_json::to_vec_pretty(value)
+        .map_err(|error| format!("序列化支持包 JSON 失败 {}: {error}", path.display()))?;
+    fs::write(path, content)
+        .map_err(|error| format!("写入支持包 JSON 失败 {}: {error}", path.display()))
+}
+
+fn normalize_archive_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn add_directory_to_zip<W: Write + io::Seek>(
+    writer: &mut ZipWriter<W>,
+    root: &Path,
+    current: &Path,
+) -> Result<(), String> {
+    let file_options = FileOptions::default().compression_method(CompressionMethod::Deflated);
+    let dir_options = FileOptions::default().compression_method(CompressionMethod::Stored);
+
+    for entry in fs::read_dir(current)
+        .map_err(|error| format!("读取支持包目录失败 {}: {error}", current.display()))?
+    {
+        let entry = entry
+            .map_err(|error| format!("读取支持包目录项失败 {}: {error}", current.display()))?;
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|error| format!("计算支持包相对路径失败 {}: {error}", path.display()))?;
+        let archive_path = normalize_archive_path(relative);
+
+        if entry
+            .file_type()
+            .map_err(|error| format!("读取支持包文件类型失败 {}: {error}", path.display()))?
+            .is_dir()
+        {
+            writer
+                .add_directory(format!("{archive_path}/"), dir_options)
+                .map_err(|error| format!("写入 zip 目录失败 {archive_path}: {error}"))?;
+            add_directory_to_zip(writer, root, &path)?;
+            continue;
+        }
+
+        writer
+            .start_file(archive_path.clone(), file_options)
+            .map_err(|error| format!("写入 zip 文件失败 {archive_path}: {error}"))?;
+        let mut file = fs::File::open(&path)
+            .map_err(|error| format!("打开支持包文件失败 {}: {error}", path.display()))?;
+        io::copy(&mut file, writer)
+            .map_err(|error| format!("压缩支持包文件失败 {}: {error}", path.display()))?;
+    }
+
+    Ok(())
+}
+
+fn create_zip_from_directory(source_dir: &Path, zip_path: &Path) -> Result<(), String> {
+    let file = fs::File::create(zip_path)
+        .map_err(|error| format!("创建支持包 zip 失败 {}: {error}", zip_path.display()))?;
+    let mut writer = ZipWriter::new(file);
+    add_directory_to_zip(&mut writer, source_dir, source_dir)?;
+    writer
+        .finish()
+        .map_err(|error| format!("完成支持包压缩失败 {}: {error}", zip_path.display()))?;
+    Ok(())
+}
+
+fn copy_directory_recursive(source: &Path, destination: &Path) -> Result<(), String> {
+    if !source.exists() {
+        return Ok(());
+    }
+    fs::create_dir_all(destination)
+        .map_err(|error| format!("创建支持包目录失败 {}: {error}", destination.display()))?;
+
+    for entry in fs::read_dir(source)
+        .map_err(|error| format!("读取目录失败 {}: {error}", source.display()))?
+    {
+        let entry =
+            entry.map_err(|error| format!("读取目录项失败 {}: {error}", source.display()))?;
+        let path = entry.path();
+        let target = destination.join(entry.file_name());
+        if entry
+            .file_type()
+            .map_err(|error| format!("读取文件类型失败 {}: {error}", path.display()))?
+            .is_dir()
+        {
+            copy_directory_recursive(&path, &target)?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("创建支持包父目录失败 {}: {error}", parent.display()))?;
+        }
+        fs::copy(&path, &target).map_err(|error| {
+            format!(
+                "复制支持包文件失败 {} -> {}: {error}",
+                path.display(),
+                target.display()
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+fn write_support_bundle_readme(path: &Path, omitted_sections: &[String]) -> Result<(), String> {
+    let omitted = omitted_sections
+        .iter()
+        .map(|section| format!("- {section}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let content = format!(
+        "Lime 支持包\n\n已包含：\n- meta/manifest.json\n- meta/log-storage-diagnostics.json\n- meta/persisted-log-tail.json\n- meta/appdata-listing.json（如目录存在）\n- logs/（如目录存在）\n\n默认未包含：\n{omitted}\n"
+    );
+
+    fs::write(path, content)
+        .map_err(|error| format!("写入支持包 README 失败 {}: {error}", path.display()))
+}
+
+fn export_support_bundle_to(
+    output_directory: &Path,
+) -> Result<SupportBundleExportResponse, String> {
+    fs::create_dir_all(output_directory).map_err(|error| {
+        format!(
+            "创建支持包输出目录失败 {}: {error}",
+            output_directory.display()
+        )
+    })?;
+
+    let generated_at = Utc::now().to_rfc3339();
+    let timestamp = Utc::now().format("%Y%m%d-%H%M%S").to_string();
+    let bundle_name = format!("Lime-Support-{timestamp}");
+    let temp_dir = tempfile::tempdir().map_err(|error| format!("创建临时目录失败: {error}"))?;
+    let bundle_dir = temp_dir.path().join(&bundle_name);
+    let meta_dir = bundle_dir.join("meta");
+    let logs_dir = bundle_dir.join("logs");
+    fs::create_dir_all(&meta_dir)
+        .map_err(|error| format!("创建支持包元数据目录失败 {}: {error}", meta_dir.display()))?;
+
+    let current_log_path = current_log_path()?;
+    let log_storage_diagnostics = read_log_storage_diagnostics_from_path(&current_log_path, 0);
+    let persisted_log_tail = read_persisted_logs_tail_from_path(&current_log_path, 200);
+    let app_data_dir = app_paths::preferred_data_dir().ok();
+    let config_path = config_path_guess();
+    let legacy_data_dir = legacy_data_dir_guess();
+    let database_path = database::get_db_path()
+        .ok()
+        .or_else(|| legacy_data_dir.as_ref().map(|dir| dir.join("lime.db")));
+    let effective_logs_dir = current_log_path.parent().map(Path::to_path_buf);
+
+    if let Some(log_dir) = effective_logs_dir.as_deref() {
+        copy_directory_recursive(log_dir, &logs_dir)?;
+    }
+
+    let included_sections = vec![
+        "meta/manifest.json".to_string(),
+        "meta/log-storage-diagnostics.json".to_string(),
+        "meta/persisted-log-tail.json".to_string(),
+        "logs/".to_string(),
+    ];
+    let omitted_sections = vec![
+        "config 内容".to_string(),
+        "数据库内容".to_string(),
+        "credentials 目录正文".to_string(),
+        "auth 目录正文".to_string(),
+        "Windows 启动诊断（Desktop Host current 待迁移）".to_string(),
+    ];
+
+    let manifest = SupportBundleManifest {
+        generated_at: generated_at.clone(),
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        platform: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        username: support_bundle_username(),
+        app_data_dir: app_data_dir
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string()),
+        config_path: config_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string()),
+        legacy_data_dir: legacy_data_dir
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string()),
+        database_path: database_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string()),
+        path_checks: vec![
+            collect_support_path_metadata(app_data_dir.as_deref()),
+            collect_support_path_metadata(config_path.as_deref()),
+            collect_support_path_metadata(legacy_data_dir.as_deref()),
+            collect_support_path_metadata(database_path.as_deref()),
+            collect_support_path_metadata(effective_logs_dir.as_deref()),
+        ],
+        log_storage_diagnostics: log_storage_diagnostics.clone(),
+        persisted_log_tail_lines: persisted_log_tail.len(),
+        included_sections: included_sections.clone(),
+        omitted_sections: omitted_sections.clone(),
+    };
+
+    write_support_json(&meta_dir.join("manifest.json"), &manifest)?;
+    write_support_json(
+        &meta_dir.join("log-storage-diagnostics.json"),
+        &log_storage_diagnostics,
+    )?;
+    write_support_json(
+        &meta_dir.join("persisted-log-tail.json"),
+        &persisted_log_tail,
+    )?;
+    if let Some(app_data_dir) = app_data_dir.as_deref() {
+        write_support_json(
+            &meta_dir.join("appdata-listing.json"),
+            &collect_directory_tree_entries(app_data_dir),
+        )?;
+    }
+    write_support_bundle_readme(&bundle_dir.join("README.txt"), &omitted_sections)?;
+
+    let bundle_path = output_directory.join(format!("{bundle_name}.zip"));
+    create_zip_from_directory(&bundle_dir, &bundle_path)?;
+
+    Ok(SupportBundleExportResponse {
+        bundle_path: bundle_path.to_string_lossy().to_string(),
+        output_directory: output_directory.to_string_lossy().to_string(),
+        generated_at,
+        platform: std::env::consts::OS.to_string(),
+        included_sections,
+        omitted_sections,
+    })
+}
+
+fn export_support_bundle() -> Result<SupportBundleExportResponse, String> {
+    export_support_bundle_to(&default_support_bundle_output_dir())
+}
+
+fn path_to_string(path: Option<PathBuf>) -> Option<String> {
+    path.map(|path| path.to_string_lossy().to_string())
+}
+
+fn env_value(key: &str) -> Option<String> {
+    std::env::var(key).ok().filter(|value| !value.is_empty())
+}
+
+fn ok_startup_check(key: &str, message: String) -> WindowsStartupCheck {
+    WindowsStartupCheck {
+        key: key.to_string(),
+        status: "ok".to_string(),
+        message,
+        detail: None,
+    }
+}
+
+fn warn_startup_check(key: &str, message: String, detail: Option<String>) -> WindowsStartupCheck {
+    WindowsStartupCheck {
+        key: key.to_string(),
+        status: "warning".to_string(),
+        message,
+        detail,
+    }
+}
+
+fn error_startup_check(key: &str, message: String, detail: Option<String>) -> WindowsStartupCheck {
+    WindowsStartupCheck {
+        key: key.to_string(),
+        status: "error".to_string(),
+        message,
+        detail,
+    }
+}
+
+fn ensure_dir_writable(path: &Path) -> Result<(), String> {
+    fs::create_dir_all(path)
+        .map_err(|error| format!("创建目录失败 {}: {error}", path.display()))?;
+    let probe_path = path.join(".app-server-startup-write-test");
+    fs::write(&probe_path, b"ok")
+        .map_err(|error| format!("写入探测文件失败 {}: {error}", probe_path.display()))?;
+    fs::remove_file(&probe_path)
+        .map_err(|error| format!("删除探测文件失败 {}: {error}", probe_path.display()))
+}
+
+fn read_windows_startup_diagnostics() -> Result<WindowsStartupDiagnosticsResponse, String> {
+    let app_data_dir = app_paths::preferred_data_dir().ok();
+    let legacy_data_dir = legacy_data_dir_guess();
+    let db_path = database::get_db_path().ok();
+    let current_exe = std::env::current_exe().ok();
+    let current_dir = std::env::current_dir().ok();
+    let home_dir = dirs::home_dir();
+    let shell_env = env_value("SHELL");
+    let comspec_env = env_value("COMSPEC");
+    let resolved_terminal_shell = shell_env.clone().or_else(|| comspec_env.clone());
+    let mut checks = Vec::new();
+
+    match app_data_dir.as_deref() {
+        Some(path) => match ensure_dir_writable(path) {
+            Ok(()) => checks.push(ok_startup_check(
+                "app_data_dir",
+                format!("应用数据目录可写: {}", path.display()),
+            )),
+            Err(error) => checks.push(warn_startup_check(
+                "app_data_dir",
+                format!("应用数据目录不可写: {}", path.display()),
+                Some(error),
+            )),
+        },
+        None => checks.push(warn_startup_check(
+            "app_data_dir",
+            "无法解析应用数据目录".to_string(),
+            None,
+        )),
+    }
+
+    match current_dir.as_deref() {
+        Some(path) if path.exists() => checks.push(ok_startup_check(
+            "current_dir",
+            format!("当前工作目录存在: {}", path.display()),
+        )),
+        Some(path) => checks.push(warn_startup_check(
+            "current_dir",
+            format!("当前工作目录不存在: {}", path.display()),
+            None,
+        )),
+        None => checks.push(warn_startup_check(
+            "current_dir",
+            "无法解析当前工作目录".to_string(),
+            None,
+        )),
+    }
+
+    if db_path.as_ref().is_some_and(|path| path.exists()) {
+        checks.push(ok_startup_check("db_path", "数据库路径已存在".to_string()));
+    } else if db_path.is_some() {
+        checks.push(warn_startup_check(
+            "db_path",
+            "数据库路径尚未创建".to_string(),
+            None,
+        ));
+    } else {
+        checks.push(error_startup_check(
+            "db_path",
+            "无法解析数据库路径".to_string(),
+            None,
+        ));
+    }
+
+    let has_blocking_issues = checks.iter().any(|check| check.status == "error");
+    let has_warnings = checks.iter().any(|check| check.status == "warning");
+    let summary_message = if has_blocking_issues {
+        Some("App Server 启动环境存在阻塞问题。".to_string())
+    } else if has_warnings {
+        Some("App Server 启动环境存在需要关注的警告。".to_string())
+    } else {
+        Some("App Server 启动环境自检通过。".to_string())
+    };
+
+    Ok(WindowsStartupDiagnosticsResponse {
+        platform: std::env::consts::OS.to_string(),
+        app_data_dir: path_to_string(app_data_dir),
+        legacy_lime_dir: path_to_string(legacy_data_dir),
+        db_path: path_to_string(db_path),
+        webview2_version: None,
+        current_exe: path_to_string(current_exe),
+        current_dir: path_to_string(current_dir),
+        resource_dir: None,
+        home_dir: path_to_string(home_dir),
+        shell_env,
+        comspec_env,
+        resolved_terminal_shell,
+        installation_kind_guess: Some("app-server".to_string()),
+        checks,
+        has_blocking_issues,
+        has_warnings,
+        summary_message,
+    })
+}
+
+fn truncate_current_log_file(current_log_path: &Path) -> Result<(), String> {
+    if let Some(parent) = current_log_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "创建日志目录失败（{}）: {}",
+                parent.to_string_lossy(),
+                error
+            )
+        })?;
+    }
+
+    fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(current_log_path)
+        .and_then(|mut file| file.write_all(b""))
+        .map_err(|error| {
+            format!(
+                "清空当前日志文件失败（{}）: {}",
+                current_log_path.to_string_lossy(),
+                error
+            )
+        })
+}
+
+fn clear_diagnostic_log_artifacts_from_path(current_log_path: &Path) -> Result<(), String> {
+    for path in collect_related_log_paths(current_log_path) {
+        if path == current_log_path || !path.exists() {
+            continue;
+        }
+        fs::remove_file(&path).map_err(|error| {
+            format!(
+                "删除历史日志文件失败（{}）: {}",
+                path.to_string_lossy(),
+                error
+            )
+        })?;
+    }
+
+    for path in collect_raw_response_paths(current_log_path) {
+        if !path.exists() {
+            continue;
+        }
+        fs::remove_file(&path).map_err(|error| {
+            format!(
+                "删除原始响应文件失败（{}）: {}",
+                path.to_string_lossy(),
+                error
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+fn clear_diagnostic_log_artifacts() -> Result<(), String> {
+    let current_path = current_log_path()?;
+    clear_diagnostic_log_artifacts_from_path(&current_path)
+}
+
+fn clear_persisted_log_artifacts_from_path(current_log_path: &Path) -> Result<(), String> {
+    truncate_current_log_file(current_log_path)?;
+    clear_diagnostic_log_artifacts_from_path(current_log_path)
+}
+
+fn clear_persisted_log_artifacts() -> Result<(), String> {
+    let current_path = current_log_path()?;
+    clear_persisted_log_artifacts_from_path(&current_path)
+}
+
 fn data_error(error: impl std::fmt::Display) -> RuntimeCoreError {
     RuntimeCoreError::Backend(error.to_string())
 }
@@ -4971,13 +8906,31 @@ fn data_error(error: impl std::fmt::Display) -> RuntimeCoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AppServer;
+    use crate::MockBackend;
+    use crate::RuntimeCore;
+    use app_server_protocol::METHOD_INITIALIZE;
+    use app_server_protocol::METHOD_INITIALIZED;
+    use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
+    use app_server_protocol::METHOD_MCP_RESOURCE_READ;
+    use app_server_protocol::METHOD_MCP_SERVER_CREATE;
+    use app_server_protocol::METHOD_MCP_SERVER_START;
+    use app_server_protocol::METHOD_MCP_SERVER_STATUS_LIST;
+    use app_server_protocol::METHOD_MCP_SERVER_STOP;
+    use app_server_protocol::METHOD_MCP_TOOL_CALL;
+    use app_server_protocol::METHOD_MCP_TOOL_LIST;
+    use app_server_protocol::SERVER_NAME;
+    use app_server_transport::decode_message;
     use lime_core::database::dao::agent_timeline::AgentThreadItemPayload;
     use lime_core::database::dao::agent_timeline::AgentThreadItemStatus;
     use lime_core::database::schema::create_tables;
     use rusqlite::Connection;
+    use serde_json::Value;
+    use std::io::Write;
     use std::sync::Arc;
     use std::sync::Mutex;
     use tempfile::TempDir;
+    use zip::write::FileOptions as TestZipFileOptions;
 
     const WORKSPACE_ID: &str = "workspace-current";
     const WORKSPACE_ROOT: &str = "/tmp/lime-current-workspace";
@@ -4999,12 +8952,622 @@ mod tests {
         .expect("insert workspace");
         LocalAppDataSource {
             db: Arc::new(Mutex::new(conn)),
+            logs: Arc::new(tokio::sync::RwLock::new(lime_core::logger::LogStore::new())),
+            aster_agent_state: AsterAgentState::new(),
             api_key_provider_service: ApiKeyProviderService::new(),
             model_registry_service: ModelRegistryService::new(Arc::new(Mutex::new(
                 Connection::open_in_memory().expect("open model db"),
             ))),
             mcp_manager: Arc::new(TokioMutex::new(McpClientManager::new(None))),
+            telegram_gateway_state: TelegramGatewayState::default(),
+            feishu_gateway_state: FeishuGatewayState::default(),
+            discord_gateway_state: DiscordGatewayState::default(),
+            wechat_gateway_state: WechatGatewayState::default(),
+            gateway_tunnel_state: GatewayTunnelState::default(),
+            wechat_login_state: WechatLoginState::default(),
         }
+    }
+
+    fn build_skill_zip(entries: &[(&str, &str)]) -> Vec<u8> {
+        let cursor = Cursor::new(Vec::new());
+        let mut writer = ZipWriter::new(cursor);
+        let options = TestZipFileOptions::default();
+        for (path, content) in entries {
+            writer.start_file(*path, options).expect("start zip entry");
+            writer
+                .write_all(content.as_bytes())
+                .expect("write zip entry");
+        }
+        writer.finish().expect("finish zip").into_inner()
+    }
+
+    #[test]
+    fn log_helpers_read_tail_and_clear_persisted_artifacts() {
+        let temp = TempDir::new().expect("temp dir");
+        let log_path = temp.path().join("lime.log");
+        let rotated_path = temp.path().join("lime.log.20260313-010000");
+        let raw_response_path = temp.path().join("raw_response_request-1.txt");
+        fs::write(
+            &rotated_path,
+            "2026-03-13 01:00:00.000 [INFO] rotated one\nfallback line\n",
+        )
+        .expect("write rotated log");
+        fs::write(&log_path, "2026-03-13 01:01:00.000 [WARN] current two\n")
+            .expect("write current log");
+        fs::write(&raw_response_path, "raw").expect("write raw response");
+
+        let entries = read_persisted_logs_tail_from_path(&log_path, 3);
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| (entry.level.as_str(), entry.message.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("info", "rotated one"),
+                ("info", "fallback line"),
+                ("warn", "current two"),
+            ]
+        );
+
+        clear_persisted_log_artifacts_from_path(&log_path).expect("clear persisted logs");
+
+        assert_eq!(fs::read_to_string(&log_path).expect("read current log"), "");
+        assert!(!rotated_path.exists());
+        assert!(!raw_response_path.exists());
+    }
+
+    #[test]
+    fn inspect_local_skill_package_returns_stripped_file_tree() {
+        let package = build_skill_zip(&[
+            (
+                "article-typesetting-master/SKILL.md",
+                "---\nname: Article Typesetting\ndescription: typeset article\n---\n",
+            ),
+            ("article-typesetting-master/references/guide.md", "# Guide"),
+            (
+                "article-typesetting-master/templates/default.md",
+                "# Template",
+            ),
+        ]);
+
+        let result = inspect_skill_zip_package("article-typesetting-master", &package)
+            .expect("local .skill package should inspect");
+
+        assert_eq!(result.directory, "article-typesetting-master");
+        assert!(result.inspection["content"]
+            .as_str()
+            .expect("inspection content")
+            .contains("Article Typesetting"));
+        assert_eq!(
+            result
+                .files
+                .iter()
+                .map(|entry| {
+                    (
+                        entry["path"].as_str().expect("file path"),
+                        entry["isDirectory"].as_bool().expect("is directory"),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            vec![
+                ("references", true),
+                ("templates", true),
+                ("SKILL.md", false),
+                ("references/guide.md", false),
+                ("templates/default.md", false),
+            ]
+        );
+    }
+
+    #[test]
+    fn export_local_skill_package_to_path_writes_skill_zip() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let skill_root = temp_dir.path().join("skills");
+        let source_dir = skill_root.join("writer");
+        fs::create_dir_all(source_dir.join("references")).expect("create skill dir");
+        fs::write(
+            source_dir.join("SKILL.md"),
+            "---\nname: Writer\ndescription: export me\n---\n\n# Writer\n",
+        )
+        .expect("write skill");
+        fs::write(source_dir.join("references").join("guide.md"), "# Guide")
+            .expect("write reference");
+
+        let export_path = temp_dir.path().join("exports").join("writer.skills");
+        let result = export_local_skill_package_to_path(&[skill_root], "writer", &export_path)
+            .expect("local Skill package should export");
+
+        assert_eq!(result.directory, "writer");
+        assert_eq!(result.output_path, export_path.to_string_lossy());
+        assert_eq!(result.file_count, 2);
+        assert!(result.bytes_written > 0);
+        assert!(export_path.is_file());
+
+        let export_file = fs::File::open(&export_path).expect("open export");
+        let mut archive = ZipArchive::new(export_file).expect("read export zip");
+        let mut names = Vec::new();
+        for index in 0..archive.len() {
+            names.push(
+                archive
+                    .by_index(index)
+                    .expect("zip entry")
+                    .name()
+                    .to_string(),
+            );
+        }
+        assert_eq!(names, vec!["writer/SKILL.md", "writer/references/guide.md"]);
+
+        let mut skill_md = String::new();
+        archive
+            .by_name("writer/SKILL.md")
+            .expect("skill md")
+            .read_to_string(&mut skill_md)
+            .expect("read skill md");
+        assert!(skill_md.contains("# Writer"));
+    }
+
+    #[test]
+    fn local_skill_detail_rename_and_replace_use_current_helpers() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let skill_root = temp_dir.path().join("skills");
+        let source_dir = skill_root.join("writer");
+        fs::create_dir_all(source_dir.join("references")).expect("create skill dir");
+        fs::write(
+            source_dir.join("SKILL.md"),
+            "---\nname: Writer\ndescription: inspect me\n---\n\n# Writer\n",
+        )
+        .expect("write skill");
+        fs::write(source_dir.join("references").join("guide.md"), "# Guide")
+            .expect("write reference");
+
+        let skill_dir = resolve_skill_package_dir(&[skill_root.clone()], "writer")
+            .expect("resolve local skill");
+        let inspection = SkillService::inspect_skill_dir(&skill_dir).expect("inspect skill");
+        let mut directories = BTreeSet::new();
+        let mut files = Vec::new();
+        collect_local_skill_detail_file_entries(
+            &skill_dir,
+            &skill_dir,
+            &mut directories,
+            &mut files,
+        )
+        .expect("collect local files");
+        assert!(inspection.content.contains("# Writer"));
+        assert_eq!(
+            directories.into_iter().collect::<Vec<_>>(),
+            vec!["references"]
+        );
+        assert_eq!(
+            files
+                .iter()
+                .map(|entry| entry["path"].as_str().expect("file path"))
+                .collect::<Vec<_>>(),
+            vec!["SKILL.md", "references/guide.md"]
+        );
+
+        let renamed_dir = skill_root.join("writer-renamed");
+        fs::rename(&source_dir, &renamed_dir).expect("rename skill");
+        assert!(renamed_dir.join("SKILL.md").is_file());
+        assert!(!source_dir.exists());
+
+        let replacement = build_skill_zip(&[
+            (
+                "writer-renamed/SKILL.md",
+                "---\nname: Writer Updated\ndescription: replace me\n---\n\n# Updated\n",
+            ),
+            ("writer-renamed/assets/sample.txt", "asset"),
+        ]);
+        let package = read_skill_zip_package(&replacement).expect("read replacement package");
+        let staged_parent = TempDir::new_in(&skill_root).expect("replacement staging");
+        let staged_dir = staged_parent.path().join("writer-renamed");
+        let staged =
+            install_skill_zip_package_into_staged_dir(&staged_dir, "writer-renamed", package)
+                .expect("stage replacement package");
+        assert_eq!(staged.directory, "writer-renamed");
+        assert!(staged.inspection["content"]
+            .as_str()
+            .expect("inspection content")
+            .contains("# Updated"));
+
+        let backup_dir = skill_root.join(".writer-renamed.replace-backup-test");
+        fs::rename(&renamed_dir, &backup_dir).expect("backup existing skill");
+        fs::rename(&staged_dir, &renamed_dir).expect("install replacement");
+        fs::remove_dir_all(&backup_dir).expect("remove backup");
+
+        let updated = fs::read_to_string(renamed_dir.join("SKILL.md")).expect("read updated skill");
+        assert!(updated.contains("# Updated"));
+        assert!(renamed_dir.join("assets").join("sample.txt").is_file());
+    }
+
+    #[test]
+    fn install_marketplace_skill_bundle_into_root_writes_standard_package() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let target_root = temp_dir.path().join("skills");
+        let content = "---\nname: Market Skill\ndescription: install me\n---\n";
+        let checksum = format!("sha256:{}", hex::encode(Sha256::digest(content.as_bytes())));
+
+        let result = install_marketplace_skill_bundle_into_root(
+            &target_root,
+            SkillMarketplaceInstallParams {
+                app: "lime".to_string(),
+                manifest_version: "agentskills.v1".to_string(),
+                name: "market-skill".to_string(),
+                aliases: Vec::new(),
+                version: "1.0.0".to_string(),
+                content_hash: "sha256:bundle".to_string(),
+                file_count: 2,
+                files: vec![
+                    SkillMarketplaceBundleFile {
+                        path: "SKILL.md".to_string(),
+                        content: content.to_string(),
+                        encoding: Some("utf-8".to_string()),
+                        sha256: Some(checksum),
+                    },
+                    SkillMarketplaceBundleFile {
+                        path: "references/guide.md".to_string(),
+                        content: "# Guide".to_string(),
+                        encoding: Some("utf-8".to_string()),
+                        sha256: None,
+                    },
+                ],
+            },
+        )
+        .expect("marketplace package should install");
+
+        assert_eq!(result.directory, "market-skill");
+        assert!(target_root.join("market-skill").join("SKILL.md").is_file());
+        assert!(target_root
+            .join("market-skill")
+            .join("references")
+            .join("guide.md")
+            .is_file());
+        assert!(result
+            .inspection
+            .get("standardCompliance")
+            .and_then(Value::as_object)
+            .and_then(|value| value.get("isStandard"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false));
+    }
+
+    #[test]
+    fn install_marketplace_skill_bundle_into_root_rejects_path_traversal() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let target_root = temp_dir.path().join("skills");
+
+        let err = install_marketplace_skill_bundle_into_root(
+            &target_root,
+            SkillMarketplaceInstallParams {
+                app: "lime".to_string(),
+                manifest_version: "agentskills.v1".to_string(),
+                name: "market-skill".to_string(),
+                aliases: Vec::new(),
+                version: "1.0.0".to_string(),
+                content_hash: String::new(),
+                file_count: 1,
+                files: vec![SkillMarketplaceBundleFile {
+                    path: "../SKILL.md".to_string(),
+                    content: "---\nname: Bad\ndescription: bad\n---\n".to_string(),
+                    encoding: Some("utf-8".to_string()),
+                    sha256: None,
+                }],
+            },
+        )
+        .expect_err("path traversal should be rejected");
+
+        assert!(err.contains("Invalid marketplace skill file path"));
+        assert!(!target_root.join("market-skill").exists());
+    }
+
+    #[test]
+    fn install_marketplace_skill_bundle_into_root_rejects_checksum_mismatch() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let target_root = temp_dir.path().join("skills");
+
+        let err = install_marketplace_skill_bundle_into_root(
+            &target_root,
+            SkillMarketplaceInstallParams {
+                app: "lime".to_string(),
+                manifest_version: "agentskills.v1".to_string(),
+                name: "market-skill".to_string(),
+                aliases: Vec::new(),
+                version: "1.0.0".to_string(),
+                content_hash: String::new(),
+                file_count: 1,
+                files: vec![SkillMarketplaceBundleFile {
+                    path: "SKILL.md".to_string(),
+                    content: "---\nname: Bad\ndescription: bad\n---\n".to_string(),
+                    encoding: Some("utf-8".to_string()),
+                    sha256: Some("sha256:0000".to_string()),
+                }],
+            },
+        )
+        .expect_err("checksum mismatch should be rejected");
+
+        assert!(err.contains("checksum mismatch"));
+        assert!(!target_root.join("market-skill").exists());
+    }
+
+    #[tokio::test]
+    async fn mcp_current_jsonrpc_starts_real_stdio_server_and_reads_tool_resource() {
+        let temp_dir = TempDir::new().expect("create mcp fixture temp dir");
+        let server_path = write_mcp_stdio_fixture(temp_dir.path());
+        let server = AppServer::with_runtime(
+            RuntimeCore::with_backend(Arc::new(MockBackend))
+                .with_app_data_source(Arc::new(setup_data_source())),
+        );
+
+        let init = app_server_request(
+            &server,
+            1,
+            METHOD_INITIALIZE,
+            json!({
+                "clientInfo": {
+                    "name": "mcp-current-fixture",
+                    "version": "test"
+                },
+                "capabilities": {
+                    "experimental": true
+                }
+            }),
+        )
+        .await;
+        assert_eq!(
+            init.pointer("/result/serverInfo/name"),
+            Some(&json!(SERVER_NAME))
+        );
+        app_server_notification(&server, METHOD_INITIALIZED, json!({})).await;
+
+        let create = app_server_request(
+            &server,
+            2,
+            METHOD_MCP_SERVER_CREATE,
+            json!({
+                "server": {
+                    "id": "fixture",
+                    "name": "fixture",
+                    "description": "Current MCP JSON-RPC fixture",
+                    "server_config": {
+                        "command": "node",
+                        "args": [server_path.to_string_lossy()],
+                        "cwd": temp_dir.path().to_string_lossy(),
+                        "timeout": 3
+                    },
+                    "enabled_lime": true,
+                    "enabled_claude": false,
+                    "enabled_codex": false,
+                    "enabled_gemini": false,
+                    "created_at": 1
+                }
+            }),
+        )
+        .await;
+        assert_eq!(
+            create.pointer("/result/servers/0/name"),
+            Some(&json!("fixture"))
+        );
+
+        let start = app_server_request(
+            &server,
+            3,
+            METHOD_MCP_SERVER_START,
+            json!({ "name": "fixture" }),
+        )
+        .await;
+        assert!(start.get("result").is_some(), "{start:?}");
+
+        let status = app_server_request(&server, 4, METHOD_MCP_SERVER_STATUS_LIST, json!({})).await;
+        assert_eq!(
+            status.pointer("/result/servers/0/is_running"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            status.pointer("/result/servers/0/server_info/supports_tools"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            status.pointer("/result/servers/0/server_info/supports_resources"),
+            Some(&json!(true))
+        );
+
+        let tools = app_server_request(&server, 5, METHOD_MCP_TOOL_LIST, json!({})).await;
+        assert_eq!(
+            tools.pointer("/result/tools/0/name"),
+            Some(&json!("mcp__fixture__echo"))
+        );
+
+        let tool_result = app_server_request(
+            &server,
+            6,
+            METHOD_MCP_TOOL_CALL,
+            json!({
+                "toolName": "mcp__fixture__echo",
+                "arguments": {
+                    "message": "hello current MCP"
+                }
+            }),
+        )
+        .await;
+        assert_eq!(
+            tool_result.pointer("/result/content/0/text"),
+            Some(&json!("echo: hello current MCP"))
+        );
+
+        let resources = app_server_request(&server, 7, METHOD_MCP_RESOURCE_LIST, json!({})).await;
+        assert_eq!(
+            resources.pointer("/result/resources/0/uri"),
+            Some(&json!("fixture://status"))
+        );
+
+        let resource = app_server_request(
+            &server,
+            8,
+            METHOD_MCP_RESOURCE_READ,
+            json!({
+                "uri": "fixture://status"
+            }),
+        )
+        .await;
+        assert_eq!(
+            resource.pointer("/result/uri"),
+            Some(&json!("fixture://status"))
+        );
+        assert_eq!(
+            resource.pointer("/result/text"),
+            Some(&json!("fixture resource ok"))
+        );
+
+        let stop = app_server_request(
+            &server,
+            9,
+            METHOD_MCP_SERVER_STOP,
+            json!({ "name": "fixture" }),
+        )
+        .await;
+        assert!(stop.get("result").is_some(), "{stop:?}");
+    }
+
+    fn write_mcp_stdio_fixture(root: &Path) -> PathBuf {
+        let path = root.join("mcp-current-fixture.mjs");
+        fs::write(
+            &path,
+            r#"
+import readline from "node:readline";
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  crlfDelay: Infinity,
+});
+
+function send(message) {
+  process.stdout.write(`${JSON.stringify(message)}\n`);
+}
+
+function result(id, value) {
+  send({ jsonrpc: "2.0", id, result: value });
+}
+
+function error(id, code, message) {
+  send({ jsonrpc: "2.0", id, error: { code, message } });
+}
+
+rl.on("line", (line) => {
+  if (!line.trim()) return;
+  const message = JSON.parse(line);
+  const { id, method, params } = message;
+
+  if (method === "initialize") {
+    result(id, {
+      protocolVersion: "2025-03-26",
+      capabilities: {
+        tools: {},
+        resources: {},
+      },
+      serverInfo: {
+        name: "fixture-mcp",
+        version: "1.0.0",
+      },
+    });
+    return;
+  }
+
+  if (method === "notifications/initialized") return;
+
+  if (method === "tools/list") {
+    result(id, {
+      tools: [
+        {
+          name: "echo",
+          description: "Echo a message for current MCP tests",
+          inputSchema: {
+            type: "object",
+            properties: {
+              message: { type: "string" },
+            },
+          },
+        },
+      ],
+    });
+    return;
+  }
+
+  if (method === "tools/call") {
+    result(id, {
+      content: [
+        {
+          type: "text",
+          text: `echo: ${params?.arguments?.message ?? ""}`,
+        },
+      ],
+      isError: false,
+    });
+    return;
+  }
+
+  if (method === "resources/list") {
+    result(id, {
+      resources: [
+        {
+          uri: "fixture://status",
+          name: "status",
+          description: "Current MCP fixture status",
+          mimeType: "text/plain",
+        },
+      ],
+    });
+    return;
+  }
+
+  if (method === "resources/read") {
+    result(id, {
+      contents: [
+        {
+          uri: params?.uri ?? "fixture://status",
+          mimeType: "text/plain",
+          text: "fixture resource ok",
+        },
+      ],
+    });
+    return;
+  }
+
+  error(id, -32601, `unsupported fixture method: ${method}`);
+});
+"#,
+        )
+        .expect("write mcp fixture");
+        path
+    }
+
+    async fn app_server_request(server: &AppServer, id: u64, method: &str, params: Value) -> Value {
+        let line = json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params,
+        })
+        .to_string();
+        let responses = server
+            .handle_json_line(&line)
+            .await
+            .expect("handle app-server request");
+        assert_eq!(responses.len(), 1, "{responses:?}");
+        let message = decode_message(&responses[0]).expect("decode app-server response");
+        serde_json::to_value(message).expect("serialize app-server response")
+    }
+
+    async fn app_server_notification(server: &AppServer, method: &str, params: Value) {
+        let line = json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        })
+        .to_string();
+        let responses = server
+            .handle_json_line(&line)
+            .await
+            .expect("handle app-server notification");
+        assert!(responses.is_empty(), "{responses:?}");
     }
 
     fn insert_session(conn: &Connection, id: &str, title: &str, updated_at: &str) {
@@ -5320,6 +9883,70 @@ mod tests {
         assert_eq!(removed, 1);
         assert_eq!(missing, 1);
         assert!(!installed.exists());
+    }
+
+    #[test]
+    fn uninstall_agent_app_keep_data_removes_install_state_from_current_list() {
+        let temp = TempDir::new().expect("temp dir");
+        let data_root = temp.path();
+        let app_id = "content-factory-app";
+        let installed = installed_agent_app_state_path_from_data_root(data_root, app_id)
+            .expect("installed path");
+        let setup =
+            setup_agent_app_state_path_from_data_root(data_root, app_id).expect("setup path");
+        let user_data = data_root
+            .join("storage")
+            .join(app_id)
+            .join("user-data.json");
+
+        fs::create_dir_all(installed.parent().expect("installed parent")).expect("installed dir");
+        fs::create_dir_all(setup.parent().expect("setup parent")).expect("setup dir");
+        fs::create_dir_all(user_data.parent().expect("user data parent")).expect("storage dir");
+        fs::write(
+            &installed,
+            serde_json::to_string_pretty(&json!({
+                "schemaVersion": INSTALLED_AGENT_APP_STATE_SCHEMA_VERSION,
+                "savedAt": NOW,
+                "state": {
+                    "appId": app_id,
+                    "identity": {
+                        "packageHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    },
+                    "projection": {
+                        "storage": {
+                            "namespace": app_id
+                        }
+                    },
+                    "setup": {}
+                }
+            }))
+            .expect("serialize installed state"),
+        )
+        .expect("write installed state");
+        fs::write(&setup, "{}").expect("write setup state");
+        fs::write(&user_data, "{}").expect("write user data");
+
+        let before = list_agent_app_installed_state_from_data_root(data_root).expect("list before");
+        assert_eq!(before.states.len(), 1);
+
+        let response = uninstall_agent_app_from_data_root(
+            AgentAppUninstallParams {
+                app_id: app_id.to_string(),
+                mode: "keep-data".to_string(),
+                confirmation_phrase: None,
+            },
+            data_root,
+        )
+        .expect("uninstall");
+
+        assert_eq!(response.status, "uninstalled");
+        assert_eq!(response.removed_target_count, 2);
+        assert_eq!(response.missing_target_count, 0);
+        assert!(response.blocker_codes.is_empty());
+        assert!(response.list.states.is_empty());
+        assert!(!installed.exists());
+        assert!(!setup.exists());
+        assert!(user_data.exists());
     }
 
     #[tokio::test]

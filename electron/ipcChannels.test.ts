@@ -32,6 +32,7 @@ describe("electron/ipcChannels", () => {
       true,
     );
     expect(isElectronHostCommand("agent_runtime_list_sessions")).toBe(true);
+    expect(isElectronHostCommand("agent_runtime_delete_session")).toBe(false);
     expect(
       isElectronHostCommand("agent_runtime_list_workspace_skill_bindings"),
     ).toBe(true);
@@ -67,9 +68,9 @@ describe("electron/ipcChannels", () => {
     expect(
       isElectronHostCommand("agent_app_runtime_submit_host_response"),
     ).toBe(true);
-    expect(isElectronHostCommand("get_usage_stats")).toBe(true);
-    expect(isElectronHostCommand("get_model_usage_ranking")).toBe(true);
-    expect(isElectronHostCommand("get_daily_usage_trends")).toBe(true);
+    expect(isElectronHostCommand("get_usage_stats")).toBe(false);
+    expect(isElectronHostCommand("get_model_usage_ranking")).toBe(false);
+    expect(isElectronHostCommand("get_daily_usage_trends")).toBe(false);
     expect(isElectronHostCommand("get_browser_connector_settings_cmd")).toBe(
       true,
     );
@@ -81,9 +82,10 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_chrome_bridge_status")).toBe(true);
     expect(isElectronHostCommand("get_browser_backend_policy")).toBe(true);
     expect(isElectronHostCommand("get_browser_backends_status")).toBe(true);
-    expect(isElectronHostCommand("get_voice_input_config")).toBe(true);
+    expect(isElectronHostCommand("get_voice_input_config")).toBe(false);
     expect(isElectronHostCommand("get_asr_credentials")).toBe(true);
     expect(isElectronHostCommand("get_voice_instructions")).toBe(true);
+    expect(isElectronHostCommand("validate_shortcut")).toBe(true);
     expect(isElectronHostCommand("voice_models_get_install_state")).toBe(true);
     expect(isElectronHostCommand("get_environment_preview")).toBe(true);
     expect(isElectronHostCommand("unified_memory_stats")).toBe(true);
@@ -104,10 +106,24 @@ describe("electron/ipcChannels", () => {
     ]) {
       expect(isElectronHostCommand(command)).toBe(false);
     }
-    expect(isElectronHostCommand("site_get_adapter_catalog_status")).toBe(true);
+    expect(isElectronHostCommand("site_get_adapter_catalog_status")).toBe(
+      false,
+    );
+    expect(isElectronHostCommand("site_list_adapters")).toBe(false);
     expect(isElectronHostCommand("open_external_url")).toBe(true);
     expect(isElectronHostCommand("open_with_default_app")).toBe(true);
     expect(isElectronHostCommand("reveal_in_finder")).toBe(true);
+    expect(isElectronHostCommand("save_exported_document")).toBe(true);
+    expect(isElectronHostCommand("save_layered_design_project_export")).toBe(
+      true,
+    );
+    expect(isElectronHostCommand("read_layered_design_project_export")).toBe(
+      true,
+    );
+    expect(isElectronHostCommand("recognize_layered_design_text")).toBe(true);
+    expect(isElectronHostCommand("analyze_layered_design_flat_image")).toBe(
+      true,
+    );
     expect(isElectronHostCommand("start_oem_cloud_oauth_callback_bridge")).toBe(
       true,
     );

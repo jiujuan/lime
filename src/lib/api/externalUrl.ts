@@ -1,5 +1,6 @@
 import { safeInvoke } from "@/lib/dev-bridge";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
+import { assertEmptyElectronHostResult } from "./electronHostResult";
 
 export const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT =
   "oem-cloud-oauth-callback";
@@ -43,6 +44,7 @@ export async function openExternalUrlWithSystemBrowser(
     result,
     "真实外部链接 current 通道",
   );
+  assertEmptyElectronHostResult("open_external_url", result);
 }
 
 export async function startOemCloudOAuthCallbackBridge(): Promise<OemCloudOAuthCallbackBridgeStartResponse> {

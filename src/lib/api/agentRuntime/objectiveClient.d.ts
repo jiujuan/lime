@@ -1,3 +1,4 @@
+import type { AppServerClient } from "@/lib/api/appServer";
 import type { AgentRuntimeCommandInvoke } from "./transport";
 import type {
   AgentRuntimeClearObjectiveResult,
@@ -7,11 +8,20 @@ import type {
   AgentRuntimeUpdateObjectiveStatusRequest,
   ManagedObjective,
 } from "./types";
+export type AgentRuntimeObjectiveAppServerClient = Pick<
+  AppServerClient,
+  | "readAgentSessionObjective"
+  | "setAgentSessionObjective"
+  | "updateAgentSessionObjectiveStatus"
+  | "clearAgentSessionObjective"
+>;
 export interface AgentRuntimeObjectiveClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
+  appServerClient?: AgentRuntimeObjectiveAppServerClient;
 }
 export declare function createObjectiveClient({
   invokeCommand,
+  appServerClient,
 }?: AgentRuntimeObjectiveClientDeps): {
   auditAgentRuntimeObjective: (
     request: AgentRuntimeObjectiveSessionRequest,

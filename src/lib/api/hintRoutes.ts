@@ -10,8 +10,25 @@ export interface HintRouteItem {
 
 const COMMAND_GET_HINT_ROUTES = "get_hint_routes";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function containsErrorEnvelope(value: unknown): boolean {
+  if (isRecord(value) && "error" in value) {
+    return true;
+  }
+  return Array.isArray(value) && value.some(containsErrorEnvelope);
+}
+
+function assertNotErrorEnvelope(command: string, value: unknown): void {
+  if (containsErrorEnvelope(value)) {
+    throw new Error(`${command} returned an error envelope`);
+  }
+}
+
 function isHintRouteItem(value: unknown): value is HintRouteItem {
-  if (!value || typeof value !== "object") {
+  if (!isRecord(value)) {
     return false;
   }
   const route = value as Partial<Record<keyof HintRouteItem, unknown>>;
@@ -33,6 +50,7 @@ export async function listHintRoutes(): Promise<HintRouteItem[]> {
     routes,
     "真实提示路由 current 通道",
   );
+  assertNotErrorEnvelope(COMMAND_GET_HINT_ROUTES, routes);
   if (!Array.isArray(routes) || routes.some((route) => !isHintRouteItem(route))) {
     throw new Error(`${COMMAND_GET_HINT_ROUTES} did not return hint routes`);
   }

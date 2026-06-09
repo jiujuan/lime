@@ -52,15 +52,6 @@ export type {
   AsterTurnOutputSchemaStrategy,
 } from "../agentExecutionRuntime";
 
-/**
- * Agent 状态
- */
-export interface AgentProcessStatus {
-  running: boolean;
-  base_url?: string;
-  port?: number;
-}
-
 export interface AgentRuntimeGeneratedTitleResult {
   title: string;
   sessionId?: string | null;

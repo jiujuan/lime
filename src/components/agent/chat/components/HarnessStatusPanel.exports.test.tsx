@@ -7,7 +7,6 @@ import {
 } from "./HarnessStatusPanel.testFixtures";
 import {
   conversationProjectionStore,
-  selectAgentUiProjectionEventsByType,
   selectLatestAgentUiProjectionEventForEvidence,
 } from "../projection/conversationProjectionStore";
 
@@ -20,37 +19,7 @@ const {
 } = getHarnessPanelTestMocks();
 
 describe("HarnessStatusPanel exports", () => {
-  it("存在 sessionId 时应支持导出交接制品并展示产物列表", async () => {
-    exportAgentRuntimeHandoffBundleMock.mockResolvedValue({
-      session_id: "session-handoff-1",
-      thread_id: "thread-handoff-1",
-      workspace_id: "workspace-handoff-1",
-      workspace_root: "/tmp/workspace-handoff-1",
-      bundle_relative_root: ".lime/harness/sessions/session-handoff-1",
-      bundle_absolute_root:
-        "/tmp/workspace-handoff-1/.lime/harness/sessions/session-handoff-1",
-      exported_at: "2026-03-27T09:30:00.000Z",
-      thread_status: "running",
-      latest_turn_status: "queued",
-      pending_request_count: 1,
-      queued_turn_count: 2,
-      active_subagent_count: 1,
-      todo_total: 3,
-      todo_pending: 1,
-      todo_in_progress: 1,
-      todo_completed: 1,
-      artifacts: [
-        {
-          kind: "handoff",
-          title: "交接摘要",
-          relative_path: ".lime/harness/sessions/session-handoff-1/handoff.md",
-          absolute_path:
-            "/tmp/workspace-handoff-1/.lime/harness/sessions/session-handoff-1/handoff.md",
-          bytes: 512,
-        },
-      ],
-    });
-
+  it("存在 sessionId 时只暴露 App Server current 的问题证据包导出入口", () => {
     renderPanel({
       diagnosticRuntimeContext: {
         sessionId: "session-handoff-1",
@@ -63,13 +32,86 @@ describe("HarnessStatusPanel exports", () => {
       },
     });
 
-    expect(document.body.textContent).toContain("交接制品");
+    expect(document.body.textContent).toContain("问题证据包");
     expect(
-      document.body.querySelector('button[aria-label="跳转到交接制品"]'),
+      document.body.querySelector('button[aria-label="跳转到问题证据包"]'),
     ).not.toBeNull();
+    expect(
+      document.body.querySelector('button[aria-label="导出问题证据包"]'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector('button[aria-label="导出交接制品"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('button[aria-label="导出 Replay 样本"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('button[aria-label="导出外部分析交接"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('button[aria-label="一键复制给 AI"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('button[aria-label="导出人工审核记录"]'),
+    ).toBeNull();
+    expect(
+      document.body.querySelector('button[aria-label="填写人工审核结果"]'),
+    ).toBeNull();
+    expect(exportAgentRuntimeHandoffBundleMock).not.toHaveBeenCalled();
+    expect(exportAgentRuntimeReplayCaseMock).not.toHaveBeenCalled();
+    expect(exportAgentRuntimeAnalysisHandoffMock).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain("会话交接四件套");
+    expect(document.body.textContent).not.toContain("Replay 样本");
+    expect(document.body.textContent).not.toContain("外部分析交接");
+    expect(document.body.textContent).not.toContain("人工审核记录");
+  });
+
+  it("旧派生导出控件下线后点击导出问题证据包不应触发 legacy compat 命令", async () => {
+    exportAgentRuntimeEvidencePackMock.mockResolvedValue({
+      session_id: "session-evidence-only-1",
+      thread_id: "thread-evidence-only-1",
+      workspace_id: "workspace-evidence-only-1",
+      workspace_root: "/tmp/workspace-evidence-only-1",
+      pack_relative_root:
+        ".lime/harness/sessions/session-evidence-only-1/evidence",
+      pack_absolute_root:
+        "/tmp/workspace-evidence-only-1/.lime/harness/sessions/session-evidence-only-1/evidence",
+      exported_at: "2026-03-27T09:36:00.000Z",
+      thread_status: "running",
+      latest_turn_status: "running",
+      turn_count: 1,
+      item_count: 2,
+      pending_request_count: 0,
+      queued_turn_count: 0,
+      recent_artifact_count: 1,
+      known_gaps: [],
+      artifacts: [
+        {
+          kind: "summary",
+          title: "问题摘要",
+          relative_path:
+            ".lime/harness/sessions/session-evidence-only-1/evidence/summary.md",
+          absolute_path:
+            "/tmp/workspace-evidence-only-1/.lime/harness/sessions/session-evidence-only-1/evidence/summary.md",
+          bytes: 128,
+        },
+      ],
+    });
+
+    renderPanel({
+      diagnosticRuntimeContext: {
+        sessionId: "session-evidence-only-1",
+        workspaceId: "workspace-evidence-only-1",
+        providerType: "openai",
+        model: "gpt-5.4",
+        executionStrategy: "react",
+        activeTheme: "default",
+        selectedTeamLabel: null,
+      },
+    });
 
     const exportButton = document.body.querySelector(
-      'button[aria-label="导出交接制品"]',
+      'button[aria-label="导出问题证据包"]',
     ) as HTMLButtonElement | null;
 
     await act(async () => {
@@ -77,47 +119,12 @@ describe("HarnessStatusPanel exports", () => {
       await Promise.resolve();
     });
 
-    expect(exportAgentRuntimeHandoffBundleMock).toHaveBeenCalledWith(
-      "session-handoff-1",
+    expect(exportAgentRuntimeEvidencePackMock).toHaveBeenCalledWith(
+      "session-evidence-only-1",
     );
-    expect(document.body.textContent).toContain(
-      ".lime/harness/sessions/session-handoff-1/handoff.md",
-    );
-    expect(document.body.textContent).toContain("线程状态");
-    expect(document.body.textContent).toContain("处理中");
-    expect(document.body.textContent).toContain("排队中");
-    expect(
-      selectAgentUiProjectionEventsByType(
-        conversationProjectionStore.getSnapshot(),
-        "agent.handoff",
-      ),
-    ).toEqual([
-      expect.objectContaining({
-        type: "agent.handoff",
-        sourceType: "evidence_projection",
-        sessionId: "session-handoff-1",
-        threadId: "thread-handoff-1",
-        evidenceId: ".lime/harness/sessions/session-handoff-1",
-        handoffId: ".lime/harness/sessions/session-handoff-1",
-        phase: "waiting",
-        surface: "handoff_lane",
-        topology: "specialist_handoff",
-        payload: expect.objectContaining({
-          handoffEvent: "runtime_handoff_bundle",
-          status: "handoff_requested",
-          from: "lime_runtime",
-          to: "specialist_runtime",
-          reason: "handoff_bundle_exported",
-          resumeTarget: ".lime/harness/sessions/session-handoff-1",
-        }),
-        refs: {
-          artifactPaths: [
-            ".lime/harness/sessions/session-handoff-1/handoff.md",
-          ],
-        },
-      }),
-    ]);
-    expect(mockToast.success).toHaveBeenCalledWith("已导出 1 个交接制品");
+    expect(exportAgentRuntimeHandoffBundleMock).not.toHaveBeenCalled();
+    expect(exportAgentRuntimeReplayCaseMock).not.toHaveBeenCalled();
+    expect(exportAgentRuntimeAnalysisHandoffMock).not.toHaveBeenCalled();
   });
 
   it("存在 sessionId 时应支持导出问题证据包并展示缺口与文件列表", async () => {
@@ -471,226 +478,4 @@ describe("HarnessStatusPanel exports", () => {
     });
   });
 
-  it("存在 sessionId 时应支持导出外部分析交接并展示分析文件列表", async () => {
-    exportAgentRuntimeAnalysisHandoffMock.mockResolvedValue({
-      session_id: "session-analysis-1",
-      thread_id: "thread-analysis-1",
-      workspace_id: "workspace-analysis-1",
-      workspace_root: "/tmp/workspace-analysis-1",
-      analysis_relative_root:
-        ".lime/harness/sessions/session-analysis-1/analysis",
-      analysis_absolute_root:
-        "/tmp/workspace-analysis-1/.lime/harness/sessions/session-analysis-1/analysis",
-      handoff_bundle_relative_root: ".lime/harness/sessions/session-analysis-1",
-      evidence_pack_relative_root:
-        ".lime/harness/sessions/session-analysis-1/evidence",
-      replay_case_relative_root:
-        ".lime/harness/sessions/session-analysis-1/replay",
-      exported_at: "2026-03-27T10:00:00.000Z",
-      title: "修复运行时导出交接缺口",
-      thread_status: "running",
-      latest_turn_status: "waiting_request",
-      pending_request_count: 1,
-      queued_turn_count: 0,
-      sanitized_workspace_root: "/workspace/lime",
-      copy_prompt: "# Lime 外部诊断与修复任务\n",
-      artifacts: [
-        {
-          kind: "analysis_brief",
-          title: "外部分析简报",
-          relative_path:
-            ".lime/harness/sessions/session-analysis-1/analysis/analysis-brief.md",
-          absolute_path:
-            "/tmp/workspace-analysis-1/.lime/harness/sessions/session-analysis-1/analysis/analysis-brief.md",
-          bytes: 512,
-        },
-        {
-          kind: "analysis_context",
-          title: "外部分析上下文",
-          relative_path:
-            ".lime/harness/sessions/session-analysis-1/analysis/analysis-context.json",
-          absolute_path:
-            "/tmp/workspace-analysis-1/.lime/harness/sessions/session-analysis-1/analysis/analysis-context.json",
-          bytes: 768,
-        },
-      ],
-    });
-
-    renderPanel({
-      diagnosticRuntimeContext: {
-        sessionId: "session-analysis-1",
-        workspaceId: "workspace-analysis-1",
-        providerType: "openai",
-        model: "gpt-5.4",
-        executionStrategy: "react",
-        activeTheme: "default",
-        selectedTeamLabel: null,
-      },
-    });
-
-    const exportButton = document.body.querySelector(
-      'button[aria-label="导出外部分析交接"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      exportButton?.click();
-      await Promise.resolve();
-    });
-
-    expect(exportAgentRuntimeAnalysisHandoffMock).toHaveBeenCalledWith(
-      "session-analysis-1",
-    );
-    expect(document.body.textContent).toContain("外部分析交接");
-    expect(document.body.textContent).toContain("修复运行时导出交接缺口");
-    expect(document.body.textContent).toContain(
-      ".lime/harness/sessions/session-analysis-1/analysis/analysis-brief.md",
-    );
-    expect(document.body.textContent).toContain(
-      ".lime/harness/sessions/session-analysis-1/analysis/analysis-context.json",
-    );
-    expect(document.body.textContent).toContain("/workspace/lime");
-    expect(document.body.textContent).not.toContain("Claude Code");
-    expect(document.body.textContent).not.toContain("Claude / Codex");
-    expect(mockToast.success).toHaveBeenCalledWith("已导出 2 个外部分析文件");
-  });
-
-  it("存在 sessionId 时应支持导出 Replay 样本并展示关联证据与文件列表", async () => {
-    exportAgentRuntimeReplayCaseMock.mockResolvedValue({
-      session_id: "session-replay-1",
-      thread_id: "thread-replay-1",
-      workspace_id: "workspace-replay-1",
-      workspace_root: "/tmp/workspace-replay-1",
-      replay_relative_root: ".lime/harness/sessions/session-replay-1/replay",
-      replay_absolute_root:
-        "/tmp/workspace-replay-1/.lime/harness/sessions/session-replay-1/replay",
-      handoff_bundle_relative_root: ".lime/harness/sessions/session-replay-1",
-      evidence_pack_relative_root:
-        ".lime/harness/sessions/session-replay-1/evidence",
-      exported_at: "2026-03-27T09:50:00.000Z",
-      thread_status: "waiting_request",
-      latest_turn_status: "completed",
-      pending_request_count: 1,
-      queued_turn_count: 1,
-      linked_handoff_artifact_count: 4,
-      linked_evidence_artifact_count: 4,
-      recent_artifact_count: 2,
-      artifacts: [
-        {
-          kind: "grader",
-          title: "评分说明",
-          relative_path:
-            ".lime/harness/sessions/session-replay-1/replay/grader.md",
-          absolute_path:
-            "/tmp/workspace-replay-1/.lime/harness/sessions/session-replay-1/replay/grader.md",
-          bytes: 320,
-        },
-      ],
-    });
-
-    renderPanel({
-      diagnosticRuntimeContext: {
-        sessionId: "session-replay-1",
-        workspaceId: "workspace-replay-1",
-        providerType: "openai",
-        model: "gpt-5.4",
-        executionStrategy: "react",
-        activeTheme: "default",
-        selectedTeamLabel: null,
-      },
-    });
-
-    const exportButton = document.body.querySelector(
-      'button[aria-label="导出 Replay 样本"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      exportButton?.click();
-      await Promise.resolve();
-    });
-
-    expect(exportAgentRuntimeReplayCaseMock).toHaveBeenCalledWith(
-      "session-replay-1",
-    );
-    expect(document.body.textContent).toContain("Replay 样本");
-    expect(document.body.textContent).toContain("关联证据主链");
-    expect(document.body.textContent).toContain(
-      ".lime/harness/sessions/session-replay-1/replay/grader.md",
-    );
-    expect(document.body.textContent).toContain(
-      ".lime/harness/sessions/session-replay-1/evidence",
-    );
-    expect(mockToast.success).toHaveBeenCalledWith(
-      "已导出 1 个 Replay 样本文件",
-    );
-  });
-
-  it("复制回归命令在未导出时应先自动导出 Replay 样本，再复制 promote / eval / trend 命令", async () => {
-    exportAgentRuntimeReplayCaseMock.mockResolvedValue({
-      session_id: "session-replay-copy-1",
-      thread_id: "thread-replay-copy-1",
-      workspace_id: "workspace-replay-copy-1",
-      workspace_root: "/tmp/workspace-replay-copy-1",
-      replay_relative_root:
-        ".lime/harness/sessions/session-replay-copy-1/replay",
-      replay_absolute_root:
-        "/tmp/workspace-replay-copy-1/.lime/harness/sessions/session-replay-copy-1/replay",
-      handoff_bundle_relative_root:
-        ".lime/harness/sessions/session-replay-copy-1",
-      evidence_pack_relative_root:
-        ".lime/harness/sessions/session-replay-copy-1/evidence",
-      exported_at: "2026-03-27T10:12:00.000Z",
-      thread_status: "waiting_request",
-      latest_turn_status: "completed",
-      pending_request_count: 0,
-      queued_turn_count: 0,
-      linked_handoff_artifact_count: 4,
-      linked_evidence_artifact_count: 4,
-      recent_artifact_count: 2,
-      artifacts: [
-        {
-          kind: "grader",
-          title: "评分说明",
-          relative_path:
-            ".lime/harness/sessions/session-replay-copy-1/replay/grader.md",
-          absolute_path:
-            "/tmp/workspace-replay-copy-1/.lime/harness/sessions/session-replay-copy-1/replay/grader.md",
-          bytes: 320,
-        },
-      ],
-    });
-
-    renderPanel({
-      diagnosticRuntimeContext: {
-        sessionId: "session-replay-copy-1",
-        workspaceId: "workspace-replay-copy-1",
-        providerType: "openai",
-        model: "gpt-5.4",
-        executionStrategy: "react",
-        activeTheme: "default",
-        selectedTeamLabel: null,
-      },
-    });
-
-    const copyButton = document.body.querySelector(
-      'button[aria-label="复制回归沉淀与验证命令"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      copyButton?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(exportAgentRuntimeReplayCaseMock).toHaveBeenCalledWith(
-      "session-replay-copy-1",
-    );
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      'npm run harness:eval:promote -- --session-id "session-replay-copy-1" --slug "session-replay-copy-1" --title "Replay case session-replay-copy-1"\n' +
-        "npm run harness:eval\n" +
-        "npm run harness:eval:trend\n",
-    );
-    expect(mockToast.success).toHaveBeenCalledWith(
-      "已复制回归沉淀、验证与趋势命令",
-    );
-  });
 });

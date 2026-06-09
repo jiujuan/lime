@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "binary": {
+      "type": "string"
+    },
+    "installCommand": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "installSupported": {
+      "type": "boolean"
+    },
+    "installed": {
+      "type": "boolean"
+    },
+    "message": {
+      "type": "string"
+    },
+    "packageManager": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "platform": {
+      "type": "string"
+    },
+    "requiresPrivilege": {
+      "type": "boolean"
+    },
+    "version": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "binary",
+    "installSupported",
+    "installed",
+    "message",
+    "platform",
+    "requiresPrivilege"
+  ],
+  "title": "GatewayTunnelCloudflaredDetectResponse",
+  "type": "object"
+}

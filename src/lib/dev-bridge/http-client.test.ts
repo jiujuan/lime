@@ -619,8 +619,8 @@ describe("http-client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     let settled = false;
-    const invokePromise = invokeViaHttp("gateway_channel_status", {
-      request: { channel: "wechat" },
+    const invokePromise = invokeViaHttp("open_external_url", {
+      request: { url: "https://example.com" },
     }).then(
       () => ({ ok: true as const }),
       (error) => ({ ok: false as const, error }),
@@ -671,8 +671,8 @@ describe("http-client", () => {
     expect(
       resolveBridgeRequestTimeoutMs("agent_app_get_ui_runtime_status"),
     ).toBe(5000);
-    expect(resolveBridgeRequestTimeoutMs("gateway_channel_status")).toBe(5000);
-    expect(resolveBridgeRequestTimeoutMs("execute_skill")).toBe(300000);
+    expect(resolveBridgeRequestTimeoutMs("open_external_url")).toBe(5000);
+    expect(resolveBridgeRequestTimeoutMs("execute_skill")).toBe(1800);
     expect(
       resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
         request: {

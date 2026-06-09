@@ -117,10 +117,28 @@ describe("galleryMaterials API", () => {
   });
 
   it("收到非图库素材形状时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ id: "m1", type: "image" });
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ id: "m1", type: "image" })
+      .mockResolvedValueOnce({
+        error: "Electron host command is not supported: get_gallery_material",
+      });
 
     await expect(getGalleryMaterial("m1")).rejects.toThrow(
       "get_gallery_material did not return gallery material",
+    );
+    await expect(getGalleryMaterial("m1")).rejects.toThrow(
+      "get_gallery_material returned an error envelope",
+    );
+  });
+
+  it("收到带 error 的伪素材对象时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      ...createMaterial("m1"),
+      error: "Electron host command is not supported: get_gallery_material",
+    });
+
+    await expect(getGalleryMaterial("m1")).rejects.toThrow(
+      "get_gallery_material returned an error envelope",
     );
   });
 
@@ -132,7 +150,12 @@ describe("galleryMaterials API", () => {
         colors: [],
         createdAt: 1,
       })
-      .mockResolvedValueOnce({ success: true });
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        ...createMetadata("m2"),
+        error:
+          "Electron host command is not supported: create_gallery_material_metadata",
+      });
 
     await expect(
       createGalleryMetadata({
@@ -153,15 +176,36 @@ describe("galleryMaterials API", () => {
     await expect(deleteGalleryMetadata("m2")).rejects.toThrow(
       "delete_gallery_material_metadata did not return void result",
     );
+    await expect(
+      createGalleryMetadata({
+        materialId: "m2",
+        colors: ["#fff"],
+      }),
+    ).rejects.toThrow(
+      "create_gallery_material_metadata returned an error envelope",
+    );
   });
 
   it("收到非图库素材列表形状时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce([{ id: "img-1" }]);
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce([{ id: "img-1" }])
+      .mockResolvedValueOnce([
+        {
+          ...createMaterial("img-1"),
+          error:
+            "Electron host command is not supported: list_gallery_materials_by_image_category",
+        },
+      ]);
 
     await expect(
       listGalleryMaterialsByImageCategory("project-1"),
     ).rejects.toThrow(
       "list_gallery_materials_by_image_category did not return gallery materials",
+    );
+    await expect(
+      listGalleryMaterialsByImageCategory("project-1"),
+    ).rejects.toThrow(
+      "list_gallery_materials_by_image_category returned an error envelope",
     );
   });
 });

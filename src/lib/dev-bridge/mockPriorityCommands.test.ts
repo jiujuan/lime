@@ -33,23 +33,53 @@ describe("mockPriorityCommands", () => {
     }
   });
 
-  it("图层设计工程目录命令在浏览器模式必须走真实桥接", () => {
+  it("图层设计命令已由 Electron Host current 白名单承接，不再作为 DevBridge mock policy", () => {
     expect(
       shouldPreferMockInBrowser("save_layered_design_project_export"),
     ).toBe(false);
     expect(
       shouldPreferMockInBrowser("read_layered_design_project_export"),
     ).toBe(false);
+    expect(shouldPreferMockInBrowser("recognize_layered_design_text")).toBe(
+      false,
+    );
+    expect(shouldPreferMockInBrowser("analyze_layered_design_flat_image")).toBe(
+      false,
+    );
     expect(
       shouldDisallowMockFallbackInBrowser("save_layered_design_project_export"),
     ).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser("read_layered_design_project_export"),
     ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("recognize_layered_design_text"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("analyze_layered_design_flat_image"),
+    ).toBe(true);
   });
 
   it("模型与运行时真相命令在浏览器模式下禁止静默退回 mock", () => {
     expect(shouldDisallowMockFallbackInBrowser("aster_agent_init")).toBe(true);
+    expect(shouldDisallowMockFallbackInBrowser("aster_agent_status")).toBe(
+      false,
+    );
+    expect(
+      shouldDisallowMockFallbackInBrowser("aster_agent_configure_provider"),
+    ).toBe(false);
+    expect(shouldDisallowMockFallbackInBrowser("aster_agent_reset")).toBe(
+      false,
+    );
+    expect(shouldDisallowMockFallbackInBrowser("agent_start_process")).toBe(
+      false,
+    );
+    expect(shouldDisallowMockFallbackInBrowser("agent_stop_process")).toBe(
+      false,
+    );
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_get_process_status"),
+    ).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("open_update_window")).toBe(
       true,
     );
@@ -82,9 +112,9 @@ describe("mockPriorityCommands", () => {
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_list_installed"),
     ).toBe(false);
-    expect(
-      shouldDisallowMockFallbackInBrowser("knowledge_list_packs"),
-    ).toBe(false);
+    expect(shouldDisallowMockFallbackInBrowser("knowledge_list_packs")).toBe(
+      false,
+    );
     expect(shouldDisallowMockFallbackInBrowser("get_automation_jobs")).toBe(
       false,
     );
@@ -115,31 +145,89 @@ describe("mockPriorityCommands", () => {
       shouldDisallowMockFallbackInBrowser(
         "agent_runtime_list_file_checkpoints",
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_get_file_checkpoint"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_diff_file_checkpoint"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser(
         "agent_runtime_restore_file_checkpoint",
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_compact_session"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_resume_thread"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_replay_request"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_get_objective"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_set_objective"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser(
+        "agent_runtime_update_objective_status",
+      ),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_clear_objective"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_continue_objective"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_audit_objective"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_promote_queued_turn"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_remove_queued_turn"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser(
+        "agent_runtime_export_handoff_bundle",
+      ),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_spawn_subagent"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_send_subagent_input"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_wait_subagents"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_resume_subagent"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_close_subagent"),
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_list_sessions"),
     ).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_update_session"),
     ).toBe(true);
-    expect(shouldDisallowMockFallbackInBrowser("execute_skill")).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_runtime_delete_session"),
+    ).toBe(false);
+    expect(shouldDisallowMockFallbackInBrowser("execute_skill")).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("gateway_channel_status")).toBe(
-      true,
+      false,
     );
     expect(
       shouldDisallowMockFallbackInBrowser("wechat_channel_list_accounts"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("get_model_registry_provider_ids"),
     ).toBe(true);
@@ -160,9 +248,7 @@ describe("mockPriorityCommands", () => {
     expect(shouldDisallowMockFallbackInBrowser("get_file_icon_data_url")).toBe(
       false,
     );
-    expect(shouldDisallowMockFallbackInBrowser("reveal_in_finder")).toBe(
-      false,
-    );
+    expect(shouldDisallowMockFallbackInBrowser("reveal_in_finder")).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("open_with_default_app")).toBe(
       false,
     );
@@ -171,16 +257,16 @@ describe("mockPriorityCommands", () => {
       shouldDisallowMockFallbackInBrowser(
         "create_image_generation_task_artifact",
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("get_media_task_artifact")).toBe(
-      true,
+      false,
     );
     expect(
       shouldDisallowMockFallbackInBrowser("list_media_task_artifacts"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("cancel_media_task_artifact"),
-    ).toBe(true);
+    ).toBe(false);
     expect(shouldPreferMockInBrowser("voice_models_download")).toBe(false);
     expect(shouldPreferMockInBrowser("voice_models_get_install_state")).toBe(
       false,
@@ -190,28 +276,55 @@ describe("mockPriorityCommands", () => {
     );
   });
 
-  it("Skills 管理命令在浏览器模式下禁止静默退回空 mock", () => {
+  it("Skill 管理旧 facade 退役后不再进入浏览器 mock fallback 策略", () => {
     expect(shouldPreferMockInBrowser("get_local_skills_for_app")).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("get_local_skills_for_app"),
-    ).toBe(true);
+    ).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("refresh_skill_cache")).toBe(
-      true,
+      false,
     );
     expect(shouldDisallowMockFallbackInBrowser("uninstall_skill_for_app")).toBe(
-      true,
+      false,
     );
     expect(
       shouldDisallowMockFallbackInBrowser("import_local_skill_for_app"),
-    ).toBe(true);
+    ).toBe(false);
+    expect(shouldDisallowMockFallbackInBrowser("inspect_remote_skill")).toBe(
+      false,
+    );
+    expect(
+      shouldDisallowMockFallbackInBrowser(
+        "take_pending_skill_package_open_requests",
+      ),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser(
+        "get_skill_package_file_association_status",
+      ),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser(
+        "set_skill_package_file_association_default",
+      ),
+    ).toBe(false);
+  });
+
+  it("已退役的 Skill marketplace/download facade 不再进入生产命令策略", () => {
+    expect(shouldPreferMockInBrowser("install_marketplace_skill_for_app")).toBe(
+      false,
+    );
     expect(
       shouldDisallowMockFallbackInBrowser("install_marketplace_skill_for_app"),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      shouldPreferMockInBrowser("install_skill_from_download_url_for_app"),
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser(
         "install_skill_from_download_url_for_app",
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("运行时真相事件在浏览器模式下禁止静默退回 mock", () => {

@@ -1,0 +1,139 @@
+{
+  "$defs": {
+    "GatewayTunnelCreateResult": {
+      "properties": {
+        "credentialsFile": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "dnsName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "publicBaseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tunnelId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tunnelName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message",
+        "ok",
+        "tunnelName"
+      ],
+      "type": "object"
+    },
+    "GatewayTunnelStatusResponse": {
+      "properties": {
+        "binary": {
+          "type": "string"
+        },
+        "commandPreview": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "connectorActive": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "connectorMessage": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastError": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastExit": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "localUrl": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "publicBaseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "startedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "binary",
+        "localUrl",
+        "mode",
+        "provider",
+        "running"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "result": {
+      "$ref": "#/$defs/GatewayTunnelCreateResult"
+    },
+    "status": {
+      "$ref": "#/$defs/GatewayTunnelStatusResponse"
+    }
+  },
+  "required": [
+    "result",
+    "status"
+  ],
+  "title": "GatewayTunnelCreateResponse",
+  "type": "object"
+}

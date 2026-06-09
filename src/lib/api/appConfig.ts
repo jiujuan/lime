@@ -128,6 +128,12 @@ function assertConfigShape(value: unknown): asserts value is Config {
   }
 }
 
+function assertVoidResult(command: string, value: unknown): void {
+  if (value !== null && value !== undefined) {
+    throw new Error(`${command} did not return void result`);
+  }
+}
+
 export function invalidateAppConfigCache(): void {
   invalidateConfigCache();
 }
@@ -191,6 +197,7 @@ export async function getConfig(
 export async function saveConfig(config: Config): Promise<void> {
   const result = await safeInvoke("save_config", { config });
   assertNotDiagnosticFacade("save_config", result, "真实配置 current 通道");
+  assertVoidResult("save_config", result);
   configCache = cloneConfig(config);
   configCacheStamp = markAppConfigChanged();
 }
@@ -214,44 +221,4 @@ export async function getDefaultProvider(): Promise<string> {
   );
   assertNonEmptyString("get_default_provider", result, "默认 Provider");
   return result;
-}
-
-export async function setDefaultProvider(provider: string): Promise<string> {
-  const nextProvider = await safeInvoke<unknown>("set_default_provider", {
-    provider,
-  });
-  assertNotDiagnosticFacade(
-    "set_default_provider",
-    nextProvider,
-    "真实默认 Provider current 通道",
-  );
-  assertNonEmptyString("set_default_provider", nextProvider, "默认 Provider");
-
-  if (configCache) {
-    configCache = {
-      ...cloneConfig(configCache),
-      default_provider: nextProvider,
-    };
-  }
-  configCacheStamp = markAppConfigChanged();
-  return nextProvider;
-}
-
-export async function updateProviderEnvVars(
-  providerType: string,
-  apiHost: string,
-  apiKey?: string,
-): Promise<void> {
-  const result = await safeInvoke("update_provider_env_vars", {
-    providerType,
-    apiHost,
-    apiKey: apiKey || null,
-  });
-  assertNotDiagnosticFacade(
-    "update_provider_env_vars",
-    result,
-    "真实 Provider 环境变量 current 通道",
-  );
-  invalidateConfigCache();
-  configCacheStamp = markAppConfigChanged();
 }

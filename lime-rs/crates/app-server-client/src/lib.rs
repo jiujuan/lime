@@ -13,10 +13,48 @@ pub use app_server_protocol::AgentAppUiRuntimeStatusResponse;
 pub use app_server_protocol::AgentAppUiRuntimeStopParams;
 pub use app_server_protocol::AgentAppUninstallParams;
 pub use app_server_protocol::AgentAppUninstallRehearsalParams;
+pub use app_server_protocol::AgentSessionActionReplayParams;
 pub use app_server_protocol::AgentSessionActionRespondParams;
+pub use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
+pub use app_server_protocol::AgentSessionAnalysisHandoffExportResponse;
+pub use app_server_protocol::AgentSessionCompactParams;
+pub use app_server_protocol::AgentSessionCompactResponse;
+pub use app_server_protocol::AgentSessionFileCheckpointDetail;
+pub use app_server_protocol::AgentSessionFileCheckpointDiffParams;
+pub use app_server_protocol::AgentSessionFileCheckpointDiffResponse;
+pub use app_server_protocol::AgentSessionFileCheckpointGetParams;
+pub use app_server_protocol::AgentSessionFileCheckpointListParams;
+pub use app_server_protocol::AgentSessionFileCheckpointListResponse;
+pub use app_server_protocol::AgentSessionFileCheckpointRestoreParams;
+pub use app_server_protocol::AgentSessionFileCheckpointRestoreResponse;
+pub use app_server_protocol::AgentSessionFileCheckpointSummary;
+pub use app_server_protocol::AgentSessionFileCheckpointThreadSummary;
+pub use app_server_protocol::AgentSessionHandoffArtifact;
+pub use app_server_protocol::AgentSessionHandoffBundleExportParams;
+pub use app_server_protocol::AgentSessionHandoffBundleExportResponse;
 pub use app_server_protocol::AgentSessionListParams;
+pub use app_server_protocol::AgentSessionObjectiveClearParams;
+pub use app_server_protocol::AgentSessionObjectiveClearResponse;
+pub use app_server_protocol::AgentSessionObjectiveReadParams;
+pub use app_server_protocol::AgentSessionObjectiveReadResponse;
+pub use app_server_protocol::AgentSessionObjectiveSetParams;
+pub use app_server_protocol::AgentSessionObjectiveSetResponse;
+pub use app_server_protocol::AgentSessionObjectiveStatusUpdateParams;
+pub use app_server_protocol::AgentSessionObjectiveStatusUpdateResponse;
+pub use app_server_protocol::AgentSessionQueuedTurnPromoteParams;
+pub use app_server_protocol::AgentSessionQueuedTurnPromoteResponse;
+pub use app_server_protocol::AgentSessionQueuedTurnRemoveParams;
+pub use app_server_protocol::AgentSessionQueuedTurnRemoveResponse;
 pub use app_server_protocol::AgentSessionReadParams;
+pub use app_server_protocol::AgentSessionReplayCaseExportParams;
+pub use app_server_protocol::AgentSessionReplayCaseExportResponse;
+pub use app_server_protocol::AgentSessionReviewDecision;
+pub use app_server_protocol::AgentSessionReviewDecisionSaveParams;
+pub use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
+pub use app_server_protocol::AgentSessionReviewDecisionTemplateExportResponse;
 pub use app_server_protocol::AgentSessionStartParams;
+pub use app_server_protocol::AgentSessionThreadResumeParams;
+pub use app_server_protocol::AgentSessionThreadResumeResponse;
 pub use app_server_protocol::AgentSessionTurnCancelParams;
 pub use app_server_protocol::AgentSessionTurnStartParams;
 pub use app_server_protocol::AppServerMethodKind;
@@ -42,6 +80,12 @@ pub use app_server_protocol::AutomationSchedulerConfigUpdateParams;
 pub use app_server_protocol::AutomationSchedulerConfigUpdateResponse;
 pub use app_server_protocol::AutomationSchedulerStatusResponse;
 pub use app_server_protocol::CapabilityListParams;
+pub use app_server_protocol::DiagnosticsCapabilityRoutingMetricsSnapshot;
+pub use app_server_protocol::DiagnosticsIdempotencyDiagnostics;
+pub use app_server_protocol::DiagnosticsMetricConfig;
+pub use app_server_protocol::DiagnosticsRequestDedupDiagnostics;
+pub use app_server_protocol::DiagnosticsResponseCacheDiagnostics;
+pub use app_server_protocol::DiagnosticsTelemetrySummary;
 pub use app_server_protocol::EvidenceExportParams;
 pub use app_server_protocol::FileSystemCreateDirectoryParams;
 pub use app_server_protocol::FileSystemCreateFileParams;
@@ -53,6 +97,11 @@ pub use app_server_protocol::FileSystemListDirectoryParams;
 pub use app_server_protocol::FileSystemMutationResponse;
 pub use app_server_protocol::FileSystemReadFilePreviewParams;
 pub use app_server_protocol::FileSystemRenameFileParams;
+pub use app_server_protocol::GatewayChannelStatusParams;
+pub use app_server_protocol::GatewayChannelStatusResponse;
+pub use app_server_protocol::GatewayTunnelCloudflaredInstallParams;
+pub use app_server_protocol::GatewayTunnelCreateParams;
+pub use app_server_protocol::GatewayTunnelSyncWebhookUrlParams;
 pub use app_server_protocol::InitializeParams;
 use app_server_protocol::JsonRpcErrorResponse;
 use app_server_protocol::JsonRpcMessage;
@@ -75,6 +124,14 @@ pub use app_server_protocol::KnowledgeUpdatePackStatusParams;
 pub use app_server_protocol::KnowledgeUpdatePackStatusResponse;
 pub use app_server_protocol::KnowledgeValidateContextRunParams;
 pub use app_server_protocol::KnowledgeValidateContextRunResponse;
+pub use app_server_protocol::LogClearResponse;
+pub use app_server_protocol::LogEntry;
+pub use app_server_protocol::LogListResponse;
+pub use app_server_protocol::LogPersistedTailParams;
+pub use app_server_protocol::LogPersistedTailResponse;
+pub use app_server_protocol::LogStorageDiagnosticsResponse;
+pub use app_server_protocol::ManagedObjective;
+pub use app_server_protocol::ManagedObjectiveStatus;
 pub use app_server_protocol::McpPromptGetParams;
 pub use app_server_protocol::McpPromptGetResponse;
 pub use app_server_protocol::McpPromptListResponse;
@@ -98,14 +155,39 @@ pub use app_server_protocol::McpToolCallWithCallerParams;
 pub use app_server_protocol::McpToolListForContextParams;
 pub use app_server_protocol::McpToolListResponse;
 pub use app_server_protocol::McpToolSearchParams;
+pub use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
+pub use app_server_protocol::MediaTaskArtifactAudioCreateParams;
+pub use app_server_protocol::MediaTaskArtifactImageCreateParams;
+pub use app_server_protocol::MediaTaskArtifactListParams;
+pub use app_server_protocol::MediaTaskArtifactListResponse;
+pub use app_server_protocol::MediaTaskArtifactLookupParams;
+pub use app_server_protocol::MediaTaskArtifactResponse;
 pub use app_server_protocol::ModelListParams;
 pub use app_server_protocol::ModelProviderAliasReadParams;
 pub use app_server_protocol::ProjectMemoryReadParams;
 pub use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::RequestId;
+pub use app_server_protocol::ServerDiagnosticsResponse;
+pub use app_server_protocol::SkillDownloadInstallParams;
+pub use app_server_protocol::SkillDownloadInstallResponse;
 pub use app_server_protocol::SkillListResponse;
+pub use app_server_protocol::SkillLocalDetailInspectParams;
+pub use app_server_protocol::SkillLocalDetailInspectResponse;
+pub use app_server_protocol::SkillLocalRenameParams;
+pub use app_server_protocol::SkillLocalRenameResponse;
+pub use app_server_protocol::SkillMarketplaceInstallParams;
+pub use app_server_protocol::SkillMarketplaceInstallResponse;
+pub use app_server_protocol::SkillPackageExportParams;
+pub use app_server_protocol::SkillPackageExportResponse;
+pub use app_server_protocol::SkillPackageLocalInspectParams;
+pub use app_server_protocol::SkillPackageLocalInspectResponse;
+pub use app_server_protocol::SkillPackageLocalInstallParams;
+pub use app_server_protocol::SkillPackageLocalInstallResponse;
+pub use app_server_protocol::SkillPackageLocalReplaceParams;
+pub use app_server_protocol::SkillPackageLocalReplaceResponse;
 pub use app_server_protocol::SkillReadParams;
 pub use app_server_protocol::SkillReadResponse;
+pub use app_server_protocol::SupportBundleExportResponse;
 pub use app_server_protocol::UsageStatsDailyTrendsListResponse;
 pub use app_server_protocol::UsageStatsDailyUsage;
 pub use app_server_protocol::UsageStatsModelRankingListResponse;
@@ -113,6 +195,10 @@ pub use app_server_protocol::UsageStatsModelUsage;
 pub use app_server_protocol::UsageStatsRangeParams;
 pub use app_server_protocol::UsageStatsReadResponse;
 pub use app_server_protocol::UsageStatsSummary;
+pub use app_server_protocol::WechatChannelAccountListResponse;
+pub use app_server_protocol::WechatConfiguredAccount;
+pub use app_server_protocol::WindowsStartupCheck;
+pub use app_server_protocol::WindowsStartupDiagnosticsResponse;
 pub use app_server_protocol::WorkspaceEnsureParams;
 pub use app_server_protocol::WorkspaceEnsureReadyResponse;
 pub use app_server_protocol::WorkspaceListResponse;
@@ -136,11 +222,29 @@ pub use app_server_protocol::METHOD_AGENT_APP_SHELL_PREPARE;
 pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START;
 pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS;
 pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
+pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_REPLAY;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
+pub use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
+pub use app_server_protocol::METHOD_AGENT_SESSION_COMPACT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
+pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF;
+pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET;
+pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST;
+pub use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE;
+pub use app_server_protocol::METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_LIST;
+pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_CLEAR;
+pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_READ;
+pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_SET;
+pub use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE;
+pub use app_server_protocol::METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE;
+pub use app_server_protocol::METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE;
 pub use app_server_protocol::METHOD_AGENT_SESSION_READ;
+pub use app_server_protocol::METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT;
+pub use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE;
+pub use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT;
 pub use app_server_protocol::METHOD_AGENT_SESSION_START;
+pub use app_server_protocol::METHOD_AGENT_SESSION_THREAD_RESUME;
 pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 pub use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 pub use app_server_protocol::METHOD_ARTIFACT_READ;
@@ -158,6 +262,10 @@ pub use app_server_protocol::METHOD_AUTOMATION_SCHEDULER_STATUS;
 pub use app_server_protocol::METHOD_AUTOMATION_SCHEDULE_PREVIEW;
 pub use app_server_protocol::METHOD_AUTOMATION_SCHEDULE_VALIDATE;
 pub use app_server_protocol::METHOD_CAPABILITY_LIST;
+pub use app_server_protocol::METHOD_DIAGNOSTICS_LOG_STORAGE_READ;
+pub use app_server_protocol::METHOD_DIAGNOSTICS_SERVER_READ;
+pub use app_server_protocol::METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT;
+pub use app_server_protocol::METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ;
 pub use app_server_protocol::METHOD_EVIDENCE_EXPORT;
 pub use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_DIRECTORY;
 pub use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_FILE;
@@ -165,6 +273,16 @@ pub use app_server_protocol::METHOD_FILE_SYSTEM_DELETE_FILE;
 pub use app_server_protocol::METHOD_FILE_SYSTEM_LIST_DIRECTORY;
 pub use app_server_protocol::METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
 pub use app_server_protocol::METHOD_FILE_SYSTEM_RENAME_FILE;
+pub use app_server_protocol::METHOD_GATEWAY_CHANNEL_STATUS;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_CREATE;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_PROBE;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_RESTART;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_START;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_STATUS;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_STOP;
+pub use app_server_protocol::METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL;
 pub use app_server_protocol::METHOD_INITIALIZE;
 pub use app_server_protocol::METHOD_INITIALIZED;
 pub use app_server_protocol::METHOD_KNOWLEDGE_CONTEXT_RESOLVE;
@@ -175,6 +293,10 @@ pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
 pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_READ;
 pub use app_server_protocol::METHOD_KNOWLEDGE_PACK_STATUS_UPDATE;
 pub use app_server_protocol::METHOD_KNOWLEDGE_SOURCE_IMPORT;
+pub use app_server_protocol::METHOD_LOG_CLEAR;
+pub use app_server_protocol::METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR;
+pub use app_server_protocol::METHOD_LOG_LIST;
+pub use app_server_protocol::METHOD_LOG_PERSISTED_TAIL;
 pub use app_server_protocol::METHOD_MCP_PROMPT_GET;
 pub use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 pub use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
@@ -194,6 +316,12 @@ pub use app_server_protocol::METHOD_MCP_TOOL_CALL_WITH_CALLER;
 pub use app_server_protocol::METHOD_MCP_TOOL_LIST;
 pub use app_server_protocol::METHOD_MCP_TOOL_LIST_FOR_CONTEXT;
 pub use app_server_protocol::METHOD_MCP_TOOL_SEARCH;
+pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE;
+pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE;
+pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_CANCEL;
+pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_GET;
+pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
+pub use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_LIST;
 pub use app_server_protocol::METHOD_MODEL_LIST;
 pub use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 pub use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -203,10 +331,19 @@ pub use app_server_protocol::METHOD_MODEL_PROVIDER_LIST;
 pub use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
 pub use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 pub use app_server_protocol::METHOD_SKILL_LIST;
+pub use app_server_protocol::METHOD_SKILL_LOCAL_DETAIL_INSPECT;
+pub use app_server_protocol::METHOD_SKILL_LOCAL_RENAME;
+pub use app_server_protocol::METHOD_SKILL_MARKETPLACE_INSTALL;
+pub use app_server_protocol::METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL;
+pub use app_server_protocol::METHOD_SKILL_PACKAGE_EXPORT;
+pub use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_INSPECT;
+pub use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_INSTALL;
+pub use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_REPLACE;
 pub use app_server_protocol::METHOD_SKILL_READ;
 pub use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_READ;
+pub use app_server_protocol::METHOD_WECHAT_CHANNEL_ACCOUNT_LIST;
 pub use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
@@ -333,6 +470,34 @@ impl AppServerClient {
         self.typed_request(typed::read_session(params))
     }
 
+    pub fn read_agent_session_objective(
+        &mut self,
+        params: AgentSessionObjectiveReadParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_agent_session_objective(params))
+    }
+
+    pub fn set_agent_session_objective(
+        &mut self,
+        params: AgentSessionObjectiveSetParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::set_agent_session_objective(params))
+    }
+
+    pub fn update_agent_session_objective_status(
+        &mut self,
+        params: AgentSessionObjectiveStatusUpdateParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::update_agent_session_objective_status(params))
+    }
+
+    pub fn clear_agent_session_objective(
+        &mut self,
+        params: AgentSessionObjectiveClearParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::clear_agent_session_objective(params))
+    }
+
     pub fn list_workspaces(&mut self) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::list_workspaces())
     }
@@ -383,6 +548,176 @@ impl AppServerClient {
 
     pub fn read_skill(&mut self, params: SkillReadParams) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::read_skill(params))
+    }
+
+    pub fn inspect_local_skill_detail(
+        &mut self,
+        params: SkillLocalDetailInspectParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::inspect_local_skill_detail(params))
+    }
+
+    pub fn rename_local_skill(
+        &mut self,
+        params: SkillLocalRenameParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::rename_local_skill(params))
+    }
+
+    pub fn inspect_local_skill_package(
+        &mut self,
+        params: SkillPackageLocalInspectParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::inspect_local_skill_package(params))
+    }
+
+    pub fn install_local_skill_package(
+        &mut self,
+        params: SkillPackageLocalInstallParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::install_local_skill_package(params))
+    }
+
+    pub fn replace_local_skill_package(
+        &mut self,
+        params: SkillPackageLocalReplaceParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::replace_local_skill_package(params))
+    }
+
+    pub fn export_skill_package(
+        &mut self,
+        params: SkillPackageExportParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::export_skill_package(params))
+    }
+
+    pub fn install_marketplace_skill(
+        &mut self,
+        params: SkillMarketplaceInstallParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::install_marketplace_skill(params))
+    }
+
+    pub fn install_skill_from_download_url(
+        &mut self,
+        params: SkillDownloadInstallParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::install_skill_from_download_url(params))
+    }
+
+    pub fn read_gateway_channel_status(
+        &mut self,
+        params: GatewayChannelStatusParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_gateway_channel_status(params))
+    }
+
+    pub fn probe_gateway_tunnel(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::probe_gateway_tunnel())
+    }
+
+    pub fn detect_gateway_tunnel_cloudflared(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::detect_gateway_tunnel_cloudflared())
+    }
+
+    pub fn install_gateway_tunnel_cloudflared(
+        &mut self,
+        params: GatewayTunnelCloudflaredInstallParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::install_gateway_tunnel_cloudflared(params))
+    }
+
+    pub fn create_gateway_tunnel(
+        &mut self,
+        params: GatewayTunnelCreateParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::create_gateway_tunnel(params))
+    }
+
+    pub fn start_gateway_tunnel(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::start_gateway_tunnel())
+    }
+
+    pub fn stop_gateway_tunnel(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::stop_gateway_tunnel())
+    }
+
+    pub fn restart_gateway_tunnel(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::restart_gateway_tunnel())
+    }
+
+    pub fn read_gateway_tunnel_status(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_gateway_tunnel_status())
+    }
+
+    pub fn sync_gateway_tunnel_webhook_url(
+        &mut self,
+        params: GatewayTunnelSyncWebhookUrlParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::sync_gateway_tunnel_webhook_url(params))
+    }
+
+    pub fn list_wechat_channel_accounts(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_wechat_channel_accounts())
+    }
+
+    pub fn create_image_media_task_artifact(
+        &mut self,
+        params: MediaTaskArtifactImageCreateParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::create_image_media_task_artifact(params))
+    }
+
+    pub fn create_audio_media_task_artifact(
+        &mut self,
+        params: MediaTaskArtifactAudioCreateParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::create_audio_media_task_artifact(params))
+    }
+
+    pub fn complete_audio_media_task_artifact(
+        &mut self,
+        params: MediaTaskArtifactAudioCompleteParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::complete_audio_media_task_artifact(params))
+    }
+
+    pub fn get_media_task_artifact(
+        &mut self,
+        params: MediaTaskArtifactLookupParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::get_media_task_artifact(params))
+    }
+
+    pub fn list_media_task_artifacts(
+        &mut self,
+        params: MediaTaskArtifactListParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_media_task_artifacts(params))
+    }
+
+    pub fn cancel_media_task_artifact(
+        &mut self,
+        params: MediaTaskArtifactLookupParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::cancel_media_task_artifact(params))
+    }
+
+    pub fn read_server_diagnostics(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_server_diagnostics())
+    }
+
+    pub fn read_log_storage_diagnostics(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_log_storage_diagnostics())
+    }
+
+    pub fn export_support_bundle(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::export_support_bundle())
+    }
+
+    pub fn read_windows_startup_diagnostics(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_windows_startup_diagnostics())
     }
 
     pub fn list_workspace_skill_bindings(
@@ -726,6 +1061,25 @@ impl AppServerClient {
         self.typed_request(typed::read_project_memory(params))
     }
 
+    pub fn list_logs(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_logs())
+    }
+
+    pub fn read_persisted_log_tail(
+        &mut self,
+        params: LogPersistedTailParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_persisted_log_tail(params))
+    }
+
+    pub fn clear_logs(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::clear_logs())
+    }
+
+    pub fn clear_diagnostic_log_history(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::clear_diagnostic_log_history())
+    }
+
     pub fn read_usage_stats(
         &mut self,
         params: UsageStatsRangeParams,
@@ -834,6 +1188,41 @@ impl AppServerClient {
         self.typed_request(typed::export_evidence(params))
     }
 
+    pub fn export_handoff_bundle(
+        &mut self,
+        params: AgentSessionHandoffBundleExportParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::export_handoff_bundle(params))
+    }
+
+    pub fn export_replay_case(
+        &mut self,
+        params: AgentSessionReplayCaseExportParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::export_replay_case(params))
+    }
+
+    pub fn export_analysis_handoff(
+        &mut self,
+        params: AgentSessionAnalysisHandoffExportParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::export_analysis_handoff(params))
+    }
+
+    pub fn export_review_decision_template(
+        &mut self,
+        params: AgentSessionReviewDecisionTemplateExportParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::export_review_decision_template(params))
+    }
+
+    pub fn save_review_decision(
+        &mut self,
+        params: AgentSessionReviewDecisionSaveParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::save_review_decision(params))
+    }
+
     pub fn start_turn(
         &mut self,
         params: AgentSessionTurnStartParams,
@@ -846,6 +1235,13 @@ impl AppServerClient {
         params: AgentSessionTurnCancelParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::cancel_turn(params))
+    }
+
+    pub fn replay_action(
+        &mut self,
+        params: AgentSessionActionReplayParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::replay_action(params))
     }
 
     pub fn respond_action(
@@ -918,6 +1314,30 @@ pub mod typed {
         TypedRequest::new(METHOD_AGENT_SESSION_READ, params)
     }
 
+    pub fn read_agent_session_objective(
+        params: AgentSessionObjectiveReadParams,
+    ) -> TypedRequest<AgentSessionObjectiveReadParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_OBJECTIVE_READ, params)
+    }
+
+    pub fn set_agent_session_objective(
+        params: AgentSessionObjectiveSetParams,
+    ) -> TypedRequest<AgentSessionObjectiveSetParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_OBJECTIVE_SET, params)
+    }
+
+    pub fn update_agent_session_objective_status(
+        params: AgentSessionObjectiveStatusUpdateParams,
+    ) -> TypedRequest<AgentSessionObjectiveStatusUpdateParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE, params)
+    }
+
+    pub fn clear_agent_session_objective(
+        params: AgentSessionObjectiveClearParams,
+    ) -> TypedRequest<AgentSessionObjectiveClearParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_OBJECTIVE_CLEAR, params)
+    }
+
     pub fn list_workspaces() -> TypedRequest<serde_json::Value> {
         TypedRequest::new(METHOD_WORKSPACE_LIST, serde_json::json!({}))
     }
@@ -962,6 +1382,145 @@ pub mod typed {
 
     pub fn read_skill(params: SkillReadParams) -> TypedRequest<SkillReadParams> {
         TypedRequest::new(METHOD_SKILL_READ, params)
+    }
+
+    pub fn inspect_local_skill_detail(
+        params: SkillLocalDetailInspectParams,
+    ) -> TypedRequest<SkillLocalDetailInspectParams> {
+        TypedRequest::new(METHOD_SKILL_LOCAL_DETAIL_INSPECT, params)
+    }
+
+    pub fn rename_local_skill(
+        params: SkillLocalRenameParams,
+    ) -> TypedRequest<SkillLocalRenameParams> {
+        TypedRequest::new(METHOD_SKILL_LOCAL_RENAME, params)
+    }
+
+    pub fn inspect_local_skill_package(
+        params: SkillPackageLocalInspectParams,
+    ) -> TypedRequest<SkillPackageLocalInspectParams> {
+        TypedRequest::new(METHOD_SKILL_PACKAGE_LOCAL_INSPECT, params)
+    }
+
+    pub fn install_local_skill_package(
+        params: SkillPackageLocalInstallParams,
+    ) -> TypedRequest<SkillPackageLocalInstallParams> {
+        TypedRequest::new(METHOD_SKILL_PACKAGE_LOCAL_INSTALL, params)
+    }
+
+    pub fn replace_local_skill_package(
+        params: SkillPackageLocalReplaceParams,
+    ) -> TypedRequest<SkillPackageLocalReplaceParams> {
+        TypedRequest::new(METHOD_SKILL_PACKAGE_LOCAL_REPLACE, params)
+    }
+
+    pub fn export_skill_package(
+        params: SkillPackageExportParams,
+    ) -> TypedRequest<SkillPackageExportParams> {
+        TypedRequest::new(METHOD_SKILL_PACKAGE_EXPORT, params)
+    }
+
+    pub fn install_marketplace_skill(
+        params: SkillMarketplaceInstallParams,
+    ) -> TypedRequest<SkillMarketplaceInstallParams> {
+        TypedRequest::new(METHOD_SKILL_MARKETPLACE_INSTALL, params)
+    }
+
+    pub fn install_skill_from_download_url(
+        params: SkillDownloadInstallParams,
+    ) -> TypedRequest<SkillDownloadInstallParams> {
+        TypedRequest::new(METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL, params)
+    }
+
+    pub fn read_gateway_channel_status(
+        params: GatewayChannelStatusParams,
+    ) -> TypedRequest<GatewayChannelStatusParams> {
+        TypedRequest::new(METHOD_GATEWAY_CHANNEL_STATUS, params)
+    }
+
+    pub fn probe_gateway_tunnel() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_GATEWAY_TUNNEL_PROBE, serde_json::json!({}))
+    }
+
+    pub fn detect_gateway_tunnel_cloudflared() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(
+            METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT,
+            serde_json::json!({}),
+        )
+    }
+
+    pub fn install_gateway_tunnel_cloudflared(
+        params: GatewayTunnelCloudflaredInstallParams,
+    ) -> TypedRequest<GatewayTunnelCloudflaredInstallParams> {
+        TypedRequest::new(METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL, params)
+    }
+
+    pub fn create_gateway_tunnel(
+        params: GatewayTunnelCreateParams,
+    ) -> TypedRequest<GatewayTunnelCreateParams> {
+        TypedRequest::new(METHOD_GATEWAY_TUNNEL_CREATE, params)
+    }
+
+    pub fn start_gateway_tunnel() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_GATEWAY_TUNNEL_START, serde_json::json!({}))
+    }
+
+    pub fn stop_gateway_tunnel() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_GATEWAY_TUNNEL_STOP, serde_json::json!({}))
+    }
+
+    pub fn restart_gateway_tunnel() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_GATEWAY_TUNNEL_RESTART, serde_json::json!({}))
+    }
+
+    pub fn read_gateway_tunnel_status() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_GATEWAY_TUNNEL_STATUS, serde_json::json!({}))
+    }
+
+    pub fn sync_gateway_tunnel_webhook_url(
+        params: GatewayTunnelSyncWebhookUrlParams,
+    ) -> TypedRequest<GatewayTunnelSyncWebhookUrlParams> {
+        TypedRequest::new(METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL, params)
+    }
+
+    pub fn list_wechat_channel_accounts() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_WECHAT_CHANNEL_ACCOUNT_LIST, serde_json::json!({}))
+    }
+
+    pub fn create_image_media_task_artifact(
+        params: MediaTaskArtifactImageCreateParams,
+    ) -> TypedRequest<MediaTaskArtifactImageCreateParams> {
+        TypedRequest::new(METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, params)
+    }
+
+    pub fn create_audio_media_task_artifact(
+        params: MediaTaskArtifactAudioCreateParams,
+    ) -> TypedRequest<MediaTaskArtifactAudioCreateParams> {
+        TypedRequest::new(METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, params)
+    }
+
+    pub fn complete_audio_media_task_artifact(
+        params: MediaTaskArtifactAudioCompleteParams,
+    ) -> TypedRequest<MediaTaskArtifactAudioCompleteParams> {
+        TypedRequest::new(METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, params)
+    }
+
+    pub fn get_media_task_artifact(
+        params: MediaTaskArtifactLookupParams,
+    ) -> TypedRequest<MediaTaskArtifactLookupParams> {
+        TypedRequest::new(METHOD_MEDIA_TASK_ARTIFACT_GET, params)
+    }
+
+    pub fn list_media_task_artifacts(
+        params: MediaTaskArtifactListParams,
+    ) -> TypedRequest<MediaTaskArtifactListParams> {
+        TypedRequest::new(METHOD_MEDIA_TASK_ARTIFACT_LIST, params)
+    }
+
+    pub fn cancel_media_task_artifact(
+        params: MediaTaskArtifactLookupParams,
+    ) -> TypedRequest<MediaTaskArtifactLookupParams> {
+        TypedRequest::new(METHOD_MEDIA_TASK_ARTIFACT_CANCEL, params)
     }
 
     pub fn list_workspace_skill_bindings(
@@ -1247,6 +1806,46 @@ pub mod typed {
         TypedRequest::new(METHOD_PROJECT_MEMORY_READ, params)
     }
 
+    pub fn list_logs() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_LOG_LIST, serde_json::json!({}))
+    }
+
+    pub fn read_persisted_log_tail(
+        params: LogPersistedTailParams,
+    ) -> TypedRequest<LogPersistedTailParams> {
+        TypedRequest::new(METHOD_LOG_PERSISTED_TAIL, params)
+    }
+
+    pub fn clear_logs() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_LOG_CLEAR, serde_json::json!({}))
+    }
+
+    pub fn clear_diagnostic_log_history() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR, serde_json::json!({}))
+    }
+
+    pub fn read_server_diagnostics() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_DIAGNOSTICS_SERVER_READ, serde_json::json!({}))
+    }
+
+    pub fn read_log_storage_diagnostics() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_DIAGNOSTICS_LOG_STORAGE_READ, serde_json::json!({}))
+    }
+
+    pub fn export_support_bundle() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(
+            METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+            serde_json::json!({}),
+        )
+    }
+
+    pub fn read_windows_startup_diagnostics() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(
+            METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
+            serde_json::json!({}),
+        )
+    }
+
     pub fn read_usage_stats(params: UsageStatsRangeParams) -> TypedRequest<UsageStatsRangeParams> {
         TypedRequest::new(METHOD_USAGE_STATS_READ, params)
     }
@@ -1337,6 +1936,36 @@ pub mod typed {
         TypedRequest::new(METHOD_EVIDENCE_EXPORT, params)
     }
 
+    pub fn export_handoff_bundle(
+        params: AgentSessionHandoffBundleExportParams,
+    ) -> TypedRequest<AgentSessionHandoffBundleExportParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, params)
+    }
+
+    pub fn export_replay_case(
+        params: AgentSessionReplayCaseExportParams,
+    ) -> TypedRequest<AgentSessionReplayCaseExportParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, params)
+    }
+
+    pub fn export_analysis_handoff(
+        params: AgentSessionAnalysisHandoffExportParams,
+    ) -> TypedRequest<AgentSessionAnalysisHandoffExportParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT, params)
+    }
+
+    pub fn export_review_decision_template(
+        params: AgentSessionReviewDecisionTemplateExportParams,
+    ) -> TypedRequest<AgentSessionReviewDecisionTemplateExportParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT, params)
+    }
+
+    pub fn save_review_decision(
+        params: AgentSessionReviewDecisionSaveParams,
+    ) -> TypedRequest<AgentSessionReviewDecisionSaveParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, params)
+    }
+
     pub fn start_turn(
         params: AgentSessionTurnStartParams,
     ) -> TypedRequest<AgentSessionTurnStartParams> {
@@ -1347,6 +1976,12 @@ pub mod typed {
         params: AgentSessionTurnCancelParams,
     ) -> TypedRequest<AgentSessionTurnCancelParams> {
         TypedRequest::new(METHOD_AGENT_SESSION_TURN_CANCEL, params)
+    }
+
+    pub fn replay_action(
+        params: AgentSessionActionReplayParams,
+    ) -> TypedRequest<AgentSessionActionReplayParams> {
+        TypedRequest::new(METHOD_AGENT_SESSION_ACTION_REPLAY, params)
     }
 
     pub fn respond_action(
@@ -1658,6 +2293,67 @@ mod tests {
     }
 
     #[test]
+    fn agent_session_objective_methods_preserve_current_contract() {
+        let mut client = AppServerClient::new();
+
+        let set = client
+            .set_agent_session_objective(AgentSessionObjectiveSetParams {
+                session_id: "session-1".to_string(),
+                workspace_id: Some("workspace-1".to_string()),
+                objective_text: "完成 current 迁移".to_string(),
+                success_criteria: vec!["test:contracts 通过".to_string()],
+                budget_policy: None,
+                risk_policy: None,
+                approval_policy: None,
+                continuation_policy: None,
+            })
+            .expect("set objective request");
+        assert_eq!(set.id, RequestId::Integer(1));
+        assert_eq!(set.method, METHOD_AGENT_SESSION_OBJECTIVE_SET);
+        assert_eq!(
+            set.params.expect("set params"),
+            json!({
+                "sessionId": "session-1",
+                "workspaceId": "workspace-1",
+                "objectiveText": "完成 current 迁移",
+                "successCriteria": ["test:contracts 通过"]
+            })
+        );
+
+        let update = client
+            .update_agent_session_objective_status(AgentSessionObjectiveStatusUpdateParams {
+                session_id: "session-1".to_string(),
+                status: ManagedObjectiveStatus::Blocked,
+                blocker_reason: Some("等待共享写集释放".to_string()),
+            })
+            .expect("update objective request");
+        assert_eq!(update.id, RequestId::Integer(2));
+        assert_eq!(update.method, METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE);
+        assert_eq!(
+            update.params.expect("update params"),
+            json!({
+                "sessionId": "session-1",
+                "status": "blocked",
+                "blockerReason": "等待共享写集释放",
+            })
+        );
+
+        let read = client
+            .read_agent_session_objective(AgentSessionObjectiveReadParams {
+                session_id: "session-1".to_string(),
+            })
+            .expect("read objective request");
+        assert_eq!(read.method, METHOD_AGENT_SESSION_OBJECTIVE_READ);
+
+        let clear = client
+            .clear_agent_session_objective(AgentSessionObjectiveClearParams {
+                session_id: "session-1".to_string(),
+            })
+            .expect("clear objective request");
+        assert_eq!(clear.method, METHOD_AGENT_SESSION_OBJECTIVE_CLEAR);
+    }
+
+    #[test]
     fn model_read_helpers_use_current_methods() {
         let mut client = AppServerClient::new();
 
@@ -1771,6 +2467,70 @@ mod tests {
                 skill_name: "article-writer".to_string(),
             })
             .expect("skill");
+        let inspect_detail = client
+            .inspect_local_skill_detail(SkillLocalDetailInspectParams {
+                app: "lime".to_string(),
+                directory: "article-writer".to_string(),
+            })
+            .expect("inspect detail");
+        let rename_skill = client
+            .rename_local_skill(SkillLocalRenameParams {
+                app: "lime".to_string(),
+                directory: "article-writer".to_string(),
+                new_directory: "article-writer-renamed".to_string(),
+            })
+            .expect("rename skill");
+        let inspect_package = client
+            .inspect_local_skill_package(SkillPackageLocalInspectParams {
+                app: "lime".to_string(),
+                source_path: "/tmp/article-writer.skill".to_string(),
+            })
+            .expect("inspect package");
+        let install_package = client
+            .install_local_skill_package(SkillPackageLocalInstallParams {
+                app: "lime".to_string(),
+                source_path: "/tmp/article-writer.skill".to_string(),
+                skill_name: Some("article-writer".to_string()),
+            })
+            .expect("install package");
+        let replace_package = client
+            .replace_local_skill_package(SkillPackageLocalReplaceParams {
+                app: "lime".to_string(),
+                directory: "article-writer".to_string(),
+                source_path: "/tmp/article-writer.skill".to_string(),
+            })
+            .expect("replace package");
+        let export_package = client
+            .export_skill_package(SkillPackageExportParams {
+                app: "lime".to_string(),
+                directory: "article-writer".to_string(),
+                target_path: "/tmp/article-writer.skills".to_string(),
+            })
+            .expect("export package");
+        let install_marketplace = client
+            .install_marketplace_skill(SkillMarketplaceInstallParams {
+                app: "lime".to_string(),
+                manifest_version: "agentskills.v1".to_string(),
+                name: "article-writer".to_string(),
+                aliases: vec!["writer".to_string()],
+                version: "1.0.0".to_string(),
+                content_hash: "sha256-demo".to_string(),
+                file_count: 1,
+                files: vec![app_server_protocol::SkillMarketplaceBundleFile {
+                    path: "SKILL.md".to_string(),
+                    content: "# Writer".to_string(),
+                    encoding: None,
+                    sha256: None,
+                }],
+            })
+            .expect("install marketplace");
+        let install_download = client
+            .install_skill_from_download_url(SkillDownloadInstallParams {
+                app: "lime".to_string(),
+                skill_name: "article-writer".to_string(),
+                download_url: "https://example.com/article-writer.skill".to_string(),
+            })
+            .expect("install download");
         let bindings = client
             .list_workspace_skill_bindings(WorkspaceSkillBindingsListParams {
                 workspace_root: "/workspace/project".to_string(),
@@ -1786,6 +2546,81 @@ mod tests {
         assert_eq!(
             skill.params.expect("params"),
             json!({ "skillName": "article-writer" })
+        );
+        assert_eq!(inspect_detail.method, METHOD_SKILL_LOCAL_DETAIL_INSPECT);
+        assert_eq!(
+            inspect_detail.params.expect("params"),
+            json!({ "app": "lime", "directory": "article-writer" })
+        );
+        assert_eq!(rename_skill.method, METHOD_SKILL_LOCAL_RENAME);
+        assert_eq!(
+            rename_skill.params.expect("params"),
+            json!({
+                "app": "lime",
+                "directory": "article-writer",
+                "newDirectory": "article-writer-renamed",
+            })
+        );
+        assert_eq!(inspect_package.method, METHOD_SKILL_PACKAGE_LOCAL_INSPECT);
+        assert_eq!(
+            inspect_package.params.expect("params"),
+            json!({ "app": "lime", "sourcePath": "/tmp/article-writer.skill" })
+        );
+        assert_eq!(install_package.method, METHOD_SKILL_PACKAGE_LOCAL_INSTALL);
+        assert_eq!(
+            install_package.params.expect("params"),
+            json!({
+                "app": "lime",
+                "sourcePath": "/tmp/article-writer.skill",
+                "skillName": "article-writer",
+            })
+        );
+        assert_eq!(replace_package.method, METHOD_SKILL_PACKAGE_LOCAL_REPLACE);
+        assert_eq!(
+            replace_package.params.expect("params"),
+            json!({
+                "app": "lime",
+                "directory": "article-writer",
+                "sourcePath": "/tmp/article-writer.skill",
+            })
+        );
+        assert_eq!(export_package.method, METHOD_SKILL_PACKAGE_EXPORT);
+        assert_eq!(
+            export_package.params.expect("params"),
+            json!({
+                "app": "lime",
+                "directory": "article-writer",
+                "targetPath": "/tmp/article-writer.skills",
+            })
+        );
+        assert_eq!(install_marketplace.method, METHOD_SKILL_MARKETPLACE_INSTALL);
+        assert_eq!(
+            install_marketplace.params.expect("params"),
+            json!({
+                "app": "lime",
+                "manifestVersion": "agentskills.v1",
+                "name": "article-writer",
+                "aliases": ["writer"],
+                "version": "1.0.0",
+                "contentHash": "sha256-demo",
+                "fileCount": 1,
+                "files": [{
+                    "path": "SKILL.md",
+                    "content": "# Writer",
+                }],
+            })
+        );
+        assert_eq!(
+            install_download.method,
+            METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL
+        );
+        assert_eq!(
+            install_download.params.expect("params"),
+            json!({
+                "app": "lime",
+                "skillName": "article-writer",
+                "downloadUrl": "https://example.com/article-writer.skill",
+            })
         );
         assert_eq!(bindings.method, METHOD_WORKSPACE_SKILL_BINDINGS_LIST);
         assert_eq!(
@@ -1965,6 +2800,14 @@ mod tests {
                 project_id: "workspace-main".to_string(),
             })
             .expect("project memory");
+        let logs = client.list_logs().expect("logs");
+        let persisted_tail = client
+            .read_persisted_log_tail(LogPersistedTailParams { lines: Some(250) })
+            .expect("persisted log tail");
+        let cleared_logs = client.clear_logs().expect("clear logs");
+        let cleared_diagnostic_history = client
+            .clear_diagnostic_log_history()
+            .expect("clear diagnostic history");
 
         assert_eq!(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
         assert_eq!(installed.params.expect("params"), json!({}));
@@ -2151,6 +2994,23 @@ mod tests {
             memory.params.expect("params"),
             json!({ "projectId": "workspace-main" })
         );
+        assert_eq!(logs.method, METHOD_LOG_LIST);
+        assert_eq!(logs.params.expect("params"), json!({}));
+        assert_eq!(persisted_tail.method, METHOD_LOG_PERSISTED_TAIL);
+        assert_eq!(
+            persisted_tail.params.expect("params"),
+            json!({ "lines": 250 })
+        );
+        assert_eq!(cleared_logs.method, METHOD_LOG_CLEAR);
+        assert_eq!(cleared_logs.params.expect("params"), json!({}));
+        assert_eq!(
+            cleared_diagnostic_history.method,
+            METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR
+        );
+        assert_eq!(
+            cleared_diagnostic_history.params.expect("params"),
+            json!({})
+        );
     }
 
     #[test]
@@ -2303,6 +3163,98 @@ mod tests {
     }
 
     #[test]
+    fn export_handoff_bundle_preserves_scope_and_stable_method() {
+        let mut client = AppServerClient::new();
+
+        let request = client
+            .export_handoff_bundle(AgentSessionHandoffBundleExportParams {
+                session_id: "sess_handoff".to_string(),
+                locale: Some("zh-CN".to_string()),
+            })
+            .expect("request");
+
+        assert_eq!(request.id, RequestId::Integer(1));
+        assert_eq!(request.method, METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT);
+        assert_eq!(
+            request.params.expect("params"),
+            json!({
+                "sessionId": "sess_handoff",
+                "locale": "zh-CN",
+            })
+        );
+    }
+
+    #[test]
+    fn runtime_export_residual_methods_preserve_scope_and_stable_method() {
+        let mut client = AppServerClient::new();
+
+        let replay = client
+            .export_replay_case(AgentSessionReplayCaseExportParams {
+                session_id: "sess_replay".to_string(),
+                locale: Some("en-US".to_string()),
+            })
+            .expect("replay request");
+        let analysis = client
+            .export_analysis_handoff(AgentSessionAnalysisHandoffExportParams {
+                session_id: "sess_analysis".to_string(),
+                locale: None,
+            })
+            .expect("analysis request");
+        let review = client
+            .export_review_decision_template(AgentSessionReviewDecisionTemplateExportParams {
+                session_id: "sess_review".to_string(),
+                locale: None,
+            })
+            .expect("review request");
+        let save = client
+            .save_review_decision(AgentSessionReviewDecisionSaveParams {
+                session_id: "sess_review".to_string(),
+                decision_status: "accepted".to_string(),
+                decision_summary: "ok".to_string(),
+                chosen_fix_strategy: "current".to_string(),
+                risk_level: "low".to_string(),
+                risk_tags: vec!["runtime".to_string()],
+                human_reviewer: "reviewer".to_string(),
+                followup_actions: Vec::new(),
+                regression_requirements: vec!["npm run test:contracts".to_string()],
+                notes: String::new(),
+                locale: Some("zh-CN".to_string()),
+            })
+            .expect("save request");
+
+        assert_eq!(replay.id, RequestId::Integer(1));
+        assert_eq!(replay.method, METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT);
+        assert_eq!(analysis.id, RequestId::Integer(2));
+        assert_eq!(
+            analysis.method,
+            METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT
+        );
+        assert_eq!(review.id, RequestId::Integer(3));
+        assert_eq!(
+            review.method,
+            METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT
+        );
+        assert_eq!(save.id, RequestId::Integer(4));
+        assert_eq!(save.method, METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE);
+        assert_eq!(
+            save.params.expect("params"),
+            json!({
+                "sessionId": "sess_review",
+                "decisionStatus": "accepted",
+                "decisionSummary": "ok",
+                "chosenFixStrategy": "current",
+                "riskLevel": "low",
+                "riskTags": ["runtime"],
+                "humanReviewer": "reviewer",
+                "followupActions": [],
+                "regressionRequirements": ["npm run test:contracts"],
+                "notes": "",
+                "locale": "zh-CN",
+            })
+        );
+    }
+
+    #[test]
     fn respond_action_preserves_action_scope_and_stable_method() {
         let mut client = AppServerClient::new();
 
@@ -2346,6 +3298,28 @@ mod tests {
                     "threadId": "thread_1",
                     "turnId": "turn_1",
                 },
+            })
+        );
+    }
+
+    #[test]
+    fn replay_action_preserves_request_scope_and_stable_method() {
+        let mut client = AppServerClient::new();
+
+        let request = client
+            .replay_action(AgentSessionActionReplayParams {
+                session_id: "sess_1".to_string(),
+                request_id: "req_confirm_1".to_string(),
+            })
+            .expect("request");
+
+        assert_eq!(request.id, RequestId::Integer(1));
+        assert_eq!(request.method, METHOD_AGENT_SESSION_ACTION_REPLAY);
+        assert_eq!(
+            request.params.expect("params"),
+            json!({
+                "sessionId": "sess_1",
+                "requestId": "req_confirm_1",
             })
         );
     }
@@ -2444,6 +3418,9 @@ mod tests {
         assert!(methods.contains(&METHOD_WORKSPACE_ENSURE_READY));
         assert!(methods.contains(&METHOD_SKILL_LIST));
         assert!(methods.contains(&METHOD_SKILL_READ));
+        assert!(methods.contains(&METHOD_SKILL_PACKAGE_LOCAL_INSPECT));
+        assert!(methods.contains(&METHOD_SKILL_PACKAGE_LOCAL_INSTALL));
+        assert!(methods.contains(&METHOD_SKILL_PACKAGE_EXPORT));
         assert!(methods.contains(&METHOD_WORKSPACE_SKILL_BINDINGS_LIST));
         assert!(methods.contains(&METHOD_AGENT_APP_INSTALLED_LIST));
         assert!(methods.contains(&METHOD_KNOWLEDGE_PACK_LIST));

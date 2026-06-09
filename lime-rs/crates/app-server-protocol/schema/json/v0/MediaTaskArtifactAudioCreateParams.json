@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "audioPath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "contentId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "durationMs": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "entrySource": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "mimeType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modality": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modalityContractKey": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "outputPath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "projectId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "projectRootPath": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "rawText": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "requestedTarget": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "requiredCapabilities": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "routingSlot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "runtimeContract": true,
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourceText": {
+      "type": "string"
+    },
+    "targetLanguage": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "threadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "voice": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "voiceStyle": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "projectRootPath",
+    "sourceText"
+  ],
+  "title": "MediaTaskArtifactAudioCreateParams",
+  "type": "object"
+}

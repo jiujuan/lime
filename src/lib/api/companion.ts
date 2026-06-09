@@ -77,7 +77,13 @@ export interface CompanionPetLive2DActionPayload {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object";
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertNotErrorEnvelope(command: string, value: unknown): void {
+  if (isRecord(value) && "error" in value) {
+    throw new Error(`${command} returned an error envelope`);
+  }
 }
 
 function isNullableString(value: unknown): value is string | null {
@@ -143,6 +149,7 @@ async function invokeCompanionCommand<T>(
     ? await safeInvoke<unknown>(command, args)
     : await safeInvoke<unknown>(command);
   assertNotDiagnosticFacade(command, result, "真实 Companion current 通道");
+  assertNotErrorEnvelope(command, result);
   return result as T;
 }
 

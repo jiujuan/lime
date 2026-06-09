@@ -1,4 +1,6 @@
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+/* global Buffer, process */
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +19,7 @@ const {
   openPathMock,
   showWindowMock,
   focusWindowMock,
+  globalShortcutIsRegisteredMock,
   showOpenDialogMock,
   showItemInFolderMock,
 } = vi.hoisted(() => {
@@ -41,6 +44,7 @@ const {
     browserWindowGetAllWindowsMock: vi.fn(() => []),
     getFileIconMock: vi.fn(),
     getPathMock: vi.fn((_name: string) => os.tmpdir()),
+    globalShortcutIsRegisteredMock: vi.fn((_shortcut: string) => false),
     loadUrlMock,
     openExternalMock: vi.fn(),
     openPathMock: vi.fn(),
@@ -51,6 +55,8 @@ const {
   };
 });
 const tempDirs: string[] = [];
+const TEST_REMOTE_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lwcdVwAAAABJRU5ErkJggg==";
 type AppServerRequestMock = (
   method: string,
   params?: unknown,
@@ -68,6 +74,9 @@ vi.mock("./electronRuntime", () => ({
   }),
   dialog: {
     showOpenDialog: showOpenDialogMock,
+  },
+  globalShortcut: {
+    isRegistered: globalShortcutIsRegisteredMock,
   },
   shell: {
     openExternal: openExternalMock,
@@ -93,6 +102,36 @@ async function createTempUserDataDir() {
   const dir = await mkdtemp(path.join(os.tmpdir(), "lime-host-commands-"));
   tempDirs.push(dir);
   return dir;
+}
+
+async function withRemotePngServer<T>(
+  run: (url: string) => Promise<T>,
+): Promise<T> {
+  const pngBytes = Buffer.from(TEST_REMOTE_PNG_BASE64, "base64");
+  const server = createServer((request, response) => {
+    if (request.url === "/hero.png") {
+      response.writeHead(200, { "content-type": "image/png" });
+      response.end(pngBytes);
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("无法启动远程图片测试服务");
+  }
+  try {
+    return await run(`http://127.0.0.1:${address.port}/hero.png`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
 }
 
 function sessionAlreadyExistsError(sessionId: string) {
@@ -140,6 +179,7 @@ function buildAgentAppShellDescriptor(): Record<string, unknown> {
 afterEach(async () => {
   vi.clearAllMocks();
   browserWindowGetAllWindowsMock.mockReturnValue([]);
+  globalShortcutIsRegisteredMock.mockReturnValue(false);
   getPathMock.mockImplementation(() => os.tmpdir());
   showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
   while (tempDirs.length > 0) {
@@ -198,6 +238,335 @@ describe("ElectronHostCommands retired API Key Provider facade", () => {
 });
 
 describe("ElectronHostCommands local file shell facade", () => {
+  it("save_exported_document 通过 Electron Host 写入用户选择的本地路径", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    const targetPath = path.join(userDataDir, "exports", "report.md");
+
+    await expect(
+      host.invoke("save_exported_document", {
+        filePath: targetPath,
+        content: "# Report\n\n正文",
+      }),
+    ).resolves.toBeNull();
+
+    await expect(readFile(targetPath, "utf8")).resolves.toBe(
+      "# Report\n\n正文",
+    );
+    const directoryStats = await stat(path.dirname(targetPath));
+    expect(directoryStats.isDirectory()).toBe(true);
+  });
+
+  it("save_exported_document 允许写入空内容但拒绝缺失 content", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    const targetPath = path.join(userDataDir, "exports", "empty.md");
+
+    await expect(
+      host.invoke("save_exported_document", {
+        filePath: targetPath,
+        content: "",
+      }),
+    ).resolves.toBeNull();
+    await expect(readFile(targetPath, "utf8")).resolves.toBe("");
+
+    await expect(
+      host.invoke("save_exported_document", {
+        filePath: targetPath,
+      }),
+    ).rejects.toThrow("Missing required string field: content");
+  });
+
+  it("save_layered_design_project_export 通过 Electron Host 写入工程目录", async () => {
+    const projectRootPath = await createTempUserDataDir();
+    const host = createHost(projectRootPath);
+
+    const result = await host.invoke("save_layered_design_project_export", {
+      request: {
+        projectRootPath,
+        documentId: "doc-1",
+        title: "Design Test",
+        directoryName: "Design Test.layered-design",
+        files: [
+          {
+            relativePath: "design.json",
+            mimeType: "application/json",
+            encoding: "utf8",
+            content: '{"layers":[]}',
+          },
+          {
+            relativePath: "export-manifest.json",
+            mimeType: "application/json",
+            encoding: "utf8",
+            content: '{"assets":[]}',
+          },
+          {
+            relativePath: "psd-like-manifest.json",
+            mimeType: "application/json",
+            encoding: "utf8",
+            content: '{"groups":[]}',
+          },
+          {
+            relativePath: "preview.png",
+            mimeType: "image/png",
+            encoding: "base64",
+            content: Buffer.from("preview").toString("base64"),
+          },
+          {
+            relativePath: "assets/subject.png",
+            mimeType: "image/png",
+            encoding: "base64",
+            content: Buffer.from("asset").toString("base64"),
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        projectRootPath,
+        exportDirectoryRelativePath:
+          ".lime/layered-designs/design-test.layered-design",
+        assetCount: 1,
+        fileCount: 5,
+        remoteReferenceAssetCount: 0,
+        cachedRemoteAssetCount: 0,
+        uncachedRemoteAssetCount: 0,
+      }),
+    );
+    const exportResult = result as { designPath: string; manifestPath: string };
+    await expect(readFile(exportResult.designPath, "utf8")).resolves.toBe(
+      '{"layers":[]}',
+    );
+    await expect(readFile(exportResult.manifestPath, "utf8")).resolves.toBe(
+      '{"assets":[]}',
+    );
+  });
+
+  it("read_layered_design_project_export 读回已保存的工程文档", async () => {
+    const projectRootPath = await createTempUserDataDir();
+    const host = createHost(projectRootPath);
+    await host.invoke("save_layered_design_project_export", {
+      request: {
+        projectRootPath,
+        documentId: "doc-1",
+        title: "Design Test",
+        directoryName: "Design Test.layered-design",
+        files: [
+          {
+            relativePath: "design.json",
+            mimeType: "application/json",
+            encoding: "utf8",
+            content: '{"layers":[{"id":"hero"}]}',
+          },
+          {
+            relativePath: "export-manifest.json",
+            mimeType: "application/json",
+            encoding: "utf8",
+            content: '{"assets":[]}',
+          },
+        ],
+      },
+    });
+
+    await expect(
+      host.invoke("read_layered_design_project_export", {
+        request: {
+          projectRootPath,
+          exportDirectoryRelativePath:
+            ".lime/layered-designs/design-test.layered-design",
+        },
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        projectRootPath,
+        exportDirectoryRelativePath:
+          ".lime/layered-designs/design-test.layered-design",
+        designJson: '{"layers":[{"id":"hero"}]}',
+        manifestJson: '{"assets":[]}',
+        assetCount: 0,
+        fileCount: 2,
+      }),
+    );
+  });
+
+  it("save_layered_design_project_export 缓存远程资产并在读回时水合 design.json", async () => {
+    await withRemotePngServer(async (remoteAssetUrl) => {
+      const projectRootPath = await createTempUserDataDir();
+      const host = createHost(projectRootPath);
+
+      const result = await host.invoke("save_layered_design_project_export", {
+        request: {
+          projectRootPath,
+          documentId: "remote-design",
+          title: "Remote Design",
+          directoryName: "Remote Design.layered-design",
+          files: [
+            {
+              relativePath: "design.json",
+              mimeType: "application/json",
+              encoding: "utf8",
+              content: JSON.stringify({
+                id: "remote-design",
+                assets: [
+                  {
+                    id: "remote-asset",
+                    kind: "subject",
+                    src: remoteAssetUrl,
+                    width: 512,
+                    height: 512,
+                  },
+                ],
+              }),
+            },
+            {
+              relativePath: "export-manifest.json",
+              mimeType: "application/json",
+              encoding: "utf8",
+              content: JSON.stringify({
+                assets: [
+                  {
+                    id: "remote-asset",
+                    kind: "subject",
+                    source: "reference",
+                    originalSrc: remoteAssetUrl,
+                  },
+                ],
+              }),
+            },
+            {
+              relativePath: "psd-like-manifest.json",
+              mimeType: "application/json",
+              encoding: "utf8",
+              content: JSON.stringify({
+                layers: [
+                  {
+                    id: "remote-layer",
+                    asset: {
+                      id: "remote-asset",
+                      source: "reference",
+                      originalSrc: remoteAssetUrl,
+                    },
+                  },
+                ],
+              }),
+            },
+          ],
+        },
+      });
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          remoteReferenceAssetCount: 1,
+          cachedRemoteAssetCount: 1,
+          uncachedRemoteAssetCount: 0,
+          assetCount: 1,
+          fileCount: 4,
+        }),
+      );
+      const exportResult = result as {
+        exportDirectoryPath: string;
+        manifestPath: string;
+      };
+      const manifest = JSON.parse(
+        await readFile(exportResult.manifestPath, "utf8"),
+      ) as { assets: Array<Record<string, unknown>> };
+      expect(manifest.assets[0]).toMatchObject({
+        source: "file",
+        filename: "assets/remote-asset.png",
+        originalSrc: remoteAssetUrl,
+      });
+      await expect(
+        readFile(
+          path.join(exportResult.exportDirectoryPath, "assets/remote-asset.png"),
+        ),
+      ).resolves.toEqual(Buffer.from(TEST_REMOTE_PNG_BASE64, "base64"));
+
+      await expect(
+        host.invoke("read_layered_design_project_export", {
+          request: {
+            projectRootPath,
+            exportDirectoryRelativePath:
+              ".lime/layered-designs/remote-design.layered-design",
+          },
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          designJson: expect.stringContaining("data:image/png;base64,"),
+          psdLikeManifestJson: expect.stringContaining(
+            '"filename": "assets/remote-asset.png"',
+          ),
+        }),
+      );
+    });
+  });
+
+  it("save_layered_design_project_export 拒绝目录穿越", async () => {
+    const projectRootPath = await createTempUserDataDir();
+    const host = createHost(projectRootPath);
+
+    await expect(
+      host.invoke("save_layered_design_project_export", {
+        request: {
+          projectRootPath,
+          documentId: "doc-1",
+          title: "Design Test",
+          files: [
+            {
+              relativePath: "../design.json",
+              mimeType: "application/json",
+              encoding: "utf8",
+              content: "{}",
+            },
+            {
+              relativePath: "export-manifest.json",
+              mimeType: "application/json",
+              encoding: "utf8",
+              content: "{}",
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow("导出文件路径不能包含目录穿越或根路径");
+  });
+
+  it("Layered Design extraction current 命令返回合法 unsupported fallback", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("recognize_layered_design_text", {
+        request: {
+          imageSrc: "data:image/png;base64,ZmFrZQ==",
+          width: 640,
+          height: 180,
+        },
+      }),
+    ).resolves.toEqual({
+      supported: false,
+      engine: "electron_host_unsupported",
+      blocks: [],
+      message: "Electron Host 尚未接入 native OCR provider",
+    });
+
+    await expect(
+      host.invoke("analyze_layered_design_flat_image", {
+        request: {
+          image: {
+            src: "data:image/png;base64,ZmFrZQ==",
+            width: 900,
+            height: 1400,
+            mimeType: "image/png",
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      supported: false,
+      engine: "electron_host_unsupported",
+      message: "Electron Host 尚未接入 native structured analyzer provider",
+    });
+  });
+
   it("agent_app_select_directory 通过 Electron dialog 选择目录", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
@@ -406,6 +775,38 @@ describe("ElectronHostCommands local file shell facade", () => {
     expect(browserWindowCtorMock).not.toHaveBeenCalled();
   });
 
+  it("get_local_skills_for_app 应透传 App Server skill/list 的本地目录路径", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const request = vi.fn(async (method: string) => {
+      if (method === "skill/list") {
+        return {
+          skills: [
+            {
+              name: "article-typesetting-master",
+              display_name: "写作排版",
+              description: "测试技能",
+              local_directory_path:
+                "/Users/demo/.agents/skills/article-typesetting-master",
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected App Server method: ${method}`);
+    });
+    const host = createHost(userDataDir, undefined, request);
+
+    await expect(
+      host.invoke("get_local_skills_for_app", { app: "lime" }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        directory: "article-typesetting-master",
+        localDirectoryPath:
+          "/Users/demo/.agents/skills/article-typesetting-master",
+      }),
+    ]);
+    expect(request).toHaveBeenCalledWith("skill/list", {});
+  });
+
   it("reveal_in_finder 通过 Electron shell 定位本地路径", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
@@ -591,7 +992,7 @@ describe("ElectronHostCommands experimental config", () => {
           update_check: { enabled: true },
         },
       }),
-    ).resolves.toEqual({ success: true });
+    ).resolves.toBeNull();
 
     await expect(host.invoke("get_experimental_config")).resolves.toEqual({
       webmcp: { enabled: true },
@@ -1497,6 +1898,113 @@ describe("ElectronHostCommands Agent App runtime current bridge", () => {
 });
 
 describe("ElectronHostCommands system utilities", () => {
+  it("get_voice_shortcut_runtime_status 读取当前语音快捷键注册状态", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    await host.invoke("save_config", {
+      config: {
+        experimental: {
+          voice_input: {
+            shortcut: "Alt+F8",
+          },
+        },
+      },
+    });
+    globalShortcutIsRegisteredMock.mockImplementation(
+      (shortcut: string) => shortcut === "Alt+F8",
+    );
+
+    await expect(
+      host.invoke("get_voice_shortcut_runtime_status"),
+    ).resolves.toEqual({
+      shortcut_registered: true,
+      registered_shortcut: "Alt+F8",
+      fn_supported: process.platform === "darwin",
+      fn_registered: false,
+      fn_fallback_shortcut: "Alt+F8",
+      fn_note: "Fn 按住录音尚未接入；当前使用普通语音快捷键回退。",
+    });
+
+    expect(globalShortcutIsRegisteredMock).toHaveBeenCalledWith("Alt+F8");
+  });
+
+  it("get_voice_shortcut_runtime_status 对无效配置回退默认快捷键", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+    await host.invoke("save_config", {
+      config: {
+        experimental: {
+          voice_input: {
+            shortcut: "InvalidKey",
+          },
+        },
+      },
+    });
+    globalShortcutIsRegisteredMock.mockReturnValue(false);
+
+    await expect(
+      host.invoke("get_voice_shortcut_runtime_status"),
+    ).resolves.toEqual({
+      shortcut_registered: false,
+      registered_shortcut: null,
+      fn_supported: process.platform === "darwin",
+      fn_registered: false,
+      fn_fallback_shortcut: "CommandOrControl+Shift+V",
+      fn_note:
+        "语音快捷键配置不可解析，已使用默认普通语音快捷键回退；Fn 按住录音尚未接入。",
+    });
+
+    expect(globalShortcutIsRegisteredMock).toHaveBeenCalledWith(
+      "CommandOrControl+Shift+V",
+    );
+  });
+
+  it("validate_shortcut 在 Electron Host 侧校验常见全局快捷键", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("validate_shortcut", {
+        shortcutStr: "CommandOrControl+Shift+V",
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      host.invoke("validate_shortcut", {
+        request: { shortcut_str: "Alt+F4" },
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      host.invoke("validate_shortcut", {
+        request: { shortcut: "Ctrl+C" },
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it("validate_shortcut 拒绝空值和无法解析的快捷键", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("validate_shortcut", { shortcutStr: "" }),
+    ).rejects.toThrow("快捷键不能为空");
+    await expect(
+      host.invoke("validate_shortcut", {
+        shortcutStr: "InvalidKey",
+      }),
+    ).rejects.toThrow("无法解析快捷键 'InvalidKey'");
+  });
+
+  it("validate_shortcut 拒绝系统输入法保留快捷键", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("validate_shortcut", {
+        shortcutStr: "CommandOrControl+Space",
+      }),
+    ).rejects.toThrow("输入法切换");
+  });
+
   it("通过系统浏览器打开 http/https 外部链接", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);

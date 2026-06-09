@@ -34,6 +34,50 @@ const overviewResponse = {
   entries: [],
 };
 
+const analysisResponse = {
+  analyzed_sessions: 1,
+  analyzed_messages: 2,
+  generated_entries: 3,
+  deduplicated_entries: 4,
+};
+
+const cleanupMemoryResponse = {
+  cleaned_entries: 1,
+  freed_space: 2,
+};
+
+const workingMemoryResponse = {
+  memory_dir: "/tmp/workspace/.memory",
+  total_sessions: 0,
+  total_entries: 0,
+  sessions: [],
+};
+
+const extractionStatusResponse = {
+  enabled: true,
+  status: "idle",
+  status_summary: "Idle",
+  working_session_count: 0,
+  working_entry_count: 0,
+  recent_compactions: [],
+};
+
+const prefetchResponse = {
+  session_id: "session-1",
+  rules_source_paths: [],
+  durable_memories: [],
+  team_memory_entries: [],
+};
+
+const effectiveSourcesResponse = {
+  working_dir: "/tmp/workspace",
+  total_sources: 0,
+  loaded_sources: 0,
+  follow_imports: true,
+  import_max_depth: 2,
+  sources: [],
+};
+
 const autoIndexResponse = {
   enabled: true,
   root_dir: "/tmp/workspace/memory",
@@ -45,9 +89,41 @@ const autoIndexResponse = {
   items: [],
 };
 
+const memdirCleanupResponse = {
+  root_dir: "/tmp/workspace/memory",
+  entrypoint: "MEMORY.md",
+  scanned_files: 1,
+  updated_files: 1,
+  removed_duplicate_links: 0,
+  dropped_missing_links: 0,
+  removed_duplicate_notes: 0,
+  trimmed_notes: 0,
+  curated_topic_files: 0,
+};
+
+const memdirScaffoldResponse = {
+  root_dir: "/tmp/workspace/memory",
+  entrypoint: "MEMORY.md",
+  created_parent_dir: true,
+  files: [],
+};
+
+const runtimeAgentsTemplateResponse = {
+  target: "workspace",
+  path: "/tmp/workspace/AGENTS.md",
+  status: "created",
+  createdParentDir: true,
+};
+
+const workspaceGitignoreResponse = {
+  path: "/tmp/workspace/.gitignore",
+  entry: ".agents/local/",
+  status: "added",
+};
+
 describe("memoryRuntime API", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.mocked(safeInvoke).mockReset();
   });
 
   it("应通过 context memory 命名代理记忆查询命令", async () => {
@@ -56,27 +132,27 @@ describe("memoryRuntime API", () => {
         case "memory_runtime_get_stats":
           return statsResponse;
         case "memory_runtime_request_analysis":
-          return { analyzed_sessions: 1 };
+          return analysisResponse;
         case "memory_runtime_cleanup":
-          return { cleaned_entries: 1, freed_space: 2 };
+          return cleanupMemoryResponse;
         case "memory_runtime_get_working_memory":
-          return { sessions: [], total_entries: 0, total_sessions: 0 };
+          return workingMemoryResponse;
         case "memory_runtime_get_extraction_status":
-          return { status: "idle", recent_compactions: [] };
+          return extractionStatusResponse;
         case "memory_runtime_prefetch_for_turn":
-          return { session_id: "session-1", durable_memories: [] };
+          return prefetchResponse;
         case "memory_runtime_get_overview":
           return overviewResponse;
         case "memory_get_effective_sources":
-          return { sources: [] };
+          return effectiveSourcesResponse;
         case "memory_get_auto_index":
           return autoIndexResponse;
         case "memory_scaffold_memdir":
-          return { files: [], root_dir: "/tmp/workspace/memory" };
+          return memdirScaffoldResponse;
         case "memory_scaffold_runtime_agents_template":
-          return { status: "created", path: "/tmp/.lime/AGENTS.md" };
+          return runtimeAgentsTemplateResponse;
         case "memory_ensure_workspace_local_agents_gitignore":
-          return { status: "added", path: "/tmp/.gitignore" };
+          return workspaceGitignoreResponse;
         default:
           return null;
       }
@@ -146,7 +222,12 @@ describe("memoryRuntime API", () => {
       "memory_runtime_prefetch_for_turn",
       {
         request: {
-          session_id: "session-1",
+          maxDurableEntries: undefined,
+          maxWorkingChars: undefined,
+          requestMetadata: undefined,
+          sessionId: "session-1",
+          userMessage: undefined,
+          workingDir: undefined,
         },
       },
     );
@@ -199,15 +280,28 @@ describe("memoryRuntime API", () => {
             total_entries: 9,
           };
         case "memory_runtime_request_analysis":
-          return { analyzed_sessions: 3 };
+          return {
+            ...analysisResponse,
+            analyzed_sessions: 3,
+          };
         case "memory_runtime_cleanup":
-          return { cleaned_entries: 4 };
+          return {
+            ...cleanupMemoryResponse,
+            cleaned_entries: 4,
+          };
         case "memory_runtime_get_working_memory":
-          return { sessions: [], total_entries: 0, total_sessions: 0 };
+          return workingMemoryResponse;
         case "memory_runtime_get_extraction_status":
-          return { status: "ready", recent_compactions: [] };
+          return {
+            ...extractionStatusResponse,
+            status: "ready",
+            status_summary: "Ready",
+          };
         case "memory_runtime_prefetch_for_turn":
-          return { session_id: "session-2", durable_memories: [] };
+          return {
+            ...prefetchResponse,
+            session_id: "session-2",
+          };
         case "memory_runtime_get_overview":
           return {
             ...overviewResponse,
@@ -217,21 +311,28 @@ describe("memoryRuntime API", () => {
             },
           };
         case "memory_get_effective_sources":
-          return { sources: [] };
+          return effectiveSourcesResponse;
         case "memory_get_auto_index":
           return autoIndexResponse;
         case "memory_toggle_auto":
           return { enabled: true };
         case "memory_update_auto_note":
-          return { items: [] };
+          return autoIndexResponse;
         case "memory_cleanup_memdir":
-          return { updated_files: 1 };
+          return memdirCleanupResponse;
         case "memory_scaffold_memdir":
-          return { files: [], root_dir: "/tmp/workspace/memory" };
+          return memdirScaffoldResponse;
         case "memory_scaffold_runtime_agents_template":
-          return { status: "exists", path: "/tmp/.lime/AGENTS.md" };
+          return {
+            ...runtimeAgentsTemplateResponse,
+            target: "global",
+            status: "exists",
+          };
         case "memory_ensure_workspace_local_agents_gitignore":
-          return { status: "exists", path: "/tmp/.gitignore" };
+          return {
+            ...workspaceGitignoreResponse,
+            status: "exists",
+          };
         default:
           return null;
       }
@@ -287,8 +388,8 @@ describe("memoryRuntime API", () => {
   it("应代理 context memory 自动记忆开关与写入命令", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({ enabled: true })
-      .mockResolvedValueOnce({ items: [] })
-      .mockResolvedValueOnce({ updated_files: 1 });
+      .mockResolvedValueOnce(autoIndexResponse)
+      .mockResolvedValueOnce(memdirCleanupResponse);
 
     await expect(toggleContextMemoryAuto(true)).resolves.toEqual(
       expect.objectContaining({ enabled: true }),
@@ -309,6 +410,39 @@ describe("memoryRuntime API", () => {
     expect(safeInvoke).toHaveBeenNthCalledWith(3, "memory_cleanup_memdir", {
       workingDir: "/tmp/workspace",
     });
+  });
+
+  it("应把记忆预取请求序列化为 Rust camelCase DTO", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce(prefetchResponse);
+
+    await expect(
+      prefetchContextMemoryForTurn({
+        max_durable_entries: 6,
+        max_working_chars: 3200,
+        request_metadata: {
+          team_memory_shadow: [{ key: "tone", content: "direct" }],
+        },
+        session_id: "session-3",
+        user_message: "hello",
+        working_dir: "/tmp/workspace",
+      }),
+    ).resolves.toEqual(expect.objectContaining({ session_id: "session-1" }));
+
+    expect(safeInvoke).toHaveBeenCalledWith(
+      "memory_runtime_prefetch_for_turn",
+      {
+        request: {
+          maxDurableEntries: 6,
+          maxWorkingChars: 3200,
+          requestMetadata: {
+            team_memory_shadow: [{ key: "tone", content: "direct" }],
+          },
+          sessionId: "session-3",
+          userMessage: "hello",
+          workingDir: "/tmp/workspace",
+        },
+      },
+    );
   });
 
   it("记忆运行时命令遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
@@ -340,6 +474,61 @@ describe("memoryRuntime API", () => {
     );
     await expect(getContextMemoryAutoIndex()).rejects.toThrow(
       "memory_get_auto_index did not return auto memory index",
+    );
+  });
+
+  it("记忆运行时副作用与读取命令遇到空对象或缺字段时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ sessions: [] })
+      .mockResolvedValueOnce({ status: "idle" })
+      .mockResolvedValueOnce({ session_id: "session-1" })
+      .mockResolvedValueOnce({ sources: [] })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ updated_files: 1 })
+      .mockResolvedValueOnce({ files: [] })
+      .mockResolvedValueOnce({ status: "created" })
+      .mockResolvedValueOnce({ status: "added" });
+
+    await expect(analyzeContextMemory()).rejects.toThrow(
+      "memory_runtime_request_analysis did not return memory analysis result",
+    );
+    await expect(cleanupContextMemory()).rejects.toThrow(
+      "memory_runtime_cleanup did not return cleanup result",
+    );
+    await expect(getContextWorkingMemory()).rejects.toThrow(
+      "memory_runtime_get_working_memory did not return working memory",
+    );
+    await expect(getContextMemoryExtractionStatus()).rejects.toThrow(
+      "memory_runtime_get_extraction_status did not return extraction status",
+    );
+    await expect(
+      prefetchContextMemoryForTurn({ session_id: "session-1" }),
+    ).rejects.toThrow(
+      "memory_runtime_prefetch_for_turn did not return memory prefetch result",
+    );
+    await expect(getContextMemoryEffectiveSources()).rejects.toThrow(
+      "memory_get_effective_sources did not return effective memory sources",
+    );
+    await expect(toggleContextMemoryAuto(true)).rejects.toThrow(
+      "memory_toggle_auto did not return memory auto toggle",
+    );
+    await expect(updateContextMemoryAutoNote("note")).rejects.toThrow(
+      "memory_update_auto_note did not return auto memory index",
+    );
+    await expect(cleanupContextMemdir()).rejects.toThrow(
+      "memory_cleanup_memdir did not return memdir cleanup",
+    );
+    await expect(scaffoldContextMemdir()).rejects.toThrow(
+      "memory_scaffold_memdir did not return memdir scaffold",
+    );
+    await expect(scaffoldRuntimeAgentsTemplate("workspace")).rejects.toThrow(
+      "memory_scaffold_runtime_agents_template did not return runtime agents template scaffold",
+    );
+    await expect(ensureWorkspaceLocalAgentsGitignore()).rejects.toThrow(
+      "memory_ensure_workspace_local_agents_gitignore did not return workspace gitignore result",
     );
   });
 

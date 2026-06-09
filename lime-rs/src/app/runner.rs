@@ -3,7 +3,7 @@
 //! 包含 Tauri 应用的主入口函数和命令注册。
 
 use std::sync::Arc;
-use tauri::{Emitter, Manager, Runtime};
+use tauri::{Emitter, Manager};
 
 #[cfg(desktop)]
 use tauri::Listener;
@@ -45,27 +45,6 @@ fn should_enable_single_instance() -> bool {
 fn should_forward_deep_link_argument(value: &str) -> bool {
     value.starts_with("lime://")
         || crate::services::agent_app_shell_window::is_agent_app_shell_deep_link_url(value)
-}
-
-fn collect_skill_package_open_arguments(args: &[String]) -> Vec<String> {
-    commands::skill_cmd::collect_skill_package_open_paths(args)
-}
-
-fn emit_skill_package_open_paths<R: Runtime>(app: &tauri::AppHandle<R>, paths: Vec<String>) {
-    if paths.is_empty() {
-        return;
-    }
-
-    commands::skill_cmd::record_skill_package_open_paths(paths.clone());
-    if should_reveal_main_window_on_startup() {
-        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-            super::window_chrome::reveal_main_window(&window, "打开 Skill 安装包");
-        }
-    }
-
-    if let Err(error) = app.emit(commands::skill_cmd::SKILL_PACKAGE_OPEN_EVENT, &paths) {
-        tracing::error!("[Skill Package] 转发打开请求失败: {}", error);
-    }
 }
 
 fn should_minimize_to_tray(window_label: &str, minimize_to_tray: bool) -> bool {
@@ -125,10 +104,6 @@ fn show_fatal_startup_dialog(_title: &str, _message: &str) {}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _profiling_guard = crate::profiling::init();
-    let startup_args = std::env::args().collect::<Vec<_>>();
-    commands::skill_cmd::record_skill_package_open_paths(collect_skill_package_open_arguments(
-        &startup_args,
-    ));
 
     // 加载并验证配置
     let config = match bootstrap::load_and_validate_config() {
@@ -197,10 +172,6 @@ pub fn run() {
     let shared_tokens_clone = shared_tokens.clone();
     let shared_logger_clone = shared_logger.clone();
     let update_check_service_clone = update_check_service_state.clone();
-    let gateway_tunnel_state = lime_gateway::tunnel::GatewayTunnelState::default();
-    let gateway_tunnel_state_for_setup = gateway_tunnel_state.clone();
-    let global_config_manager_for_setup = global_config_manager_state.clone();
-    let tunnel_logs_clone = logs.clone();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -264,8 +235,6 @@ pub fn run() {
                         tracing::error!("[单实例] 转发 Deep Link URL 失败: {}", error);
                     }
                 }
-
-                emit_skill_package_open_paths(app, collect_skill_package_open_arguments(&args));
             }));
     } else {
         tracing::info!("[启动] 已禁用单实例插件（当前会话允许并行实例）");
@@ -297,7 +266,6 @@ pub fn run() {
         .manage(lime_gateway::feishu::FeishuGatewayState::default())
         .manage(lime_gateway::wechat::WechatGatewayState::default())
         .manage(lime_gateway::wechat::WechatLoginState::default())
-        .manage(gateway_tunnel_state)
         .on_window_event(move |window, event| {
             // 处理窗口关闭事件
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -379,7 +347,9 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             {
-                crate::commands::windows_startup_cmd::maybe_show_windows_startup_notice(&app.handle());
+                crate::services::windows_startup_service::maybe_show_windows_startup_notice(
+                    &app.handle(),
+                );
             }
 
             // 初始化托盘管理器。AgentAPP standalone 使用单 App 原生托盘，避免继承 Lime Desktop 多 App 菜单。
@@ -937,180 +907,23 @@ pub fn run() {
                 });
             }
 
-            // 启动 Gateway Tunnel 守护（managed 模式自动拉起并持续保活）
-            {
-                let tunnel_state = gateway_tunnel_state_for_setup.clone();
-                let config_manager = global_config_manager_for_setup.clone();
-                let logs = tunnel_logs_clone.clone();
-                tauri::async_runtime::spawn(async move {
-                    let mut round: u64 = 0;
-                    loop {
-                        let config = config_manager.config();
-                        if !config.gateway.tunnel.enabled {
-                            round = 0;
-                            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-                            continue;
-                        }
-
-                        let mode = config.gateway.tunnel.mode.trim().to_ascii_lowercase();
-                        if mode == "managed" {
-                            match lime_gateway::tunnel::status_tunnel_with_config(
-                                &tunnel_state,
-                                Some(config.clone()),
-                            )
-                            .await
-                            {
-                                Ok(status) => {
-                                    if status.running {
-                                        if round == 0 {
-                                            logs.write().await.add(
-                                                "info",
-                                                &format!(
-                                                    "[GatewayTunnel] managed 隧道运行中: pid={:?} local={} public={:?}",
-                                                    status.pid, status.local_url, status.public_base_url
-                                                ),
-                                            );
-                                        }
-                                    } else if lime_gateway::tunnel::is_manual_stop_error(
-                                        status.last_error.as_deref(),
-                                    ) {
-                                        if round.is_multiple_of(6) {
-                                            logs.write().await.add(
-                                                "info",
-                                                "[GatewayTunnel] managed 隧道处于手动停止状态，守护器不自动拉起",
-                                            );
-                                        }
-                                    } else {
-                                        logs.write().await.add(
-                                            "warn",
-                                            &format!(
-                                                "[GatewayTunnel] managed 隧道未运行，守护器尝试拉起: last_exit={:?} last_error={:?}",
-                                                status.last_exit, status.last_error
-                                            ),
-                                        );
-                                        if let Err(e) = lime_gateway::tunnel::start_tunnel(
-                                            &tunnel_state,
-                                            logs.clone(),
-                                            config.clone(),
-                                        )
-                                        .await
-                                        {
-                                            logs.write().await.add(
-                                                "warn",
-                                                &format!("[GatewayTunnel] 守护拉起失败: {e}"),
-                                            );
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    logs.write()
-                                        .await
-                                        .add("warn", &format!("[GatewayTunnel] 守护状态检查失败: {e}"));
-                                }
-                            }
-                        } else if mode == "external" && round.is_multiple_of(6) {
-                            match lime_gateway::tunnel::status_tunnel_with_config(
-                                &tunnel_state,
-                                Some(config),
-                            )
-                            .await
-                            {
-                                Ok(status) => {
-                                    logs.write().await.add(
-                                        "info",
-                                        &format!(
-                                            "[GatewayTunnel] external 模式诊断: active={:?} detail={:?}",
-                                            status.connector_active, status.connector_message
-                                        ),
-                                    );
-                                }
-                                Err(e) => {
-                                    logs.write().await.add(
-                                        "warn",
-                                        &format!("[GatewayTunnel] external 模式诊断失败: {e}"),
-                                    );
-                                }
-                            }
-                        }
-
-                        round = round.saturating_add(1);
-                        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-                    }
-                });
-            }
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             // Server commands (from app::commands)
-            app_commands::get_server_diagnostics,
             // Config commands (from app::commands)
-            app_commands::get_config,
-            app_commands::save_config,
-            app_commands::get_environment_preview,
-            app_commands::get_default_provider,
-            app_commands::set_default_provider,
             app_commands::get_endpoint_providers,
             app_commands::set_endpoint_provider,
-            app_commands::update_provider_env_vars,
             // OpenAI Custom commands (from app::commands)
             app_commands::get_openai_custom_status,
             app_commands::set_openai_custom_config,
             // Claude Custom commands (from app::commands)
             app_commands::get_claude_custom_status,
             app_commands::set_claude_custom_config,
-            // Log commands (from app::commands)
-            app_commands::get_logs,
-            app_commands::get_persisted_logs_tail,
-            app_commands::get_log_storage_diagnostics,
-            app_commands::export_support_bundle,
-            app_commands::clear_logs,
-            app_commands::clear_diagnostic_log_history,
-            app_commands::report_frontend_crash,
-            app_commands::report_frontend_debug_log,
             // API test commands (from app::commands)
             app_commands::get_available_models,
             app_commands::check_api_compatibility,
-            // Skill commands
-            commands::skill_cmd::get_skills,
-            commands::skill_cmd::get_skills_for_app,
-            commands::skill_cmd::get_local_skills_for_app,
-            commands::skill_cmd::install_skill,
-            commands::skill_cmd::install_skill_for_app,
-            commands::skill_cmd::uninstall_skill,
-            commands::skill_cmd::uninstall_skill_for_app,
-            commands::skill_cmd::get_skill_repos,
-            commands::skill_cmd::add_skill_repo,
-            commands::skill_cmd::remove_skill_repo,
-            commands::skill_cmd::refresh_skill_cache,
-            commands::skill_cmd::get_installed_lime_skills,
-            commands::skill_cmd::inspect_local_skill_for_app,
-            commands::skill_cmd::inspect_local_skill_detail_for_app,
-            commands::skill_cmd::reveal_local_skill_for_app,
-            commands::skill_cmd::rename_local_skill_for_app,
-            commands::skill_cmd::replace_local_skill_package_for_app,
-            commands::skill_cmd::create_skill_scaffold_for_app,
-            commands::skill_cmd::import_local_skill_for_app,
-            commands::skill_cmd::inspect_local_skill_package_for_app,
-            commands::skill_cmd::install_local_skill_package_for_app,
-            commands::skill_cmd::export_local_skill_package_for_app,
-            commands::skill_cmd::take_pending_skill_package_open_requests,
-            commands::skill_cmd::get_skill_package_file_association_status,
-            commands::skill_cmd::set_skill_package_file_association_default,
-            commands::skill_cmd::install_marketplace_skill_for_app,
-            commands::skill_cmd::install_skill_from_download_url_for_app,
-            commands::skill_cmd::inspect_remote_skill,
-            // Capability Draft commands
-            commands::capability_draft_cmd::capability_draft_create,
-            commands::capability_draft_cmd::capability_draft_list,
-            commands::capability_draft_cmd::capability_draft_get,
-            commands::capability_draft_cmd::capability_draft_verify,
-            commands::capability_draft_cmd::capability_draft_register,
-            commands::capability_draft_cmd::capability_draft_submit_approval_session_inputs,
-            commands::capability_draft_cmd::capability_draft_execute_controlled_get,
             // Agent App Desktop shell / runtime facade commands
-            // Skill Execution commands
-            commands::skill_exec_cmd::execute_skill,
             // Execution run commands
             commands::execution_run_cmd::execution_run_list,
             commands::execution_run_cmd::execution_run_get,
@@ -1120,18 +933,6 @@ pub fn run() {
             commands::browser_runtime_cmd::close_browser_runtime_debugger_window,
             commands::browser_runtime_cmd::launch_browser_session,
             commands::browser_runtime_cmd::launch_browser_runtime_assist,
-            commands::site_capability_cmd::site_list_adapters,
-            commands::site_capability_cmd::site_recommend_adapters,
-            commands::site_capability_cmd::site_search_adapters,
-            commands::site_capability_cmd::site_get_adapter_info,
-            commands::site_capability_cmd::site_get_adapter_launch_readiness,
-            commands::site_capability_cmd::site_get_adapter_catalog_status,
-            commands::site_capability_cmd::site_apply_adapter_catalog_bootstrap,
-            commands::site_capability_cmd::site_clear_adapter_catalog_cache,
-            commands::site_capability_cmd::site_import_adapter_yaml_bundle,
-            commands::site_capability_cmd::site_run_adapter,
-            commands::site_capability_cmd::site_debug_run_adapter,
-            commands::site_capability_cmd::site_save_adapter_result,
             // Hint route commands
             commands::security_perf_cmd::get_hint_routes,
             // Machine ID commands
@@ -1151,54 +952,7 @@ pub fn run() {
             commands::machine_id_cmd::copy_machine_id_to_clipboard,
             commands::machine_id_cmd::paste_machine_id_from_clipboard,
             commands::machine_id_cmd::get_system_info,
-            commands::windows_startup_cmd::get_windows_startup_diagnostics,
-            // Agent commands
-            commands::agent_cmd::agent_start_process,
-            commands::agent_cmd::agent_stop_process,
-            commands::agent_cmd::agent_get_process_status,
             commands::agent_cmd::agent_generate_title,
-            // Aster Agent commands
-            commands::aster_agent_cmd::command_api::provider_api::aster_agent_init,
-            commands::aster_agent_cmd::command_api::provider_api::aster_agent_status,
-            commands::aster_agent_cmd::command_api::provider_api::aster_agent_reset,
-            commands::aster_agent_cmd::command_api::provider_api::aster_agent_configure_provider,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_submit_turn,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_interrupt_turn,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_compact_session,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_resume_thread,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_promote_queued_turn,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_remove_queued_turn,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_replay_request,
-            commands::aster_agent_cmd::command_api::session_api::agent_runtime_create_session,
-            commands::aster_agent_cmd::command_api::session_api::agent_runtime_list_sessions,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_get_session,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_get_thread_read,
-            commands::aster_agent_cmd::command_api::objective_api::agent_runtime_get_objective,
-            commands::aster_agent_cmd::command_api::objective_api::agent_runtime_set_objective,
-            commands::aster_agent_cmd::command_api::objective_api::agent_runtime_update_objective_status,
-            commands::aster_agent_cmd::command_api::objective_api::agent_runtime_clear_objective,
-            commands::aster_agent_cmd::command_api::objective_api::agent_runtime_continue_objective,
-            commands::aster_agent_cmd::command_api::objective_audit::agent_runtime_audit_objective,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_list_file_checkpoints,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_get_file_checkpoint,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_diff_file_checkpoint,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_restore_file_checkpoint,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_export_analysis_handoff,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_export_handoff_bundle,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_export_evidence_pack,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_export_review_decision_template,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_save_review_decision,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_export_replay_case,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_get_tool_inventory,
-            commands::aster_agent_cmd::command_api::runtime_api::agent_runtime_list_workspace_skill_bindings,
-            commands::aster_agent_cmd::command_api::subagent_api::agent_runtime_spawn_subagent,
-            commands::aster_agent_cmd::command_api::subagent_api::agent_runtime_send_subagent_input,
-            commands::aster_agent_cmd::command_api::subagent_api::agent_runtime_wait_subagents,
-            commands::aster_agent_cmd::command_api::subagent_api::agent_runtime_resume_subagent,
-            commands::aster_agent_cmd::command_api::subagent_api::agent_runtime_close_subagent,
-            commands::aster_agent_cmd::command_api::session_api::agent_runtime_update_session,
-            commands::aster_agent_cmd::action_runtime::agent_runtime_delete_session,
-            commands::aster_agent_cmd::action_runtime::agent_runtime_respond_action,
             commands::aster_agent_cmd::tool_runtime::social_tools::social_generate_cover_image_cmd,
             // Model Registry commands
             commands::model_registry_cmd::get_model_registry,
@@ -1265,7 +1019,6 @@ pub fn run() {
             commands::webview_cmd::get_browser_event_buffer,
             commands::webview_cmd::browser_execute_action,
             commands::webview_cmd::get_browser_action_audit_logs,
-            commands::hotkey_cmd::validate_shortcut,
             // Session Files commands
             commands::session_files_cmd::session_files_create,
             commands::session_files_cmd::session_files_exists,
@@ -1281,10 +1034,6 @@ pub fn run() {
             commands::session_files_cmd::session_files_list_files,
             commands::session_files_cmd::session_files_cleanup_expired,
             commands::session_files_cmd::session_files_cleanup_empty,
-            commands::layered_design_cmd::analyze_layered_design_flat_image,
-            commands::layered_design_cmd::read_layered_design_project_export,
-            commands::layered_design_cmd::recognize_layered_design_text,
-            commands::layered_design_cmd::save_layered_design_project_export,
             // Workspace commands
             commands::workspace_cmd::workspace_create,
             commands::workspace_cmd::workspace_list,
@@ -1315,12 +1064,6 @@ pub fn run() {
             commands::video_generation_cmd::get_video_generation_task,
             commands::video_generation_cmd::list_video_generation_tasks,
             commands::video_generation_cmd::cancel_video_generation_task,
-            commands::media_task_cmd::create_image_generation_task_artifact,
-            commands::media_task_cmd::create_audio_generation_task_artifact,
-            commands::media_task_cmd::complete_audio_generation_task_artifact,
-            commands::media_task_cmd::get_media_task_artifact,
-            commands::media_task_cmd::list_media_task_artifacts,
-            commands::media_task_cmd::cancel_media_task_artifact,
             // Gallery material commands
             commands::gallery_material_cmd::create_gallery_material_metadata,
             commands::gallery_material_cmd::get_gallery_material_metadata,
@@ -1397,7 +1140,6 @@ pub fn run() {
             commands::voice_model_cmd::voice_models_test_transcribe_file,
             // Voice Input commands
             crate::voice::commands::get_voice_input_config,
-            crate::voice::commands::get_voice_shortcut_runtime_status,
             crate::voice::commands::save_voice_input_config,
             crate::voice::commands::get_voice_instructions,
             crate::voice::commands::save_voice_instruction,
@@ -1413,44 +1155,11 @@ pub fn run() {
             crate::voice::commands::cancel_recording,
             crate::voice::commands::get_recording_status,
             crate::voice::commands::list_audio_devices,
-            // Telegram 远程触发命令
-            commands::gateway_channel_cmd::gateway_channel_start,
-            commands::gateway_channel_cmd::gateway_channel_stop,
-            commands::gateway_channel_cmd::gateway_channel_status,
-            commands::gateway_channel_cmd::telegram_channel_probe,
-            commands::gateway_channel_cmd::feishu_channel_probe,
-            commands::gateway_channel_cmd::discord_channel_probe,
-            commands::gateway_channel_cmd::wechat_channel_probe,
-            commands::wechat_channel_cmd::wechat_channel_login_start,
-            commands::wechat_channel_cmd::wechat_channel_login_wait,
-            commands::wechat_channel_cmd::wechat_channel_list_accounts,
-            commands::wechat_channel_cmd::wechat_channel_remove_account,
-            commands::wechat_channel_cmd::wechat_channel_set_runtime_model,
-            commands::gateway_tunnel_cmd::gateway_tunnel_probe,
-            commands::gateway_tunnel_cmd::gateway_tunnel_detect_cloudflared,
-            commands::gateway_tunnel_cmd::gateway_tunnel_install_cloudflared,
-            commands::gateway_tunnel_cmd::gateway_tunnel_create,
-            commands::gateway_tunnel_cmd::gateway_tunnel_start,
-            commands::gateway_tunnel_cmd::gateway_tunnel_stop,
-            commands::gateway_tunnel_cmd::gateway_tunnel_restart,
-            commands::gateway_tunnel_cmd::gateway_tunnel_status,
-            commands::gateway_tunnel_cmd::gateway_tunnel_sync_webhook_url,
         ])
         .build(tauri::generate_context!())
         .map(|app| {
-            app.run(|app_handle, event| {
-                #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-                {
-                    if let tauri::RunEvent::Opened { urls } = event {
-                        let paths =
-                            commands::skill_cmd::collect_skill_package_open_paths_from_urls(&urls);
-                        emit_skill_package_open_paths(app_handle, paths);
-                    }
-                }
-                #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
-                {
-                    let _ = (app_handle, event);
-                }
+            app.run(|_app_handle, _event| {
+                // Skill package open requests 已迁到 Electron Desktop Host current。
             });
         });
 

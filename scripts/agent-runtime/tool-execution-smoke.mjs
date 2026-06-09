@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   assertSmoke,
   createAgentSessionCurrent,
+  exportAgentSessionEvidencePackCurrent,
   invokeDevBridge,
   readAgentRuntimeThreadCurrent,
   readAgentSessionDetailCurrent,
@@ -1775,11 +1776,10 @@ async function runSmoke(options) {
     );
 
     console.log(`${LOG_PREFIX} stage=export-evidence-pack`);
-    const evidencePack = await invokeDevBridge(
-      options,
-      "agent_runtime_export_evidence_pack",
-      { sessionId },
-    );
+    const evidencePack = await exportAgentSessionEvidencePackCurrent(options, {
+      sessionId,
+      turnId,
+    });
 
     const providerRequests = providerRequestSummaries(fixture.requests);
     const matrix = buildToolExecutionMatrix(finalState.threadRead, targetTools);
@@ -1857,6 +1857,8 @@ async function runSmoke(options) {
         verifiesRuntimeInventoryTools: true,
         verifiesRuntimeToolExecution: true,
         verifiesEvidencePack: true,
+        usesCompatToolInventoryCommand: true,
+        usesAppServerEvidenceExportCurrent: true,
         batchId: scenario.id,
         targetTools,
         allScenarioTargetTools: inventoryCoverage.allScenarioTargetTools,

@@ -28,6 +28,16 @@ export interface SyncTrayModelShortcutsPayload {
   quick_model_groups: TrayQuickModelGroup[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertNotErrorEnvelope(command: string, value: unknown): void {
+  if (isRecord(value) && "error" in value) {
+    throw new Error(`${command} returned an error envelope`);
+  }
+}
+
 export async function syncTrayModelShortcuts(
   payload: SyncTrayModelShortcutsPayload,
 ): Promise<void> {
@@ -43,6 +53,7 @@ export async function syncTrayModelShortcuts(
     result,
     "真实托盘 current 通道",
   );
+  assertNotErrorEnvelope("sync_tray_model_shortcuts", result);
   if (result !== null && result !== undefined) {
     throw new Error(
       "sync_tray_model_shortcuts did not return tray sync result",

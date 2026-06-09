@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { safeInvoke } from "@/lib/dev-bridge";
 import {
+  type CreateAudioGenerationTaskArtifactRequest,
+  type CreateImageGenerationTaskArtifactRequest,
+  type ListMediaTaskArtifactsRequest,
+  type MediaTaskLookupRequest,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   cancelMediaTaskArtifact,
   completeAudioGenerationTaskArtifact,
   createAudioGenerationTaskArtifact,
@@ -9,489 +18,262 @@ import {
   listMediaTaskArtifacts,
 } from "./mediaTasks";
 
-vi.mock("@/lib/dev-bridge", () => ({
-  safeInvoke: vi.fn(),
+const appServerRequestMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api/appServer", () => ({
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE:
+    "mediaTaskArtifact/image/create",
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE:
+    "mediaTaskArtifact/audio/create",
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE:
+    "mediaTaskArtifact/audio/complete",
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET: "mediaTaskArtifact/get",
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST: "mediaTaskArtifact/list",
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL: "mediaTaskArtifact/cancel",
+  createAppServerClient: vi.fn(() => ({
+    createImageMediaTaskArtifact: appServerRequestMock,
+    createAudioMediaTaskArtifact: appServerRequestMock,
+    completeAudioMediaTaskArtifact: appServerRequestMock,
+    getMediaTaskArtifact: appServerRequestMock,
+    listMediaTaskArtifacts: appServerRequestMock,
+    cancelMediaTaskArtifact: appServerRequestMock,
+  })),
 }));
+
+function buildTaskResult(overrides: Record<string, unknown> = {}) {
+  const taskId =
+    typeof overrides.task_id === "string" ? overrides.task_id : "task-image-1";
+  const taskType =
+    typeof overrides.task_type === "string"
+      ? overrides.task_type
+      : "image_generate";
+  const taskFamily =
+    typeof overrides.task_family === "string" ? overrides.task_family : "image";
+  const normalizedStatus =
+    typeof overrides.normalized_status === "string"
+      ? overrides.normalized_status
+      : "pending";
+
+  return {
+    success: true,
+    task_id: taskId,
+    task_type: taskType,
+    task_family: taskFamily,
+    status:
+      typeof overrides.status === "string"
+        ? overrides.status
+        : "pending_submit",
+    normalized_status: normalizedStatus,
+    path: `.lime/tasks/${taskType}/${taskId}.json`,
+    absolute_path: `/workspace/.lime/tasks/${taskType}/${taskId}.json`,
+    artifact_path: `.lime/tasks/${taskType}/${taskId}.json`,
+    absolute_artifact_path: `/workspace/.lime/tasks/${taskType}/${taskId}.json`,
+    reused_existing: false,
+    record: {
+      task_id: taskId,
+      task_type: taskType,
+      task_family: taskFamily,
+      payload: {
+        prompt: "未来感青柠实验室",
+      },
+      status:
+        typeof overrides.status === "string"
+          ? overrides.status
+          : "pending_submit",
+      normalized_status: normalizedStatus,
+      created_at: "2026-04-04T12:00:00Z",
+    },
+    ...overrides,
+  };
+}
 
 describe("mediaTasks API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    appServerRequestMock.mockReset();
   });
 
-  it("应通过统一网关创建图片任务 artifact", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      success: true,
-      task_id: "task-image-1",
-      task_type: "image_generate",
-      task_family: "image",
-      status: "pending_submit",
-      normalized_status: "pending",
-      path: ".lime/tasks/image_generate/task-image-1.json",
-      absolute_path: "/workspace/.lime/tasks/image_generate/task-image-1.json",
-      artifact_path: ".lime/tasks/image_generate/task-image-1.json",
-      absolute_artifact_path:
-        "/workspace/.lime/tasks/image_generate/task-image-1.json",
-      reused_existing: false,
-      record: {
-        task_id: "task-image-1",
-        task_type: "image_generate",
-        task_family: "image",
-        payload: {
-          prompt: "未来感青柠实验室",
-        },
-        status: "pending_submit",
-        normalized_status: "pending",
-        created_at: "2026-04-04T12:00:00Z",
-      },
+  it("应通过 App Server current 创建图片任务 artifact", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: buildTaskResult(),
     });
+    const request = {
+      projectRootPath: "/workspace",
+      prompt: "未来感青柠实验室",
+      titleGenerationResult: {
+        title: "未来感青柠实验室",
+        sessionId: "session-title-1",
+        usedFallback: false,
+      },
+      mode: "generate",
+      count: 1,
+    } satisfies CreateImageGenerationTaskArtifactRequest;
 
-    await expect(
-      createImageGenerationTaskArtifact({
-        projectRootPath: "/workspace",
-        prompt: "未来感青柠实验室",
-        titleGenerationResult: {
-          title: "未来感青柠实验室",
-          sessionId: "session-title-1",
-          usedFallback: false,
-        },
-        mode: "generate",
-        count: 1,
-      }),
-    ).resolves.toEqual(
+    await expect(createImageGenerationTaskArtifact(request)).resolves.toEqual(
       expect.objectContaining({
         task_id: "task-image-1",
         task_type: "image_generate",
       }),
     );
-
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
-      "create_image_generation_task_artifact",
-      {
-        request: {
-          projectRootPath: "/workspace",
-          prompt: "未来感青柠实验室",
-          titleGenerationResult: {
-            title: "未来感青柠实验室",
-            sessionId: "session-title-1",
-            usedFallback: false,
-          },
-          mode: "generate",
-          count: 1,
-        },
-      },
+    expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE).toBe(
+      "mediaTaskArtifact/image/create",
     );
+    expect(appServerRequestMock).toHaveBeenCalledWith(request);
   });
 
-  it("应通过统一网关创建音频任务 artifact", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      success: true,
-      task_id: "task-audio-1",
-      task_type: "audio_generate",
-      task_family: "audio",
-      status: "pending_submit",
-      normalized_status: "pending",
-      path: ".lime/tasks/audio_generate/task-audio-1.json",
-      absolute_path: "/workspace/.lime/tasks/audio_generate/task-audio-1.json",
-      artifact_path: ".lime/tasks/audio_generate/task-audio-1.json",
-      absolute_artifact_path:
-        "/workspace/.lime/tasks/audio_generate/task-audio-1.json",
-      reused_existing: false,
-      record: {
+  it("应通过 App Server current 创建音频任务 artifact", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: buildTaskResult({
         task_id: "task-audio-1",
         task_type: "audio_generate",
         task_family: "audio",
-        payload: {
-          source_text: "请生成温暖旁白",
-          modality_contract_key: "voice_generation",
-          audio_output: {
-            kind: "audio_output",
-            status: "pending",
-            mime_type: "audio/mpeg",
-          },
-        },
-        status: "pending_submit",
-        normalized_status: "pending",
-        created_at: "2026-04-04T12:00:00Z",
-      },
-    });
-
-    await expect(
-      createAudioGenerationTaskArtifact({
-        projectRootPath: "/workspace",
-        sourceText: "请生成温暖旁白",
-        voice: "warm_narrator",
-        entrySource: "at_voice_command",
-        modalityContractKey: "voice_generation",
-        modality: "audio",
-        requiredCapabilities: ["text_generation", "voice_generation"],
-        routingSlot: "voice_generation_model",
       }),
-    ).resolves.toEqual(
+    });
+    const request = {
+      projectRootPath: "/workspace",
+      sourceText: "请生成温暖旁白",
+      voice: "warm_narrator",
+      entrySource: "at_voice_command",
+      modalityContractKey: "voice_generation",
+      modality: "audio",
+      requiredCapabilities: ["text_generation", "voice_generation"],
+      routingSlot: "voice_generation_model",
+    } satisfies CreateAudioGenerationTaskArtifactRequest;
+
+    await expect(createAudioGenerationTaskArtifact(request)).resolves.toEqual(
       expect.objectContaining({
         task_id: "task-audio-1",
         task_type: "audio_generate",
       }),
     );
-
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
-      "create_audio_generation_task_artifact",
-      {
-        request: {
-          projectRootPath: "/workspace",
-          sourceText: "请生成温暖旁白",
-          voice: "warm_narrator",
-          entrySource: "at_voice_command",
-          modalityContractKey: "voice_generation",
-          modality: "audio",
-          requiredCapabilities: ["text_generation", "voice_generation"],
-          routingSlot: "voice_generation_model",
-        },
-      },
+    expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE).toBe(
+      "mediaTaskArtifact/audio/create",
     );
+    expect(appServerRequestMock).toHaveBeenCalledWith(request);
   });
 
-  it("应通过统一网关完成音频任务并回写 audio_output", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      success: true,
-      task_id: "task-audio-2",
-      task_type: "audio_generate",
-      task_family: "audio",
-      status: "succeeded",
-      normalized_status: "succeeded",
-      path: ".lime/tasks/audio_generate/task-audio-2.json",
-      absolute_path: "/workspace/.lime/tasks/audio_generate/task-audio-2.json",
-      artifact_path: ".lime/tasks/audio_generate/task-audio-2.json",
-      absolute_artifact_path:
-        "/workspace/.lime/tasks/audio_generate/task-audio-2.json",
-      reused_existing: false,
-      record: {
+  it("应通过 App Server current 完成音频任务并回写 audio_output", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: buildTaskResult({
         task_id: "task-audio-2",
         task_type: "audio_generate",
         task_family: "audio",
-        payload: {
-          source_text: "请生成温暖旁白",
-          modality_contract_key: "voice_generation",
-          audio_path: ".lime/runtime/audio/task-audio-2.mp3",
-          audio_output: {
-            kind: "audio_output",
-            status: "completed",
-            audio_path: ".lime/runtime/audio/task-audio-2.mp3",
-            mime_type: "audio/mpeg",
-            duration_ms: 2400,
-          },
-        },
         status: "succeeded",
         normalized_status: "succeeded",
-        created_at: "2026-04-04T12:00:00Z",
-        result: {
-          kind: "audio_generation_result",
-          status: "completed",
-          audio_path: ".lime/runtime/audio/task-audio-2.mp3",
-        },
-      },
-    });
-
-    await expect(
-      completeAudioGenerationTaskArtifact({
-        projectRootPath: "/workspace",
-        taskRef: "task-audio-2",
-        audioPath: ".lime/runtime/audio/task-audio-2.mp3",
-        mimeType: "audio/mpeg",
-        durationMs: 2400,
-        providerId: "limecore",
-        model: "voice-pro",
       }),
-    ).resolves.toEqual(
+    });
+    const request = {
+      projectRootPath: "/workspace",
+      taskRef: "task-audio-2",
+      audioPath: ".lime/runtime/audio/task-audio-2.mp3",
+      mimeType: "audio/mpeg",
+      durationMs: 2400,
+      providerId: "limecore",
+      model: "voice-pro",
+    };
+
+    await expect(completeAudioGenerationTaskArtifact(request)).resolves.toEqual(
       expect.objectContaining({
         task_id: "task-audio-2",
         normalized_status: "succeeded",
       }),
     );
-
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
-      "complete_audio_generation_task_artifact",
-      {
-        request: {
-          projectRootPath: "/workspace",
-          taskRef: "task-audio-2",
-          audioPath: ".lime/runtime/audio/task-audio-2.mp3",
-          mimeType: "audio/mpeg",
-          durationMs: 2400,
-          providerId: "limecore",
-          model: "voice-pro",
-        },
-      },
+    expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE).toBe(
+      "mediaTaskArtifact/audio/complete",
     );
+    expect(appServerRequestMock).toHaveBeenCalledWith(request);
   });
 
-  it("应通过统一网关读取、列出和取消媒体任务 artifact", async () => {
-    vi.mocked(safeInvoke)
+  it("应通过 App Server current 读取、列出和取消媒体任务 artifact", async () => {
+    appServerRequestMock
       .mockResolvedValueOnce({
-        success: true,
-        task_id: "task-image-2",
-        task_type: "image_generate",
-        task_family: "image",
-        status: "pending_submit",
-        normalized_status: "pending",
-        path: ".lime/tasks/image_generate/task-image-2.json",
-        absolute_path:
-          "/workspace/.lime/tasks/image_generate/task-image-2.json",
-        artifact_path: ".lime/tasks/image_generate/task-image-2.json",
-        absolute_artifact_path:
-          "/workspace/.lime/tasks/image_generate/task-image-2.json",
-        reused_existing: false,
-        record: {
-          task_id: "task-image-2",
-          task_type: "image_generate",
-          task_family: "image",
-          payload: {
-            prompt: "读取任务",
+        result: buildTaskResult({ task_id: "task-image-2" }),
+      })
+      .mockResolvedValueOnce({
+        result: {
+          success: true,
+          workspace_root: "/workspace",
+          artifact_root: "/workspace/.lime/tasks",
+          filters: {
+            status: "pending",
+            task_family: "image",
+            task_type: "image_generate",
+            modality_contract_key: "image_generation",
+            routing_outcome: "accepted",
+            limit: 10,
           },
-          status: "pending_submit",
-          normalized_status: "pending",
-          created_at: "2026-04-04T12:10:00Z",
+          total: 1,
+          modality_runtime_contracts: {
+            snapshot_count: 1,
+            entry_keys: ["at_image_command"],
+            thread_ids: ["thread-image-2"],
+            turn_ids: ["turn-image-2"],
+            content_ids: ["content-image-2"],
+            modalities: ["image"],
+            skill_ids: ["image_generate"],
+            model_ids: ["gpt-image-1"],
+            cost_states: ["estimated"],
+            limit_states: ["within_limit"],
+            estimated_cost_classes: ["low"],
+            limit_event_kinds: ["quota_low"],
+            quota_low_count: 1,
+            executor_kinds: ["skill"],
+            executor_binding_keys: ["image_generate"],
+            limecore_policy_refs: [
+              "model_catalog",
+              "provider_offer",
+              "tenant_feature_flags",
+            ],
+            limecore_policy_evaluation_statuses: [
+              { status: "input_gap", count: 1 },
+            ],
+            limecore_policy_evaluation_pending_refs: [
+              "model_catalog",
+              "provider_offer",
+              "tenant_feature_flags",
+            ],
+          },
+          tasks: [buildTaskResult({ task_id: "task-image-2" })],
         },
       })
       .mockResolvedValueOnce({
-        success: true,
-        workspace_root: "/workspace",
-        artifact_root: "/workspace/.lime/tasks",
-        filters: {
-          status: "pending",
-          task_family: "image",
-          task_type: "image_generate",
-          modality_contract_key: "image_generation",
-          routing_outcome: "accepted",
-          limit: 10,
-        },
-        total: 1,
-        modality_runtime_contracts: {
-          snapshot_count: 1,
-          contract_keys: ["image_generation"],
-          entry_keys: ["at_image_command"],
-          thread_ids: ["thread-image-2"],
-          turn_ids: ["turn-image-2"],
-          content_ids: ["content-image-2"],
-          modalities: ["image"],
-          skill_ids: ["image_generate"],
-          model_ids: ["gpt-image-1"],
-          cost_states: ["estimated"],
-          limit_states: ["within_limit"],
-          estimated_cost_classes: ["low"],
-          limit_event_kinds: ["quota_low"],
-          quota_low_count: 1,
-          execution_profile_keys: ["image_generation_profile"],
-          executor_adapter_keys: ["skill:image_generate"],
-          executor_kinds: ["skill"],
-          executor_binding_keys: ["image_generate"],
-          limecore_policy_refs: [
-            "model_catalog",
-            "provider_offer",
-            "tenant_feature_flags",
-          ],
-          limecore_policy_snapshot_count: 1,
-          limecore_policy_snapshot_statuses: [
-            { status: "local_defaults_evaluated", count: 1 },
-          ],
-          limecore_policy_decisions: ["allow"],
-          limecore_policy_decision_sources: ["local_default_policy"],
-          limecore_policy_evaluation_statuses: [
-            { status: "input_gap", count: 1 },
-          ],
-          limecore_policy_evaluation_decisions: ["ask"],
-          limecore_policy_evaluation_decision_sources: [
-            "policy_input_evaluator",
-          ],
-          limecore_policy_evaluation_blocking_refs: [],
-          limecore_policy_evaluation_ask_refs: [
-            "model_catalog",
-            "provider_offer",
-            "tenant_feature_flags",
-          ],
-          limecore_policy_evaluation_pending_refs: [
-            "model_catalog",
-            "provider_offer",
-            "tenant_feature_flags",
-          ],
-          limecore_policy_unresolved_refs: [
-            "model_catalog",
-            "provider_offer",
-            "tenant_feature_flags",
-          ],
-          limecore_policy_missing_inputs: [
-            "model_catalog",
-            "provider_offer",
-            "tenant_feature_flags",
-          ],
-          limecore_policy_pending_hit_refs: [
-            "model_catalog",
-            "provider_offer",
-            "tenant_feature_flags",
-          ],
-          limecore_policy_value_hit_count: 0,
-          blocked_count: 0,
-          routing_outcomes: [{ outcome: "accepted", count: 1 }],
-          model_registry_assessment_count: 0,
-          audio_output_count: 0,
-          audio_output_statuses: [],
-          audio_output_error_codes: [],
-          transcript_count: 0,
-          transcript_statuses: [],
-          transcript_error_codes: [],
-          snapshots: [
-            {
-              task_id: "task-image-2",
-              task_type: "image_generate",
-              normalized_status: "pending",
-              contract_key: "image_generation",
-              entry_key: "at_image_command",
-              thread_id: "thread-image-2",
-              turn_id: "turn-image-2",
-              content_id: "content-image-2",
-              modality: "image",
-              skill_id: "image_generate",
-              model_id: "gpt-image-1",
-              cost_state: "estimated",
-              limit_state: "within_limit",
-              estimated_cost_class: "low",
-              limit_event_kind: "quota_low",
-              quota_low: true,
-              routing_slot: "image_generation_model",
-              provider_id: null,
-              model: "gpt-image-1",
-              execution_profile_key: "image_generation_profile",
-              executor_adapter_key: "skill:image_generate",
-              executor_kind: "skill",
-              executor_binding_key: "image_generate",
-              limecore_policy_refs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              limecore_policy_snapshot_status: "local_defaults_evaluated",
-              limecore_policy_decision: "allow",
-              limecore_policy_decision_source: "local_default_policy",
-              limecore_policy_decision_scope: "local_defaults_only",
-              limecore_policy_decision_reason:
-                "declared_policy_refs_with_no_local_deny_rule",
-              limecore_policy_evaluation_status: "input_gap",
-              limecore_policy_evaluation_decision: "ask",
-              limecore_policy_evaluation_decision_source:
-                "policy_input_evaluator",
-              limecore_policy_evaluation_decision_scope:
-                "pending_policy_inputs",
-              limecore_policy_evaluation_decision_reason:
-                "declared_policy_refs_missing_inputs",
-              limecore_policy_evaluation_blocking_refs: [],
-              limecore_policy_evaluation_ask_refs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              limecore_policy_evaluation_pending_refs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              limecore_policy_unresolved_refs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              limecore_policy_missing_inputs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              limecore_policy_pending_hit_refs: [
-                "model_catalog",
-                "provider_offer",
-                "tenant_feature_flags",
-              ],
-              limecore_policy_value_hits: [],
-              limecore_policy_value_hit_count: 0,
-              routing_event: "model_routing_decision",
-              routing_outcome: "accepted",
-              failure_code: null,
-              model_capability_assessment_source: null,
-              model_supports_image_generation: null,
-            },
-          ],
-        },
-        tasks: [
-          {
-            success: true,
+        result: buildTaskResult({
+          task_id: "task-image-2",
+          status: "cancelled",
+          normalized_status: "cancelled",
+          record: {
             task_id: "task-image-2",
             task_type: "image_generate",
             task_family: "image",
-            status: "pending_submit",
-            normalized_status: "pending",
-            path: ".lime/tasks/image_generate/task-image-2.json",
-            absolute_path:
-              "/workspace/.lime/tasks/image_generate/task-image-2.json",
-            artifact_path: ".lime/tasks/image_generate/task-image-2.json",
-            absolute_artifact_path:
-              "/workspace/.lime/tasks/image_generate/task-image-2.json",
-            reused_existing: false,
-            record: {
-              task_id: "task-image-2",
-              task_type: "image_generate",
-              task_family: "image",
-              payload: {
-                prompt: "读取任务",
-              },
-              status: "pending_submit",
-              normalized_status: "pending",
-              created_at: "2026-04-04T12:10:00Z",
+            payload: {
+              prompt: "读取任务",
             },
+            status: "cancelled",
+            normalized_status: "cancelled",
+            created_at: "2026-04-04T12:10:00Z",
           },
-        ],
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        task_id: "task-image-2",
-        task_type: "image_generate",
-        task_family: "image",
-        status: "cancelled",
-        normalized_status: "cancelled",
-        path: ".lime/tasks/image_generate/task-image-2.json",
-        absolute_path:
-          "/workspace/.lime/tasks/image_generate/task-image-2.json",
-        artifact_path: ".lime/tasks/image_generate/task-image-2.json",
-        absolute_artifact_path:
-          "/workspace/.lime/tasks/image_generate/task-image-2.json",
-        reused_existing: false,
-        record: {
-          task_id: "task-image-2",
-          task_type: "image_generate",
-          task_family: "image",
-          payload: {
-            prompt: "读取任务",
-          },
-          status: "cancelled",
-          normalized_status: "cancelled",
-          created_at: "2026-04-04T12:10:00Z",
-        },
+        }),
       });
 
-    await expect(
-      getMediaTaskArtifact({
-        projectRootPath: "/workspace",
-        taskRef: "task-image-2",
-      }),
-    ).resolves.toEqual(expect.objectContaining({ task_id: "task-image-2" }));
+    const lookupRequest = {
+      projectRootPath: "/workspace",
+      taskRef: "task-image-2",
+    } satisfies MediaTaskLookupRequest;
+    const listRequest = {
+      projectRootPath: "/workspace",
+      status: "pending",
+      taskFamily: "image",
+      taskType: "image_generate",
+      modalityContractKey: "image_generation",
+      routingOutcome: "accepted",
+      limit: 10,
+    } satisfies ListMediaTaskArtifactsRequest;
 
-    await expect(
-      listMediaTaskArtifacts({
-        projectRootPath: "/workspace",
-        status: "pending",
-        taskFamily: "image",
-        taskType: "image_generate",
-        modalityContractKey: "image_generation",
-        routingOutcome: "accepted",
-        limit: 10,
-      }),
-    ).resolves.toEqual(
+    await expect(getMediaTaskArtifact(lookupRequest)).resolves.toEqual(
+      expect.objectContaining({ task_id: "task-image-2" }),
+    );
+
+    await expect(listMediaTaskArtifacts(listRequest)).resolves.toEqual(
       expect.objectContaining({
         total: 1,
         modality_runtime_contracts: expect.objectContaining({
@@ -527,49 +309,46 @@ describe("mediaTasks API", () => {
       }),
     );
 
-    await expect(
-      cancelMediaTaskArtifact({
-        projectRootPath: "/workspace",
-        taskRef: "task-image-2",
-      }),
-    ).resolves.toEqual(
+    await expect(cancelMediaTaskArtifact(lookupRequest)).resolves.toEqual(
       expect.objectContaining({ normalized_status: "cancelled" }),
     );
 
-    expect(vi.mocked(safeInvoke)).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       1,
-      "get_media_task_artifact",
-      {
-        request: {
-          projectRootPath: "/workspace",
-          taskRef: "task-image-2",
-        },
-      },
+      lookupRequest,
     );
-    expect(vi.mocked(safeInvoke)).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       2,
-      "list_media_task_artifacts",
-      {
-        request: {
-          projectRootPath: "/workspace",
-          status: "pending",
-          taskFamily: "image",
-          taskType: "image_generate",
-          modalityContractKey: "image_generation",
-          routingOutcome: "accepted",
-          limit: 10,
-        },
-      },
+      listRequest,
     );
-    expect(vi.mocked(safeInvoke)).toHaveBeenNthCalledWith(
+    expect(appServerRequestMock).toHaveBeenNthCalledWith(
       3,
-      "cancel_media_task_artifact",
-      {
-        request: {
-          projectRootPath: "/workspace",
-          taskRef: "task-image-2",
-        },
-      },
+      lookupRequest,
     );
+    expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET).toBe(
+      "mediaTaskArtifact/get",
+    );
+    expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST).toBe(
+      "mediaTaskArtifact/list",
+    );
+    expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL).toBe(
+      "mediaTaskArtifact/cancel",
+    );
+  });
+
+  it("后端报错时应向上传递异常", async () => {
+    appServerRequestMock.mockRejectedValueOnce(new Error("app server down"));
+
+    await expect(
+      getMediaTaskArtifact({
+        projectRootPath: "/workspace",
+        taskRef: "task-image-1",
+      }),
+    ).rejects.toThrow("app server down");
+
+    expect(appServerRequestMock).toHaveBeenCalledWith({
+      projectRootPath: "/workspace",
+      taskRef: "task-image-1",
+    });
   });
 });

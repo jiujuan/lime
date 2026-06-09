@@ -135,6 +135,57 @@ describe("AppSidebar Agent Apps", () => {
     );
   });
 
+  it("Agent App 卸载后应通过变更事件刷新并移除动态导航引用", async () => {
+    mockListInstalledAgentApps
+      .mockResolvedValueOnce({
+        states: [
+          {
+            appId: "content-factory-app",
+            disabled: false,
+            manifest: {
+              displayName: "内容工厂",
+            },
+            projection: {
+              app: {
+                appId: "content-factory-app",
+                displayName: "内容工厂",
+              },
+              entries: [
+                {
+                  key: "dashboard",
+                  kind: "page",
+                  title: "项目首页",
+                },
+              ],
+            },
+          },
+        ],
+        issues: [],
+      })
+      .mockResolvedValueOnce({
+        states: [],
+        issues: [],
+      });
+    const container = mountSidebarContainer();
+    await flushEffects(2);
+
+    expect(container.textContent).toContain("内容工厂");
+
+    await act(async () => {
+      window.dispatchEvent(new Event("lime:agent-apps-changed"));
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(mockListInstalledAgentApps).toHaveBeenCalledTimes(2);
+    expect(container.textContent).not.toContain("内容工厂");
+    expect(
+      Array.from(
+        container.querySelectorAll('[data-testid="app-sidebar-main-nav"] button'),
+      ).map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["新建任务", "专家", "Skills", "项目资料"]);
+  });
+
   it("Agent App 动态导航加载失败时应降级为静态导航而不输出控制台错误", async () => {
     const navError = new Error("timeout after 5000ms");
     mockListInstalledAgentApps.mockRejectedValueOnce(navError);

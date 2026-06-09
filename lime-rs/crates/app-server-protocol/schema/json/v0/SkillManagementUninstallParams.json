@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "app": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "app",
+    "directory"
+  ],
+  "title": "SkillManagementUninstallParams",
+  "type": "object"
+}

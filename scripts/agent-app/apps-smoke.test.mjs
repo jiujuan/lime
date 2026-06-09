@@ -15,12 +15,12 @@ describe("agent app center smoke guard", () => {
     expect(content).toContain(
       '[data-testid="agent-apps-delete-data-current-phase-gate"]',
     );
+    expect(content).toContain('[data-testid="agent-apps-lifecycle-actions"]');
     expect(content).toContain(
       '[data-testid="agent-apps-uninstall-delete-data"]',
     );
-    expect(content).toContain(
-      '[data-testid="agent-apps-uninstall-keep-data"]',
-    );
+    expect(content).toContain('[data-testid="agent-apps-uninstall-keep-data"]');
+    expect(content).not.toContain("expandContentFactoryMoreInfo");
     expect(content).toContain("deleteDataDryRunRetainsInstalledState");
     expect(content).toContain("deleteDataConfirmationGateLocked");
     expect(content).toContain("keepDataRemovedInstalledState");
@@ -41,5 +41,18 @@ describe("agent app center smoke guard", () => {
     expect(content).not.toContain('"agent_app_save_installed_state"');
     expect(content).not.toContain("invokeMockOnly");
     expect(content).not.toContain("defaultMocks");
+  });
+
+  it("keeps DevBridge event aborts out of product error assertions", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("isBenignDevBridgeEventAbortText");
+    expect(content).toContain("isBenignDevBridgeEventAbortRequest");
+    expect(content).toContain("ignoredConsoleErrors");
+    expect(content).toContain("ignoredFailedRequests");
+    expect(content).toContain('request.url().includes("/events?")');
+    expect(content).toContain(
+      'request.failure()?.errorText === "net::ERR_ABORTED"',
+    );
   });
 });

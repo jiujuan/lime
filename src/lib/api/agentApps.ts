@@ -190,7 +190,13 @@ export interface AgentAppDeleteDataExecutionEvidence {
 }
 
 export interface AgentAppUninstallResult {
-  status?: "rehearsal_only" | "blocked" | "deleted" | "failed" | string;
+  status?:
+    | "rehearsal_only"
+    | "blocked"
+    | "deleted"
+    | "uninstalled"
+    | "failed"
+    | string;
   rehearsal: AgentAppUninstallRehearsalResult;
   list: InstalledAgentAppStateListResult;
   removedTargetCount: number;

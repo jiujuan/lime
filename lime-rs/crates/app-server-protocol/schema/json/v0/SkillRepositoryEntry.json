@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "branch": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "branch",
+    "enabled",
+    "name",
+    "owner"
+  ],
+  "title": "SkillRepositoryEntry",
+  "type": "object"
+}

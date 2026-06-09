@@ -7,6 +7,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
   assertSmoke,
+  exportAgentSessionEvidencePackCurrent,
   invokeDevBridge,
   readAgentRuntimeThreadCurrent,
   sleep,
@@ -355,13 +356,9 @@ async function runSmoke(options) {
     console.log(
       `${LOG_PREFIX} stage=export-evidence-pack session=${runSessionId}`,
     );
-    const evidencePack = await invokeDevBridge(
-      options,
-      "agent_runtime_export_evidence_pack",
-      {
-        sessionId: runSessionId,
-      },
-    );
+    const evidencePack = await exportAgentSessionEvidencePackCurrent(options, {
+      sessionId: runSessionId,
+    });
 
     const evidence = buildAutomationSmokeEvidence({
       generatedAt: new Date().toISOString(),

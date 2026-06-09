@@ -2,6 +2,7 @@ import { convertFileSrc } from "@/lib/desktop-host/core";
 import { safeInvoke } from "@/lib/dev-bridge";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
+import { assertEmptyElectronHostResult } from "./electronHostResult";
 
 const FILE_SHELL_CURRENT_SURFACE = "真实文件壳 current 通道";
 
@@ -12,6 +13,7 @@ export async function revealPathInFinder(path: string): Promise<void> {
     result,
     FILE_SHELL_CURRENT_SURFACE,
   );
+  assertEmptyElectronHostResult("reveal_in_finder", result);
 }
 
 export async function openPathWithDefaultApp(path: string): Promise<void> {
@@ -21,6 +23,7 @@ export async function openPathWithDefaultApp(path: string): Promise<void> {
     result,
     FILE_SHELL_CURRENT_SURFACE,
   );
+  assertEmptyElectronHostResult("open_with_default_app", result);
 }
 
 export async function getHomeDirectory(): Promise<string> {

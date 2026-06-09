@@ -137,6 +137,16 @@ describe("webview-api Browser bridge diagnostics", () => {
   });
 
   it("Browser bridge 真实 current 返回不应被诊断检测拦截", async () => {
+    const profileSession = {
+      profile_key: "google",
+      browser_source: "system" as const,
+      browser_path: "/Applications/Google Chrome.app",
+      profile_dir: "/tmp/lime-profile-google",
+      remote_debugging_port: 9222,
+      pid: 12345,
+      started_at: "2026-06-08T00:00:00.000Z",
+      last_url: "https://example.com",
+    };
     const endpointInfo = {
       server_running: true,
       host: "127.0.0.1",
@@ -146,27 +156,60 @@ describe("webview-api Browser bridge diagnostics", () => {
       bridge_key: "bridge-key",
     };
     const bridgeStatus = {
-      endpoint: endpointInfo,
+      observer_count: 0,
+      control_count: 0,
+      pending_command_count: 0,
       observers: [],
       controls: [],
       pending_commands: [],
     };
     const backendPolicy = {
-      preferred_backend: "existing_session",
-      fallback_enabled: false,
-      updated_at: "2026-06-08T00:00:00.000Z",
+      priority: ["lime_extension_bridge", "cdp_direct"],
+      auto_fallback: false,
     };
     const backendsStatus = {
       policy: backendPolicy,
-      backends: [],
-      updated_at: "2026-06-08T00:00:00.000Z",
+      bridge_observer_count: 0,
+      bridge_control_count: 0,
+      running_profile_count: 0,
+      cdp_alive_profile_count: 0,
+      aster_native_host_supported: false,
+      aster_native_host_configured: false,
+      backends: [
+        {
+          backend: "lime_extension_bridge",
+          available: false,
+          reason: "未连接",
+          capabilities: [],
+        },
+      ],
     };
     const connectorSettings = {
       enabled: true,
       install_root_dir: "/tmp/browser-connectors",
       install_dir: "/tmp/browser-connectors/Lime Browser Connector",
-      system_connectors: [],
-      browser_action_capabilities: [],
+      system_connectors: [
+        {
+          id: "calendar",
+          label: "日历",
+          description: "读取日历上下文",
+          enabled: false,
+          available: false,
+          visible: true,
+          authorization_status: "not_determined",
+          last_error: null,
+          capabilities: ["read"],
+        },
+      ],
+      browser_action_capabilities: [
+        {
+          key: "read_page",
+          label: "读取页面",
+          description: "读取当前页面",
+          group: "read",
+          enabled: true,
+        },
+      ],
     };
     const connectorInstallStatus = {
       status: "not_installed" as const,
@@ -180,7 +223,7 @@ describe("webview-api Browser bridge diagnostics", () => {
     };
 
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([profileSession])
       .mockResolvedValueOnce(endpointInfo)
       .mockResolvedValueOnce(bridgeStatus)
       .mockResolvedValueOnce(backendPolicy)
@@ -188,7 +231,7 @@ describe("webview-api Browser bridge diagnostics", () => {
       .mockResolvedValueOnce(connectorSettings)
       .mockResolvedValueOnce(connectorInstallStatus);
 
-    await expect(getChromeProfileSessions()).resolves.toEqual([]);
+    await expect(getChromeProfileSessions()).resolves.toEqual([profileSession]);
     await expect(getChromeBridgeEndpointInfo()).resolves.toEqual(endpointInfo);
     await expect(getChromeBridgeStatus()).resolves.toEqual(bridgeStatus);
     await expect(getBrowserBackendPolicy()).resolves.toEqual(backendPolicy);
@@ -216,6 +259,58 @@ describe("webview-api Browser bridge diagnostics", () => {
       7,
       "get_browser_connector_install_status_cmd",
     );
+  });
+
+  it("Browser bridge / connector 读链收到 mock-like 或缺字段 payload 时应 fail closed", async () => {
+    const cases: Array<[string, () => Promise<unknown>, unknown, string]> = [
+      [
+        "get_chrome_profile_sessions",
+        getChromeProfileSessions,
+        [{ profile_key: "google" }],
+        "get_chrome_profile_sessions did not return chrome profile sessions",
+      ],
+      [
+        "get_chrome_bridge_endpoint_info",
+        getChromeBridgeEndpointInfo,
+        { success: true },
+        "get_chrome_bridge_endpoint_info did not return chrome bridge endpoint info",
+      ],
+      [
+        "get_chrome_bridge_status",
+        getChromeBridgeStatus,
+        {},
+        "get_chrome_bridge_status did not return chrome bridge status",
+      ],
+      [
+        "get_browser_backend_policy",
+        getBrowserBackendPolicy,
+        { preferred_backend: "existing_session" },
+        "get_browser_backend_policy did not return browser backend policy",
+      ],
+      [
+        "get_browser_backends_status",
+        getBrowserBackendsStatus,
+        { error: "not available" },
+        "get_browser_backends_status did not return browser backends status",
+      ],
+      [
+        "get_browser_connector_settings_cmd",
+        getBrowserConnectorSettings,
+        { enabled: true },
+        "get_browser_connector_settings_cmd did not return browser connector settings",
+      ],
+      [
+        "get_browser_connector_install_status_cmd",
+        getBrowserConnectorInstallStatus,
+        { status: "not_installed" },
+        "get_browser_connector_install_status_cmd did not return browser connector install status",
+      ],
+    ];
+
+    for (const [, action, payload, message] of cases) {
+      vi.mocked(safeInvoke).mockResolvedValueOnce(payload);
+      await expect(action()).rejects.toThrow(message);
+    }
   });
 
   it("Browser connector 写链未接 current 前应 fail closed 且不调用 legacy command", async () => {

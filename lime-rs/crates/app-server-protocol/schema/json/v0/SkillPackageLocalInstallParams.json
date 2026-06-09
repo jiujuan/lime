@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "app": {
+      "type": "string"
+    },
+    "skillName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sourcePath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "app",
+    "sourcePath"
+  ],
+  "title": "SkillPackageLocalInstallParams",
+  "type": "object"
+}

@@ -708,6 +708,301 @@ export interface UpdateBrowserSessionControlRequest {
 const BROWSER_CONNECTOR_CURRENT_SURFACE = "真实 Browser connector current 通道";
 const BROWSER_RUNTIME_CURRENT_SURFACE = "真实 Browser runtime current 通道";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isOptionalNullableString(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === "string";
+}
+
+function isBrowserBackendType(value: unknown): value is BrowserBackendType {
+  return (
+    value === "aster_compat" ||
+    value === "lime_extension_bridge" ||
+    value === "cdp_direct"
+  );
+}
+
+function isChromeProfileSessionInfo(
+  value: unknown,
+): value is ChromeProfileSessionInfo {
+  return (
+    isRecord(value) &&
+    typeof value.profile_key === "string" &&
+    (value.browser_source === "system" || value.browser_source === "playwright") &&
+    typeof value.browser_path === "string" &&
+    typeof value.profile_dir === "string" &&
+    isFiniteNumber(value.remote_debugging_port) &&
+    isFiniteNumber(value.pid) &&
+    typeof value.started_at === "string" &&
+    typeof value.last_url === "string"
+  );
+}
+
+function assertChromeProfileSessions(
+  command: string,
+  value: unknown,
+): asserts value is ChromeProfileSessionInfo[] {
+  if (!Array.isArray(value) || !value.every(isChromeProfileSessionInfo)) {
+    throw new Error(`${command} did not return chrome profile sessions`);
+  }
+}
+
+function isChromeBridgeEndpointInfo(
+  value: unknown,
+): value is ChromeBridgeEndpointInfo {
+  return (
+    isRecord(value) &&
+    typeof value.server_running === "boolean" &&
+    typeof value.host === "string" &&
+    isFiniteNumber(value.port) &&
+    typeof value.observer_ws_url === "string" &&
+    typeof value.control_ws_url === "string" &&
+    typeof value.bridge_key === "string"
+  );
+}
+
+function assertChromeBridgeEndpointInfo(
+  command: string,
+  value: unknown,
+): asserts value is ChromeBridgeEndpointInfo {
+  if (!isChromeBridgeEndpointInfo(value)) {
+    throw new Error(`${command} did not return chrome bridge endpoint info`);
+  }
+}
+
+function isChromeBridgePageInfo(value: unknown): value is ChromeBridgePageInfo {
+  return (
+    isRecord(value) &&
+    isOptionalNullableString(value.title) &&
+    isOptionalNullableString(value.url) &&
+    typeof value.markdown === "string" &&
+    typeof value.updated_at === "string"
+  );
+}
+
+function isChromeBridgeObserverSnapshot(
+  value: unknown,
+): value is ChromeBridgeObserverSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.client_id === "string" &&
+    typeof value.profile_key === "string" &&
+    typeof value.connected_at === "string" &&
+    isOptionalNullableString(value.user_agent) &&
+    isOptionalNullableString(value.last_heartbeat_at) &&
+    (value.last_page_info === undefined ||
+      value.last_page_info === null ||
+      isChromeBridgePageInfo(value.last_page_info))
+  );
+}
+
+function isChromeBridgeControlSnapshot(
+  value: unknown,
+): value is ChromeBridgeControlSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.client_id === "string" &&
+    typeof value.connected_at === "string" &&
+    isOptionalNullableString(value.user_agent)
+  );
+}
+
+function isChromeBridgePendingCommandSnapshot(
+  value: unknown,
+): value is ChromeBridgePendingCommandSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.request_id === "string" &&
+    (value.source_type === "api" || value.source_type === "control") &&
+    typeof value.command === "string" &&
+    typeof value.observer_client_id === "string" &&
+    typeof value.wait_for_page_info === "boolean" &&
+    typeof value.command_completed === "boolean" &&
+    typeof value.created_at === "string"
+  );
+}
+
+function isChromeBridgeStatusSnapshot(
+  value: unknown,
+): value is ChromeBridgeStatusSnapshot {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.observer_count) &&
+    isFiniteNumber(value.control_count) &&
+    isFiniteNumber(value.pending_command_count) &&
+    Array.isArray(value.observers) &&
+    value.observers.every(isChromeBridgeObserverSnapshot) &&
+    Array.isArray(value.controls) &&
+    value.controls.every(isChromeBridgeControlSnapshot) &&
+    Array.isArray(value.pending_commands) &&
+    value.pending_commands.every(isChromeBridgePendingCommandSnapshot)
+  );
+}
+
+function assertChromeBridgeStatusSnapshot(
+  command: string,
+  value: unknown,
+): asserts value is ChromeBridgeStatusSnapshot {
+  if (!isChromeBridgeStatusSnapshot(value)) {
+    throw new Error(`${command} did not return chrome bridge status`);
+  }
+}
+
+function isSystemConnectorSnapshot(
+  value: unknown,
+): value is SystemConnectorSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.label === "string" &&
+    typeof value.description === "string" &&
+    typeof value.enabled === "boolean" &&
+    typeof value.available === "boolean" &&
+    typeof value.visible === "boolean" &&
+    typeof value.authorization_status === "string" &&
+    isOptionalNullableString(value.last_error) &&
+    isStringArray(value.capabilities)
+  );
+}
+
+function isBrowserActionCapabilitySnapshot(
+  value: unknown,
+): value is BrowserActionCapabilitySnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.key === "string" &&
+    typeof value.label === "string" &&
+    typeof value.description === "string" &&
+    typeof value.group === "string" &&
+    typeof value.enabled === "boolean"
+  );
+}
+
+function isBrowserConnectorSettingsSnapshot(
+  value: unknown,
+): value is BrowserConnectorSettingsSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.enabled === "boolean" &&
+    isOptionalNullableString(value.install_root_dir) &&
+    isOptionalNullableString(value.install_dir) &&
+    Array.isArray(value.system_connectors) &&
+    value.system_connectors.every(isSystemConnectorSnapshot) &&
+    (value.browser_action_capabilities === undefined ||
+      (Array.isArray(value.browser_action_capabilities) &&
+        value.browser_action_capabilities.every(
+          isBrowserActionCapabilitySnapshot,
+        )))
+  );
+}
+
+function assertBrowserConnectorSettingsSnapshot(
+  command: string,
+  value: unknown,
+): asserts value is BrowserConnectorSettingsSnapshot {
+  if (!isBrowserConnectorSettingsSnapshot(value)) {
+    throw new Error(`${command} did not return browser connector settings`);
+  }
+}
+
+function isBrowserConnectorInstallStatus(
+  value: unknown,
+): value is BrowserConnectorInstallStatus {
+  return (
+    isRecord(value) &&
+    (value.status === "not_installed" ||
+      value.status === "installed" ||
+      value.status === "update_available" ||
+      value.status === "broken") &&
+    isOptionalNullableString(value.install_root_dir) &&
+    isOptionalNullableString(value.install_dir) &&
+    typeof value.bundled_name === "string" &&
+    typeof value.bundled_version === "string" &&
+    isOptionalNullableString(value.installed_name) &&
+    isOptionalNullableString(value.installed_version) &&
+    isOptionalNullableString(value.message)
+  );
+}
+
+function assertBrowserConnectorInstallStatus(
+  command: string,
+  value: unknown,
+): asserts value is BrowserConnectorInstallStatus {
+  if (!isBrowserConnectorInstallStatus(value)) {
+    throw new Error(
+      `${command} did not return browser connector install status`,
+    );
+  }
+}
+
+function isBrowserBackendPolicy(
+  value: unknown,
+): value is BrowserBackendPolicy {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.priority) &&
+    value.priority.every(isBrowserBackendType) &&
+    typeof value.auto_fallback === "boolean"
+  );
+}
+
+function assertBrowserBackendPolicy(
+  command: string,
+  value: unknown,
+): asserts value is BrowserBackendPolicy {
+  if (!isBrowserBackendPolicy(value)) {
+    throw new Error(`${command} did not return browser backend policy`);
+  }
+}
+
+function isBrowserBackendStatusItem(
+  value: unknown,
+): value is BrowserBackendStatusItem {
+  return (
+    isRecord(value) &&
+    isBrowserBackendType(value.backend) &&
+    typeof value.available === "boolean" &&
+    isOptionalNullableString(value.reason) &&
+    isStringArray(value.capabilities)
+  );
+}
+
+function isBrowserBackendsStatusSnapshot(
+  value: unknown,
+): value is BrowserBackendsStatusSnapshot {
+  return (
+    isRecord(value) &&
+    isBrowserBackendPolicy(value.policy) &&
+    isFiniteNumber(value.bridge_observer_count) &&
+    isFiniteNumber(value.bridge_control_count) &&
+    isFiniteNumber(value.running_profile_count) &&
+    isFiniteNumber(value.cdp_alive_profile_count) &&
+    typeof value.aster_native_host_supported === "boolean" &&
+    typeof value.aster_native_host_configured === "boolean" &&
+    Array.isArray(value.backends) &&
+    value.backends.every(isBrowserBackendStatusItem)
+  );
+}
+
+function assertBrowserBackendsStatusSnapshot(
+  command: string,
+  value: unknown,
+): asserts value is BrowserBackendsStatusSnapshot {
+  if (!isBrowserBackendsStatusSnapshot(value)) {
+    throw new Error(`${command} did not return browser backends status`);
+  }
+}
+
 function rejectMissingBrowserConnectorCurrent<T>(command: string): Promise<T> {
   return Promise.reject(
     new Error(`${command} 尚未接入${BROWSER_CONNECTOR_CURRENT_SURFACE}`),
@@ -743,6 +1038,7 @@ export async function getChromeProfileSessions(): Promise<
     result,
     "真实 Browser bridge current 通道",
   );
+  assertChromeProfileSessions(command, result);
   return result;
 }
 
@@ -827,6 +1123,7 @@ export async function getChromeBridgeEndpointInfo(): Promise<ChromeBridgeEndpoin
     result,
     "真实 Browser bridge current 通道",
   );
+  assertChromeBridgeEndpointInfo(command, result);
   return result;
 }
 
@@ -841,6 +1138,7 @@ export async function getChromeBridgeStatus(): Promise<ChromeBridgeStatusSnapsho
     result,
     "真实 Browser bridge current 通道",
   );
+  assertChromeBridgeStatusSnapshot(command, result);
   return result;
 }
 
@@ -857,6 +1155,7 @@ export async function getBrowserConnectorSettings(): Promise<BrowserConnectorSet
   const command = "get_browser_connector_settings_cmd";
   const result = await safeInvoke<BrowserConnectorSettingsSnapshot>(command);
   assertNotDiagnosticFacade(command, result, BROWSER_CONNECTOR_CURRENT_SURFACE);
+  assertBrowserConnectorSettingsSnapshot(command, result);
   return result;
 }
 
@@ -902,6 +1201,7 @@ export async function getBrowserConnectorInstallStatus(): Promise<BrowserConnect
   const command = "get_browser_connector_install_status_cmd";
   const result = await safeInvoke<BrowserConnectorInstallStatus>(command);
   assertNotDiagnosticFacade(command, result, BROWSER_CONNECTOR_CURRENT_SURFACE);
+  assertBrowserConnectorInstallStatus(command, result);
   return result;
 }
 
@@ -953,6 +1253,7 @@ export async function getBrowserBackendPolicy(): Promise<BrowserBackendPolicy> {
     result,
     "真实 Browser bridge current 通道",
   );
+  assertBrowserBackendPolicy(command, result);
   return result;
 }
 
@@ -971,6 +1272,7 @@ export async function getBrowserBackendsStatus(): Promise<BrowserBackendsStatusS
     result,
     "真实 Browser bridge current 通道",
   );
+  assertBrowserBackendsStatusSnapshot(command, result);
   return result;
 }
 

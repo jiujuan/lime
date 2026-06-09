@@ -23,10 +23,8 @@ const CHAT_PROVIDER_PREFERENCE = "deepseek";
 const CHAT_MODEL_PREFERENCE = "deepseek-v4-flash";
 const CONTEXT_CLOSE_TIMEOUT_MS = 5_000;
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
-  "agentSession/turn/start";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =
-  "agentSession/turn/cancel";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
 const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
 const TERMINAL_THREAD_STATUSES = new Set([
   "completed",
@@ -113,9 +111,7 @@ function sleep(ms) {
 }
 
 function readConsoleText(consoleMessages) {
-  return consoleMessages
-    .map((item) => String(item?.text || ""))
-    .join("\n");
+  return consoleMessages.map((item) => String(item?.text || "")).join("\n");
 }
 
 function timeoutAfter(ms) {
@@ -147,7 +143,13 @@ async function waitForCondition(label, probe, timeoutMs, intervalMs) {
   throw new Error(`${label} 超时${suffix}`);
 }
 
-async function waitForAnyVisibleText(page, label, texts, timeoutMs, intervalMs) {
+async function waitForAnyVisibleText(
+  page,
+  label,
+  texts,
+  timeoutMs,
+  intervalMs,
+) {
   return waitForCondition(
     label,
     async () => {
@@ -315,13 +317,6 @@ function readImageLaunch(metadata) {
     readNestedObject(requestContext, ["image_task", "imageTask"]);
 
   return { launch, imageTask };
-}
-
-function isImageGenerateSkillExecution(invoke) {
-  return (
-    invoke?.cmd === "execute_skill" &&
-    invoke.args?.skillName === "image_generate"
-  );
 }
 
 function isLegacyImageRuntimeSubmit(invoke) {
@@ -671,7 +666,9 @@ async function main() {
       "等待默认工作区完成加载",
       () => {
         const consoleText = readConsoleText(consoleMessages);
-        if (consoleText.includes("AgentChatPage.loadData.projectOnlyComplete")) {
+        if (
+          consoleText.includes("AgentChatPage.loadData.projectOnlyComplete")
+        ) {
           return "AgentChatPage.loadData.projectOnlyComplete";
         }
         if (consoleText.includes("AgentChatPage.loadData.projectLoaded")) {
@@ -791,134 +788,88 @@ async function main() {
     });
 
     const submitInvoke = await waitForCondition(
-      "等待 @配图 提交 image_generate 执行请求",
+      "等待 @配图 提交 current Agent Runtime turn",
       () =>
         invokes
           .slice(submitStart)
-          .find(
-            (item) =>
-              isImageGenerateSkillExecution(item) ||
-              isCurrentImageRuntimeSubmit(item) ||
-              isLegacyImageRuntimeSubmit(item),
-          ) || null,
+          .find((item) => isCurrentImageRuntimeSubmit(item)) || null,
       options.timeoutMs,
       options.intervalMs,
     );
+    const retiredImageSkillInvoke =
+      invokes
+        .slice(submitStart)
+        .find((item) => item?.cmd === "execute_skill") || null;
+    const legacyRuntimeSubmitInvoke =
+      invokes
+        .slice(submitStart)
+        .find((item) => isLegacyImageRuntimeSubmit(item)) || null;
     assert(
-      !isLegacyImageRuntimeSubmit(submitInvoke),
-      "@配图 不应再通过 agent_runtime_submit_turn 提交，必须走 execute_skill 或 agentSession/turn/start current 主链",
+      !retiredImageSkillInvoke,
+      "@配图 不应再通过 execute_skill 提交，必须走 agentSession/turn/start current 主链",
+    );
+    assert(
+      !legacyRuntimeSubmitInvoke,
+      "@配图 不应再通过 agent_runtime_submit_turn 提交，必须走 agentSession/turn/start current 主链",
     );
 
-    if (isImageGenerateSkillExecution(submitInvoke)) {
-      const args = submitInvoke.args || {};
-      const userInput = String(args.userInput || "");
-      assert(
-        userInput.includes("@配图"),
-        "@配图 execute_skill.userInput 应保留命令标签",
-      );
-      assert(
-        userInput.includes(IMAGE_PROMPT),
-        "@配图 execute_skill.userInput 未保留用户输入",
-      );
-      assert(
-        typeof args.executionId === "string" && args.executionId.trim(),
-        "@配图 execute_skill 缺少 executionId",
-      );
-      assert(
-        typeof args.sessionId === "string" && args.sessionId.trim(),
-        "@配图 execute_skill 缺少 sessionId",
-      );
+    const request = getAppServerMethodRequest(
+      submitInvoke,
+      APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+    );
+    assert(request, "@配图 current 提交缺少 agentSession/turn/start");
+    const params = request.params || {};
+    const runtimeOptions = params.runtimeOptions || {};
+    const metadata = runtimeOptions.metadata || {};
+    const asterChatRequest = runtimeOptions.hostOptions?.asterChatRequest || {};
+    const turnConfig = asterChatRequest.turn_config || asterChatRequest;
+    const { launch, imageTask } = readImageLaunch(metadata);
+    const runtimeContract = readNestedObject(imageTask, [
+      "runtime_contract",
+      "runtimeContract",
+    ]);
+    const contractKey =
+      imageTask?.modality_contract_key ||
+      imageTask?.modalityContractKey ||
+      runtimeContract?.contract_key ||
+      runtimeContract?.contractKey;
 
-      const executionMarker = await waitForAnyVisibleText(
-        page,
-        "等待 @配图 技能执行可见状态",
-        [
-          "先执行技能 image_generate",
-          "正在执行 Skill: image_generate",
-          "任务类型：image_generate",
-          "图片生成",
-        ],
-        options.timeoutMs,
-        options.intervalMs,
-      );
-      const imagePreviewVisible = await isTextVisible(page, "图片生成", 5_000);
+    assert(launch, "@配图 提交缺少 harness.image_skill_launch");
+    assert(imageTask, "@配图 提交缺少 image_task");
+    assert(
+      String(imageTask.prompt || "").includes(IMAGE_PROMPT),
+      "@配图 image_task.prompt 未保留用户输入",
+    );
+    assert(
+      contractKey === "image_generation",
+      `@配图 image_task 合同应为 image_generation，实际为 ${String(contractKey)}`,
+    );
+    assert(
+      turnConfig.provider_preference == null,
+      "@配图 不应把当前聊天 provider 提交为 request provider_preference",
+    );
+    assert(
+      turnConfig.model_preference == null,
+      "@配图 不应把当前聊天 model 提交为 request model_preference",
+    );
 
-      summary.assertions.imageSkillExecutionSubmitted = true;
-      summary.assertions.imageCommandTagPreserved = true;
-      summary.assertions.imagePromptPreserved = true;
-      summary.assertions.imageGenerateProcessVisible = true;
-      summary.assertions.imageGenerateProcessMarker = executionMarker;
-      summary.assertions.imagePreviewVisible = imagePreviewVisible;
-      summary.submitRequest = {
-        routeMode: "skill_execution",
-        command: submitInvoke.cmd,
-        skillName: args.skillName,
-        userInput,
-        sessionId: args.sessionId || null,
-        executionId: args.executionId || null,
-        providerOverride: args.providerOverride ?? null,
-        modelOverride: args.modelOverride ?? null,
-      };
-    } else {
-      const request = getAppServerMethodRequest(
-        submitInvoke,
-        APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
-      );
-      assert(request, "@配图 current 提交缺少 agentSession/turn/start");
-      const params = request.params || {};
-      const runtimeOptions = params.runtimeOptions || {};
-      const metadata = runtimeOptions.metadata || {};
-      const asterChatRequest =
-        runtimeOptions.hostOptions?.asterChatRequest || {};
-      const turnConfig = asterChatRequest.turn_config || asterChatRequest;
-      const { launch, imageTask } = readImageLaunch(metadata);
-      const runtimeContract = readNestedObject(imageTask, [
-        "runtime_contract",
-        "runtimeContract",
-      ]);
-      const contractKey =
-        imageTask?.modality_contract_key ||
-        imageTask?.modalityContractKey ||
-        runtimeContract?.contract_key ||
-        runtimeContract?.contractKey;
-
-      assert(launch, "@配图 提交缺少 harness.image_skill_launch");
-      assert(imageTask, "@配图 提交缺少 image_task");
-      assert(
-        String(imageTask.prompt || "").includes(IMAGE_PROMPT),
-        "@配图 image_task.prompt 未保留用户输入",
-      );
-      assert(
-        contractKey === "image_generation",
-        `@配图 image_task 合同应为 image_generation，实际为 ${String(contractKey)}`,
-      );
-      assert(
-        turnConfig.provider_preference == null,
-        "@配图 不应把当前聊天 provider 提交为 request provider_preference",
-      );
-      assert(
-        turnConfig.model_preference == null,
-        "@配图 不应把当前聊天 model 提交为 request model_preference",
-      );
-
-      summary.assertions.imageSkillLaunchSubmitted = true;
-      summary.assertions.imageGenerationContractPreserved = true;
-      summary.assertions.chatModelPreferenceSuppressed = true;
-      summary.submitRequest = {
-        routeMode: "agentSession/turn/start",
-        message: params.input?.text || asterChatRequest.message || null,
-        sessionId: params.sessionId || null,
-        turnId: params.turnId || null,
-        providerPreference:
-          runtimeOptions.providerPreference ??
-          turnConfig.provider_preference ??
-          null,
-        modelPreference:
-          runtimeOptions.modelPreference ?? turnConfig.model_preference ?? null,
-        contractKey,
-        imagePrompt: imageTask.prompt,
-      };
-    }
+    summary.assertions.imageSkillLaunchSubmitted = true;
+    summary.assertions.imageGenerationContractPreserved = true;
+    summary.assertions.chatModelPreferenceSuppressed = true;
+    summary.submitRequest = {
+      routeMode: "agentSession/turn/start",
+      message: params.input?.text || asterChatRequest.message || null,
+      sessionId: params.sessionId || null,
+      turnId: params.turnId || null,
+      providerPreference:
+        runtimeOptions.providerPreference ??
+        turnConfig.provider_preference ??
+        null,
+      modelPreference:
+        runtimeOptions.modelPreference ?? turnConfig.model_preference ?? null,
+      contractKey,
+      imagePrompt: imageTask.prompt,
+    };
 
     await page.screenshot({
       path: path.join(

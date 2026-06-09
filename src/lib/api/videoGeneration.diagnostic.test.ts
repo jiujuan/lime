@@ -6,12 +6,12 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
-describe("videoGeneration API diagnostic fail-closed", () => {
+describe("videoGeneration API retired fail-closed", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("创建视频任务收到 diagnostic facade 时应 fail closed", async () => {
+  it("创建视频任务应在调用旧 native 命令前 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {
         command: "create_video_generation_task",
@@ -27,11 +27,13 @@ describe("videoGeneration API diagnostic fail-closed", () => {
         prompt: "城市夜景",
       }),
     ).rejects.toThrow(
-      "create_video_generation_task 尚未接入真实视频生成 current 通道",
+      "create_video_generation_task is retired until video generation tasks move to App Server current methods",
     );
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("列表视频任务收到数组级 diagnostic facade 时应 fail closed", async () => {
+  it("列表视频任务应在调用旧 native 命令前 fail closed", async () => {
     const diagnosticList = [] as unknown[] & {
       __diagnostic?: Record<string, unknown>;
     };
@@ -44,11 +46,13 @@ describe("videoGeneration API diagnostic fail-closed", () => {
     await expect(
       videoGenerationApi.listTasks("project-1"),
     ).rejects.toThrow(
-      "list_video_generation_tasks 尚未接入真实视频生成 current 通道",
+      "list_video_generation_tasks is retired until video generation tasks move to App Server current methods",
     );
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("查询和取消视频任务收到 diagnostic facade 时应 fail closed", async () => {
+  it("查询和取消视频任务应在调用旧 native 命令前 fail closed", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({
         diagnostic: {
@@ -64,23 +68,16 @@ describe("videoGeneration API diagnostic fail-closed", () => {
       });
 
     await expect(videoGenerationApi.getTask("task-1")).rejects.toThrow(
-      "get_video_generation_task 尚未接入真实视频生成 current 通道",
+      "get_video_generation_task is retired until video generation tasks move to App Server current methods",
     );
     await expect(videoGenerationApi.cancelTask("task-1")).rejects.toThrow(
-      "cancel_video_generation_task 尚未接入真实视频生成 current 通道",
+      "cancel_video_generation_task is retired until video generation tasks move to App Server current methods",
     );
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("查询和取消视频任务允许真实 null 结果", async () => {
-    vi.mocked(safeInvoke).mockResolvedValue(null);
-
-    await expect(videoGenerationApi.getTask("missing-task")).resolves.toBeNull();
-    await expect(
-      videoGenerationApi.cancelTask("missing-task"),
-    ).resolves.toBeNull();
-  });
-
-  it("创建视频任务收到非任务形状时应 fail closed", async () => {
+  it("创建视频任务不接受旧 native 假成功返回", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
 
     await expect(
@@ -91,11 +88,13 @@ describe("videoGeneration API diagnostic fail-closed", () => {
         prompt: "城市夜景",
       }),
     ).rejects.toThrow(
-      "create_video_generation_task did not return video generation task",
+      "create_video_generation_task is retired until video generation tasks move to App Server current methods",
     );
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("列表视频任务收到错误元素形状时应 fail closed", async () => {
+  it("列表视频任务不接受旧 native 错误元素返回", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce([
       {
         id: "task-1",
@@ -104,11 +103,13 @@ describe("videoGeneration API diagnostic fail-closed", () => {
     ]);
 
     await expect(videoGenerationApi.listTasks("project-1")).rejects.toThrow(
-      "list_video_generation_tasks did not return video generation task list",
+      "list_video_generation_tasks is retired until video generation tasks move to App Server current methods",
     );
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("查询和取消视频任务收到错误对象时应 fail closed", async () => {
+  it("查询和取消视频任务不接受旧 native 错误对象返回", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({
         error: {
@@ -127,10 +128,12 @@ describe("videoGeneration API diagnostic fail-closed", () => {
       });
 
     await expect(videoGenerationApi.getTask("task-1")).rejects.toThrow(
-      "get_video_generation_task did not return video generation task",
+      "get_video_generation_task is retired until video generation tasks move to App Server current methods",
     );
     await expect(videoGenerationApi.cancelTask("task-2")).rejects.toThrow(
-      "cancel_video_generation_task did not return video generation task",
+      "cancel_video_generation_task is retired until video generation tasks move to App Server current methods",
     );
+
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,22 @@
+import {
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
+  createAppServerClient,
+} from "@/lib/api/appServer";
+import type {
+  CompleteAudioGenerationTaskArtifactRequest,
+  CreateAudioGenerationTaskArtifactRequest,
+  CreateImageGenerationTaskArtifactRequest,
+  ListMediaTaskArtifactsOutput,
+  ListMediaTaskArtifactsRequest,
+  MediaTaskArtifactOutput,
+  MediaTaskLookupRequest,
+} from "./agentRuntime/types";
+
 export type {
   CompleteAudioGenerationTaskArtifactRequest,
   CreateAudioGenerationTaskArtifactRequest,
@@ -18,10 +37,52 @@ export type {
 } from "./agentRuntime/types";
 
 export {
-  cancelMediaTaskArtifact,
-  completeAudioGenerationTaskArtifact,
-  createAudioGenerationTaskArtifact,
-  createImageGenerationTaskArtifact,
-  getMediaTaskArtifact,
-  listMediaTaskArtifacts,
-} from "./agentRuntime/mediaClient";
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
+};
+
+export async function createImageGenerationTaskArtifact(
+  request: CreateImageGenerationTaskArtifactRequest,
+): Promise<MediaTaskArtifactOutput> {
+  return (await createAppServerClient().createImageMediaTaskArtifact(request))
+    .result as MediaTaskArtifactOutput;
+}
+
+export async function createAudioGenerationTaskArtifact(
+  request: CreateAudioGenerationTaskArtifactRequest,
+): Promise<MediaTaskArtifactOutput> {
+  return (await createAppServerClient().createAudioMediaTaskArtifact(request))
+    .result as MediaTaskArtifactOutput;
+}
+
+export async function completeAudioGenerationTaskArtifact(
+  request: CompleteAudioGenerationTaskArtifactRequest,
+): Promise<MediaTaskArtifactOutput> {
+  return (await createAppServerClient().completeAudioMediaTaskArtifact(request))
+    .result as MediaTaskArtifactOutput;
+}
+
+export async function getMediaTaskArtifact(
+  request: MediaTaskLookupRequest,
+): Promise<MediaTaskArtifactOutput> {
+  return (await createAppServerClient().getMediaTaskArtifact(request))
+    .result as MediaTaskArtifactOutput;
+}
+
+export async function listMediaTaskArtifacts(
+  request: ListMediaTaskArtifactsRequest,
+): Promise<ListMediaTaskArtifactsOutput> {
+  return (await createAppServerClient().listMediaTaskArtifacts(request))
+    .result as ListMediaTaskArtifactsOutput;
+}
+
+export async function cancelMediaTaskArtifact(
+  request: MediaTaskLookupRequest,
+): Promise<MediaTaskArtifactOutput> {
+  return (await createAppServerClient().cancelMediaTaskArtifact(request))
+    .result as MediaTaskArtifactOutput;
+}

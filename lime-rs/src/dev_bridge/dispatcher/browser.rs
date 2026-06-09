@@ -7,7 +7,6 @@ mod bridge;
 mod cdp;
 mod runtime;
 mod sessions;
-mod site;
 
 type DynError = Box<dyn std::error::Error>;
 
@@ -39,10 +38,6 @@ pub(super) async fn try_handle(
     }
 
     if let Some(result) = cdp::try_handle(state, cmd, args).await? {
-        return Ok(Some(result));
-    }
-
-    if let Some(result) = site::try_handle(state, cmd, args).await? {
         return Ok(Some(result));
     }
 

@@ -14,9 +14,29 @@ use app_server_protocol::AgentAppUiRuntimeStopParams;
 use app_server_protocol::AgentAppUninstallParams;
 use app_server_protocol::AgentAppUninstallRehearsalParams;
 use app_server_protocol::AgentEvent;
+use app_server_protocol::AgentSessionActionReplayParams;
 use app_server_protocol::AgentSessionActionRespondParams;
+use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
+use app_server_protocol::AgentSessionCompactParams;
 use app_server_protocol::AgentSessionEventParams;
+use app_server_protocol::AgentSessionFileCheckpointDiffParams;
+use app_server_protocol::AgentSessionFileCheckpointGetParams;
+use app_server_protocol::AgentSessionFileCheckpointListParams;
+use app_server_protocol::AgentSessionFileCheckpointRestoreParams;
+use app_server_protocol::AgentSessionHandoffBundleExportParams;
 use app_server_protocol::AgentSessionListParams;
+use app_server_protocol::AgentSessionObjectiveAuditParams;
+use app_server_protocol::AgentSessionObjectiveClearParams;
+use app_server_protocol::AgentSessionObjectiveContinueParams;
+use app_server_protocol::AgentSessionObjectiveReadParams;
+use app_server_protocol::AgentSessionObjectiveSetParams;
+use app_server_protocol::AgentSessionObjectiveStatusUpdateParams;
+use app_server_protocol::AgentSessionQueuedTurnPromoteParams;
+use app_server_protocol::AgentSessionQueuedTurnRemoveParams;
+use app_server_protocol::AgentSessionReplayCaseExportParams;
+use app_server_protocol::AgentSessionReviewDecisionSaveParams;
+use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
+use app_server_protocol::AgentSessionThreadResumeParams;
 use app_server_protocol::AgentSessionUpdateParams;
 use app_server_protocol::ArtifactReadParams;
 use app_server_protocol::AutomationJobCreateParams;
@@ -27,6 +47,7 @@ use app_server_protocol::AutomationJobUpdateParams;
 use app_server_protocol::AutomationScheduleParams;
 use app_server_protocol::AutomationSchedulerConfigUpdateParams;
 use app_server_protocol::CapabilityListParams;
+use app_server_protocol::ChannelProbeParams;
 use app_server_protocol::ClientInfo;
 use app_server_protocol::ConnectCallbackSendParams;
 use app_server_protocol::ConnectDeepLinkResolveParams;
@@ -39,6 +60,12 @@ use app_server_protocol::FileSystemDeleteFileParams;
 use app_server_protocol::FileSystemListDirectoryParams;
 use app_server_protocol::FileSystemReadFilePreviewParams;
 use app_server_protocol::FileSystemRenameFileParams;
+use app_server_protocol::GatewayChannelStartParams;
+use app_server_protocol::GatewayChannelStatusParams;
+use app_server_protocol::GatewayChannelStopParams;
+use app_server_protocol::GatewayTunnelCloudflaredInstallParams;
+use app_server_protocol::GatewayTunnelCreateParams;
+use app_server_protocol::GatewayTunnelSyncWebhookUrlParams;
 use app_server_protocol::InitializeParams;
 use app_server_protocol::InitializeResponse;
 use app_server_protocol::JsonRpcError;
@@ -55,6 +82,7 @@ use app_server_protocol::KnowledgeResolveContextParams;
 use app_server_protocol::KnowledgeSetDefaultPackParams;
 use app_server_protocol::KnowledgeUpdatePackStatusParams;
 use app_server_protocol::KnowledgeValidateContextRunParams;
+use app_server_protocol::LogPersistedTailParams;
 use app_server_protocol::McpPromptGetParams;
 use app_server_protocol::McpResourceReadParams;
 use app_server_protocol::McpServerCreateParams;
@@ -68,6 +96,11 @@ use app_server_protocol::McpToolCallParams;
 use app_server_protocol::McpToolCallWithCallerParams;
 use app_server_protocol::McpToolListForContextParams;
 use app_server_protocol::McpToolSearchParams;
+use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
+use app_server_protocol::MediaTaskArtifactAudioCreateParams;
+use app_server_protocol::MediaTaskArtifactImageCreateParams;
+use app_server_protocol::MediaTaskArtifactListParams;
+use app_server_protocol::MediaTaskArtifactLookupParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelProviderAliasReadParams;
 use app_server_protocol::ModelProviderConfigExportParams;
@@ -91,8 +124,29 @@ use app_server_protocol::PlatformInfo;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
+use app_server_protocol::SkillDownloadInstallParams;
+use app_server_protocol::SkillLocalDetailInspectParams;
+use app_server_protocol::SkillLocalImportParams;
+use app_server_protocol::SkillLocalInspectParams;
+use app_server_protocol::SkillLocalRenameParams;
+use app_server_protocol::SkillManagementInstallParams;
+use app_server_protocol::SkillManagementListParams;
+use app_server_protocol::SkillManagementUninstallParams;
+use app_server_protocol::SkillMarketplaceInstallParams;
+use app_server_protocol::SkillPackageExportParams;
+use app_server_protocol::SkillPackageLocalInspectParams;
+use app_server_protocol::SkillPackageLocalInstallParams;
+use app_server_protocol::SkillPackageLocalReplaceParams;
 use app_server_protocol::SkillReadParams;
+use app_server_protocol::SkillRemoteInspectParams;
+use app_server_protocol::SkillRepositoryDeleteParams;
+use app_server_protocol::SkillRepositorySaveParams;
+use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::UsageStatsRangeParams;
+use app_server_protocol::WechatChannelAccountRemoveParams;
+use app_server_protocol::WechatLoginStartParams;
+use app_server_protocol::WechatLoginWaitParams;
+use app_server_protocol::WechatRuntimeModelSetParams;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspacePathReadParams;
 use app_server_protocol::WorkspaceProjectPathResolveParams;
@@ -110,11 +164,31 @@ use app_server_protocol::METHOD_AGENT_APP_SHELL_PREPARE;
 use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START;
 use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS;
 use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
+use app_server_protocol::METHOD_AGENT_SESSION_ACTION_REPLAY;
 use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
+use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
+use app_server_protocol::METHOD_AGENT_SESSION_COMPACT;
 use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
+use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF;
+use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET;
+use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST;
+use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE;
+use app_server_protocol::METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT;
 use app_server_protocol::METHOD_AGENT_SESSION_LIST;
+use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_AUDIT;
+use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_CLEAR;
+use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE;
+use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_READ;
+use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_SET;
+use app_server_protocol::METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE;
+use app_server_protocol::METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE;
+use app_server_protocol::METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE;
 use app_server_protocol::METHOD_AGENT_SESSION_READ;
+use app_server_protocol::METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT;
+use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE;
+use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT;
 use app_server_protocol::METHOD_AGENT_SESSION_START;
+use app_server_protocol::METHOD_AGENT_SESSION_THREAD_RESUME;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 use app_server_protocol::METHOD_AGENT_SESSION_UPDATE;
@@ -137,13 +211,31 @@ use app_server_protocol::METHOD_CONNECT_CALLBACK_SEND;
 use app_server_protocol::METHOD_CONNECT_DEEP_LINK_RESOLVE;
 use app_server_protocol::METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE;
 use app_server_protocol::METHOD_CONNECT_RELAY_API_KEY_SAVE;
+use app_server_protocol::METHOD_DIAGNOSTICS_LOG_STORAGE_READ;
+use app_server_protocol::METHOD_DIAGNOSTICS_SERVER_READ;
+use app_server_protocol::METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT;
+use app_server_protocol::METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ;
+use app_server_protocol::METHOD_DISCORD_CHANNEL_PROBE;
 use app_server_protocol::METHOD_EVIDENCE_EXPORT;
+use app_server_protocol::METHOD_FEISHU_CHANNEL_PROBE;
 use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_DIRECTORY;
 use app_server_protocol::METHOD_FILE_SYSTEM_CREATE_FILE;
 use app_server_protocol::METHOD_FILE_SYSTEM_DELETE_FILE;
 use app_server_protocol::METHOD_FILE_SYSTEM_LIST_DIRECTORY;
 use app_server_protocol::METHOD_FILE_SYSTEM_READ_FILE_PREVIEW;
 use app_server_protocol::METHOD_FILE_SYSTEM_RENAME_FILE;
+use app_server_protocol::METHOD_GATEWAY_CHANNEL_START;
+use app_server_protocol::METHOD_GATEWAY_CHANNEL_STATUS;
+use app_server_protocol::METHOD_GATEWAY_CHANNEL_STOP;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_CREATE;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_PROBE;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_RESTART;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_START;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_STATUS;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_STOP;
+use app_server_protocol::METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL;
 use app_server_protocol::METHOD_INITIALIZE;
 use app_server_protocol::METHOD_INITIALIZED;
 use app_server_protocol::METHOD_KNOWLEDGE_CONTEXT_RESOLVE;
@@ -154,6 +246,10 @@ use app_server_protocol::METHOD_KNOWLEDGE_PACK_LIST;
 use app_server_protocol::METHOD_KNOWLEDGE_PACK_READ;
 use app_server_protocol::METHOD_KNOWLEDGE_PACK_STATUS_UPDATE;
 use app_server_protocol::METHOD_KNOWLEDGE_SOURCE_IMPORT;
+use app_server_protocol::METHOD_LOG_CLEAR;
+use app_server_protocol::METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR;
+use app_server_protocol::METHOD_LOG_LIST;
+use app_server_protocol::METHOD_LOG_PERSISTED_TAIL;
 use app_server_protocol::METHOD_MCP_PROMPT_GET;
 use app_server_protocol::METHOD_MCP_PROMPT_LIST;
 use app_server_protocol::METHOD_MCP_RESOURCE_LIST;
@@ -173,6 +269,12 @@ use app_server_protocol::METHOD_MCP_TOOL_CALL_WITH_CALLER;
 use app_server_protocol::METHOD_MCP_TOOL_LIST;
 use app_server_protocol::METHOD_MCP_TOOL_LIST_FOR_CONTEXT;
 use app_server_protocol::METHOD_MCP_TOOL_SEARCH;
+use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE;
+use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE;
+use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_CANCEL;
+use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_GET;
+use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
+use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_LIST;
 use app_server_protocol::METHOD_MODEL_LIST;
 use app_server_protocol::METHOD_MODEL_PREFERENCES_LIST;
 use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_LIST;
@@ -199,11 +301,38 @@ use app_server_protocol::METHOD_MODEL_PROVIDER_UI_STATE_WRITE;
 use app_server_protocol::METHOD_MODEL_PROVIDER_UPDATE;
 use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
 use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
+use app_server_protocol::METHOD_SKILL_CACHE_REFRESH;
+use app_server_protocol::METHOD_SKILL_INSTALLED_DIRECTORIES_LIST;
 use app_server_protocol::METHOD_SKILL_LIST;
+use app_server_protocol::METHOD_SKILL_LOCAL_DETAIL_INSPECT;
+use app_server_protocol::METHOD_SKILL_LOCAL_IMPORT;
+use app_server_protocol::METHOD_SKILL_LOCAL_INSPECT;
+use app_server_protocol::METHOD_SKILL_LOCAL_RENAME;
+use app_server_protocol::METHOD_SKILL_LOCAL_SCAFFOLD_CREATE;
+use app_server_protocol::METHOD_SKILL_MANAGEMENT_INSTALL;
+use app_server_protocol::METHOD_SKILL_MANAGEMENT_LIST;
+use app_server_protocol::METHOD_SKILL_MANAGEMENT_UNINSTALL;
+use app_server_protocol::METHOD_SKILL_MARKETPLACE_INSTALL;
+use app_server_protocol::METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL;
+use app_server_protocol::METHOD_SKILL_PACKAGE_EXPORT;
+use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_INSPECT;
+use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_INSTALL;
+use app_server_protocol::METHOD_SKILL_PACKAGE_LOCAL_REPLACE;
 use app_server_protocol::METHOD_SKILL_READ;
+use app_server_protocol::METHOD_SKILL_REMOTE_INSPECT;
+use app_server_protocol::METHOD_SKILL_REPOSITORY_DELETE;
+use app_server_protocol::METHOD_SKILL_REPOSITORY_LIST;
+use app_server_protocol::METHOD_SKILL_REPOSITORY_SAVE;
+use app_server_protocol::METHOD_TELEGRAM_CHANNEL_PROBE;
 use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
 use app_server_protocol::METHOD_USAGE_STATS_READ;
+use app_server_protocol::METHOD_WECHAT_CHANNEL_ACCOUNT_LIST;
+use app_server_protocol::METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE;
+use app_server_protocol::METHOD_WECHAT_CHANNEL_LOGIN_START;
+use app_server_protocol::METHOD_WECHAT_CHANNEL_LOGIN_WAIT;
+use app_server_protocol::METHOD_WECHAT_CHANNEL_PROBE;
+use app_server_protocol::METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET;
 use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
@@ -285,8 +414,49 @@ impl RequestProcessor {
             METHOD_FILE_SYSTEM_RENAME_FILE => self.handle_file_system_rename_file(params).await,
             METHOD_FILE_SYSTEM_DELETE_FILE => self.handle_file_system_delete_file(params).await,
             METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params).await,
+            METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT => {
+                self.handle_handoff_bundle_export(params).await
+            }
+            METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT => self.handle_replay_case_export(params).await,
+            METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT => {
+                self.handle_analysis_handoff_export(params).await
+            }
+            METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT => {
+                self.handle_review_decision_template_export(params).await
+            }
+            METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE => {
+                self.handle_review_decision_save(params).await
+            }
             METHOD_AGENT_SESSION_LIST => self.handle_session_list(params).await,
             METHOD_AGENT_SESSION_UPDATE => self.handle_session_update(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_READ => self.handle_objective_read(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_SET => self.handle_objective_set(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE => {
+                self.handle_objective_status_update(params).await
+            }
+            METHOD_AGENT_SESSION_OBJECTIVE_CLEAR => self.handle_objective_clear(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE => self.handle_objective_continue(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_AUDIT => self.handle_objective_audit(params).await,
+            METHOD_AGENT_SESSION_COMPACT => self.handle_session_compact(params).await,
+            METHOD_AGENT_SESSION_THREAD_RESUME => self.handle_session_thread_resume(params).await,
+            METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE => {
+                self.handle_session_queued_turn_remove(params).await
+            }
+            METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE => {
+                self.handle_session_queued_turn_promote(params).await
+            }
+            METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST => {
+                self.handle_file_checkpoint_list(params).await
+            }
+            METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET => {
+                self.handle_file_checkpoint_get(params).await
+            }
+            METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF => {
+                self.handle_file_checkpoint_diff(params).await
+            }
+            METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE => {
+                self.handle_file_checkpoint_restore(params).await
+            }
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
             METHOD_AGENT_SESSION_READ => self.handle_session_read(params).await,
             METHOD_WORKSPACE_LIST => self.handle_workspace_list().await,
@@ -301,6 +471,89 @@ impl RequestProcessor {
             METHOD_WORKSPACE_ENSURE_READY => self.handle_workspace_ensure_ready(params).await,
             METHOD_SKILL_LIST => self.handle_skill_list().await,
             METHOD_SKILL_READ => self.handle_skill_read(params).await,
+            METHOD_SKILL_MANAGEMENT_LIST => self.handle_skill_management_list(params).await,
+            METHOD_SKILL_MANAGEMENT_INSTALL => self.handle_skill_management_install(params).await,
+            METHOD_SKILL_MANAGEMENT_UNINSTALL => {
+                self.handle_skill_management_uninstall(params).await
+            }
+            METHOD_SKILL_REPOSITORY_LIST => self.handle_skill_repository_list().await,
+            METHOD_SKILL_REPOSITORY_SAVE => self.handle_skill_repository_save(params).await,
+            METHOD_SKILL_REPOSITORY_DELETE => self.handle_skill_repository_delete(params).await,
+            METHOD_SKILL_CACHE_REFRESH => self.handle_skill_cache_refresh().await,
+            METHOD_SKILL_INSTALLED_DIRECTORIES_LIST => {
+                self.handle_skill_installed_directories_list().await
+            }
+            METHOD_SKILL_LOCAL_INSPECT => self.handle_skill_local_inspect(params).await,
+            METHOD_SKILL_LOCAL_DETAIL_INSPECT => {
+                self.handle_skill_local_detail_inspect(params).await
+            }
+            METHOD_SKILL_LOCAL_SCAFFOLD_CREATE => {
+                self.handle_skill_local_scaffold_create(params).await
+            }
+            METHOD_SKILL_LOCAL_IMPORT => self.handle_skill_local_import(params).await,
+            METHOD_SKILL_LOCAL_RENAME => self.handle_skill_local_rename(params).await,
+            METHOD_SKILL_REMOTE_INSPECT => self.handle_skill_remote_inspect(params).await,
+            METHOD_SKILL_PACKAGE_LOCAL_INSPECT => {
+                self.handle_skill_package_local_inspect(params).await
+            }
+            METHOD_SKILL_PACKAGE_LOCAL_INSTALL => {
+                self.handle_skill_package_local_install(params).await
+            }
+            METHOD_SKILL_PACKAGE_LOCAL_REPLACE => {
+                self.handle_skill_package_local_replace(params).await
+            }
+            METHOD_SKILL_PACKAGE_EXPORT => self.handle_skill_package_export(params).await,
+            METHOD_SKILL_MARKETPLACE_INSTALL => self.handle_skill_marketplace_install(params).await,
+            METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL => {
+                self.handle_skill_download_install(params).await
+            }
+            METHOD_GATEWAY_CHANNEL_START => self.handle_gateway_channel_start(params).await,
+            METHOD_GATEWAY_CHANNEL_STOP => self.handle_gateway_channel_stop(params).await,
+            METHOD_GATEWAY_CHANNEL_STATUS => self.handle_gateway_channel_status(params).await,
+            METHOD_GATEWAY_TUNNEL_PROBE => self.handle_gateway_tunnel_probe().await,
+            METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT => {
+                self.handle_gateway_tunnel_cloudflared_detect().await
+            }
+            METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL => {
+                self.handle_gateway_tunnel_cloudflared_install(params).await
+            }
+            METHOD_GATEWAY_TUNNEL_CREATE => self.handle_gateway_tunnel_create(params).await,
+            METHOD_GATEWAY_TUNNEL_START => self.handle_gateway_tunnel_start().await,
+            METHOD_GATEWAY_TUNNEL_STOP => self.handle_gateway_tunnel_stop().await,
+            METHOD_GATEWAY_TUNNEL_RESTART => self.handle_gateway_tunnel_restart().await,
+            METHOD_GATEWAY_TUNNEL_STATUS => self.handle_gateway_tunnel_status().await,
+            METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL => {
+                self.handle_gateway_tunnel_sync_webhook_url(params).await
+            }
+            METHOD_TELEGRAM_CHANNEL_PROBE => self.handle_telegram_channel_probe(params).await,
+            METHOD_FEISHU_CHANNEL_PROBE => self.handle_feishu_channel_probe(params).await,
+            METHOD_DISCORD_CHANNEL_PROBE => self.handle_discord_channel_probe(params).await,
+            METHOD_WECHAT_CHANNEL_PROBE => self.handle_wechat_channel_probe(params).await,
+            METHOD_WECHAT_CHANNEL_LOGIN_START => {
+                self.handle_wechat_channel_login_start(params).await
+            }
+            METHOD_WECHAT_CHANNEL_LOGIN_WAIT => self.handle_wechat_channel_login_wait(params).await,
+            METHOD_WECHAT_CHANNEL_ACCOUNT_LIST => self.handle_wechat_channel_account_list().await,
+            METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE => {
+                self.handle_wechat_channel_account_remove(params).await
+            }
+            METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET => {
+                self.handle_wechat_channel_runtime_model_set(params).await
+            }
+            METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE => {
+                self.handle_media_task_artifact_image_create(params).await
+            }
+            METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE => {
+                self.handle_media_task_artifact_audio_create(params).await
+            }
+            METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE => {
+                self.handle_media_task_artifact_audio_complete(params).await
+            }
+            METHOD_MEDIA_TASK_ARTIFACT_GET => self.handle_media_task_artifact_get(params).await,
+            METHOD_MEDIA_TASK_ARTIFACT_LIST => self.handle_media_task_artifact_list(params).await,
+            METHOD_MEDIA_TASK_ARTIFACT_CANCEL => {
+                self.handle_media_task_artifact_cancel(params).await
+            }
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
                 self.handle_workspace_skill_bindings_list(params).await
             }
@@ -392,6 +645,18 @@ impl RequestProcessor {
             METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list().await,
             METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read(params).await,
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
+            METHOD_LOG_LIST => self.handle_log_list().await,
+            METHOD_LOG_PERSISTED_TAIL => self.handle_log_persisted_tail(params).await,
+            METHOD_LOG_CLEAR => self.handle_log_clear().await,
+            METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR => self.handle_log_diagnostic_history_clear().await,
+            METHOD_DIAGNOSTICS_LOG_STORAGE_READ => self.handle_diagnostics_log_storage_read().await,
+            METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT => {
+                self.handle_diagnostics_support_bundle_export().await
+            }
+            METHOD_DIAGNOSTICS_SERVER_READ => self.handle_diagnostics_server_read().await,
+            METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ => {
+                self.handle_diagnostics_windows_startup_read().await
+            }
             METHOD_USAGE_STATS_READ => self.handle_usage_stats_read(params).await,
             METHOD_USAGE_STATS_MODEL_RANKING_LIST => {
                 self.handle_usage_stats_model_ranking_list(params).await
@@ -452,6 +717,7 @@ impl RequestProcessor {
             METHOD_CONNECT_CALLBACK_SEND => self.handle_connect_callback_send(params).await,
             METHOD_AGENT_SESSION_TURN_START => self.handle_turn_start(params, event_callback).await,
             METHOD_AGENT_SESSION_TURN_CANCEL => self.handle_turn_cancel(params).await,
+            METHOD_AGENT_SESSION_ACTION_REPLAY => self.handle_action_replay(params).await,
             METHOD_AGENT_SESSION_ACTION_RESPOND => self.handle_action_respond(params).await,
             _ => Err(JsonRpcError::new(
                 error_codes::METHOD_NOT_FOUND,
@@ -538,6 +804,204 @@ impl RequestProcessor {
         let response = self
             .runtime
             .update_session_current(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_objective_read(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionObjectiveReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_agent_session_objective(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_objective_set(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionObjectiveSetParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .set_agent_session_objective(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_objective_status_update(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionObjectiveStatusUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_agent_session_objective_status(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_objective_clear(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionObjectiveClearParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .clear_agent_session_objective(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_objective_continue(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionObjectiveContinueParams = parse_params(params)?;
+        let host = self.runtime_host_context();
+        let output = self
+            .runtime
+            .continue_agent_session_objective(params, host)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result_with_events(output.response, output.events)
+    }
+
+    async fn handle_objective_audit(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionObjectiveAuditParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .audit_agent_session_objective(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_session_compact(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionCompactParams = parse_params(params)?;
+        let output = self
+            .runtime
+            .compact_agent_session(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result_with_events(output.response, output.events)
+    }
+
+    async fn handle_session_thread_resume(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionThreadResumeParams = parse_params(params)?;
+        let host = self.runtime_host_context();
+        let output = self
+            .runtime
+            .resume_agent_session_thread(params, host)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result_with_events(output.response, output.events)
+    }
+
+    async fn handle_session_queued_turn_remove(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionQueuedTurnRemoveParams = parse_params(params)?;
+        let output = self
+            .runtime
+            .remove_agent_session_queued_turn(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result_with_events(output.response, output.events)
+    }
+
+    async fn handle_session_queued_turn_promote(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionQueuedTurnPromoteParams = parse_params(params)?;
+        let output = self
+            .runtime
+            .promote_agent_session_queued_turn(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result_with_events(output.response, output.events)
+    }
+
+    async fn handle_file_checkpoint_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionFileCheckpointListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_agent_session_file_checkpoints(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_file_checkpoint_get(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionFileCheckpointGetParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .get_agent_session_file_checkpoint(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_file_checkpoint_diff(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionFileCheckpointDiffParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .diff_agent_session_file_checkpoint(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_file_checkpoint_restore(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionFileCheckpointRestoreParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .restore_agent_session_file_checkpoint(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -668,6 +1132,624 @@ impl RequestProcessor {
         let response = self
             .runtime
             .read_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_management_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillManagementListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_management_skills(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_management_install(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillManagementInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_management_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_management_uninstall(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillManagementUninstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .uninstall_management_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_repository_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_skill_repositories()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_repository_save(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillRepositorySaveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .save_skill_repository(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_repository_delete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillRepositoryDeleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_skill_repository(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_cache_refresh(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .refresh_skill_cache()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_installed_directories_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_installed_skill_directories()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_local_inspect(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillLocalInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_local_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_package_local_inspect(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillPackageLocalInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_local_skill_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_local_detail_inspect(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillLocalDetailInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_local_skill_detail(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_local_scaffold_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillScaffoldCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_skill_scaffold(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_local_import(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillLocalImportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .import_local_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_local_rename(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillLocalRenameParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .rename_local_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_remote_inspect(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillRemoteInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_remote_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_package_local_install(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillPackageLocalInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_local_skill_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_package_local_replace(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillPackageLocalReplaceParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .replace_local_skill_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_package_export(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillPackageExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_local_skill_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_marketplace_install(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillMarketplaceInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_marketplace_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_skill_download_install(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillDownloadInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_skill_from_download_url(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_channel_status(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GatewayChannelStatusParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_gateway_channel_status(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_channel_start(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GatewayChannelStartParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .start_gateway_channel(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_channel_stop(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GatewayChannelStopParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .stop_gateway_channel(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_probe(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .probe_gateway_tunnel()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_cloudflared_detect(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .detect_gateway_tunnel_cloudflared()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_cloudflared_install(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GatewayTunnelCloudflaredInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_gateway_tunnel_cloudflared(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GatewayTunnelCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_gateway_tunnel(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_start(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .start_gateway_tunnel()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_stop(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .stop_gateway_tunnel()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_restart(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .restart_gateway_tunnel()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_status(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .read_gateway_tunnel_status()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_gateway_tunnel_sync_webhook_url(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: GatewayTunnelSyncWebhookUrlParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .sync_gateway_tunnel_webhook_url(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_telegram_channel_probe(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ChannelProbeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .probe_telegram_channel(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_feishu_channel_probe(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ChannelProbeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .probe_feishu_channel(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_discord_channel_probe(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ChannelProbeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .probe_discord_channel(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_wechat_channel_probe(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ChannelProbeParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .probe_wechat_channel(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_wechat_channel_login_start(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: WechatLoginStartParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .start_wechat_channel_login(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_wechat_channel_login_wait(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: WechatLoginWaitParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .wait_wechat_channel_login(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_wechat_channel_account_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_wechat_channel_accounts()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_wechat_channel_account_remove(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: WechatChannelAccountRemoveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .remove_wechat_channel_account(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_wechat_channel_runtime_model_set(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: WechatRuntimeModelSetParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .set_wechat_channel_runtime_model(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_media_task_artifact_image_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: MediaTaskArtifactImageCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_image_media_task_artifact(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_media_task_artifact_audio_create(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: MediaTaskArtifactAudioCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_audio_media_task_artifact(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_media_task_artifact_audio_complete(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: MediaTaskArtifactAudioCompleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .complete_audio_media_task_artifact(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_media_task_artifact_get(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: MediaTaskArtifactLookupParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .get_media_task_artifact(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_media_task_artifact_list(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: MediaTaskArtifactListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_media_task_artifacts(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_media_task_artifact_cancel(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: MediaTaskArtifactLookupParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .cancel_media_task_artifact(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
@@ -1389,6 +2471,82 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_log_list(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self.runtime.list_logs().await.map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_log_persisted_tail(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: LogPersistedTailParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_persisted_log_tail(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_log_clear(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self.runtime.clear_logs().await.map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_log_diagnostic_history_clear(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .clear_diagnostic_log_history()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_diagnostics_log_storage_read(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .read_log_storage_diagnostics()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_diagnostics_support_bundle_export(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .export_support_bundle()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_diagnostics_server_read(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .read_server_diagnostics()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_diagnostics_windows_startup_read(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .read_windows_startup_diagnostics()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_usage_stats_read(
         &self,
         params: Option<serde_json::Value>,
@@ -1928,6 +3086,76 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
+    async fn handle_handoff_bundle_export(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionHandoffBundleExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_handoff_bundle(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_replay_case_export(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionReplayCaseExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_replay_case(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_analysis_handoff_export(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionAnalysisHandoffExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_analysis_handoff(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_review_decision_template_export(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionReviewDecisionTemplateExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_review_decision_template(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_review_decision_save(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionReviewDecisionSaveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .save_review_decision(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
     async fn handle_turn_start(
         &self,
         params: Option<serde_json::Value>,
@@ -1988,6 +3216,20 @@ impl RequestProcessor {
         let output = self
             .runtime
             .respond_action(params, host)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result_with_events(output.response, output.events)
+    }
+
+    async fn handle_action_replay(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionActionReplayParams = parse_params(params)?;
+        let output = self
+            .runtime
+            .replay_action(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result_with_events(output.response, output.events)

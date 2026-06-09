@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "bundlePath": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string"
+    },
+    "includedSections": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "omittedSections": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outputDirectory": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "bundlePath",
+    "generatedAt",
+    "outputDirectory",
+    "platform"
+  ],
+  "title": "SupportBundleExportResponse",
+  "type": "object"
+}

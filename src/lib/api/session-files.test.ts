@@ -4,6 +4,8 @@ import {
   cleanupEmpty,
   cleanupExpired,
   createSession,
+  deleteFile,
+  deleteSession,
   getOrCreateSession,
   getSessionDetail,
   importDocument,
@@ -123,6 +125,31 @@ describe("session-files API", () => {
         filePath: "/tmp/doc.md",
       },
     );
+  });
+
+  it("deleteSession / deleteFile 应只接受 void 返回", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({});
+
+    await expect(deleteSession("session-1")).resolves.toBeUndefined();
+    await expect(deleteFile("session-1", "article.md")).resolves.toBeUndefined();
+    await expect(deleteSession("session-2")).rejects.toThrow(
+      "session_files_delete did not return void result",
+    );
+    await expect(deleteFile("session-2", "draft.md")).rejects.toThrow(
+      "session_files_delete_file did not return void result",
+    );
+
+    expect(safeInvoke).toHaveBeenNthCalledWith(1, "session_files_delete", {
+      sessionId: "session-1",
+    });
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "session_files_delete_file", {
+      sessionId: "session-1",
+      fileName: "article.md",
+    });
   });
 
   it("遇到 diagnostic facade 时应 fail closed", async () => {

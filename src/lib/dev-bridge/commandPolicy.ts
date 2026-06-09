@@ -11,7 +11,6 @@ export type DevBridgeCommandTimeoutProfile =
   | "agent-runtime"
   | "agent-app-ui-runtime-start"
   | "agent-app-package"
-  | "skill-execution"
   | "knowledge-compile"
   | "voice-model-download"
   | "layered-design-project"
@@ -26,7 +25,6 @@ export type DevBridgeCommandTimeoutProfile =
  */
 const bridgeTruthCommands = new Set<string>([
   "aster_agent_init",
-  "aster_agent_status",
   "open_external_url",
   "open_update_window",
   "start_oem_cloud_oauth_callback_bridge",
@@ -38,22 +36,7 @@ const bridgeTruthCommands = new Set<string>([
   "agent_runtime_submit_turn",
   "agent_runtime_interrupt_turn",
   "agent_runtime_export_evidence_pack",
-  "agent_runtime_compact_session",
-  "agent_runtime_resume_thread",
-  "agent_runtime_replay_request",
   "agent_runtime_get_thread_read",
-  "agent_runtime_get_objective",
-  "agent_runtime_set_objective",
-  "agent_runtime_update_objective_status",
-  "agent_runtime_clear_objective",
-  "agent_runtime_continue_objective",
-  "agent_runtime_audit_objective",
-  "agent_runtime_list_file_checkpoints",
-  "agent_runtime_get_file_checkpoint",
-  "agent_runtime_diff_file_checkpoint",
-  "agent_runtime_restore_file_checkpoint",
-  "agent_runtime_promote_queued_turn",
-  "agent_runtime_remove_queued_turn",
   "agent_runtime_respond_action",
   "agent_app_start_ui_runtime",
   "agent_app_get_ui_runtime_status",
@@ -66,16 +49,7 @@ const bridgeTruthCommands = new Set<string>([
   "agent_runtime_list_sessions",
   "agent_runtime_get_session",
   "agent_runtime_update_session",
-  "agent_runtime_delete_session",
   "agent_runtime_get_tool_inventory",
-  "agent_runtime_spawn_subagent",
-  "agent_runtime_send_subagent_input",
-  "agent_runtime_wait_subagents",
-  "agent_runtime_resume_subagent",
-  "agent_runtime_close_subagent",
-  "execute_skill",
-  "gateway_channel_status",
-  "wechat_channel_list_accounts",
   "get_default_provider",
   "get_model_registry",
   "get_model_registry_provider_ids",
@@ -84,49 +58,9 @@ const bridgeTruthCommands = new Set<string>([
   "get_provider_alias_config",
   "get_all_alias_configs",
   "refresh_model_registry",
-  "create_image_generation_task_artifact",
-  "create_audio_generation_task_artifact",
-  "complete_audio_generation_task_artifact",
-  "get_media_task_artifact",
-  "list_media_task_artifacts",
-  "cancel_media_task_artifact",
-  "save_layered_design_project_export",
-  "read_layered_design_project_export",
-  "capability_draft_create",
-  "capability_draft_list",
-  "capability_draft_get",
-  "capability_draft_verify",
-  "capability_draft_register",
-  "capability_draft_submit_approval_session_inputs",
-  "capability_draft_execute_controlled_get",
   "agent_runtime_list_workspace_skill_bindings",
   "app_server_handle_json_lines",
   "app_server_drain_events",
-  "get_skills_for_app",
-  "get_local_skills_for_app",
-  "install_skill_for_app",
-  "uninstall_skill_for_app",
-  "get_skill_repos",
-  "add_skill_repo",
-  "remove_skill_repo",
-  "get_installed_lime_skills",
-  "refresh_skill_cache",
-  "inspect_local_skill_for_app",
-  "inspect_local_skill_detail_for_app",
-  "reveal_local_skill_for_app",
-  "rename_local_skill_for_app",
-  "replace_local_skill_package_for_app",
-  "create_skill_scaffold_for_app",
-  "import_local_skill_for_app",
-  "inspect_local_skill_package_for_app",
-  "install_local_skill_package_for_app",
-  "export_local_skill_package_for_app",
-  "take_pending_skill_package_open_requests",
-  "get_skill_package_file_association_status",
-  "set_skill_package_file_association_default",
-  "install_marketplace_skill_for_app",
-  "install_skill_from_download_url_for_app",
-  "inspect_remote_skill",
   "project_memory_get",
   "get_file_name",
   "session_files_save_file",
@@ -136,6 +70,15 @@ const bridgeTruthCommands = new Set<string>([
   "voice_models_delete",
   "voice_models_set_default",
   "voice_models_test_transcribe_file",
+]);
+
+const noMockFallbackCompatCommands = new Set<string>([]);
+
+const electronHostNoMockFallbackCommands = new Set([
+  "save_layered_design_project_export",
+  "read_layered_design_project_export",
+  "recognize_layered_design_text",
+  "analyze_layered_design_flat_image",
 ]);
 
 const optionalLegacyUxCommands = new Set<string>([
@@ -152,9 +95,7 @@ const devBridgeAgentAppPackageCommands = new Set([
   "agentAppLocalPackage/inspect",
 ]);
 
-const devBridgeSkillExecutionCommands = new Set(["execute_skill"]);
-
-const devBridgeLayeredDesignProjectCommands = new Set([
+const electronHostLayeredDesignProjectCommands = new Set([
   "save_layered_design_project_export",
   "read_layered_design_project_export",
 ]);
@@ -164,8 +105,6 @@ const devBridgeCooldownBypassCommands = new Set([
   "agent_runtime_list_sessions",
   "agent_runtime_submit_turn",
   "agent_runtime_create_session",
-  "agent_runtime_send_subagent_input",
-  "execute_skill",
   "get_or_create_default_project",
   "workspace_get",
   "workspace_get_default",
@@ -202,6 +141,18 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "agentSession/read",
   "skill/list",
   "skill/read",
+  "skillManagement/list",
+  "skillManagement/install",
+  "skillManagement/uninstall",
+  "skillRepository/list",
+  "skillRepository/save",
+  "skillRepository/delete",
+  "skillCache/refresh",
+  "skillInstalledDirectories/list",
+  "skillLocal/inspect",
+  "skillLocal/scaffold/create",
+  "skillLocal/import",
+  "skillRemote/inspect",
   "workspaceSkillBindings/list",
   "workspaceRegisteredSkills/list",
   "agentAppLocalPackage/inspect",
@@ -223,6 +174,14 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "knowledgeContextRun/validate",
   "automationJob/list",
   "projectMemory/read",
+  "gatewayChannel/status",
+  "wechatChannel/accounts/list",
+  "mediaTaskArtifact/image/create",
+  "mediaTaskArtifact/audio/create",
+  "mediaTaskArtifact/audio/complete",
+  "mediaTaskArtifact/get",
+  "mediaTaskArtifact/list",
+  "mediaTaskArtifact/cancel",
   "model/list",
   "modelPreferences/list",
   "modelSyncState/read",
@@ -253,6 +212,14 @@ const bridgeTruthEventPrefixes = [
 
 export function isBridgeTruthCommand(command: string): boolean {
   return bridgeTruthCommands.has(command);
+}
+
+export function shouldDisallowMockFallbackCommand(command: string): boolean {
+  return (
+    isBridgeTruthCommand(command) ||
+    noMockFallbackCompatCommands.has(command) ||
+    electronHostNoMockFallbackCommands.has(command)
+  );
 }
 
 export function isOptionalLegacyUxCommand(command: string): boolean {
@@ -339,13 +306,10 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (devBridgeAgentAppPackageCommands.has(command)) {
     return "agent-app-package";
   }
-  if (devBridgeSkillExecutionCommands.has(command)) {
-    return "skill-execution";
-  }
   if (command === "voice_models_download") {
     return "voice-model-download";
   }
-  if (devBridgeLayeredDesignProjectCommands.has(command)) {
+  if (electronHostLayeredDesignProjectCommands.has(command)) {
     return "layered-design-project";
   }
   if (isBridgeTruthCommand(command)) {

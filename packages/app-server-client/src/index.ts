@@ -26,11 +26,31 @@ import {
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
+  METHOD_AGENT_SESSION_ACTION_REPLAY,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
+  METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+  METHOD_AGENT_SESSION_COMPACT,
   METHOD_AGENT_SESSION_EVENT,
+  METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
   METHOD_AGENT_SESSION_LIST,
+  METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
+  METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
+  METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
+  METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
+  METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET,
+  METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
+  METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE,
+  METHOD_AGENT_SESSION_OBJECTIVE_READ,
+  METHOD_AGENT_SESSION_OBJECTIVE_SET,
+  METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+  METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
+  METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
+  METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
   METHOD_AGENT_SESSION_READ,
+  METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
+  METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   METHOD_AGENT_SESSION_START,
+  METHOD_AGENT_SESSION_THREAD_RESUME,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
@@ -60,6 +80,25 @@ import {
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_FILE_SYSTEM_RENAME_FILE,
+  METHOD_GATEWAY_CHANNEL_START,
+  METHOD_GATEWAY_CHANNEL_STOP,
+  METHOD_GATEWAY_CHANNEL_STATUS,
+  METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT,
+  METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL,
+  METHOD_GATEWAY_TUNNEL_CREATE,
+  METHOD_GATEWAY_TUNNEL_PROBE,
+  METHOD_GATEWAY_TUNNEL_RESTART,
+  METHOD_GATEWAY_TUNNEL_START,
+  METHOD_GATEWAY_TUNNEL_STATUS,
+  METHOD_GATEWAY_TUNNEL_STOP,
+  METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL,
+  METHOD_DISCORD_CHANNEL_PROBE,
+  METHOD_FEISHU_CHANNEL_PROBE,
+  METHOD_TELEGRAM_CHANNEL_PROBE,
+  METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
+  METHOD_DIAGNOSTICS_SERVER_READ,
+  METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+  METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
   METHOD_INITIALIZE,
   METHOD_INITIALIZED,
   METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
@@ -70,6 +109,16 @@ import {
   METHOD_KNOWLEDGE_PACK_READ,
   METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
   METHOD_KNOWLEDGE_SOURCE_IMPORT,
+  METHOD_LOG_CLEAR,
+  METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR,
+  METHOD_LOG_LIST,
+  METHOD_LOG_PERSISTED_TAIL,
+  METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
+  METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+  METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
+  METHOD_MEDIA_TASK_ARTIFACT_GET,
+  METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+  METHOD_MEDIA_TASK_ARTIFACT_LIST,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PREFERENCES_LIST,
   METHOD_MODEL_PROVIDER_ALIAS_LIST,
@@ -115,11 +164,37 @@ import {
   METHOD_MCP_TOOL_LIST_FOR_CONTEXT,
   METHOD_MCP_TOOL_SEARCH,
   METHOD_PROJECT_MEMORY_READ,
+  METHOD_SKILL_CACHE_REFRESH,
+  METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
+  METHOD_SKILL_LOCAL_IMPORT,
+  METHOD_SKILL_LOCAL_INSPECT,
+  METHOD_SKILL_LOCAL_DETAIL_INSPECT,
+  METHOD_SKILL_LOCAL_RENAME,
+  METHOD_SKILL_LOCAL_SCAFFOLD_CREATE,
+  METHOD_SKILL_MANAGEMENT_INSTALL,
+  METHOD_SKILL_MANAGEMENT_LIST,
+  METHOD_SKILL_MANAGEMENT_UNINSTALL,
+  METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL,
   METHOD_SKILL_LIST,
+  METHOD_SKILL_MARKETPLACE_INSTALL,
+  METHOD_SKILL_PACKAGE_EXPORT,
+  METHOD_SKILL_PACKAGE_LOCAL_INSPECT,
+  METHOD_SKILL_PACKAGE_LOCAL_INSTALL,
+  METHOD_SKILL_PACKAGE_LOCAL_REPLACE,
+  METHOD_SKILL_REMOTE_INSPECT,
+  METHOD_SKILL_REPOSITORY_DELETE,
+  METHOD_SKILL_REPOSITORY_LIST,
+  METHOD_SKILL_REPOSITORY_SAVE,
   METHOD_SKILL_READ,
   METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
   METHOD_USAGE_STATS_MODEL_RANKING_LIST,
   METHOD_USAGE_STATS_READ,
+  METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
+  METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
+  METHOD_WECHAT_CHANNEL_LOGIN_START,
+  METHOD_WECHAT_CHANNEL_LOGIN_WAIT,
+  METHOD_WECHAT_CHANNEL_PROBE,
+  METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
@@ -140,15 +215,56 @@ import {
   notification,
   request,
   type AgentEvent,
+  type AgentSessionAnalysisHandoffExportParams,
+  type AgentSessionAnalysisHandoffExportResponse,
+  type AgentSessionActionReplayParams,
+  type AgentSessionActionReplayResponse,
   type AgentSessionActionRespondParams,
   type AgentSessionActionRespondResponse,
+  type AgentSessionCompactParams,
+  type AgentSessionCompactResponse,
   type AgentSessionEventNotification,
+  type AgentSessionHandoffBundleExportParams,
+  type AgentSessionHandoffBundleExportResponse,
   type AgentSessionListParams,
   type AgentSessionListResponse,
+  type AgentSessionObjectiveClearParams,
+  type AgentSessionObjectiveClearResponse,
+  type AgentSessionObjectiveAuditParams,
+  type AgentSessionObjectiveAuditResponse,
+  type AgentSessionObjectiveContinueParams,
+  type AgentSessionObjectiveContinueResponse,
+  type AgentSessionFileCheckpointDetail,
+  type AgentSessionFileCheckpointDiffParams,
+  type AgentSessionFileCheckpointDiffResponse,
+  type AgentSessionFileCheckpointGetParams,
+  type AgentSessionFileCheckpointListParams,
+  type AgentSessionFileCheckpointListResponse,
+  type AgentSessionFileCheckpointRestoreParams,
+  type AgentSessionFileCheckpointRestoreResponse,
+  type AgentSessionFileCheckpointSummary,
+  type AgentSessionFileCheckpointThreadSummary,
+  type AgentSessionObjectiveReadParams,
+  type AgentSessionObjectiveReadResponse,
+  type AgentSessionObjectiveSetParams,
+  type AgentSessionObjectiveSetResponse,
+  type AgentSessionObjectiveStatusUpdateParams,
+  type AgentSessionObjectiveStatusUpdateResponse,
+  type AgentSessionQueuedTurnPromoteParams,
+  type AgentSessionQueuedTurnPromoteResponse,
+  type AgentSessionQueuedTurnRemoveParams,
+  type AgentSessionQueuedTurnRemoveResponse,
   type AgentSessionReadParams,
   type AgentSessionReadResponse,
+  type AgentSessionReplayCaseExportParams,
+  type AgentSessionReplayCaseExportResponse,
+  type AgentSessionReviewDecisionSaveParams,
+  type AgentSessionReviewDecisionTemplateExportParams,
+  type AgentSessionReviewDecisionTemplateExportResponse,
   type AgentSessionStartParams,
   type AgentSessionStartResponse,
+  type AgentSessionThreadResumeParams,
+  type AgentSessionThreadResumeResponse,
   type AgentSessionTurnCancelParams,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartParams,
@@ -217,6 +333,21 @@ import {
   type FileSystemMutationResponse,
   type FileSystemReadFilePreviewParams,
   type FileSystemRenameFileParams,
+  type GatewayChannelStartParams,
+  type GatewayChannelStopParams,
+  type GatewayChannelStatusParams,
+  type GatewayChannelStatusResponse,
+  type GatewayTunnelCloudflaredDetectResponse,
+  type GatewayTunnelCloudflaredInstallParams,
+  type GatewayTunnelCloudflaredInstallResponse,
+  type GatewayTunnelCreateParams,
+  type GatewayTunnelCreateResponse,
+  type GatewayTunnelProbeResponse,
+  type GatewayTunnelStatusResponse,
+  type GatewayTunnelSyncWebhookUrlParams,
+  type GatewayTunnelSyncWebhookUrlResponse,
+  type ChannelProbeParams,
+  type ChannelProbeResponse,
   type InitializeParams,
   type InitializeResponse,
   type JsonRpcErrorResponse,
@@ -240,6 +371,21 @@ import {
   type KnowledgeUpdatePackStatusResponse,
   type KnowledgeValidateContextRunParams,
   type KnowledgeValidateContextRunResponse,
+  type LogClearResponse,
+  type LogStorageDiagnosticsResponse,
+  type LogListResponse,
+  type LogPersistedTailParams,
+  type LogPersistedTailResponse,
+  type ServerDiagnosticsResponse,
+  type SupportBundleExportResponse,
+  type WindowsStartupDiagnosticsResponse,
+  type MediaTaskArtifactAudioCompleteParams,
+  type MediaTaskArtifactAudioCreateParams,
+  type MediaTaskArtifactImageCreateParams,
+  type MediaTaskArtifactListParams,
+  type MediaTaskArtifactListResponse,
+  type MediaTaskArtifactLookupParams,
+  type MediaTaskArtifactResponse,
   type ModelListParams,
   type ModelListResponse,
   type ModelPreferencesListResponse,
@@ -294,13 +440,54 @@ import {
   type ProjectMemoryReadParams,
   type ProjectMemoryReadResponse,
   type RequestId,
+  type SkillDownloadInstallParams,
+  type SkillDownloadInstallResponse,
+  type SkillInstalledDirectoriesListResponse,
+  type SkillLocalImportParams,
+  type SkillLocalImportResponse,
+  type SkillLocalInspectParams,
+  type SkillLocalInspectResponse,
+  type SkillLocalDetailInspectParams,
+  type SkillLocalDetailInspectResponse,
+  type SkillLocalRenameParams,
+  type SkillLocalRenameResponse,
+  type SkillManagementInstallParams,
+  type SkillManagementListParams,
+  type SkillManagementUninstallParams,
+  type SkillManagementWriteResponse,
   type SkillListResponse,
+  type SkillMarketplaceInstallParams,
+  type SkillMarketplaceInstallResponse,
+  type SkillPackageExportParams,
+  type SkillPackageExportResponse,
+  type SkillPackageLocalInspectParams,
+  type SkillPackageLocalInspectResponse,
+  type SkillPackageLocalInstallParams,
+  type SkillPackageLocalInstallResponse,
+  type SkillPackageLocalReplaceParams,
+  type SkillPackageLocalReplaceResponse,
+  type SkillRemoteInspectParams,
+  type SkillRemoteInspectResponse,
+  type SkillRepositoryDeleteParams,
+  type SkillRepositoryListResponse,
+  type SkillRepositorySaveParams,
   type SkillReadParams,
   type SkillReadResponse,
+  type SkillScaffoldCreateParams,
+  type SkillScaffoldCreateResponse,
   type UsageStatsDailyTrendsListResponse,
   type UsageStatsModelRankingListResponse,
   type UsageStatsRangeParams,
   type UsageStatsReadResponse,
+  type WechatChannelAccountRemoveParams,
+  type WechatChannelAccountRemoveResponse,
+  type WechatChannelAccountListResponse,
+  type WechatLoginStartParams,
+  type WechatLoginStartResponse,
+  type WechatLoginWaitParams,
+  type WechatLoginWaitResponse,
+  type WechatRuntimeModelSetParams,
+  type WechatRuntimeModelSetResponse,
   type WorkspaceEnsureParams,
   type WorkspaceEnsureReadyResponse,
   type WorkspaceListResponse,
@@ -530,6 +717,88 @@ export class AppServerClient {
     return this.request(METHOD_AGENT_SESSION_UPDATE, params);
   }
 
+  readAgentSessionObjective(
+    params: AgentSessionObjectiveReadParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_OBJECTIVE_READ, params);
+  }
+
+  setAgentSessionObjective(
+    params: AgentSessionObjectiveSetParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_OBJECTIVE_SET, params);
+  }
+
+  updateAgentSessionObjectiveStatus(
+    params: AgentSessionObjectiveStatusUpdateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE, params);
+  }
+
+  clearAgentSessionObjective(
+    params: AgentSessionObjectiveClearParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_OBJECTIVE_CLEAR, params);
+  }
+
+  continueAgentSessionObjective(
+    params: AgentSessionObjectiveContinueParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE, params);
+  }
+
+  auditAgentSessionObjective(
+    params: AgentSessionObjectiveAuditParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_OBJECTIVE_AUDIT, params);
+  }
+
+  compactAgentSession(params: AgentSessionCompactParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_COMPACT, params);
+  }
+
+  resumeAgentSessionThread(
+    params: AgentSessionThreadResumeParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_THREAD_RESUME, params);
+  }
+
+  removeAgentSessionQueuedTurn(
+    params: AgentSessionQueuedTurnRemoveParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE, params);
+  }
+
+  promoteAgentSessionQueuedTurn(
+    params: AgentSessionQueuedTurnPromoteParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE, params);
+  }
+
+  listAgentSessionFileCheckpoints(
+    params: AgentSessionFileCheckpointListParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST, params);
+  }
+
+  getAgentSessionFileCheckpoint(
+    params: AgentSessionFileCheckpointGetParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET, params);
+  }
+
+  diffAgentSessionFileCheckpoint(
+    params: AgentSessionFileCheckpointDiffParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF, params);
+  }
+
+  restoreAgentSessionFileCheckpoint(
+    params: AgentSessionFileCheckpointRestoreParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, params);
+  }
+
   listWorkspaces(): JsonRpcRequest {
     return this.request(METHOD_WORKSPACE_LIST, {});
   }
@@ -570,6 +839,98 @@ export class AppServerClient {
 
   readSkill(params: SkillReadParams): JsonRpcRequest {
     return this.request(METHOD_SKILL_READ, params);
+  }
+
+  listManagementSkills(params: SkillManagementListParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_MANAGEMENT_LIST, params);
+  }
+
+  installManagementSkill(params: SkillManagementInstallParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_MANAGEMENT_INSTALL, params);
+  }
+
+  uninstallManagementSkill(
+    params: SkillManagementUninstallParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_SKILL_MANAGEMENT_UNINSTALL, params);
+  }
+
+  listSkillRepositories(): JsonRpcRequest {
+    return this.request(METHOD_SKILL_REPOSITORY_LIST, {});
+  }
+
+  saveSkillRepository(params: SkillRepositorySaveParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_REPOSITORY_SAVE, params);
+  }
+
+  deleteSkillRepository(params: SkillRepositoryDeleteParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_REPOSITORY_DELETE, params);
+  }
+
+  refreshSkillCache(): JsonRpcRequest {
+    return this.request(METHOD_SKILL_CACHE_REFRESH, {});
+  }
+
+  listInstalledSkillDirectories(): JsonRpcRequest {
+    return this.request(METHOD_SKILL_INSTALLED_DIRECTORIES_LIST, {});
+  }
+
+  inspectLocalSkill(params: SkillLocalInspectParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_LOCAL_INSPECT, params);
+  }
+
+  inspectLocalSkillDetail(
+    params: SkillLocalDetailInspectParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_SKILL_LOCAL_DETAIL_INSPECT, params);
+  }
+
+  createSkillScaffold(params: SkillScaffoldCreateParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_LOCAL_SCAFFOLD_CREATE, params);
+  }
+
+  importLocalSkill(params: SkillLocalImportParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_LOCAL_IMPORT, params);
+  }
+
+  renameLocalSkill(params: SkillLocalRenameParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_LOCAL_RENAME, params);
+  }
+
+  inspectRemoteSkill(params: SkillRemoteInspectParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_REMOTE_INSPECT, params);
+  }
+
+  inspectLocalSkillPackage(
+    params: SkillPackageLocalInspectParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_SKILL_PACKAGE_LOCAL_INSPECT, params);
+  }
+
+  installLocalSkillPackage(
+    params: SkillPackageLocalInstallParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_SKILL_PACKAGE_LOCAL_INSTALL, params);
+  }
+
+  replaceLocalSkillPackage(
+    params: SkillPackageLocalReplaceParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_SKILL_PACKAGE_LOCAL_REPLACE, params);
+  }
+
+  exportSkillPackage(params: SkillPackageExportParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_PACKAGE_EXPORT, params);
+  }
+
+  installMarketplaceSkill(
+    params: SkillMarketplaceInstallParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_SKILL_MARKETPLACE_INSTALL, params);
+  }
+
+  installSkillFromDownload(params: SkillDownloadInstallParams): JsonRpcRequest {
+    return this.request(METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL, params);
   }
 
   listWorkspaceSkillBindings(
@@ -816,6 +1177,164 @@ export class AppServerClient {
     return this.request(METHOD_PROJECT_MEMORY_READ, params);
   }
 
+  listLogs(): JsonRpcRequest {
+    return this.request(METHOD_LOG_LIST, {});
+  }
+
+  readPersistedLogTail(params: LogPersistedTailParams): JsonRpcRequest {
+    return this.request(METHOD_LOG_PERSISTED_TAIL, params);
+  }
+
+  clearLogs(): JsonRpcRequest {
+    return this.request(METHOD_LOG_CLEAR, {});
+  }
+
+  clearDiagnosticLogHistory(): JsonRpcRequest {
+    return this.request(METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR, {});
+  }
+
+  readLogStorageDiagnostics(): JsonRpcRequest {
+    return this.request(METHOD_DIAGNOSTICS_LOG_STORAGE_READ, {});
+  }
+
+  exportSupportBundle(): JsonRpcRequest {
+    return this.request(METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT, {});
+  }
+
+  readServerDiagnostics(): JsonRpcRequest {
+    return this.request(METHOD_DIAGNOSTICS_SERVER_READ, {});
+  }
+
+  readWindowsStartupDiagnostics(): JsonRpcRequest {
+    return this.request(METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, {});
+  }
+
+  readGatewayChannelStatus(
+    params: GatewayChannelStatusParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_CHANNEL_STATUS, params);
+  }
+
+  startGatewayChannel(params: GatewayChannelStartParams): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_CHANNEL_START, params);
+  }
+
+  stopGatewayChannel(params: GatewayChannelStopParams): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_CHANNEL_STOP, params);
+  }
+
+  probeTelegramChannel(params: ChannelProbeParams = {}): JsonRpcRequest {
+    return this.request(METHOD_TELEGRAM_CHANNEL_PROBE, params);
+  }
+
+  probeFeishuChannel(params: ChannelProbeParams = {}): JsonRpcRequest {
+    return this.request(METHOD_FEISHU_CHANNEL_PROBE, params);
+  }
+
+  probeDiscordChannel(params: ChannelProbeParams = {}): JsonRpcRequest {
+    return this.request(METHOD_DISCORD_CHANNEL_PROBE, params);
+  }
+
+  probeWechatChannel(params: ChannelProbeParams = {}): JsonRpcRequest {
+    return this.request(METHOD_WECHAT_CHANNEL_PROBE, params);
+  }
+
+  startWechatChannelLogin(params: WechatLoginStartParams = {}): JsonRpcRequest {
+    return this.request(METHOD_WECHAT_CHANNEL_LOGIN_START, params);
+  }
+
+  waitWechatChannelLogin(params: WechatLoginWaitParams): JsonRpcRequest {
+    return this.request(METHOD_WECHAT_CHANNEL_LOGIN_WAIT, params);
+  }
+
+  listWechatChannelAccounts(): JsonRpcRequest {
+    return this.request(METHOD_WECHAT_CHANNEL_ACCOUNT_LIST, {});
+  }
+
+  removeWechatChannelAccount(
+    params: WechatChannelAccountRemoveParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE, params);
+  }
+
+  setWechatChannelRuntimeModel(
+    params: WechatRuntimeModelSetParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET, params);
+  }
+
+  probeGatewayTunnel(): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_PROBE, {});
+  }
+
+  detectGatewayTunnelCloudflared(): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT, {});
+  }
+
+  installGatewayTunnelCloudflared(
+    params: GatewayTunnelCloudflaredInstallParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL, params);
+  }
+
+  createGatewayTunnel(params: GatewayTunnelCreateParams): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_CREATE, params);
+  }
+
+  startGatewayTunnel(): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_START, {});
+  }
+
+  stopGatewayTunnel(): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_STOP, {});
+  }
+
+  restartGatewayTunnel(): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_RESTART, {});
+  }
+
+  readGatewayTunnelStatus(): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_STATUS, {});
+  }
+
+  syncGatewayTunnelWebhookUrl(
+    params: GatewayTunnelSyncWebhookUrlParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL, params);
+  }
+
+  createImageMediaTaskArtifact(
+    params: MediaTaskArtifactImageCreateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, params);
+  }
+
+  createAudioMediaTaskArtifact(
+    params: MediaTaskArtifactAudioCreateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, params);
+  }
+
+  completeAudioMediaTaskArtifact(
+    params: MediaTaskArtifactAudioCompleteParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, params);
+  }
+
+  getMediaTaskArtifact(params: MediaTaskArtifactLookupParams): JsonRpcRequest {
+    return this.request(METHOD_MEDIA_TASK_ARTIFACT_GET, params);
+  }
+
+  listMediaTaskArtifacts(params: MediaTaskArtifactListParams): JsonRpcRequest {
+    return this.request(METHOD_MEDIA_TASK_ARTIFACT_LIST, params);
+  }
+
+  cancelMediaTaskArtifact(
+    params: MediaTaskArtifactLookupParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_MEDIA_TASK_ARTIFACT_CANCEL, params);
+  }
+
   readUsageStats(params: UsageStatsRangeParams): JsonRpcRequest {
     return this.request(METHOD_USAGE_STATS_READ, params);
   }
@@ -858,6 +1377,35 @@ export class AppServerClient {
 
   exportEvidence(params: EvidenceExportParams): JsonRpcRequest {
     return this.request(METHOD_EVIDENCE_EXPORT, params);
+  }
+
+  exportHandoffBundle(
+    params: AgentSessionHandoffBundleExportParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, params);
+  }
+
+  exportReplayCase(params: AgentSessionReplayCaseExportParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, params);
+  }
+
+  exportAnalysisHandoff(
+    params: AgentSessionAnalysisHandoffExportParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT, params);
+  }
+
+  exportReviewDecisionTemplate(
+    params: AgentSessionReviewDecisionTemplateExportParams,
+  ): JsonRpcRequest {
+    return this.request(
+      METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+      params,
+    );
+  }
+
+  saveReviewDecision(params: AgentSessionReviewDecisionSaveParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, params);
   }
 
   startSession(params: AgentSessionStartParams): JsonRpcRequest {
@@ -1012,6 +1560,10 @@ export class AppServerClient {
     return this.request(METHOD_AGENT_SESSION_TURN_CANCEL, params);
   }
 
+  replayAction(params: AgentSessionActionReplayParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_ACTION_REPLAY, params);
+  }
+
   respondAction(params: AgentSessionActionRespondParams): JsonRpcRequest {
     return this.request(METHOD_AGENT_SESSION_ACTION_RESPOND, params);
   }
@@ -1083,6 +1635,162 @@ export class AppServerConnection {
     return await this.request<AgentSessionUpdateResponse>(
       this.client.updateSession(params),
       METHOD_AGENT_SESSION_UPDATE,
+      options,
+    );
+  }
+
+  async readAgentSessionObjective(
+    params: AgentSessionObjectiveReadParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionObjectiveReadResponse>> {
+    return await this.request<AgentSessionObjectiveReadResponse>(
+      this.client.readAgentSessionObjective(params),
+      METHOD_AGENT_SESSION_OBJECTIVE_READ,
+      options,
+    );
+  }
+
+  async setAgentSessionObjective(
+    params: AgentSessionObjectiveSetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionObjectiveSetResponse>> {
+    return await this.request<AgentSessionObjectiveSetResponse>(
+      this.client.setAgentSessionObjective(params),
+      METHOD_AGENT_SESSION_OBJECTIVE_SET,
+      options,
+    );
+  }
+
+  async updateAgentSessionObjectiveStatus(
+    params: AgentSessionObjectiveStatusUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionObjectiveStatusUpdateResponse>> {
+    return await this.request<AgentSessionObjectiveStatusUpdateResponse>(
+      this.client.updateAgentSessionObjectiveStatus(params),
+      METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+      options,
+    );
+  }
+
+  async clearAgentSessionObjective(
+    params: AgentSessionObjectiveClearParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionObjectiveClearResponse>> {
+    return await this.request<AgentSessionObjectiveClearResponse>(
+      this.client.clearAgentSessionObjective(params),
+      METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
+      options,
+    );
+  }
+
+  async continueAgentSessionObjective(
+    params: AgentSessionObjectiveContinueParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionObjectiveContinueResponse>> {
+    return await this.request<AgentSessionObjectiveContinueResponse>(
+      this.client.continueAgentSessionObjective(params),
+      METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
+      options,
+    );
+  }
+
+  async auditAgentSessionObjective(
+    params: AgentSessionObjectiveAuditParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionObjectiveAuditResponse>> {
+    return await this.request<AgentSessionObjectiveAuditResponse>(
+      this.client.auditAgentSessionObjective(params),
+      METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
+      options,
+    );
+  }
+
+  async compactAgentSession(
+    params: AgentSessionCompactParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionCompactResponse>> {
+    return await this.request<AgentSessionCompactResponse>(
+      this.client.compactAgentSession(params),
+      METHOD_AGENT_SESSION_COMPACT,
+      options,
+    );
+  }
+
+  async resumeAgentSessionThread(
+    params: AgentSessionThreadResumeParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionThreadResumeResponse>> {
+    return await this.request<AgentSessionThreadResumeResponse>(
+      this.client.resumeAgentSessionThread(params),
+      METHOD_AGENT_SESSION_THREAD_RESUME,
+      options,
+    );
+  }
+
+  async removeAgentSessionQueuedTurn(
+    params: AgentSessionQueuedTurnRemoveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionQueuedTurnRemoveResponse>> {
+    return await this.request<AgentSessionQueuedTurnRemoveResponse>(
+      this.client.removeAgentSessionQueuedTurn(params),
+      METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
+      options,
+    );
+  }
+
+  async promoteAgentSessionQueuedTurn(
+    params: AgentSessionQueuedTurnPromoteParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionQueuedTurnPromoteResponse>> {
+    return await this.request<AgentSessionQueuedTurnPromoteResponse>(
+      this.client.promoteAgentSessionQueuedTurn(params),
+      METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
+      options,
+    );
+  }
+
+  async listAgentSessionFileCheckpoints(
+    params: AgentSessionFileCheckpointListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionFileCheckpointListResponse>> {
+    return await this.request<AgentSessionFileCheckpointListResponse>(
+      this.client.listAgentSessionFileCheckpoints(params),
+      METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
+      options,
+    );
+  }
+
+  async getAgentSessionFileCheckpoint(
+    params: AgentSessionFileCheckpointGetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionFileCheckpointDetail>> {
+    return await this.request<AgentSessionFileCheckpointDetail>(
+      this.client.getAgentSessionFileCheckpoint(params),
+      METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET,
+      options,
+    );
+  }
+
+  async diffAgentSessionFileCheckpoint(
+    params: AgentSessionFileCheckpointDiffParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionFileCheckpointDiffResponse>> {
+    return await this.request<AgentSessionFileCheckpointDiffResponse>(
+      this.client.diffAgentSessionFileCheckpoint(params),
+      METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
+      options,
+    );
+  }
+
+  async restoreAgentSessionFileCheckpoint(
+    params: AgentSessionFileCheckpointRestoreParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<
+    AppServerRequestResult<AgentSessionFileCheckpointRestoreResponse>
+  > {
+    return await this.request<AgentSessionFileCheckpointRestoreResponse>(
+      this.client.restoreAgentSessionFileCheckpoint(params),
+      METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE,
       options,
     );
   }
@@ -1188,6 +1896,223 @@ export class AppServerConnection {
     return await this.request<SkillReadResponse>(
       this.client.readSkill(params),
       METHOD_SKILL_READ,
+      options,
+    );
+  }
+
+  async listManagementSkills(
+    params: SkillManagementListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillListResponse>> {
+    return await this.request<SkillListResponse>(
+      this.client.listManagementSkills(params),
+      METHOD_SKILL_MANAGEMENT_LIST,
+      options,
+    );
+  }
+
+  async installManagementSkill(
+    params: SkillManagementInstallParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillManagementWriteResponse>> {
+    return await this.request<SkillManagementWriteResponse>(
+      this.client.installManagementSkill(params),
+      METHOD_SKILL_MANAGEMENT_INSTALL,
+      options,
+    );
+  }
+
+  async uninstallManagementSkill(
+    params: SkillManagementUninstallParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillManagementWriteResponse>> {
+    return await this.request<SkillManagementWriteResponse>(
+      this.client.uninstallManagementSkill(params),
+      METHOD_SKILL_MANAGEMENT_UNINSTALL,
+      options,
+    );
+  }
+
+  async listSkillRepositories(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillRepositoryListResponse>> {
+    return await this.request<SkillRepositoryListResponse>(
+      this.client.listSkillRepositories(),
+      METHOD_SKILL_REPOSITORY_LIST,
+      options,
+    );
+  }
+
+  async saveSkillRepository(
+    params: SkillRepositorySaveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillManagementWriteResponse>> {
+    return await this.request<SkillManagementWriteResponse>(
+      this.client.saveSkillRepository(params),
+      METHOD_SKILL_REPOSITORY_SAVE,
+      options,
+    );
+  }
+
+  async deleteSkillRepository(
+    params: SkillRepositoryDeleteParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillManagementWriteResponse>> {
+    return await this.request<SkillManagementWriteResponse>(
+      this.client.deleteSkillRepository(params),
+      METHOD_SKILL_REPOSITORY_DELETE,
+      options,
+    );
+  }
+
+  async refreshSkillCache(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillManagementWriteResponse>> {
+    return await this.request<SkillManagementWriteResponse>(
+      this.client.refreshSkillCache(),
+      METHOD_SKILL_CACHE_REFRESH,
+      options,
+    );
+  }
+
+  async listInstalledSkillDirectories(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillInstalledDirectoriesListResponse>> {
+    return await this.request<SkillInstalledDirectoriesListResponse>(
+      this.client.listInstalledSkillDirectories(),
+      METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
+      options,
+    );
+  }
+
+  async inspectLocalSkill(
+    params: SkillLocalInspectParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillLocalInspectResponse>> {
+    return await this.request<SkillLocalInspectResponse>(
+      this.client.inspectLocalSkill(params),
+      METHOD_SKILL_LOCAL_INSPECT,
+      options,
+    );
+  }
+
+  async inspectLocalSkillPackage(
+    params: SkillPackageLocalInspectParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillPackageLocalInspectResponse>> {
+    return await this.request<SkillPackageLocalInspectResponse>(
+      this.client.inspectLocalSkillPackage(params),
+      METHOD_SKILL_PACKAGE_LOCAL_INSPECT,
+      options,
+    );
+  }
+
+  async inspectLocalSkillDetail(
+    params: SkillLocalDetailInspectParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillLocalDetailInspectResponse>> {
+    return await this.request<SkillLocalDetailInspectResponse>(
+      this.client.inspectLocalSkillDetail(params),
+      METHOD_SKILL_LOCAL_DETAIL_INSPECT,
+      options,
+    );
+  }
+
+  async createSkillScaffold(
+    params: SkillScaffoldCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillScaffoldCreateResponse>> {
+    return await this.request<SkillScaffoldCreateResponse>(
+      this.client.createSkillScaffold(params),
+      METHOD_SKILL_LOCAL_SCAFFOLD_CREATE,
+      options,
+    );
+  }
+
+  async importLocalSkill(
+    params: SkillLocalImportParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillLocalImportResponse>> {
+    return await this.request<SkillLocalImportResponse>(
+      this.client.importLocalSkill(params),
+      METHOD_SKILL_LOCAL_IMPORT,
+      options,
+    );
+  }
+
+  async renameLocalSkill(
+    params: SkillLocalRenameParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillLocalRenameResponse>> {
+    return await this.request<SkillLocalRenameResponse>(
+      this.client.renameLocalSkill(params),
+      METHOD_SKILL_LOCAL_RENAME,
+      options,
+    );
+  }
+
+  async inspectRemoteSkill(
+    params: SkillRemoteInspectParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillRemoteInspectResponse>> {
+    return await this.request<SkillRemoteInspectResponse>(
+      this.client.inspectRemoteSkill(params),
+      METHOD_SKILL_REMOTE_INSPECT,
+      options,
+    );
+  }
+
+  async installLocalSkillPackage(
+    params: SkillPackageLocalInstallParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillPackageLocalInstallResponse>> {
+    return await this.request<SkillPackageLocalInstallResponse>(
+      this.client.installLocalSkillPackage(params),
+      METHOD_SKILL_PACKAGE_LOCAL_INSTALL,
+      options,
+    );
+  }
+
+  async replaceLocalSkillPackage(
+    params: SkillPackageLocalReplaceParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillPackageLocalReplaceResponse>> {
+    return await this.request<SkillPackageLocalReplaceResponse>(
+      this.client.replaceLocalSkillPackage(params),
+      METHOD_SKILL_PACKAGE_LOCAL_REPLACE,
+      options,
+    );
+  }
+
+  async exportSkillPackage(
+    params: SkillPackageExportParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillPackageExportResponse>> {
+    return await this.request<SkillPackageExportResponse>(
+      this.client.exportSkillPackage(params),
+      METHOD_SKILL_PACKAGE_EXPORT,
+      options,
+    );
+  }
+
+  async installMarketplaceSkill(
+    params: SkillMarketplaceInstallParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillMarketplaceInstallResponse>> {
+    return await this.request<SkillMarketplaceInstallResponse>(
+      this.client.installMarketplaceSkill(params),
+      METHOD_SKILL_MARKETPLACE_INSTALL,
+      options,
+    );
+  }
+
+  async installSkillFromDownload(
+    params: SkillDownloadInstallParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SkillDownloadInstallResponse>> {
+    return await this.request<SkillDownloadInstallResponse>(
+      this.client.installSkillFromDownload(params),
+      METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL,
       options,
     );
   }
@@ -1776,6 +2701,377 @@ export class AppServerConnection {
     );
   }
 
+  async listLogs(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<LogListResponse>> {
+    return await this.request<LogListResponse>(
+      this.client.listLogs(),
+      METHOD_LOG_LIST,
+      options,
+    );
+  }
+
+  async readPersistedLogTail(
+    params: LogPersistedTailParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<LogPersistedTailResponse>> {
+    return await this.request<LogPersistedTailResponse>(
+      this.client.readPersistedLogTail(params),
+      METHOD_LOG_PERSISTED_TAIL,
+      options,
+    );
+  }
+
+  async clearLogs(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<LogClearResponse>> {
+    return await this.request<LogClearResponse>(
+      this.client.clearLogs(),
+      METHOD_LOG_CLEAR,
+      options,
+    );
+  }
+
+  async clearDiagnosticLogHistory(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<LogClearResponse>> {
+    return await this.request<LogClearResponse>(
+      this.client.clearDiagnosticLogHistory(),
+      METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR,
+      options,
+    );
+  }
+
+  async readLogStorageDiagnostics(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<LogStorageDiagnosticsResponse>> {
+    return await this.request<LogStorageDiagnosticsResponse>(
+      this.client.readLogStorageDiagnostics(),
+      METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
+      options,
+    );
+  }
+
+  async exportSupportBundle(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<SupportBundleExportResponse>> {
+    return await this.request<SupportBundleExportResponse>(
+      this.client.exportSupportBundle(),
+      METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+      options,
+    );
+  }
+
+  async readServerDiagnostics(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ServerDiagnosticsResponse>> {
+    return await this.request<ServerDiagnosticsResponse>(
+      this.client.readServerDiagnostics(),
+      METHOD_DIAGNOSTICS_SERVER_READ,
+      options,
+    );
+  }
+
+  async readWindowsStartupDiagnostics(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WindowsStartupDiagnosticsResponse>> {
+    return await this.request<WindowsStartupDiagnosticsResponse>(
+      this.client.readWindowsStartupDiagnostics(),
+      METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
+      options,
+    );
+  }
+
+  async readGatewayChannelStatus(
+    params: GatewayChannelStatusParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayChannelStatusResponse>> {
+    return await this.request<GatewayChannelStatusResponse>(
+      this.client.readGatewayChannelStatus(params),
+      METHOD_GATEWAY_CHANNEL_STATUS,
+      options,
+    );
+  }
+
+  async startGatewayChannel(
+    params: GatewayChannelStartParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayChannelStatusResponse>> {
+    return await this.request<GatewayChannelStatusResponse>(
+      this.client.startGatewayChannel(params),
+      METHOD_GATEWAY_CHANNEL_START,
+      options,
+    );
+  }
+
+  async stopGatewayChannel(
+    params: GatewayChannelStopParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayChannelStatusResponse>> {
+    return await this.request<GatewayChannelStatusResponse>(
+      this.client.stopGatewayChannel(params),
+      METHOD_GATEWAY_CHANNEL_STOP,
+      options,
+    );
+  }
+
+  async probeTelegramChannel(
+    params: ChannelProbeParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ChannelProbeResponse>> {
+    return await this.request<ChannelProbeResponse>(
+      this.client.probeTelegramChannel(params),
+      METHOD_TELEGRAM_CHANNEL_PROBE,
+      options,
+    );
+  }
+
+  async probeFeishuChannel(
+    params: ChannelProbeParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ChannelProbeResponse>> {
+    return await this.request<ChannelProbeResponse>(
+      this.client.probeFeishuChannel(params),
+      METHOD_FEISHU_CHANNEL_PROBE,
+      options,
+    );
+  }
+
+  async probeDiscordChannel(
+    params: ChannelProbeParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ChannelProbeResponse>> {
+    return await this.request<ChannelProbeResponse>(
+      this.client.probeDiscordChannel(params),
+      METHOD_DISCORD_CHANNEL_PROBE,
+      options,
+    );
+  }
+
+  async probeWechatChannel(
+    params: ChannelProbeParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ChannelProbeResponse>> {
+    return await this.request<ChannelProbeResponse>(
+      this.client.probeWechatChannel(params),
+      METHOD_WECHAT_CHANNEL_PROBE,
+      options,
+    );
+  }
+
+  async startWechatChannelLogin(
+    params: WechatLoginStartParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WechatLoginStartResponse>> {
+    return await this.request<WechatLoginStartResponse>(
+      this.client.startWechatChannelLogin(params),
+      METHOD_WECHAT_CHANNEL_LOGIN_START,
+      options,
+    );
+  }
+
+  async waitWechatChannelLogin(
+    params: WechatLoginWaitParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WechatLoginWaitResponse>> {
+    return await this.request<WechatLoginWaitResponse>(
+      this.client.waitWechatChannelLogin(params),
+      METHOD_WECHAT_CHANNEL_LOGIN_WAIT,
+      options,
+    );
+  }
+
+  async listWechatChannelAccounts(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WechatChannelAccountListResponse>> {
+    return await this.request<WechatChannelAccountListResponse>(
+      this.client.listWechatChannelAccounts(),
+      METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
+      options,
+    );
+  }
+
+  async removeWechatChannelAccount(
+    params: WechatChannelAccountRemoveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WechatChannelAccountRemoveResponse>> {
+    return await this.request<WechatChannelAccountRemoveResponse>(
+      this.client.removeWechatChannelAccount(params),
+      METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
+      options,
+    );
+  }
+
+  async setWechatChannelRuntimeModel(
+    params: WechatRuntimeModelSetParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WechatRuntimeModelSetResponse>> {
+    return await this.request<WechatRuntimeModelSetResponse>(
+      this.client.setWechatChannelRuntimeModel(params),
+      METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
+      options,
+    );
+  }
+
+  async probeGatewayTunnel(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelProbeResponse>> {
+    return await this.request<GatewayTunnelProbeResponse>(
+      this.client.probeGatewayTunnel(),
+      METHOD_GATEWAY_TUNNEL_PROBE,
+      options,
+    );
+  }
+
+  async detectGatewayTunnelCloudflared(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelCloudflaredDetectResponse>> {
+    return await this.request<GatewayTunnelCloudflaredDetectResponse>(
+      this.client.detectGatewayTunnelCloudflared(),
+      METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT,
+      options,
+    );
+  }
+
+  async installGatewayTunnelCloudflared(
+    params: GatewayTunnelCloudflaredInstallParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelCloudflaredInstallResponse>> {
+    return await this.request<GatewayTunnelCloudflaredInstallResponse>(
+      this.client.installGatewayTunnelCloudflared(params),
+      METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL,
+      options,
+    );
+  }
+
+  async createGatewayTunnel(
+    params: GatewayTunnelCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelCreateResponse>> {
+    return await this.request<GatewayTunnelCreateResponse>(
+      this.client.createGatewayTunnel(params),
+      METHOD_GATEWAY_TUNNEL_CREATE,
+      options,
+    );
+  }
+
+  async startGatewayTunnel(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelStatusResponse>> {
+    return await this.request<GatewayTunnelStatusResponse>(
+      this.client.startGatewayTunnel(),
+      METHOD_GATEWAY_TUNNEL_START,
+      options,
+    );
+  }
+
+  async stopGatewayTunnel(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelStatusResponse>> {
+    return await this.request<GatewayTunnelStatusResponse>(
+      this.client.stopGatewayTunnel(),
+      METHOD_GATEWAY_TUNNEL_STOP,
+      options,
+    );
+  }
+
+  async restartGatewayTunnel(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelStatusResponse>> {
+    return await this.request<GatewayTunnelStatusResponse>(
+      this.client.restartGatewayTunnel(),
+      METHOD_GATEWAY_TUNNEL_RESTART,
+      options,
+    );
+  }
+
+  async readGatewayTunnelStatus(
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelStatusResponse>> {
+    return await this.request<GatewayTunnelStatusResponse>(
+      this.client.readGatewayTunnelStatus(),
+      METHOD_GATEWAY_TUNNEL_STATUS,
+      options,
+    );
+  }
+
+  async syncGatewayTunnelWebhookUrl(
+    params: GatewayTunnelSyncWebhookUrlParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<GatewayTunnelSyncWebhookUrlResponse>> {
+    return await this.request<GatewayTunnelSyncWebhookUrlResponse>(
+      this.client.syncGatewayTunnelWebhookUrl(params),
+      METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL,
+      options,
+    );
+  }
+
+  async createImageMediaTaskArtifact(
+    params: MediaTaskArtifactImageCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MediaTaskArtifactResponse>> {
+    return await this.request<MediaTaskArtifactResponse>(
+      this.client.createImageMediaTaskArtifact(params),
+      METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+      options,
+    );
+  }
+
+  async createAudioMediaTaskArtifact(
+    params: MediaTaskArtifactAudioCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MediaTaskArtifactResponse>> {
+    return await this.request<MediaTaskArtifactResponse>(
+      this.client.createAudioMediaTaskArtifact(params),
+      METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+      options,
+    );
+  }
+
+  async completeAudioMediaTaskArtifact(
+    params: MediaTaskArtifactAudioCompleteParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MediaTaskArtifactResponse>> {
+    return await this.request<MediaTaskArtifactResponse>(
+      this.client.completeAudioMediaTaskArtifact(params),
+      METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
+      options,
+    );
+  }
+
+  async getMediaTaskArtifact(
+    params: MediaTaskArtifactLookupParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MediaTaskArtifactResponse>> {
+    return await this.request<MediaTaskArtifactResponse>(
+      this.client.getMediaTaskArtifact(params),
+      METHOD_MEDIA_TASK_ARTIFACT_GET,
+      options,
+    );
+  }
+
+  async listMediaTaskArtifacts(
+    params: MediaTaskArtifactListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MediaTaskArtifactListResponse>> {
+    return await this.request<MediaTaskArtifactListResponse>(
+      this.client.listMediaTaskArtifacts(params),
+      METHOD_MEDIA_TASK_ARTIFACT_LIST,
+      options,
+    );
+  }
+
+  async cancelMediaTaskArtifact(
+    params: MediaTaskArtifactLookupParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<MediaTaskArtifactResponse>> {
+    return await this.request<MediaTaskArtifactResponse>(
+      this.client.cancelMediaTaskArtifact(params),
+      METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
+      options,
+    );
+  }
+
   async readUsageStats(
     params: UsageStatsRangeParams,
     options: AppServerRequestOptions = {},
@@ -1893,6 +3189,65 @@ export class AppServerConnection {
     return await this.request<EvidenceExportResponse>(
       this.client.exportEvidence(params),
       METHOD_EVIDENCE_EXPORT,
+      options,
+    );
+  }
+
+  async exportHandoffBundle(
+    params: AgentSessionHandoffBundleExportParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionHandoffBundleExportResponse>> {
+    return await this.request<AgentSessionHandoffBundleExportResponse>(
+      this.client.exportHandoffBundle(params),
+      METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
+      options,
+    );
+  }
+
+  async exportReplayCase(
+    params: AgentSessionReplayCaseExportParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionReplayCaseExportResponse>> {
+    return await this.request<AgentSessionReplayCaseExportResponse>(
+      this.client.exportReplayCase(params),
+      METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
+      options,
+    );
+  }
+
+  async exportAnalysisHandoff(
+    params: AgentSessionAnalysisHandoffExportParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionAnalysisHandoffExportResponse>> {
+    return await this.request<AgentSessionAnalysisHandoffExportResponse>(
+      this.client.exportAnalysisHandoff(params),
+      METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+      options,
+    );
+  }
+
+  async exportReviewDecisionTemplate(
+    params: AgentSessionReviewDecisionTemplateExportParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<
+    AppServerRequestResult<AgentSessionReviewDecisionTemplateExportResponse>
+  > {
+    return await this.request<AgentSessionReviewDecisionTemplateExportResponse>(
+      this.client.exportReviewDecisionTemplate(params),
+      METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+      options,
+    );
+  }
+
+  async saveReviewDecision(
+    params: AgentSessionReviewDecisionSaveParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<
+    AppServerRequestResult<AgentSessionReviewDecisionTemplateExportResponse>
+  > {
+    return await this.request<AgentSessionReviewDecisionTemplateExportResponse>(
+      this.client.saveReviewDecision(params),
+      METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
       options,
     );
   }
@@ -2042,6 +3397,17 @@ export class AppServerConnection {
     return await this.request<AgentSessionTurnCancelResponse>(
       this.client.cancelTurn(params),
       METHOD_AGENT_SESSION_TURN_CANCEL,
+      options,
+    );
+  }
+
+  async replayAction(
+    params: AgentSessionActionReplayParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionActionReplayResponse>> {
+    return await this.request<AgentSessionActionReplayResponse>(
+      this.client.replayAction(params),
+      METHOD_AGENT_SESSION_ACTION_REPLAY,
       options,
     );
   }

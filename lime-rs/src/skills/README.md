@@ -40,7 +40,7 @@ Lime 通过以下机制让 AI 能够自动发现和调用 Skills：
 ```
 用户安装 Skill
     ↓
-skill_cmd.rs::install_skill_for_app()
+App Server skillManagement/install 或 skillLocal/import
     ↓
 AsterAgentState::reload_lime_skills()
     ↓
@@ -105,11 +105,10 @@ skills/
 └── execution_callback.rs
     └── tauri::AppHandle (事件发送)
 
-commands/skill_cmd.rs
-├── install_skill_for_app()
-│   └── AsterAgentState::reload_lime_skills()
-└── uninstall_skill_for_app()
-    └── AsterAgentState::reload_lime_skills()
+App Server Skill 管理 current 链
+├── skillManagement/install / skillManagement/uninstall
+├── skillLocal/scaffold/create / skillLocal/import
+└── AsterAgentState::reload_lime_skills()
 ```
 
 ## 相关文档
@@ -131,4 +130,5 @@ commands/skill_cmd.rs
 - `content_post_with_cover` 的结果标准化与补充 Artifact 事件统一收口到 `skills/social_post.rs`
 - 服务层和执行层共用 `SkillService::inspect_*` inspection 结果作为标准合规事实源，并向前端暴露标准合规状态与资源摘要
 - 无效 Skill 仍可在管理页中看到检查结果，但不会进入运行时自动加载和可执行列表
+- 管理链路的 current 入口是 App Server `skillManagement/*`、`skillRepository/*`、`skillLocal/*`、`skillRemote/inspect`，旧 `commands/skill_cmd.rs` 只允许作为 wrapper 清理区
 - 管理链路支持创建最小标准 Skill 脚手架，新建结果会立即经过统一 inspection 校验

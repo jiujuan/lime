@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "accountId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "channel": {
+      "type": "string"
+    },
+    "persist": {
+      "default": true,
+      "type": "boolean"
+    },
+    "webhookPath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "channel"
+  ],
+  "title": "GatewayTunnelSyncWebhookUrlParams",
+  "type": "object"
+}

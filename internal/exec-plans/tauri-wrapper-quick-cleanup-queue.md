@@ -90,16 +90,16 @@ git diff --cached --name-only
 | TW-Q4B-EXTERNAL-TOOLS-SHELL              | 5      | 可并行                     | 中     | 低到中 | `external_tools_cmd.rs`、`src/lib/api/externalUrl.ts`、Electron shell tests       | App Server protocol                            | 清外部打开 / CLI login shell wrapper                        |
 | TW-Q5A-KNOWLEDGE-READ                    | 6      | 当前易冲突                 | 中     | 中     | `knowledge_cmd.rs`、knowledge API / tests / mocks                                 | `local_data_source.rs`、protocol 热区若未释放  | 清已 current 的 knowledge 读链旧入口                        |
 | TW-Q5B-MODEL-READ                        | 6      | 可并行                     | 中     | 中     | `model_registry_cmd.rs`、models API / mocks / dispatcher                          | `commandPolicy.ts` 若已被占用                  | 清 model registry 读链旧入口                                |
-| TW-Q5C-AGENT-APP-READ                    | 6      | 当前易冲突                 | 中     | 中     | `agent_app_cmd.rs`、Agent Apps API / UI tests                                     | Agent Apps 页面热区若未释放                    | 清 Agent App installed / UI runtime 读链残留                |
+| TW-Q5C-AGENT-APP-READ                    | 6      | 当前易冲突                 | 中     | 中     | Agent Apps API / UI tests / App Server current fixture                            | Agent Apps 页面热区若未释放                    | Agent App 旧 wrapper 已删除；只补 current fixture / 守卫    |
 | TW-Q6-SESSION-FILES                      | 7      | 可并行但需 App Server 判断 | 中     | 中     | `session_files_cmd.rs`、session files API / mocks                                 | App Server protocol 热区                       | 清 session file 读写残留                                    |
 | TW-Q7-CONFIG-LOGS-DIAG                   | 8      | 可并行拆分                 | 中     | 中     | config / logs / diagnostics API 与 Rust wrapper                                   | `app/commands/config.rs` 若被占用              | 拆分配置、日志、诊断 current owner                          |
 | TW-Q8-BROWSER-WEBVIEW                    | 9      | 建议单进程                 | 中到高 | 中     | `webview_cmd.rs`、browser dispatcher、`src/lib/webview-api.ts`                    | Electron host 热区                             | 清 Browser / Webview / CDP / Profile wrapper                |
 | TW-Q9-VOICE-ASR                          | 10     | 可并行                     | 中到高 | 中到高 | voice / ASR API、dispatcher voice、desktop-host voice mocks                       | 录音设备 / Electron host 热区                  | 拆分录音设备与 ASR service current owner                    |
 | TW-Q10-SKILLS                            | 11     | 建议单进程                 | 高     | 中到高 | `skill_cmd.rs`、`dispatcher/skills.rs`、skills API / mocks                        | Agent Runtime tool runtime                     | 清 Skill catalog / package / marketplace wrapper            |
-| TW-Q11-MCP                               | 12     | 当前易冲突                 | 高     | 高     | `mcp_cmd.rs`、MCP API / App Server protocol / tests                               | App Server protocol 热区                       | MCP 已 current；确认后删除旧 wrapper 并补真实 fixture        |
+| TW-Q11-MCP                               | 12     | 当前易冲突                 | 高     | 高     | MCP API / App Server protocol / tests                                             | App Server protocol 热区                       | MCP 已 current；旧 wrapper 已删除；real stdio fixture 已补齐 |
 | TW-Q12-KNOWLEDGE-WORKSPACE-CONTENT-WRITE | 13     | 建议单进程                 | 高     | 高     | knowledge / workspace / content API、Rust wrappers、App Server protocol           | App Server protocol 热区                       | 迁写链并清旧入口                                            |
 | TW-Q13-MEMORY                            | 14     | 建议单进程                 | 高     | 高     | memory / unifiedMemory / memoryRuntime API 与 Rust wrappers                       | RuntimeCore / workspace 文件系统热区           | 迁 Memory / Unified Memory / Project Memory                 |
-| TW-Q14-AGENT-APP-RUNTIME                 | 15     | 当前易冲突                 | 高     | 高     | agent app runtime API、Rust wrappers、Agent Apps UI                               | Agent Apps 页面热区                            | 迁 Agent App task / UI runtime 旧 facade                    |
+| TW-Q14-AGENT-APP-RUNTIME                 | 15     | 当前易冲突                 | 高     | 高     | agent app runtime API、Electron Host projection、Agent Apps UI                    | Agent Apps 页面热区                            | 旧 Rust wrapper 已删除；继续收 App Server runtime residual  |
 | TW-Q15-AGENT-RUNTIME                     | 16     | 不建议作为快速清理并行项   | 最高   | 最高   | App Server runtime、agentRuntime clients、Aster runtime core                      | `runtime_turn/**`、tool runtime、protocol 热区 | 逐条迁 Agent Runtime residual                               |
 
 推荐并行启动方式：
@@ -658,7 +658,7 @@ npx vitest run "src/lib/api/skills.test.ts" "src/lib/api/skill-execution.test.ts
 
 候选：
 
-- `mcp_cmd.rs`：约 19 个 command，已从 runner / DevBridge / `commands/mod.rs` 断开，当前是 `dead-file-candidate / delete-after-confirmation`。
+- `mcp_cmd.rs`：约 19 个 command，已从 runner / DevBridge / `commands/mod.rs` 断开并物理删除；不得恢复到 `lime-rs/src/commands/**`。
 - CRUD / import / sync / start-stop / tool-call / prompt-get / resource-read 已进入 App Server current。
 
 执行口径：
@@ -666,7 +666,7 @@ npx vitest run "src/lib/api/skills.test.ts" "src/lib/api/skill-execution.test.ts
 - 不修回旧 Tauri in-process bridge。
 - MCP server config、tool call、prompt/resource 读写都应走 App Server JSON-RPC。
 - 已迁命令不得回流 Tauri wrapper、Electron Host legacy facade、DevBridge truth、mock priority 或 desktop-host mock。
-- 后续只允许确认后物理删除 `mcp_cmd.rs`，并补真实 MCP server fixture；不得在 `lime-rs/src/commands/**` 追加 stub / wrapper / adapter。
+- 真实 MCP server fixture 已覆盖 start/status/tool call/resource read 正向链路；后续只按 MCP panel / GUI 风险补回归，且不得在 `lime-rs/src/commands/**` 恢复 `mcp_cmd.rs` 或追加 stub / wrapper / adapter。
 
 验证：
 
@@ -787,11 +787,16 @@ npx vitest run "src/lib/api/agentAppRuntime.test.ts" "src/lib/api/agentApps.test
 - `agent_runtime_export_evidence_pack`
 - `agent_runtime_get_tool_inventory`
 - `agent_runtime_spawn_subagent`
+- `agent_runtime_send_subagent_input`
+- `agent_runtime_wait_subagents`
+- `agent_runtime_resume_subagent`
+- `agent_runtime_close_subagent`
 - checkpoint / handoff / replay / review / queued turn。
 
 执行口径：
 
-- 不能简单删除；必须逐条迁到 App Server JSON-RPC current。
+- public subagent facade 先退出 current / bridge truth 分类；后续按 App Server RuntimeCore 真实设计决定新增 current method 或删除旧入口。
+- 不能简单删除仍有 GUI 调用的前端 thin client；必须逐条迁到 App Server JSON-RPC current 或明确下线。
 - `runtime_turn/**`、`tool_runtime/**`、DTO、event projection、evidence projection 里的可复用核心先抽到 RuntimeCore / services。
 - legacy `agent_runtime_*` 最多保留 thin compat delegate，并写退出条件；不得再承接新业务逻辑。
 
@@ -1000,7 +1005,7 @@ npm run smoke:agent-session-history-electron-fixture -- --timeout-ms 180000
   - 旧入口搜索：`rg -n "agent_app_select_directory|AgentAppSelectDirectory|agent_app_select_directory_result|agent_app_select_directory_from_window" "lime-rs/src" "src/lib/dev-bridge" "src/lib/desktop-host" "src/lib/api/agentApps.ts" "electron" "scripts/check-command-contracts.mjs" "internal/exec-plans" --glob "!lime-rs/target/**"` 显示旧 Rust wrapper / runner / DevBridge truth 已无命中，命令名只剩 Electron Host current、前端 API 网关、负向 mock 测试、contract required command 和执行计划记录。
   - 守卫结果：`scripts/check-command-contracts.mjs` 已要求 `agent_app_select_directory` 作为 Electron Host current 命令存在，并禁止 Agent App shell / picker 重新通过 `commands/mod.rs` 暴露 legacy Tauri module；`rustCommandsCurrentBoundary.test.ts` 已把 `agent_app_cmd.rs` 副作用预算从 125 下调到 60。
   - 验证结果：`rustfmt --edition 2021 --check --config skip_children=true "lime-rs/src/commands/agent_app_cmd.rs"` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；`node scripts/check-command-contracts.mjs` 通过；`npx vitest run "src/lib/governance/rustCommandsCurrentBoundary.test.ts" --silent=passed-only --disableConsoleIntercept` 通过。
-  - 剩余阻塞：`agent_app_cmd.rs` 仍有 `agent_app_start_ui_runtime` / `agent_app_get_ui_runtime_status` / `agent_app_stop_ui_runtime` 旧 UI runtime wrapper，但 runner / `commands/mod.rs` 已撤注册；下一刀应在确认无残余引用后物理删除整文件或先迁出仍被测试 / helper 复用的 UI runtime 支撑代码，不能在 `lime-rs/src/commands/**` 新增 picker stub。
+  - 剩余阻塞：后续物理删除切片已删除 `agent_app_cmd.rs`、`agent_app_runtime_cmd.rs` 与 `agent_app_runtime_cmd/**`；本记录仅保留历史过程。后续只能补 Electron Host / App Server current fixture 和不可恢复守卫，不能在 `lime-rs/src/commands/**` 新增 picker stub 或恢复旧文件。
 
 - 2026-06-08 Codex TW-Q4C-COMPANION-WRAPPER 完成
   - 写集：`lime-rs/src/app/runner.rs`、`lime-rs/src/commands/mod.rs`、`lime-rs/src/commands/companion_cmd.rs`、`scripts/check-command-contracts.mjs`、`src/lib/governance/rustCommandsCurrentBoundary.test.ts`、`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`

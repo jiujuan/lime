@@ -1,8 +1,6 @@
 import type {
-  AgentProcessStatus,
   AgentRuntimeGeneratedTitleResult,
   AsterAgentStatus,
-  AsterProviderConfig,
 } from "./types";
 import {
   invokeAgentRuntimeBridge,
@@ -27,39 +25,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
-}
-
-function isOptionalFiniteNumber(
-  value: unknown,
-): value is number | undefined {
-  return (
-    value === undefined ||
-    (typeof value === "number" && Number.isFinite(value))
-  );
-}
-
-function isAgentProcessStatus(value: unknown): value is AgentProcessStatus {
-  return (
-    isRecord(value) &&
-    typeof value.running === "boolean" &&
-    isOptionalString(value.base_url) &&
-    isOptionalFiniteNumber(value.port)
-  );
-}
-
-function assertAgentProcessStatus(
-  command: string,
-  value: unknown,
-): asserts value is AgentProcessStatus {
-  if (!isAgentProcessStatus(value)) {
-    throw new Error(`${command} did not return agent process status`);
-  }
-}
-
-function assertVoidResult(command: string, value: unknown): void {
-  if (value !== undefined && value !== null) {
-    throw new Error(`${command} did not return void result`);
-  }
 }
 
 function isAsterAgentStatus(value: unknown): value is AsterAgentStatus {
@@ -130,26 +95,6 @@ function buildLocalGeneratedTitle(
 export function createAgentClient({
   bridgeInvoke = invokeAgentRuntimeBridge,
 }: AgentRuntimeAgentClientDeps = {}) {
-  async function startAgentProcess(): Promise<AgentProcessStatus> {
-    const command = "agent_start_process";
-    const result = await bridgeInvoke<unknown>(command, {});
-    assertAgentProcessStatus(command, result);
-    return result;
-  }
-
-  async function stopAgentProcess(): Promise<void> {
-    const command = "agent_stop_process";
-    const result = await bridgeInvoke<unknown>(command);
-    assertVoidResult(command, result);
-  }
-
-  async function getAgentProcessStatus(): Promise<AgentProcessStatus> {
-    const command = "agent_get_process_status";
-    const result = await bridgeInvoke<unknown>(command);
-    assertAgentProcessStatus(command, result);
-    return result;
-  }
-
   async function generateAgentRuntimeTitleResult(
     request: GenerateAgentRuntimeTitleRequest,
   ): Promise<AgentRuntimeGeneratedTitleResult> {
@@ -189,47 +134,17 @@ export function createAgentClient({
     return result;
   }
 
-  async function getAsterAgentStatus(): Promise<AsterAgentStatus> {
-    const command = "aster_agent_status";
-    const result = await bridgeInvoke<unknown>(command);
-    assertAsterAgentStatus(command, result);
-    return result;
-  }
-
-  async function configureAsterProvider(
-    config: AsterProviderConfig,
-    sessionId: string,
-  ): Promise<AsterAgentStatus> {
-    const command = "aster_agent_configure_provider";
-    const result = await bridgeInvoke<unknown>(command, {
-      request: config,
-      session_id: sessionId,
-    });
-    assertAsterAgentStatus(command, result);
-    return result;
-  }
-
   return {
-    configureAsterProvider,
     generateAgentRuntimeTitleResult,
     generateAgentRuntimeTitle,
     generateAgentRuntimeSessionTitle,
-    getAgentProcessStatus,
-    getAsterAgentStatus,
     initAsterAgent,
-    startAgentProcess,
-    stopAgentProcess,
   };
 }
 
 export const {
-  configureAsterProvider,
   generateAgentRuntimeTitleResult,
   generateAgentRuntimeTitle,
   generateAgentRuntimeSessionTitle,
-  getAgentProcessStatus,
-  getAsterAgentStatus,
   initAsterAgent,
-  startAgentProcess,
-  stopAgentProcess,
 } = createAgentClient();

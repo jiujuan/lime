@@ -29,7 +29,7 @@
 |    29 | `lime-rs/src/commands/webview_cmd.rs`                             | Desktop Host / Browser Runtime               |
 |    28 | `lime-rs/src/commands/skill_cmd.rs`                               | Skills / marketplace / execution 分拆        |
 |    21 | `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` | Agent Runtime 主链，最后处理                 |
-|    19 | `lime-rs/src/commands/mcp_cmd.rs`                                 | MCP 已 App Server current；待删除确认        |
+|    19 | `lime-rs/src/commands/mcp_cmd.rs`                                 | 历史计数；旧 wrapper 已删除，MCP current real stdio fixture 已补齐 |
 |    16 | `lime-rs/src/commands/config_cmd.rs`                              | Config / Desktop Host shell split            |
 |    16 | `lime-rs/src/commands/machine_id_cmd.rs`                          | Machine identity / diagnostics split         |
 |    15 | `lime-rs/src/commands/memory_management_cmd.rs`                   | Memory App Server current                    |
@@ -37,7 +37,7 @@
 |    14 | `lime-rs/src/commands/model_registry_cmd.rs`                      | Model Provider current                       |
 |    14 | `lime-rs/src/commands/session_files_cmd.rs`                       | Session files App Server current             |
 |    13 | `lime-rs/src/commands/memory_cmd.rs`                              | Memory App Server current                    |
-|    12 | `lime-rs/src/commands/agent_app_cmd.rs`                           | Agent App current / Desktop Host shell split |
+|    12 | `lime-rs/src/commands/agent_app_cmd.rs`                           | 历史计数；旧 wrapper 已删除，禁止恢复                         |
 |    12 | `lime-rs/src/commands/site_capability_cmd.rs`                     | Site capability current                      |
 |    10 | `lime-rs/src/commands/browser_connector_cmd.rs`                   | Desktop Host / Browser Runtime               |
 |    10 | `lime-rs/src/commands/telemetry_cmd.rs`                           | Telemetry / App Server split                 |

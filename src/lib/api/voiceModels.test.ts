@@ -52,7 +52,25 @@ describe("voiceModels API", () => {
     };
 
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([{ id: "sensevoice-small-int8-2024-07-17" }])
+      .mockResolvedValueOnce([
+        {
+          id: "sensevoice-small-int8-2024-07-17",
+          name: "SenseVoice Small INT8",
+          provider: "FunAudioLLM / sherpa-onnx",
+          description: "本地离线 ASR 模型",
+          version: "2024-07-17",
+          languages: ["zh", "en"],
+          size_bytes: 262144000,
+          download_url:
+            "https://models.example.com/voice/sensevoice-small-int8.tar.bz2",
+          vad_model_id: "silero-vad-onnx",
+          vad_download_url:
+            "https://models.example.com/voice/silero_vad.onnx",
+          runtime: "sherpa-onnx",
+          bundled: false,
+          checksum_sha256: "abc123",
+        },
+      ])
       .mockResolvedValueOnce(installState)
       .mockResolvedValueOnce({ state: installedState })
       .mockResolvedValueOnce(installState)
@@ -195,6 +213,16 @@ describe("voiceModels API", () => {
       getVoiceModelInstallState(DEFAULT_SENSEVOICE_MODEL_ID),
     ).rejects.toThrow(
       "voice_models_get_install_state 尚未接入真实语音模型 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+  });
+
+  it("语音模型目录遇到浅层 mock-like 项时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce([
+      { id: "sensevoice-small-int8-2024-07-17" },
+    ]);
+
+    await expect(listVoiceModelCatalog()).rejects.toThrow(
+      "voice_models_list_catalog did not return a voice model catalog entry",
     );
   });
 

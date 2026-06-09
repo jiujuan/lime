@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "AgentSessionFileCheckpointSummary": {
+      "properties": {
+        "checkpointId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "previewText": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "snapshotPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "validationIssueCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "versionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "versionNo": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "checkpointId",
+        "path",
+        "source",
+        "turnId",
+        "updatedAt",
+        "validationIssueCount"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "checkpoint": {
+      "$ref": "#/$defs/AgentSessionFileCheckpointSummary"
+    },
+    "checkpointDocument": true,
+    "content": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "liveDocument": true,
+    "livePath": {
+      "type": "string"
+    },
+    "metadata": true,
+    "sessionId": {
+      "type": "string"
+    },
+    "snapshotPath": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "validationIssues": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "versionHistory": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    }
+  },
+  "required": [
+    "checkpoint",
+    "livePath",
+    "sessionId",
+    "snapshotPath",
+    "threadId"
+  ],
+  "title": "AgentSessionFileCheckpointDetail",
+  "type": "object"
+}

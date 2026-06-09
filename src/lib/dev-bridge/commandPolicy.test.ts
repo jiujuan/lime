@@ -15,6 +15,7 @@ import {
   isOptionalLegacyUxCommand,
   isOptionalLegacyUxCommandAvailable,
   resolveDevBridgeCommandTimeoutProfile,
+  shouldDisallowMockFallbackCommand,
   shouldBypassDevBridgeCooldown,
   shouldRetryDevBridgeReadCommand,
 } from "./commandPolicy";
@@ -30,8 +31,176 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(false);
     expect(isBridgeTruthCommand("get_automation_jobs")).toBe(false);
     expect(isBridgeTruthCommand("project_memory_get")).toBe(true);
+    for (const command of [
+      "save_layered_design_project_export",
+      "read_layered_design_project_export",
+      "recognize_layered_design_text",
+      "analyze_layered_design_flat_image",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(true);
+    }
+    expect(isBridgeTruthCommand("get_local_skills_for_app")).toBe(false);
+    expect(shouldDisallowMockFallbackCommand("get_local_skills_for_app")).toBe(
+      false,
+    );
+    expect(
+      isBridgeTruthCommand("take_pending_skill_package_open_requests"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand(
+        "take_pending_skill_package_open_requests",
+      ),
+    ).toBe(false);
+    expect(
+      isBridgeTruthCommand("get_skill_package_file_association_status"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand(
+        "get_skill_package_file_association_status",
+      ),
+    ).toBe(false);
+    expect(
+      isBridgeTruthCommand("set_skill_package_file_association_default"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand(
+        "set_skill_package_file_association_default",
+      ),
+    ).toBe(false);
     expect(isBridgeTruthCommand("agent_generate_title")).toBe(false);
     expect(isBridgeTruthCommand("get_hint_routes")).toBe(false);
+    expect(isBridgeTruthCommand("agent_start_process")).toBe(false);
+    expect(isBridgeTruthCommand("agent_stop_process")).toBe(false);
+    expect(isBridgeTruthCommand("agent_get_process_status")).toBe(false);
+    expect(isBridgeTruthCommand("aster_agent_status")).toBe(false);
+    expect(isBridgeTruthCommand("aster_agent_configure_provider")).toBe(false);
+    expect(isBridgeTruthCommand("aster_agent_reset")).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_get_thread_read")).toBe(true);
+    expect(isBridgeTruthCommand("agent_runtime_export_evidence_pack")).toBe(
+      true,
+    );
+    expect(isBridgeTruthCommand("create_image_generation_task_artifact")).toBe(
+      false,
+    );
+    expect(shouldDisallowMockFallbackCommand("get_media_task_artifact")).toBe(
+      false,
+    );
+    expect(isBridgeTruthCommand("agent_runtime_delete_session")).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand("agent_runtime_delete_session"),
+    ).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_compact_session")).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_get_objective")).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand("agent_runtime_get_objective"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand("agent_runtime_set_objective"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand(
+        "agent_runtime_update_objective_status",
+      ),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand("agent_runtime_clear_objective"),
+    ).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_list_file_checkpoints")).toBe(
+      false,
+    );
+    expect(
+      shouldDisallowMockFallbackCommand("agent_runtime_list_file_checkpoints"),
+    ).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_export_handoff_bundle")).toBe(
+      false,
+    );
+    expect(
+      shouldDisallowMockFallbackCommand("agent_runtime_export_handoff_bundle"),
+    ).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_spawn_subagent")).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_send_subagent_input")).toBe(
+      false,
+    );
+    expect(isBridgeTruthCommand("agent_runtime_wait_subagents")).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_resume_subagent")).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_close_subagent")).toBe(false);
+  });
+
+  it("P9 process / Aster residual 已退役，不再作为 DevBridge policy surface", () => {
+    for (const command of [
+      "agent_start_process",
+      "agent_stop_process",
+      "agent_get_process_status",
+      "aster_agent_status",
+      "aster_agent_configure_provider",
+      "aster_agent_reset",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
+    }
+  });
+
+  it("public subagent 旧 facade 已退役，不再作为 DevBridge policy surface", () => {
+    for (const command of [
+      "agent_runtime_spawn_subagent",
+      "agent_runtime_send_subagent_input",
+      "agent_runtime_wait_subagents",
+      "agent_runtime_resume_subagent",
+      "agent_runtime_close_subagent",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
+    }
+  });
+
+  it("P10 Skill 管理旧 facade 已退役，不再作为 DevBridge policy surface", () => {
+    for (const command of [
+      "get_skills_for_app",
+      "install_skill_for_app",
+      "uninstall_skill_for_app",
+      "get_skill_repos",
+      "add_skill_repo",
+      "remove_skill_repo",
+      "get_installed_lime_skills",
+      "refresh_skill_cache",
+      "inspect_local_skill_for_app",
+      "create_skill_scaffold_for_app",
+      "import_local_skill_for_app",
+      "inspect_remote_skill",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
+    }
+  });
+
+  it("queue/session 旧 facade 已由 App Server current method 替换", () => {
+    for (const command of [
+      "agent_runtime_compact_session",
+      "agent_runtime_resume_thread",
+      "agent_runtime_promote_queued_turn",
+      "agent_runtime_remove_queued_turn",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
+    }
+  });
+
+  it("replay request 旧 facade 已退役，不再作为 DevBridge policy surface", () => {
+    expect(isBridgeTruthCommand("agent_runtime_replay_request")).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand("agent_runtime_replay_request"),
+    ).toBe(false);
+  });
+
+  it("objective continue / audit 旧 facade 已退役，不再作为 DevBridge policy surface", () => {
+    for (const command of [
+      "agent_runtime_continue_objective",
+      "agent_runtime_audit_objective",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
+    }
   });
 
   it("集中声明 Claw 旧可选 UX 命令，只在 Electron host 明确支持时调用", () => {
@@ -64,6 +233,16 @@ describe("commandPolicy", () => {
       resolveDevBridgeCommandTimeoutProfile("agent_app_start_ui_runtime"),
     ).toBe("agent-app-ui-runtime-start");
     expect(
+      resolveDevBridgeCommandTimeoutProfile(
+        "save_layered_design_project_export",
+      ),
+    ).toBe("layered-design-project");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile(
+        "read_layered_design_project_export",
+      ),
+    ).toBe("layered-design-project");
+    expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
         request: {
           lines: [
@@ -80,7 +259,7 @@ describe("commandPolicy", () => {
       }),
     ).toBe("agent-app-ui-runtime-start");
     expect(resolveDevBridgeCommandTimeoutProfile("execute_skill")).toBe(
-      "skill-execution",
+      "default",
     );
     expect(resolveDevBridgeCommandTimeoutProfile("agent_generate_title")).toBe(
       "default",
@@ -173,6 +352,50 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "skill-management",
+              method: "skillManagement/list",
+              params: { app: "lime" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "channel-status",
+              method: "gatewayChannel/status",
+              params: { channel: "wechat" },
+            }),
+            JSON.stringify({
+              id: "wechat-accounts",
+              method: "wechatChannel/accounts/list",
+              params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "media-task",
+              method: "mediaTaskArtifact/list",
+              params: { projectRootPath: "/workspace" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "knowledge",
               method: "knowledgePack/compile",
               params: {},
@@ -206,6 +429,9 @@ describe("commandPolicy", () => {
     expect(shouldBypassDevBridgeCooldown("agent_runtime_get_session")).toBe(
       true,
     );
+    expect(
+      shouldBypassDevBridgeCooldown("agent_runtime_send_subagent_input"),
+    ).toBe(false);
     expect(shouldRetryDevBridgeReadCommand("agent_runtime_get_session")).toBe(
       true,
     );

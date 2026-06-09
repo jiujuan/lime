@@ -1,0 +1,35 @@
+{
+  "$defs": {
+    "LogEntry": {
+      "properties": {
+        "level": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "message",
+        "timestamp"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "entries": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LogEntry"
+      },
+      "type": "array"
+    }
+  },
+  "title": "LogPersistedTailResponse",
+  "type": "object"
+}

@@ -103,7 +103,7 @@ describe("companion API", () => {
       "companion_get_pet_status did not return companion status",
     );
     await expect(launchCompanionPet()).rejects.toThrow(
-      "companion_launch_pet did not return launch result",
+      "companion_launch_pet returned an error envelope",
     );
     await expect(
       sendCompanionPetCommand({
@@ -112,6 +112,49 @@ describe("companion API", () => {
       }),
     ).rejects.toThrow(
       "companion_send_pet_command did not return send result",
+    );
+  });
+
+  it("桌宠命令遇到 error envelope 时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        endpoint: "ws://127.0.0.1:45554/companion/pet",
+        server_listening: true,
+        connected: true,
+        client_id: "lime",
+        platform: "macos",
+        capabilities: ["bubble", "movement"],
+        last_event: "pet.ready",
+        last_error: null,
+        last_state: "idle",
+        error: "Electron host command is not supported",
+      })
+      .mockResolvedValueOnce({
+        launched: true,
+        resolved_path: "/Applications/Lime Pet.app/Contents/MacOS/Lime Pet",
+        endpoint: "ws://127.0.0.1:45554/companion/pet",
+        message: null,
+        error: "launch fallback",
+      })
+      .mockResolvedValueOnce({
+        delivered: true,
+        connected: true,
+        error: "send fallback",
+      });
+
+    await expect(getCompanionPetStatus()).rejects.toThrow(
+      "companion_get_pet_status returned an error envelope",
+    );
+    await expect(launchCompanionPet()).rejects.toThrow(
+      "companion_launch_pet returned an error envelope",
+    );
+    await expect(
+      sendCompanionPetCommand({
+        event: "pet.show_bubble",
+        payload: { text: "你好" },
+      }),
+    ).rejects.toThrow(
+      "companion_send_pet_command returned an error envelope",
     );
   });
 

@@ -1,0 +1,38 @@
+{
+  "$defs": {
+    "SkillRepositoryEntry": {
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "branch",
+        "enabled",
+        "name",
+        "owner"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "repo": {
+      "$ref": "#/$defs/SkillRepositoryEntry"
+    }
+  },
+  "required": [
+    "repo"
+  ],
+  "title": "SkillRepositorySaveParams",
+  "type": "object"
+}

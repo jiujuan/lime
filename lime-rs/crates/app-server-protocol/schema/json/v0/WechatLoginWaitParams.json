@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "accountName": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "baseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "botType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionKey": {
+      "type": "string"
+    },
+    "timeoutMs": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "sessionKey"
+  ],
+  "title": "WechatLoginWaitParams",
+  "type": "object"
+}

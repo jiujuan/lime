@@ -1,16 +1,19 @@
 import { AppServerClient } from "@/lib/api/appServer";
+import {
+  APP_SERVER_METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+  APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
+  APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
+  APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
+  APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+} from "@/lib/api/appServer";
 import { projectAppServerEvidenceExportToRuntimeEvidencePack } from "./appServerEvidenceExportProjection";
-import { AGENT_RUNTIME_COMMANDS } from "./commandManifest.generated";
 import {
   normalizeAnalysisHandoff,
   normalizeHandoffBundle,
   normalizeReplayCase,
   normalizeReviewDecisionTemplate,
 } from "./normalizers";
-import {
-  invokeAgentRuntimeCommand,
-  type AgentRuntimeCommandInvoke,
-} from "./transport";
+import type { AgentRuntimeCommandInvoke } from "./transport";
 import type {
   AgentRuntimeAnalysisHandoff,
   AgentRuntimeAnalysisArtifact,
@@ -26,7 +29,12 @@ import type {
 
 export type AgentRuntimeEvidenceExportAppServerClient = Pick<
   AppServerClient,
-  "exportEvidence"
+  | "exportEvidence"
+  | "exportHandoffBundle"
+  | "exportReplayCase"
+  | "exportAnalysisHandoff"
+  | "exportReviewDecisionTemplate"
+  | "saveReviewDecision"
 >;
 
 export interface AgentRuntimeExportClientDeps {
@@ -264,15 +272,23 @@ function assertRuntimeExportResult(
 
 export function createExportClient({
   appServerClient = new AppServerClient(),
-  invokeCommand = invokeAgentRuntimeCommand,
 }: AgentRuntimeExportClientDeps = {}) {
   async function exportAgentRuntimeHandoffBundle(
     sessionId: string,
   ): Promise<AgentRuntimeHandoffBundle> {
-    const command = AGENT_RUNTIME_COMMANDS.exportHandoffBundle;
-    const result = await invokeCommand(command, { sessionId });
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      throw new Error(
+        "sessionId is required to export App Server handoff bundle",
+      );
+    }
+
+    const response = await appServerClient.exportHandoffBundle({
+      sessionId: normalizedSessionId,
+    });
+    const result = response.result;
     assertRuntimeExportResult(
-      command,
+      APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
       result,
       isHandoffBundle,
       "runtime handoff bundle",
@@ -283,10 +299,18 @@ export function createExportClient({
   async function exportAgentRuntimeAnalysisHandoff(
     sessionId: string,
   ): Promise<AgentRuntimeAnalysisHandoff> {
-    const command = AGENT_RUNTIME_COMMANDS.exportAnalysisHandoff;
-    const result = await invokeCommand(command, { sessionId });
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      throw new Error(
+        "sessionId is required to export App Server analysis handoff",
+      );
+    }
+    const response = await appServerClient.exportAnalysisHandoff({
+      sessionId: normalizedSessionId,
+    });
+    const result = response.result;
     assertRuntimeExportResult(
-      command,
+      APP_SERVER_METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
       result,
       isAnalysisHandoff,
       "runtime analysis handoff",
@@ -297,10 +321,18 @@ export function createExportClient({
   async function exportAgentRuntimeReviewDecisionTemplate(
     sessionId: string,
   ): Promise<AgentRuntimeReviewDecisionTemplate> {
-    const command = AGENT_RUNTIME_COMMANDS.exportReviewDecisionTemplate;
-    const result = await invokeCommand(command, { sessionId });
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      throw new Error(
+        "sessionId is required to export App Server review decision template",
+      );
+    }
+    const response = await appServerClient.exportReviewDecisionTemplate({
+      sessionId: normalizedSessionId,
+    });
+    const result = response.result;
     assertRuntimeExportResult(
-      command,
+      APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
       result,
       isReviewDecisionTemplate,
       "runtime review decision template",
@@ -311,10 +343,27 @@ export function createExportClient({
   async function saveAgentRuntimeReviewDecision(
     request: AgentRuntimeSaveReviewDecisionRequest,
   ): Promise<AgentRuntimeReviewDecisionTemplate> {
-    const command = AGENT_RUNTIME_COMMANDS.saveReviewDecision;
-    const result = await invokeCommand(command, { request });
+    const normalizedSessionId = request.session_id.trim();
+    if (!normalizedSessionId) {
+      throw new Error(
+        "sessionId is required to save App Server review decision",
+      );
+    }
+    const response = await appServerClient.saveReviewDecision({
+      sessionId: normalizedSessionId,
+      decisionStatus: request.decision_status,
+      decisionSummary: request.decision_summary,
+      chosenFixStrategy: request.chosen_fix_strategy,
+      riskLevel: request.risk_level,
+      riskTags: request.risk_tags,
+      humanReviewer: request.human_reviewer,
+      followupActions: request.followup_actions,
+      regressionRequirements: request.regression_requirements,
+      notes: request.notes,
+    });
+    const result = response.result;
     assertRuntimeExportResult(
-      command,
+      APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
       result,
       isReviewDecisionTemplate,
       "runtime review decision template",
@@ -342,10 +391,18 @@ export function createExportClient({
   async function exportAgentRuntimeReplayCase(
     sessionId: string,
   ): Promise<AgentRuntimeReplayCase> {
-    const command = AGENT_RUNTIME_COMMANDS.exportReplayCase;
-    const result = await invokeCommand(command, { sessionId });
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      throw new Error(
+        "sessionId is required to export App Server replay case",
+      );
+    }
+    const response = await appServerClient.exportReplayCase({
+      sessionId: normalizedSessionId,
+    });
+    const result = response.result;
     assertRuntimeExportResult(
-      command,
+      APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
       result,
       isReplayCase,
       "runtime replay case",

@@ -55,6 +55,32 @@ describe("externalUrl API", () => {
     );
   });
 
+  it("打开外部链接只接受真实空返回", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      });
+
+    await expect(
+      openExternalUrlWithSystemBrowser("https://user.limeai.run/login"),
+    ).resolves.toBeUndefined();
+    await expect(
+      openExternalUrlWithSystemBrowser("https://user.limeai.run/login"),
+    ).rejects.toThrow(
+      "open_external_url did not return empty Electron host result",
+    );
+    await expect(
+      openExternalUrlWithSystemBrowser("https://user.limeai.run/login"),
+    ).rejects.toThrow(
+      "open_external_url did not return empty Electron host result",
+    );
+  });
+
   it("OAuth 本机回调桥遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {

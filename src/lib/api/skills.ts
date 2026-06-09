@@ -1,9 +1,50 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import { AppServerClient } from "@/lib/api/appServer";
 import type {
   SkillMarketplaceBundle,
   SkillMarketplaceInstallResult,
 } from "./officialSkillMarketplace";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
+import { revealPathInFinder } from "./fileSystem";
+import {
+  METHOD_SKILL_LOCAL_DETAIL_INSPECT,
+  METHOD_SKILL_LOCAL_IMPORT,
+  METHOD_SKILL_LOCAL_INSPECT,
+  METHOD_SKILL_LOCAL_RENAME,
+  METHOD_SKILL_LOCAL_SCAFFOLD_CREATE,
+  METHOD_SKILL_MANAGEMENT_INSTALL,
+  METHOD_SKILL_MANAGEMENT_LIST,
+  METHOD_SKILL_MANAGEMENT_UNINSTALL,
+  METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL,
+  METHOD_SKILL_MARKETPLACE_INSTALL,
+  METHOD_SKILL_PACKAGE_EXPORT,
+  METHOD_SKILL_PACKAGE_LOCAL_INSPECT,
+  METHOD_SKILL_PACKAGE_LOCAL_INSTALL,
+  METHOD_SKILL_PACKAGE_LOCAL_REPLACE,
+  METHOD_SKILL_REMOTE_INSPECT,
+  METHOD_SKILL_REPOSITORY_DELETE,
+  METHOD_SKILL_REPOSITORY_LIST,
+  METHOD_SKILL_REPOSITORY_SAVE,
+  METHOD_SKILL_CACHE_REFRESH,
+  METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
+  type SkillDownloadInstallParams,
+  type SkillLocalImportParams,
+  type SkillLocalInspectParams,
+  type SkillLocalDetailInspectParams,
+  type SkillLocalRenameParams,
+  type SkillManagementInstallParams,
+  type SkillManagementListParams,
+  type SkillManagementUninstallParams,
+  type SkillMarketplaceInstallParams,
+  type SkillPackageExportParams,
+  type SkillPackageLocalInspectParams,
+  type SkillPackageLocalInstallParams,
+  type SkillPackageLocalReplaceParams,
+  type SkillRemoteInspectParams,
+  type SkillRepositoryDeleteParams,
+  type SkillRepositorySaveParams,
+  type SkillScaffoldCreateParams,
+} from "../../../packages/app-server-client/src/protocol";
 
 export type SkillSourceKind = "builtin" | "other";
 export type SkillCatalogSource = "project" | "user" | "remote";
@@ -57,6 +98,7 @@ export interface Skill {
   name: string;
   description: string;
   directory: string;
+  localDirectoryPath?: string;
   readmeUrl?: string;
   installed: boolean;
   sourceKind: SkillSourceKind;
@@ -167,6 +209,7 @@ function normalizeStandardCompliance(
 function normalizeSkill(skill: Skill): Skill {
   return {
     ...skill,
+    localDirectoryPath: normalizeOptionalPath(skill.localDirectoryPath),
     standardCompliance: normalizeStandardCompliance(skill.standardCompliance),
   };
 }
@@ -204,12 +247,173 @@ function normalizeStringList(value: string[] | null | undefined): string[] {
     : [];
 }
 
+function normalizeOptionalPath(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isStringList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
+async function requestSkillAppServer<T>(
+  method: string,
+  params: Record<string, unknown>,
+): Promise<T> {
+  const response = await new AppServerClient().request<T>(method, params);
+  return response.result;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((item) => typeof item === "string")
+  );
+}
+
 function isOptionalString(value: unknown): boolean {
   return value === undefined || value === null || typeof value === "string";
+}
+
+function isSkillResourceSummary(value: unknown): value is SkillResourceSummary {
+  return (
+    isRecord(value) &&
+    typeof value.hasScripts === "boolean" &&
+    typeof value.hasReferences === "boolean" &&
+    typeof value.hasAssets === "boolean"
+  );
+}
+
+function isSkillStandardComplianceLike(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (isRecord(value) &&
+      (value.isStandard === undefined ||
+        typeof value.isStandard === "boolean") &&
+      (value.validationErrors === undefined ||
+        isStringList(value.validationErrors)) &&
+      (value.deprecatedFields === undefined ||
+        isStringList(value.deprecatedFields)))
+  );
+}
+
+function isSkillInspection(value: unknown): value is SkillInspection {
+  return (
+    isRecord(value) &&
+    typeof value.content === "string" &&
+    isOptionalString(value.license) &&
+    isOptionalString(value.compatibility) &&
+    isStringRecord(value.metadata) &&
+    isStringList(value.allowedTools) &&
+    isSkillResourceSummary(value.resourceSummary) &&
+    isSkillStandardComplianceLike(value.standardCompliance)
+  );
+}
+
+function assertSkillManagementWriteResult(command: string, value: unknown) {
+  if (!isRecord(value) || value.success !== true) {
+    throw new Error(`${command} did not return success result`);
+  }
+}
+
+function assertImportedSkillResult(
+  command: string,
+  value: unknown,
+): asserts value is ImportedSkillResult {
+  if (!isRecord(value) || typeof value.directory !== "string") {
+    throw new Error(`${command} did not return imported skill result`);
+  }
+}
+
+function isLocalSkillPackageFileEntry(
+  value: unknown,
+): value is LocalSkillPackageFileEntry {
+  return (
+    isRecord(value) &&
+    typeof value.path === "string" &&
+    typeof value.isDirectory === "boolean" &&
+    typeof value.size === "number" &&
+    Number.isFinite(value.size) &&
+    isOptionalString(value.content)
+  );
+}
+
+function assertLocalSkillPackageInspectionResult(
+  command: string,
+  value: unknown,
+): asserts value is LocalSkillPackageInspectionResult {
+  if (
+    !isRecord(value) ||
+    typeof value.directory !== "string" ||
+    !isSkillInspection(value.inspection) ||
+    !Array.isArray(value.files) ||
+    !value.files.every(isLocalSkillPackageFileEntry)
+  ) {
+    throw new Error(`${command} did not return local skill package inspection`);
+  }
+}
+
+function assertSkillMarketplaceInstallResult(
+  command: string,
+  value: unknown,
+): asserts value is SkillMarketplaceInstallResult {
+  if (
+    !isRecord(value) ||
+    typeof value.directory !== "string" ||
+    !isSkillInspection(value.inspection)
+  ) {
+    throw new Error(`${command} did not return skill install result`);
+  }
+}
+
+function assertSkillPackageExportResult(
+  command: string,
+  value: unknown,
+): asserts value is SkillPackageExportResult {
+  if (
+    !isRecord(value) ||
+    typeof value.directory !== "string" ||
+    typeof value.outputPath !== "string" ||
+    typeof value.fileCount !== "number" ||
+    !Number.isFinite(value.fileCount) ||
+    typeof value.bytesWritten !== "number" ||
+    !Number.isFinite(value.bytesWritten)
+  ) {
+    throw new Error(`${command} did not return skill package export result`);
+  }
+}
+
+function assertSkillRepositoryListResult(
+  command: string,
+  value: unknown,
+): asserts value is { repos: SkillRepo[] } {
+  if (!isRecord(value) || !Array.isArray(value.repos)) {
+    throw new Error(`${command} did not return skill repositories`);
+  }
+}
+
+function assertInstalledSkillDirectoriesResult(
+  command: string,
+  value: unknown,
+): asserts value is { directories: string[] } {
+  if (!isRecord(value) || !isStringList(value.directories)) {
+    throw new Error(`${command} did not return installed skill directories`);
+  }
+}
+
+function assertSkillInspectionResult(
+  command: string,
+  value: unknown,
+): asserts value is { inspection: SkillInspection } {
+  if (!isRecord(value) || !isSkillInspection(value.inspection)) {
+    throw new Error(`${command} did not return skill inspection result`);
+  }
 }
 
 function isSkillPackageFileAssociationStatus(
@@ -259,36 +463,71 @@ export const skillsApi = {
     app: AppType = "lime",
     options?: { refreshRemote?: boolean },
   ): Promise<Skill[]> {
-    const skills = await invokeSkillsCommand<Skill[]>("get_skills_for_app", {
-      app,
-      refresh_remote: options?.refreshRemote ?? false,
-    });
-    return normalizeSkills(skills);
+    const result = await requestSkillAppServer<{ skills: Skill[] }>(
+      METHOD_SKILL_MANAGEMENT_LIST,
+      {
+        app,
+        refreshRemote: options?.refreshRemote ?? false,
+      } satisfies SkillManagementListParams,
+    );
+    return normalizeSkills(result.skills);
   },
 
   async install(directory: string, app: AppType = "lime"): Promise<boolean> {
-    return invokeSkillsCommand("install_skill_for_app", { app, directory });
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_MANAGEMENT_INSTALL,
+      { app, directory } satisfies SkillManagementInstallParams,
+    );
+    assertSkillManagementWriteResult(METHOD_SKILL_MANAGEMENT_INSTALL, result);
+    return true;
   },
 
   async uninstall(directory: string, app: AppType = "lime"): Promise<boolean> {
-    return invokeSkillsCommand("uninstall_skill_for_app", { app, directory });
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_MANAGEMENT_UNINSTALL,
+      { app, directory } satisfies SkillManagementUninstallParams,
+    );
+    assertSkillManagementWriteResult(
+      METHOD_SKILL_MANAGEMENT_UNINSTALL,
+      result,
+    );
+    return true;
   },
 
   async getRepos(): Promise<SkillRepo[]> {
-    const repos = await invokeSkillsCommand<SkillRepo[]>("get_skill_repos");
-    return normalizeSkillRepos(repos);
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_REPOSITORY_LIST,
+      {},
+    );
+    assertSkillRepositoryListResult(METHOD_SKILL_REPOSITORY_LIST, result);
+    return normalizeSkillRepos(result.repos);
   },
 
   async addRepo(repo: SkillRepo): Promise<boolean> {
-    return invokeSkillsCommand("add_skill_repo", { repo });
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_REPOSITORY_SAVE,
+      { repo } satisfies SkillRepositorySaveParams,
+    );
+    assertSkillManagementWriteResult(METHOD_SKILL_REPOSITORY_SAVE, result);
+    return true;
   },
 
   async removeRepo(owner: string, name: string): Promise<boolean> {
-    return invokeSkillsCommand("remove_skill_repo", { owner, name });
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_REPOSITORY_DELETE,
+      { owner, name } satisfies SkillRepositoryDeleteParams,
+    );
+    assertSkillManagementWriteResult(METHOD_SKILL_REPOSITORY_DELETE, result);
+    return true;
   },
 
   async refreshCache(): Promise<boolean> {
-    return invokeSkillsCommand("refresh_skill_cache");
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_CACHE_REFRESH,
+      {},
+    );
+    assertSkillManagementWriteResult(METHOD_SKILL_CACHE_REFRESH, result);
+    return true;
   },
 
   /**
@@ -300,10 +539,15 @@ export const skillsApi = {
    * @returns 已安装的 Skill 目录名列表
    */
   async getInstalledLimeSkills(): Promise<string[]> {
-    const directories = await invokeSkillsCommand<string[]>(
-      "get_installed_lime_skills",
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
+      {},
     );
-    return normalizeStringList(directories);
+    assertInstalledSkillDirectoriesResult(
+      METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
+      result,
+    );
+    return normalizeStringList(result.directories);
   },
 
   /**
@@ -317,25 +561,30 @@ export const skillsApi = {
     directory: string,
     app: AppType = "lime",
   ): Promise<SkillInspection> {
-    const inspection = await invokeSkillsCommand<SkillInspection>(
-      "inspect_local_skill_for_app",
-      { app, directory },
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_LOCAL_INSPECT,
+      { app, directory } satisfies SkillLocalInspectParams,
     );
-    return normalizeInspection(inspection);
+    assertSkillInspectionResult(METHOD_SKILL_LOCAL_INSPECT, result);
+    return normalizeInspection(result.inspection);
   },
 
   async inspectLocalSkillDetail(
     directory: string,
     app: AppType = "lime",
   ): Promise<LocalSkillDetailInspectionResult> {
-    const result = await invokeSkillsCommand<LocalSkillDetailInspectionResult>(
-      "inspect_local_skill_detail_for_app",
-      { app, directory },
+    const result =
+      await requestSkillAppServer<LocalSkillDetailInspectionResult>(
+        METHOD_SKILL_LOCAL_DETAIL_INSPECT,
+        { app, directory } satisfies SkillLocalDetailInspectParams,
+      );
+    assertLocalSkillPackageInspectionResult(
+      METHOD_SKILL_LOCAL_DETAIL_INSPECT,
+      result,
     );
     return {
       ...result,
       inspection: normalizeInspection(result.inspection),
-      files: Array.isArray(result.files) ? result.files : [],
     };
   },
 
@@ -343,10 +592,18 @@ export const skillsApi = {
     directory: string,
     app: AppType = "lime",
   ): Promise<boolean> {
-    return invokeSkillsCommand<boolean>("reveal_local_skill_for_app", {
-      app,
-      directory,
-    });
+    const normalizedDirectory = directory.trim();
+    const skill = (await this.getLocal(app)).find(
+      (item) => item.directory === normalizedDirectory,
+    );
+    const localDirectoryPath = normalizeOptionalPath(skill?.localDirectoryPath);
+    if (!localDirectoryPath) {
+      throw new Error(
+        `skill/list did not return localDirectoryPath for ${normalizedDirectory}`,
+      );
+    }
+    await revealPathInFinder(localDirectoryPath);
+    return true;
   },
 
   async renameLocalSkill(
@@ -354,14 +611,16 @@ export const skillsApi = {
     newDirectory: string,
     app: AppType = "lime",
   ): Promise<ImportedSkillResult> {
-    return invokeSkillsCommand<ImportedSkillResult>(
-      "rename_local_skill_for_app",
+    const result = await requestSkillAppServer<ImportedSkillResult>(
+      METHOD_SKILL_LOCAL_RENAME,
       {
         app,
         directory,
         newDirectory,
-      },
+      } satisfies SkillLocalRenameParams,
     );
+    assertImportedSkillResult(METHOD_SKILL_LOCAL_RENAME, result);
+    return result;
   },
 
   async replaceLocalSkillPackage(
@@ -369,13 +628,17 @@ export const skillsApi = {
     sourcePath: string,
     app: AppType = "lime",
   ): Promise<SkillMarketplaceInstallResult> {
-    const result = await invokeSkillsCommand<SkillMarketplaceInstallResult>(
-      "replace_local_skill_package_for_app",
+    const result = await requestSkillAppServer<SkillMarketplaceInstallResult>(
+      METHOD_SKILL_PACKAGE_LOCAL_REPLACE,
       {
         app,
         directory,
         sourcePath,
-      },
+      } satisfies SkillPackageLocalReplaceParams,
+    );
+    assertSkillMarketplaceInstallResult(
+      METHOD_SKILL_PACKAGE_LOCAL_REPLACE,
+      result,
     );
     return {
       ...result,
@@ -387,44 +650,48 @@ export const skillsApi = {
     request: CreateSkillScaffoldRequest,
     app: AppType = "lime",
   ): Promise<SkillInspection> {
-    const inspection = await invokeSkillsCommand<SkillInspection>(
-      "create_skill_scaffold_for_app",
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_LOCAL_SCAFFOLD_CREATE,
       {
         app,
         request,
-      },
+      } satisfies SkillScaffoldCreateParams,
     );
-    return normalizeInspection(inspection);
+    assertSkillInspectionResult(METHOD_SKILL_LOCAL_SCAFFOLD_CREATE, result);
+    return normalizeInspection(result.inspection);
   },
 
   async importLocalSkill(
     sourcePath: string,
     app: AppType = "lime",
   ): Promise<ImportedSkillResult> {
-    return invokeSkillsCommand<ImportedSkillResult>(
-      "import_local_skill_for_app",
+    const result = await requestSkillAppServer<ImportedSkillResult>(
+      METHOD_SKILL_LOCAL_IMPORT,
       {
         app,
         sourcePath,
-      },
+      } satisfies SkillLocalImportParams,
     );
+    assertImportedSkillResult(METHOD_SKILL_LOCAL_IMPORT, result);
+    return result;
   },
 
   async inspectLocalSkillPackage(
     sourcePath: string,
     app: AppType = "lime",
   ): Promise<LocalSkillPackageInspectionResult> {
-    const result = await invokeSkillsCommand<LocalSkillPackageInspectionResult>(
-      "inspect_local_skill_package_for_app",
-      {
-        app,
-        sourcePath,
-      },
+    const result =
+      await requestSkillAppServer<LocalSkillPackageInspectionResult>(
+        METHOD_SKILL_PACKAGE_LOCAL_INSPECT,
+        { app, sourcePath } satisfies SkillPackageLocalInspectParams,
+      );
+    assertLocalSkillPackageInspectionResult(
+      METHOD_SKILL_PACKAGE_LOCAL_INSPECT,
+      result,
     );
     return {
       ...result,
       inspection: normalizeInspection(result.inspection),
-      files: Array.isArray(result.files) ? result.files : [],
     };
   },
 
@@ -432,12 +699,13 @@ export const skillsApi = {
     sourcePath: string,
     app: AppType = "lime",
   ): Promise<SkillMarketplaceInstallResult> {
-    const result = await invokeSkillsCommand<SkillMarketplaceInstallResult>(
-      "install_local_skill_package_for_app",
-      {
-        app,
-        sourcePath,
-      },
+    const result = await requestSkillAppServer<SkillMarketplaceInstallResult>(
+      METHOD_SKILL_PACKAGE_LOCAL_INSTALL,
+      { app, sourcePath } satisfies SkillPackageLocalInstallParams,
+    );
+    assertSkillMarketplaceInstallResult(
+      METHOD_SKILL_PACKAGE_LOCAL_INSTALL,
+      result,
     );
     return {
       ...result,
@@ -481,49 +749,68 @@ export const skillsApi = {
     targetPath: string,
     app: AppType = "lime",
   ): Promise<SkillPackageExportResult> {
-    return invokeSkillsCommand<SkillPackageExportResult>(
-      "export_local_skill_package_for_app",
-      {
-        app,
-        directory,
-        targetPath,
-      },
+    const result = await requestSkillAppServer<SkillPackageExportResult>(
+      METHOD_SKILL_PACKAGE_EXPORT,
+      { app, directory, targetPath } satisfies SkillPackageExportParams,
     );
+    assertSkillPackageExportResult(METHOD_SKILL_PACKAGE_EXPORT, result);
+    return result;
   },
 
   async installMarketplaceBundle(
     bundle: SkillMarketplaceBundle,
     app: AppType = "lime",
   ): Promise<SkillMarketplaceInstallResult> {
-    return invokeSkillsCommand<SkillMarketplaceInstallResult>(
-      "install_marketplace_skill_for_app",
+    const result = await requestSkillAppServer<SkillMarketplaceInstallResult>(
+      METHOD_SKILL_MARKETPLACE_INSTALL,
       {
         app,
-        bundle,
-      },
+        manifestVersion: bundle.manifestVersion,
+        name: bundle.name,
+        aliases: bundle.aliases,
+        version: bundle.version,
+        contentHash: bundle.contentHash,
+        fileCount: bundle.fileCount,
+        files: bundle.files,
+      } satisfies SkillMarketplaceInstallParams,
     );
+    assertSkillMarketplaceInstallResult(
+      METHOD_SKILL_MARKETPLACE_INSTALL,
+      result,
+    );
+    return {
+      ...result,
+      inspection: normalizeInspection(result.inspection),
+    };
   },
 
   async installFromDownloadUrl(
     request: SkillDownloadInstallRequest,
     app: AppType = "lime",
   ): Promise<SkillMarketplaceInstallResult> {
-    return invokeSkillsCommand<SkillMarketplaceInstallResult>(
-      "install_skill_from_download_url_for_app",
+    const result = await requestSkillAppServer<SkillMarketplaceInstallResult>(
+      METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL,
       {
         app,
-        request,
-      },
+        skillName: request.skillName,
+        downloadUrl: request.downloadUrl,
+      } satisfies SkillDownloadInstallParams,
     );
+    assertSkillMarketplaceInstallResult(METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL, result);
+    return {
+      ...result,
+      inspection: normalizeInspection(result.inspection),
+    };
   },
 
   async inspectRemoteSkill(
     locator: RemoteSkillLocator,
   ): Promise<SkillInspection> {
-    const inspection = await invokeSkillsCommand<SkillInspection>(
-      "inspect_remote_skill",
-      locator,
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_REMOTE_INSPECT,
+      locator satisfies SkillRemoteInspectParams,
     );
-    return normalizeInspection(inspection);
+    assertSkillInspectionResult(METHOD_SKILL_REMOTE_INSPECT, result);
+    return normalizeInspection(result.inspection);
   },
 };

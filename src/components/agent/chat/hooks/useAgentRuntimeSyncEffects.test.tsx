@@ -10,7 +10,7 @@ import {
 import type { AgentThreadTurn } from "../types";
 import { useAgentRuntimeSyncEffects } from "./useAgentRuntimeSyncEffects";
 
-const mockIsDevBridgeAvailable = vi.hoisted(() => vi.fn(() => false));
+const mockIsAppServerBridgeAvailable = vi.hoisted(() => vi.fn(() => false));
 const mockHasDevBridgeEventListenerCapability = vi.hoisted(() =>
   vi.fn(() => false),
 );
@@ -20,9 +20,12 @@ const mockHasDesktopHostEventListenerCapability = vi.hoisted(() =>
 const mockSafeInvoke = vi.hoisted(() => vi.fn());
 const mockSafeListen = vi.hoisted(() => vi.fn(async () => () => {}));
 
+vi.mock("@/lib/api/appServerBridgeAvailability", () => ({
+  isAppServerBridgeAvailable: mockIsAppServerBridgeAvailable,
+}));
+
 vi.mock("@/lib/dev-bridge", () => ({
   hasDevBridgeEventListenerCapability: mockHasDevBridgeEventListenerCapability,
-  isDevBridgeAvailable: mockIsDevBridgeAvailable,
   safeInvoke: mockSafeInvoke,
   safeListen: mockSafeListen,
 }));
@@ -93,7 +96,192 @@ function createAppServerThreadClientMock(): AgentRuntimeAppServerClient {
     }),
     startTurn: vi.fn().mockResolvedValue({}),
     cancelTurn: vi.fn().mockResolvedValue({}),
+    replayAction: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        action: null,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    compactAgentSession: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        compacted: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    resumeAgentSessionThread: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        resumed: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    removeAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        queuedTurnId: "queued-1",
+        removed: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    promoteAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        queuedTurnId: "queued-1",
+        promoted: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     respondAction: vi.fn().mockResolvedValue({}),
+    listAgentSessionFileCheckpoints: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        checkpointCount: 0,
+        checkpoints: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    getAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        checkpoint: {
+          checkpointId: "checkpoint-1",
+          turnId: "turn-1",
+          path: "src/App.tsx",
+          source: "tool_result",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+          validationIssueCount: 0,
+        },
+        livePath: "/tmp/work/src/App.tsx",
+        snapshotPath: "/tmp/work/.lime/checkpoints/checkpoint-1/App.tsx",
+        versionHistory: [],
+        validationIssues: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    diffAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        checkpoint: {
+          checkpointId: "checkpoint-1",
+          turnId: "turn-1",
+          path: "src/App.tsx",
+          source: "tool_result",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+          validationIssueCount: 0,
+        },
+        diff: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    restoreAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        checkpoint: {
+          checkpointId: "checkpoint-1",
+          turnId: "turn-1",
+          path: "src/App.tsx",
+          source: "tool_result",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+          validationIssueCount: 0,
+        },
+        livePath: "src/App.tsx",
+        snapshotPath: ".lime/checkpoints/checkpoint-1/App.tsx",
+        backupPath: null,
+        restoredAt: "2026-06-06T00:00:01.000Z",
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     drainEvents: vi.fn().mockResolvedValue([]),
   };
 }
@@ -164,7 +352,7 @@ describe("useAgentRuntimeSyncEffects", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true;
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-29T00:05:00.000Z"));
-    mockIsDevBridgeAvailable.mockReturnValue(false);
+    mockIsAppServerBridgeAvailable.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(false);
     mockHasDesktopHostEventListenerCapability.mockReturnValue(true);
     mockSafeListen.mockResolvedValue(() => {});
@@ -515,7 +703,7 @@ describe("useAgentRuntimeSyncEffects", () => {
   });
 
   it("浏览器 DevBridge 发送中但无原生事件能力时，应轮询刷新当前会话详情", async () => {
-    mockIsDevBridgeAvailable.mockReturnValue(true);
+    mockIsAppServerBridgeAvailable.mockReturnValue(true);
     mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(false);
 
@@ -549,7 +737,7 @@ describe("useAgentRuntimeSyncEffects", () => {
   });
 
   it("浏览器 DevBridge 已接通事件桥时，不应再轮询刷新当前会话详情", async () => {
-    mockIsDevBridgeAvailable.mockReturnValue(true);
+    mockIsAppServerBridgeAvailable.mockReturnValue(true);
     mockHasDesktopHostEventListenerCapability.mockReturnValue(false);
     mockHasDevBridgeEventListenerCapability.mockReturnValue(true);
 

@@ -22,11 +22,28 @@ async function invokeAgentAppRuntimeCommand<T>(
     result,
     "真实 Agent App runtime current 通道",
   );
+  assertNotErrorEnvelope(command, result);
+  if (isRecord(result) && Array.isArray(result.taskEvents)) {
+    assertNotErrorEnvelope(command, result.taskEvents);
+  }
   return result as T;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object";
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function containsErrorEnvelope(value: unknown): boolean {
+  if (isRecord(value) && "error" in value) {
+    return true;
+  }
+  return Array.isArray(value) && value.some(containsErrorEnvelope);
+}
+
+function assertNotErrorEnvelope(command: string, value: unknown): void {
+  if (containsErrorEnvelope(value)) {
+    throw new Error(`${command} returned an error envelope`);
+  }
 }
 
 function isOptionalString(value: unknown): value is string | undefined {

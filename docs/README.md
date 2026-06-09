@@ -29,6 +29,7 @@
 - 研究、PRD、技术专题：`../internal/research/`、`../internal/prd/`、`../internal/tech/`
 - Electron 打包 / 发布 / updater 规则：`../AGENTS.md`、`../internal/aiprompts/quality-workflow.md`、`../internal/roadmap/appserver/release-updater.md`；current 打包事实源是 `forge.config.mjs` 与 Electron Forge。
 - Rust command 清理规则：`../AGENTS.md`、`../internal/aiprompts/commands.md`、`../internal/roadmap/appserver/README.md`；`lime-rs/src/commands/**` 是旧 Tauri wrapper 清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。新增 Rust 后端能力进入 App Server / RuntimeCore / services，桌面壳能力进入 Electron Desktop Host；旧 wrapper 删不动只能登记 blocker，不能保留 fail-closed stub、tombstone 或 thin facade 当完成态。
+- 前端 DevBridge 治理规则：`../AGENTS.md`、`../internal/aiprompts/commands.md`、`../internal/aiprompts/governance.md`、`../internal/exec-plans/tech-debt-tracker.md`；`src/lib/dev-bridge/**` 不是旧 Rust DevBridge 的整体删除对象，`safeInvoke`、HTTP client、`app_server_handle_json_lines` 和 bridge availability 是 current renderer bridge，旧命令 policy / mock fallback 才是后续治理对象。
 
 ## 维护规则
 

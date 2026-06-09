@@ -10,16 +10,6 @@ use super::config;
 use super::recording_service::{AudioDeviceInfo, RecordingServiceState};
 use tauri::State;
 
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct VoiceShortcutRuntimeStatus {
-    pub shortcut_registered: bool,
-    pub registered_shortcut: Option<String>,
-    pub fn_supported: bool,
-    pub fn_registered: bool,
-    pub fn_fallback_shortcut: Option<String>,
-    pub fn_note: String,
-}
-
 /// 获取所有可用的麦克风设备
 #[command]
 pub async fn list_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
@@ -30,21 +20,6 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
 #[command]
 pub async fn get_voice_input_config() -> Result<VoiceInputConfig, String> {
     config::load_voice_config()
-}
-
-/// 获取语音快捷键运行时状态
-#[command]
-pub async fn get_voice_shortcut_runtime_status() -> Result<VoiceShortcutRuntimeStatus, String> {
-    let fn_status = super::fn_shortcut::runtime_status();
-    Ok(VoiceShortcutRuntimeStatus {
-        shortcut_registered: super::shortcut::is_registered(),
-        registered_shortcut: super::shortcut::get_current(),
-        fn_supported: fn_status.supported,
-        fn_registered: fn_status.registered,
-        fn_fallback_shortcut: super::shortcut::get_current()
-            .or_else(|| Some("CommandOrControl+Shift+V".to_string())),
-        fn_note: fn_status.note,
-    })
 }
 
 /// 保存语音输入配置

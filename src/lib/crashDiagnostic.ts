@@ -33,7 +33,6 @@ import {
   clearInvokeTraceBuffer,
   getInvokeErrorBuffer,
   getInvokeTraceBuffer,
-  safeInvoke,
   type InvokeErrorBufferEntry,
   type InvokeTraceBufferEntry,
 } from "@/lib/dev-bridge";
@@ -729,10 +728,6 @@ export async function copyTextToClipboard(
     return;
   }
 
-  if (await copyTextViaDesktopHostClipboard(text)) {
-    return;
-  }
-
   if (lastError) {
     throw new Error(formatClipboardCopyError(lastError, messages));
   }
@@ -1262,28 +1257,6 @@ export async function openCrashDiagnosticDownloadDirectory(): Promise<OpenDownlo
       { location: getDefaultDownloadDirectoryHint() },
     ),
   );
-}
-
-async function copyTextViaDesktopHostClipboard(text: string): Promise<boolean> {
-  if (!isDesktopRuntime()) {
-    return false;
-  }
-
-  try {
-    const result = await safeInvoke<unknown>("copy_machine_id_to_clipboard", {
-      machineId: text,
-    });
-
-    if (typeof result === "boolean") {
-      return result;
-    }
-    if (typeof result === "object" && result !== null && "success" in result) {
-      return Boolean((result as { success?: boolean }).success);
-    }
-    return Boolean(result);
-  } catch {
-    return false;
-  }
 }
 
 function isDesktopRuntime(): boolean {

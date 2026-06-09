@@ -2,21 +2,15 @@
 //!
 //! 将 HTTP 请求路由到现有的 Tauri 命令函数。
 
-mod agent_apps;
 mod agent_sessions;
-mod app_runtime;
 mod browser;
-mod capability_drafts;
 mod content;
 mod files;
 mod logs;
-mod media_tasks;
 mod memory;
 mod memory_runtime;
 mod models;
 mod project_resources;
-mod providers;
-mod runtime_queries;
 mod skills;
 mod voice;
 mod workspace;
@@ -87,23 +81,11 @@ pub async fn handle_command(
     cmd: &str,
     args: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    if let Some(result) = app_runtime::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
     if let Some(result) = logs::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
     if let Some(result) = files::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = media_tasks::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = providers::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
@@ -119,19 +101,11 @@ pub async fn handle_command(
         return Ok(result);
     }
 
-    if let Some(result) = runtime_queries::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
     if let Some(result) = memory_runtime::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
     if let Some(result) = agent_sessions::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = agent_apps::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
@@ -152,10 +126,6 @@ pub async fn handle_command(
     }
 
     if let Some(result) = skills::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = capability_drafts::try_handle(cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
@@ -439,17 +409,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn voice_shortcut_status_bridge_query_available() {
-        let state = make_test_state();
-        let status_value = handle_command(&state, "get_voice_shortcut_runtime_status", None)
-            .await
-            .unwrap();
-
-        assert!(status_value["shortcut_registered"].is_boolean());
-        assert!(status_value["fn_registered"].is_boolean());
-    }
-
-    #[tokio::test]
     async fn browser_profile_commands_roundtrip() {
         let state = make_test_state();
 
@@ -666,28 +625,46 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn site_adapter_launch_readiness_command_is_bridged() {
+    async fn retired_site_adapter_commands_are_not_dev_bridge_facades() {
         let state = make_test_state();
-
-        let value = handle_command(
-            &state,
+        let cases = [
+            "site_list_adapters",
+            "site_recommend_adapters",
+            "site_search_adapters",
+            "site_get_adapter_info",
             "site_get_adapter_launch_readiness",
-            Some(serde_json::json!({
-                "request": {
-                    "adapter_name": "x/article-export"
-                }
-            })),
-        )
-        .await
-        .unwrap();
+            "site_get_adapter_catalog_status",
+            "site_apply_adapter_catalog_bootstrap",
+            "site_clear_adapter_catalog_cache",
+            "site_import_adapter_yaml_bundle",
+            "site_run_adapter",
+            "site_debug_run_adapter",
+            "site_save_adapter_result",
+        ];
 
-        assert_eq!(value["adapter"], "x/article-export");
-        assert_eq!(value["domain"], "x.com");
-        assert_eq!(value["status"], "requires_browser_runtime");
+        for cmd in cases {
+            let error = handle_command(
+                &state,
+                cmd,
+                Some(serde_json::json!({
+                    "request": {
+                        "adapter_name": "x/article-export"
+                    }
+                })),
+            )
+            .await
+            .expect_err("retired Site Adapter command should not route through Rust DevBridge");
+
+            let error_text = error.to_string();
+            assert!(
+                error_text.contains("[DevBridge] 未知命令"),
+                "command {cmd} should stay retired from Rust DevBridge, got: {error_text}"
+            );
+        }
     }
 
     #[tokio::test]
-    async fn execute_skill_bridge_requires_app_handle_in_test_state() {
+    async fn retired_execute_skill_is_not_a_dev_bridge_facade() {
         let state = make_test_state();
 
         let error = handle_command(
@@ -699,69 +676,50 @@ mod tests {
             })),
         )
         .await
-        .expect_err("execute_skill without app handle should fail");
+        .expect_err("retired execute_skill should not route through Rust DevBridge");
 
-        assert!(error.to_string().contains("Dev Bridge 未持有 AppHandle"));
+        assert!(error.to_string().contains("Unsupported command"));
     }
 
     #[tokio::test]
-    async fn agent_runtime_file_checkpoint_commands_are_bridged() {
+    async fn retired_agent_runtime_checkpoint_queue_replay_commands_are_not_dev_bridge_facades() {
         let state = make_test_state();
         let cases = [
-            (
-                "agent_runtime_list_file_checkpoints",
-                serde_json::json!({
-                    "request": {
-                        "session_id": "session-1"
-                    }
-                }),
-            ),
-            (
-                "agent_runtime_get_file_checkpoint",
-                serde_json::json!({
-                    "request": {
-                        "session_id": "session-1",
-                        "checkpoint_id": "checkpoint-1"
-                    }
-                }),
-            ),
-            (
-                "agent_runtime_diff_file_checkpoint",
-                serde_json::json!({
-                    "request": {
-                        "session_id": "session-1",
-                        "checkpoint_id": "checkpoint-1"
-                    }
-                }),
-            ),
-            (
-                "agent_runtime_restore_file_checkpoint",
-                serde_json::json!({
+            "agent_runtime_list_file_checkpoints",
+            "agent_runtime_get_file_checkpoint",
+            "agent_runtime_diff_file_checkpoint",
+            "agent_runtime_restore_file_checkpoint",
+            "agent_runtime_replay_request",
+            "agent_runtime_promote_queued_turn",
+            "agent_runtime_remove_queued_turn",
+        ];
+
+        for cmd in cases {
+            let error = handle_command(
+                &state,
+                cmd,
+                Some(serde_json::json!({
                     "request": {
                         "session_id": "session-1",
                         "checkpoint_id": "checkpoint-1",
-                        "confirm_restore": true,
-                        "create_backup": true
+                        "request_id": "request-1",
+                        "queued_turn_id": "queued-1"
                     }
-                }),
-            ),
-        ];
-
-        for (cmd, args) in cases {
-            let error = handle_command(&state, cmd, Some(args))
-                .await
-                .expect_err("missing app handle should fail after bridge routing");
+                })),
+            )
+            .await
+            .expect_err("retired P9 residual command should not route through Rust DevBridge");
 
             let error_text = error.to_string();
             assert!(
-                error_text.contains("Dev Bridge 未持有 AppHandle"),
-                "command {cmd} should route into agent_sessions bridge, got: {error_text}"
+                error_text.contains("Unsupported command"),
+                "command {cmd} should stay retired from Rust DevBridge, got: {error_text}"
             );
         }
     }
 
     #[tokio::test]
-    async fn agent_runtime_subagent_control_commands_are_bridged() {
+    async fn retired_public_subagent_commands_are_not_dev_bridge_facades() {
         let state = make_test_state();
         let cases = [
             "agent_runtime_spawn_subagent",
@@ -780,12 +738,12 @@ mod tests {
                 })),
             )
             .await
-            .expect_err("missing app handle should fail after bridge routing");
+            .expect_err("retired public subagent command should not route through Rust DevBridge");
 
             let error_text = error.to_string();
             assert!(
-                error_text.contains("Dev Bridge 未持有 AppHandle"),
-                "command {cmd} should route into agent_sessions bridge, got: {error_text}"
+                error_text.contains("Unsupported command"),
+                "command {cmd} should stay retired from Rust DevBridge, got: {error_text}"
             );
         }
     }
@@ -858,7 +816,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn gateway_channel_status_is_bridged() {
+    async fn retired_gateway_channel_status_is_not_dev_bridge_facade() {
         let state = make_test_state();
 
         let error = handle_command(
@@ -871,19 +829,19 @@ mod tests {
             })),
         )
         .await
-        .expect_err("missing app handle should fail after bridge routing");
+        .expect_err("retired gateway_channel_status command should be unknown");
 
-        assert!(error.to_string().contains("Dev Bridge 未持有 AppHandle"));
+        assert!(error.to_string().contains("[DevBridge] 未知命令"));
     }
 
     #[tokio::test]
-    async fn wechat_channel_list_accounts_is_bridged() {
+    async fn retired_wechat_channel_list_accounts_is_not_dev_bridge_facade() {
         let state = make_test_state();
 
         let error = handle_command(&state, "wechat_channel_list_accounts", None)
             .await
-            .expect_err("missing app handle should fail after bridge routing");
+            .expect_err("retired wechat_channel_list_accounts command should be unknown");
 
-        assert!(error.to_string().contains("Dev Bridge 未持有 AppHandle"));
+        assert!(error.to_string().contains("[DevBridge] 未知命令"));
     }
 }

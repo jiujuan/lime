@@ -75,6 +75,14 @@ const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
   "agentSession/turn/start";
 const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
+const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =
+  "agentSession/fileCheckpoint/list";
+const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET =
+  "agentSession/fileCheckpoint/get";
+const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =
+  "agentSession/fileCheckpoint/diff";
+const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE =
+  "agentSession/fileCheckpoint/restore";
 const APP_SERVER_METHOD_AGENT_SESSION_EVENT = "agentSession/event";
 const FORBIDDEN_AGENT_RUNTIME_SESSION_COMMANDS = new Set([
   "agent_runtime_create_session",
@@ -87,6 +95,10 @@ const FORBIDDEN_AGENT_RUNTIME_CURRENT_METHOD_COMMANDS = new Set([
   ...FORBIDDEN_AGENT_RUNTIME_SESSION_COMMANDS,
   "agent_runtime_submit_turn",
   "agent_runtime_respond_action",
+  "agent_runtime_list_file_checkpoints",
+  "agent_runtime_get_file_checkpoint",
+  "agent_runtime_diff_file_checkpoint",
+  "agent_runtime_restore_file_checkpoint",
 ]);
 const WORKSPACE_HARNESS_DEBUG_OVERRIDE_KEY =
   "lime:debug:workspace-harness-enabled:v1";
@@ -1377,6 +1389,41 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
           message.id,
           buildAppServerSessionReadFixture(fixture),
         );
+      case APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST: {
+        const nowIso = new Date().toISOString();
+        return buildAppServerJsonRpcResult(message.id, {
+          sessionId: CODE_FIXTURE_SESSION_ID,
+          threadId: CODE_FIXTURE_THREAD_ID,
+          checkpointCount: 1,
+          checkpoints: [buildCodeRuntimeFileCheckpointSummary(nowIso)],
+        });
+      }
+      case APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET:
+        return buildAppServerJsonRpcResult(
+          message.id,
+          buildCodeRuntimeFileCheckpointDetail(),
+        );
+      case APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF:
+        return buildAppServerJsonRpcResult(
+          message.id,
+          buildCodeRuntimeFileCheckpointDiff(),
+        );
+      case APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE: {
+        restoreFileCheckpointRequests.push(params);
+        if (restoreFileCheckpointRequests.length > 20) {
+          restoreFileCheckpointRequests.shift();
+        }
+        const nowIso = new Date().toISOString();
+        return buildAppServerJsonRpcResult(message.id, {
+          sessionId: CODE_FIXTURE_SESSION_ID,
+          threadId: CODE_FIXTURE_THREAD_ID,
+          checkpoint: buildCodeRuntimeFileCheckpointSummary(nowIso),
+          livePath: CODE_FIXTURE_SOURCE_FILE_PATH,
+          snapshotPath: CODE_FIXTURE_CHECKPOINT_SNAPSHOT_PATH,
+          backupPath: CODE_FIXTURE_RESTORE_BACKUP_PATH,
+          restoredAt: nowIso,
+        });
+      }
       case APP_SERVER_METHOD_AGENT_SESSION_TURN_START: {
         const turnParams = params && typeof params === "object" ? params : {};
         const submitRequest = {
@@ -1605,7 +1652,7 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
       });
       return;
     }
-    if (command === "aster_agent_init" || command === "aster_agent_status") {
+    if (command === "aster_agent_init") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1629,66 +1676,6 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
           error: {
             code: "legacy_agent_runtime_current_method_command",
             message: `${command} 已下线，本 smoke 必须走 agentSession/* App Server JSON-RPC current 方法`,
-          },
-        }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_list_file_checkpoints") {
-      const nowIso = new Date().toISOString();
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          result: {
-            session_id: CODE_FIXTURE_SESSION_ID,
-            thread_id: CODE_FIXTURE_THREAD_ID,
-            checkpoint_count: 1,
-            checkpoints: [buildCodeRuntimeFileCheckpointSummary(nowIso)],
-          },
-        }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_get_file_checkpoint") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          result: buildCodeRuntimeFileCheckpointDetail(),
-        }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_diff_file_checkpoint") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          result: buildCodeRuntimeFileCheckpointDiff(),
-        }),
-      });
-      return;
-    }
-    if (command === "agent_runtime_restore_file_checkpoint") {
-      const request = args?.request ?? null;
-      restoreFileCheckpointRequests.push(request);
-      if (restoreFileCheckpointRequests.length > 20) {
-        restoreFileCheckpointRequests.shift();
-      }
-      const nowIso = new Date().toISOString();
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          result: {
-            session_id: CODE_FIXTURE_SESSION_ID,
-            thread_id: CODE_FIXTURE_THREAD_ID,
-            checkpoint: buildCodeRuntimeFileCheckpointSummary(nowIso),
-            live_path: CODE_FIXTURE_SOURCE_FILE_PATH,
-            snapshot_path: CODE_FIXTURE_CHECKPOINT_SNAPSHOT_PATH,
-            backup_path: CODE_FIXTURE_RESTORE_BACKUP_PATH,
-            restored_at: nowIso,
           },
         }),
       });
@@ -2552,10 +2539,10 @@ function isExpectedPlainCodeRuntimeQueuedSubmitRequest(request) {
 
 function isExpectedFileCheckpointRestoreRequest(request) {
   return (
-    request?.session_id === CODE_FIXTURE_SESSION_ID &&
-    request?.checkpoint_id === CODE_FIXTURE_CHECKPOINT_ID &&
-    request?.confirm_restore === true &&
-    request?.create_backup === true
+    request?.sessionId === CODE_FIXTURE_SESSION_ID &&
+    request?.checkpointId === CODE_FIXTURE_CHECKPOINT_ID &&
+    request?.confirmRestore === true &&
+    request?.createBackup === true
   );
 }
 

@@ -4,6 +4,35 @@ import {
   type AgentRuntimeAppServerClient,
 } from "./clientFactory";
 
+const appServerCheckpointSummary = {
+  checkpointId: "checkpoint-1",
+  turnId: "turn-1",
+  path: "src/App.tsx",
+  source: "tool_result",
+  updatedAt: "2026-06-06T00:00:00.000Z",
+  validationIssueCount: 0,
+};
+
+const appServerManagedObjective = {
+  objectiveId: "objective-1",
+  workspaceId: "workspace-1",
+  ownerKind: "agent_session",
+  ownerId: "session-1",
+  objectiveText: "完成生产命令 current 迁移",
+  successCriteria: ["前端网关 fail closed"],
+  status: "active",
+  budgetPolicy: null,
+  riskPolicy: null,
+  approvalPolicy: null,
+  continuationPolicy: null,
+  lastAuditSummary: null,
+  lastEvidencePackRef: null,
+  lastArtifactRefs: [],
+  blockerReason: null,
+  createdAt: "2026-06-06T00:00:00.000Z",
+  updatedAt: "2026-06-06T00:00:00.000Z",
+};
+
 function appServerClientMock(): AgentRuntimeAppServerClient {
   return {
     startSession: vi.fn().mockResolvedValue({
@@ -135,7 +164,255 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
     }),
     startTurn: vi.fn().mockResolvedValue({}),
     cancelTurn: vi.fn().mockResolvedValue({}),
+    replayAction: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        action: {
+          type: "action_required",
+          requestId: "request-1",
+          actionType: "ask_user",
+          prompt: "请选择执行模式",
+          scope: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+          },
+        },
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    compactAgentSession: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        compacted: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    resumeAgentSessionThread: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        resumed: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    removeAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        queuedTurnId: "queued-1",
+        removed: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    promoteAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        queuedTurnId: "queued-1",
+        promoted: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     respondAction: vi.fn().mockResolvedValue({}),
+    listAgentSessionFileCheckpoints: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        checkpointCount: 1,
+        checkpoints: [appServerCheckpointSummary],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    getAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        checkpoint: appServerCheckpointSummary,
+        livePath: "/tmp/work/src/App.tsx",
+        snapshotPath: "/tmp/work/.lime/checkpoints/checkpoint-1/App.tsx",
+        versionHistory: [],
+        validationIssues: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    diffAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        checkpoint: appServerCheckpointSummary,
+        diff: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    restoreAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        checkpoint: appServerCheckpointSummary,
+        livePath: "src/App.tsx",
+        snapshotPath: ".lime/checkpoints/checkpoint-1/App.tsx",
+        backupPath: null,
+        restoredAt: "2026-06-06T00:00:01.000Z",
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    readAgentSessionObjective: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        objective: appServerManagedObjective,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    setAgentSessionObjective: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        objective: appServerManagedObjective,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    updateAgentSessionObjectiveStatus: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        objective: appServerManagedObjective,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    clearAgentSessionObjective: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        cleared: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    continueAgentSessionObjective: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        submitted: true,
+        queuedTurnId: "queued-1",
+        objective: appServerManagedObjective,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    auditAgentSessionObjective: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        objective: appServerManagedObjective,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     exportEvidence: vi.fn().mockResolvedValue({
       id: 1,
       result: {
@@ -174,46 +451,209 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
+    exportHandoffBundle: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+        workspaceRoot: "/tmp/work",
+        bundleRelativeRoot: ".lime/harness/sessions/session-1",
+        bundleAbsoluteRoot: "/tmp/work/.lime/harness/sessions/session-1",
+        exportedAt: "2026-06-06T00:00:06.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 1,
+        queuedTurnCount: 0,
+        activeSubagentCount: 0,
+        todoTotal: 0,
+        todoPending: 0,
+        todoInProgress: 0,
+        todoCompleted: 0,
+        artifacts: [
+          {
+            kind: "handoff",
+            title: "handoff.md",
+            relativePath: ".lime/harness/sessions/session-1/handoff.md",
+            absolutePath:
+              "/tmp/work/.lime/harness/sessions/session-1/handoff.md",
+            bytes: 128,
+          },
+        ],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    exportReplayCase: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+        workspaceRoot: "/tmp/work",
+        replayRelativeRoot: ".lime/harness/sessions/session-1/replay",
+        replayAbsoluteRoot: "/tmp/work/.lime/harness/sessions/session-1/replay",
+        handoffBundleRelativeRoot: ".lime/harness/sessions/session-1",
+        evidencePackRelativeRoot: ".lime/harness/sessions/session-1/evidence",
+        exportedAt: "2026-06-06T00:00:07.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 1,
+        queuedTurnCount: 0,
+        linkedHandoffArtifactCount: 1,
+        linkedEvidenceArtifactCount: 1,
+        recentArtifactCount: 0,
+        artifacts: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    exportAnalysisHandoff: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+        workspaceRoot: "/tmp/work",
+        sanitizedWorkspaceRoot: "/tmp/work",
+        analysisRelativeRoot: ".lime/harness/sessions/session-1/analysis",
+        analysisAbsoluteRoot:
+          "/tmp/work/.lime/harness/sessions/session-1/analysis",
+        handoffBundleRelativeRoot: ".lime/harness/sessions/session-1",
+        evidencePackRelativeRoot: ".lime/harness/sessions/session-1/evidence",
+        replayCaseRelativeRoot: ".lime/harness/sessions/session-1/replay",
+        exportedAt: "2026-06-06T00:00:08.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 1,
+        queuedTurnCount: 0,
+        title: "analysis",
+        copyPrompt: "review",
+        artifacts: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    exportReviewDecisionTemplate: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+        workspaceRoot: "/tmp/work",
+        reviewRelativeRoot: ".lime/harness/sessions/session-1/review",
+        reviewAbsoluteRoot: "/tmp/work/.lime/harness/sessions/session-1/review",
+        analysisRelativeRoot: ".lime/harness/sessions/session-1/analysis",
+        analysisAbsoluteRoot:
+          "/tmp/work/.lime/harness/sessions/session-1/analysis",
+        handoffBundleRelativeRoot: ".lime/harness/sessions/session-1",
+        evidencePackRelativeRoot: ".lime/harness/sessions/session-1/evidence",
+        replayCaseRelativeRoot: ".lime/harness/sessions/session-1/replay",
+        exportedAt: "2026-06-06T00:00:09.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 1,
+        queuedTurnCount: 0,
+        title: "review",
+        defaultDecisionStatus: "pending_review",
+        decision: {
+          decisionStatus: "pending_review",
+          riskLevel: "unknown",
+          riskTags: [],
+          followupActions: [],
+          regressionRequirements: [],
+        },
+        decisionStatusOptions: ["pending_review"],
+        riskLevelOptions: ["unknown"],
+        reviewChecklist: [],
+        analysisArtifacts: [],
+        artifacts: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    saveReviewDecision: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+        workspaceRoot: "/tmp/work",
+        reviewRelativeRoot: ".lime/harness/sessions/session-1/review",
+        reviewAbsoluteRoot: "/tmp/work/.lime/harness/sessions/session-1/review",
+        analysisRelativeRoot: ".lime/harness/sessions/session-1/analysis",
+        analysisAbsoluteRoot:
+          "/tmp/work/.lime/harness/sessions/session-1/analysis",
+        handoffBundleRelativeRoot: ".lime/harness/sessions/session-1",
+        evidencePackRelativeRoot: ".lime/harness/sessions/session-1/evidence",
+        replayCaseRelativeRoot: ".lime/harness/sessions/session-1/replay",
+        exportedAt: "2026-06-06T00:00:10.000Z",
+        threadStatus: "running",
+        pendingRequestCount: 1,
+        queuedTurnCount: 0,
+        title: "review",
+        defaultDecisionStatus: "pending_review",
+        decision: {
+          decisionStatus: "accepted",
+          riskLevel: "low",
+          riskTags: [],
+          followupActions: [],
+          regressionRequirements: [],
+        },
+        decisionStatusOptions: ["accepted"],
+        riskLevelOptions: ["low"],
+        reviewChecklist: [],
+        analysisArtifacts: [],
+        artifacts: [],
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     drainEvents: vi.fn().mockResolvedValue([]),
   };
 }
 
 describe("agentRuntime clientFactory", () => {
-  it("传入 invoke 时应同时驱动 command 与 bridge client", async () => {
-    const siteAdapter = {
-      name: "adapter-1",
-      domain: "example.com",
-      description: "示例站点适配器",
-      read_only: true,
-      capabilities: ["extract"],
-      input_schema: { type: "object" },
-      example_args: {},
-      example: "读取示例站点",
-    };
-    const invoke = vi
-      .fn()
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce([siteAdapter]);
-    const client = createAgentRuntimeClient({ invoke });
+  it("传入 invoke 时 queue/session control 应走 App Server current，retired site adapter 仍 fail-closed", async () => {
+    const invoke = vi.fn();
+    const appServerClient = appServerClientMock();
+    const client = createAgentRuntimeClient({ invoke, appServerClient });
 
     await expect(
       client.resumeAgentRuntimeThread({
         session_id: "session-1",
       }),
     ).resolves.toBe(true);
-    await expect(client.siteListAdapters()).resolves.toEqual([siteAdapter]);
+    await expect(client.siteListAdapters()).rejects.toThrow(
+      "site_list_adapters is retired until Site Adapter moves to App Server current methods",
+    );
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "agent_runtime_resume_thread", {
-      request: {
-        session_id: "session-1",
-      },
+    expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
+      sessionId: "session-1",
     });
-    expect(invoke).toHaveBeenNthCalledWith(2, "site_list_adapters");
+    expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("仅注入 bridgeInvoke 时非 lifecycle command client 也应复用同一桥接函数", async () => {
+  it("仅注入 bridgeInvoke 时 queue/session control 不应回退到 legacy bridgeInvoke", async () => {
     const bridgeInvoke = vi.fn().mockResolvedValueOnce(true);
-    const client = createAgentRuntimeClient({ bridgeInvoke });
+    const appServerClient = appServerClientMock();
+    const client = createAgentRuntimeClient({ bridgeInvoke, appServerClient });
 
     await expect(
       client.resumeAgentRuntimeThread({
@@ -221,11 +661,10 @@ describe("agentRuntime clientFactory", () => {
       }),
     ).resolves.toBe(true);
 
-    expect(bridgeInvoke).toHaveBeenCalledWith("agent_runtime_resume_thread", {
-      request: {
-        session_id: "session-1",
-      },
+    expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
+      sessionId: "session-1",
     });
+    expect(bridgeInvoke).not.toHaveBeenCalled();
   });
 
   it("session create/list/get 应走同一个 App Server client，不复用 legacy bridgeInvoke", async () => {
@@ -418,6 +857,30 @@ describe("agentRuntime clientFactory", () => {
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });
 
+  it("file checkpoint 应走 App Server client，不复用 legacy bridgeInvoke", async () => {
+    const appServerClient = appServerClientMock();
+    const bridgeInvoke = vi.fn();
+    const client = createAgentRuntimeClient({
+      appServerClient,
+      bridgeInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.listAgentRuntimeFileCheckpoints({ session_id: "session-1" }),
+    ).resolves.toMatchObject({
+      session_id: "session-1",
+      checkpoint_count: 1,
+    });
+
+    expect(appServerClient.listAgentSessionFileCheckpoints).toHaveBeenCalledWith(
+      {
+        sessionId: "session-1",
+      },
+    );
+    expect(bridgeInvoke).not.toHaveBeenCalled();
+  });
+
   it("evidence pack export 应走 App Server client，不复用 legacy bridgeInvoke", async () => {
     const appServerClient = appServerClientMock();
     const bridgeInvoke = vi.fn();
@@ -440,6 +903,29 @@ describe("agentRuntime clientFactory", () => {
       includeEvents: true,
       includeArtifacts: true,
       includeEvidencePack: true,
+    });
+    expect(bridgeInvoke).not.toHaveBeenCalled();
+  });
+
+  it("handoff bundle export 应走 App Server client，不复用 legacy bridgeInvoke", async () => {
+    const appServerClient = appServerClientMock();
+    const bridgeInvoke = vi.fn();
+    const client = createAgentRuntimeClient({
+      appServerClient,
+      bridgeInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.exportAgentRuntimeHandoffBundle("session-1"),
+    ).resolves.toMatchObject({
+      session_id: "session-1",
+      thread_id: "thread-1",
+      bundle_relative_root: ".lime/harness/sessions/session-1",
+    });
+
+    expect(appServerClient.exportHandoffBundle).toHaveBeenCalledWith({
+      sessionId: "session-1",
     });
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });

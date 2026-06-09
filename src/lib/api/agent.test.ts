@@ -26,9 +26,17 @@ vi.mock("@/lib/electron-host", () => ({
 }));
 
 import {
+  APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY,
   APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+  APP_SERVER_METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+  APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
+  APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
   APP_SERVER_METHOD_AGENT_SESSION_READ,
+  APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
+  APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
+  APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   APP_SERVER_METHOD_AGENT_SESSION_START,
+  APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME,
   APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
@@ -44,7 +52,6 @@ import {
   exportAgentRuntimeReplayCase,
   exportAgentRuntimeReviewDecisionTemplate,
   saveAgentRuntimeReviewDecision,
-  getAsterAgentStatus,
   generateAgentRuntimeTitleResult,
   generateAgentRuntimeTitle,
   generateAgentRuntimeSessionTitle,
@@ -69,10 +76,18 @@ function line(value: unknown): string {
   return `${JSON.stringify(value)}\n`;
 }
 
-const appServerResponseQueue: unknown[] = [];
+type AppServerMockEnvelope =
+  | { result: unknown }
+  | { error: { code: number; message: string; data?: unknown } };
+
+const appServerResponseQueue: AppServerMockEnvelope[] = [];
 
 function mockAppServerResponse(result: unknown): void {
-  appServerResponseQueue.push(result);
+  appServerResponseQueue.push({ result });
+}
+
+function mockAppServerError(message: string, code = -32000): void {
+  appServerResponseQueue.push({ error: { code, message } });
 }
 
 function installAppServerMock(): void {
@@ -84,7 +99,7 @@ function installAppServerMock(): void {
       return undefined;
     }
 
-    const result = appServerResponseQueue.shift();
+    const envelope = appServerResponseQueue.shift();
     const requestLine = args?.request?.lines?.[0];
     const request =
       typeof requestLine === "string"
@@ -95,7 +110,7 @@ function installAppServerMock(): void {
       lines: [
         line({
           id: request.id,
-          result,
+          ...(envelope ?? { result: undefined }),
         }),
       ],
     };
@@ -161,22 +176,6 @@ describe("Agent API 治理护栏", () => {
           runStartHooks: false,
         },
       },
-    });
-  });
-
-  it("getAsterAgentStatus 应返回现役状态结构", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      initialized: true,
-      provider_configured: true,
-      provider_name: "Anthropic",
-      model_name: "claude-sonnet-4-20250514",
-    });
-
-    await expect(getAsterAgentStatus()).resolves.toEqual({
-      initialized: true,
-      provider_configured: true,
-      provider_name: "Anthropic",
-      model_name: "claude-sonnet-4-20250514",
     });
   });
 
@@ -470,8 +469,19 @@ describe("Agent API 治理护栏", () => {
     });
   });
 
-  it("resumeAgentRuntimeThread 应走统一 runtime resume 命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(true);
+  it("resumeAgentRuntimeThread 应经 Electron IPC 调 App Server thread/resume", async () => {
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime-resume",
+        threadId: "thread-runtime-resume",
+        appId: "agent-chat",
+        status: "running",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+      },
+      turns: [],
+      resumed: true,
+    });
 
     await expect(
       resumeAgentRuntimeThread({
@@ -479,19 +489,19 @@ describe("Agent API 治理护栏", () => {
       }),
     ).resolves.toBe(true);
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith("agent_runtime_resume_thread", {
-      request: {
-        session_id: "session-runtime-resume",
-      },
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME, {
+      sessionId: "session-runtime-resume",
     });
   });
 
-  it("replayAgentRuntimeRequest 应走统一 runtime replay 命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      type: "action_required",
-      request_id: "req-runtime-replay",
-      action_type: "ask_user",
-      prompt: "请选择执行模式",
+  it("replayAgentRuntimeRequest 应经 Electron IPC 调 App Server action/replay", async () => {
+    mockAppServerResponse({
+      action: {
+        type: "action_required",
+        requestId: "req-runtime-replay",
+        actionType: "ask_user",
+        prompt: "请选择执行模式",
+      },
     });
 
     await expect(
@@ -502,17 +512,13 @@ describe("Agent API 治理护栏", () => {
     ).resolves.toMatchObject({
       request_id: "req-runtime-replay",
       action_type: "ask_user",
+      prompt: "请选择执行模式",
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_replay_request",
-      {
-        request: {
-          session_id: "session-runtime-replay",
-          request_id: "req-runtime-replay",
-        },
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY, {
+      sessionId: "session-runtime-replay",
+      requestId: "req-runtime-replay",
+    });
   });
 
   it("getAgentRuntimeThreadRead 应经 Electron IPC 调 App Server session/read 并归一化 queued_turns", async () => {
@@ -569,8 +575,8 @@ describe("Agent API 治理护栏", () => {
     });
   });
 
-  it("exportAgentRuntimeReplayCase 应走统一 runtime replay case 命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
+  it("exportAgentRuntimeReplayCase 应经 Electron IPC 调 App Server replayCase/export", async () => {
+    mockAppServerResponse({
       sessionId: "session-runtime-replay-case",
       threadId: "thread-runtime-replay-case",
       workspaceRoot: "/tmp/workspace",
@@ -600,16 +606,25 @@ describe("Agent API 治理护栏", () => {
       linked_handoff_artifact_count: 4,
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_export_replay_case",
-      {
-        sessionId: "session-runtime-replay-case",
-      },
-    );
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, {
+      sessionId: "session-runtime-replay-case",
+    });
   });
 
-  it("promoteAgentRuntimeQueuedTurn 应走统一 runtime promote 命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce(true);
+  it("promoteAgentRuntimeQueuedTurn 应经 Electron IPC 调 App Server queuedTurn/promote", async () => {
+    mockAppServerResponse({
+      session: {
+        sessionId: "session-runtime",
+        threadId: "thread-runtime",
+        appId: "agent-chat",
+        status: "running",
+        createdAt: "2026-06-06T00:00:00.000Z",
+        updatedAt: "2026-06-06T00:00:01.000Z",
+      },
+      turns: [],
+      queuedTurnId: "queued-turn-2",
+      promoted: true,
+    });
 
     await expect(
       promoteAgentRuntimeQueuedTurn({
@@ -618,13 +633,12 @@ describe("Agent API 治理护栏", () => {
       }),
     ).resolves.toBe(true);
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_promote_queued_turn",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
       {
-        request: {
-          session_id: "session-runtime",
-          queued_turn_id: "queued-turn-2",
-        },
+        sessionId: "session-runtime",
+        queuedTurnId: "queued-turn-2",
       },
     );
   });
@@ -1072,8 +1086,8 @@ describe("Agent API 治理护栏", () => {
     expect(errorDebugCall?.[3]).toMatchObject({ level: "warn" });
   });
 
-  it("exportAgentRuntimeHandoffBundle 应走统一 runtime handoff 导出命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
+  it("exportAgentRuntimeHandoffBundle 应经 Electron IPC 调 App Server handoffBundle/export", async () => {
+    mockAppServerResponse({
       sessionId: "session-runtime-3",
       threadId: "thread-runtime-3",
       workspaceRoot: "/tmp/workspace-3",
@@ -1116,8 +1130,9 @@ describe("Agent API 治理护栏", () => {
       ],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_export_handoff_bundle",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
       {
         sessionId: "session-runtime-3",
       },
@@ -1218,8 +1233,8 @@ describe("Agent API 治理护栏", () => {
     });
   });
 
-  it("exportAgentRuntimeAnalysisHandoff 应兼容 camelCase / snake_case 并走统一 analysis 导出命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
+  it("exportAgentRuntimeAnalysisHandoff 应兼容 camelCase / snake_case 并经 App Server 导出", async () => {
+    mockAppServerResponse({
       sessionId: "session-runtime-4a",
       threadId: "thread-runtime-4a",
       workspaceRoot: "/tmp/workspace-4a",
@@ -1268,16 +1283,17 @@ describe("Agent API 治理护栏", () => {
       ],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_export_analysis_handoff",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
       {
         sessionId: "session-runtime-4a",
       },
     );
   });
 
-  it("exportAgentRuntimeReviewDecisionTemplate 应兼容 camelCase / snake_case 并走统一 review decision 导出命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
+  it("exportAgentRuntimeReviewDecisionTemplate 应兼容 camelCase / snake_case 并经 App Server 导出", async () => {
+    mockAppServerResponse({
       sessionId: "session-runtime-4b",
       threadId: "thread-runtime-4b",
       workspaceRoot: "/tmp/workspace-4b",
@@ -1463,16 +1479,17 @@ describe("Agent API 治理护栏", () => {
       ],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_export_review_decision_template",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
       {
         sessionId: "session-runtime-4b",
       },
     );
   });
 
-  it("saveAgentRuntimeReviewDecision 应走统一 review decision 保存命令并归一化返回结构", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
+  it("saveAgentRuntimeReviewDecision 应经 App Server 保存并归一化返回结构", async () => {
+    mockAppServerResponse({
       sessionId: "session-runtime-4c",
       threadId: "thread-runtime-4c",
       workspaceRoot: "/tmp/workspace-4c",
@@ -1602,31 +1619,27 @@ describe("Agent API 治理护栏", () => {
       ],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_save_review_decision",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
       {
-        request: {
-          session_id: "session-runtime-4c",
-          decision_status: "accepted",
-          decision_summary: "确认最小修复可接受。",
-          chosen_fix_strategy: "先收口 runtime 命令，再补 UI 回归。",
-          risk_level: "medium",
-          risk_tags: ["runtime", "ui"],
-          human_reviewer: "Lime Maintainer",
-          reviewed_at: "2026-03-27T10:25:00Z",
-          followup_actions: ["补充 HarnessStatusPanel 测试"],
-          regression_requirements: ["npm run test:contracts"],
-          notes: "保持 review decision 主链单一。",
-        },
+        sessionId: "session-runtime-4c",
+        decisionStatus: "accepted",
+        decisionSummary: "确认最小修复可接受。",
+        chosenFixStrategy: "先收口 runtime 命令，再补 UI 回归。",
+        riskLevel: "medium",
+        riskTags: ["runtime", "ui"],
+        humanReviewer: "Lime Maintainer",
+        followupActions: ["补充 HarnessStatusPanel 测试"],
+        regressionRequirements: ["npm run test:contracts"],
+        notes: "保持 review decision 主链单一。",
       },
     );
   });
 
   it("saveAgentRuntimeReviewDecision 应透传 denied 权限确认阻止 accepted 的后端错误", async () => {
-    mockSafeInvoke.mockRejectedValueOnce(
-      new Error(
-        "真实权限确认已被拒绝，不能把本次 review decision 保存为 accepted；请先处理真实权限确认，或改为 rejected / deferred / needs_more_evidence。",
-      ),
+    mockAppServerError(
+      "真实权限确认已被拒绝，不能把本次 review decision 保存为 accepted；请先处理真实权限确认，或改为 rejected / deferred / needs_more_evidence。",
     );
 
     await expect(
@@ -1645,22 +1658,27 @@ describe("Agent API 治理护栏", () => {
       }),
     ).rejects.toThrow("真实权限确认已被拒绝");
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_save_review_decision",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
       {
-        request: expect.objectContaining({
-          session_id: "session-runtime-4d",
-          decision_status: "accepted",
-        }),
+        sessionId: "session-runtime-4d",
+        decisionStatus: "accepted",
+        decisionSummary: "错误接受被拒绝的权限确认。",
+        chosenFixStrategy: "直接接受。",
+        riskLevel: "low",
+        riskTags: ["permission"],
+        humanReviewer: "Lime Maintainer",
+        followupActions: [],
+        regressionRequirements: [],
+        notes: "",
       },
     );
   });
 
   it("saveAgentRuntimeReviewDecision 应透传用户锁定能力缺口阻止 accepted 的后端错误", async () => {
-    mockSafeInvoke.mockRejectedValueOnce(
-      new Error(
-        "显式用户模型锁定不满足当前 execution profile（capabilityGap=browser_reasoning_candidate_missing），不能把本次 review decision 保存为 accepted；请切换到满足 routingSlot 的模型或取消显式模型锁定并重新导出证据，或改为 rejected / deferred / needs_more_evidence。",
-      ),
+    mockAppServerError(
+      "显式用户模型锁定不满足当前 execution profile（capabilityGap=browser_reasoning_candidate_missing），不能把本次 review decision 保存为 accepted；请切换到满足 routingSlot 的模型或取消显式模型锁定并重新导出证据，或改为 rejected / deferred / needs_more_evidence。",
     );
 
     await expect(
@@ -1679,13 +1697,20 @@ describe("Agent API 治理护栏", () => {
       }),
     ).rejects.toThrow("显式用户模型锁定");
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_save_review_decision",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
       {
-        request: expect.objectContaining({
-          session_id: "session-runtime-4e",
-          decision_status: "accepted",
-        }),
+        sessionId: "session-runtime-4e",
+        decisionStatus: "accepted",
+        decisionSummary: "错误接受模型锁定能力缺口。",
+        chosenFixStrategy: "直接接受。",
+        riskLevel: "low",
+        riskTags: ["model-routing"],
+        humanReviewer: "Lime Maintainer",
+        followupActions: [],
+        regressionRequirements: [],
+        notes: "",
       },
     );
   });
@@ -2009,144 +2034,34 @@ describe("Agent API 治理护栏", () => {
     expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 
-  it("subagent 控制面 helper 应走统一 runtime 命令", async () => {
-    mockSafeInvoke
-      .mockResolvedValueOnce({
-        agent_id: "subagent-session-1",
-        nickname: "Image #1",
-      })
-      .mockResolvedValueOnce({
-        submission_id: "queued-subagent-1",
-      })
-      .mockResolvedValueOnce({
-        status: {
-          "subagent-session-1": {
-            session_id: "subagent-session-1",
-            kind: "completed",
-          },
-        },
-        timed_out: false,
-      })
-      .mockResolvedValueOnce({
-        status: {
-          session_id: "subagent-session-1",
-          kind: "idle",
-        },
-        cascade_session_ids: ["subagent-session-1", "subagent-child-1"],
-        changed_session_ids: ["subagent-session-1", "subagent-child-1"],
-      })
-      .mockResolvedValueOnce({
-        previous_status: {
-          session_id: "subagent-session-1",
-          kind: "running",
-        },
-        cascade_session_ids: ["subagent-session-1", "subagent-child-1"],
-        changed_session_ids: ["subagent-session-1", "subagent-child-1"],
-      });
-
+  it("subagent 控制面 helper 没有 current method 时应 fail closed", async () => {
     await expect(
       spawnAgentRuntimeSubagent({
         parent_session_id: "session-runtime-parent",
         message: "处理 Image #1",
         agent_type: "image_editor",
       }),
-    ).resolves.toEqual({
-      agent_id: "subagent-session-1",
-      nickname: "Image #1",
-    });
+    ).rejects.toThrow("agent_runtime_spawn_subagent is retired");
     await expect(
       sendAgentRuntimeSubagentInput({
         id: "subagent-session-1",
         message: "继续优化导出尺寸",
         interrupt: true,
       }),
-    ).resolves.toEqual({
-      submission_id: "queued-subagent-1",
-    });
+    ).rejects.toThrow("agent_runtime_send_subagent_input is retired");
     await expect(
       waitAgentRuntimeSubagents({
         ids: ["subagent-session-1"],
         timeout_ms: 12000,
       }),
-    ).resolves.toEqual({
-      status: {
-        "subagent-session-1": {
-          session_id: "subagent-session-1",
-          kind: "completed",
-        },
-      },
-      timed_out: false,
-    });
+    ).rejects.toThrow("agent_runtime_wait_subagents is retired");
     await expect(
       resumeAgentRuntimeSubagent({ id: "subagent-session-1" }),
-    ).resolves.toEqual({
-      status: {
-        session_id: "subagent-session-1",
-        kind: "idle",
-      },
-      cascade_session_ids: ["subagent-session-1", "subagent-child-1"],
-      changed_session_ids: ["subagent-session-1", "subagent-child-1"],
-    });
+    ).rejects.toThrow("agent_runtime_resume_subagent is retired");
     await expect(
       closeAgentRuntimeSubagent({ id: "subagent-session-1" }),
-    ).resolves.toEqual({
-      previous_status: {
-        session_id: "subagent-session-1",
-        kind: "running",
-      },
-      cascade_session_ids: ["subagent-session-1", "subagent-child-1"],
-      changed_session_ids: ["subagent-session-1", "subagent-child-1"],
-    });
+    ).rejects.toThrow("agent_runtime_close_subagent is retired");
 
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      1,
-      "agent_runtime_spawn_subagent",
-      {
-        request: {
-          parent_session_id: "session-runtime-parent",
-          message: "处理 Image #1",
-          agent_type: "image_editor",
-        },
-      },
-    );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      2,
-      "agent_runtime_send_subagent_input",
-      {
-        request: {
-          id: "subagent-session-1",
-          message: "继续优化导出尺寸",
-          interrupt: true,
-        },
-      },
-    );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      3,
-      "agent_runtime_wait_subagents",
-      {
-        request: {
-          ids: ["subagent-session-1"],
-          timeout_ms: 12000,
-        },
-      },
-    );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      4,
-      "agent_runtime_resume_subagent",
-      {
-        request: {
-          id: "subagent-session-1",
-        },
-      },
-    );
-    expect(mockSafeInvoke).toHaveBeenNthCalledWith(
-      5,
-      "agent_runtime_close_subagent",
-      {
-        request: {
-          id: "subagent-session-1",
-        },
-      },
-    );
+    expect(mockSafeInvoke).not.toHaveBeenCalled();
   });
 });

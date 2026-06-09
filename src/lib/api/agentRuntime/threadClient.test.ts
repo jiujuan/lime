@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   APP_SERVER_METHOD_AGENT_SESSION_EVENT,
   AppServerRpcError,
+  type AppServerRequestResult,
 } from "@/lib/api/appServer";
-import { isDevBridgeAvailable, safeListen } from "@/lib/dev-bridge";
-import { isElectronHostCommandAvailable } from "@/lib/electron-host";
+import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
+import { safeListen } from "@/lib/dev-bridge";
 import { listenAgentRuntimeEvent } from "../agentRuntimeEvents";
 import {
   appServerActionRespondParamsFromRequest,
@@ -20,18 +21,16 @@ import type {
   AgentRuntimeFileCheckpointListResult,
   AgentRuntimeFileCheckpointRestoreResult,
   AgentRuntimeFileCheckpointSummary,
-  AgentRuntimeReplayedActionRequiredView,
   AgentRuntimeSubmitTurnRequest,
 } from "./types";
 
 vi.mock("@/lib/dev-bridge", () => ({
-  isDevBridgeAvailable: vi.fn(),
   safeInvoke: vi.fn(),
   safeListen: vi.fn(),
 }));
 
-vi.mock("@/lib/electron-host", () => ({
-  isElectronHostCommandAvailable: vi.fn(),
+vi.mock("@/lib/api/appServerBridgeAvailability", () => ({
+  isAppServerBridgeAvailable: vi.fn(),
 }));
 
 function appServerClientMock(): AgentRuntimeAppServerClient {
@@ -68,10 +67,192 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
     }),
     startTurn: vi.fn().mockResolvedValue({}),
     cancelTurn: vi.fn().mockResolvedValue({}),
+    replayAction: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        action: {
+          type: "action_required",
+          requestId: "request-1",
+          actionType: "ask_user",
+          prompt: "请选择执行模式",
+          scope: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+          },
+        },
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    compactAgentSession: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        compacted: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    resumeAgentSessionThread: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        resumed: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    removeAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "idle",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        queuedTurnId: "queued-1",
+        removed: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
+    promoteAgentSessionQueuedTurn: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        turns: [],
+        queuedTurnId: "queued-1",
+        promoted: true,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     respondAction: vi.fn().mockResolvedValue({}),
     drainEvents: vi.fn().mockResolvedValue([]),
+    listAgentSessionFileCheckpoints: vi.fn().mockResolvedValue({
+      id: 1,
+      result: appServerCheckpointList,
+      response: { id: 1, result: appServerCheckpointList },
+      messages: [],
+      notifications: [],
+    }),
+    getAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: appServerCheckpointDetail,
+      response: { id: 1, result: appServerCheckpointDetail },
+      messages: [],
+      notifications: [],
+    }),
+    diffAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: appServerCheckpointDiff,
+      response: { id: 1, result: appServerCheckpointDiff },
+      messages: [],
+      notifications: [],
+    }),
+    restoreAgentSessionFileCheckpoint: vi.fn().mockResolvedValue({
+      id: 1,
+      result: appServerCheckpointRestore,
+      response: { id: 1, result: appServerCheckpointRestore },
+      messages: [],
+      notifications: [],
+    }),
   };
 }
+
+const appServerCheckpointSummary = {
+  checkpointId: "checkpoint-1",
+  turnId: "turn-1",
+  path: "src/App.tsx",
+  source: "tool_result",
+  updatedAt: "2026-06-06T00:00:00.000Z",
+  validationIssueCount: 0,
+};
+
+const appServerCheckpointList = {
+  sessionId: "session-1",
+  threadId: "thread-1",
+  checkpointCount: 1,
+  checkpoints: [appServerCheckpointSummary],
+};
+
+const appServerCheckpointDetail = {
+  sessionId: "session-1",
+  threadId: "thread-1",
+  checkpoint: appServerCheckpointSummary,
+  livePath: "/workspace/src/App.tsx",
+  snapshotPath: "/workspace/.lime/checkpoints/checkpoint-1/App.tsx",
+  versionHistory: [],
+  validationIssues: [],
+  content: "export default function App() {}",
+};
+
+const appServerCheckpointDiff = {
+  sessionId: "session-1",
+  threadId: "thread-1",
+  checkpoint: appServerCheckpointSummary,
+  currentVersionId: "version-current",
+  previousVersionId: "version-previous",
+  diff: [],
+};
+
+const appServerCheckpointRestore = {
+  sessionId: "session-1",
+  threadId: "thread-1",
+  checkpoint: appServerCheckpointSummary,
+  livePath: "/workspace/src/App.tsx",
+  snapshotPath: "/workspace/.lime/checkpoints/checkpoint-1/App.tsx",
+  backupPath: null,
+  restoredAt: "2026-06-06T00:01:00.000Z",
+};
 
 const checkpointSummary: AgentRuntimeFileCheckpointSummary = {
   checkpoint_id: "checkpoint-1",
@@ -119,47 +300,66 @@ const checkpointRestore: AgentRuntimeFileCheckpointRestoreResult = {
   restored_at: "2026-06-06T00:01:00.000Z",
 };
 
-const replayedAction: AgentRuntimeReplayedActionRequiredView = {
-  type: "action_required",
-  request_id: "request-1",
-  action_type: "tool_confirmation",
-  tool_name: "apply_patch",
-  arguments: {
-    path: "src/App.tsx",
-  },
-};
-
-function createInvokeCommand(results: unknown[]) {
-  const invokeCommand = vi.fn();
-  for (const result of results) {
-    invokeCommand.mockResolvedValueOnce(result);
-  }
-  return invokeCommand;
+function malformedAppServerResult<T>(
+  result: unknown,
+): AppServerRequestResult<T> {
+  return {
+    id: 1,
+    result: result as T,
+    response: {
+      id: 1,
+      result: result as T,
+    },
+    messages: [],
+    notifications: [],
+  };
 }
 
 describe("agentRuntime threadClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isDevBridgeAvailable).mockReturnValue(false);
-    vi.mocked(isElectronHostCommandAvailable).mockReturnValue(false);
+    vi.mocked(isAppServerBridgeAvailable).mockReturnValue(false);
     vi.mocked(safeListen).mockResolvedValue(vi.fn());
   });
 
-  it("legacy residual 命令应通过 command gateway 调用并校验返回形态", async () => {
-    const invokeCommand = createInvokeCommand([
-      null,
-      true,
-      replayedAction,
-      true,
-      false,
-      checkpointList,
-      checkpointDetail,
-      checkpointDiff,
-      checkpointRestore,
-    ]);
+  it("replay request 应走 App Server current action/replay 且不调用 legacy command gateway", async () => {
+    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
+    const appServerClient = appServerClientMock();
     const client = createThreadClient({
-      appServerClient: appServerClientMock(),
-      invokeCommand: invokeCommand as AgentRuntimeCommandInvoke,
+      appServerClient,
+      invokeCommand,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.replayAgentRuntimeRequest({
+        session_id: "session-1",
+        request_id: "request-1",
+      }),
+    ).resolves.toMatchObject({
+      type: "action_required",
+      request_id: "request-1",
+      action_type: "ask_user",
+      prompt: "请选择执行模式",
+      scope: {
+        session_id: "session-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+      },
+    });
+    expect(appServerClient.replayAction).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      requestId: "request-1",
+    });
+    expect(invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("queue/session control 应走 App Server current methods 且不调用 legacy command gateway", async () => {
+    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
+    const appServerClient = appServerClientMock();
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand,
       isAppServerTurnLifecycleAvailable: () => true,
     });
 
@@ -170,16 +370,8 @@ describe("agentRuntime threadClient", () => {
       }),
     ).resolves.toBeUndefined();
     await expect(
-      client.resumeAgentRuntimeThread({
-        session_id: "session-1",
-      }),
+      client.resumeAgentRuntimeThread({ session_id: "session-1" }),
     ).resolves.toBe(true);
-    await expect(
-      client.replayAgentRuntimeRequest({
-        session_id: "session-1",
-        request_id: "request-1",
-      }),
-    ).resolves.toEqual(replayedAction);
     await expect(
       client.removeAgentRuntimeQueuedTurn({
         session_id: "session-1",
@@ -191,7 +383,63 @@ describe("agentRuntime threadClient", () => {
         session_id: "session-1",
         queued_turn_id: "queued-1",
       }),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
+
+    expect(appServerClient.compactAgentSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      eventName: "agentSession/event/session-1",
+    });
+    expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
+    expect(appServerClient.removeAgentSessionQueuedTurn).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      queuedTurnId: "queued-1",
+    });
+    expect(appServerClient.promoteAgentSessionQueuedTurn).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      queuedTurnId: "queued-1",
+    });
+    expect(invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("replay current 收到假成功或缺字段结果时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.replayAction).mockResolvedValueOnce(
+      malformedAppServerResult({
+        action: {
+          type: "action_required",
+          actionType: "tool_confirmation",
+        },
+      }),
+    );
+    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.replayAgentRuntimeRequest({
+        session_id: "session-1",
+        request_id: "request-1",
+      }),
+    ).rejects.toThrow(
+      "agentSession/action/replay did not return replayed action view",
+    );
+    expect(invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("file checkpoint 应走 App Server current methods，不复用 legacy command gateway", async () => {
+    const appServerClient = appServerClientMock();
+    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
     await expect(
       client.listAgentRuntimeFileCheckpoints({
         session_id: "session-1",
@@ -217,108 +465,77 @@ describe("agentRuntime threadClient", () => {
       }),
     ).resolves.toEqual(checkpointRestore);
 
-    expect(invokeCommand).toHaveBeenNthCalledWith(
-      1,
-      "agent_runtime_compact_session",
+    expect(appServerClient.listAgentSessionFileCheckpoints).toHaveBeenCalledWith(
       {
-        request: {
-          session_id: "session-1",
-          event_name: "agentSession/event/session-1",
-        },
+        sessionId: "session-1",
       },
     );
-    expect(invokeCommand).toHaveBeenNthCalledWith(
-      2,
-      "agent_runtime_resume_thread",
-      {
-        request: {
-          session_id: "session-1",
-        },
-      },
-    );
-    expect(invokeCommand).toHaveBeenNthCalledWith(
-      9,
-      "agent_runtime_restore_file_checkpoint",
-      {
-        request: {
-          session_id: "session-1",
-          checkpoint_id: "checkpoint-1",
-          confirm_restore: true,
-        },
-      },
-    );
+    expect(appServerClient.getAgentSessionFileCheckpoint).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      checkpointId: "checkpoint-1",
+    });
+    expect(appServerClient.diffAgentSessionFileCheckpoint).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      checkpointId: "checkpoint-1",
+    });
+    expect(
+      appServerClient.restoreAgentSessionFileCheckpoint,
+    ).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      checkpointId: "checkpoint-1",
+      confirmRestore: true,
+      createBackup: undefined,
+    });
+    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
-  it("legacy residual 收到假成功或缺字段结果时应 fail closed", async () => {
-    const invokeCommand = createInvokeCommand([
-      { success: true },
-      { success: true },
-      {
-        type: "action_required",
-        action_type: "tool_confirmation",
-      },
-      { removed: true },
-      { promoted: true },
-      {
-        ...checkpointList,
-        checkpoints: [{ ...checkpointSummary, validation_issue_count: "0" }],
-      },
-      {
-        ...checkpointDetail,
-        checkpoint: { ...checkpointSummary, checkpoint_id: "" },
-      },
-      {
-        ...checkpointDiff,
-        thread_id: "",
-      },
-      {
-        ...checkpointRestore,
-        restored_at: null,
-      },
-    ]);
+  it("file checkpoint App Server current 收到假成功或缺字段结果时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(
+      appServerClient.listAgentSessionFileCheckpoints,
+    ).mockResolvedValueOnce(
+      malformedAppServerResult({
+        ...appServerCheckpointList,
+        checkpoints: [
+          { ...appServerCheckpointSummary, validationIssueCount: "0" },
+        ],
+      }),
+    );
+    vi.mocked(
+      appServerClient.getAgentSessionFileCheckpoint,
+    ).mockResolvedValueOnce(
+      malformedAppServerResult({
+        ...appServerCheckpointDetail,
+        checkpoint: { ...appServerCheckpointSummary, checkpointId: "" },
+      }),
+    );
+    vi.mocked(
+      appServerClient.diffAgentSessionFileCheckpoint,
+    ).mockResolvedValueOnce(
+      malformedAppServerResult({
+        ...appServerCheckpointDiff,
+        threadId: "",
+      }),
+    );
+    vi.mocked(
+      appServerClient.restoreAgentSessionFileCheckpoint,
+    ).mockResolvedValueOnce(
+      malformedAppServerResult({
+        ...appServerCheckpointRestore,
+        restoredAt: null,
+      }),
+    );
+    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createThreadClient({
-      appServerClient: appServerClientMock(),
-      invokeCommand: invokeCommand as AgentRuntimeCommandInvoke,
+      appServerClient,
+      invokeCommand,
       isAppServerTurnLifecycleAvailable: () => true,
     });
 
     await expect(
-      client.compactAgentRuntimeSession({
-        session_id: "session-1",
-        event_name: "agentSession/event/session-1",
-      }),
-    ).rejects.toThrow("agent_runtime_compact_session did not return void");
-    await expect(
-      client.resumeAgentRuntimeThread({ session_id: "session-1" }),
-    ).rejects.toThrow("agent_runtime_resume_thread did not return boolean");
-    await expect(
-      client.replayAgentRuntimeRequest({
-        session_id: "session-1",
-        request_id: "request-1",
-      }),
-    ).rejects.toThrow(
-      "agent_runtime_replay_request did not return replayed action view",
-    );
-    await expect(
-      client.removeAgentRuntimeQueuedTurn({
-        session_id: "session-1",
-        queued_turn_id: "queued-1",
-      }),
-    ).rejects.toThrow(
-      "agent_runtime_remove_queued_turn did not return boolean",
-    );
-    await expect(
-      client.promoteAgentRuntimeQueuedTurn({
-        session_id: "session-1",
-        queued_turn_id: "queued-1",
-      }),
-    ).rejects.toThrow(
-      "agent_runtime_promote_queued_turn did not return boolean",
-    );
-    await expect(
       client.listAgentRuntimeFileCheckpoints({ session_id: "session-1" }),
     ).rejects.toThrow(
-      "agent_runtime_list_file_checkpoints did not return file checkpoint list",
+      "agentSession/fileCheckpoint/list did not return file checkpoint list",
     );
     await expect(
       client.getAgentRuntimeFileCheckpoint({
@@ -326,7 +543,7 @@ describe("agentRuntime threadClient", () => {
         checkpoint_id: "checkpoint-1",
       }),
     ).rejects.toThrow(
-      "agent_runtime_get_file_checkpoint did not return file checkpoint detail",
+      "agentSession/fileCheckpoint/get did not return file checkpoint detail",
     );
     await expect(
       client.diffAgentRuntimeFileCheckpoint({
@@ -334,7 +551,7 @@ describe("agentRuntime threadClient", () => {
         checkpoint_id: "checkpoint-1",
       }),
     ).rejects.toThrow(
-      "agent_runtime_diff_file_checkpoint did not return file checkpoint diff",
+      "agentSession/fileCheckpoint/diff did not return file checkpoint diff",
     );
     await expect(
       client.restoreAgentRuntimeFileCheckpoint({
@@ -343,8 +560,9 @@ describe("agentRuntime threadClient", () => {
         confirm_restore: true,
       }),
     ).rejects.toThrow(
-      "agent_runtime_restore_file_checkpoint did not return file checkpoint restore result",
+      "agentSession/fileCheckpoint/restore did not return file checkpoint restore result",
     );
+    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
   it("App Server 可用时 submit 应进入 agentSession/turn/start", async () => {
@@ -424,8 +642,7 @@ describe("agentRuntime threadClient", () => {
   });
 
   it("浏览器 DevBridge 可用时 submit 应允许进入 App Server JSON-RPC", async () => {
-    vi.mocked(isDevBridgeAvailable).mockReturnValue(true);
-    vi.mocked(isElectronHostCommandAvailable).mockReturnValue(false);
+    vi.mocked(isAppServerBridgeAvailable).mockReturnValue(true);
     const appServerClient = appServerClientMock();
     const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createThreadClient({
@@ -668,13 +885,7 @@ describe("agentRuntime threadClient", () => {
   it("App Server submit 响应缺少 turn 时应使用请求 turn_id 注册事件路由", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
-      id: 1,
-      result: {},
-      response: {
-        id: 1,
-        result: {},
-      },
-      messages: [],
+      ...malformedAppServerResult({}),
       notifications: [
         {
           method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
@@ -698,7 +909,7 @@ describe("agentRuntime threadClient", () => {
           },
         },
       ],
-    } as never);
+    });
     const client = createThreadClient({
       appServerClient,
       invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,

@@ -705,6 +705,157 @@
       "title": "AgentAppPackageIdentity",
       "type": "object"
     },
+    "AgentAppShellPackageMount": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "manifestHash": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "readOnly": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "manifestHash",
+        "packageHash",
+        "path",
+        "readOnly"
+      ],
+      "title": "AgentAppShellPackageMount",
+      "type": "object"
+    },
+    "AgentAppShellPrepareParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "descriptor": true
+      },
+      "required": [
+        "descriptor"
+      ],
+      "title": "AgentAppShellPrepareParams",
+      "type": "object"
+    },
+    "AgentAppShellPrepareResponse": {
+      "$defs": {
+        "AgentAppShellPackageMount": {
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "manifestHash": {
+              "type": "string"
+            },
+            "packageHash": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "readOnly": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "manifestHash",
+            "packageHash",
+            "path",
+            "readOnly"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "descriptorVersion": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "devShell": {
+          "type": "boolean"
+        },
+        "entryKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "installMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "message": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "packageMount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAppShellPackageMount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "preparedAt": {
+          "type": "string"
+        },
+        "shellKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "windowTitle": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "devShell",
+        "preparedAt",
+        "status"
+      ],
+      "title": "AgentAppShellPrepareResponse",
+      "type": "object"
+    },
     "AgentAppUiRuntimeStartParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -1457,6 +1608,117 @@
       "title": "AgentSession",
       "type": "object"
     },
+    "AgentSessionActionReplayParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "sessionId"
+      ],
+      "title": "AgentSessionActionReplayParams",
+      "type": "object"
+    },
+    "AgentSessionActionReplayResponse": {
+      "$defs": {
+        "AgentSessionActionScope": {
+          "properties": {
+            "sessionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "AgentSessionActionType": {
+          "enum": [
+            "ask_user",
+            "elicitation",
+            "tool_confirmation"
+          ],
+          "type": "string"
+        },
+        "AgentSessionReplayedActionRequired": {
+          "properties": {
+            "actionType": {
+              "$ref": "#/$defs/AgentSessionActionType"
+            },
+            "arguments": true,
+            "prompt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "questions": true,
+            "requestId": {
+              "type": "string"
+            },
+            "requestedSchema": true,
+            "scope": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AgentSessionActionScope"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "toolName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "actionType",
+            "requestId",
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentSessionReplayedActionRequired"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "AgentSessionActionReplayResponse",
+      "type": "object"
+    },
     "AgentSessionActionRespondParams": {
       "$defs": {
         "AgentSessionActionScope": {
@@ -1579,6 +1841,326 @@
       "title": "AgentSessionActionType",
       "type": "string"
     },
+    "AgentSessionAnalysisHandoffExportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "locale": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionAnalysisHandoffExportParams",
+      "type": "object"
+    },
+    "AgentSessionAnalysisHandoffExportResponse": {
+      "$defs": {
+        "AgentSessionHandoffArtifact": {
+          "properties": {
+            "absolutePath": {
+              "type": "string"
+            },
+            "bytes": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "relativePath": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "absolutePath",
+            "bytes",
+            "kind",
+            "relativePath",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "analysisAbsoluteRoot": {
+          "type": "string"
+        },
+        "analysisRelativeRoot": {
+          "type": "string"
+        },
+        "artifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionHandoffArtifact"
+          },
+          "type": "array"
+        },
+        "copyPrompt": {
+          "type": "string"
+        },
+        "evidencePackRelativeRoot": {
+          "type": "string"
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "handoffBundleRelativeRoot": {
+          "type": "string"
+        },
+        "latestTurnStatus": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pendingRequestCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queuedTurnCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replayCaseRelativeRoot": {
+          "type": "string"
+        },
+        "sanitizedWorkspaceRoot": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "threadStatus": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "analysisAbsoluteRoot",
+        "analysisRelativeRoot",
+        "copyPrompt",
+        "evidencePackRelativeRoot",
+        "exportedAt",
+        "handoffBundleRelativeRoot",
+        "pendingRequestCount",
+        "queuedTurnCount",
+        "replayCaseRelativeRoot",
+        "sanitizedWorkspaceRoot",
+        "sessionId",
+        "threadId",
+        "threadStatus",
+        "title",
+        "workspaceRoot"
+      ],
+      "title": "AgentSessionAnalysisHandoffExportResponse",
+      "type": "object"
+    },
+    "AgentSessionCompactParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "eventName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionCompactParams",
+      "type": "object"
+    },
+    "AgentSessionCompactResponse": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "AgentTurn": {
+          "properties": {
+            "completedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/AgentTurnStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "status",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "compacted": {
+          "type": "boolean"
+        },
+        "session": {
+          "$ref": "#/$defs/AgentSession"
+        },
+        "turns": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "compacted",
+        "session"
+      ],
+      "title": "AgentSessionCompactResponse",
+      "type": "object"
+    },
     "AgentSessionEventParams": {
       "$defs": {
         "AgentEvent": {
@@ -1635,6 +2217,945 @@
         "event"
       ],
       "title": "AgentSessionEventParams",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointDetail": {
+      "$defs": {
+        "AgentSessionFileCheckpointSummary": {
+          "properties": {
+            "checkpointId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "previewText": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "requestId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "snapshotPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "validationIssueCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "versionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "versionNo": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "checkpointId",
+            "path",
+            "source",
+            "turnId",
+            "updatedAt",
+            "validationIssueCount"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkpoint": {
+          "$ref": "#/$defs/AgentSessionFileCheckpointSummary"
+        },
+        "checkpointDocument": true,
+        "content": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "liveDocument": true,
+        "livePath": {
+          "type": "string"
+        },
+        "metadata": true,
+        "sessionId": {
+          "type": "string"
+        },
+        "snapshotPath": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "validationIssues": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "versionHistory": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "checkpoint",
+        "livePath",
+        "sessionId",
+        "snapshotPath",
+        "threadId"
+      ],
+      "title": "AgentSessionFileCheckpointDetail",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointDiffParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkpointId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkpointId",
+        "sessionId"
+      ],
+      "title": "AgentSessionFileCheckpointDiffParams",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointDiffResponse": {
+      "$defs": {
+        "AgentSessionFileCheckpointSummary": {
+          "properties": {
+            "checkpointId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "previewText": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "requestId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "snapshotPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "validationIssueCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "versionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "versionNo": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "checkpointId",
+            "path",
+            "source",
+            "turnId",
+            "updatedAt",
+            "validationIssueCount"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkpoint": {
+          "$ref": "#/$defs/AgentSessionFileCheckpointSummary"
+        },
+        "currentVersionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "diff": true,
+        "previousVersionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkpoint",
+        "sessionId",
+        "threadId"
+      ],
+      "title": "AgentSessionFileCheckpointDiffResponse",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointGetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkpointId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkpointId",
+        "sessionId"
+      ],
+      "title": "AgentSessionFileCheckpointGetParams",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionFileCheckpointListParams",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointListResponse": {
+      "$defs": {
+        "AgentSessionFileCheckpointSummary": {
+          "properties": {
+            "checkpointId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "previewText": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "requestId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "snapshotPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "validationIssueCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "versionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "versionNo": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "checkpointId",
+            "path",
+            "source",
+            "turnId",
+            "updatedAt",
+            "validationIssueCount"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkpointCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "checkpoints": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionFileCheckpointSummary"
+          },
+          "type": "array"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkpointCount",
+        "sessionId",
+        "threadId"
+      ],
+      "title": "AgentSessionFileCheckpointListResponse",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointRestoreParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkpointId": {
+          "type": "string"
+        },
+        "confirmRestore": {
+          "default": false,
+          "type": "boolean"
+        },
+        "createBackup": {
+          "default": true,
+          "type": "boolean"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkpointId",
+        "sessionId"
+      ],
+      "title": "AgentSessionFileCheckpointRestoreParams",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointRestoreResponse": {
+      "$defs": {
+        "AgentSessionFileCheckpointSummary": {
+          "properties": {
+            "checkpointId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "previewText": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "requestId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "snapshotPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "validationIssueCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "versionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "versionNo": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "checkpointId",
+            "path",
+            "source",
+            "turnId",
+            "updatedAt",
+            "validationIssueCount"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "backupPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "checkpoint": {
+          "$ref": "#/$defs/AgentSessionFileCheckpointSummary"
+        },
+        "livePath": {
+          "type": "string"
+        },
+        "restoredAt": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "snapshotPath": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkpoint",
+        "livePath",
+        "restoredAt",
+        "sessionId",
+        "snapshotPath",
+        "threadId"
+      ],
+      "title": "AgentSessionFileCheckpointRestoreResponse",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointSummary": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkpointId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "previewText": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "snapshotPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "validationIssueCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "versionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "versionNo": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "checkpointId",
+        "path",
+        "source",
+        "turnId",
+        "updatedAt",
+        "validationIssueCount"
+      ],
+      "title": "AgentSessionFileCheckpointSummary",
+      "type": "object"
+    },
+    "AgentSessionFileCheckpointThreadSummary": {
+      "$defs": {
+        "AgentSessionFileCheckpointSummary": {
+          "properties": {
+            "checkpointId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "previewText": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "requestId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "snapshotPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "source": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "validationIssueCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "versionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "versionNo": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "checkpointId",
+            "path",
+            "source",
+            "turnId",
+            "updatedAt",
+            "validationIssueCount"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "count": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "latestCheckpoint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentSessionFileCheckpointSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "count"
+      ],
+      "title": "AgentSessionFileCheckpointThreadSummary",
+      "type": "object"
+    },
+    "AgentSessionHandoffArtifact": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "absolutePath": {
+          "type": "string"
+        },
+        "bytes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "absolutePath",
+        "bytes",
+        "kind",
+        "relativePath",
+        "title"
+      ],
+      "title": "AgentSessionHandoffArtifact",
+      "type": "object"
+    },
+    "AgentSessionHandoffBundleExportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "locale": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionHandoffBundleExportParams",
+      "type": "object"
+    },
+    "AgentSessionHandoffBundleExportResponse": {
+      "$defs": {
+        "AgentSessionHandoffArtifact": {
+          "properties": {
+            "absolutePath": {
+              "type": "string"
+            },
+            "bytes": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "relativePath": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "absolutePath",
+            "bytes",
+            "kind",
+            "relativePath",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "activeSubagentCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "artifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionHandoffArtifact"
+          },
+          "type": "array"
+        },
+        "bundleAbsoluteRoot": {
+          "type": "string"
+        },
+        "bundleRelativeRoot": {
+          "type": "string"
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "latestTurnStatus": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pendingRequestCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queuedTurnCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "threadStatus": {
+          "type": "string"
+        },
+        "todoCompleted": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "todoInProgress": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "todoPending": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "todoTotal": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "activeSubagentCount",
+        "bundleAbsoluteRoot",
+        "bundleRelativeRoot",
+        "exportedAt",
+        "pendingRequestCount",
+        "queuedTurnCount",
+        "sessionId",
+        "threadId",
+        "threadStatus",
+        "todoCompleted",
+        "todoInProgress",
+        "todoPending",
+        "todoTotal",
+        "workspaceRoot"
+      ],
+      "title": "AgentSessionHandoffBundleExportResponse",
       "type": "object"
     },
     "AgentSessionListParams": {
@@ -1751,6 +3272,759 @@
       "title": "AgentSessionListResponse",
       "type": "object"
     },
+    "AgentSessionObjectiveAuditParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "ownerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "ownerKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionObjectiveAuditParams",
+      "type": "object"
+    },
+    "AgentSessionObjectiveAuditResponse": {
+      "$defs": {
+        "ManagedObjective": {
+          "properties": {
+            "approvalPolicy": true,
+            "blockerReason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "budgetPolicy": true,
+            "continuationPolicy": true,
+            "createdAt": {
+              "type": "string"
+            },
+            "lastArtifactRefs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "lastAuditSummary": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastEvidencePackRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "objectiveId": {
+              "type": "string"
+            },
+            "objectiveText": {
+              "type": "string"
+            },
+            "ownerId": {
+              "type": "string"
+            },
+            "ownerKind": {
+              "type": "string"
+            },
+            "riskPolicy": true,
+            "status": {
+              "$ref": "#/$defs/ManagedObjectiveStatus"
+            },
+            "successCriteria": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "objectiveId",
+            "objectiveText",
+            "ownerId",
+            "ownerKind",
+            "status",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "ManagedObjectiveStatus": {
+          "enum": [
+            "active",
+            "blocked",
+            "budget_limited",
+            "completed",
+            "failed",
+            "needs_input",
+            "paused",
+            "verifying"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "objective": {
+          "$ref": "#/$defs/ManagedObjective"
+        }
+      },
+      "required": [
+        "objective"
+      ],
+      "title": "AgentSessionObjectiveAuditResponse",
+      "type": "object"
+    },
+    "AgentSessionObjectiveClearParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionObjectiveClearParams",
+      "type": "object"
+    },
+    "AgentSessionObjectiveClearResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cleared": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cleared"
+      ],
+      "title": "AgentSessionObjectiveClearResponse",
+      "type": "object"
+    },
+    "AgentSessionObjectiveContinueParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "ownerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "ownerKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionObjectiveContinueParams",
+      "type": "object"
+    },
+    "AgentSessionObjectiveContinueResponse": {
+      "$defs": {
+        "AgentTurn": {
+          "properties": {
+            "completedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/AgentTurnStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "status",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "ManagedObjective": {
+          "properties": {
+            "approvalPolicy": true,
+            "blockerReason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "budgetPolicy": true,
+            "continuationPolicy": true,
+            "createdAt": {
+              "type": "string"
+            },
+            "lastArtifactRefs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "lastAuditSummary": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastEvidencePackRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "objectiveId": {
+              "type": "string"
+            },
+            "objectiveText": {
+              "type": "string"
+            },
+            "ownerId": {
+              "type": "string"
+            },
+            "ownerKind": {
+              "type": "string"
+            },
+            "riskPolicy": true,
+            "status": {
+              "$ref": "#/$defs/ManagedObjectiveStatus"
+            },
+            "successCriteria": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "objectiveId",
+            "objectiveText",
+            "ownerId",
+            "ownerKind",
+            "status",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "ManagedObjectiveStatus": {
+          "enum": [
+            "active",
+            "blocked",
+            "budget_limited",
+            "completed",
+            "failed",
+            "needs_input",
+            "paused",
+            "verifying"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "objective": {
+          "$ref": "#/$defs/ManagedObjective"
+        },
+        "queuedTurnId": {
+          "type": "string"
+        },
+        "submitted": {
+          "type": "boolean"
+        },
+        "turn": {
+          "$ref": "#/$defs/AgentTurn"
+        }
+      },
+      "required": [
+        "objective",
+        "queuedTurnId",
+        "submitted",
+        "turn"
+      ],
+      "title": "AgentSessionObjectiveContinueResponse",
+      "type": "object"
+    },
+    "AgentSessionObjectiveReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionObjectiveReadParams",
+      "type": "object"
+    },
+    "AgentSessionObjectiveReadResponse": {
+      "$defs": {
+        "ManagedObjective": {
+          "properties": {
+            "approvalPolicy": true,
+            "blockerReason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "budgetPolicy": true,
+            "continuationPolicy": true,
+            "createdAt": {
+              "type": "string"
+            },
+            "lastArtifactRefs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "lastAuditSummary": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastEvidencePackRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "objectiveId": {
+              "type": "string"
+            },
+            "objectiveText": {
+              "type": "string"
+            },
+            "ownerId": {
+              "type": "string"
+            },
+            "ownerKind": {
+              "type": "string"
+            },
+            "riskPolicy": true,
+            "status": {
+              "$ref": "#/$defs/ManagedObjectiveStatus"
+            },
+            "successCriteria": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "objectiveId",
+            "objectiveText",
+            "ownerId",
+            "ownerKind",
+            "status",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "ManagedObjectiveStatus": {
+          "enum": [
+            "active",
+            "blocked",
+            "budget_limited",
+            "completed",
+            "failed",
+            "needs_input",
+            "paused",
+            "verifying"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "objective": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ManagedObjective"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "AgentSessionObjectiveReadResponse",
+      "type": "object"
+    },
+    "AgentSessionObjectiveSetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "approvalPolicy": true,
+        "budgetPolicy": true,
+        "continuationPolicy": true,
+        "objectiveText": {
+          "type": "string"
+        },
+        "riskPolicy": true,
+        "sessionId": {
+          "type": "string"
+        },
+        "successCriteria": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "objectiveText",
+        "sessionId"
+      ],
+      "title": "AgentSessionObjectiveSetParams",
+      "type": "object"
+    },
+    "AgentSessionObjectiveSetResponse": {
+      "$defs": {
+        "ManagedObjective": {
+          "properties": {
+            "approvalPolicy": true,
+            "blockerReason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "budgetPolicy": true,
+            "continuationPolicy": true,
+            "createdAt": {
+              "type": "string"
+            },
+            "lastArtifactRefs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "lastAuditSummary": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastEvidencePackRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "objectiveId": {
+              "type": "string"
+            },
+            "objectiveText": {
+              "type": "string"
+            },
+            "ownerId": {
+              "type": "string"
+            },
+            "ownerKind": {
+              "type": "string"
+            },
+            "riskPolicy": true,
+            "status": {
+              "$ref": "#/$defs/ManagedObjectiveStatus"
+            },
+            "successCriteria": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "objectiveId",
+            "objectiveText",
+            "ownerId",
+            "ownerKind",
+            "status",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "ManagedObjectiveStatus": {
+          "enum": [
+            "active",
+            "blocked",
+            "budget_limited",
+            "completed",
+            "failed",
+            "needs_input",
+            "paused",
+            "verifying"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "objective": {
+          "$ref": "#/$defs/ManagedObjective"
+        }
+      },
+      "required": [
+        "objective"
+      ],
+      "title": "AgentSessionObjectiveSetResponse",
+      "type": "object"
+    },
+    "AgentSessionObjectiveStatusUpdateParams": {
+      "$defs": {
+        "ManagedObjectiveStatus": {
+          "enum": [
+            "active",
+            "blocked",
+            "budget_limited",
+            "completed",
+            "failed",
+            "needs_input",
+            "paused",
+            "verifying"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockerReason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ManagedObjectiveStatus"
+        }
+      },
+      "required": [
+        "sessionId",
+        "status"
+      ],
+      "title": "AgentSessionObjectiveStatusUpdateParams",
+      "type": "object"
+    },
+    "AgentSessionObjectiveStatusUpdateResponse": {
+      "$defs": {
+        "ManagedObjective": {
+          "properties": {
+            "approvalPolicy": true,
+            "blockerReason": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "budgetPolicy": true,
+            "continuationPolicy": true,
+            "createdAt": {
+              "type": "string"
+            },
+            "lastArtifactRefs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "lastAuditSummary": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastEvidencePackRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "objectiveId": {
+              "type": "string"
+            },
+            "objectiveText": {
+              "type": "string"
+            },
+            "ownerId": {
+              "type": "string"
+            },
+            "ownerKind": {
+              "type": "string"
+            },
+            "riskPolicy": true,
+            "status": {
+              "$ref": "#/$defs/ManagedObjectiveStatus"
+            },
+            "successCriteria": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "objectiveId",
+            "objectiveText",
+            "ownerId",
+            "ownerKind",
+            "status",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "ManagedObjectiveStatus": {
+          "enum": [
+            "active",
+            "blocked",
+            "budget_limited",
+            "completed",
+            "failed",
+            "needs_input",
+            "paused",
+            "verifying"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "objective": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ManagedObjective"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "AgentSessionObjectiveStatusUpdateResponse",
+      "type": "object"
+    },
     "AgentSessionOverview": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -1816,6 +4090,366 @@
         "updatedAt"
       ],
       "title": "AgentSessionOverview",
+      "type": "object"
+    },
+    "AgentSessionQueuedTurnPromoteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "queuedTurnId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "queuedTurnId",
+        "sessionId"
+      ],
+      "title": "AgentSessionQueuedTurnPromoteParams",
+      "type": "object"
+    },
+    "AgentSessionQueuedTurnPromoteResponse": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "AgentTurn": {
+          "properties": {
+            "completedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/AgentTurnStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "status",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "promoted": {
+          "type": "boolean"
+        },
+        "queuedTurnId": {
+          "type": "string"
+        },
+        "session": {
+          "$ref": "#/$defs/AgentSession"
+        },
+        "turns": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "promoted",
+        "queuedTurnId",
+        "session"
+      ],
+      "title": "AgentSessionQueuedTurnPromoteResponse",
+      "type": "object"
+    },
+    "AgentSessionQueuedTurnRemoveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "queuedTurnId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "queuedTurnId",
+        "sessionId"
+      ],
+      "title": "AgentSessionQueuedTurnRemoveParams",
+      "type": "object"
+    },
+    "AgentSessionQueuedTurnRemoveResponse": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "AgentTurn": {
+          "properties": {
+            "completedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/AgentTurnStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "status",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "queuedTurnId": {
+          "type": "string"
+        },
+        "removed": {
+          "type": "boolean"
+        },
+        "session": {
+          "$ref": "#/$defs/AgentSession"
+        },
+        "turns": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "queuedTurnId",
+        "removed",
+        "session"
+      ],
+      "title": "AgentSessionQueuedTurnRemoveResponse",
       "type": "object"
     },
     "AgentSessionReadParams": {
@@ -2010,6 +4644,577 @@
       "title": "AgentSessionReadResponse",
       "type": "object"
     },
+    "AgentSessionReplayCaseExportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "locale": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionReplayCaseExportParams",
+      "type": "object"
+    },
+    "AgentSessionReplayCaseExportResponse": {
+      "$defs": {
+        "AgentSessionHandoffArtifact": {
+          "properties": {
+            "absolutePath": {
+              "type": "string"
+            },
+            "bytes": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "relativePath": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "absolutePath",
+            "bytes",
+            "kind",
+            "relativePath",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionHandoffArtifact"
+          },
+          "type": "array"
+        },
+        "evidencePackRelativeRoot": {
+          "type": "string"
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "handoffBundleRelativeRoot": {
+          "type": "string"
+        },
+        "latestTurnStatus": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "linkedEvidenceArtifactCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "linkedHandoffArtifactCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pendingRequestCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queuedTurnCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recentArtifactCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replayAbsoluteRoot": {
+          "type": "string"
+        },
+        "replayRelativeRoot": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "threadStatus": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidencePackRelativeRoot",
+        "exportedAt",
+        "handoffBundleRelativeRoot",
+        "linkedEvidenceArtifactCount",
+        "linkedHandoffArtifactCount",
+        "pendingRequestCount",
+        "queuedTurnCount",
+        "recentArtifactCount",
+        "replayAbsoluteRoot",
+        "replayRelativeRoot",
+        "sessionId",
+        "threadId",
+        "threadStatus",
+        "workspaceRoot"
+      ],
+      "title": "AgentSessionReplayCaseExportResponse",
+      "type": "object"
+    },
+    "AgentSessionReplayedActionRequired": {
+      "$defs": {
+        "AgentSessionActionScope": {
+          "properties": {
+            "sessionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "turnId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "AgentSessionActionType": {
+          "enum": [
+            "ask_user",
+            "elicitation",
+            "tool_confirmation"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "actionType": {
+          "$ref": "#/$defs/AgentSessionActionType"
+        },
+        "arguments": true,
+        "prompt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "questions": true,
+        "requestId": {
+          "type": "string"
+        },
+        "requestedSchema": true,
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentSessionActionScope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "toolName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "actionType",
+        "requestId",
+        "type"
+      ],
+      "title": "AgentSessionReplayedActionRequired",
+      "type": "object"
+    },
+    "AgentSessionReviewDecision": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "chosenFixStrategy": {
+          "default": "",
+          "type": "string"
+        },
+        "decisionStatus": {
+          "type": "string"
+        },
+        "decisionSummary": {
+          "default": "",
+          "type": "string"
+        },
+        "followupActions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "humanReviewer": {
+          "default": "",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "type": "string"
+        },
+        "regressionRequirements": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "riskLevel": {
+          "type": "string"
+        },
+        "riskTags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "decisionStatus",
+        "riskLevel"
+      ],
+      "title": "AgentSessionReviewDecision",
+      "type": "object"
+    },
+    "AgentSessionReviewDecisionSaveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "chosenFixStrategy": {
+          "default": "",
+          "type": "string"
+        },
+        "decisionStatus": {
+          "type": "string"
+        },
+        "decisionSummary": {
+          "default": "",
+          "type": "string"
+        },
+        "followupActions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "humanReviewer": {
+          "default": "",
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "notes": {
+          "default": "",
+          "type": "string"
+        },
+        "regressionRequirements": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "riskLevel": {
+          "type": "string"
+        },
+        "riskTags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "decisionStatus",
+        "riskLevel",
+        "sessionId"
+      ],
+      "title": "AgentSessionReviewDecisionSaveParams",
+      "type": "object"
+    },
+    "AgentSessionReviewDecisionTemplateExportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "locale": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionReviewDecisionTemplateExportParams",
+      "type": "object"
+    },
+    "AgentSessionReviewDecisionTemplateExportResponse": {
+      "$defs": {
+        "AgentSessionHandoffArtifact": {
+          "properties": {
+            "absolutePath": {
+              "type": "string"
+            },
+            "bytes": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "relativePath": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "absolutePath",
+            "bytes",
+            "kind",
+            "relativePath",
+            "title"
+          ],
+          "type": "object"
+        },
+        "AgentSessionReviewDecision": {
+          "properties": {
+            "chosenFixStrategy": {
+              "default": "",
+              "type": "string"
+            },
+            "decisionStatus": {
+              "type": "string"
+            },
+            "decisionSummary": {
+              "default": "",
+              "type": "string"
+            },
+            "followupActions": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "humanReviewer": {
+              "default": "",
+              "type": "string"
+            },
+            "notes": {
+              "default": "",
+              "type": "string"
+            },
+            "regressionRequirements": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "riskLevel": {
+              "type": "string"
+            },
+            "riskTags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "decisionStatus",
+            "riskLevel"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "analysisAbsoluteRoot": {
+          "type": "string"
+        },
+        "analysisArtifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionHandoffArtifact"
+          },
+          "type": "array"
+        },
+        "analysisRelativeRoot": {
+          "type": "string"
+        },
+        "artifacts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionHandoffArtifact"
+          },
+          "type": "array"
+        },
+        "decision": {
+          "$ref": "#/$defs/AgentSessionReviewDecision"
+        },
+        "decisionStatusOptions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "defaultDecisionStatus": {
+          "type": "string"
+        },
+        "evidencePackRelativeRoot": {
+          "type": "string"
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "handoffBundleRelativeRoot": {
+          "type": "string"
+        },
+        "latestTurnStatus": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pendingRequestCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queuedTurnCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replayCaseRelativeRoot": {
+          "type": "string"
+        },
+        "reviewAbsoluteRoot": {
+          "type": "string"
+        },
+        "reviewChecklist": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reviewRelativeRoot": {
+          "type": "string"
+        },
+        "riskLevelOptions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "threadStatus": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workspaceRoot": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "analysisAbsoluteRoot",
+        "analysisRelativeRoot",
+        "decision",
+        "defaultDecisionStatus",
+        "evidencePackRelativeRoot",
+        "exportedAt",
+        "handoffBundleRelativeRoot",
+        "pendingRequestCount",
+        "queuedTurnCount",
+        "replayCaseRelativeRoot",
+        "reviewAbsoluteRoot",
+        "reviewRelativeRoot",
+        "sessionId",
+        "threadId",
+        "threadStatus",
+        "title",
+        "workspaceRoot"
+      ],
+      "title": "AgentSessionReviewDecisionTemplateExportResponse",
+      "type": "object"
+    },
     "AgentSessionStartParams": {
       "$defs": {
         "BusinessObjectRef": {
@@ -2200,6 +5405,178 @@
       ],
       "title": "AgentSessionStatus",
       "type": "string"
+    },
+    "AgentSessionThreadResumeParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "AgentSessionThreadResumeParams",
+      "type": "object"
+    },
+    "AgentSessionThreadResumeResponse": {
+      "$defs": {
+        "AgentSession": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "businessObjectRef": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusinessObjectRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentSessionStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "createdAt",
+            "sessionId",
+            "status",
+            "threadId",
+            "updatedAt"
+          ],
+          "type": "object"
+        },
+        "AgentSessionStatus": {
+          "enum": [
+            "canceled",
+            "completed",
+            "failed",
+            "idle",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "AgentTurn": {
+          "properties": {
+            "completedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/AgentTurnStatus"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "status",
+            "threadId",
+            "turnId"
+          ],
+          "type": "object"
+        },
+        "AgentTurnStatus": {
+          "enum": [
+            "accepted",
+            "canceled",
+            "completed",
+            "failed",
+            "queued",
+            "running",
+            "waitingAction"
+          ],
+          "type": "string"
+        },
+        "BusinessObjectRef": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "metadata": true,
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "uri": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "resumed": {
+          "type": "boolean"
+        },
+        "session": {
+          "$ref": "#/$defs/AgentSession"
+        },
+        "turns": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "resumed",
+        "session"
+      ],
+      "title": "AgentSessionThreadResumeResponse",
+      "type": "object"
     },
     "AgentSessionTurnCancelParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3222,6 +6599,43 @@
       "title": "CapabilityListResponse",
       "type": "object"
     },
+    "ChannelProbeParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "ChannelProbeParams",
+      "type": "object"
+    },
+    "ChannelProbeResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": true,
+      "properties": {
+        "accountId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "message",
+        "ok"
+      ],
+      "title": "ChannelProbeResponse",
+      "type": "object"
+    },
     "ClientCapabilities": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -3533,6 +6947,434 @@
         "providerName"
       ],
       "title": "ConnectRelayApiKeySaveResponse",
+      "type": "object"
+    },
+    "DiagnosticsCapabilityRoutingMetricsSnapshot": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "allCandidatesExcludedTotal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "filterEvalTotal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "filterExcludedContextTotal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "filterExcludedToolsTotal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "filterExcludedTotal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "filterExcludedVisionTotal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "modelFallbackTotal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "providerFallbackTotal": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "allCandidatesExcludedTotal",
+        "filterEvalTotal",
+        "filterExcludedContextTotal",
+        "filterExcludedToolsTotal",
+        "filterExcludedTotal",
+        "filterExcludedVisionTotal",
+        "modelFallbackTotal",
+        "providerFallbackTotal"
+      ],
+      "title": "DiagnosticsCapabilityRoutingMetricsSnapshot",
+      "type": "object"
+    },
+    "DiagnosticsIdempotencyDiagnostics": {
+      "$defs": {
+        "DiagnosticsMetricConfig": {
+          "properties": {
+            "cacheableStatusCodes": {
+              "default": [],
+              "items": {
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "headerName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "maxBodyBytes": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "maxEntries": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ttlSecs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "waitTimeoutMs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "enabled",
+            "ttlSecs"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/DiagnosticsMetricConfig"
+        },
+        "replayRatePercent": {
+          "format": "double",
+          "type": "number"
+        },
+        "stats": true
+      },
+      "required": [
+        "config",
+        "replayRatePercent",
+        "stats"
+      ],
+      "title": "DiagnosticsIdempotencyDiagnostics",
+      "type": "object"
+    },
+    "DiagnosticsMetricConfig": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cacheableStatusCodes": {
+          "default": [],
+          "items": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "headerName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "maxBodyBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxEntries": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ttlSecs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "waitTimeoutMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "enabled",
+        "ttlSecs"
+      ],
+      "title": "DiagnosticsMetricConfig",
+      "type": "object"
+    },
+    "DiagnosticsRequestDedupDiagnostics": {
+      "$defs": {
+        "DiagnosticsMetricConfig": {
+          "properties": {
+            "cacheableStatusCodes": {
+              "default": [],
+              "items": {
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "headerName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "maxBodyBytes": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "maxEntries": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ttlSecs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "waitTimeoutMs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "enabled",
+            "ttlSecs"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/DiagnosticsMetricConfig"
+        },
+        "replayRatePercent": {
+          "format": "double",
+          "type": "number"
+        },
+        "stats": true
+      },
+      "required": [
+        "config",
+        "replayRatePercent",
+        "stats"
+      ],
+      "title": "DiagnosticsRequestDedupDiagnostics",
+      "type": "object"
+    },
+    "DiagnosticsResponseCacheDiagnostics": {
+      "$defs": {
+        "DiagnosticsMetricConfig": {
+          "properties": {
+            "cacheableStatusCodes": {
+              "default": [],
+              "items": {
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "headerName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "maxBodyBytes": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "maxEntries": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ttlSecs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "waitTimeoutMs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "enabled",
+            "ttlSecs"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/DiagnosticsMetricConfig"
+        },
+        "hitRatePercent": {
+          "format": "double",
+          "type": "number"
+        },
+        "stats": true
+      },
+      "required": [
+        "config",
+        "hitRatePercent",
+        "stats"
+      ],
+      "title": "DiagnosticsResponseCacheDiagnostics",
+      "type": "object"
+    },
+    "DiagnosticsTelemetrySummary": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "avgLatencyMs": {
+          "format": "double",
+          "type": "number"
+        },
+        "failedRequests": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "maxLatencyMs": {
+          "format": "double",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "minLatencyMs": {
+          "format": "double",
+          "type": [
+            "null",
+            "number"
+          ]
+        },
+        "successRate": {
+          "format": "double",
+          "type": "number"
+        },
+        "successfulRequests": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "timeoutRequests": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalInputTokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalOutputTokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalRequests": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalTokens": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "avgLatencyMs",
+        "failedRequests",
+        "successRate",
+        "successfulRequests",
+        "timeoutRequests",
+        "totalInputTokens",
+        "totalOutputTokens",
+        "totalRequests",
+        "totalTokens"
+      ],
+      "title": "DiagnosticsTelemetrySummary",
       "type": "object"
     },
     "EvidenceExportParams": {
@@ -4445,6 +8287,624 @@
       "title": "FileSystemRenameFileParams",
       "type": "object"
     },
+    "GatewayChannelStartParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "channel": {
+          "type": "string"
+        },
+        "pollTimeoutSecs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "title": "GatewayChannelStartParams",
+      "type": "object"
+    },
+    "GatewayChannelStatusParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "channel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "title": "GatewayChannelStatusParams",
+      "type": "object"
+    },
+    "GatewayChannelStatusResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "status": true
+      },
+      "required": [
+        "channel",
+        "status"
+      ],
+      "title": "GatewayChannelStatusResponse",
+      "type": "object"
+    },
+    "GatewayChannelStopParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "channel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "title": "GatewayChannelStopParams",
+      "type": "object"
+    },
+    "GatewayTunnelCloudflaredDetectResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "binary": {
+          "type": "string"
+        },
+        "installCommand": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "installSupported": {
+          "type": "boolean"
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "packageManager": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "platform": {
+          "type": "string"
+        },
+        "requiresPrivilege": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "binary",
+        "installSupported",
+        "installed",
+        "message",
+        "platform",
+        "requiresPrivilege"
+      ],
+      "title": "GatewayTunnelCloudflaredDetectResponse",
+      "type": "object"
+    },
+    "GatewayTunnelCloudflaredInstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "confirm": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "GatewayTunnelCloudflaredInstallParams",
+      "type": "object"
+    },
+    "GatewayTunnelCloudflaredInstallResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "attempted": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "exitCode": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packageManager": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "platform": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "stdout": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "attempted",
+        "installed",
+        "message",
+        "ok",
+        "platform",
+        "stderr",
+        "stdout"
+      ],
+      "title": "GatewayTunnelCloudflaredInstallResponse",
+      "type": "object"
+    },
+    "GatewayTunnelCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "dnsName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "persist": {
+          "default": true,
+          "type": "boolean"
+        },
+        "tunnelName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "GatewayTunnelCreateParams",
+      "type": "object"
+    },
+    "GatewayTunnelCreateResponse": {
+      "$defs": {
+        "GatewayTunnelCreateResult": {
+          "properties": {
+            "credentialsFile": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "dnsName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "publicBaseUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tunnelId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tunnelName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "message",
+            "ok",
+            "tunnelName"
+          ],
+          "type": "object"
+        },
+        "GatewayTunnelStatusResponse": {
+          "properties": {
+            "binary": {
+              "type": "string"
+            },
+            "commandPreview": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "connectorActive": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "connectorMessage": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastError": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "lastExit": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "localUrl": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "pid": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "provider": {
+              "type": "string"
+            },
+            "publicBaseUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "running": {
+              "type": "boolean"
+            },
+            "startedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "binary",
+            "localUrl",
+            "mode",
+            "provider",
+            "running"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "result": {
+          "$ref": "#/$defs/GatewayTunnelCreateResult"
+        },
+        "status": {
+          "$ref": "#/$defs/GatewayTunnelStatusResponse"
+        }
+      },
+      "required": [
+        "result",
+        "status"
+      ],
+      "title": "GatewayTunnelCreateResponse",
+      "type": "object"
+    },
+    "GatewayTunnelCreateResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "credentialsFile": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "dnsName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "publicBaseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tunnelId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tunnelName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message",
+        "ok",
+        "tunnelName"
+      ],
+      "title": "GatewayTunnelCreateResult",
+      "type": "object"
+    },
+    "GatewayTunnelProbeResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "binary": {
+          "type": "string"
+        },
+        "configReady": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "binary",
+        "configReady",
+        "message",
+        "mode",
+        "ok",
+        "provider"
+      ],
+      "title": "GatewayTunnelProbeResponse",
+      "type": "object"
+    },
+    "GatewayTunnelStatusResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "binary": {
+          "type": "string"
+        },
+        "commandPreview": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "connectorActive": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "connectorMessage": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastError": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastExit": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "localUrl": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "publicBaseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "startedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "binary",
+        "localUrl",
+        "mode",
+        "provider",
+        "running"
+      ],
+      "title": "GatewayTunnelStatusResponse",
+      "type": "object"
+    },
+    "GatewayTunnelSyncWebhookUrlParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "channel": {
+          "type": "string"
+        },
+        "persist": {
+          "default": true,
+          "type": "boolean"
+        },
+        "webhookPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "title": "GatewayTunnelSyncWebhookUrlParams",
+      "type": "object"
+    },
+    "GatewayTunnelSyncWebhookUrlResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "channel": {
+          "type": "string"
+        },
+        "persisted": {
+          "type": "boolean"
+        },
+        "publicBaseUrl": {
+          "type": "string"
+        },
+        "webhookPath": {
+          "type": "string"
+        },
+        "webhookUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "persisted",
+        "publicBaseUrl",
+        "webhookPath",
+        "webhookUrl"
+      ],
+      "title": "GatewayTunnelSyncWebhookUrlResponse",
+      "type": "object"
+    },
+    "ImageStoryboardSlotInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "label": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "shotType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "slotId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "title": "ImageStoryboardSlotInput",
+      "type": "object"
+    },
     "InitializeParams": {
       "$defs": {
         "ClientCapabilities": {
@@ -5307,6 +9767,353 @@
       "title": "KnowledgeValidateContextRunResponse",
       "type": "object"
     },
+    "LogArtifactEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "compressed": {
+          "type": "boolean"
+        },
+        "fileName": {
+          "type": "string"
+        },
+        "modifiedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "sizeBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "compressed",
+        "fileName",
+        "path",
+        "sizeBytes"
+      ],
+      "title": "LogArtifactEntry",
+      "type": "object"
+    },
+    "LogClearResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cleared": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cleared"
+      ],
+      "title": "LogClearResponse",
+      "type": "object"
+    },
+    "LogEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "level": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "message",
+        "timestamp"
+      ],
+      "title": "LogEntry",
+      "type": "object"
+    },
+    "LogListResponse": {
+      "$defs": {
+        "LogEntry": {
+          "properties": {
+            "level": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "timestamp": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "level",
+            "message",
+            "timestamp"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LogEntry"
+          },
+          "type": "array"
+        }
+      },
+      "title": "LogListResponse",
+      "type": "object"
+    },
+    "LogPersistedTailParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "lines": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "title": "LogPersistedTailParams",
+      "type": "object"
+    },
+    "LogPersistedTailResponse": {
+      "$defs": {
+        "LogEntry": {
+          "properties": {
+            "level": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "timestamp": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "level",
+            "message",
+            "timestamp"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LogEntry"
+          },
+          "type": "array"
+        }
+      },
+      "title": "LogPersistedTailResponse",
+      "type": "object"
+    },
+    "LogStorageDiagnosticsResponse": {
+      "$defs": {
+        "LogArtifactEntry": {
+          "properties": {
+            "compressed": {
+              "type": "boolean"
+            },
+            "fileName": {
+              "type": "string"
+            },
+            "modifiedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "sizeBytes": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "compressed",
+            "fileName",
+            "path",
+            "sizeBytes"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "currentLogExists": {
+          "type": "boolean"
+        },
+        "currentLogPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "currentLogSizeBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "inMemoryLogCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "logDirectory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rawResponseFiles": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LogArtifactEntry"
+          },
+          "type": "array"
+        },
+        "relatedLogFiles": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LogArtifactEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "currentLogExists",
+        "inMemoryLogCount"
+      ],
+      "title": "LogStorageDiagnosticsResponse",
+      "type": "object"
+    },
+    "ManagedObjective": {
+      "$defs": {
+        "ManagedObjectiveStatus": {
+          "enum": [
+            "active",
+            "blocked",
+            "budget_limited",
+            "completed",
+            "failed",
+            "needs_input",
+            "paused",
+            "verifying"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "approvalPolicy": true,
+        "blockerReason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "budgetPolicy": true,
+        "continuationPolicy": true,
+        "createdAt": {
+          "type": "string"
+        },
+        "lastArtifactRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lastAuditSummary": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastEvidencePackRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "objectiveId": {
+          "type": "string"
+        },
+        "objectiveText": {
+          "type": "string"
+        },
+        "ownerId": {
+          "type": "string"
+        },
+        "ownerKind": {
+          "type": "string"
+        },
+        "riskPolicy": true,
+        "status": {
+          "$ref": "#/$defs/ManagedObjectiveStatus"
+        },
+        "successCriteria": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "createdAt",
+        "objectiveId",
+        "objectiveText",
+        "ownerId",
+        "ownerKind",
+        "status",
+        "updatedAt"
+      ],
+      "title": "ManagedObjective",
+      "type": "object"
+    },
+    "ManagedObjectiveStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "active",
+        "blocked",
+        "budget_limited",
+        "completed",
+        "failed",
+        "needs_input",
+        "paused",
+        "verifying"
+      ],
+      "title": "ManagedObjectiveStatus",
+      "type": "string"
+    },
     "McpContent": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "oneOf": [
@@ -5977,6 +10784,789 @@
         "query"
       ],
       "title": "McpToolSearchParams",
+      "type": "object"
+    },
+    "MediaTaskArtifactAudioCompleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "audioPath": {
+          "type": "string"
+        },
+        "durationMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mimeType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectRootPath": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskRef": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "audioPath",
+        "projectRootPath",
+        "taskRef"
+      ],
+      "title": "MediaTaskArtifactAudioCompleteParams",
+      "type": "object"
+    },
+    "MediaTaskArtifactAudioCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "audioPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "contentId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "durationMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "entrySource": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "mimeType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modality": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modalityContractKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "outputPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectRootPath": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rawText": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requestedTarget": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requiredCapabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "routingSlot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runtimeContract": true,
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceText": {
+          "type": "string"
+        },
+        "targetLanguage": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "voice": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "voiceStyle": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "projectRootPath",
+        "sourceText"
+      ],
+      "title": "MediaTaskArtifactAudioCreateParams",
+      "type": "object"
+    },
+    "MediaTaskArtifactImageCreateParams": {
+      "$defs": {
+        "ImageStoryboardSlotInput": {
+          "properties": {
+            "label": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "shotType": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "slotId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "anchorHint": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "anchorSectionTitle": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "anchorText": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "aspectRatio": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "contentId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "entrySource": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "executorMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "layoutHint": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modality": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "modalityContractKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "mode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "outerModel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "personaContext": true,
+        "presentation": true,
+        "projectId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectRootPath": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rawText": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "referenceImages": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requestedTarget": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "requiredCapabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "routingSlot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runtimeContract": true,
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "size": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "slotId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "storyboardSlots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ImageStoryboardSlotInput"
+          },
+          "type": "array"
+        },
+        "style": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "targetOutputId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "targetOutputRefId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tasteContext": true,
+        "threadId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "title": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "titleGenerationResult": true,
+        "turnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "usage": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "projectRootPath",
+        "prompt"
+      ],
+      "title": "MediaTaskArtifactImageCreateParams",
+      "type": "object"
+    },
+    "MediaTaskArtifactListFilters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modality_contract_key": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "routing_outcome": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "task_family": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "task_type": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "MediaTaskArtifactListFilters",
+      "type": "object"
+    },
+    "MediaTaskArtifactListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modalityContractKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectRootPath": {
+          "type": "string"
+        },
+        "routingOutcome": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskFamily": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "projectRootPath"
+      ],
+      "title": "MediaTaskArtifactListParams",
+      "type": "object"
+    },
+    "MediaTaskArtifactListResponse": {
+      "$defs": {
+        "MediaTaskArtifactListFilters": {
+          "properties": {
+            "limit": {
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "modality_contract_key": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "routing_outcome": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "status": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "task_family": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "task_type": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "MediaTaskArtifactResponse": {
+          "properties": {
+            "absolute_artifact_path": {
+              "default": "",
+              "type": "string"
+            },
+            "absolute_path": {
+              "default": "",
+              "type": "string"
+            },
+            "artifact_path": {
+              "default": "",
+              "type": "string"
+            },
+            "current_attempt_id": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "idempotency_key": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "normalized_status": {
+              "type": "string"
+            },
+            "path": {
+              "default": "",
+              "type": "string"
+            },
+            "record": {
+              "default": null
+            },
+            "reused_existing": {
+              "default": false,
+              "type": "boolean"
+            },
+            "status": {
+              "type": "string"
+            },
+            "success": {
+              "type": "boolean"
+            },
+            "task_family": {
+              "default": "",
+              "type": "string"
+            },
+            "task_id": {
+              "type": "string"
+            },
+            "task_type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "normalized_status",
+            "status",
+            "success",
+            "task_id",
+            "task_type"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifact_root": {
+          "type": "string"
+        },
+        "filters": {
+          "$ref": "#/$defs/MediaTaskArtifactListFilters"
+        },
+        "modality_runtime_contracts": {
+          "default": null
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "tasks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MediaTaskArtifactResponse"
+          },
+          "type": "array"
+        },
+        "total": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "workspace_root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_root",
+        "filters",
+        "success",
+        "total",
+        "workspace_root"
+      ],
+      "title": "MediaTaskArtifactListResponse",
+      "type": "object"
+    },
+    "MediaTaskArtifactLookupParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "projectRootPath": {
+          "type": "string"
+        },
+        "taskRef": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectRootPath",
+        "taskRef"
+      ],
+      "title": "MediaTaskArtifactLookupParams",
+      "type": "object"
+    },
+    "MediaTaskArtifactResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "absolute_artifact_path": {
+          "default": "",
+          "type": "string"
+        },
+        "absolute_path": {
+          "default": "",
+          "type": "string"
+        },
+        "artifact_path": {
+          "default": "",
+          "type": "string"
+        },
+        "current_attempt_id": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "idempotency_key": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "normalized_status": {
+          "type": "string"
+        },
+        "path": {
+          "default": "",
+          "type": "string"
+        },
+        "record": {
+          "default": null
+        },
+        "reused_existing": {
+          "default": false,
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "task_family": {
+          "default": "",
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "task_type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "normalized_status",
+        "status",
+        "success",
+        "task_id",
+        "task_type"
+      ],
+      "title": "MediaTaskArtifactResponse",
       "type": "object"
     },
     "ModelListParams": {
@@ -6828,6 +12418,295 @@
       "title": "ServerCapabilities",
       "type": "object"
     },
+    "ServerDiagnosticsResponse": {
+      "$defs": {
+        "DiagnosticsCapabilityRoutingMetricsSnapshot": {
+          "properties": {
+            "allCandidatesExcludedTotal": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "filterEvalTotal": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "filterExcludedContextTotal": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "filterExcludedToolsTotal": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "filterExcludedTotal": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "filterExcludedVisionTotal": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "modelFallbackTotal": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "providerFallbackTotal": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "allCandidatesExcludedTotal",
+            "filterEvalTotal",
+            "filterExcludedContextTotal",
+            "filterExcludedToolsTotal",
+            "filterExcludedTotal",
+            "filterExcludedVisionTotal",
+            "modelFallbackTotal",
+            "providerFallbackTotal"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsIdempotencyDiagnostics": {
+          "properties": {
+            "config": {
+              "$ref": "#/$defs/DiagnosticsMetricConfig"
+            },
+            "replayRatePercent": {
+              "format": "double",
+              "type": "number"
+            },
+            "stats": true
+          },
+          "required": [
+            "config",
+            "replayRatePercent",
+            "stats"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsMetricConfig": {
+          "properties": {
+            "cacheableStatusCodes": {
+              "default": [],
+              "items": {
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "headerName": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "maxBodyBytes": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "maxEntries": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ttlSecs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "waitTimeoutMs": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "enabled",
+            "ttlSecs"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsRequestDedupDiagnostics": {
+          "properties": {
+            "config": {
+              "$ref": "#/$defs/DiagnosticsMetricConfig"
+            },
+            "replayRatePercent": {
+              "format": "double",
+              "type": "number"
+            },
+            "stats": true
+          },
+          "required": [
+            "config",
+            "replayRatePercent",
+            "stats"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsResponseCacheDiagnostics": {
+          "properties": {
+            "config": {
+              "$ref": "#/$defs/DiagnosticsMetricConfig"
+            },
+            "hitRatePercent": {
+              "format": "double",
+              "type": "number"
+            },
+            "stats": true
+          },
+          "required": [
+            "config",
+            "hitRatePercent",
+            "stats"
+          ],
+          "type": "object"
+        },
+        "DiagnosticsTelemetrySummary": {
+          "properties": {
+            "avgLatencyMs": {
+              "format": "double",
+              "type": "number"
+            },
+            "failedRequests": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxLatencyMs": {
+              "format": "double",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "minLatencyMs": {
+              "format": "double",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "successRate": {
+              "format": "double",
+              "type": "number"
+            },
+            "successfulRequests": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "timeoutRequests": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalInputTokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalOutputTokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalRequests": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "totalTokens": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "avgLatencyMs",
+            "failedRequests",
+            "successRate",
+            "successfulRequests",
+            "timeoutRequests",
+            "totalInputTokens",
+            "totalOutputTokens",
+            "totalRequests",
+            "totalTokens"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "capabilityRouting": {
+          "$ref": "#/$defs/DiagnosticsCapabilityRoutingMetricsSnapshot"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "idempotency": {
+          "$ref": "#/$defs/DiagnosticsIdempotencyDiagnostics"
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "requestDedup": {
+          "$ref": "#/$defs/DiagnosticsRequestDedupDiagnostics"
+        },
+        "responseCache": {
+          "$ref": "#/$defs/DiagnosticsResponseCacheDiagnostics"
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "telemetrySummary": {
+          "$ref": "#/$defs/DiagnosticsTelemetrySummary"
+        }
+      },
+      "required": [
+        "capabilityRouting",
+        "generatedAt",
+        "host",
+        "idempotency",
+        "port",
+        "requestDedup",
+        "responseCache",
+        "running",
+        "telemetrySummary"
+      ],
+      "title": "ServerDiagnosticsResponse",
+      "type": "object"
+    },
     "ServerInfo": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -6849,6 +12728,56 @@
       "title": "ServerInfo",
       "type": "object"
     },
+    "SkillDownloadInstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "downloadUrl": {
+          "type": "string"
+        },
+        "skillName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "downloadUrl",
+        "skillName"
+      ],
+      "title": "SkillDownloadInstallParams",
+      "type": "object"
+    },
+    "SkillDownloadInstallResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "inspection": true
+      },
+      "required": [
+        "directory",
+        "inspection"
+      ],
+      "title": "SkillDownloadInstallResponse",
+      "type": "object"
+    },
+    "SkillInstalledDirectoriesListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directories": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "SkillInstalledDirectoriesListResponse",
+      "type": "object"
+    },
     "SkillListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -6859,6 +12788,482 @@
         }
       },
       "title": "SkillListResponse",
+      "type": "object"
+    },
+    "SkillLocalDetailInspectParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "directory"
+      ],
+      "title": "SkillLocalDetailInspectParams",
+      "type": "object"
+    },
+    "SkillLocalDetailInspectResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "files": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "inspection": true
+      },
+      "required": [
+        "directory",
+        "inspection"
+      ],
+      "title": "SkillLocalDetailInspectResponse",
+      "type": "object"
+    },
+    "SkillLocalImportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "sourcePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "sourcePath"
+      ],
+      "title": "SkillLocalImportParams",
+      "type": "object"
+    },
+    "SkillLocalImportResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory"
+      ],
+      "title": "SkillLocalImportResponse",
+      "type": "object"
+    },
+    "SkillLocalInspectParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "directory"
+      ],
+      "title": "SkillLocalInspectParams",
+      "type": "object"
+    },
+    "SkillLocalInspectResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "inspection": true
+      },
+      "required": [
+        "inspection"
+      ],
+      "title": "SkillLocalInspectResponse",
+      "type": "object"
+    },
+    "SkillLocalRenameParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "newDirectory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "directory",
+        "newDirectory"
+      ],
+      "title": "SkillLocalRenameParams",
+      "type": "object"
+    },
+    "SkillLocalRenameResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory"
+      ],
+      "title": "SkillLocalRenameResponse",
+      "type": "object"
+    },
+    "SkillManagementInstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "directory"
+      ],
+      "title": "SkillManagementInstallParams",
+      "type": "object"
+    },
+    "SkillManagementListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "refreshRemote": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "app"
+      ],
+      "title": "SkillManagementListParams",
+      "type": "object"
+    },
+    "SkillManagementUninstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "directory"
+      ],
+      "title": "SkillManagementUninstallParams",
+      "type": "object"
+    },
+    "SkillManagementWriteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "title": "SkillManagementWriteResponse",
+      "type": "object"
+    },
+    "SkillMarketplaceBundleFile": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "encoding": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "content",
+        "path"
+      ],
+      "title": "SkillMarketplaceBundleFile",
+      "type": "object"
+    },
+    "SkillMarketplaceInstallParams": {
+      "$defs": {
+        "SkillMarketplaceBundleFile": {
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "encoding": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "content",
+            "path"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "aliases": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "app": {
+          "type": "string"
+        },
+        "contentHash": {
+          "default": "",
+          "type": "string"
+        },
+        "fileCount": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "files": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SkillMarketplaceBundleFile"
+          },
+          "type": "array"
+        },
+        "manifestVersion": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "manifestVersion",
+        "name",
+        "version"
+      ],
+      "title": "SkillMarketplaceInstallParams",
+      "type": "object"
+    },
+    "SkillMarketplaceInstallResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "inspection": true
+      },
+      "required": [
+        "directory",
+        "inspection"
+      ],
+      "title": "SkillMarketplaceInstallResponse",
+      "type": "object"
+    },
+    "SkillPackageExportParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "targetPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "directory",
+        "targetPath"
+      ],
+      "title": "SkillPackageExportParams",
+      "type": "object"
+    },
+    "SkillPackageExportResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "bytesWritten": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "fileCount": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outputPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bytesWritten",
+        "directory",
+        "fileCount",
+        "outputPath"
+      ],
+      "title": "SkillPackageExportResponse",
+      "type": "object"
+    },
+    "SkillPackageLocalInspectParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "sourcePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "sourcePath"
+      ],
+      "title": "SkillPackageLocalInspectParams",
+      "type": "object"
+    },
+    "SkillPackageLocalInspectResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "files": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "inspection": true
+      },
+      "required": [
+        "directory",
+        "inspection"
+      ],
+      "title": "SkillPackageLocalInspectResponse",
+      "type": "object"
+    },
+    "SkillPackageLocalInstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "skillName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourcePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "sourcePath"
+      ],
+      "title": "SkillPackageLocalInstallParams",
+      "type": "object"
+    },
+    "SkillPackageLocalInstallResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "inspection": true
+      },
+      "required": [
+        "directory",
+        "inspection"
+      ],
+      "title": "SkillPackageLocalInstallResponse",
+      "type": "object"
+    },
+    "SkillPackageLocalReplaceParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "sourcePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "directory",
+        "sourcePath"
+      ],
+      "title": "SkillPackageLocalReplaceParams",
+      "type": "object"
+    },
+    "SkillPackageLocalReplaceResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "inspection": true
+      },
+      "required": [
+        "directory",
+        "inspection"
+      ],
+      "title": "SkillPackageLocalReplaceResponse",
       "type": "object"
     },
     "SkillReadParams": {
@@ -6883,6 +13288,226 @@
         "skill"
       ],
       "title": "SkillReadResponse",
+      "type": "object"
+    },
+    "SkillRemoteInspectParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "branch",
+        "directory",
+        "name",
+        "owner"
+      ],
+      "title": "SkillRemoteInspectParams",
+      "type": "object"
+    },
+    "SkillRemoteInspectResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "inspection": true
+      },
+      "required": [
+        "inspection"
+      ],
+      "title": "SkillRemoteInspectResponse",
+      "type": "object"
+    },
+    "SkillRepositoryDeleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "owner"
+      ],
+      "title": "SkillRepositoryDeleteParams",
+      "type": "object"
+    },
+    "SkillRepositoryEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "branch",
+        "enabled",
+        "name",
+        "owner"
+      ],
+      "title": "SkillRepositoryEntry",
+      "type": "object"
+    },
+    "SkillRepositoryListResponse": {
+      "$defs": {
+        "SkillRepositoryEntry": {
+          "properties": {
+            "branch": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "branch",
+            "enabled",
+            "name",
+            "owner"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "repos": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SkillRepositoryEntry"
+          },
+          "type": "array"
+        }
+      },
+      "title": "SkillRepositoryListResponse",
+      "type": "object"
+    },
+    "SkillRepositorySaveParams": {
+      "$defs": {
+        "SkillRepositoryEntry": {
+          "properties": {
+            "branch": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "branch",
+            "enabled",
+            "name",
+            "owner"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "repo": {
+          "$ref": "#/$defs/SkillRepositoryEntry"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "title": "SkillRepositorySaveParams",
+      "type": "object"
+    },
+    "SkillScaffoldCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "request": true
+      },
+      "required": [
+        "app",
+        "request"
+      ],
+      "title": "SkillScaffoldCreateParams",
+      "type": "object"
+    },
+    "SkillScaffoldCreateResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "inspection": true
+      },
+      "required": [
+        "inspection"
+      ],
+      "title": "SkillScaffoldCreateResponse",
+      "type": "object"
+    },
+    "SupportBundleExportResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "bundlePath": {
+          "type": "string"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "includedSections": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "omittedSections": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputDirectory": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bundlePath",
+        "generatedAt",
+        "outputDirectory",
+        "platform"
+      ],
+      "title": "SupportBundleExportResponse",
       "type": "object"
     },
     "UsageStatsDailyTrendsListResponse": {
@@ -7187,6 +13812,448 @@
       "title": "UsageStatsSummary",
       "type": "object"
     },
+    "WechatChannelAccountListResponse": {
+      "$defs": {
+        "WechatConfiguredAccount": {
+          "properties": {
+            "accountId": {
+              "type": "string"
+            },
+            "baseUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "cdnBaseUrl": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "hasToken": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "scannerUserId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "accountId",
+            "enabled",
+            "hasToken"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accounts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/WechatConfiguredAccount"
+          },
+          "type": "array"
+        }
+      },
+      "title": "WechatChannelAccountListResponse",
+      "type": "object"
+    },
+    "WechatChannelAccountRemoveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountId": {
+          "type": "string"
+        },
+        "purgeData": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "accountId"
+      ],
+      "title": "WechatChannelAccountRemoveParams",
+      "type": "object"
+    },
+    "WechatChannelAccountRemoveResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "WechatChannelAccountRemoveResponse",
+      "type": "object"
+    },
+    "WechatConfiguredAccount": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountId": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "cdnBaseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "hasToken": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "scannerUserId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "accountId",
+        "enabled",
+        "hasToken"
+      ],
+      "title": "WechatConfiguredAccount",
+      "type": "object"
+    },
+    "WechatLoginStartParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "botType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "WechatLoginStartParams",
+      "type": "object"
+    },
+    "WechatLoginStartResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "qrcodeUrl": {
+          "type": "string"
+        },
+        "sessionKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message",
+        "qrcodeUrl",
+        "sessionKey"
+      ],
+      "title": "WechatLoginStartResponse",
+      "type": "object"
+    },
+    "WechatLoginWaitParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountName": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "botType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionKey": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sessionKey"
+      ],
+      "title": "WechatLoginWaitParams",
+      "type": "object"
+    },
+    "WechatLoginWaitResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "accountId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "botToken": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "userId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "connected",
+        "message"
+      ],
+      "title": "WechatLoginWaitResponse",
+      "type": "object"
+    },
+    "WechatRuntimeModelSetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "modelId": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "modelId",
+        "providerId"
+      ],
+      "title": "WechatRuntimeModelSetParams",
+      "type": "object"
+    },
+    "WechatRuntimeModelSetResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "runtimeModel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtimeModel"
+      ],
+      "title": "WechatRuntimeModelSetResponse",
+      "type": "object"
+    },
+    "WindowsStartupCheck": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "detail": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "message",
+        "status"
+      ],
+      "title": "WindowsStartupCheck",
+      "type": "object"
+    },
+    "WindowsStartupDiagnosticsResponse": {
+      "$defs": {
+        "WindowsStartupCheck": {
+          "properties": {
+            "detail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "message",
+            "status"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appDataDir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "checks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/WindowsStartupCheck"
+          },
+          "type": "array"
+        },
+        "comspecEnv": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "currentDir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "currentExe": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "dbPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "hasBlockingIssues": {
+          "type": "boolean"
+        },
+        "hasWarnings": {
+          "type": "boolean"
+        },
+        "homeDir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "installationKindGuess": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "legacyLimeDir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "platform": {
+          "type": "string"
+        },
+        "resolvedTerminalShell": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "resourceDir": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "shellEnv": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "summaryMessage": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "webview2Version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "hasBlockingIssues",
+        "hasWarnings",
+        "platform"
+      ],
+      "title": "WindowsStartupDiagnosticsResponse",
+      "type": "object"
+    },
     "WorkspaceEnsureParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -7465,10 +14532,30 @@
               "agentAppUiRuntime/start",
               "agentAppUiRuntime/status",
               "agentAppUiRuntime/stop",
+              "agentSession/action/replay",
               "agentSession/action/respond",
+              "agentSession/analysisHandoff/export",
+              "agentSession/compact",
+              "agentSession/fileCheckpoint/diff",
+              "agentSession/fileCheckpoint/get",
+              "agentSession/fileCheckpoint/list",
+              "agentSession/fileCheckpoint/restore",
+              "agentSession/handoffBundle/export",
               "agentSession/list",
+              "agentSession/objective/audit",
+              "agentSession/objective/clear",
+              "agentSession/objective/continue",
+              "agentSession/objective/read",
+              "agentSession/objective/set",
+              "agentSession/objective/status/update",
+              "agentSession/queuedTurn/promote",
+              "agentSession/queuedTurn/remove",
               "agentSession/read",
+              "agentSession/replayCase/export",
+              "agentSession/reviewDecision/save",
+              "agentSession/reviewDecisionTemplate/export",
               "agentSession/start",
+              "agentSession/thread/resume",
               "agentSession/turn/cancel",
               "agentSession/turn/start",
               "agentSession/update",
@@ -7491,13 +14578,31 @@
               "connectDeepLink/resolve",
               "connectOpenDeepLink/resolve",
               "connectRelayApiKey/save",
+              "diagnostics/logStorage/read",
+              "diagnostics/server/read",
+              "diagnostics/supportBundle/export",
+              "diagnostics/windowsStartup/read",
+              "discordChannel/probe",
               "evidence/export",
+              "feishuChannel/probe",
               "fileSystem/createDirectory",
               "fileSystem/createFile",
               "fileSystem/deleteFile",
               "fileSystem/listDirectory",
               "fileSystem/readFilePreview",
               "fileSystem/renameFile",
+              "gatewayChannel/start",
+              "gatewayChannel/status",
+              "gatewayChannel/stop",
+              "gatewayTunnel/cloudflared/detect",
+              "gatewayTunnel/cloudflared/install",
+              "gatewayTunnel/create",
+              "gatewayTunnel/probe",
+              "gatewayTunnel/restart",
+              "gatewayTunnel/start",
+              "gatewayTunnel/status",
+              "gatewayTunnel/stop",
+              "gatewayTunnel/syncWebhookUrl",
               "initialize",
               "knowledgeContext/resolve",
               "knowledgeContextRun/validate",
@@ -7507,6 +14612,10 @@
               "knowledgePack/read",
               "knowledgePack/source/import",
               "knowledgePack/status/update",
+              "log/clear",
+              "log/diagnosticHistory/clear",
+              "log/list",
+              "log/persistedTail",
               "mcpPrompt/get",
               "mcpPrompt/list",
               "mcpResource/list",
@@ -7526,6 +14635,12 @@
               "mcpTool/list",
               "mcpTool/listForContext",
               "mcpTool/search",
+              "mediaTaskArtifact/audio/complete",
+              "mediaTaskArtifact/audio/create",
+              "mediaTaskArtifact/cancel",
+              "mediaTaskArtifact/get",
+              "mediaTaskArtifact/image/create",
+              "mediaTaskArtifact/list",
               "model/list",
               "modelPreferences/list",
               "modelProvider/catalog/list",
@@ -7554,9 +14669,36 @@
               "projectMemory/read",
               "skill/list",
               "skill/read",
+              "skillCache/refresh",
+              "skillInstalledDirectories/list",
+              "skillLocal/detail/inspect",
+              "skillLocal/import",
+              "skillLocal/inspect",
+              "skillLocal/rename",
+              "skillLocal/scaffold/create",
+              "skillManagement/install",
+              "skillManagement/list",
+              "skillManagement/uninstall",
+              "skillMarketplace/install",
+              "skillPackage/download/install",
+              "skillPackage/export",
+              "skillPackage/local/inspect",
+              "skillPackage/local/install",
+              "skillPackage/local/replace",
+              "skillRemote/inspect",
+              "skillRepository/delete",
+              "skillRepository/list",
+              "skillRepository/save",
+              "telegramChannel/probe",
               "usageStats/dailyTrends/list",
               "usageStats/modelRanking/list",
               "usageStats/read",
+              "wechatChannel/account/remove",
+              "wechatChannel/accounts/list",
+              "wechatChannel/login/start",
+              "wechatChannel/login/wait",
+              "wechatChannel/probe",
+              "wechatChannel/runtimeModel/set",
               "workspace/byPath/read",
               "workspace/default/ensure",
               "workspace/default/read",

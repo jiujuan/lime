@@ -1,8 +1,6 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
-import {
-  hasDevBridgeEventListenerCapability,
-  isDevBridgeAvailable,
-} from "@/lib/dev-bridge";
+import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
+import { hasDevBridgeEventListenerCapability } from "@/lib/dev-bridge";
 import { parseAgentEvent } from "@/lib/api/agentProtocol";
 import {
   dedupeAgentRuntimeEventNames,
@@ -12,7 +10,7 @@ import { hasDesktopHostEventListenerCapability } from "@/lib/desktop-runtime";
 import type { AgentThreadTurn } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 
-const DEV_BRIDGE_RUNTIME_POLL_MS = 1000;
+const APP_SERVER_BRIDGE_RUNTIME_POLL_MS = 1000;
 const RECOVERED_RUNTIME_POLL_ACTIVE_WINDOW_MS = 30 * 60 * 1000;
 
 function parseTimestampMs(value: string | null | undefined): number | null {
@@ -135,10 +133,10 @@ export function useAgentRuntimeSyncEffects(
     queuedTurnCount,
     threadTurns,
   });
-  const shouldUseDevBridgeRuntimePolling =
+  const shouldUseAppServerBridgeRuntimePolling =
     Boolean(sessionId) &&
     isSending &&
-    isDevBridgeAvailable() &&
+    isAppServerBridgeAvailable() &&
     !hasRuntimeEventListenerCapability;
   const shouldSubscribeTeamEvents =
     Boolean(sessionId) &&
@@ -190,7 +188,7 @@ export function useAgentRuntimeSyncEffects(
   ]);
 
   useEffect(() => {
-    if (!sessionId || !shouldUseDevBridgeRuntimePolling) {
+    if (!sessionId || !shouldUseAppServerBridgeRuntimePolling) {
       return;
     }
 
@@ -198,12 +196,16 @@ export function useAgentRuntimeSyncEffects(
 
     const timer = window.setInterval(() => {
       void refreshSessionDetail(sessionId);
-    }, DEV_BRIDGE_RUNTIME_POLL_MS);
+    }, APP_SERVER_BRIDGE_RUNTIME_POLL_MS);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [refreshSessionDetail, sessionId, shouldUseDevBridgeRuntimePolling]);
+  }, [
+    refreshSessionDetail,
+    sessionId,
+    shouldUseAppServerBridgeRuntimePolling,
+  ]);
 
   useEffect(() => {
     if (!sessionId || !normalizedCurrentTurnEventName) {

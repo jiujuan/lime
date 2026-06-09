@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "allCandidatesExcludedTotal": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "filterEvalTotal": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "filterExcludedContextTotal": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "filterExcludedToolsTotal": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "filterExcludedTotal": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "filterExcludedVisionTotal": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "modelFallbackTotal": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "providerFallbackTotal": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "allCandidatesExcludedTotal",
+    "filterEvalTotal",
+    "filterExcludedContextTotal",
+    "filterExcludedToolsTotal",
+    "filterExcludedTotal",
+    "filterExcludedVisionTotal",
+    "modelFallbackTotal",
+    "providerFallbackTotal"
+  ],
+  "title": "DiagnosticsCapabilityRoutingMetricsSnapshot",
+  "type": "object"
+}

@@ -128,6 +128,28 @@ describe("fileSystem API", () => {
     );
   });
 
+  it("文件壳 side-effect 命令只接受真实空返回", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      });
+
+    await expect(revealPathInFinder("/tmp/demo.txt")).resolves.toBeUndefined();
+    await expect(revealPathInFinder("/tmp/demo.txt")).rejects.toThrow(
+      "reveal_in_finder did not return empty Electron host result",
+    );
+    await expect(openPathWithDefaultApp("/tmp/demo.txt")).resolves.toBeUndefined();
+    await expect(openPathWithDefaultApp("/tmp/demo.txt")).rejects.toThrow(
+      "open_with_default_app did not return empty Electron host result",
+    );
+  });
+
   it("get_home_dir 返回非空字符串以外的形态时应 fail closed", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({ home: "/Users/demo" });
 

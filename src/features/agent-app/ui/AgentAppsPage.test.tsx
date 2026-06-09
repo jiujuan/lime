@@ -738,15 +738,18 @@ describe("AgentAppsPage", () => {
       container.querySelector('[data-testid="agent-apps-launch-summary"]')
         ?.textContent,
     ).toContain("ui:项目首页:/dashboard");
-
-    const moreInfo = container.querySelector(
-      '[data-testid="agent-apps-more-info"]',
-    ) as HTMLButtonElement | null;
-    await act(async () => {
-      moreInfo?.click();
-      await Promise.resolve();
-    });
-    await flush();
+    const lifecycleActions = container.querySelector(
+      '[data-testid="agent-apps-lifecycle-actions"]',
+    );
+    expect(lifecycleActions).not.toBeNull();
+    expect(
+      lifecycleActions?.querySelector(
+        '[data-testid="agent-apps-uninstall-keep-data"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-apps-more-info-content"]'),
+    ).toBeNull();
 
     const disableButton = container.querySelector(
       '[data-testid="agent-apps-disable"]',

@@ -108,6 +108,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === "string";
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
 function normalizeText(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -134,6 +146,30 @@ async function invokeVoiceModelCommand<T>(
     : await safeInvoke(command);
   assertNotDiagnosticFacade(command, result, "真实语音模型 current 通道");
   return result as T;
+}
+
+function assertCatalogEntry(
+  command: string,
+  value: unknown,
+): asserts value is VoiceModelCatalogEntry {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.provider !== "string" ||
+    typeof value.description !== "string" ||
+    typeof value.version !== "string" ||
+    !isStringArray(value.languages) ||
+    !isFiniteNumber(value.size_bytes) ||
+    typeof value.download_url !== "string" ||
+    !isNullableString(value.vad_model_id) ||
+    !isNullableString(value.vad_download_url) ||
+    typeof value.runtime !== "string" ||
+    typeof value.bundled !== "boolean" ||
+    !isNullableString(value.checksum_sha256)
+  ) {
+    throw new Error(`${command} did not return a voice model catalog entry`);
+  }
 }
 
 function assertInstallState(
@@ -169,7 +205,10 @@ function assertCatalog(command: string, value: unknown): VoiceModelCatalogEntry[
   if (!Array.isArray(value)) {
     throw new Error(`${command} did not return a voice model catalog`);
   }
-  return value as VoiceModelCatalogEntry[];
+  for (const item of value) {
+    assertCatalogEntry(command, item);
+  }
+  return value;
 }
 
 function assertAsrCredential(

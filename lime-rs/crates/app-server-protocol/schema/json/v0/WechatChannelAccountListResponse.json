@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "WechatConfiguredAccount": {
+      "properties": {
+        "accountId": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "cdnBaseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "hasToken": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "scannerUserId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "accountId",
+        "enabled",
+        "hasToken"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "accounts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/WechatConfiguredAccount"
+      },
+      "type": "array"
+    }
+  },
+  "title": "WechatChannelAccountListResponse",
+  "type": "object"
+}

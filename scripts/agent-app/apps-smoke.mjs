@@ -258,6 +258,36 @@ function sanitizeDiagnosticJson(value, depth = 0) {
   return sanitizeDiagnosticText(String(value));
 }
 
+function isBenignDevBridgeEventAbortText(value) {
+  const text = String(value ?? "");
+  return (
+    text.includes("net::ERR_ABORTED") &&
+    (text.includes("/events?") ||
+      text.includes("127.0.0.1:3030/events") ||
+      text.includes("lime-open-voice-model-settings") ||
+      text.includes("app-update%3A%2F%2Fsession"))
+  );
+}
+
+function isBenignDevBridgeEventAbortRequest(request) {
+  return (
+    request.failure()?.errorText === "net::ERR_ABORTED" &&
+    request.url().includes("/events?")
+  );
+}
+
+function recordConsoleError(message, consoleErrors, ignoredConsoleErrors) {
+  if (message.type() !== "error") {
+    return;
+  }
+  const text = message.text();
+  if (isBenignDevBridgeEventAbortText(text)) {
+    ignoredConsoleErrors.push(text);
+    return;
+  }
+  consoleErrors.push(text);
+}
+
 function contentFactoryRuntimeHtml() {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -1305,6 +1335,8 @@ async function collectFailureDiagnostics(
   error,
   consoleErrors,
   failedRequests,
+  ignoredConsoleErrors = [],
+  ignoredFailedRequests = [],
 ) {
   const screenshotPath = path.join(
     options.evidenceDir,
@@ -1498,6 +1530,8 @@ async function collectFailureDiagnostics(
     processSnapshot,
     consoleErrors,
     failedRequests,
+    ignoredConsoleErrors,
+    ignoredFailedRequests,
     screenshot,
   };
   fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
@@ -1542,20 +1576,7 @@ async function openContentFactoryDetails(page, timeoutMs) {
   await page.waitForSelector('[data-testid="agent-apps-detail"]', {
     timeout: timeoutMs,
   });
-}
-
-async function expandContentFactoryMoreInfo(page, timeoutMs) {
-  if (
-    (await page
-      .locator('[data-testid="agent-apps-more-info-content"]')
-      .count()) > 0
-  ) {
-    return;
-  }
-  await page.click('[data-testid="agent-apps-more-info"]', {
-    timeout: timeoutMs,
-  });
-  await page.waitForSelector('[data-testid="agent-apps-more-info-content"]', {
+  await page.waitForSelector('[data-testid="agent-apps-lifecycle-actions"]', {
     timeout: timeoutMs,
   });
 }
@@ -2410,10 +2431,9 @@ async function runFlagOffRegression(options) {
   const context = await launchSmokeContext(userDataDir);
   const page = await context.newPage();
   const consoleErrors = [];
+  const ignoredConsoleErrors = [];
   page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
-    }
+    recordConsoleError(message, consoleErrors, ignoredConsoleErrors);
   });
 
   try {
@@ -2446,6 +2466,7 @@ async function runFlagOffRegression(options) {
     return {
       assertions,
       consoleErrors,
+      ignoredConsoleErrors,
       screenshot: screenshotPath,
     };
   } finally {
@@ -2607,6 +2628,8 @@ async function main() {
   const context = await launchSmokeContext(userDataDir);
   const consoleErrors = [];
   const failedRequests = [];
+  const ignoredConsoleErrors = [];
+  const ignoredFailedRequests = [];
 
   const bootstrap = activeCloudBootstrapPayload();
   await context.addInitScript((payload) => {
@@ -2627,16 +2650,19 @@ async function main() {
     },
   );
   page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
-    }
+    recordConsoleError(message, consoleErrors, ignoredConsoleErrors);
   });
   page.on("requestfailed", (request) => {
-    failedRequests.push({
+    const record = {
       url: request.url(),
       method: request.method(),
       failure: request.failure()?.errorText ?? "unknown",
-    });
+    };
+    if (isBenignDevBridgeEventAbortRequest(request)) {
+      ignoredFailedRequests.push(record);
+      return;
+    }
+    failedRequests.push(record);
   });
 
   try {
@@ -2762,7 +2788,6 @@ async function main() {
 
     logStage("disable-enable");
     await openContentFactoryDetails(page, options.timeoutMs);
-    await expandContentFactoryMoreInfo(page, options.timeoutMs);
     await page.click('[data-testid="agent-apps-disable"]');
     await page.waitForFunction(
       () =>
@@ -2891,7 +2916,6 @@ async function main() {
 
     logStage("uninstall-rehearsal");
     await openContentFactoryDetails(page, options.timeoutMs);
-    await expandContentFactoryMoreInfo(page, options.timeoutMs);
     await page.click('[data-testid="agent-apps-uninstall-delete-data"]');
     await page.waitForSelector('[data-testid="agent-apps-uninstall-preview"]', {
       timeout: options.timeoutMs,
@@ -3088,6 +3112,8 @@ async function main() {
           flagOff,
           consoleErrors,
           failedRequests,
+          ignoredConsoleErrors,
+          ignoredFailedRequests,
           screenshot: screenshotPath,
         },
         null,
@@ -3103,6 +3129,8 @@ async function main() {
       error,
       consoleErrors,
       failedRequests,
+      ignoredConsoleErrors,
+      ignoredFailedRequests,
     );
     throw error;
   } finally {

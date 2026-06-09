@@ -65,12 +65,14 @@ pub mod runtime_skill_binding_service;
 pub mod site_adapter_import_service;
 pub mod site_adapter_registry;
 pub mod site_capability_service;
+pub mod skill_service_state;
 pub mod sysinfo_service;
 pub mod thread_reliability_projection_service;
 pub mod update_check_service;
 pub mod update_window;
 pub mod web_search_prompt_service;
 pub mod web_search_runtime_service;
+pub mod windows_startup_service;
 pub mod workspace_health_service;
 
 #[cfg(test)]

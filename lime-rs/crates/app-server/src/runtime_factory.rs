@@ -10,6 +10,7 @@ use crate::RuntimeCore;
 use crate::UnavailableBackend;
 #[cfg(feature = "aster-backend")]
 use crate::{AsterBackend, AsterBackendHost};
+use lime_core::database::DbConnection;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -96,11 +97,25 @@ impl AppServerRuntimeFactory {
         RuntimeCore::with_backend(Arc::new(RuntimeBackend::new()))
     }
 
+    pub fn runtime_backend_core_with_db(db: DbConnection) -> RuntimeCore {
+        RuntimeCore::with_backend(Arc::new(RuntimeBackend::with_db(db)))
+    }
+
     pub fn runtime_backend_core_with_capability_source(
         capability_source: Arc<dyn CapabilitySource>,
     ) -> RuntimeCore {
         RuntimeCore::with_backend_and_capability_source(
             Arc::new(RuntimeBackend::new()),
+            capability_source,
+        )
+    }
+
+    pub fn runtime_backend_core_with_db_and_capability_source(
+        db: DbConnection,
+        capability_source: Arc<dyn CapabilitySource>,
+    ) -> RuntimeCore {
+        RuntimeCore::with_backend_and_capability_source(
+            Arc::new(RuntimeBackend::with_db(db)),
             capability_source,
         )
     }

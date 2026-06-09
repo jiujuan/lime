@@ -657,7 +657,6 @@
   "skills.scaffoldDialog.validation.description": "Skill の説明を入力してください",
   "skills.scaffoldDialog.validation.directory": "ディレクトリ名を入力してください",
   "skills.scaffoldDialog.validation.name": "Skill 名を入力してください",
-  "skills.skillCard.action.execute": "実行",
   "skills.skillCard.action.inspect": "詳細を確認",
   "skills.skillCard.action.install": "インストール",
   "skills.skillCard.action.installing": "インストール中",

@@ -5,16 +5,11 @@ export type {
 } from "./clientFactory";
 export type { AgentRuntimeCreateSessionOptions } from "./types";
 export {
-  configureAsterProvider,
   createAgentClient,
   generateAgentRuntimeTitleResult,
   generateAgentRuntimeTitle,
   generateAgentRuntimeSessionTitle,
-  getAgentProcessStatus,
-  getAsterAgentStatus,
   initAsterAgent,
-  startAgentProcess,
-  stopAgentProcess,
 } from "./agentClient";
 export {
   createExportClient,
@@ -39,15 +34,6 @@ export {
   setAgentRuntimeObjective,
   updateAgentRuntimeObjectiveStatus,
 } from "./objectiveClient";
-export {
-  cancelMediaTaskArtifact,
-  completeAudioGenerationTaskArtifact,
-  createAudioGenerationTaskArtifact,
-  createMediaClient,
-  createImageGenerationTaskArtifact,
-  getMediaTaskArtifact,
-  listMediaTaskArtifacts,
-} from "./mediaClient";
 export {
   createSessionClient,
   createAgentRuntimeSession,

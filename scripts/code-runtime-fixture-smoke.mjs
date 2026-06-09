@@ -42,6 +42,10 @@ const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
 const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
 const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
 const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =
+  "agentSession/fileCheckpoint/list";
+const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =
+  "agentSession/fileCheckpoint/diff";
 const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 const FIXTURE_RELATIVE_PATH = ".lime/qc/code-runtime-fixture/src/greeting.ts";
 const INITIAL_CONTENT = [
@@ -751,25 +755,25 @@ async function runSmoke(options) {
     );
 
     console.log(`${LOG_PREFIX} stage=file-checkpoints`);
-    const checkpointList = await invokeDevBridge(
+    const checkpointListResult = await invokeAppServer(
       options,
-      "agent_runtime_list_file_checkpoints",
+      APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
       {
-        request: { sessionId },
+        sessionId,
       },
     );
+    const checkpointList = checkpointListResult.result;
     const checkpointId = checkpointIdFromList(checkpointList);
     assertSmoke(checkpointId, "未找到 runtime file checkpoint");
-    const checkpointDiff = await invokeDevBridge(
+    const checkpointDiffResult = await invokeAppServer(
       options,
-      "agent_runtime_diff_file_checkpoint",
+      APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
       {
-        request: {
-          sessionId,
-          checkpointId,
-        },
+        sessionId,
+        checkpointId,
       },
     );
+    const checkpointDiff = checkpointDiffResult.result;
 
     console.log(`${LOG_PREFIX} stage=export-evidence`);
     const evidenceExportResult = await invokeAppServer(
@@ -857,7 +861,7 @@ async function runSmoke(options) {
         usesAppServerJsonRpcSubmitTurn: true,
         usesAppServerSessionRead: true,
         usesAppServerEvidenceExport: true,
-        usesFileCheckpointCompat: true,
+        usesAppServerFileCheckpointCurrent: true,
         usesDefaultReactExecutionStrategy: true,
         usesLocalhostFixtureProvider: true,
         avoidsAtCodeCommandRoute: true,

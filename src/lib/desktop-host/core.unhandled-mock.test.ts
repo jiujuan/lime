@@ -86,6 +86,67 @@ describe("desktop-host/core 未注册 mock command", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
+  it("Agent Runtime session update / delete 默认 mock 被清理后不再伪造成功", async () => {
+    for (const command of [
+      "agent_runtime_update_session",
+      "agent_runtime_delete_session",
+    ]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("Agent Runtime evidence pack 默认 mock 被清理后不再伪造导出成功", async () => {
+    await expect(
+      invokeMockOnly("agent_runtime_export_evidence_pack", {
+        sessionId: "mock-session",
+      }),
+    ).rejects.toThrow(
+      '未注册命令 "agent_runtime_export_evidence_pack"',
+    );
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("Agent Runtime process / Aster residual 默认 mock 被清理后不再伪造成功", async () => {
+    for (const command of [
+      "agent_get_process_status",
+      "agent_start_process",
+      "agent_stop_process",
+      "aster_agent_init",
+      "aster_agent_status",
+      "aster_agent_configure_provider",
+      "aster_agent_reset",
+    ]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("Capability Draft 默认 mock 被清理后不再伪造草案成功", async () => {
+    for (const command of [
+      "capability_draft_create",
+      "capability_draft_list",
+      "capability_draft_get",
+      "capability_draft_verify",
+      "capability_draft_register",
+      "capability_draft_submit_approval_session_inputs",
+      "capability_draft_execute_controlled_get",
+    ]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
   it("实验配置默认 mock 被清理后不再伪造配置读写成功", async () => {
     for (const command of [
       "get_experimental_config",
@@ -131,6 +192,65 @@ describe("desktop-host/core 未注册 mock command", () => {
         `未注册命令 "${command}"`,
       );
     }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("sysinfo/session/intercept 旧默认 mock 被清理后不再伪造成功", async () => {
+    for (const command of [
+      "subscribe_sysinfo",
+      "unsubscribe_sysinfo",
+      "update_session",
+      "add_flow_to_session",
+      "remove_flow_from_session",
+      "unarchive_session",
+      "archive_session",
+      "delete_session",
+      "remove_bookmark",
+      "intercept_config_set",
+      "intercept_continue",
+      "intercept_cancel",
+      "delete_quick_filter",
+    ]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("Machine ID 旧默认 mock 被清理后不再伪造成功", async () => {
+    for (const command of [
+      "get_current_machine_id",
+      "set_machine_id",
+      "generate_random_machine_id",
+      "validate_machine_id",
+      "check_admin_privileges",
+      "get_os_type",
+      "backup_machine_id_to_file",
+      "restore_machine_id_from_file",
+      "format_machine_id",
+      "detect_machine_id_format",
+      "convert_machine_id_format",
+      "get_machine_id_history",
+      "clear_machine_id_override",
+      "copy_machine_id_to_clipboard",
+      "paste_machine_id_from_clipboard",
+      "get_system_info",
+    ]) {
+      await expect(invokeMockOnly(command)).rejects.toThrow(
+        `未注册命令 "${command}"`,
+      );
+    }
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("提示路由旧默认 mock 被清理后不再伪造空列表", async () => {
+    await expect(invokeMockOnly("get_hint_routes")).rejects.toThrow(
+      '未注册命令 "get_hint_routes"',
+    );
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });

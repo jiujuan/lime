@@ -119,6 +119,53 @@ describe("electron/devHttpBridge", () => {
     });
   });
 
+  it("/invoke 支持 Design Canvas 工程导出级别的大 payload", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    const { bridge } = await createStartedBridge(invoke);
+    const largeProjectPayload = "x".repeat(2 * 1024 * 1024);
+
+    const response = await postJson(bridge.url, {
+      cmd: "save_layered_design_project_export",
+      args: {
+        request: {
+          projectRootPath: "/tmp/workspace",
+          documentId: "design-canvas-smoke",
+          title: "Design Canvas Smoke",
+          files: [
+            {
+              relativePath: "design.json",
+              encoding: "utf8",
+              content: largeProjectPayload,
+            },
+            {
+              relativePath: "export-manifest.json",
+              encoding: "utf8",
+              content: '{"assets":[]}',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(response).toEqual({
+      status: 200,
+      body: { result: { accepted: true } },
+    });
+    expect(invoke).toHaveBeenCalledWith(
+      "save_layered_design_project_export",
+      expect.objectContaining({
+        request: expect.objectContaining({
+          documentId: "design-canvas-smoke",
+          files: expect.arrayContaining([
+            expect.objectContaining({
+              content: largeProjectPayload,
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
   it("/invoke 缺 command 或 body 非对象时 fail closed 且不调用 invoke", async () => {
     const invoke = vi.fn();
     const { bridge } = await createStartedBridge(invoke);

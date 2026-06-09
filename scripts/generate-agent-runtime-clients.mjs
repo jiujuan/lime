@@ -26,7 +26,6 @@ const allowedDomains = new Set([
   "session",
   "export",
   "inventory",
-  "subagent",
 ]);
 const allowedLifecycles = new Set(["current", "compat", "deprecated"]);
 const allowedMockStrategies = new Set([
@@ -185,6 +184,9 @@ function buildGeneratedOutput(schemaEntries) {
   const byDomainBody = domains
     .map((domain) => {
       const entries = schemaEntries.filter((entry) => entry.domain === domain);
+      if (entries.length === 0) {
+        return `  ${JSON.stringify(domain)}: [],`;
+      }
       const lines = entries.map(
         (entry) => `    AGENT_RUNTIME_COMMANDS.${entry.key},`,
       );
@@ -272,6 +274,9 @@ function buildGeneratedDeclarationOutput(schemaEntries) {
   const byDomainBody = domains
     .map((domain) => {
       const entries = schemaEntries.filter((entry) => entry.domain === domain);
+      if (entries.length === 0) {
+        return `  readonly ${JSON.stringify(domain)}: readonly [];`;
+      }
       const lines = entries.map((entry) => `    ${JSON.stringify(entry.command)},`);
       return `  readonly ${JSON.stringify(domain)}: readonly [\n${lines.join("\n")}\n  ];`;
     })

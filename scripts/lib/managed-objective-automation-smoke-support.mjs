@@ -1,10 +1,23 @@
 import { summarizeEvidencePack } from "./managed-objective-continuation-smoke-core.mjs";
+import {
+  findWorkspaceSkillBinding,
+  workspaceSkillDirectoryFromName,
+  writeWorkspaceSkillFixture,
+} from "./workspace-skill-fixture.mjs";
 
 const CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
 const COMPLETION_AUDIT_POLICY = "artifact_or_evidence_required";
 const CURRENT_AGENT_TURN_DISPATCH = "agentSession/turn/start";
 const AUTOMATION_SMOKE_SKILL_TITLE =
   "Managed Objective Automation Smoke Report";
+const AUTOMATION_SMOKE_SKILL_BOUNDARY = {
+  registrationSurface: "direct-workspace-skill-fixture",
+  classification: "current-smoke-fixture",
+  retiredCommandSurface: "capability-draft-authoring-commands",
+  currentReadMethods: ["workspaceSkillBindings/list"],
+  exitCondition:
+    "keep this smoke independent from P11 Capability Draft authoring commands; use App Server capabilityDraft/* only after P11 current methods exist",
+};
 
 function pickString(target, ...keys) {
   for (const key of keys) {
@@ -169,6 +182,39 @@ export function buildCapabilityDraftRequest(workspaceRoot) {
   };
 }
 
+function automationSmokeSkillDirectoryName() {
+  return workspaceSkillDirectoryFromName(AUTOMATION_SMOKE_SKILL_TITLE);
+}
+
+function buildAutomationSmokeSkillFiles() {
+  const request = buildCapabilityDraftRequest("");
+  return request.generatedFiles;
+}
+
+function buildAutomationSmokeSkillRegistration() {
+  const timestamp = new Date().toISOString();
+  return {
+    registrationId: `smoke-capreg-${Date.now()}`,
+    registeredAt: timestamp,
+    sourceDraftId: "smoke-capdraft-managed-objective-automation",
+    sourceVerificationReportId:
+      "smoke-capver-managed-objective-automation-fixture",
+    generatedFileCount: buildAutomationSmokeSkillFiles().length,
+    permissionSummary: ["Level 0 只读发现", "Level 1 fixture-scoped write"],
+    source: "managed_objective_automation_smoke_fixture",
+  };
+}
+
+async function writeAutomationSmokeWorkspaceSkill(workspaceRoot) {
+  const skillDirectory = automationSmokeSkillDirectoryName();
+  return await writeWorkspaceSkillFixture({
+    workspaceRoot,
+    directory: skillDirectory,
+    generatedFiles: buildAutomationSmokeSkillFiles(),
+    registration: buildAutomationSmokeSkillRegistration(),
+  });
+}
+
 async function invokeAppServer(options, invoke, method, params = {}) {
   const response = await invoke(options, "app_server_handle_json_lines", {
     request: {
@@ -206,67 +252,37 @@ export async function registerAutomationSmokeWorkspaceSkill(
   workspaceRoot,
   invoke,
 ) {
-  const createRequest = buildCapabilityDraftRequest(workspaceRoot);
-  const draft = await invoke(options, "capability_draft_create", {
-    request: createRequest,
-  });
-  const draftId = pickString(draft, "draftId", "draft_id");
-  if (!draftId) {
-    throw new Error("capability_draft_create 未返回 draftId");
-  }
-
-  const verification = await invoke(options, "capability_draft_verify", {
-    request: { workspaceRoot, draftId },
-  });
-  const verificationStatus = pickString(
-    verification?.draft,
-    "verificationStatus",
-    "verification_status",
-  );
-  if (verificationStatus !== "verified_pending_registration") {
-    throw new Error(
-      `Capability Draft verification 状态异常: ${verificationStatus}`,
-    );
-  }
-  const failedChecks = pickArray(verification?.report, "checks").filter(
-    (check) => pickString(check, "status") === "failed",
-  );
-  if (failedChecks.length > 0) {
-    throw new Error(
-      `Capability Draft verification 存在失败项: ${JSON.stringify(failedChecks)}`,
-    );
-  }
-
-  const registrationResult = await invoke(
-    options,
-    "capability_draft_register",
-    {
-      request: { workspaceRoot, draftId },
-    },
-  );
-  const registration = registrationResult?.registration || {};
+  const {
+    skillDirectory: writtenSkillDirectory,
+    registeredSkillDirectory: writtenRegisteredSkillDirectory,
+    registration,
+  } = await writeAutomationSmokeWorkspaceSkill(workspaceRoot);
   const skillDirectory = pickString(
     registration,
     "skillDirectory",
     "skill_directory",
-  );
-  const registeredSkillDirectory = pickString(
-    registration,
-    "registeredSkillDirectory",
-    "registered_skill_directory",
-  );
+  ) || writtenSkillDirectory;
+  const registeredSkillDirectory =
+    pickString(
+      registration,
+      "registeredSkillDirectory",
+      "registered_skill_directory",
+    ) || writtenRegisteredSkillDirectory;
   const sourceDraftId =
-    pickString(registration, "sourceDraftId", "source_draft_id") || draftId;
+    pickString(registration, "sourceDraftId", "source_draft_id") ||
+    "smoke-capdraft-managed-objective-automation";
   const sourceVerificationReportId = pickString(
     registration,
     "sourceVerificationReportId",
     "source_verification_report_id",
   );
   if (!skillDirectory || !registeredSkillDirectory) {
-    throw new Error("capability_draft_register 未返回 Skill 注册目录");
+    throw new Error("automation smoke workspace skill fixture 缺少注册目录");
   }
   if (!sourceVerificationReportId) {
-    throw new Error("capability_draft_register 未返回 verification provenance");
+    throw new Error(
+      "automation smoke workspace skill fixture 缺少 verification provenance",
+    );
   }
 
   const bindingSnapshot = await invokeAppServer(
@@ -280,16 +296,11 @@ export async function registerAutomationSmokeWorkspaceSkill(
       browserAssist: false,
     },
   );
-  const binding = pickArray(bindingSnapshot, "bindings").find((item) => {
-    return (
-      pickString(item, "directory") === skillDirectory ||
-      pickString(
-        item,
-        "registeredSkillDirectory",
-        "registered_skill_directory",
-      ) === registeredSkillDirectory
-    );
-  });
+  const binding = findWorkspaceSkillBinding(
+    bindingSnapshot,
+    registeredSkillDirectory,
+    skillDirectory,
+  );
   if (!binding) {
     throw new Error("runtime binding readiness 未找到刚注册的 workspace skill");
   }
@@ -305,17 +316,14 @@ export async function registerAutomationSmokeWorkspaceSkill(
     registeredSkillDirectory,
     sourceDraftId,
     sourceVerificationReportId,
-    verificationReportId: pickString(
-      verification?.report,
-      "reportId",
-      "report_id",
-    ),
+    verificationReportId: sourceVerificationReportId,
     registrationId: pickString(
       registration,
       "registrationId",
       "registration_id",
     ),
     bindingStatus,
+    boundary: AUTOMATION_SMOKE_SKILL_BOUNDARY,
     permissionSummary: pickArray(
       registration,
       "permissionSummary",
@@ -492,6 +500,7 @@ export function buildAutomationSmokeEvidence({
   options,
   health,
   workspace,
+  skillBinding,
   provider,
   providerSessionId,
   job,
@@ -563,6 +572,7 @@ export function buildAutomationSmokeEvidence({
       usesAutomationJobOwner: true,
       usesAppServerJsonRpcSubmitTurn: true,
       usesRegisteredWorkspaceSkill: Boolean(workspaceSkillRuntimeEnable),
+      usesCapabilityDraftAuthoringCommands: false,
       usesLocalFixtureProvider: provider?.source === "localhost-fixture",
       avoidsLiveProviderByDefault: !options.allowLiveProvider,
       evidencePackExported: Boolean(evidencePack),
@@ -592,6 +602,8 @@ export function buildAutomationSmokeEvidence({
       providerSessionId,
     },
     automation: {
+      workspaceSkillRegistrationBoundary:
+        skillBinding?.boundary || AUTOMATION_SMOKE_SKILL_BOUNDARY,
       jobId: job?.id || null,
       runResult,
       latestRun: latestRun

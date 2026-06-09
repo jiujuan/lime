@@ -1,0 +1,250 @@
+{
+  "$defs": {
+    "ImageStoryboardSlotInput": {
+      "properties": {
+        "label": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "shotType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "slotId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "anchorHint": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "anchorSectionTitle": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "anchorText": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "aspectRatio": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "contentId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "count": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "entrySource": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "executorMode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "layoutHint": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modality": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "modalityContractKey": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "mode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "outerModel": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "personaContext": true,
+    "presentation": true,
+    "projectId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "projectRootPath": {
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "rawText": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "referenceImages": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "requestedTarget": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "requiredCapabilities": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "routingSlot": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "runtimeContract": true,
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "size": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "slotId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "storyboardSlots": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ImageStoryboardSlotInput"
+      },
+      "type": "array"
+    },
+    "style": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "targetOutputId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "targetOutputRefId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "tasteContext": true,
+    "threadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "title": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "titleGenerationResult": true,
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "usage": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "projectRootPath",
+    "prompt"
+  ],
+  "title": "MediaTaskArtifactImageCreateParams",
+  "type": "object"
+}

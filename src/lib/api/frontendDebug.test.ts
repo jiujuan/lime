@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { isDevBridgeAvailable, safeInvoke } from "@/lib/dev-bridge";
+import { safeInvoke } from "@/lib/dev-bridge";
 import { reportFrontendDebugLog } from "./frontendDebug";
 
 vi.mock("@/lib/dev-bridge", () => ({
-  isDevBridgeAvailable: vi.fn(() => false),
   safeInvoke: vi.fn(),
 }));
 
@@ -12,35 +11,21 @@ describe("frontendDebug API", () => {
     vi.clearAllMocks();
   });
 
-  it("应代理前端调试日志上报命令", async () => {
-    vi.mocked(isDevBridgeAvailable).mockReturnValue(false);
-    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+  it("应通过 Electron Host current 通道上报前端调试日志并保持参数投影", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce(null);
+    const report = {
+      message: "AgentChatPage.loadData.start",
+      category: "agent",
+    };
 
-    await expect(
-      reportFrontendDebugLog({
-        message: "AgentChatPage.loadData.start",
-        category: "agent",
-      }),
-    ).resolves.toBeUndefined();
-  });
+    await expect(reportFrontendDebugLog(report)).resolves.toBeUndefined();
 
-  it("浏览器 dev shell 下应 fail closed，不能静默跳过真实上报", async () => {
-    vi.mocked(isDevBridgeAvailable).mockReturnValue(true);
-
-    await expect(
-      reportFrontendDebugLog({
-        message: "AgentChatPage.loadData.start",
-        category: "agent",
-      }),
-    ).rejects.toThrow(
-      "report_frontend_debug_log 尚未接入浏览器 DevBridge current 通道",
-    );
-
-    expect(safeInvoke).not.toHaveBeenCalled();
+    expect(safeInvoke).toHaveBeenCalledWith("report_frontend_debug_log", {
+      report,
+    });
   });
 
   it("遇到 Electron degraded diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(isDevBridgeAvailable).mockReturnValue(false);
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       diagnostic: {
         category: "electron-diagnostic-facade",
@@ -54,7 +39,20 @@ describe("frontendDebug API", () => {
         category: "agent",
       }),
     ).rejects.toThrow(
-      "report_frontend_debug_log 尚未接入真实前端调试日志 current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "report_frontend_debug_log 尚未接入前端调试日志 Electron Host current 通道",
+    );
+  });
+
+  it("遇到异常成功形态时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
+
+    await expect(
+      reportFrontendDebugLog({
+        message: "AgentChatPage.loadData.start",
+        category: "agent",
+      }),
+    ).rejects.toThrow(
+      "report_frontend_debug_log did not return debug log result",
     );
   });
 });

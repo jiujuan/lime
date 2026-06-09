@@ -93,4 +93,22 @@ describe("tray API", () => {
       "sync_tray_model_shortcuts did not return tray sync result",
     );
   });
+
+  it("托盘同步遇到 error envelope 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      error: "Electron host command is not supported: sync_tray_model_shortcuts",
+    });
+
+    await expect(
+      syncTrayModelShortcuts({
+        current_model_provider_type: "openai",
+        current_model_provider_label: "OpenAI",
+        current_model: "gpt-4.1",
+        current_theme_label: "默认主题",
+        quick_model_groups: [],
+      }),
+    ).rejects.toThrow(
+      "sync_tray_model_shortcuts returned an error envelope",
+    );
+  });
 });

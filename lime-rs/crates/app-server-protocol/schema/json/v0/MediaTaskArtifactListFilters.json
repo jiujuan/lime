@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "limit": {
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "modality_contract_key": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "routing_outcome": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "status": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "task_family": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "task_type": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "MediaTaskArtifactListFilters",
+  "type": "object"
+}

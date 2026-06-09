@@ -10,7 +10,12 @@ import type {
 } from "./types";
 export type AgentRuntimeEvidenceExportAppServerClient = Pick<
   AppServerClient,
-  "exportEvidence"
+  | "exportEvidence"
+  | "exportHandoffBundle"
+  | "exportReplayCase"
+  | "exportAnalysisHandoff"
+  | "exportReviewDecisionTemplate"
+  | "saveReviewDecision"
 >;
 export interface AgentRuntimeExportClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;

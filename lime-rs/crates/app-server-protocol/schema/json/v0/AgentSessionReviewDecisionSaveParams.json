@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "chosenFixStrategy": {
+      "default": "",
+      "type": "string"
+    },
+    "decisionStatus": {
+      "type": "string"
+    },
+    "decisionSummary": {
+      "default": "",
+      "type": "string"
+    },
+    "followupActions": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "humanReviewer": {
+      "default": "",
+      "type": "string"
+    },
+    "locale": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "notes": {
+      "default": "",
+      "type": "string"
+    },
+    "regressionRequirements": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "riskLevel": {
+      "type": "string"
+    },
+    "riskTags": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "decisionStatus",
+    "riskLevel",
+    "sessionId"
+  ],
+  "title": "AgentSessionReviewDecisionSaveParams",
+  "type": "object"
+}

@@ -4,7 +4,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.62.0",
+  "version": "1.63.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -185,6 +185,7 @@
     "smoke:app-server-sidecar-lifecycle": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server/sidecar-lifecycle-smoke.mjs",
     "smoke:app-server-external-backend": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server/external-backend-smoke.mjs",
     "smoke:app-server-packaged-external-backend-failure": "npm --prefix \"packages/app-server-client\" run build && node scripts/app-server/packaged-external-backend-failure-smoke.mjs",
+    "smoke:mcp-current": "node scripts/mcp/current-smoke.mjs",
     "smoke:site-adapters": "node scripts/site-adapter-catalog-smoke.mjs",
     "smoke:agent-runtime-tool-surface": "node scripts/agent-runtime/tool-surface-smoke.mjs",
     "smoke:agent-runtime-tool-surface-page": "node scripts/agent-runtime/tool-surface-page-smoke.mjs",

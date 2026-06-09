@@ -257,9 +257,6 @@ function assertVoidLike(command: string, value: unknown): void {
   if (value == null) {
     return;
   }
-  if (isRecord(value) && Object.keys(value).length === 0) {
-    return;
-  }
   throw new Error(`${command} did not return an empty result`);
 }
 

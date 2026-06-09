@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "accountId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "baseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "botToken": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "connected": {
+      "type": "boolean"
+    },
+    "message": {
+      "type": "string"
+    },
+    "userId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "connected",
+    "message"
+  ],
+  "title": "WechatLoginWaitResponse",
+  "type": "object"
+}

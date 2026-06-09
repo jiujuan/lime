@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "app": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "newDirectory": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "app",
+    "directory",
+    "newDirectory"
+  ],
+  "title": "SkillLocalRenameParams",
+  "type": "object"
+}

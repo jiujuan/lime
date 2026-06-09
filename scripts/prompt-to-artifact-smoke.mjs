@@ -4,6 +4,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import {
+  findWorkspaceRegisteredSkill,
+  findWorkspaceSkillBinding,
+  workspaceSkillDirectoryFromName,
+  writeWorkspaceSkillFixture,
+} from "./lib/workspace-skill-fixture.mjs";
 
 const DEFAULTS = {
   healthUrl: "http://127.0.0.1:3030/health",
@@ -13,6 +19,22 @@ const DEFAULTS = {
   workspaceRoot: "",
   cleanup: false,
   json: false,
+};
+const RETIRED_AUTHORING_COMMANDS = [
+  ["capability", "draft", "create"].join("_"),
+  ["capability", "draft", "verify"].join("_"),
+  ["capability", "draft", "register"].join("_"),
+];
+const CAPABILITY_DRAFT_BOUNDARY = {
+  registrationSurface: "direct-workspace-skill-fixture",
+  retiredCommandSurface: RETIRED_AUTHORING_COMMANDS.join("|"),
+  classification: "dead/guard-only",
+  currentReadMethods: [
+    "workspaceRegisteredSkills/list",
+    "workspaceSkillBindings/list",
+  ],
+  exitCondition:
+    "do not restore retired authoring commands; keep smoke evidence on App Server current read methods",
 };
 
 function printHelp() {
@@ -181,7 +203,8 @@ async function invokeAppServer(invokeUrl, method, params = {}) {
       ],
     },
   });
-  const lines = Array.isArray(response?.lines) ? response.lines : [];
+  const responseLines = response?.result?.lines ?? response?.lines;
+  const lines = Array.isArray(responseLines) ? responseLines : [];
   for (const line of lines) {
     const text = typeof line === "string" ? line.trim() : "";
     if (!text) {
@@ -197,6 +220,21 @@ async function invokeAppServer(invokeUrl, method, params = {}) {
     return message.result;
   }
   throw new Error(`${method} did not return a JSON-RPC response`);
+}
+
+function buildPromptArtifactSkillRegistration(skillDirectory, registeredSkillDirectory) {
+  const timestamp = new Date().toISOString();
+  return {
+    registrationId: `smoke-capreg-prompt-artifact-${Date.now()}`,
+    registeredAt: timestamp,
+    skillDirectory,
+    registeredSkillDirectory,
+    sourceDraftId: "smoke-capdraft-prompt-artifact-fixture",
+    sourceVerificationReportId: "smoke-capver-prompt-artifact-fixture",
+    generatedFileCount: buildGeneratedFiles().length,
+    permissionSummary: ["Level 0 只读发现", "Level 1 fixture-scoped write"],
+    source: "prompt_to_artifact_smoke_fixture",
+  };
 }
 
 function buildGeneratedFiles() {
@@ -315,66 +353,15 @@ async function runSmoke(options) {
   const startedAt = new Date().toISOString();
 
   try {
-    const createRequest = {
+    const skillName = "只读 CLI 每日报告";
+    const skillDirectory = workspaceSkillDirectoryFromName(skillName);
+    const fixture = await writeWorkspaceSkillFixture({
       workspaceRoot: workspace.workspaceRoot,
-      name: "只读 CLI 每日报告",
-      description: "把只读 CLI 或 fixture 输出整理成 Markdown 趋势摘要。",
-      userGoal:
-        "每天 9 点读取只读 CLI 或 fixture 输出，生成 Markdown 趋势摘要，失败时提示我检查配置。",
-      sourceKind: "cli",
-      sourceRefs: [
-        "internal/exec-plans/skill-forge-prompt-to-artifact-p5-plan.md",
-      ],
-      permissionSummary: ["Level 0 只读发现", "Level 1 draft-scoped write"],
+      directory: skillDirectory,
       generatedFiles: buildGeneratedFiles(),
-    };
-
-    const draft = await invoke(options.invokeUrl, "capability_draft_create", {
-      request: createRequest,
+      registration: buildPromptArtifactSkillRegistration(skillDirectory),
     });
-    const draftId = pickString(draft, "draftId", "draft_id");
-    assert(draftId, "capability_draft_create 未返回 draftId");
-
-    const verification = await invoke(
-      options.invokeUrl,
-      "capability_draft_verify",
-      {
-        request: { workspaceRoot: workspace.workspaceRoot, draftId },
-      },
-    );
-    const verificationStatus = pickString(
-      verification?.draft,
-      "verificationStatus",
-      "verification_status",
-    );
-    assert(
-      verificationStatus === "verified_pending_registration",
-      `verification 未进入 pending registration: ${verificationStatus}`,
-    );
-    const failedChecks = pickArray(verification?.report, "checks").filter(
-      (check) => pickString(check, "status") === "failed",
-    );
-    assert(
-      failedChecks.length === 0,
-      `verification 存在失败项: ${JSON.stringify(failedChecks)}`,
-    );
-
-    const registration = await invoke(
-      options.invokeUrl,
-      "capability_draft_register",
-      {
-        request: { workspaceRoot: workspace.workspaceRoot, draftId },
-      },
-    );
-    const registeredSkillDirectory = pickString(
-      registration?.registration,
-      "registeredSkillDirectory",
-      "registered_skill_directory",
-    );
-    assert(
-      registeredSkillDirectory,
-      "registration 未返回 registeredSkillDirectory",
-    );
+    const { registeredSkillDirectory, registration } = fixture;
 
     const registeredSkillsResult = await invokeAppServer(
       options.invokeUrl,
@@ -383,14 +370,10 @@ async function runSmoke(options) {
     );
     const registeredSkills = pickArray(registeredSkillsResult, "skills");
     assert(Array.isArray(registeredSkills), "registered skills 返回不是数组");
-    const registeredSkill = registeredSkills.find(
-      (skill) =>
-        pickString(
-          skill,
-          "registeredSkillDirectory",
-          "registered_skill_directory",
-        ) === registeredSkillDirectory ||
-        pickString(skill, "name") === "只读 CLI 每日报告",
+    const registeredSkill = findWorkspaceRegisteredSkill(
+      registeredSkillsResult,
+      registeredSkillDirectory,
+      skillName,
     );
     assert(registeredSkill, "registered discovery 未找到刚注册的 skill");
     assert(
@@ -408,14 +391,10 @@ async function runSmoke(options) {
         workbench: true,
       },
     );
-    const bindings = pickArray(bindingSnapshot, "bindings");
-    const binding = bindings.find(
-      (item) =>
-        pickString(
-          item,
-          "registered_skill_directory",
-          "registeredSkillDirectory",
-        ) === registeredSkillDirectory,
+    const binding = findWorkspaceSkillBinding(
+      bindingSnapshot,
+      registeredSkillDirectory,
+      skillDirectory,
     );
     assert(binding, "runtime binding readiness 未找到刚注册的 skill");
     assert(
@@ -438,17 +417,17 @@ async function runSmoke(options) {
       startedAt,
       finishedAt: new Date().toISOString(),
       workspaceRoot: workspace.workspaceRoot,
-      draftId,
-      verificationStatus,
+      sourceDraftId: pickString(registration, "sourceDraftId"),
+      verificationStatus: "retired_authoring_not_invoked",
       verificationReportId: pickString(
-        verification?.report,
-        "reportId",
-        "report_id",
+        registration,
+        "sourceVerificationReportId",
       ),
       registeredSkillDirectory,
       registeredSkillName: pickString(registeredSkill, "name"),
       bindingStatus: pickString(binding, "binding_status", "bindingStatus"),
       nextGate: pickString(binding, "next_gate", "nextGate"),
+      capabilityDraftBoundary: CAPABILITY_DRAFT_BOUNDARY,
       cleanup: options.cleanup && workspace.createdTemp,
     };
 

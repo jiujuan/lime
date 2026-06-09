@@ -1132,20 +1132,24 @@ function listMockMediaTaskArtifacts(args: any) {
   };
 }
 
-export const mediaTaskMocks: Record<string, (args: any) => any> = {
-  create_image_generation_task_artifact: (args: any) =>
-    buildMockMediaTaskOutput(args),
-  create_audio_generation_task_artifact: (args: any) =>
-    buildMockMediaTaskOutput(args, {
-      task_type: "audio_generate",
-    }),
-  complete_audio_generation_task_artifact: (args: any) =>
-    buildMockCompletedAudioTaskOutput(args),
-  get_media_task_artifact: (args: any) => buildMockMediaTaskOutput(args),
-  list_media_task_artifacts: (args: any) => listMockMediaTaskArtifacts(args),
-  cancel_media_task_artifact: (args: any) =>
-    buildMockMediaTaskOutput(args, {
-      status: "cancelled",
-      normalized_status: "cancelled",
-    }),
-};
+export function createMediaTaskMockHandlers(): Record<string, (args: any) => any> {
+  return {
+    create_image_generation_task_artifact: (args: any) =>
+      buildMockMediaTaskOutput(args),
+    create_audio_generation_task_artifact: (args: any) =>
+      buildMockMediaTaskOutput(args, {
+        task_type: "audio_generate",
+      }),
+    complete_audio_generation_task_artifact: (args: any) =>
+      buildMockCompletedAudioTaskOutput(args),
+    get_media_task_artifact: (args: any) => buildMockMediaTaskOutput(args),
+    list_media_task_artifacts: (args: any) => listMockMediaTaskArtifacts(args),
+    cancel_media_task_artifact: (args: any) =>
+      buildMockMediaTaskOutput(args, {
+        status: "cancelled",
+        normalized_status: "cancelled",
+      }),
+  };
+}
+
+export const mediaTaskMocks: Record<string, (args: any) => any> = {};

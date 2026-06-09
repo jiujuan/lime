@@ -7,7 +7,7 @@ use crate::agent_tools::execution::{
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::aster_agent_cmd::{
     append_subagent_tool_scope_session_permissions, ensure_browser_mcp_tools_registered,
-    ensure_creation_task_tools_registered, ensure_social_image_tool_registered,
+    ensure_social_image_tool_registered,
 };
 use crate::commands::skill_error::{
     format_skill_error, SKILL_ERR_PROVIDER_UNAVAILABLE, SKILL_ERR_SESSION_INIT_FAILED,
@@ -200,15 +200,6 @@ async fn ensure_skill_agent_ready(
                 format!("注册社媒生图工具失败: {error}"),
             )
         })?;
-    ensure_creation_task_tools_registered(aster_state, db, api_key_provider_service, app_handle)
-        .await
-        .map_err(|error| {
-            format_skill_error(
-                SKILL_ERR_SESSION_INIT_FAILED,
-                format!("注册创作任务工具失败: {error}"),
-            )
-        })?;
-
     Ok(())
 }
 
@@ -354,6 +345,7 @@ mod permission_tests {
             skill_name: "image_generate".to_string(),
             display_name: "配图".to_string(),
             description: "测试 skill".to_string(),
+            local_directory_path: PathBuf::from("/tmp/image_generate"),
             markdown_content: "test".to_string(),
             license: None,
             compatibility: None,

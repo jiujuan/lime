@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "WindowsStartupCheck": {
+      "properties": {
+        "detail": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "message",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appDataDir": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "checks": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/WindowsStartupCheck"
+      },
+      "type": "array"
+    },
+    "comspecEnv": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "currentDir": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "currentExe": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "dbPath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "hasBlockingIssues": {
+      "type": "boolean"
+    },
+    "hasWarnings": {
+      "type": "boolean"
+    },
+    "homeDir": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "installationKindGuess": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "legacyLimeDir": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "platform": {
+      "type": "string"
+    },
+    "resolvedTerminalShell": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "resourceDir": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "shellEnv": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "summaryMessage": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "webview2Version": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "hasBlockingIssues",
+    "hasWarnings",
+    "platform"
+  ],
+  "title": "WindowsStartupDiagnosticsResponse",
+  "type": "object"
+}

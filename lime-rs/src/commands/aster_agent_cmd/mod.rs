@@ -10,8 +10,6 @@ use crate::agent::runtime_queue_service::{
     clear_runtime_queue_with_event_port as clear_runtime_queue_with_event_port_service,
     finish_active_runtime_turn_if_matches as finish_active_runtime_turn_if_matches_service,
     list_runtime_queue_snapshots as list_runtime_queue_snapshots_service,
-    promote_runtime_queued_turn as promote_runtime_queued_turn_service,
-    remove_runtime_queued_turn as remove_runtime_queued_turn_service,
     resume_persisted_runtime_queues_on_startup_with_event_port as resume_persisted_runtime_queues_on_startup_with_event_port_service,
     resume_runtime_queue_if_needed_with_event_port as resume_runtime_queue_if_needed_with_event_port_service,
     submit_runtime_turn_with_event_port as submit_runtime_turn_with_event_port_service,
@@ -423,27 +421,6 @@ pub(crate) use browser_assist::{
     extract_browser_assist_runtime_hint, BrowserAssistModalityRuntimeContract,
     BROWSER_ASSIST_ALLOW_PATTERN,
 };
-#[allow(unused_imports)]
-pub(crate) use command_api::{
-    agent_runtime_audit_objective, agent_runtime_clear_objective, agent_runtime_close_subagent,
-    agent_runtime_compact_session, agent_runtime_continue_objective, agent_runtime_create_session,
-    agent_runtime_diff_file_checkpoint, agent_runtime_export_analysis_handoff,
-    agent_runtime_export_evidence_pack, agent_runtime_export_handoff_bundle,
-    agent_runtime_export_replay_case, agent_runtime_get_file_checkpoint,
-    agent_runtime_get_objective, agent_runtime_get_session, agent_runtime_get_thread_read,
-    agent_runtime_get_tool_inventory, agent_runtime_interrupt_turn,
-    agent_runtime_list_file_checkpoints, agent_runtime_list_sessions,
-    agent_runtime_list_workspace_skill_bindings, agent_runtime_promote_queued_turn,
-    agent_runtime_remove_queued_turn, agent_runtime_replay_request,
-    agent_runtime_restore_file_checkpoint, agent_runtime_resume_subagent,
-    agent_runtime_resume_thread, agent_runtime_save_review_decision,
-    agent_runtime_send_subagent_input, agent_runtime_set_objective, agent_runtime_spawn_subagent,
-    agent_runtime_submit_turn, agent_runtime_update_objective_status, agent_runtime_update_session,
-    agent_runtime_wait_subagents, aster_agent_configure_provider, aster_agent_init,
-    aster_agent_reset, aster_agent_status, AgentRuntimeClearObjectiveResult,
-    AgentRuntimeContinueObjectiveResult, AgentRuntimeObjectiveStatusRequest,
-    AgentRuntimeSessionObjectiveRequest, AgentRuntimeSetObjectiveRequest,
-};
 pub(crate) use cover_skill_launch::{
     append_cover_skill_launch_session_permissions, merge_system_prompt_with_cover_skill_launch,
     prepare_cover_skill_launch_request_metadata,
@@ -471,9 +448,9 @@ pub(crate) use dto::{
     AgentRuntimeReplayedActionRequiredView, AgentRuntimeRequestView,
     AgentRuntimeRespondActionRequest, AgentRuntimeRestoreFileCheckpointRequest,
     AgentRuntimeResumeSubagentRequest, AgentRuntimeResumeSubagentResponse,
-    AgentRuntimeResumeThreadRequest, AgentRuntimeSaveReviewDecisionRequest,
-    AgentRuntimeSendSubagentInputRequest, AgentRuntimeSendSubagentInputResponse,
-    AgentRuntimeSessionDetail, AgentRuntimeSpawnSubagentRequest, AgentRuntimeSpawnSubagentResponse,
+    AgentRuntimeResumeThreadRequest, AgentRuntimeSendSubagentInputRequest,
+    AgentRuntimeSendSubagentInputResponse, AgentRuntimeSessionDetail,
+    AgentRuntimeSpawnSubagentRequest, AgentRuntimeSpawnSubagentResponse,
     AgentRuntimeSubmitTurnRequest, AgentRuntimeThreadArtifactView, AgentRuntimeThreadDiagnostics,
     AgentRuntimeThreadEvidenceSummary, AgentRuntimeThreadReadModel,
     AgentRuntimeThreadTelemetrySummary, AgentRuntimeThreadToolCallView,
@@ -487,9 +464,8 @@ pub(crate) use form_skill_launch::{
     prepare_form_skill_launch_request_metadata, prune_form_skill_launch_detour_tools_from_registry,
 };
 pub(crate) use image_skill_launch::{
-    append_image_skill_launch_session_permissions, build_image_skill_launch_direct_task,
-    merge_system_prompt_with_image_skill_launch, prepare_image_skill_launch_request_metadata,
-    prune_image_skill_launch_detour_tools_from_registry,
+    append_image_skill_launch_session_permissions, merge_system_prompt_with_image_skill_launch,
+    prepare_image_skill_launch_request_metadata, prune_image_skill_launch_detour_tools_from_registry,
 };
 pub(crate) use mcp_bridge::{ensure_lime_mcp_servers_running, inject_mcp_extensions};
 pub(crate) use pdf_read_skill_launch::{
@@ -596,9 +572,8 @@ pub(crate) use tool_runtime::{
     append_subagent_tool_scope_session_permissions, apply_workspace_sandbox_permissions, ImageInput,
 };
 pub(crate) use tool_runtime::{
-    ensure_browser_mcp_tools_registered, ensure_creation_task_tools_registered,
-    ensure_runtime_support_tools_registered, ensure_social_image_tool_registered,
-    submit_image_generation_task_value,
+    ensure_browser_mcp_tools_registered, ensure_runtime_support_tools_registered,
+    ensure_social_image_tool_registered,
 };
 #[cfg(test)]
 #[allow(unused_imports)]

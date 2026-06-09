@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "ManagedObjective": {
+      "properties": {
+        "approvalPolicy": true,
+        "blockerReason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "budgetPolicy": true,
+        "continuationPolicy": true,
+        "createdAt": {
+          "type": "string"
+        },
+        "lastArtifactRefs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lastAuditSummary": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "lastEvidencePackRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "objectiveId": {
+          "type": "string"
+        },
+        "objectiveText": {
+          "type": "string"
+        },
+        "ownerId": {
+          "type": "string"
+        },
+        "ownerKind": {
+          "type": "string"
+        },
+        "riskPolicy": true,
+        "status": {
+          "$ref": "#/$defs/ManagedObjectiveStatus"
+        },
+        "successCriteria": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "workspaceId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "createdAt",
+        "objectiveId",
+        "objectiveText",
+        "ownerId",
+        "ownerKind",
+        "status",
+        "updatedAt"
+      ],
+      "type": "object"
+    },
+    "ManagedObjectiveStatus": {
+      "enum": [
+        "active",
+        "blocked",
+        "budget_limited",
+        "completed",
+        "failed",
+        "needs_input",
+        "paused",
+        "verifying"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "objective": {
+      "$ref": "#/$defs/ManagedObjective"
+    }
+  },
+  "required": [
+    "objective"
+  ],
+  "title": "AgentSessionObjectiveAuditResponse",
+  "type": "object"
+}

@@ -87,6 +87,19 @@ App Server release manifest 与 sidecar smoke 脚本已迁到 `scripts/app-serve
 
 新增 App Server 脚本继续进入 `scripts/app-server/` 或复用现有 App Server npm scripts；涉及 Electron packaged sidecar / release asset 的脚本仍按 Electron / release 批次单独迁移。
 
+### MCP 脚本
+
+MCP current 使用链路 smoke 位于 `scripts/mcp/`。对外继续使用 `package.json` 里的稳定入口：
+
+```bash
+npm run smoke:mcp-current
+npm run smoke:mcp-current -- --allow-write-fixture
+```
+
+默认入口只通过 `app_server_handle_json_lines -> App Server JSON-RPC` 验证 `mcpServer/list`、`mcpServerStatus/list`、`mcpTool/list|listForContext|search`、`mcpPrompt/list`、`mcpResource/list` 读链，并禁止旧 `mcp_*` / `get_mcp_servers` Tauri facade 作为成功证据。`--allow-write-fixture` 会创建临时 stdio MCP server，覆盖 `mcpServer/create|start|stop|delete`、`mcpTool/call` 与 `mcpResource/read`，用于复验迁移后 MCP 获取和使用流程。
+
+新增 MCP 脚本继续进入 `scripts/mcp/` 或复用现有 `smoke:mcp-current` npm script；共享实现仍放在 `scripts/lib/`。
+
 ### Electron 脚本
 
 Electron release / updater 领域新增脚本进入 `scripts/electron/`。当前 `scripts/electron/update-feed-r2-upload-plan.mjs` 负责 R2 updater 上传计划，`scripts/electron/make-zip-local-feed.mjs` 负责用本地临时 feed 验证 Forge macOS ZIP / `RELEASES.json` 生成链路，`scripts/electron/release-workflow-guard.mjs` 负责结构化校验 GitHub Actions release workflow 的 Forge maker、签名、公证、Windows Squirrel 与旧链路拒绝规则。

@@ -320,30 +320,14 @@ describe("项目管理 API", () => {
       expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("应该调用命令设置默认项目", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
-
-      await expect(setDefaultProject("default-4")).resolves.toBeUndefined();
-      expect(safeInvoke).toHaveBeenCalledWith("workspace_set_default", {
-        id: "default-4",
-      });
+    it("设置默认项目默认 fail closed，不能回到旧 native 命令", async () => {
+      await expect(setDefaultProject("default-4")).rejects.toThrow(
+        "workspace_set_default is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("应该代理项目写命令，并通过 App Server 读取项目", async () => {
-      vi.mocked(safeInvoke)
-        .mockResolvedValueOnce({
-          id: "project-1",
-          name: "项目 1",
-          workspace_type: "general",
-          root_path: "/tmp/project-1",
-        })
-        .mockResolvedValueOnce({
-          id: "project-1",
-          name: "项目 1-更新",
-          workspace_type: "general",
-          root_path: "/tmp/project-1",
-        })
-        .mockResolvedValueOnce(true);
+    it("项目写命令默认 fail closed，读链仍通过 App Server", async () => {
       resolveAppServerRequest({
         workspaces: [
           {
@@ -377,7 +361,17 @@ describe("项目管理 API", () => {
           rootPath: "/tmp/project-1",
           workspaceType: "general",
         }),
-      ).resolves.toEqual(expect.objectContaining({ id: "project-1" }));
+      ).rejects.toThrow(
+        "workspace_create is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
+      await expect(
+        updateProject("project-1", { name: "项目 1-更新" }),
+      ).rejects.toThrow(
+        "workspace_update is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
+      await expect(deleteProject("project-1", true)).rejects.toThrow(
+        "workspace_delete is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
       await expect(listProjects()).resolves.toEqual([
         expect.objectContaining({ id: "project-1" }),
       ]);
@@ -387,31 +381,12 @@ describe("项目管理 API", () => {
       await expect(getProject("project-1")).resolves.toEqual(
         expect.objectContaining({ id: "project-1" }),
       );
-      await expect(
-        updateProject("project-1", { name: "项目 1-更新" }),
-      ).resolves.toEqual(expect.objectContaining({ name: "项目 1-更新" }));
-      await expect(deleteProject("project-1", true)).resolves.toBe(true);
-
-      expect(safeInvoke).toHaveBeenNthCalledWith(1, "workspace_create", {
-        request: {
-          name: "项目 1",
-          rootPath: "/tmp/project-1",
-          workspaceType: "general",
-        },
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(2, "workspace_update", {
-        id: "project-1",
-        request: { name: "项目 1-更新" },
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(3, "workspace_delete", {
-        id: "project-1",
-        deleteDirectory: true,
-      });
       expectAppServerRequest(1, "workspace/list", {});
       expectAppServerRequest(2, "workspace/default/ensure", {});
       expectAppServerRequest(3, "workspace/read", {
         id: "project-1",
       });
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
     it("短时间重复获取同一项目应复用 workspace/read 缓存", async () => {
@@ -546,300 +521,112 @@ describe("项目管理 API", () => {
       expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("应该代理内容相关命令", async () => {
-      vi.mocked(safeInvoke)
-        .mockResolvedValueOnce({
-          id: "content-1",
-          project_id: "project-1",
-          title: "第一章",
-          content_type: "chapter",
-          status: "draft",
-          order: 1,
-          word_count: 10,
-          created_at: 1,
-          updated_at: 2,
-          body: "内容",
-        })
-        .mockResolvedValueOnce({
-          id: "content-1",
-          project_id: "project-1",
-          title: "第一章",
-          content_type: "chapter",
-          status: "draft",
-          order: 1,
-          word_count: 10,
-          created_at: 1,
-          updated_at: 2,
-          body: "内容",
-        })
-        .mockResolvedValueOnce({
-          content_id: "content-1",
-          current_version_id: "v1",
-          version_count: 1,
-          versions: [],
-        })
-        .mockResolvedValueOnce([
-          {
-            id: "content-1",
-            project_id: "project-1",
-            title: "第一章",
-            content_type: "chapter",
-            status: "draft",
-            order: 1,
-            word_count: 10,
-            created_at: 1,
-            updated_at: 2,
-          },
-        ])
-        .mockResolvedValueOnce({
-          id: "content-1",
-          project_id: "project-1",
-          title: "第一章-修订",
-          content_type: "chapter",
-          status: "completed",
-          order: 1,
-          word_count: 20,
-          created_at: 1,
-          updated_at: 3,
-          body: "内容",
-        })
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce([1, 2, 3]);
-
+    it("Content / General Workbench 命令默认 fail closed，不能回到旧 native 命令", async () => {
       await expect(
         createContent({
           project_id: "project-1",
           title: "第一章",
           content_type: "chapter",
         }),
-      ).resolves.toEqual(expect.objectContaining({ id: "content-1" }));
-      await expect(getContent("content-1")).resolves.toEqual(
-        expect.objectContaining({ id: "content-1" }),
+      ).rejects.toThrow(
+        "content_create is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
+      await expect(getContent("content-1")).rejects.toThrow(
+        "content_get is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
       await expect(
         getGeneralWorkbenchDocumentState("content-1"),
-      ).resolves.toEqual(expect.objectContaining({ current_version_id: "v1" }));
+      ).rejects.toThrow(
+        "content_get_general_workbench_document_state is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
       await expect(
         listContents("project-1", { content_type: "chapter" }),
-      ).resolves.toEqual([expect.objectContaining({ id: "content-1" })]);
+      ).rejects.toThrow(
+        "content_list is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
       await expect(
         updateContent("content-1", {
           title: "第一章-修订",
           status: "completed",
         }),
-      ).resolves.toEqual(expect.objectContaining({ title: "第一章-修订" }));
-      await expect(deleteContent("content-1")).resolves.toBe(true);
+      ).rejects.toThrow(
+        "content_update is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
+      await expect(deleteContent("content-1")).rejects.toThrow(
+        "content_delete is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
       await expect(
         reorderContents("project-1", ["content-1"]),
-      ).resolves.toBeUndefined();
-      await expect(getContentStats("project-1")).resolves.toEqual([1, 2, 3]);
-
-      expect(safeInvoke).toHaveBeenNthCalledWith(1, "content_create", {
-        request: {
-          project_id: "project-1",
-          title: "第一章",
-          content_type: "chapter",
-        },
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(2, "content_get", {
-        id: "content-1",
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(
-        3,
-        "content_get_general_workbench_document_state",
-        { id: "content-1" },
+      ).rejects.toThrow(
+        "content_reorder is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
-      expect(safeInvoke).toHaveBeenNthCalledWith(4, "content_list", {
-        projectId: "project-1",
-        query: { content_type: "chapter" },
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(5, "content_update", {
-        id: "content-1",
-        request: { title: "第一章-修订", status: "completed" },
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(6, "content_delete", {
-        id: "content-1",
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(7, "content_reorder", {
-        projectId: "project-1",
-        contentIds: ["content-1"],
-      });
-      expect(safeInvoke).toHaveBeenNthCalledWith(8, "content_stats", {
-        projectId: "project-1",
-      });
+      await expect(getContentStats("project-1")).rejects.toThrow(
+        "content_stats is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
+
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("legacy workspace/content/general workbench 命令收到 diagnostic facade 时应 fail closed", async () => {
-      const diagnostic = (command: string) => ({
-        diagnostic: {
-          source: "desktop-host",
-          command,
-        },
-      });
-      const diagnosticList = Object.assign([], {
-        __diagnostic: {
-          source: "desktop-host",
-          command: "content_list",
-        },
-      });
-      const diagnosticStats = Object.assign([], {
-        __diagnostic: {
-          source: "desktop-host",
-          command: "content_stats",
-        },
-      });
+    it("Workspace / Content retired 命令应在 diagnostic facade 前 fail closed", async () => {
+      vi.mocked(safeInvoke).mockResolvedValue({ diagnostic: true });
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        diagnostic("workspace_create"),
-      );
       await expect(
         createProject({ name: "诊断项目", rootPath: "/tmp/diagnostic" }),
-      ).rejects.toThrow("workspace_create 尚未接入");
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        diagnostic("workspace_update"),
+      ).rejects.toThrow(
+        "workspace_create is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
+
       await expect(updateProject("project-1", { name: "诊断" })).rejects.toThrow(
-        "workspace_update 尚未接入",
+        "workspace_update is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        diagnostic("workspace_delete"),
-      );
       await expect(deleteProject("project-1", true)).rejects.toThrow(
-        "workspace_delete 尚未接入",
+        "workspace_delete is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        diagnostic("workspace_set_default"),
-      );
       await expect(setDefaultProject("project-1")).rejects.toThrow(
-        "workspace_set_default 尚未接入",
+        "workspace_set_default is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_create"));
       await expect(
         createContent({ project_id: "project-1", title: "诊断内容" }),
-      ).rejects.toThrow("content_create 尚未接入");
+      ).rejects.toThrow(
+        "content_create is retired until Workspace writes and Content CRUD move to App Server current methods",
+      );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_get"));
       await expect(getContent("content-1")).rejects.toThrow(
-        "content_get 尚未接入",
+        "content_get is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(
-        diagnostic("content_get_general_workbench_document_state"),
-      );
       await expect(
         getGeneralWorkbenchDocumentState("content-1"),
       ).rejects.toThrow(
-        "content_get_general_workbench_document_state 尚未接入",
+        "content_get_general_workbench_document_state is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticList);
       await expect(listContents("project-1")).rejects.toThrow(
-        "content_list 尚未接入",
+        "content_list is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_update"));
       await expect(updateContent("content-1", { title: "诊断" })).rejects.toThrow(
-        "content_update 尚未接入",
+        "content_update is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_delete"));
       await expect(deleteContent("content-1")).rejects.toThrow(
-        "content_delete 尚未接入",
+        "content_delete is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnostic("content_reorder"));
       await expect(
         reorderContents("project-1", ["content-1"]),
-      ).rejects.toThrow("content_reorder 尚未接入");
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce(diagnosticStats);
-      await expect(getContentStats("project-1")).rejects.toThrow(
-        "content_stats 尚未接入",
-      );
-    });
-
-    it("legacy workspace/content/general workbench 命令收到错误返回形态时应 fail closed", async () => {
-      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
-      await expect(
-        createProject({ name: "伪项目", rootPath: "/tmp/fake" }),
-      ).rejects.toThrow("workspace_create did not return workspace");
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce({ id: "project-1" });
-      await expect(updateProject("project-1", { name: "伪更新" })).rejects.toThrow(
-        "workspace_update did not return workspace",
-      );
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
-      await expect(deleteProject("project-1", true)).rejects.toThrow(
-        "workspace_delete did not return boolean result",
-      );
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
-      await expect(setDefaultProject("project-1")).rejects.toThrow(
-        "workspace_set_default did not return void result",
-      );
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce({
-        id: "content-1",
-        project_id: "project-1",
-        title: "缺正文",
-        content_type: "chapter",
-        status: "draft",
-        order: 1,
-        word_count: 10,
-        created_at: 1,
-        updated_at: 2,
-      });
-      await expect(
-        createContent({ project_id: "project-1", title: "缺正文" }),
-      ).rejects.toThrow("content_create did not return content detail");
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
-      await expect(getContent("content-1")).rejects.toThrow(
-        "content_get did not return content detail",
-      );
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce({
-        content_id: "content-1",
-        current_version_id: "v1",
-        version_count: 1,
-        versions: [{ id: "v1", created_at: 1 }],
-      });
-      await expect(
-        getGeneralWorkbenchDocumentState("content-1"),
       ).rejects.toThrow(
-        "content_get_general_workbench_document_state did not return general workbench document state",
+        "content_reorder is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
-      vi.mocked(safeInvoke).mockResolvedValueOnce([{ id: "content-1" }]);
-      await expect(listContents("project-1")).rejects.toThrow(
-        "content_list did not return content list",
-      );
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce(null);
-      await expect(updateContent("content-1", { title: "空更新" })).rejects.toThrow(
-        "content_update did not return content detail",
-      );
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
-      await expect(deleteContent("content-1")).rejects.toThrow(
-        "content_delete did not return boolean result",
-      );
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce({ success: true });
-      await expect(
-        reorderContents("project-1", ["content-1"]),
-      ).rejects.toThrow("content_reorder did not return void result");
-
-      vi.mocked(safeInvoke).mockResolvedValueOnce([1, "2", 3]);
       await expect(getContentStats("project-1")).rejects.toThrow(
-        "content_stats did not return content stats",
+        "content_stats is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
+
+      expect(safeInvoke).not.toHaveBeenCalled();
     });
   });
 

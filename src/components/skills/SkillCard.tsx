@@ -5,7 +5,6 @@
  * 功能：
  * - 显示 Skill 基本信息（名称、描述、来源）
  * - 安装/卸载操作按钮（非内置）
- * - 执行按钮（仅已安装的 Skill 显示）
  * - 检查详情按钮（本地可查看内容，远程可安装前预检）
  * - GitHub 链接按钮
  *
@@ -17,7 +16,6 @@ import {
   Download,
   Trash2,
   Loader2,
-  Play,
   FileText,
   AlertTriangle,
   CheckCircle2,
@@ -224,7 +222,6 @@ interface SkillCardProps {
   skill: Skill;
   onInstall: (directory: string) => void;
   onUninstall: (directory: string) => void;
-  onExecute?: (skill: Skill) => void;
   onViewContent?: (skill: Skill) => void;
   installing: boolean;
 }
@@ -234,7 +231,6 @@ interface SkillCardProps {
  *
  * 展示单个 Skill 的信息和操作按钮，包括：
  * - 安装/卸载按钮（非内置）
- * - 执行按钮（仅已安装的 Skill 显示）
  * - 检查详情按钮（本地查看内容，远程执行安装前预检）
  * - GitHub 链接按钮
  *
@@ -247,7 +243,6 @@ export function SkillCard({
   skill,
   onInstall,
   onUninstall,
-  onExecute,
   onViewContent,
   installing,
 }: SkillCardProps) {
@@ -260,16 +255,6 @@ export function SkillCard({
       onUninstall(skill.directory);
     } else {
       onInstall(skill.directory);
-    }
-  };
-
-  /**
-   * 处理执行按钮点击
-   * 仅已安装的 Skill 可以执行
-   */
-  const handleExecute = () => {
-    if (skill.installed && onExecute) {
-      onExecute(skill);
     }
   };
 
@@ -343,17 +328,6 @@ export function SkillCard({
                     )}
                   </>
                 )}
-              </button>
-            )}
-
-            {skill.installed && onExecute && (
-              <button
-                onClick={handleExecute}
-                disabled={installing}
-                className="flex-1 inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                <Play className="h-3 w-3" />
-                {t("skills.skillCard.action.execute")}
               </button>
             )}
 

@@ -1,7 +1,7 @@
 import { safeInvoke } from "@/lib/dev-bridge";
 import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
-function isFrontendCrashReportResult(value: unknown): boolean {
+function isSuccessRecord(value: unknown): boolean {
   return (
     Boolean(value) &&
     typeof value === "object" &&
@@ -15,11 +15,11 @@ export async function reportFrontendCrash(report: unknown): Promise<void> {
   assertNotDiagnosticFacade(
     "report_frontend_crash",
     result,
-    "真实前端崩溃诊断 current 通道",
+    "前端崩溃诊断 Electron Host current 通道",
   );
-  if (!isFrontendCrashReportResult(result)) {
-    throw new Error(
-      "report_frontend_crash did not return frontend crash report result",
-    );
+  if (result === null || result === undefined || isSuccessRecord(result)) {
+    return;
   }
+
+  throw new Error("report_frontend_crash did not return crash report result");
 }

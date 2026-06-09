@@ -6,11 +6,13 @@ import {
 import type { AppServerSessionRpcClient } from "./appServerSessionClient";
 import type { AgentRuntimeEvidenceExportAppServerClient } from "./exportClient";
 import type { AgentRuntimeWorkspaceSkillBindingsAppServerClient } from "./inventoryClient";
+import type { AgentRuntimeObjectiveAppServerClient } from "./objectiveClient";
 import type { AgentRuntimeThreadClientDeps } from "./threadClient";
 export type AgentRuntimeAppServerClient =
   AgentRuntimeThreadClientDeps["appServerClient"] &
     AppServerSessionRpcClient &
     AgentRuntimeEvidenceExportAppServerClient &
+    AgentRuntimeObjectiveAppServerClient &
     AgentRuntimeWorkspaceSkillBindingsAppServerClient;
 export interface AgentRuntimeClientDeps extends AgentRuntimeTransportDeps {
   bridgeInvoke?: AgentRuntimeBridgeInvoke;
@@ -129,24 +131,6 @@ export declare function createAgentRuntimeClient({
   updateAgentRuntimeSession: (
     request: import("./types").AgentRuntimeUpdateSessionRequest,
   ) => Promise<void>;
-  cancelMediaTaskArtifact: (
-    request: import("./types").MediaTaskLookupRequest,
-  ) => Promise<import("./types").MediaTaskArtifactOutput>;
-  completeAudioGenerationTaskArtifact: (
-    request: import("./types").CompleteAudioGenerationTaskArtifactRequest,
-  ) => Promise<import("./types").MediaTaskArtifactOutput>;
-  createAudioGenerationTaskArtifact: (
-    request: import("./types").CreateAudioGenerationTaskArtifactRequest,
-  ) => Promise<import("./types").MediaTaskArtifactOutput>;
-  createImageGenerationTaskArtifact: (
-    request: import("./types").CreateImageGenerationTaskArtifactRequest,
-  ) => Promise<import("./types").MediaTaskArtifactOutput>;
-  getMediaTaskArtifact: (
-    request: import("./types").MediaTaskLookupRequest,
-  ) => Promise<import("./types").MediaTaskArtifactOutput>;
-  listMediaTaskArtifacts: (
-    request: import("./types").ListMediaTaskArtifactsRequest,
-  ) => Promise<import("./types").ListMediaTaskArtifactsOutput>;
   getAgentRuntimeToolInventory: (
     request?: import("./types").AgentRuntimeToolInventoryRequest,
   ) => Promise<import("./types").AgentRuntimeToolInventory>;
@@ -189,10 +173,6 @@ export declare function createAgentRuntimeClient({
   saveAgentRuntimeReviewDecision: (
     request: import("./types").AgentRuntimeSaveReviewDecisionRequest,
   ) => Promise<import("./types").AgentRuntimeReviewDecisionTemplate>;
-  configureAsterProvider: (
-    config: import("./types").AsterProviderConfig,
-    sessionId: string,
-  ) => Promise<import("./types").AsterAgentStatus>;
   generateAgentRuntimeTitleResult: (
     request: import("./agentClient").GenerateAgentRuntimeTitleRequest,
   ) => Promise<import("./types").AgentRuntimeGeneratedTitleResult>;
@@ -203,10 +183,6 @@ export declare function createAgentRuntimeClient({
     sessionId: string,
     previewText?: string,
   ) => Promise<string>;
-  getAgentProcessStatus: () => Promise<import("./types").AgentProcessStatus>;
-  getAsterAgentStatus: () => Promise<import("./types").AsterAgentStatus>;
   initAsterAgent: () => Promise<import("./types").AsterAgentStatus>;
-  startAgentProcess: () => Promise<import("./types").AgentProcessStatus>;
-  stopAgentProcess: () => Promise<void>;
 };
 export type AgentRuntimeClient = ReturnType<typeof createAgentRuntimeClient>;

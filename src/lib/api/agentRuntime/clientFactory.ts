@@ -7,8 +7,10 @@ import {
   createInventoryClient,
   type AgentRuntimeWorkspaceSkillBindingsAppServerClient,
 } from "./inventoryClient";
-import { createMediaClient } from "./mediaClient";
-import { createObjectiveClient } from "./objectiveClient";
+import {
+  createObjectiveClient,
+  type AgentRuntimeObjectiveAppServerClient,
+} from "./objectiveClient";
 import type { AppServerSessionRpcClient } from "./appServerSessionClient";
 import { createSessionClient } from "./sessionClient";
 import { createSiteClient } from "./siteClient";
@@ -29,6 +31,7 @@ export type AgentRuntimeAppServerClient =
   AgentRuntimeThreadClientDeps["appServerClient"] &
     AppServerSessionRpcClient &
     AgentRuntimeEvidenceExportAppServerClient &
+    AgentRuntimeObjectiveAppServerClient &
     AgentRuntimeWorkspaceSkillBindingsAppServerClient;
 
 export interface AgentRuntimeClientDeps extends AgentRuntimeTransportDeps {
@@ -63,8 +66,9 @@ export function createAgentRuntimeClient({
       appServerClient,
       invokeCommand: resolvedInvokeCommand,
     }),
-    ...createMediaClient({ bridgeInvoke: resolvedBridgeInvoke }),
-    ...createObjectiveClient({ invokeCommand: resolvedInvokeCommand }),
+    ...createObjectiveClient({
+      appServerClient,
+    }),
     ...createSessionClient({
       appServerClient,
     }),

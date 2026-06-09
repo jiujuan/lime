@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "accountId": {
+      "type": "string"
+    },
+    "baseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "cdnBaseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "hasToken": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "scannerUserId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "accountId",
+    "enabled",
+    "hasToken"
+  ],
+  "title": "WechatConfiguredAccount",
+  "type": "object"
+}

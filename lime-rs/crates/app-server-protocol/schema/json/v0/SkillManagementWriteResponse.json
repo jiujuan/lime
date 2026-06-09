@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "title": "SkillManagementWriteResponse",
+  "type": "object"
+}

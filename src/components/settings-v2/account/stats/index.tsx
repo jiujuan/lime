@@ -206,7 +206,7 @@ export function StatsSettings() {
       setDailyUsage(trends);
     } catch (e) {
       console.error("加载统计数据失败:", e);
-      setError(e instanceof Error ? e.message : t("settings.stats.error.load"));
+      setError(t("settings.stats.error.load"));
       setStats(null);
       setModelUsage([]);
       setDailyUsage([]);

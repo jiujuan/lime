@@ -22,11 +22,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct RuntimeBackend {
     agent_state: AsterAgentState,
     api_key_provider_service: ApiKeyProviderService,
+    db: Option<DbConnection>,
 }
 
 impl RuntimeBackend {
@@ -34,6 +36,15 @@ impl RuntimeBackend {
         Self {
             agent_state: AsterAgentState::new(),
             api_key_provider_service: ApiKeyProviderService::new(),
+            db: None,
+        }
+    }
+
+    pub fn with_db(db: DbConnection) -> Self {
+        Self {
+            agent_state: AsterAgentState::new(),
+            api_key_provider_service: ApiKeyProviderService::new(),
+            db: Some(db),
         }
     }
 
@@ -44,7 +55,7 @@ impl RuntimeBackend {
     ) -> Result<(), RuntimeCoreError> {
         let session_scope = session_scope_from_request(&request)?;
         let host_request = aster_chat_request_from_request(&request);
-        let db = initialize_runtime_database()?;
+        let db = initialize_runtime_database(self.db.as_ref())?;
         let selection = resolve_runtime_model_selection(&request)?;
         let direct_provider_config = direct_provider_config_from_request(
             host_request.as_ref(),
@@ -205,10 +216,16 @@ impl ExecutionBackend for RuntimeBackend {
     }
 }
 
-fn initialize_runtime_database() -> Result<DbConnection, RuntimeCoreError> {
-    let db = database::init_database().map_err(|error| {
-        RuntimeCoreError::Backend(format!("failed to initialize database: {error}"))
-    })?;
+fn initialize_runtime_database(
+    db: Option<&DbConnection>,
+) -> Result<DbConnection, RuntimeCoreError> {
+    let db = if let Some(db) = db {
+        Arc::clone(db)
+    } else {
+        database::init_database().map_err(|error| {
+            RuntimeCoreError::Backend(format!("failed to initialize database: {error}"))
+        })?
+    };
     initialize_aster_runtime(db.clone()).map_err(|error| {
         RuntimeCoreError::Backend(format!(
             "failed to initialize Aster runtime for App Server runtime backend: {error}"

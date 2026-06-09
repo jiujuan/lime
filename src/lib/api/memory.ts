@@ -6,12 +6,10 @@
 
 import { logAgentDebug } from "@/lib/agentDebug";
 import { AppServerClient } from "@/lib/api/appServer";
-import { safeInvoke } from "@/lib/dev-bridge";
 import {
   METHOD_PROJECT_MEMORY_READ,
   type ProjectMemoryReadResponse as AppServerProjectMemoryReadResponse,
 } from "../../../packages/app-server-client/src/protocol";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 const PROJECT_MEMORY_CACHE_TTL_MS = 30_000;
 const projectMemoryCache = new Map<
@@ -28,22 +26,6 @@ type ProjectMemoryReadResponse = Omit<
 > & {
   memory?: ProjectMemory | null;
 };
-
-function clearProjectMemoryCache(): void {
-  projectMemoryCache.clear();
-  projectMemoryInflight.clear();
-}
-
-async function invokeMemoryCrudCommand<T>(
-  command: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  const result = args
-    ? await safeInvoke(command, args)
-    : await safeInvoke(command);
-  assertNotDiagnosticFacade(command, result, "真实 Memory CRUD current 通道");
-  return result as T;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -104,30 +86,6 @@ function isCharacter(value: unknown): value is Character {
   );
 }
 
-function assertCharacter(value: unknown, command: string): Character {
-  if (!isCharacter(value)) {
-    throw new Error(`${command} did not return a character`);
-  }
-  return value;
-}
-
-function assertCharacterList(value: unknown, command: string): Character[] {
-  if (!Array.isArray(value) || !value.every(isCharacter)) {
-    throw new Error(`${command} did not return characters`);
-  }
-  return value;
-}
-
-function assertNullableCharacter(
-  value: unknown,
-  command: string,
-): Character | null {
-  if (value === null) {
-    return null;
-  }
-  return assertCharacter(value, command);
-}
-
 function isWorldBuilding(value: unknown): value is WorldBuilding {
   return (
     isRecord(value) &&
@@ -139,23 +97,6 @@ function isWorldBuilding(value: unknown): value is WorldBuilding {
     isRecordOrUndefined(value.extra) &&
     isString(value.updated_at)
   );
-}
-
-function assertWorldBuilding(value: unknown, command: string): WorldBuilding {
-  if (!isWorldBuilding(value)) {
-    throw new Error(`${command} did not return world building`);
-  }
-  return value;
-}
-
-function assertNullableWorldBuilding(
-  value: unknown,
-  command: string,
-): WorldBuilding | null {
-  if (value === null) {
-    return null;
-  }
-  return assertWorldBuilding(value, command);
 }
 
 function isOutlineNode(value: unknown): value is OutlineNode {
@@ -175,37 +116,6 @@ function isOutlineNode(value: unknown): value is OutlineNode {
   );
 }
 
-function assertOutlineNode(value: unknown, command: string): OutlineNode {
-  if (!isOutlineNode(value)) {
-    throw new Error(`${command} did not return an outline node`);
-  }
-  return value;
-}
-
-function assertOutlineNodeList(value: unknown, command: string): OutlineNode[] {
-  if (!Array.isArray(value) || !value.every(isOutlineNode)) {
-    throw new Error(`${command} did not return outline nodes`);
-  }
-  return value;
-}
-
-function assertNullableOutlineNode(
-  value: unknown,
-  command: string,
-): OutlineNode | null {
-  if (value === null) {
-    return null;
-  }
-  return assertOutlineNode(value, command);
-}
-
-function assertBoolean(value: unknown, command: string): boolean {
-  if (!isBoolean(value)) {
-    throw new Error(`${command} did not return a boolean`);
-  }
-  return value;
-}
-
 function isProjectMemory(value: unknown): value is ProjectMemory {
   return (
     isRecord(value) &&
@@ -223,6 +133,12 @@ function assertProjectMemory(value: unknown): ProjectMemory {
     throw new Error("App Server projectMemory/read did not return valid memory");
   }
   return value;
+}
+
+function rejectRetiredMemoryCrudCommand(command: string): never {
+  throw new Error(
+    `${command} is retired until Memory CRUD moves to App Server current methods`,
+  );
 }
 
 // ==================== 类型定义 ====================
@@ -352,31 +268,22 @@ export interface ProjectMemory {
 
 /** 获取角色列表 */
 export async function listCharacters(projectId: string): Promise<Character[]> {
-  const result = await invokeMemoryCrudCommand<unknown>("character_list", {
-    projectId,
-  });
-  return assertCharacterList(result, "character_list");
+  void projectId;
+  return rejectRetiredMemoryCrudCommand("character_list");
 }
 
 /** 获取角色详情 */
 export async function getCharacter(id: string): Promise<Character | null> {
-  const result = await invokeMemoryCrudCommand<unknown>("character_get", { id });
-  return assertNullableCharacter(result, "character_get");
+  void id;
+  return rejectRetiredMemoryCrudCommand("character_get");
 }
 
 /** 创建角色 */
 export async function createCharacter(
   request: CreateCharacterRequest,
 ): Promise<Character> {
-  const result = await invokeMemoryCrudCommand<unknown>(
-    "character_create",
-    {
-      request,
-    },
-  );
-  const character = assertCharacter(result, "character_create");
-  clearProjectMemoryCache();
-  return character;
+  void request;
+  return rejectRetiredMemoryCrudCommand("character_create");
 }
 
 /** 更新角色 */
@@ -384,26 +291,15 @@ export async function updateCharacter(
   id: string,
   request: UpdateCharacterRequest,
 ): Promise<Character> {
-  const result = await invokeMemoryCrudCommand<unknown>(
-    "character_update",
-    {
-      id,
-      request,
-    },
-  );
-  const character = assertCharacter(result, "character_update");
-  clearProjectMemoryCache();
-  return character;
+  void id;
+  void request;
+  return rejectRetiredMemoryCrudCommand("character_update");
 }
 
 /** 删除角色 */
 export async function deleteCharacter(id: string): Promise<boolean> {
-  const result = await invokeMemoryCrudCommand<unknown>("character_delete", {
-    id,
-  });
-  const deleted = assertBoolean(result, "character_delete");
-  clearProjectMemoryCache();
-  return deleted;
+  void id;
+  return rejectRetiredMemoryCrudCommand("character_delete");
 }
 
 // ==================== 世界观 API ====================
@@ -412,10 +308,8 @@ export async function deleteCharacter(id: string): Promise<boolean> {
 export async function getWorldBuilding(
   projectId: string,
 ): Promise<WorldBuilding | null> {
-  const result = await invokeMemoryCrudCommand<unknown>("world_building_get", {
-    projectId,
-  });
-  return assertNullableWorldBuilding(result, "world_building_get");
+  void projectId;
+  return rejectRetiredMemoryCrudCommand("world_building_get");
 }
 
 /** 更新世界观 */
@@ -423,16 +317,9 @@ export async function updateWorldBuilding(
   projectId: string,
   request: UpdateWorldBuildingRequest,
 ): Promise<WorldBuilding> {
-  const result = await invokeMemoryCrudCommand<unknown>(
-    "world_building_update",
-    {
-      projectId,
-      request,
-    },
-  );
-  const worldBuilding = assertWorldBuilding(result, "world_building_update");
-  clearProjectMemoryCache();
-  return worldBuilding;
+  void projectId;
+  void request;
+  return rejectRetiredMemoryCrudCommand("world_building_update");
 }
 
 // ==================== 大纲 API ====================
@@ -441,33 +328,22 @@ export async function updateWorldBuilding(
 export async function listOutlineNodes(
   projectId: string,
 ): Promise<OutlineNode[]> {
-  const result = await invokeMemoryCrudCommand<unknown>("outline_node_list", {
-    projectId,
-  });
-  return assertOutlineNodeList(result, "outline_node_list");
+  void projectId;
+  return rejectRetiredMemoryCrudCommand("outline_node_list");
 }
 
 /** 获取大纲节点详情 */
 export async function getOutlineNode(id: string): Promise<OutlineNode | null> {
-  const result = await invokeMemoryCrudCommand<unknown>("outline_node_get", {
-    id,
-  });
-  return assertNullableOutlineNode(result, "outline_node_get");
+  void id;
+  return rejectRetiredMemoryCrudCommand("outline_node_get");
 }
 
 /** 创建大纲节点 */
 export async function createOutlineNode(
   request: CreateOutlineNodeRequest,
 ): Promise<OutlineNode> {
-  const result = await invokeMemoryCrudCommand<unknown>(
-    "outline_node_create",
-    {
-      request,
-    },
-  );
-  const node = assertOutlineNode(result, "outline_node_create");
-  clearProjectMemoryCache();
-  return node;
+  void request;
+  return rejectRetiredMemoryCrudCommand("outline_node_create");
 }
 
 /** 更新大纲节点 */
@@ -475,26 +351,15 @@ export async function updateOutlineNode(
   id: string,
   request: UpdateOutlineNodeRequest,
 ): Promise<OutlineNode> {
-  const result = await invokeMemoryCrudCommand<unknown>(
-    "outline_node_update",
-    {
-      id,
-      request,
-    },
-  );
-  const node = assertOutlineNode(result, "outline_node_update");
-  clearProjectMemoryCache();
-  return node;
+  void id;
+  void request;
+  return rejectRetiredMemoryCrudCommand("outline_node_update");
 }
 
 /** 删除大纲节点 */
 export async function deleteOutlineNode(id: string): Promise<boolean> {
-  const result = await invokeMemoryCrudCommand<unknown>("outline_node_delete", {
-    id,
-  });
-  const deleted = assertBoolean(result, "outline_node_delete");
-  clearProjectMemoryCache();
-  return deleted;
+  void id;
+  return rejectRetiredMemoryCrudCommand("outline_node_delete");
 }
 
 // ==================== 聚合 API ====================

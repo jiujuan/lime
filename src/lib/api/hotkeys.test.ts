@@ -55,6 +55,34 @@ describe("hotkeys API", () => {
     );
   });
 
+  it("语音快捷键运行时状态收到 mock-like 或缺字段返回时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({
+        shortcut_registered: false,
+        registered_shortcut: null,
+        fn_supported: true,
+        fn_registered: false,
+        fn_fallback_shortcut: "CommandOrControl+Shift+V",
+      })
+      .mockResolvedValueOnce({
+        error: {
+          code: "COMMAND_UNSUPPORTED",
+          message: "not available",
+        },
+      });
+
+    await expect(getVoiceShortcutRuntimeStatus()).rejects.toThrow(
+      "get_voice_shortcut_runtime_status did not return voice shortcut runtime status",
+    );
+    await expect(getVoiceShortcutRuntimeStatus()).rejects.toThrow(
+      "get_voice_shortcut_runtime_status did not return voice shortcut runtime status",
+    );
+    await expect(getVoiceShortcutRuntimeStatus()).rejects.toThrow(
+      "get_voice_shortcut_runtime_status did not return voice shortcut runtime status",
+    );
+  });
+
   it("应聚合整体快捷键运行时状态", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       shortcut_registered: true,

@@ -246,6 +246,7 @@ mod tests {
             skill_name: name.to_string(),
             display_name: name.to_string(),
             description: String::new(),
+            local_directory_path: std::path::PathBuf::from("/tmp").join(name),
             markdown_content: String::new(),
             license: None,
             compatibility: None,

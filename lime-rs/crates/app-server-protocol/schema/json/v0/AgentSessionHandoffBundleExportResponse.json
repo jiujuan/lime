@@ -1,0 +1,129 @@
+{
+  "$defs": {
+    "AgentSessionHandoffArtifact": {
+      "properties": {
+        "absolutePath": {
+          "type": "string"
+        },
+        "bytes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "absolutePath",
+        "bytes",
+        "kind",
+        "relativePath",
+        "title"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "activeSubagentCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "artifacts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AgentSessionHandoffArtifact"
+      },
+      "type": "array"
+    },
+    "bundleAbsoluteRoot": {
+      "type": "string"
+    },
+    "bundleRelativeRoot": {
+      "type": "string"
+    },
+    "exportedAt": {
+      "type": "string"
+    },
+    "latestTurnStatus": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "pendingRequestCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "queuedTurnCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "threadStatus": {
+      "type": "string"
+    },
+    "todoCompleted": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "todoInProgress": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "todoPending": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "todoTotal": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "workspaceId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workspaceRoot": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "activeSubagentCount",
+    "bundleAbsoluteRoot",
+    "bundleRelativeRoot",
+    "exportedAt",
+    "pendingRequestCount",
+    "queuedTurnCount",
+    "sessionId",
+    "threadId",
+    "threadStatus",
+    "todoCompleted",
+    "todoInProgress",
+    "todoPending",
+    "todoTotal",
+    "workspaceRoot"
+  ],
+  "title": "AgentSessionHandoffBundleExportResponse",
+  "type": "object"
+}

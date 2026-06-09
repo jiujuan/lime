@@ -7,18 +7,33 @@ const TERMINAL_THREAD_STATUSES = new Set([
   "waiting_request",
 ]);
 const RUNNING_THREAD_STATUSES = new Set(["running", "queued", "interrupting"]);
+const FAILED_THREAD_STATUSES = new Set([
+  "failed",
+  "aborted",
+  "cancelled",
+  "canceled",
+]);
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
 const APP_SERVER_METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
 const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
 const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
 const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
+const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ =
+  "agentSession/objective/read";
+const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET =
+  "agentSession/objective/set";
+const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE =
+  "agentSession/objective/continue";
+const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_AUDIT =
+  "agentSession/objective/audit";
 const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
   "agentSession/turn/start";
 const APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL =
   "agentSession/turn/cancel";
 const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
+const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -262,6 +277,92 @@ export async function updateAgentSessionRuntimeCurrent(
     },
     30_000,
   );
+}
+
+export async function setAgentSessionObjectiveCurrent(
+  options,
+  {
+    sessionId,
+    workspaceId,
+    objectiveText,
+    successCriteria = [],
+    continuationPolicy = null,
+    budgetPolicy = null,
+    riskPolicy = null,
+  },
+) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET,
+    compactRecord({
+      sessionId,
+      workspaceId,
+      objectiveText,
+      successCriteria,
+      continuationPolicy,
+      budgetPolicy,
+      riskPolicy,
+    }),
+  );
+  return response?.objective || null;
+}
+
+export async function readAgentSessionObjectiveCurrent(options, sessionId) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ,
+    { sessionId },
+  );
+  return response?.objective || null;
+}
+
+export async function continueAgentSessionObjectiveCurrent(
+  options,
+  { sessionId, ownerKind, ownerId },
+) {
+  return invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
+    compactRecord({
+      sessionId,
+      ownerKind,
+      ownerId,
+    }),
+  );
+}
+
+export async function auditAgentSessionObjectiveCurrent(
+  options,
+  { sessionId, ownerKind, ownerId },
+) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
+    compactRecord({
+      sessionId,
+      ownerKind,
+      ownerId,
+    }),
+  );
+  return response?.objective || null;
+}
+
+export async function exportAgentSessionEvidencePackCurrent(
+  options,
+  { sessionId, turnId },
+) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_EVIDENCE_EXPORT,
+    compactRecord({
+      sessionId,
+      turnId,
+      includeEvents: true,
+      includeArtifacts: true,
+      includeEvidencePack: true,
+    }),
+  );
+  return response?.evidencePack || null;
 }
 
 export async function readAgentSessionDetailCurrent(
@@ -570,6 +671,73 @@ export function summarizeSessionDetail(detail) {
   };
 }
 
+function normalizeTurnRecord(turn) {
+  if (!turn || typeof turn !== "object" || Array.isArray(turn)) {
+    return null;
+  }
+  return {
+    id: turn.id || turn.turnId || turn.turn_id || null,
+    status: String(turn.status || "").toLowerCase(),
+    completedAt: turn.completed_at || turn.completedAt || null,
+    error:
+      turn.error ||
+      turn.error_message ||
+      turn.errorMessage ||
+      turn.failure_reason ||
+      turn.failureReason ||
+      null,
+  };
+}
+
+function turnRecordsFromSessionDetail(sessionDetail) {
+  return (Array.isArray(sessionDetail?.turns) ? sessionDetail.turns : [])
+    .map(normalizeTurnRecord)
+    .filter(Boolean);
+}
+
+function turnRecordsFromThreadRead(threadRead) {
+  return (Array.isArray(threadRead?.turns) ? threadRead.turns : [])
+    .map(normalizeTurnRecord)
+    .filter(Boolean);
+}
+
+export function objectivePollFailureReason({
+  threadRead,
+  sessionDetail,
+  objective,
+} = {}) {
+  const latestStatus = String(latestTurnStatus(threadRead) || "").toLowerCase();
+  if (FAILED_THREAD_STATUSES.has(latestStatus)) {
+    return `latest_turn_status=${latestStatus}`;
+  }
+
+  const threadStatus = String(threadRead?.status || "").toLowerCase();
+  if (FAILED_THREAD_STATUSES.has(threadStatus)) {
+    return `thread_status=${threadStatus}`;
+  }
+
+  const failedTurn = [
+    ...turnRecordsFromSessionDetail(sessionDetail),
+    ...turnRecordsFromThreadRead(threadRead),
+  ].find((turn) => FAILED_THREAD_STATUSES.has(turn.status));
+  if (failedTurn) {
+    return [
+      `turn_status=${failedTurn.status}`,
+      failedTurn.id ? `turn_id=${failedTurn.id}` : "",
+      failedTurn.error ? `error=${failedTurn.error}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  const objectiveStatus = String(objective?.status || "").toLowerCase();
+  if (objectiveStatus === "failed") {
+    return "objective_status=failed";
+  }
+
+  return null;
+}
+
 export function summarizeObjective(objective) {
   if (!objective) {
     return null;
@@ -728,14 +896,20 @@ export function evidencePackExplainsObjectiveStop(objective, evidencePack) {
   return false;
 }
 
-export async function waitForObjectiveState(options, sessionId, predicate, label) {
+export async function waitForObjectiveState(
+  options,
+  sessionId,
+  predicate,
+  label,
+  { failFast = false } = {},
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
 
   while (Date.now() - startedAt < options.timeoutMs) {
     const [threadRead, objective, sessionDetail] = await Promise.all([
       readAgentRuntimeThreadCurrent(options, sessionId),
-      invokeDevBridge(options, "agent_runtime_get_objective", { sessionId }),
+      readAgentSessionObjectiveCurrent(options, sessionId),
       readAgentSessionDetailCurrent(options, sessionId),
     ]);
     lastSnapshot = {
@@ -745,6 +919,18 @@ export async function waitForObjectiveState(options, sessionId, predicate, label
     };
     if (predicate({ threadRead, objective, sessionDetail, snapshot: lastSnapshot })) {
       return { threadRead, objective, sessionDetail, snapshot: lastSnapshot };
+    }
+    if (failFast) {
+      const failureReason = objectivePollFailureReason({
+        threadRead,
+        sessionDetail,
+        objective,
+      });
+      if (failureReason) {
+        throw new Error(
+          `${options.logPrefix} ${label} failed early: ${failureReason}; last=${JSON.stringify(lastSnapshot)}`,
+        );
+      }
     }
     await sleep(options.intervalMs);
   }

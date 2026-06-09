@@ -162,6 +162,23 @@ rg -n "tauri dev|tauri\.conf|src-tauri|npm run tauri|@tauri-apps/cli" "package.j
 9. 旧 runner 根入口已删除；current 入口只允许 Electron / Forge。
 10. `scripts/update-version.sh` 只更新 `package.json`、`packages/lime-cli-npm/package.json` 与 `lime-rs/Cargo.toml`，不再写 `tauri.conf`。
 
+2026-06-09 追加前端 API error envelope fail-closed 守卫：
+
+```bash
+npx vitest run "src/lib/api/hintRoutes.test.ts" "src/lib/api/agentAppRuntime.test.ts" "src/lib/api/companion.test.ts" "src/lib/api/tray.test.ts" --silent=passed-only --disableConsoleIntercept
+npx eslint --max-warnings 0 "src/lib/api/hintRoutes.ts" "src/lib/api/hintRoutes.test.ts" "src/lib/api/agentAppRuntime.ts" "src/lib/api/agentAppRuntime.test.ts" "src/lib/api/companion.ts" "src/lib/api/companion.test.ts" "src/lib/api/tray.ts" "src/lib/api/tray.test.ts"
+npm run test:contracts
+git diff --check -- "src/lib/api/hintRoutes.ts" "src/lib/api/hintRoutes.test.ts" "src/lib/api/agentAppRuntime.ts" "src/lib/api/agentAppRuntime.test.ts" "src/lib/api/companion.ts" "src/lib/api/companion.test.ts" "src/lib/api/tray.ts" "src/lib/api/tray.test.ts" "internal/roadmap/appserver/testing-migration.md"
+```
+
+这组证据证明：
+
+1. `get_hint_routes` 在 optional legacy UX 网关中拒绝顶层和数组项 error envelope，不再把 unsupported / fallback 响应混成真实提示路由。
+2. `agent_app_runtime_*` current Electron Host -> App Server 投影网关拒绝顶层 error envelope 与 `taskEvents[]` 项 error envelope，不再把伪 task 状态当作真实 Agent App runtime 数据。
+3. `companion_*` 前端网关拒绝顶层 error envelope，不再把桌宠状态 / 启动 / 命令投递 fallback 当作真实成功。
+4. `sync_tray_model_shortcuts` 前端网关拒绝顶层 error envelope，不再把托盘壳能力 fallback 当作同步成功。
+5. 本轮只补未被并行写集占用的 API fail-closed 守卫；P15 `materials` / `session-files`、P14 `asrProvider` / `voiceModels`、P12 `agentApps` 仍需等对应 API 文件释放后补同类守卫，或在 Electron Host / App Server / Rust runner / contract 热区释放后成组 current 化。
+
 2026-06-06 追加 direct GUI smoke current wrapper：
 
 ```bash

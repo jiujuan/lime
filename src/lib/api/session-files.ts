@@ -170,6 +170,12 @@ function assertNumberResult(command: string, value: unknown): asserts value is n
   }
 }
 
+function assertVoidResult(command: string, value: unknown): void {
+  if (value !== null && value !== undefined) {
+    throw new Error(`${command} did not return void result`);
+  }
+}
+
 function assertImportDocumentToSessionResult(
   command: string,
   value: unknown,
@@ -210,6 +216,10 @@ function assertSessionFilesCommandResult(
       return;
     case "session_files_save_file":
       assertSessionFile(command, value);
+      return;
+    case "session_files_delete":
+    case "session_files_delete_file":
+      assertVoidResult(command, value);
       return;
     case "session_files_read_file":
     case "session_files_resolve_file_path":
@@ -292,7 +302,7 @@ export async function getOrCreateSession(
  * 删除会话
  */
 export async function deleteSession(sessionId: string): Promise<void> {
-  return invokeSessionFilesCommand<void>("session_files_delete", {
+  await invokeSessionFilesCommand<void>("session_files_delete", {
     sessionId,
   });
 }
@@ -412,7 +422,7 @@ export async function deleteFile(
   sessionId: string,
   fileName: string,
 ): Promise<void> {
-  return invokeSessionFilesCommand<void>("session_files_delete_file", {
+  await invokeSessionFilesCommand<void>("session_files_delete_file", {
     sessionId,
     fileName,
   });

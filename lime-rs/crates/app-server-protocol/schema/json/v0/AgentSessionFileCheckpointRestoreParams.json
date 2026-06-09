@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "checkpointId": {
+      "type": "string"
+    },
+    "confirmRestore": {
+      "default": false,
+      "type": "boolean"
+    },
+    "createBackup": {
+      "default": true,
+      "type": "boolean"
+    },
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "checkpointId",
+    "sessionId"
+  ],
+  "title": "AgentSessionFileCheckpointRestoreParams",
+  "type": "object"
+}

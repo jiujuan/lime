@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "branch": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "branch",
+    "directory",
+    "name",
+    "owner"
+  ],
+  "title": "SkillRemoteInspectParams",
+  "type": "object"
+}

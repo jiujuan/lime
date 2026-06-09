@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "chosenFixStrategy": {
+      "default": "",
+      "type": "string"
+    },
+    "decisionStatus": {
+      "type": "string"
+    },
+    "decisionSummary": {
+      "default": "",
+      "type": "string"
+    },
+    "followupActions": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "humanReviewer": {
+      "default": "",
+      "type": "string"
+    },
+    "notes": {
+      "default": "",
+      "type": "string"
+    },
+    "regressionRequirements": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "riskLevel": {
+      "type": "string"
+    },
+    "riskTags": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "decisionStatus",
+    "riskLevel"
+  ],
+  "title": "AgentSessionReviewDecision",
+  "type": "object"
+}

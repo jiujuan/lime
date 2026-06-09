@@ -1556,6 +1556,219 @@ export function AgentAppsPage({
                     </div>
                   ) : null}
 
+                  {selected ? (
+                    <section
+                      className="space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3"
+                      data-testid="agent-apps-lifecycle-actions"
+                    >
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={selected.disabled || Boolean(busyAction)}
+                          onClick={() => void handleSetDisabled(selected, true)}
+                          data-testid="agent-apps-disable"
+                        >
+                          <Ban size={16} />
+                          {t("agentApp.apps.action.disable")}
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!selected.disabled || Boolean(busyAction)}
+                          onClick={() => void handleSetDisabled(selected, false)}
+                          data-testid="agent-apps-enable"
+                        >
+                          <CheckCircle2 size={16} />
+                          {t("agentApp.apps.action.enable")}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={Boolean(busyAction)}
+                          onClick={() =>
+                            void handlePreviewUninstall(selected, "keep-data")
+                          }
+                          data-testid="agent-apps-uninstall-keep-data"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <Archive size={16} />
+                            {t("agentApp.apps.action.uninstallKeepData")}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={Boolean(busyAction)}
+                          onClick={() =>
+                            void handlePreviewUninstall(selected, "delete-data")
+                          }
+                          data-testid="agent-apps-uninstall-delete-data"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <Archive size={16} />
+                            {t("agentApp.apps.action.uninstallDeleteData")}
+                          </span>
+                        </button>
+                      </div>
+                      {uninstallPreview ? (
+                        <div
+                          className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3"
+                          data-testid="agent-apps-uninstall-preview"
+                        >
+                          <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                            {t("agentApp.apps.uninstallPreview.title")}
+                          </p>
+                          <p className="mt-2 text-sm text-[color:var(--lime-text-muted)]">
+                            {t("agentApp.apps.uninstallPreview.summary", {
+                              deleted: uninstallPreview.deletedTargetCount,
+                              retained: uninstallPreview.retainedTargetCount,
+                            })}
+                          </p>
+                          {activeUninstallDescriptor ? (
+                            <div
+                              className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"
+                              data-testid="agent-apps-cleanup-evidence"
+                            >
+                              <p className="text-sm text-emerald-800">
+                                {t("agentApp.lab.manager.evidence.summary", {
+                                  deleted:
+                                    activeUninstallDescriptor.cleanupEvidence
+                                      .deletedTargetCount,
+                                  retained:
+                                    activeUninstallDescriptor.cleanupEvidence
+                                      .retainedTargetCount,
+                                })}
+                              </p>
+                              <pre
+                                className="max-h-44 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-950 p-3 text-xs leading-5 text-emerald-50"
+                                data-testid="agent-apps-cleanup-evidence-json"
+                              >
+                                {JSON.stringify(
+                                  activeUninstallDescriptor.cleanupEvidence,
+                                  null,
+                                  2,
+                                )}
+                              </pre>
+                              <div
+                                className="grid gap-2 sm:grid-cols-2"
+                                data-testid="agent-apps-residual-audit"
+                              >
+                                <span className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-700">
+                                  {t(
+                                    "agentApp.lab.manager.evidence.residual.pendingDeletion",
+                                    {
+                                      count:
+                                        activeUninstallDescriptor.residualAudit
+                                          .pendingDeletionCount,
+                                    },
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          ) : null}
+                          {activeUninstallDescriptor?.mode === "delete-data" ? (
+                            <div
+                              className="mt-3 space-y-3 rounded-lg border border-rose-200 bg-rose-50 p-3"
+                              data-testid="agent-apps-delete-data-confirmation"
+                            >
+                              <div className="space-y-1">
+                                <p className="text-sm font-semibold text-rose-900">
+                                  {t(
+                                    "agentApp.apps.uninstallPreview.deleteDataGate.title",
+                                  )}
+                                </p>
+                                <p className="text-sm text-rose-800">
+                                  {t(
+                                    "agentApp.apps.uninstallPreview.deleteDataGate.description",
+                                  )}
+                                </p>
+                                {deleteDataExecutionBlocked ? (
+                                  <p
+                                    className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                                    data-testid="agent-apps-delete-data-current-phase-gate"
+                                  >
+                                    {t(
+                                      "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly",
+                                    )}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="rounded-lg border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2">
+                                <span className="text-xs font-medium text-rose-700">
+                                  {t(
+                                    "agentApp.apps.uninstallPreview.deleteDataGate.phraseLabel",
+                                  )}
+                                </span>
+                                <code
+                                  className="mt-1 block break-all rounded-md bg-slate-950 px-2 py-1.5 text-xs text-rose-50"
+                                  data-testid="agent-apps-delete-data-confirmation-phrase"
+                                >
+                                  {deleteDataConfirmationPhrase}
+                                </code>
+                              </div>
+                              <input
+                                value={deleteDataConfirmationInput}
+                                onChange={(event) =>
+                                  setDeleteDataConfirmationInput(
+                                    event.target.value,
+                                  )
+                                }
+                                className="w-full rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-sm text-[color:var(--lime-text-strong)] outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                                placeholder={t(
+                                  "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder",
+                                )}
+                                aria-label={t(
+                                  "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel",
+                                )}
+                                disabled={deleteDataExecutionBlocked}
+                                data-testid="agent-apps-delete-data-confirmation-input"
+                              />
+                              <p
+                                className={`text-xs ${
+                                  deleteDataExecutionBlocked
+                                    ? "text-amber-700"
+                                    : deleteDataConfirmationMatches
+                                      ? "text-emerald-700"
+                                      : "text-rose-700"
+                                }`}
+                                data-testid="agent-apps-delete-data-confirmation-status"
+                              >
+                                {deleteDataExecutionBlocked
+                                  ? t(
+                                      "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly",
+                                    )
+                                  : deleteDataConfirmationMatches
+                                    ? t(
+                                        "agentApp.apps.uninstallPreview.deleteDataGate.ready",
+                                      )
+                                    : t(
+                                        "agentApp.apps.uninstallPreview.deleteDataGate.mismatch",
+                                      )}
+                              </p>
+                            </div>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="mt-3 inline-flex items-center gap-2 rounded-full bg-rose-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={
+                              Boolean(busyAction) ||
+                              deleteDataExecutionBlocked ||
+                              !deleteDataConfirmationMatches
+                            }
+                            onClick={() => void handleConfirmUninstall()}
+                            data-testid="agent-apps-uninstall-confirm"
+                          >
+                            <Archive size={16} />
+                            {deleteDataExecutionBlocked
+                              ? t("agentApp.apps.action.deleteDataUnavailable")
+                              : t("agentApp.apps.action.confirmUninstall")}
+                          </button>
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
+
                   <section>
                     <button
                       type="button"
@@ -1629,230 +1842,6 @@ export function AgentAppsPage({
                         ) : null}
                         {selectedItem.sourceState?.reason ? (
                           <p>{selectedItem.sourceState.reason}</p>
-                        ) : null}
-                        {selected ? (
-                          <div className="grid gap-2 border-t border-[color:var(--lime-surface-border)] pt-3 sm:grid-cols-2">
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={
-                                selected.disabled || Boolean(busyAction)
-                              }
-                              onClick={() =>
-                                void handleSetDisabled(selected, true)
-                              }
-                              data-testid="agent-apps-disable"
-                            >
-                              <Ban size={16} />
-                              {t("agentApp.apps.action.disable")}
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={
-                                !selected.disabled || Boolean(busyAction)
-                              }
-                              onClick={() =>
-                                void handleSetDisabled(selected, false)
-                              }
-                              data-testid="agent-apps-enable"
-                            >
-                              <CheckCircle2 size={16} />
-                              {t("agentApp.apps.action.enable")}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)]"
-                              disabled={Boolean(busyAction)}
-                              onClick={() =>
-                                void handlePreviewUninstall(
-                                  selected,
-                                  "keep-data",
-                                )
-                              }
-                              data-testid="agent-apps-uninstall-keep-data"
-                            >
-                              <span className="inline-flex items-center gap-2">
-                                <Archive size={16} />
-                                {t("agentApp.apps.action.uninstallKeepData")}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-rose-800 transition hover:bg-rose-50"
-                              disabled={Boolean(busyAction)}
-                              onClick={() =>
-                                void handlePreviewUninstall(
-                                  selected,
-                                  "delete-data",
-                                )
-                              }
-                              data-testid="agent-apps-uninstall-delete-data"
-                            >
-                              <span className="inline-flex items-center gap-2">
-                                <Archive size={16} />
-                                {t("agentApp.apps.action.uninstallDeleteData")}
-                              </span>
-                            </button>
-                          </div>
-                        ) : null}
-                        {uninstallPreview ? (
-                          <div
-                            className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3"
-                            data-testid="agent-apps-uninstall-preview"
-                          >
-                            <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                              {t("agentApp.apps.uninstallPreview.title")}
-                            </p>
-                            <p className="mt-2 text-sm text-[color:var(--lime-text-muted)]">
-                              {t("agentApp.apps.uninstallPreview.summary", {
-                                deleted: uninstallPreview.deletedTargetCount,
-                                retained: uninstallPreview.retainedTargetCount,
-                              })}
-                            </p>
-                            {activeUninstallDescriptor ? (
-                              <div
-                                className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"
-                                data-testid="agent-apps-cleanup-evidence"
-                              >
-                                <p className="text-sm text-emerald-800">
-                                  {t("agentApp.lab.manager.evidence.summary", {
-                                    deleted:
-                                      activeUninstallDescriptor.cleanupEvidence
-                                        .deletedTargetCount,
-                                    retained:
-                                      activeUninstallDescriptor.cleanupEvidence
-                                        .retainedTargetCount,
-                                  })}
-                                </p>
-                                <pre
-                                  className="max-h-44 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-950 p-3 text-xs leading-5 text-emerald-50"
-                                  data-testid="agent-apps-cleanup-evidence-json"
-                                >
-                                  {JSON.stringify(
-                                    activeUninstallDescriptor.cleanupEvidence,
-                                    null,
-                                    2,
-                                  )}
-                                </pre>
-                                <div
-                                  className="grid gap-2 sm:grid-cols-2"
-                                  data-testid="agent-apps-residual-audit"
-                                >
-                                  <span className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-700">
-                                    {t(
-                                      "agentApp.lab.manager.evidence.residual.pendingDeletion",
-                                      {
-                                        count:
-                                          activeUninstallDescriptor
-                                            .residualAudit.pendingDeletionCount,
-                                      },
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-                            ) : null}
-                            {activeUninstallDescriptor?.mode ===
-                            "delete-data" ? (
-                              <div
-                                className="mt-3 space-y-3 rounded-lg border border-rose-200 bg-rose-50 p-3"
-                                data-testid="agent-apps-delete-data-confirmation"
-                              >
-                                <div className="space-y-1">
-                                  <p className="text-sm font-semibold text-rose-900">
-                                    {t(
-                                      "agentApp.apps.uninstallPreview.deleteDataGate.title",
-                                    )}
-                                  </p>
-                                  <p className="text-sm text-rose-800">
-                                    {t(
-                                      "agentApp.apps.uninstallPreview.deleteDataGate.description",
-                                    )}
-                                  </p>
-                                  {deleteDataExecutionBlocked ? (
-                                    <p
-                                      className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
-                                      data-testid="agent-apps-delete-data-current-phase-gate"
-                                    >
-                                      {t(
-                                        "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly",
-                                      )}
-                                    </p>
-                                  ) : null}
-                                </div>
-                                <div className="rounded-lg border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2">
-                                  <span className="text-xs font-medium text-rose-700">
-                                    {t(
-                                      "agentApp.apps.uninstallPreview.deleteDataGate.phraseLabel",
-                                    )}
-                                  </span>
-                                  <code
-                                    className="mt-1 block break-all rounded-md bg-slate-950 px-2 py-1.5 text-xs text-rose-50"
-                                    data-testid="agent-apps-delete-data-confirmation-phrase"
-                                  >
-                                    {deleteDataConfirmationPhrase}
-                                  </code>
-                                </div>
-                                <input
-                                  value={deleteDataConfirmationInput}
-                                  onChange={(event) =>
-                                    setDeleteDataConfirmationInput(
-                                      event.target.value,
-                                    )
-                                  }
-                                  className="w-full rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-sm text-[color:var(--lime-text-strong)] outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
-                                  placeholder={t(
-                                    "agentApp.apps.uninstallPreview.deleteDataGate.inputPlaceholder",
-                                  )}
-                                  aria-label={t(
-                                    "agentApp.apps.uninstallPreview.deleteDataGate.inputLabel",
-                                  )}
-                                  disabled={deleteDataExecutionBlocked}
-                                  data-testid="agent-apps-delete-data-confirmation-input"
-                                />
-                                <p
-                                  className={`text-xs ${
-                                    deleteDataExecutionBlocked
-                                      ? "text-amber-700"
-                                      : deleteDataConfirmationMatches
-                                        ? "text-emerald-700"
-                                        : "text-rose-700"
-                                  }`}
-                                  data-testid="agent-apps-delete-data-confirmation-status"
-                                >
-                                  {deleteDataExecutionBlocked
-                                    ? t(
-                                        "agentApp.apps.uninstallPreview.deleteDataGate.dryRunOnly",
-                                      )
-                                    : deleteDataConfirmationMatches
-                                      ? t(
-                                          "agentApp.apps.uninstallPreview.deleteDataGate.ready",
-                                        )
-                                      : t(
-                                          "agentApp.apps.uninstallPreview.deleteDataGate.mismatch",
-                                        )}
-                                </p>
-                              </div>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="mt-3 inline-flex items-center gap-2 rounded-full bg-rose-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={
-                                Boolean(busyAction) ||
-                                deleteDataExecutionBlocked ||
-                                !deleteDataConfirmationMatches
-                              }
-                              onClick={() => void handleConfirmUninstall()}
-                              data-testid="agent-apps-uninstall-confirm"
-                            >
-                              <Archive size={16} />
-                              {deleteDataExecutionBlocked
-                                ? t(
-                                    "agentApp.apps.action.deleteDataUnavailable",
-                                  )
-                                : t("agentApp.apps.action.confirmUninstall")}
-                            </button>
-                          </div>
                         ) : null}
                       </div>
                     ) : null}

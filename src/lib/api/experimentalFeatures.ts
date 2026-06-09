@@ -21,6 +21,12 @@ function isExperimentalFeatures(value: unknown): value is ExperimentalFeatures {
   );
 }
 
+function assertVoidResult(command: string, value: unknown): void {
+  if (value !== null && value !== undefined) {
+    throw new Error(`${command} did not return void result`);
+  }
+}
+
 export async function getExperimentalConfig(): Promise<ExperimentalFeatures> {
   const result = await safeInvoke<unknown>("get_experimental_config");
   assertNotDiagnosticFacade(
@@ -45,4 +51,5 @@ export async function saveExperimentalConfig(
     result,
     "真实 Experimental config current 通道",
   );
+  assertVoidResult("save_experimental_config", result);
 }

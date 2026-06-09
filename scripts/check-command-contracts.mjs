@@ -97,6 +97,66 @@ const retiredAgentAppPackageFacadeCommands = new Set([
   "agent_app_uninstall",
   "agent_app_uninstall_rehearsal",
 ]);
+const retiredUsageStatsElectronFacadeCommands = new Set([
+  "get_usage_stats",
+  "get_model_usage_ranking",
+  "get_daily_usage_trends",
+]);
+const retiredLogFacadeCommands = new Set([
+  "get_logs",
+  "get_persisted_logs_tail",
+  "clear_logs",
+  "clear_diagnostic_log_history",
+  "get_log_storage_diagnostics",
+  "export_support_bundle",
+  "get_server_diagnostics",
+  "get_windows_startup_diagnostics",
+]);
+const retiredLogTauriGenerateHandlerCommands = new Set(
+  retiredLogFacadeCommands,
+);
+const retiredFrontendDiagnosticsTauriGenerateHandlerCommands = new Set([
+  "report_frontend_crash",
+  "report_frontend_debug_log",
+]);
+const retiredConfigTauriGenerateHandlerCommands = new Set([
+  "get_config",
+  "save_config",
+  "get_environment_preview",
+  "get_default_provider",
+  "set_default_provider",
+  "update_provider_env_vars",
+]);
+const retiredChannelReadOnlyFacadeCommands = new Set([
+  "gateway_channel_status",
+  "wechat_channel_list_accounts",
+]);
+const retiredChannelSideEffectFacadeCommands = new Set([
+  "gateway_channel_start",
+  "gateway_channel_stop",
+  "telegram_channel_probe",
+  "feishu_channel_probe",
+  "discord_channel_probe",
+  "wechat_channel_probe",
+  "wechat_channel_login_start",
+  "wechat_channel_login_wait",
+  "wechat_channel_remove_account",
+  "wechat_channel_set_runtime_model",
+]);
+const retiredGatewayTunnelFacadeCommands = new Set([
+  "gateway_tunnel_probe",
+  "gateway_tunnel_detect_cloudflared",
+  "gateway_tunnel_install_cloudflared",
+  "gateway_tunnel_create",
+  "gateway_tunnel_start",
+  "gateway_tunnel_stop",
+  "gateway_tunnel_restart",
+  "gateway_tunnel_status",
+  "gateway_tunnel_sync_webhook_url",
+]);
+const retiredVoiceInputConfigElectronFacadeCommands = new Set([
+  "get_voice_input_config",
+]);
 const currentAgentAppShellDesktopHostCommands = new Set([
   "agent_app_launch_shell",
 ]);
@@ -106,14 +166,187 @@ const currentAgentAppRuntimeDesktopHostCommands = new Set([
   "agent_app_runtime_get_task",
   "agent_app_runtime_submit_host_response",
 ]);
+const currentTrayDesktopHostShellCommands = new Set([
+  "sync_tray_model_shortcuts",
+]);
+const currentHotkeyDesktopHostShellCommands = new Set([
+  "get_voice_shortcut_runtime_status",
+  "validate_shortcut",
+]);
+const currentSkillDesktopHostShellCommands = new Set([
+  "get_local_skills_for_app",
+  "take_pending_skill_package_open_requests",
+  "get_skill_package_file_association_status",
+  "set_skill_package_file_association_default",
+]);
+const currentLayeredDesignDesktopHostShellCommands = new Set([
+  "save_layered_design_project_export",
+  "read_layered_design_project_export",
+  "recognize_layered_design_text",
+  "analyze_layered_design_flat_image",
+]);
+const retiredAgentRuntimeSessionRustCommands = new Set([
+  "agent_runtime_create_session",
+  "agent_runtime_list_sessions",
+  "agent_runtime_get_session",
+  "agent_runtime_update_session",
+  "agent_runtime_delete_session",
+]);
+const retiredAgentRuntimeSubagentRustCommands = new Set([
+  "agent_runtime_spawn_subagent",
+  "agent_runtime_send_subagent_input",
+  "agent_runtime_wait_subagents",
+  "agent_runtime_resume_subagent",
+  "agent_runtime_close_subagent",
+]);
+const retiredAgentRuntimeCoreCurrentBridgeRustCommands = new Set([
+  "agent_runtime_submit_turn",
+  "agent_runtime_interrupt_turn",
+  "agent_runtime_respond_action",
+  "agent_runtime_get_thread_read",
+  "agent_runtime_export_evidence_pack",
+  "agent_runtime_get_tool_inventory",
+  "agent_runtime_list_workspace_skill_bindings",
+]);
+const retiredAgentRuntimeCheckpointQueueReplayRustCommands = new Set([
+  "agent_runtime_list_file_checkpoints",
+  "agent_runtime_get_file_checkpoint",
+  "agent_runtime_diff_file_checkpoint",
+  "agent_runtime_restore_file_checkpoint",
+  "agent_runtime_replay_request",
+  "agent_runtime_promote_queued_turn",
+  "agent_runtime_remove_queued_turn",
+]);
+const retiredAgentRuntimeCheckpointCurrentCommands = new Set([
+  "agent_runtime_list_file_checkpoints",
+  "agent_runtime_get_file_checkpoint",
+  "agent_runtime_diff_file_checkpoint",
+  "agent_runtime_restore_file_checkpoint",
+]);
+const retiredAgentRuntimeCompactObjectiveRustCommands = new Set([
+  "agent_runtime_compact_session",
+  "agent_runtime_resume_thread",
+  "agent_runtime_get_objective",
+  "agent_runtime_set_objective",
+  "agent_runtime_update_objective_status",
+  "agent_runtime_clear_objective",
+  "agent_runtime_continue_objective",
+  "agent_runtime_audit_objective",
+]);
+const retiredAgentRuntimeObjectiveCrudGatewayCommands = new Set([
+  "agent_runtime_get_objective",
+  "agent_runtime_set_objective",
+  "agent_runtime_update_objective_status",
+  "agent_runtime_clear_objective",
+]);
+const retiredAgentRuntimeObjectiveContinuationGatewayCommands = new Set([
+  "agent_runtime_continue_objective",
+  "agent_runtime_audit_objective",
+]);
+const retiredAgentRuntimeProcessAsterRustCommands = new Set([
+  "agent_start_process",
+  "agent_stop_process",
+  "agent_get_process_status",
+  "aster_agent_init",
+  "aster_agent_status",
+  "aster_agent_configure_provider",
+  "aster_agent_reset",
+]);
+const retiredAgentRuntimeExportRustCommands = new Set([
+  "agent_runtime_export_analysis_handoff",
+  "agent_runtime_export_handoff_bundle",
+  "agent_runtime_export_review_decision_template",
+  "agent_runtime_save_review_decision",
+  "agent_runtime_export_replay_case",
+]);
+const retiredSkillExecutionFacadeCommands = new Set(["execute_skill"]);
+const retiredCapabilityDraftAuthoringCommands = new Set([
+  "capability_draft_create",
+  "capability_draft_list",
+  "capability_draft_get",
+  "capability_draft_verify",
+  "capability_draft_register",
+  "capability_draft_submit_approval_session_inputs",
+  "capability_draft_execute_controlled_get",
+]);
+const retiredSkillManagementFacadeCommands = new Set([
+  "get_skills",
+  "get_skills_for_app",
+  "install_skill",
+  "install_skill_for_app",
+  "uninstall_skill",
+  "uninstall_skill_for_app",
+  "get_skill_repos",
+  "add_skill_repo",
+  "remove_skill_repo",
+  "refresh_skill_cache",
+  "get_installed_lime_skills",
+  "inspect_local_skill_for_app",
+  "create_skill_scaffold_for_app",
+  "import_local_skill_for_app",
+  "inspect_remote_skill",
+]);
+const retiredSkillRevealFacadeCommands = new Set([
+  "reveal_local_skill_for_app",
+]);
+const retiredSkillLocalManagementFacadeCommands = new Set([
+  "inspect_local_skill_detail_for_app",
+  "rename_local_skill_for_app",
+  "replace_local_skill_package_for_app",
+  "inspect_remote_skill",
+]);
+const retiredSkillPackageLocalFacadeCommands = new Set([
+  "inspect_local_skill_package_for_app",
+  "install_local_skill_package_for_app",
+  "export_local_skill_package_for_app",
+]);
+const retiredSkillMarketplaceInstallFacadeCommands = new Set([
+  "install_marketplace_skill_for_app",
+  "install_skill_from_download_url_for_app",
+]);
+const retiredSiteAdapterFacadeCommands = new Set([
+  "site_list_adapters",
+  "site_recommend_adapters",
+  "site_search_adapters",
+  "site_get_adapter_info",
+  "site_get_adapter_launch_readiness",
+  "site_get_adapter_catalog_status",
+  "site_apply_adapter_catalog_bootstrap",
+  "site_clear_adapter_catalog_cache",
+  "site_import_adapter_yaml_bundle",
+  "site_run_adapter",
+  "site_debug_run_adapter",
+  "site_save_adapter_result",
+]);
+const retiredMediaTaskArtifactFacadeCommands = new Set([
+  "create_image_generation_task_artifact",
+  "create_audio_generation_task_artifact",
+  "complete_audio_generation_task_artifact",
+  "get_media_task_artifact",
+  "list_media_task_artifacts",
+  "cancel_media_task_artifact",
+]);
+const retiredAgentRuntimeRustCommands = new Set([
+  ...retiredAgentRuntimeSessionRustCommands,
+  ...retiredAgentRuntimeSubagentRustCommands,
+  ...retiredAgentRuntimeCoreCurrentBridgeRustCommands,
+  ...retiredAgentRuntimeCheckpointQueueReplayRustCommands,
+  ...retiredAgentRuntimeCompactObjectiveRustCommands,
+  ...retiredAgentRuntimeProcessAsterRustCommands,
+  ...retiredAgentRuntimeExportRustCommands,
+]);
 const currentFileBrowserDesktopHostShellCommands = new Set([
   "get_home_dir",
   "get_file_manager_locations",
   "get_file_icon_data_url",
   "reveal_in_finder",
   "open_with_default_app",
+  "save_exported_document",
 ]);
 const retiredTauriGenerateHandlerCommands = new Set([
+  ...retiredLogTauriGenerateHandlerCommands,
+  ...retiredFrontendDiagnosticsTauriGenerateHandlerCommands,
+  ...retiredConfigTauriGenerateHandlerCommands,
   "add_mcp_server",
   "add_model_to_provider",
   "add_prompt",
@@ -289,6 +522,7 @@ const retiredTauriCommandModules = new Set([
   "tray_cmd",
   "voice_test_cmd",
   "websocket_cmd",
+  "windows_startup_cmd",
 ]);
 
 function addDeferredCommands(commands, reason) {
@@ -300,6 +534,11 @@ function addDeferredCommands(commands, reason) {
 const currentElectronHostRequiredCommands = new Set([
   "app_server_handle_json_lines",
   "app_server_drain_events",
+  ...currentTrayDesktopHostShellCommands,
+  ...currentHotkeyDesktopHostShellCommands,
+  ...currentSkillDesktopHostShellCommands,
+  ...currentLayeredDesignDesktopHostShellCommands,
+  ...currentFileBrowserDesktopHostShellCommands,
   "aster_agent_init",
   "agent_runtime_create_session",
   "agent_runtime_submit_turn",
@@ -328,12 +567,9 @@ const currentElectronHostRequiredCommands = new Set([
   "get_model_registry",
   "get_model_registry_provider_ids",
   "get_model_sync_state",
-  "get_daily_usage_trends",
-  "get_model_usage_ranking",
   "get_models_by_tier",
   "get_models_for_provider",
   "get_provider_alias_config",
-  "get_usage_stats",
   "open_external_url",
   "project_memory_get",
   "save_experimental_config",
@@ -364,111 +600,11 @@ const electronDiagnosticFacadeCommands = new Set([
   "get_chrome_bridge_status",
   "get_chrome_profile_sessions",
   "get_environment_preview",
-  "get_voice_input_config",
-  "get_voice_shortcut_runtime_status",
   "list_audio_devices",
-  "site_get_adapter_catalog_status",
-  "site_list_adapters",
   "unified_memory_stats",
   "voice_models_get_install_state",
   "voice_models_list_catalog",
 ]);
-
-addDeferredCommands(
-  [
-    "agent_start_process",
-    "agent_stop_process",
-    "agent_get_process_status",
-    "aster_agent_status",
-    "aster_agent_configure_provider",
-    "aster_agent_reset",
-    "agent_runtime_compact_session",
-    "agent_runtime_resume_thread",
-    "agent_runtime_replay_request",
-    "agent_runtime_get_objective",
-    "agent_runtime_set_objective",
-    "agent_runtime_update_objective_status",
-    "agent_runtime_clear_objective",
-    "agent_runtime_continue_objective",
-    "agent_runtime_audit_objective",
-    "agent_runtime_list_file_checkpoints",
-    "agent_runtime_get_file_checkpoint",
-    "agent_runtime_diff_file_checkpoint",
-    "agent_runtime_restore_file_checkpoint",
-    "agent_runtime_promote_queued_turn",
-    "agent_runtime_remove_queued_turn",
-    "agent_runtime_delete_session",
-    "agent_runtime_export_analysis_handoff",
-    "agent_runtime_export_handoff_bundle",
-    "agent_runtime_export_review_decision_template",
-    "agent_runtime_save_review_decision",
-    "agent_runtime_export_replay_case",
-    "agent_runtime_spawn_subagent",
-    "agent_runtime_send_subagent_input",
-    "agent_runtime_wait_subagents",
-    "agent_runtime_resume_subagent",
-    "agent_runtime_close_subagent",
-  ],
-  "compat: agent_runtime legacy/side-effect commands remain behind the existing runtime adapter until App Server JSON-RPC methods land.",
-);
-
-addDeferredCommands(
-  [
-    "execute_skill",
-    "inspect_local_skill_detail_for_app",
-    "reveal_local_skill_for_app",
-    "rename_local_skill_for_app",
-    "replace_local_skill_package_for_app",
-    "inspect_local_skill_package_for_app",
-    "install_local_skill_package_for_app",
-    "export_local_skill_package_for_app",
-    "take_pending_skill_package_open_requests",
-    "get_skill_package_file_association_status",
-    "set_skill_package_file_association_default",
-    "install_marketplace_skill_for_app",
-    "install_skill_from_download_url_for_app",
-  ],
-  "compat: Agent App and skill package commands are native feature surfaces; do not bulk-register them as Electron App Server truth bridge commands.",
-);
-
-addDeferredCommands(
-  [
-    "gateway_channel_status",
-    "wechat_channel_list_accounts",
-    "site_list_adapters",
-    "site_recommend_adapters",
-    "site_search_adapters",
-    "site_get_adapter_info",
-    "site_get_adapter_launch_readiness",
-    "site_get_adapter_catalog_status",
-    "site_apply_adapter_catalog_bootstrap",
-    "site_clear_adapter_catalog_cache",
-    "site_import_adapter_yaml_bundle",
-    "site_run_adapter",
-    "site_debug_run_adapter",
-    "site_save_adapter_result",
-    "create_image_generation_task_artifact",
-    "create_audio_generation_task_artifact",
-    "complete_audio_generation_task_artifact",
-    "get_media_task_artifact",
-    "list_media_task_artifacts",
-    "cancel_media_task_artifact",
-  ],
-  "compat: feature-specific native commands await dedicated current App Server protocol coverage before Electron host registration.",
-);
-
-addDeferredCommands(
-  [
-    "capability_draft_create",
-    "capability_draft_list",
-    "capability_draft_get",
-    "capability_draft_verify",
-    "capability_draft_register",
-    "capability_draft_submit_approval_session_inputs",
-    "capability_draft_execute_controlled_get",
-  ],
-  "compat: Capability Draft generation / verification / registration remains a gated native feature surface; registered skills discovery has moved to App Server workspaceRegisteredSkills/list.",
-);
 
 function normalizePath(filePath) {
   return filePath.split(path.sep).join("/");
@@ -757,6 +893,14 @@ function readSource(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
+function readExistingProductionSourceForGuard(relativePath) {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    return "";
+  }
+  return readProductionSourceForGuard(relativePath);
+}
+
 function collectRustSourceFiles(relativeRoot) {
   const absoluteRoot = path.join(repoRoot, relativeRoot);
   return walkDirectory(absoluteRoot)
@@ -837,6 +981,21 @@ function hasTauriCommandRegistration(sourceCode, command) {
     String.raw`\bcommands::[A-Za-z0-9_]+::${escapeRegExp(command)}\b`,
   );
   return pattern.test(sourceCode);
+}
+
+function hasRustFunctionDefinition(sourceCode, functionName) {
+  const pattern = new RegExp(
+    String.raw`\b(?:pub(?:\s*\([^)]*\))?\s+)?(?:async\s+)?fn\s+${escapeRegExp(functionName)}\s*\(`,
+  );
+  return pattern.test(sourceCode);
+}
+
+function agentCommandCatalogRuntimeSurfaceHas(command) {
+  const catalog = readAgentCommandCatalog();
+  return (
+    (catalog.runtimeGatewayCommands ?? []).includes(command) ||
+    (catalog.capabilityDraftCommands ?? []).includes(command)
+  );
 }
 
 function stripRustTestModules(sourceCode) {
@@ -1541,6 +1700,9 @@ function collectRetiredApiKeyProviderFacadeSourceFailures() {
   ];
 
   for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
     const sourceCode = readProductionSourceForGuard(source.path);
     for (const command of retiredApiKeyProviderFacadeCommands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
@@ -1580,7 +1742,7 @@ function collectRetiredMcpDesktopFacadeSourceFailures() {
         "已迁到 App Server MCP current API 的旧 MCP 命令不能回到 legacy Tauri generate_handler",
     },
     {
-      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      paths: collectRustSourceFiles("lime-rs/src/dev_bridge/dispatcher"),
       message:
         "已迁到 App Server MCP current API 的旧 MCP 命令不能回到 Rust DevBridge dispatcher",
     },
@@ -1593,15 +1755,18 @@ function collectRetiredMcpDesktopFacadeSourceFailures() {
   ];
 
   for (const source of restrictedSources) {
-    const sourceCode = readProductionSourceForGuard(source.path);
+    const paths = source.paths ?? [source.path];
     const commands = source.commands ?? retiredMcpDesktopFacadeCommands;
-    for (const command of commands) {
-      if (hasStandaloneIdentifier(sourceCode, command)) {
-        failures.push({
-          file: source.path,
-          message: source.message,
-          token: command,
-        });
+    for (const path of paths) {
+      const sourceCode = readProductionSourceForGuard(path);
+      for (const command of commands) {
+        if (hasStandaloneIdentifier(sourceCode, command)) {
+          failures.push({
+            file: path,
+            message: source.message,
+            token: command,
+          });
+        }
       }
     }
   }
@@ -1646,6 +1811,9 @@ function collectRetiredAgentAppPackageFacadeSourceFailures() {
   ];
 
   for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
     const sourceCode = readProductionSourceForGuard(source.path);
     for (const command of retiredAgentAppPackageFacadeCommands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
@@ -1655,6 +1823,348 @@ function collectRetiredAgentAppPackageFacadeSourceFailures() {
           token: command,
         });
       }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredLogFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已迁到 App Server log/* 与 diagnostics/* 的旧诊断命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "已迁到 App Server log/* 与 diagnostics/* 的旧诊断命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/app_runtime.rs",
+      message:
+        "已迁到 App Server diagnostics/* 的旧诊断命令不能回到 Rust DevBridge app runtime dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/logs.rs",
+      message:
+        "已迁到 App Server log/* 与 diagnostics/logStorage/read 的旧日志命令不能回到 Rust DevBridge logs dispatcher",
+    },
+    {
+      path: "scripts/social-workbench-e2e-smoke.mjs",
+      message:
+        "Social Workbench smoke 的诊断探活必须走 app_server_handle_json_lines -> diagnostics/server/read，不能继续把旧 get_* diagnostics facade 当正向证据",
+      commands: [
+        "get_log_storage_diagnostics",
+        "export_support_bundle",
+        "get_server_diagnostics",
+        "get_windows_startup_diagnostics",
+      ],
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    const commands = source.commands ?? retiredLogFacadeCommands;
+    for (const command of commands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const deletedWrapperSources = [
+    "lime-rs/src/app/commands/logs.rs",
+    "lime-rs/src/app/commands/server.rs",
+    "lime-rs/src/commands/windows_startup_cmd.rs",
+  ];
+  for (const sourcePath of deletedWrapperSources) {
+    if (fs.existsSync(path.join(repoRoot, sourcePath))) {
+      failures.push({
+        file: sourcePath,
+        message:
+          "P16 诊断旧 Tauri wrapper 文件已退场，不能在旧 command 目录恢复",
+        token: sourcePath,
+      });
+    }
+  }
+
+  const appCommandsModPath = "lime-rs/src/app/commands/mod.rs";
+  const appCommandsModSource = readProductionSourceForGuard(appCommandsModPath);
+  addForbiddenSubstringFailures(
+    failures,
+    appCommandsModPath,
+    appCommandsModSource,
+    [
+      {
+        substring: "mod logs",
+        message:
+          "P16 日志 / support bundle 旧 app_commands 模块不能回到 app/commands 注册树",
+      },
+      {
+        substring: "pub use logs",
+        message: "P16 日志 / support bundle 旧 app_commands 模块不能重新导出",
+      },
+      {
+        substring: "mod server",
+        message:
+          "P16 server diagnostics 旧 app_commands 模块不能回到 app/commands 注册树",
+      },
+      {
+        substring: "pub use server",
+        message: "P16 server diagnostics 旧 app_commands 模块不能重新导出",
+      },
+    ],
+  );
+
+  return failures;
+}
+
+function collectRetiredConfigFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "P16 config / provider residual 已迁出 legacy Tauri generate_handler，不能回到旧 runner 注册",
+    },
+    {
+      path: "lime-rs/src/app/commands/config.rs",
+      message:
+        "P16 config / provider residual 旧 Tauri wrapper 已退场，不能回到 app_commands config 模块",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredConfigTauriGenerateHandlerCommands) {
+      const hasRetiredConfigFacade =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : new RegExp(
+              String.raw`\bpub\s+async\s+fn\s+${escapeRegExp(command)}\b`,
+            ).test(sourceCode);
+      if (hasRetiredConfigFacade) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const deletedWrapperSources = [
+    "lime-rs/src/dev_bridge/dispatcher/app_runtime.rs",
+  ];
+  for (const sourcePath of deletedWrapperSources) {
+    if (fs.existsSync(path.join(repoRoot, sourcePath))) {
+      failures.push({
+        file: sourcePath,
+        message:
+          "P16 config / provider Rust DevBridge app runtime dispatcher 已退场，不能恢复旧 HTTP bridge 直连配置读写",
+        token: sourcePath,
+      });
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredChannelSideEffectFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/channelsRuntime.ts",
+      message:
+        "Channels side-effect 前端网关必须通过 App Server gatewayChannel/* / *Channel/* current method，不能回到旧 safeInvoke facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已迁到 App Server Channels current API 的旧 Channels side-effect 命令不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "已迁到 App Server Channels current API 的旧 Channels side-effect 命令不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "已迁到 App Server Channels current API 的旧 Channels side-effect 命令不能继续作为 runtime gateway command",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已迁到 App Server Channels current API 的旧 Channels side-effect 命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      paths: collectRustSourceFiles("lime-rs/src/dev_bridge/dispatcher"),
+      message:
+        "已迁到 App Server Channels current API 的旧 Channels side-effect 命令不能回到 Rust DevBridge dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const paths = source.paths ?? [source.path];
+    for (const relativePath of paths) {
+      if (!fs.existsSync(path.join(repoRoot, relativePath))) {
+        continue;
+      }
+      const sourceCode = readProductionSourceForGuard(relativePath);
+      for (const command of retiredChannelSideEffectFacadeCommands) {
+        const hasRetiredChannelFacade =
+          relativePath === "lime-rs/src/app/runner.rs"
+            ? hasTauriCommandRegistration(sourceCode, command)
+            : relativePath === "src/lib/governance/agentCommandCatalog.json"
+              ? agentCommandCatalogRuntimeSurfaceHas(command)
+              : hasStandaloneIdentifier(sourceCode, command);
+        if (hasRetiredChannelFacade) {
+          failures.push({
+            file: relativePath,
+            message: source.message,
+            token: command,
+          });
+        }
+      }
+    }
+  }
+
+  const deletedDispatcherPath =
+    "lime-rs/src/dev_bridge/dispatcher/runtime_queries.rs";
+  if (fs.existsSync(path.join(repoRoot, deletedDispatcherPath))) {
+    failures.push({
+      file: deletedDispatcherPath,
+      message:
+        "Channels runtime model 旧 Rust DevBridge dispatcher 已退场，不能恢复旧 wechat_channel_set_runtime_model 分发",
+      token: deletedDispatcherPath,
+    });
+  }
+
+  const commandsModPath = "lime-rs/src/commands/mod.rs";
+  const commandsModSource = readProductionSourceForGuard(commandsModPath);
+  for (const moduleName of ["gateway_channel_cmd", "wechat_channel_cmd"]) {
+    if (hasStandaloneIdentifier(commandsModSource, moduleName)) {
+      failures.push({
+        file: commandsModPath,
+        message:
+          "Channels/WeChat 旧 Tauri wrapper 已迁到 App Server current，不能回到 commands 模块树",
+        token: moduleName,
+      });
+    }
+  }
+
+  for (const retiredWrapperPath of [
+    "lime-rs/src/commands/gateway_channel_cmd.rs",
+    "lime-rs/src/commands/wechat_channel_cmd.rs",
+  ]) {
+    if (fs.existsSync(path.join(repoRoot, retiredWrapperPath))) {
+      failures.push({
+        file: retiredWrapperPath,
+        message:
+          "Channels/WeChat 旧 Tauri wrapper 文件已删除，不能恢复旧 wrapper 文件本体",
+        token: retiredWrapperPath,
+      });
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredGatewayTunnelFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/api/channelsRuntime.ts",
+      message:
+        "Gateway Tunnel 前端网关必须通过 App Server gatewayTunnel/* current method，不能回到旧 safeInvoke facade",
+    },
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已迁到 App Server gatewayTunnel/* 的旧 tunnel 命令不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "已迁到 App Server gatewayTunnel/* 的旧 tunnel 命令不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "已迁到 App Server gatewayTunnel/* 的旧 tunnel 命令不能继续作为 runtime gateway command",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已迁到 App Server gatewayTunnel/* 的旧 tunnel 命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      paths: collectRustSourceFiles("lime-rs/src/dev_bridge/dispatcher"),
+      message:
+        "已迁到 App Server gatewayTunnel/* 的旧 tunnel 命令不能回到 Rust DevBridge dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const paths = source.paths ?? [source.path];
+    for (const relativePath of paths) {
+      if (!fs.existsSync(path.join(repoRoot, relativePath))) {
+        continue;
+      }
+      const sourceCode = readProductionSourceForGuard(relativePath);
+      for (const command of retiredGatewayTunnelFacadeCommands) {
+        const hasRetiredTunnelFacade =
+          relativePath === "lime-rs/src/app/runner.rs"
+            ? hasTauriCommandRegistration(sourceCode, command)
+            : relativePath === "src/lib/governance/agentCommandCatalog.json"
+              ? agentCommandCatalogRuntimeSurfaceHas(command)
+              : hasStandaloneIdentifier(sourceCode, command);
+        if (hasRetiredTunnelFacade) {
+          failures.push({
+            file: relativePath,
+            message: source.message,
+            token: command,
+          });
+        }
+      }
+    }
+  }
+
+  const commandsModPath = "lime-rs/src/commands/mod.rs";
+  const commandsModSource = readProductionSourceForGuard(commandsModPath);
+  if (hasStandaloneIdentifier(commandsModSource, "gateway_tunnel_cmd")) {
+    failures.push({
+      file: commandsModPath,
+      message:
+        "Gateway Tunnel 旧 Tauri wrapper 已迁到 App Server current，不能回到 commands 模块树",
+      token: "gateway_tunnel_cmd",
+    });
+  }
+
+  const runnerPath = "lime-rs/src/app/runner.rs";
+  const runnerSource = readProductionSourceForGuard(runnerPath);
+  for (const token of ["GatewayTunnelState", "lime_gateway::tunnel::"]) {
+    if (runnerSource.includes(token)) {
+      failures.push({
+        file: runnerPath,
+        message:
+          "Gateway Tunnel 生命周期已迁到 App Server LocalAppDataSource，legacy Tauri runner 不能重新持有 tunnel 状态或守护器",
+        token,
+      });
     }
   }
 
@@ -1698,6 +2208,9 @@ function collectCurrentAgentAppShellDesktopHostSourceFailures() {
   ];
 
   for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
     const sourceCode = readProductionSourceForGuard(source.path);
     for (const command of currentAgentAppShellDesktopHostCommands) {
       if (hasStandaloneIdentifier(sourceCode, command)) {
@@ -1742,6 +2255,862 @@ function collectCurrentAgentAppRuntimeDesktopHostSourceFailures() {
         });
       }
     }
+  }
+
+  return failures;
+}
+
+function collectCurrentTrayDesktopHostShellSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "sync_tray_model_shortcuts 是 Electron Desktop Host 托盘壳能力，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "sync_tray_model_shortcuts 是 Electron Desktop Host 托盘壳能力，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/modelMocks.ts",
+      message:
+        "sync_tray_model_shortcuts 是 Electron Desktop Host 托盘壳能力，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "sync_tray_model_shortcuts 是 Electron Desktop Host 托盘壳能力，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "sync_tray_model_shortcuts 是 Electron Desktop Host 托盘壳能力，不能回到 Rust DevBridge dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of currentTrayDesktopHostShellCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectCurrentHotkeyDesktopHostShellSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "快捷键状态 / 校验是 Electron Desktop Host 快捷键壳能力，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "快捷键状态 / 校验是 Electron Desktop Host 快捷键壳能力，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/configSystemMocks.ts",
+      message:
+        "快捷键状态 / 校验是 Electron Desktop Host 快捷键壳能力，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/desktop-host/voiceMocks.ts",
+      message:
+        "快捷键状态 / 校验是 Electron Desktop Host 快捷键壳能力，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "快捷键状态 / 校验是 Electron Desktop Host 快捷键壳能力，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "快捷键状态 / 校验是 Electron Desktop Host 快捷键壳能力，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/voice.rs",
+      message:
+        "快捷键状态 / 校验是 Electron Desktop Host 快捷键壳能力，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/voice/commands.rs",
+      message:
+        "快捷键状态 / 校验是 Electron Desktop Host 快捷键壳能力，不能回到旧 Tauri voice command",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of currentHotkeyDesktopHostShellCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  for (const retiredPath of ["lime-rs/src/commands/hotkey_cmd.rs"]) {
+    if (fs.existsSync(path.join(repoRoot, retiredPath))) {
+      failures.push({
+        file: retiredPath,
+        message:
+          "快捷键校验旧 Tauri wrapper 已迁到 Electron Desktop Host current，不能恢复旧文件本体",
+        token: retiredPath,
+      });
+    }
+  }
+
+  const commandsModPath = "lime-rs/src/commands/mod.rs";
+  const commandsModSource = readProductionSourceForGuard(commandsModPath);
+  if (hasStandaloneIdentifier(commandsModSource, "hotkey_cmd")) {
+    failures.push({
+      file: commandsModPath,
+      message:
+        "快捷键校验旧 Tauri wrapper 已迁到 Electron Desktop Host current，不能回到 commands 模块树",
+      token: "hotkey_cmd",
+    });
+  }
+
+  return failures;
+}
+
+function collectCurrentSkillDesktopHostShellSourceFailures() {
+  const failures = [];
+  const retiredSkillCommandPath = "lime-rs/src/commands/skill_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredSkillCommandPath))) {
+    failures.push({
+      file: retiredSkillCommandPath,
+      message:
+        "Skill 旧 Tauri wrapper 文件已物理删除，不能恢复 skill_cmd.rs 文件本体",
+      token: retiredSkillCommandPath,
+    });
+  }
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/skillManagementMocks.ts",
+      message:
+        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/skills.rs",
+      message:
+        "Skill list/open-request/file-association 是 Electron Desktop Host 壳能力，不能回到 Rust DevBridge skills dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of currentSkillDesktopHostShellCommands) {
+      const hasCurrentSkillShellLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/governance/agentCommandCatalog.json"
+            ? agentCommandCatalogRuntimeSurfaceHas(command)
+            : hasStandaloneIdentifier(sourceCode, command);
+      if (hasCurrentSkillShellLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectCurrentLayeredDesignDesktopHostShellSourceFailures() {
+  const failures = [];
+  const bridgeTruthCommands = collectBridgeTruthCommands();
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Layered Design project/extraction 是 Electron Desktop Host 壳能力，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Layered Design project/extraction 是 Electron Desktop Host 壳能力，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Layered Design project/extraction 是 Electron Desktop Host 壳能力，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Layered Design project/extraction 是 Electron Desktop Host 壳能力，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/files.rs",
+      message:
+        "Layered Design project/extraction 是 Electron Desktop Host 壳能力，不能回到 Rust DevBridge files dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of currentLayeredDesignDesktopHostShellCommands) {
+      const hasCurrentLayeredDesignShellLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/governance/agentCommandCatalog.json"
+            ? agentCommandCatalogRuntimeSurfaceHas(command)
+            : source.path === "src/lib/dev-bridge/commandPolicy.ts"
+              ? bridgeTruthCommands.has(command)
+              : hasStandaloneIdentifier(sourceCode, command);
+      if (hasCurrentLayeredDesignShellLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  const commandSource = readProductionSourceForGuard(
+    "lime-rs/src/commands/layered_design_cmd.rs",
+  );
+  for (const command of currentLayeredDesignDesktopHostShellCommands) {
+    const tauriWrapperPattern = new RegExp(
+      `#\\[\\s*tauri::command\\s*\\][\\s\\S]{0,240}\\b${command}\\b`,
+      "u",
+    );
+    if (tauriWrapperPattern.test(commandSource)) {
+      failures.push({
+        file: "lime-rs/src/commands/layered_design_cmd.rs",
+        message:
+          "Layered Design 旧 Tauri wrapper 已退场，layered_design_cmd.rs 只能保留迁移来源 / inner 测试，不能恢复可调用 command wrapper",
+        token: command,
+      });
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredAgentRuntimeRustSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Agent Runtime session CRUD / public subagent facade / core current bridge / checkpoint queue replay / compact objective 旧入口已撤下，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/agent_sessions.rs",
+      message:
+        "Agent Runtime session CRUD / public subagent facade / core current bridge / checkpoint queue replay / compact objective / process Aster 旧入口已撤下，不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/providers.rs",
+      message:
+        "Agent Runtime process/Aster 旧 DevBridge provider dispatcher 已撤下，不能恢复旧 Rust DevBridge dispatcher",
+      commands: retiredAgentRuntimeProcessAsterRustCommands,
+    },
+    {
+      path: "lime-rs/src/commands/agent_cmd.rs",
+      message:
+        "Agent process 旧 Tauri wrapper 已撤下，不能在 agent_cmd.rs 恢复可调用 Rust wrapper",
+      commands: retiredAgentRuntimeProcessAsterRustCommands,
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/action_runtime.rs",
+      message:
+        "Agent Runtime delete session / respond action 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
+      commands: [
+        "agent_runtime_delete_session",
+        "agent_runtime_respond_action",
+      ],
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/command_api/session_api.rs",
+      message:
+        "Agent Runtime session CRUD 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/command_api/subagent_api.rs",
+      message:
+        "Agent Runtime public subagent 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
+      commands: retiredAgentRuntimeSubagentRustCommands,
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/command_api.rs",
+      message:
+        "Agent Runtime session CRUD / public subagent / core current bridge / checkpoint queue replay / compact objective / process Aster 旧 Tauri wrapper 已撤下，不能在 command_api.rs 重新导出 legacy wrapper",
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/mod.rs",
+      message:
+        "Agent Runtime session CRUD / public subagent / core current bridge / checkpoint queue replay / compact objective / process Aster 旧 Tauri wrapper 已撤下，不能在 aster_agent_cmd/mod.rs 重新导出 legacy wrapper",
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/command_api/provider_api.rs",
+      message:
+        "Aster provider/status/reset 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
+      commands: retiredAgentRuntimeProcessAsterRustCommands,
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/command_api/objective_api.rs",
+      message:
+        "Agent Runtime objective 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
+      commands: retiredAgentRuntimeCompactObjectiveRustCommands,
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/command_api/objective_audit.rs",
+      message:
+        "Agent Runtime objective audit 旧 Tauri wrapper 已撤下，不能在 commands/** 恢复可调用 Rust wrapper",
+      commands: retiredAgentRuntimeCompactObjectiveRustCommands,
+    },
+    {
+      path: "lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs",
+      message:
+        "Agent Runtime session read / core current bridge / checkpoint queue replay / compact resume / export residual 旧 Tauri wrapper 已撤下，不能在 runtime_api.rs 恢复 legacy wrapper",
+      commands: [
+        "agent_runtime_get_session",
+        ...retiredAgentRuntimeCoreCurrentBridgeRustCommands,
+        ...retiredAgentRuntimeCheckpointQueueReplayRustCommands,
+        "agent_runtime_compact_session",
+        "agent_runtime_resume_thread",
+        ...retiredAgentRuntimeExportRustCommands,
+      ],
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    if (!fs.existsSync(path.join(repoRoot, source.path))) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    const commands = source.commands ?? retiredAgentRuntimeRustCommands;
+    for (const command of commands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredSkillExecutionFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "已下线的 execute_skill 独立执行命令不能继续作为 DevBridge truth 或特殊策略命令",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "已下线的 execute_skill 独立执行命令不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/skillForgeMocks.ts",
+      message:
+        "已下线的 execute_skill 独立执行命令不能继续保留 desktop-host mock fixture",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "已下线的 execute_skill 独立执行命令不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/commands/mod.rs",
+      message:
+        "skill_exec_cmd 已删除，不能重新暴露为 legacy Tauri command module",
+      tokens: ["skill_exec_cmd"],
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "已下线的 execute_skill 独立执行命令不能回到 Rust DevBridge dispatcher",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/skills.rs",
+      message:
+        "已下线的 execute_skill 独立执行命令不能回到 Rust DevBridge skills dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const absolutePath = path.join(repoRoot, source.path);
+    if (!fs.existsSync(absolutePath)) {
+      continue;
+    }
+    const sourceCode = readProductionSourceForGuard(source.path);
+    const tokens = source.tokens ?? retiredSkillExecutionFacadeCommands;
+    for (const token of tokens) {
+      if (hasStandaloneIdentifier(sourceCode, token)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token,
+        });
+      }
+    }
+  }
+
+  const retiredWrapperPath = "lime-rs/src/commands/skill_exec_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredWrapperPath))) {
+    failures.push({
+      file: retiredWrapperPath,
+      message: "execute_skill 独立 Tauri wrapper 已下线，文件不能恢复",
+      token: retiredWrapperPath,
+    });
+  }
+
+  return failures;
+}
+
+function collectRetiredSkillRevealFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "本地 Skill reveal 已迁到 App Server skill/list localDirectoryPath projection + Electron reveal_in_finder，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "本地 Skill reveal 已迁到 App Server skill/list localDirectoryPath projection + Electron reveal_in_finder，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "本地 Skill reveal 已迁到 App Server skill/list + Electron reveal_in_finder，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/skills.ts",
+      message:
+        "skillsApi.revealLocalSkill 必须通过 get_local_skills_for_app 读取 localDirectoryPath 后调用 reveal_in_finder，不能回到旧 Tauri facade",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredSkillRevealFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredSkillManagementFacadeSourceFailures() {
+  const failures = [];
+  const retiredSkillCommandPath = "lime-rs/src/commands/skill_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredSkillCommandPath))) {
+    failures.push({
+      file: retiredSkillCommandPath,
+      message:
+        "Skill 管理旧 Tauri wrapper 文件已物理删除，不能恢复 skill_cmd.rs 文件本体",
+      token: retiredSkillCommandPath,
+    });
+  }
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Skill 管理旧 facade 已迁到 App Server skillManagement/* / skillRepository/* / skillLocal/* / skillRemote/inspect，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Skill 管理旧 facade 已迁到 App Server current，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/desktop-host/skillManagementMocks.ts",
+      message:
+        "Skill 管理旧 facade 已迁到 App Server current，不能保留 desktop-host 默认 mock",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Skill 管理旧 facade 已迁到 App Server current，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/skills.ts",
+      message:
+        "skillsApi Skill 管理必须通过 App Server skillManagement/* / skillRepository/* / skillLocal/* / skillRemote/inspect，不能回到旧 Tauri facade",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Skill 管理旧 facade 已迁到 App Server current，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/skills.rs",
+      message:
+        "Skill 管理旧 facade 已迁到 App Server current，不能回到 Rust DevBridge skills dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readExistingProductionSourceForGuard(source.path);
+    for (const command of retiredSkillManagementFacadeCommands) {
+      const hasRetiredSkillManagementLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/governance/agentCommandCatalog.json"
+            ? agentCommandCatalogRuntimeSurfaceHas(command)
+            : hasStandaloneIdentifier(sourceCode, command);
+      if (hasRetiredSkillManagementLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredSkillPackageLocalFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "本地 Skill package inspect/install/export 已迁到 App Server skillPackage/local/* + skillPackage/export，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "本地 Skill package inspect/install/export 已迁到 App Server skillPackage/local/* + skillPackage/export，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "本地 Skill package inspect/install/export 已迁到 App Server skillPackage/local/* + skillPackage/export，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/skills.ts",
+      message:
+        "skillsApi 本地 Skill package inspect/install/export 必须通过 App Server skillPackage/local/* + skillPackage/export，不能回到旧 Tauri facade",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredSkillPackageLocalFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredSkillLocalManagementFacadeSourceFailures() {
+  const failures = [];
+  const retiredSkillCommandPath = "lime-rs/src/commands/skill_cmd.rs";
+  if (fs.existsSync(path.join(repoRoot, retiredSkillCommandPath))) {
+    failures.push({
+      file: retiredSkillCommandPath,
+      message:
+        "本地 Skill 旧 Tauri wrapper 文件已物理删除，不能恢复 skill_cmd.rs 文件本体",
+      token: retiredSkillCommandPath,
+    });
+  }
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "本地 Skill detail/rename/replace 与远程 inspect 已迁到 App Server skillLocal/* / skillPackage/local/replace / skillRemote/inspect，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "本地 Skill detail/rename/replace 与远程 inspect 已迁到 App Server skillLocal/* / skillPackage/local/replace / skillRemote/inspect，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "本地 Skill detail/rename/replace 与远程 inspect 已迁到 App Server skillLocal/* / skillPackage/local/replace / skillRemote/inspect，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/skills.ts",
+      message:
+        "skillsApi 本地 Skill detail/rename/replace 与远程 inspect 必须通过 App Server skillLocal/* / skillPackage/local/replace / skillRemote/inspect，不能回到旧 Tauri facade",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "本地 Skill detail/rename/replace 与远程 inspect 已迁到 App Server current，不能回到 legacy Tauri generate_handler",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher/skills.rs",
+      message:
+        "本地 Skill detail/rename/replace 与远程 inspect 已迁到 App Server current，不能回到 Rust DevBridge skills dispatcher",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readExistingProductionSourceForGuard(source.path);
+    for (const command of retiredSkillLocalManagementFacadeCommands) {
+      const hasRetiredSkillLocalManagementLeak =
+        source.path === "lime-rs/src/app/runner.rs"
+          ? hasTauriCommandRegistration(sourceCode, command)
+          : source.path === "src/lib/governance/agentCommandCatalog.json"
+            ? agentCommandCatalogRuntimeSurfaceHas(command)
+            : hasStandaloneIdentifier(sourceCode, command);
+      if (hasRetiredSkillLocalManagementLeak) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredSkillMarketplaceInstallFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "官方 Skill marketplace/download 安装已迁到 App Server skillMarketplace/install + skillPackage/download/install，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "官方 Skill marketplace/download 安装已迁到 App Server skillMarketplace/install + skillPackage/download/install，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "官方 Skill marketplace/download 安装已迁到 App Server skillMarketplace/install + skillPackage/download/install，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/skills.ts",
+      message:
+        "skillsApi 官方 Skill marketplace/download 安装必须通过 App Server skillMarketplace/install + skillPackage/download/install，不能回到旧 Tauri facade",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredSkillMarketplaceInstallFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredSiteAdapterFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Site Adapter 旧命令已退为 fail-closed guard，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Site Adapter 旧命令已退为 fail-closed guard，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Site Adapter 旧命令已退为 fail-closed guard，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/agentRuntime/siteClient.ts",
+      message:
+        "Site Adapter 前端 client 必须保持 fail-closed，不能重新调用旧 bridge facade",
+      commands: ["bridgeInvoke("],
+    },
+    {
+      path: "electron/ipcChannels.ts",
+      message:
+        "Site Adapter 旧命令不能回到 Electron Host 白名单；后续必须先定义 App Server current method",
+    },
+    {
+      path: "electron/hostCommands.ts",
+      message:
+        "Site Adapter 旧命令不能回到 Electron Host diagnostic facade；后续必须先定义 App Server current method",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Site Adapter 旧命令不能回到 legacy Tauri generate_handler；后续必须先定义 App Server current method",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "Site Adapter 旧命令不能回到 Rust DevBridge dispatcher；后续必须先定义 App Server current method",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    const commands = source.commands ?? retiredSiteAdapterFacadeCommands;
+    for (const command of commands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  return failures;
+}
+
+function collectRetiredMediaTaskArtifactFacadeSourceFailures() {
+  const failures = [];
+  const restrictedSources = [
+    {
+      path: "src/lib/dev-bridge/commandPolicy.ts",
+      message:
+        "Media task artifact 旧命令已迁到 App Server mediaTaskArtifact/*，不能继续作为 DevBridge truth command",
+    },
+    {
+      path: "src/lib/dev-bridge/mockPriorityCommands.ts",
+      message:
+        "Media task artifact 旧命令已迁到 App Server mediaTaskArtifact/*，不能继续作为 mock priority command",
+    },
+    {
+      path: "src/lib/governance/agentCommandCatalog.json",
+      message:
+        "Media task artifact 旧命令已迁到 App Server mediaTaskArtifact/*，不能继续作为 runtime gateway command",
+    },
+    {
+      path: "src/lib/api/mediaTasks.ts",
+      message:
+        "mediaTasks API 必须通过 App Server mediaTaskArtifact/*，不能回到旧 Tauri facade",
+    },
+    {
+      path: "lime-rs/src/app/runner.rs",
+      message:
+        "Media task artifact 旧命令不能回到 legacy Tauri generate_handler；current 入口是 App Server mediaTaskArtifact/*",
+    },
+    {
+      path: "lime-rs/src/dev_bridge/dispatcher.rs",
+      message:
+        "Media task artifact 旧命令不能回到 Rust DevBridge dispatcher；current 入口是 App Server mediaTaskArtifact/*",
+    },
+  ];
+
+  for (const source of restrictedSources) {
+    const sourceCode = readProductionSourceForGuard(source.path);
+    for (const command of retiredMediaTaskArtifactFacadeCommands) {
+      if (hasStandaloneIdentifier(sourceCode, command)) {
+        failures.push({
+          file: source.path,
+          message: source.message,
+          token: command,
+        });
+      }
+    }
+  }
+
+  for (const retiredPath of [
+    "lime-rs/src/commands/media_task_cmd.rs",
+    "lime-rs/src/commands/aster_agent_cmd/tool_runtime/creation_tools.rs",
+    "lime-rs/src/dev_bridge/dispatcher/media_tasks.rs",
+  ]) {
+    if (fs.existsSync(path.join(repoRoot, retiredPath))) {
+      failures.push({
+        file: retiredPath,
+        message:
+          "Media task artifact 旧 Tauri wrapper / creation tool runtime 已迁到 App Server current，不能恢复旧文件本体",
+        token: retiredPath,
+      });
+    }
+  }
+
+  const commandsModPath = "lime-rs/src/commands/mod.rs";
+  const commandsModSource = readProductionSourceForGuard(commandsModPath);
+  if (hasStandaloneIdentifier(commandsModSource, "media_task_cmd")) {
+    failures.push({
+      file: commandsModPath,
+      message:
+        "Media task artifact 旧 Tauri wrapper 已迁到 App Server current，不能回到 commands 模块树",
+      token: "media_task_cmd",
+    });
   }
 
   return failures;
@@ -1867,10 +3236,44 @@ function main() {
     collectRetiredMcpDesktopFacadeSourceFailures();
   const retiredAgentAppPackageFacadeSourceFailures =
     collectRetiredAgentAppPackageFacadeSourceFailures();
+  const retiredLogFacadeSourceFailures =
+    collectRetiredLogFacadeSourceFailures();
+  const retiredConfigFacadeSourceFailures =
+    collectRetiredConfigFacadeSourceFailures();
+  const retiredChannelSideEffectFacadeSourceFailures =
+    collectRetiredChannelSideEffectFacadeSourceFailures();
+  const retiredGatewayTunnelFacadeSourceFailures =
+    collectRetiredGatewayTunnelFacadeSourceFailures();
   const currentAgentAppShellDesktopHostSourceFailures =
     collectCurrentAgentAppShellDesktopHostSourceFailures();
   const currentAgentAppRuntimeDesktopHostSourceFailures =
     collectCurrentAgentAppRuntimeDesktopHostSourceFailures();
+  const currentTrayDesktopHostShellSourceFailures =
+    collectCurrentTrayDesktopHostShellSourceFailures();
+  const currentHotkeyDesktopHostShellSourceFailures =
+    collectCurrentHotkeyDesktopHostShellSourceFailures();
+  const currentSkillDesktopHostShellSourceFailures =
+    collectCurrentSkillDesktopHostShellSourceFailures();
+  const currentLayeredDesignDesktopHostShellSourceFailures =
+    collectCurrentLayeredDesignDesktopHostShellSourceFailures();
+  const retiredAgentRuntimeRustSourceFailures =
+    collectRetiredAgentRuntimeRustSourceFailures();
+  const retiredSkillExecutionFacadeSourceFailures =
+    collectRetiredSkillExecutionFacadeSourceFailures();
+  const retiredSkillRevealFacadeSourceFailures =
+    collectRetiredSkillRevealFacadeSourceFailures();
+  const retiredSkillManagementFacadeSourceFailures =
+    collectRetiredSkillManagementFacadeSourceFailures();
+  const retiredSkillLocalManagementFacadeSourceFailures =
+    collectRetiredSkillLocalManagementFacadeSourceFailures();
+  const retiredSkillPackageLocalFacadeSourceFailures =
+    collectRetiredSkillPackageLocalFacadeSourceFailures();
+  const retiredSkillMarketplaceInstallFacadeSourceFailures =
+    collectRetiredSkillMarketplaceInstallFacadeSourceFailures();
+  const retiredSiteAdapterFacadeSourceFailures =
+    collectRetiredSiteAdapterFacadeSourceFailures();
+  const retiredMediaTaskArtifactFacadeSourceFailures =
+    collectRetiredMediaTaskArtifactFacadeSourceFailures();
   const currentFileBrowserDesktopHostShellSourceFailures =
     collectCurrentFileBrowserDesktopHostShellSourceFailures();
   const retiredTauriGenerateHandlerFailures =
@@ -1907,6 +3310,11 @@ function main() {
   );
   const deprecatedCommandsStillUsed = new Set(
     [...frontendCommands].filter((command) => deprecatedCommands.has(command)),
+  );
+  const retiredCapabilityDraftAuthoringFrontendLeaks = new Set(
+    [...retiredCapabilityDraftAuthoringCommands].filter((command) =>
+      frontendCommands.has(command),
+    ),
   );
   const retiredFileBrowserFacadeLeaks = new Set(
     [...retiredFileBrowserFacadeCommands].filter(
@@ -1957,12 +3365,296 @@ function main() {
         capabilityDraftCommands.has(command),
     ),
   );
+  const retiredUsageStatsElectronFacadeLeaks = new Set(
+    [...retiredUsageStatsElectronFacadeCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredLogFacadeLeaks = new Set(
+    [...retiredLogFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredChannelReadOnlyFacadeLeaks = new Set(
+    [...retiredChannelReadOnlyFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredChannelSideEffectFacadeLeaks = new Set(
+    [...retiredChannelSideEffectFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredGatewayTunnelFacadeLeaks = new Set(
+    [...retiredGatewayTunnelFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredVoiceInputConfigElectronFacadeLeaks = new Set(
+    [...retiredVoiceInputConfigElectronFacadeCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredAgentRuntimeExportSurfaceLeaks = new Set(
+    [...retiredAgentRuntimeExportRustCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredAgentRuntimeCheckpointCurrentSurfaceLeaks = new Set(
+    [...retiredAgentRuntimeCheckpointCurrentCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredAgentRuntimeSubagentSurfaceLeaks = new Set(
+    [...retiredAgentRuntimeSubagentRustCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredAgentRuntimeProcessAsterSurfaceLeaks = new Set(
+    [...retiredAgentRuntimeProcessAsterRustCommands]
+      .filter((command) => command !== "aster_agent_init")
+      .filter(
+        (command) =>
+          registeredCommands.has(command) ||
+          bridgeTruthCommands.has(command) ||
+          mockPriorityCommands.has(command) ||
+          runtimeGatewayCommands.has(command) ||
+          capabilityDraftCommands.has(command),
+      ),
+  );
+  const retiredAgentRuntimeDeleteSessionSurfaceLeaks = new Set(
+    ["agent_runtime_delete_session"].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredAgentRuntimeObjectiveCrudGatewayLeaks = new Set(
+    [...retiredAgentRuntimeObjectiveCrudGatewayCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredAgentRuntimeObjectiveContinuationGatewayLeaks = new Set(
+    [...retiredAgentRuntimeObjectiveContinuationGatewayCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredSkillExecutionFacadeLeaks = new Set(
+    [...retiredSkillExecutionFacadeCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredCapabilityDraftAuthoringSurfaceLeaks = new Set(
+    [...retiredCapabilityDraftAuthoringCommands].filter(
+      (command) =>
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command),
+    ),
+  );
+  const retiredSkillRevealFacadeLeaks = new Set(
+    [...retiredSkillRevealFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredSkillManagementFacadeLeaks = new Set(
+    [...retiredSkillManagementFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredSkillPackageLocalFacadeLeaks = new Set(
+    [...retiredSkillPackageLocalFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredSkillLocalManagementFacadeLeaks = new Set(
+    [...retiredSkillLocalManagementFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredSkillMarketplaceInstallFacadeLeaks = new Set(
+    [...retiredSkillMarketplaceInstallFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredSiteAdapterFacadeLeaks = new Set(
+    [...retiredSiteAdapterFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const retiredMediaTaskArtifactFacadeLeaks = new Set(
+    [...retiredMediaTaskArtifactFacadeCommands].filter(
+      (command) =>
+        frontendCommands.has(command) ||
+        registeredCommands.has(command) ||
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
   const currentFileBrowserDesktopHostShellBridgeLeaks = new Set(
     [...currentFileBrowserDesktopHostShellCommands].filter(
       (command) =>
         bridgeTruthCommands.has(command) ||
         runtimeGatewayCommands.has(command) ||
         capabilityDraftCommands.has(command),
+    ),
+  );
+  const currentTrayDesktopHostShellBridgeLeaks = new Set(
+    [...currentTrayDesktopHostShellCommands].filter(
+      (command) =>
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const currentHotkeyDesktopHostShellBridgeLeaks = new Set(
+    [...currentHotkeyDesktopHostShellCommands].filter(
+      (command) =>
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const currentSkillDesktopHostShellBridgeLeaks = new Set(
+    [...currentSkillDesktopHostShellCommands].filter(
+      (command) =>
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
+    ),
+  );
+  const currentLayeredDesignDesktopHostShellBridgeLeaks = new Set(
+    [...currentLayeredDesignDesktopHostShellCommands].filter(
+      (command) =>
+        bridgeTruthCommands.has(command) ||
+        mockPriorityCommands.has(command) ||
+        runtimeGatewayCommands.has(command) ||
+        capabilityDraftCommands.has(command) ||
+        deferredCommands.has(command),
     ),
   );
   const runtimeGatewayMissingRegistrations = new Set(
@@ -2054,6 +3746,15 @@ function main() {
     );
   }
 
+  if (retiredCapabilityDraftAuthoringFrontendLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已退役的 Capability Draft authoring 命令不能回到前端生产 safeInvoke / invoke",
+      retiredCapabilityDraftAuthoringFrontendLeaks,
+      frontendUsage,
+    );
+  }
+
   if (retiredFileBrowserFacadeLeaks.size > 0) {
     hasError = true;
     printCommandGroup(
@@ -2102,6 +3803,22 @@ function main() {
     );
   }
 
+  if (retiredAgentRuntimeObjectiveCrudGatewayLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server agentSession/objective/* 的旧 objective CRUD 命令不能回到 Electron Host / DevBridge / mock / runtime catalog",
+      retiredAgentRuntimeObjectiveCrudGatewayLeaks,
+    );
+  }
+
+  if (retiredAgentRuntimeObjectiveContinuationGatewayLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server agentSession/objective/continue|audit 的旧 objective continue/audit 命令不能回到 Electron Host / DevBridge / mock / runtime catalog",
+      retiredAgentRuntimeObjectiveContinuationGatewayLeaks,
+    );
+  }
+
   if (retiredMcpDesktopFacadeSourceFailures.length > 0) {
     hasError = true;
     printGuardFailures(
@@ -2134,6 +3851,264 @@ function main() {
     );
   }
 
+  if (retiredUsageStatsElectronFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server usageStats/* 的旧 Usage Stats Electron façade 不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredUsageStatsElectronFacadeLeaks,
+    );
+  }
+
+  if (retiredLogFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server log/* 与 diagnostics/* 的旧诊断 facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredLogFacadeLeaks,
+    );
+  }
+
+  if (retiredLogFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server log/* 与 diagnostics/* 的旧诊断命令不能回到旧客户端源码",
+      retiredLogFacadeSourceFailures,
+    );
+  }
+
+  if (retiredChannelReadOnlyFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server gatewayChannel/status + wechatChannel/accounts/list 的旧 Channels/WeChat 只读 facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredChannelReadOnlyFacadeLeaks,
+    );
+  }
+
+  if (retiredChannelSideEffectFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server Channels side-effect current API 的旧 Channels/WeChat facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredChannelSideEffectFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
+  if (retiredChannelSideEffectFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server Channels side-effect current API 的旧 Channels/WeChat 命令不能回到旧客户端源码",
+      retiredChannelSideEffectFacadeSourceFailures,
+    );
+  }
+
+  if (retiredGatewayTunnelFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server gatewayTunnel/* 的旧 tunnel facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredGatewayTunnelFacadeLeaks,
+      frontendUsage,
+    );
+  }
+
+  if (retiredGatewayTunnelFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server gatewayTunnel/* 的旧 tunnel 命令不能回到旧客户端源码",
+      retiredGatewayTunnelFacadeSourceFailures,
+    );
+  }
+
+  if (retiredConfigFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host current 的旧 config facade 不能回到 Rust 旧源码",
+      retiredConfigFacadeSourceFailures,
+    );
+  }
+
+  if (retiredVoiceInputConfigElectronFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已收敛到 app config current 网关的旧 Voice Input config Electron façade 不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredVoiceInputConfigElectronFacadeLeaks,
+    );
+  }
+
+  if (retiredAgentRuntimeExportSurfaceLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server agentSession export current 的旧 Agent Runtime export 命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredAgentRuntimeExportSurfaceLeaks,
+    );
+  }
+
+  if (retiredAgentRuntimeCheckpointCurrentSurfaceLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server agentSession/fileCheckpoint current 的旧 Agent Runtime checkpoint 命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredAgentRuntimeCheckpointCurrentSurfaceLeaks,
+    );
+  }
+
+  if (retiredAgentRuntimeSubagentSurfaceLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已退役的 public subagent facade 不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredAgentRuntimeSubagentSurfaceLeaks,
+    );
+  }
+
+  if (retiredAgentRuntimeProcessAsterSurfaceLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已退役的 Agent Runtime process / Aster side-effect facade 不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredAgentRuntimeProcessAsterSurfaceLeaks,
+    );
+  }
+
+  if (retiredAgentRuntimeDeleteSessionSurfaceLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已收敛到 App Server agentSession/update archived projection 的旧 delete session 命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredAgentRuntimeDeleteSessionSurfaceLeaks,
+    );
+  }
+
+  if (retiredSkillExecutionFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已下线的 execute_skill 独立执行命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime surface",
+      retiredSkillExecutionFacadeLeaks,
+    );
+  }
+
+  if (retiredCapabilityDraftAuthoringSurfaceLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已退役的 Capability Draft authoring 命令不能回到 Electron Host、DevBridge truth、mock priority 或 runtime/capability catalog",
+      retiredCapabilityDraftAuthoringSurfaceLeaks,
+    );
+  }
+
+  if (retiredSkillRevealFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server skill/list + Electron reveal_in_finder 的旧 Skill reveal facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredSkillRevealFacadeLeaks,
+    );
+  }
+
+  if (retiredSkillManagementFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server skillManagement/* / skillRepository/* / skillLocal/* / skillRemote/inspect 的旧 Skill 管理 facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredSkillManagementFacadeLeaks,
+    );
+  }
+
+  if (retiredSkillPackageLocalFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server skillPackage/local/* + skillPackage/export 的旧本地 Skill package facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredSkillPackageLocalFacadeLeaks,
+    );
+  }
+
+  if (retiredSkillLocalManagementFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server skillLocal/* + skillPackage/local/replace 的旧本地 Skill 管理 facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredSkillLocalManagementFacadeLeaks,
+    );
+  }
+
+  if (retiredSkillMarketplaceInstallFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 App Server skillMarketplace/install + skillPackage/download/install 的旧官方 Skill 安装 facade 不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredSkillMarketplaceInstallFacadeLeaks,
+    );
+  }
+
+  if (retiredSiteAdapterFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Site Adapter 旧 facade 已退役，不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredSiteAdapterFacadeLeaks,
+    );
+  }
+
+  if (retiredMediaTaskArtifactFacadeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Media task artifact 旧 facade 已迁到 App Server current，不能回到前端调用、Electron Host、DevBridge truth、mock priority、runtime catalog 或 deferred 白名单",
+      retiredMediaTaskArtifactFacadeLeaks,
+    );
+  }
+
+  if (retiredSkillExecutionFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已下线的 execute_skill 独立执行命令不能回到旧客户端源码",
+      retiredSkillExecutionFacadeSourceFailures,
+    );
+  }
+
+  if (retiredSkillRevealFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server skill/list + Electron reveal_in_finder 的旧 Skill reveal facade 不能回到旧客户端源码",
+      retiredSkillRevealFacadeSourceFailures,
+    );
+  }
+
+  if (retiredSkillManagementFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server skillManagement/* / skillRepository/* / skillLocal/* / skillRemote/inspect 的旧 Skill 管理 facade 不能回到旧客户端源码",
+      retiredSkillManagementFacadeSourceFailures,
+    );
+  }
+
+  if (retiredSkillPackageLocalFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server skillPackage/local/* + skillPackage/export 的旧本地 Skill package facade 不能回到旧客户端源码",
+      retiredSkillPackageLocalFacadeSourceFailures,
+    );
+  }
+
+  if (retiredSkillLocalManagementFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server skillLocal/* + skillPackage/local/replace 的旧本地 Skill 管理 facade 不能回到旧客户端源码",
+      retiredSkillLocalManagementFacadeSourceFailures,
+    );
+  }
+
+  if (retiredSkillMarketplaceInstallFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 App Server skillMarketplace/install + skillPackage/download/install 的旧官方 Skill 安装 facade 不能回到旧客户端源码",
+      retiredSkillMarketplaceInstallFacadeSourceFailures,
+    );
+  }
+
+  if (retiredSiteAdapterFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Site Adapter 旧 facade 已退役，不能回到受限事实源",
+      retiredSiteAdapterFacadeSourceFailures,
+    );
+  }
+
+  if (retiredMediaTaskArtifactFacadeSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Media task artifact 旧 facade 已迁到 App Server mediaTaskArtifact/*，不能回到受限事实源",
+      retiredMediaTaskArtifactFacadeSourceFailures,
+    );
+  }
+
   if (currentAgentAppShellDesktopHostSourceFailures.length > 0) {
     hasError = true;
     printGuardFailures(
@@ -2147,6 +4122,78 @@ function main() {
     printGuardFailures(
       "已迁到 Electron Desktop Host + App Server agentSession 的 Agent App runtime task 命令不能回到旧客户端源码",
       currentAgentAppRuntimeDesktopHostSourceFailures,
+    );
+  }
+
+  if (currentTrayDesktopHostShellBridgeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 Electron Desktop Host 的托盘壳命令不能回到 DevBridge truth、mock priority、runtime gateway 或 deferred surface",
+      currentTrayDesktopHostShellBridgeLeaks,
+    );
+  }
+
+  if (currentTrayDesktopHostShellSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host 的托盘壳命令不能回到旧客户端源码",
+      currentTrayDesktopHostShellSourceFailures,
+    );
+  }
+
+  if (currentHotkeyDesktopHostShellBridgeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 Electron Desktop Host 的快捷键壳命令不能回到 DevBridge truth、mock priority、runtime gateway 或 deferred surface",
+      currentHotkeyDesktopHostShellBridgeLeaks,
+    );
+  }
+
+  if (currentHotkeyDesktopHostShellSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host 的快捷键壳命令不能回到旧客户端源码",
+      currentHotkeyDesktopHostShellSourceFailures,
+    );
+  }
+
+  if (currentSkillDesktopHostShellBridgeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 Electron Desktop Host 的 Skill 壳命令不能回到 DevBridge truth、mock priority、runtime gateway 或 deferred surface",
+      currentSkillDesktopHostShellBridgeLeaks,
+    );
+  }
+
+  if (currentSkillDesktopHostShellSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host 的 Skill 壳命令不能回到旧客户端源码",
+      currentSkillDesktopHostShellSourceFailures,
+    );
+  }
+
+  if (currentLayeredDesignDesktopHostShellBridgeLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "已迁到 Electron Desktop Host 的 Layered Design 壳命令不能回到 DevBridge truth、mock priority、runtime gateway 或 deferred surface",
+      currentLayeredDesignDesktopHostShellBridgeLeaks,
+    );
+  }
+
+  if (currentLayeredDesignDesktopHostShellSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "已迁到 Electron Desktop Host 的 Layered Design 壳命令不能回到旧客户端源码",
+      currentLayeredDesignDesktopHostShellSourceFailures,
+    );
+  }
+
+  if (retiredAgentRuntimeRustSourceFailures.length > 0) {
+    hasError = true;
+    printGuardFailures(
+      "Agent Runtime residual 旧 Rust Tauri 入口不能回流",
+      retiredAgentRuntimeRustSourceFailures,
     );
   }
 

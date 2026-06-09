@@ -32,11 +32,54 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "EvidenceExportResponse",
     "EvidencePackSummary",
     "EvidencePackArtifact",
+    "AgentSessionHandoffBundleExportParams",
+    "AgentSessionHandoffBundleExportResponse",
+    "AgentSessionHandoffArtifact",
+    "AgentSessionReplayCaseExportParams",
+    "AgentSessionReplayCaseExportResponse",
+    "AgentSessionAnalysisHandoffExportParams",
+    "AgentSessionAnalysisHandoffExportResponse",
+    "AgentSessionReviewDecisionTemplateExportParams",
+    "AgentSessionReviewDecisionTemplateExportResponse",
+    "AgentSessionReviewDecisionSaveParams",
+    "AgentSessionReviewDecision",
     "AgentSessionListParams",
     "AgentSessionOverview",
     "AgentSessionListResponse",
     "AgentSessionUpdateParams",
     "AgentSessionUpdateResponse",
+    "ManagedObjectiveStatus",
+    "ManagedObjective",
+    "AgentSessionObjectiveReadParams",
+    "AgentSessionObjectiveReadResponse",
+    "AgentSessionObjectiveSetParams",
+    "AgentSessionObjectiveSetResponse",
+    "AgentSessionObjectiveStatusUpdateParams",
+    "AgentSessionObjectiveStatusUpdateResponse",
+    "AgentSessionObjectiveClearParams",
+    "AgentSessionObjectiveClearResponse",
+    "AgentSessionObjectiveContinueParams",
+    "AgentSessionObjectiveContinueResponse",
+    "AgentSessionObjectiveAuditParams",
+    "AgentSessionObjectiveAuditResponse",
+    "AgentSessionCompactParams",
+    "AgentSessionCompactResponse",
+    "AgentSessionThreadResumeParams",
+    "AgentSessionThreadResumeResponse",
+    "AgentSessionQueuedTurnRemoveParams",
+    "AgentSessionQueuedTurnRemoveResponse",
+    "AgentSessionQueuedTurnPromoteParams",
+    "AgentSessionQueuedTurnPromoteResponse",
+    "AgentSessionFileCheckpointListParams",
+    "AgentSessionFileCheckpointGetParams",
+    "AgentSessionFileCheckpointDiffParams",
+    "AgentSessionFileCheckpointRestoreParams",
+    "AgentSessionFileCheckpointSummary",
+    "AgentSessionFileCheckpointThreadSummary",
+    "AgentSessionFileCheckpointListResponse",
+    "AgentSessionFileCheckpointDetail",
+    "AgentSessionFileCheckpointDiffResponse",
+    "AgentSessionFileCheckpointRestoreResponse",
     "WorkspaceReadParams",
     "WorkspacePathReadParams",
     "WorkspaceProjectPathResolveParams",
@@ -49,6 +92,74 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "SkillReadParams",
     "SkillListResponse",
     "SkillReadResponse",
+    "SkillManagementListParams",
+    "SkillManagementInstallParams",
+    "SkillManagementUninstallParams",
+    "SkillRepositorySaveParams",
+    "SkillRepositoryDeleteParams",
+    "SkillLocalInspectParams",
+    "SkillScaffoldCreateParams",
+    "SkillLocalImportParams",
+    "SkillRemoteInspectParams",
+    "SkillManagementWriteResponse",
+    "SkillRepositoryListResponse",
+    "SkillInstalledDirectoriesListResponse",
+    "SkillLocalInspectResponse",
+    "SkillScaffoldCreateResponse",
+    "SkillLocalImportResponse",
+    "SkillRemoteInspectResponse",
+    "SkillLocalDetailInspectParams",
+    "SkillLocalRenameParams",
+    "SkillPackageLocalReplaceParams",
+    "SkillLocalDetailInspectResponse",
+    "SkillLocalRenameResponse",
+    "SkillPackageLocalReplaceResponse",
+    "SkillPackageLocalInspectParams",
+    "SkillPackageLocalInstallParams",
+    "SkillPackageExportParams",
+    "SkillMarketplaceBundleFile",
+    "SkillMarketplaceInstallParams",
+    "SkillDownloadInstallParams",
+    "SkillPackageLocalInspectResponse",
+    "SkillPackageLocalInstallResponse",
+    "SkillMarketplaceInstallResponse",
+    "SkillDownloadInstallResponse",
+    "SkillPackageExportResponse",
+    "GatewayChannelStartParams",
+    "GatewayChannelStopParams",
+    "GatewayChannelStatusParams",
+    "GatewayChannelStatusResponse",
+    "ChannelProbeParams",
+    "ChannelProbeResponse",
+    "WechatLoginStartParams",
+    "WechatLoginStartResponse",
+    "WechatLoginWaitParams",
+    "WechatLoginWaitResponse",
+    "WechatConfiguredAccount",
+    "WechatChannelAccountListResponse",
+    "WechatChannelAccountRemoveParams",
+    "WechatChannelAccountRemoveResponse",
+    "WechatRuntimeModelSetParams",
+    "WechatRuntimeModelSetResponse",
+    "GatewayTunnelCreateParams",
+    "GatewayTunnelCreateResult",
+    "GatewayTunnelCreateResponse",
+    "GatewayTunnelProbeResponse",
+    "GatewayTunnelStatusResponse",
+    "GatewayTunnelCloudflaredDetectResponse",
+    "GatewayTunnelCloudflaredInstallParams",
+    "GatewayTunnelCloudflaredInstallResponse",
+    "GatewayTunnelSyncWebhookUrlParams",
+    "GatewayTunnelSyncWebhookUrlResponse",
+    "ImageStoryboardSlotInput",
+    "MediaTaskArtifactImageCreateParams",
+    "MediaTaskArtifactAudioCreateParams",
+    "MediaTaskArtifactAudioCompleteParams",
+    "MediaTaskArtifactLookupParams",
+    "MediaTaskArtifactListParams",
+    "MediaTaskArtifactListFilters",
+    "MediaTaskArtifactResponse",
+    "MediaTaskArtifactListResponse",
     "WorkspaceSkillBindingsListParams",
     "WorkspaceSkillBindingsListResponse",
     "WorkspaceRegisteredSkillsListParams",
@@ -140,6 +251,23 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "McpResourceListResponse",
     "ProjectMemoryReadParams",
     "ProjectMemoryReadResponse",
+    "LogEntry",
+    "LogListResponse",
+    "LogPersistedTailParams",
+    "LogPersistedTailResponse",
+    "LogClearResponse",
+    "LogArtifactEntry",
+    "LogStorageDiagnosticsResponse",
+    "SupportBundleExportResponse",
+    "DiagnosticsMetricConfig",
+    "DiagnosticsTelemetrySummary",
+    "DiagnosticsCapabilityRoutingMetricsSnapshot",
+    "DiagnosticsResponseCacheDiagnostics",
+    "DiagnosticsRequestDedupDiagnostics",
+    "DiagnosticsIdempotencyDiagnostics",
+    "ServerDiagnosticsResponse",
+    "WindowsStartupCheck",
+    "WindowsStartupDiagnosticsResponse",
     "UsageStatsRangeParams",
     "UsageStatsSummary",
     "UsageStatsReadResponse",
@@ -208,6 +336,9 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "AgentSessionTurnCancelResponse",
     "AgentSessionActionType",
     "AgentSessionActionScope",
+    "AgentSessionActionReplayParams",
+    "AgentSessionActionReplayResponse",
+    "AgentSessionReplayedActionRequired",
     "AgentSessionActionRespondParams",
     "AgentSessionActionRespondResponse",
     "AgentSessionEventParams",
@@ -233,8 +364,31 @@ pub const METHOD_FILE_SYSTEM_CREATE_DIRECTORY: &str = "fileSystem/createDirector
 pub const METHOD_FILE_SYSTEM_RENAME_FILE: &str = "fileSystem/renameFile";
 pub const METHOD_FILE_SYSTEM_DELETE_FILE: &str = "fileSystem/deleteFile";
 pub const METHOD_EVIDENCE_EXPORT: &str = "evidence/export";
+pub const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT: &str = "agentSession/handoffBundle/export";
+pub const METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT: &str = "agentSession/replayCase/export";
+pub const METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT: &str =
+    "agentSession/analysisHandoff/export";
+pub const METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT: &str =
+    "agentSession/reviewDecisionTemplate/export";
+pub const METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE: &str = "agentSession/reviewDecision/save";
 pub const METHOD_AGENT_SESSION_LIST: &str = "agentSession/list";
 pub const METHOD_AGENT_SESSION_UPDATE: &str = "agentSession/update";
+pub const METHOD_AGENT_SESSION_OBJECTIVE_READ: &str = "agentSession/objective/read";
+pub const METHOD_AGENT_SESSION_OBJECTIVE_SET: &str = "agentSession/objective/set";
+pub const METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE: &str =
+    "agentSession/objective/status/update";
+pub const METHOD_AGENT_SESSION_OBJECTIVE_CLEAR: &str = "agentSession/objective/clear";
+pub const METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE: &str = "agentSession/objective/continue";
+pub const METHOD_AGENT_SESSION_OBJECTIVE_AUDIT: &str = "agentSession/objective/audit";
+pub const METHOD_AGENT_SESSION_COMPACT: &str = "agentSession/compact";
+pub const METHOD_AGENT_SESSION_THREAD_RESUME: &str = "agentSession/thread/resume";
+pub const METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE: &str = "agentSession/queuedTurn/remove";
+pub const METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE: &str = "agentSession/queuedTurn/promote";
+pub const METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST: &str = "agentSession/fileCheckpoint/list";
+pub const METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET: &str = "agentSession/fileCheckpoint/get";
+pub const METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF: &str = "agentSession/fileCheckpoint/diff";
+pub const METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE: &str =
+    "agentSession/fileCheckpoint/restore";
 pub const METHOD_WORKSPACE_LIST: &str = "workspace/list";
 pub const METHOD_WORKSPACE_READ: &str = "workspace/read";
 pub const METHOD_WORKSPACE_BY_PATH_READ: &str = "workspace/byPath/read";
@@ -245,6 +399,53 @@ pub const METHOD_WORKSPACE_PROJECT_PATH_RESOLVE: &str = "workspace/projectPath/r
 pub const METHOD_WORKSPACE_ENSURE_READY: &str = "workspace/ensureReady";
 pub const METHOD_SKILL_LIST: &str = "skill/list";
 pub const METHOD_SKILL_READ: &str = "skill/read";
+pub const METHOD_SKILL_MANAGEMENT_LIST: &str = "skillManagement/list";
+pub const METHOD_SKILL_MANAGEMENT_INSTALL: &str = "skillManagement/install";
+pub const METHOD_SKILL_MANAGEMENT_UNINSTALL: &str = "skillManagement/uninstall";
+pub const METHOD_SKILL_REPOSITORY_LIST: &str = "skillRepository/list";
+pub const METHOD_SKILL_REPOSITORY_SAVE: &str = "skillRepository/save";
+pub const METHOD_SKILL_REPOSITORY_DELETE: &str = "skillRepository/delete";
+pub const METHOD_SKILL_CACHE_REFRESH: &str = "skillCache/refresh";
+pub const METHOD_SKILL_INSTALLED_DIRECTORIES_LIST: &str = "skillInstalledDirectories/list";
+pub const METHOD_SKILL_LOCAL_INSPECT: &str = "skillLocal/inspect";
+pub const METHOD_SKILL_LOCAL_DETAIL_INSPECT: &str = "skillLocal/detail/inspect";
+pub const METHOD_SKILL_LOCAL_SCAFFOLD_CREATE: &str = "skillLocal/scaffold/create";
+pub const METHOD_SKILL_LOCAL_IMPORT: &str = "skillLocal/import";
+pub const METHOD_SKILL_LOCAL_RENAME: &str = "skillLocal/rename";
+pub const METHOD_SKILL_REMOTE_INSPECT: &str = "skillRemote/inspect";
+pub const METHOD_SKILL_PACKAGE_LOCAL_INSPECT: &str = "skillPackage/local/inspect";
+pub const METHOD_SKILL_PACKAGE_LOCAL_INSTALL: &str = "skillPackage/local/install";
+pub const METHOD_SKILL_PACKAGE_LOCAL_REPLACE: &str = "skillPackage/local/replace";
+pub const METHOD_SKILL_PACKAGE_EXPORT: &str = "skillPackage/export";
+pub const METHOD_SKILL_MARKETPLACE_INSTALL: &str = "skillMarketplace/install";
+pub const METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL: &str = "skillPackage/download/install";
+pub const METHOD_GATEWAY_CHANNEL_START: &str = "gatewayChannel/start";
+pub const METHOD_GATEWAY_CHANNEL_STOP: &str = "gatewayChannel/stop";
+pub const METHOD_GATEWAY_CHANNEL_STATUS: &str = "gatewayChannel/status";
+pub const METHOD_TELEGRAM_CHANNEL_PROBE: &str = "telegramChannel/probe";
+pub const METHOD_FEISHU_CHANNEL_PROBE: &str = "feishuChannel/probe";
+pub const METHOD_DISCORD_CHANNEL_PROBE: &str = "discordChannel/probe";
+pub const METHOD_WECHAT_CHANNEL_PROBE: &str = "wechatChannel/probe";
+pub const METHOD_WECHAT_CHANNEL_LOGIN_START: &str = "wechatChannel/login/start";
+pub const METHOD_WECHAT_CHANNEL_LOGIN_WAIT: &str = "wechatChannel/login/wait";
+pub const METHOD_WECHAT_CHANNEL_ACCOUNT_LIST: &str = "wechatChannel/accounts/list";
+pub const METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE: &str = "wechatChannel/account/remove";
+pub const METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET: &str = "wechatChannel/runtimeModel/set";
+pub const METHOD_GATEWAY_TUNNEL_PROBE: &str = "gatewayTunnel/probe";
+pub const METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT: &str = "gatewayTunnel/cloudflared/detect";
+pub const METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL: &str = "gatewayTunnel/cloudflared/install";
+pub const METHOD_GATEWAY_TUNNEL_CREATE: &str = "gatewayTunnel/create";
+pub const METHOD_GATEWAY_TUNNEL_START: &str = "gatewayTunnel/start";
+pub const METHOD_GATEWAY_TUNNEL_STOP: &str = "gatewayTunnel/stop";
+pub const METHOD_GATEWAY_TUNNEL_RESTART: &str = "gatewayTunnel/restart";
+pub const METHOD_GATEWAY_TUNNEL_STATUS: &str = "gatewayTunnel/status";
+pub const METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL: &str = "gatewayTunnel/syncWebhookUrl";
+pub const METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE: &str = "mediaTaskArtifact/image/create";
+pub const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE: &str = "mediaTaskArtifact/audio/create";
+pub const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE: &str = "mediaTaskArtifact/audio/complete";
+pub const METHOD_MEDIA_TASK_ARTIFACT_GET: &str = "mediaTaskArtifact/get";
+pub const METHOD_MEDIA_TASK_ARTIFACT_LIST: &str = "mediaTaskArtifact/list";
+pub const METHOD_MEDIA_TASK_ARTIFACT_CANCEL: &str = "mediaTaskArtifact/cancel";
 pub const METHOD_WORKSPACE_SKILL_BINDINGS_LIST: &str = "workspaceSkillBindings/list";
 pub const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST: &str = "workspaceRegisteredSkills/list";
 pub const METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT: &str = "agentAppLocalPackage/inspect";
@@ -300,6 +501,14 @@ pub const METHOD_MCP_PROMPT_GET: &str = "mcpPrompt/get";
 pub const METHOD_MCP_RESOURCE_LIST: &str = "mcpResource/list";
 pub const METHOD_MCP_RESOURCE_READ: &str = "mcpResource/read";
 pub const METHOD_PROJECT_MEMORY_READ: &str = "projectMemory/read";
+pub const METHOD_LOG_LIST: &str = "log/list";
+pub const METHOD_LOG_PERSISTED_TAIL: &str = "log/persistedTail";
+pub const METHOD_LOG_CLEAR: &str = "log/clear";
+pub const METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR: &str = "log/diagnosticHistory/clear";
+pub const METHOD_DIAGNOSTICS_LOG_STORAGE_READ: &str = "diagnostics/logStorage/read";
+pub const METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT: &str = "diagnostics/supportBundle/export";
+pub const METHOD_DIAGNOSTICS_SERVER_READ: &str = "diagnostics/server/read";
+pub const METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ: &str = "diagnostics/windowsStartup/read";
 pub const METHOD_USAGE_STATS_READ: &str = "usageStats/read";
 pub const METHOD_USAGE_STATS_MODEL_RANKING_LIST: &str = "usageStats/modelRanking/list";
 pub const METHOD_USAGE_STATS_DAILY_TRENDS_LIST: &str = "usageStats/dailyTrends/list";
@@ -336,6 +545,7 @@ pub const METHOD_AGENT_SESSION_START: &str = "agentSession/start";
 pub const METHOD_AGENT_SESSION_READ: &str = "agentSession/read";
 pub const METHOD_AGENT_SESSION_TURN_START: &str = "agentSession/turn/start";
 pub const METHOD_AGENT_SESSION_TURN_CANCEL: &str = "agentSession/turn/cancel";
+pub const METHOD_AGENT_SESSION_ACTION_REPLAY: &str = "agentSession/action/replay";
 pub const METHOD_AGENT_SESSION_ACTION_RESPOND: &str = "agentSession/action/respond";
 pub const METHOD_AGENT_SESSION_EVENT: &str = "agentSession/event";
 
@@ -399,11 +609,87 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_LIST,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_OBJECTIVE_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_OBJECTIVE_SET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_COMPACT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_THREAD_RESUME,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -444,6 +730,194 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_SKILL_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_MANAGEMENT_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_MANAGEMENT_INSTALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_MANAGEMENT_UNINSTALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_REPOSITORY_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_REPOSITORY_SAVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_REPOSITORY_DELETE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_CACHE_REFRESH,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_LOCAL_INSPECT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_LOCAL_DETAIL_INSPECT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_LOCAL_SCAFFOLD_CREATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_LOCAL_IMPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_LOCAL_RENAME,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_REMOTE_INSPECT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_PACKAGE_LOCAL_INSPECT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_PACKAGE_LOCAL_INSTALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_PACKAGE_LOCAL_REPLACE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_PACKAGE_EXPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_MARKETPLACE_INSTALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_CHANNEL_START,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_CHANNEL_STOP,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_CHANNEL_STATUS,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_TELEGRAM_CHANNEL_PROBE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_FEISHU_CHANNEL_PROBE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_DISCORD_CHANNEL_PROBE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_WECHAT_CHANNEL_PROBE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_WECHAT_CHANNEL_LOGIN_START,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_WECHAT_CHANNEL_LOGIN_WAIT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_PROBE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_CREATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_START,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_STOP,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_RESTART,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_STATUS,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MEDIA_TASK_ARTIFACT_GET,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MEDIA_TASK_ARTIFACT_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -663,6 +1137,38 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
+        method: METHOD_LOG_LIST,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_LOG_PERSISTED_TAIL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_LOG_CLEAR,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_DIAGNOSTICS_SERVER_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
         method: METHOD_USAGE_STATS_READ,
         kind: AppServerMethodKind::Request,
     },
@@ -804,6 +1310,10 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_AGENT_SESSION_TURN_CANCEL,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_AGENT_SESSION_ACTION_REPLAY,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {
@@ -1141,6 +1651,205 @@ pub struct EvidencePackArtifact {
     pub bytes: usize,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionHandoffBundleExportParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionHandoffBundleExportResponse {
+    pub session_id: String,
+    pub thread_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    pub workspace_root: String,
+    pub bundle_relative_root: String,
+    pub bundle_absolute_root: String,
+    pub exported_at: String,
+    pub thread_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_turn_status: Option<String>,
+    pub pending_request_count: usize,
+    pub queued_turn_count: usize,
+    pub active_subagent_count: usize,
+    pub todo_total: usize,
+    pub todo_pending: usize,
+    pub todo_in_progress: usize,
+    pub todo_completed: usize,
+    #[serde(default)]
+    pub artifacts: Vec<AgentSessionHandoffArtifact>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionHandoffArtifact {
+    pub kind: String,
+    pub title: String,
+    pub relative_path: String,
+    pub absolute_path: String,
+    pub bytes: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionReplayCaseExportParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionReplayCaseExportResponse {
+    pub session_id: String,
+    pub thread_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    pub workspace_root: String,
+    pub replay_relative_root: String,
+    pub replay_absolute_root: String,
+    pub handoff_bundle_relative_root: String,
+    pub evidence_pack_relative_root: String,
+    pub exported_at: String,
+    pub thread_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_turn_status: Option<String>,
+    pub pending_request_count: usize,
+    pub queued_turn_count: usize,
+    pub linked_handoff_artifact_count: usize,
+    pub linked_evidence_artifact_count: usize,
+    pub recent_artifact_count: usize,
+    #[serde(default)]
+    pub artifacts: Vec<AgentSessionHandoffArtifact>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionAnalysisHandoffExportParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionAnalysisHandoffExportResponse {
+    pub session_id: String,
+    pub thread_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    pub workspace_root: String,
+    pub sanitized_workspace_root: String,
+    pub analysis_relative_root: String,
+    pub analysis_absolute_root: String,
+    pub handoff_bundle_relative_root: String,
+    pub evidence_pack_relative_root: String,
+    pub replay_case_relative_root: String,
+    pub exported_at: String,
+    pub thread_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_turn_status: Option<String>,
+    pub pending_request_count: usize,
+    pub queued_turn_count: usize,
+    pub title: String,
+    pub copy_prompt: String,
+    #[serde(default)]
+    pub artifacts: Vec<AgentSessionHandoffArtifact>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionReviewDecisionTemplateExportParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionReviewDecisionSaveParams {
+    pub session_id: String,
+    pub decision_status: String,
+    #[serde(default)]
+    pub decision_summary: String,
+    #[serde(default)]
+    pub chosen_fix_strategy: String,
+    pub risk_level: String,
+    #[serde(default)]
+    pub risk_tags: Vec<String>,
+    #[serde(default)]
+    pub human_reviewer: String,
+    #[serde(default)]
+    pub followup_actions: Vec<String>,
+    #[serde(default)]
+    pub regression_requirements: Vec<String>,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionReviewDecision {
+    pub decision_status: String,
+    #[serde(default)]
+    pub decision_summary: String,
+    #[serde(default)]
+    pub chosen_fix_strategy: String,
+    pub risk_level: String,
+    #[serde(default)]
+    pub risk_tags: Vec<String>,
+    #[serde(default)]
+    pub human_reviewer: String,
+    #[serde(default)]
+    pub followup_actions: Vec<String>,
+    #[serde(default)]
+    pub regression_requirements: Vec<String>,
+    #[serde(default)]
+    pub notes: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionReviewDecisionTemplateExportResponse {
+    pub session_id: String,
+    pub thread_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    pub workspace_root: String,
+    pub review_relative_root: String,
+    pub review_absolute_root: String,
+    pub analysis_relative_root: String,
+    pub analysis_absolute_root: String,
+    pub handoff_bundle_relative_root: String,
+    pub evidence_pack_relative_root: String,
+    pub replay_case_relative_root: String,
+    pub exported_at: String,
+    pub thread_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_turn_status: Option<String>,
+    pub pending_request_count: usize,
+    pub queued_turn_count: usize,
+    pub title: String,
+    pub default_decision_status: String,
+    pub decision: AgentSessionReviewDecision,
+    #[serde(default)]
+    pub decision_status_options: Vec<String>,
+    #[serde(default)]
+    pub risk_level_options: Vec<String>,
+    #[serde(default)]
+    pub review_checklist: Vec<String>,
+    #[serde(default)]
+    pub analysis_artifacts: Vec<AgentSessionHandoffArtifact>,
+    #[serde(default)]
+    pub artifacts: Vec<AgentSessionHandoffArtifact>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerListResponse {
@@ -1408,6 +2117,347 @@ pub struct AgentSessionUpdateResponse {
     pub session: AgentSessionOverview,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedObjectiveStatus {
+    Active,
+    Verifying,
+    NeedsInput,
+    Blocked,
+    BudgetLimited,
+    Paused,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedObjective {
+    pub objective_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    pub owner_kind: String,
+    pub owner_id: String,
+    pub objective_text: String,
+    #[serde(default)]
+    pub success_criteria: Vec<String>,
+    pub status: ManagedObjectiveStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_policy: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_policy: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_policy: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_policy: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_audit_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_evidence_pack_ref: Option<String>,
+    #[serde(default)]
+    pub last_artifact_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker_reason: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveReadParams {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveReadResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub objective: Option<ManagedObjective>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveSetParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    pub objective_text: String,
+    #[serde(default)]
+    pub success_criteria: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_policy: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_policy: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_policy: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_policy: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveSetResponse {
+    pub objective: ManagedObjective,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveStatusUpdateParams {
+    pub session_id: String,
+    pub status: ManagedObjectiveStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveStatusUpdateResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub objective: Option<ManagedObjective>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveClearParams {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveClearResponse {
+    pub cleared: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveContinueParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveContinueResponse {
+    pub submitted: bool,
+    pub queued_turn_id: String,
+    pub objective: ManagedObjective,
+    pub turn: AgentTurn,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveAuditParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionObjectiveAuditResponse {
+    pub objective: ManagedObjective,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionCompactParams {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionCompactResponse {
+    pub session: AgentSession,
+    #[serde(default)]
+    pub turns: Vec<AgentTurn>,
+    pub compacted: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionThreadResumeParams {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionThreadResumeResponse {
+    pub session: AgentSession,
+    #[serde(default)]
+    pub turns: Vec<AgentTurn>,
+    pub resumed: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionQueuedTurnRemoveParams {
+    pub session_id: String,
+    pub queued_turn_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionQueuedTurnRemoveResponse {
+    pub session: AgentSession,
+    #[serde(default)]
+    pub turns: Vec<AgentTurn>,
+    pub queued_turn_id: String,
+    pub removed: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionQueuedTurnPromoteParams {
+    pub session_id: String,
+    pub queued_turn_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionQueuedTurnPromoteResponse {
+    pub session: AgentSession,
+    #[serde(default)]
+    pub turns: Vec<AgentTurn>,
+    pub queued_turn_id: String,
+    pub promoted: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointListParams {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointGetParams {
+    pub session_id: String,
+    pub checkpoint_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointDiffParams {
+    pub session_id: String,
+    pub checkpoint_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointRestoreParams {
+    pub session_id: String,
+    pub checkpoint_id: String,
+    #[serde(default)]
+    pub confirm_restore: bool,
+    #[serde(default = "default_file_checkpoint_restore_backup")]
+    pub create_backup: bool,
+}
+
+fn default_file_checkpoint_restore_backup() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointSummary {
+    pub checkpoint_id: String,
+    pub turn_id: String,
+    pub path: String,
+    pub source: String,
+    pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_no: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_path: Option<String>,
+    pub validation_issue_count: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointThreadSummary {
+    pub count: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checkpoint: Option<AgentSessionFileCheckpointSummary>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointListResponse {
+    pub session_id: String,
+    pub thread_id: String,
+    pub checkpoint_count: usize,
+    #[serde(default)]
+    pub checkpoints: Vec<AgentSessionFileCheckpointSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointDetail {
+    pub session_id: String,
+    pub thread_id: String,
+    pub checkpoint: AgentSessionFileCheckpointSummary,
+    pub live_path: String,
+    pub snapshot_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint_document: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_document: Option<serde_json::Value>,
+    #[serde(default)]
+    pub version_history: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub validation_issues: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointDiffResponse {
+    pub session_id: String,
+    pub thread_id: String,
+    pub checkpoint: AgentSessionFileCheckpointSummary,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_version_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_version_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionFileCheckpointRestoreResponse {
+    pub session_id: String,
+    pub thread_id: String,
+    pub checkpoint: AgentSessionFileCheckpointSummary,
+    pub live_path: String,
+    pub snapshot_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backup_path: Option<String>,
+    pub restored_at: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReadParams {
@@ -1483,6 +2533,1006 @@ pub struct SkillListResponse {
 #[serde(rename_all = "camelCase")]
 pub struct SkillReadResponse {
     pub skill: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillManagementListParams {
+    pub app: String,
+    #[serde(default)]
+    pub refresh_remote: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillManagementInstallParams {
+    pub app: String,
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillManagementUninstallParams {
+    pub app: String,
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRepositoryEntry {
+    pub owner: String,
+    pub name: String,
+    pub branch: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRepositorySaveParams {
+    pub repo: SkillRepositoryEntry,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRepositoryDeleteParams {
+    pub owner: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocalInspectParams {
+    pub app: String,
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillScaffoldCreateParams {
+    pub app: String,
+    pub request: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocalImportParams {
+    pub app: String,
+    pub source_path: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRemoteInspectParams {
+    pub owner: String,
+    pub name: String,
+    pub branch: String,
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillManagementWriteResponse {
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRepositoryListResponse {
+    #[serde(default)]
+    pub repos: Vec<SkillRepositoryEntry>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillInstalledDirectoriesListResponse {
+    #[serde(default)]
+    pub directories: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocalInspectResponse {
+    pub inspection: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillScaffoldCreateResponse {
+    pub inspection: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocalImportResponse {
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRemoteInspectResponse {
+    pub inspection: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageLocalInspectParams {
+    pub app: String,
+    pub source_path: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocalDetailInspectParams {
+    pub app: String,
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocalRenameParams {
+    pub app: String,
+    pub directory: String,
+    pub new_directory: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageLocalReplaceParams {
+    pub app: String,
+    pub directory: String,
+    pub source_path: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageLocalInstallParams {
+    pub app: String,
+    pub source_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageExportParams {
+    pub app: String,
+    pub directory: String,
+    pub target_path: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillMarketplaceBundleFile {
+    pub path: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoding: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillMarketplaceInstallParams {
+    pub app: String,
+    pub manifest_version: String,
+    pub name: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    pub version: String,
+    #[serde(default)]
+    pub content_hash: String,
+    #[serde(default)]
+    pub file_count: u64,
+    #[serde(default)]
+    pub files: Vec<SkillMarketplaceBundleFile>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillDownloadInstallParams {
+    pub app: String,
+    pub skill_name: String,
+    pub download_url: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageLocalInspectResponse {
+    pub directory: String,
+    pub inspection: serde_json::Value,
+    #[serde(default)]
+    pub files: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocalDetailInspectResponse {
+    pub directory: String,
+    pub inspection: serde_json::Value,
+    #[serde(default)]
+    pub files: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillLocalRenameResponse {
+    pub directory: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageLocalInstallResponse {
+    pub directory: String,
+    pub inspection: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageLocalReplaceResponse {
+    pub directory: String,
+    pub inspection: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillMarketplaceInstallResponse {
+    pub directory: String,
+    pub inspection: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillDownloadInstallResponse {
+    pub directory: String,
+    pub inspection: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageExportResponse {
+    pub directory: String,
+    pub output_path: String,
+    pub file_count: u64,
+    pub bytes_written: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayChannelStartParams {
+    pub channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "account_id")]
+    pub account_id: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "poll_timeout_secs"
+    )]
+    pub poll_timeout_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayChannelStopParams {
+    pub channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "account_id")]
+    pub account_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayChannelStatusParams {
+    pub channel: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayChannelStatusResponse {
+    pub channel: String,
+    pub status: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelProbeParams {
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "account_id")]
+    pub account_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelProbeResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "account_id")]
+    pub account_id: Option<String>,
+    pub ok: bool,
+    pub message: String,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatLoginStartParams {
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "base_url")]
+    pub base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "bot_type")]
+    pub bot_type: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "session_key"
+    )]
+    pub session_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatLoginStartResponse {
+    #[serde(alias = "session_key")]
+    pub session_key: String,
+    #[serde(alias = "qrcode_url")]
+    pub qrcode_url: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatLoginWaitParams {
+    #[serde(alias = "session_key")]
+    pub session_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "base_url")]
+    pub base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "bot_type")]
+    pub bot_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "timeout_ms")]
+    pub timeout_ms: Option<u64>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "account_name"
+    )]
+    pub account_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatLoginWaitResponse {
+    pub connected: bool,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "bot_token")]
+    pub bot_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "account_id")]
+    pub account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "user_id")]
+    pub user_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "base_url")]
+    pub base_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatConfiguredAccount {
+    pub account_id: String,
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cdn_base_url: Option<String>,
+    pub has_token: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scanner_user_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatChannelAccountListResponse {
+    #[serde(default)]
+    pub accounts: Vec<WechatConfiguredAccount>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatChannelAccountRemoveParams {
+    #[serde(alias = "account_id")]
+    pub account_id: String,
+    #[serde(default, alias = "purge_data")]
+    pub purge_data: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatChannelAccountRemoveResponse {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatRuntimeModelSetParams {
+    #[serde(alias = "provider_id")]
+    pub provider_id: String,
+    #[serde(alias = "model_id")]
+    pub model_id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WechatRuntimeModelSetResponse {
+    pub runtime_model: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelCreateParams {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "tunnel_name"
+    )]
+    pub tunnel_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "dns_name")]
+    pub dns_name: Option<String>,
+    #[serde(default = "default_true")]
+    pub persist: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelCreateResult {
+    pub ok: bool,
+    pub tunnel_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "tunnel_id")]
+    pub tunnel_id: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "credentials_file"
+    )]
+    pub credentials_file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "dns_name")]
+    pub dns_name: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "public_base_url"
+    )]
+    pub public_base_url: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelStatusResponse {
+    pub running: bool,
+    pub provider: String,
+    pub mode: String,
+    pub binary: String,
+    pub local_url: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "public_base_url"
+    )]
+    pub public_base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "started_at")]
+    pub started_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "last_error")]
+    pub last_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "last_exit")]
+    pub last_exit: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "command_preview"
+    )]
+    pub command_preview: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "connector_active"
+    )]
+    pub connector_active: Option<bool>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "connector_message"
+    )]
+    pub connector_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelProbeResponse {
+    pub ok: bool,
+    pub provider: String,
+    pub mode: String,
+    pub binary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(alias = "config_ready")]
+    pub config_ready: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelCloudflaredDetectResponse {
+    pub installed: bool,
+    pub binary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    pub platform: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "package_manager"
+    )]
+    pub package_manager: Option<String>,
+    #[serde(alias = "install_supported")]
+    pub install_supported: bool,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "install_command"
+    )]
+    pub install_command: Option<String>,
+    #[serde(alias = "requires_privilege")]
+    pub requires_privilege: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelCloudflaredInstallParams {
+    #[serde(default)]
+    pub confirm: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelCloudflaredInstallResponse {
+    pub ok: bool,
+    pub attempted: bool,
+    pub platform: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "package_manager"
+    )]
+    pub package_manager: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "exit_code")]
+    pub exit_code: Option<i32>,
+    pub installed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    pub stdout: String,
+    pub stderr: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelCreateResponse {
+    pub result: GatewayTunnelCreateResult,
+    pub status: GatewayTunnelStatusResponse,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelSyncWebhookUrlParams {
+    pub channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "account_id")]
+    pub account_id: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "webhook_path"
+    )]
+    pub webhook_path: Option<String>,
+    #[serde(default = "default_true")]
+    pub persist: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayTunnelSyncWebhookUrlResponse {
+    pub channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "account_id")]
+    pub account_id: Option<String>,
+    #[serde(alias = "webhook_path")]
+    pub webhook_path: String,
+    #[serde(alias = "public_base_url")]
+    pub public_base_url: String,
+    #[serde(alias = "webhook_url")]
+    pub webhook_url: String,
+    pub persisted: bool,
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageStoryboardSlotInput {
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "slot_id")]
+    pub slot_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "shot_type")]
+    pub shot_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaTaskArtifactImageCreateParams {
+    pub project_root_path: String,
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "title_generation_result"
+    )]
+    pub title_generation_result: Option<serde_json::Value>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "persona_context"
+    )]
+    pub persona_context: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<serde_json::Value>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "taste_context"
+    )]
+    pub taste_context: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "raw_text")]
+    pub raw_text: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "layout_hint"
+    )]
+    pub layout_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "aspect_ratio"
+    )]
+    pub aspect_ratio: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "provider_id"
+    )]
+    pub provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "executor_mode"
+    )]
+    pub executor_mode: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "outer_model"
+    )]
+    pub outer_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "session_id")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "thread_id")]
+    pub thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "turn_id")]
+    pub turn_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "project_id")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "content_id")]
+    pub content_id: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "entry_source"
+    )]
+    pub entry_source: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "modality_contract_key"
+    )]
+    pub modality_contract_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modality: Option<String>,
+    #[serde(default, alias = "required_capabilities")]
+    pub required_capabilities: Vec<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "routing_slot"
+    )]
+    pub routing_slot: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "runtime_contract"
+    )]
+    pub runtime_contract: Option<serde_json::Value>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "requested_target"
+    )]
+    pub requested_target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "slot_id")]
+    pub slot_id: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "anchor_hint"
+    )]
+    pub anchor_hint: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "anchor_section_title"
+    )]
+    pub anchor_section_title: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "anchor_text"
+    )]
+    pub anchor_text: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "target_output_id"
+    )]
+    pub target_output_id: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "target_output_ref_id"
+    )]
+    pub target_output_ref_id: Option<String>,
+    #[serde(default, alias = "reference_images")]
+    pub reference_images: Vec<String>,
+    #[serde(default, alias = "storyboard_slots")]
+    pub storyboard_slots: Vec<ImageStoryboardSlotInput>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaTaskArtifactAudioCreateParams {
+    pub project_root_path: String,
+    #[serde(alias = "source_text", alias = "prompt", alias = "text")]
+    pub source_text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "raw_text")]
+    pub raw_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voice: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "voice_style"
+    )]
+    pub voice_style: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "target_language"
+    )]
+    pub target_language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "mime_type")]
+    pub mime_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "audio_path")]
+    pub audio_path: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "duration_ms"
+    )]
+    pub duration_ms: Option<u64>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "provider_id"
+    )]
+    pub provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "session_id")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "thread_id")]
+    pub thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "turn_id")]
+    pub turn_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "project_id")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "content_id")]
+    pub content_id: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "entry_source"
+    )]
+    pub entry_source: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "modality_contract_key"
+    )]
+    pub modality_contract_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modality: Option<String>,
+    #[serde(default, alias = "required_capabilities")]
+    pub required_capabilities: Vec<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "routing_slot"
+    )]
+    pub routing_slot: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "runtime_contract"
+    )]
+    pub runtime_contract: Option<serde_json::Value>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "requested_target"
+    )]
+    pub requested_target: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "output_path"
+    )]
+    pub output_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaTaskArtifactAudioCompleteParams {
+    pub project_root_path: String,
+    pub task_ref: String,
+    #[serde(alias = "audio_path", alias = "audio_url")]
+    pub audio_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "mime_type")]
+    pub mime_type: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "duration_ms"
+    )]
+    pub duration_ms: Option<u64>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "provider_id"
+    )]
+    pub provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaTaskArtifactLookupParams {
+    pub project_root_path: String,
+    pub task_ref: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaTaskArtifactListParams {
+    pub project_root_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "task_family"
+    )]
+    pub task_family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "task_type")]
+    pub task_type: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "modality_contract_key"
+    )]
+    pub modality_contract_key: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "routing_outcome"
+    )]
+    pub routing_outcome: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MediaTaskArtifactListFilters {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modality_contract_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_outcome: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MediaTaskArtifactResponse {
+    pub success: bool,
+    pub task_id: String,
+    pub task_type: String,
+    #[serde(default)]
+    pub task_family: String,
+    pub status: String,
+    pub normalized_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_attempt_id: Option<String>,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub absolute_path: String,
+    #[serde(default)]
+    pub artifact_path: String,
+    #[serde(default)]
+    pub absolute_artifact_path: String,
+    #[serde(default)]
+    pub reused_existing: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+    #[serde(default)]
+    pub record: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MediaTaskArtifactListResponse {
+    pub success: bool,
+    pub workspace_root: String,
+    pub artifact_root: String,
+    pub filters: MediaTaskArtifactListFilters,
+    pub total: usize,
+    #[serde(default)]
+    pub modality_runtime_contracts: serde_json::Value,
+    #[serde(default)]
+    pub tasks: Vec<MediaTaskArtifactResponse>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -2124,6 +4174,214 @@ pub struct ProjectMemoryReadResponse {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct LogEntry {
+    pub timestamp: String,
+    pub level: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LogListResponse {
+    #[serde(default)]
+    pub entries: Vec<LogEntry>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LogPersistedTailParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lines: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LogPersistedTailResponse {
+    #[serde(default)]
+    pub entries: Vec<LogEntry>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LogClearResponse {
+    pub cleared: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LogArtifactEntry {
+    pub file_name: String,
+    pub path: String,
+    pub size_bytes: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified_at: Option<String>,
+    pub compressed: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LogStorageDiagnosticsResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_log_path: Option<String>,
+    pub current_log_exists: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_log_size_bytes: Option<u64>,
+    pub in_memory_log_count: usize,
+    #[serde(default)]
+    pub related_log_files: Vec<LogArtifactEntry>,
+    #[serde(default)]
+    pub raw_response_files: Vec<LogArtifactEntry>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SupportBundleExportResponse {
+    pub bundle_path: String,
+    pub output_directory: String,
+    pub generated_at: String,
+    pub platform: String,
+    #[serde(default)]
+    pub included_sections: Vec<String>,
+    #[serde(default)]
+    pub omitted_sections: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsMetricConfig {
+    pub enabled: bool,
+    pub ttl_secs: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_entries: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_body_bytes: Option<u64>,
+    #[serde(default)]
+    pub cacheable_status_codes: Vec<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait_timeout_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsTelemetrySummary {
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub failed_requests: u64,
+    pub timeout_requests: u64,
+    pub success_rate: f64,
+    pub avg_latency_ms: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_latency_ms: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_latency_ms: Option<f64>,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
+    pub total_tokens: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsCapabilityRoutingMetricsSnapshot {
+    pub filter_eval_total: u64,
+    pub filter_excluded_total: u64,
+    pub filter_excluded_tools_total: u64,
+    pub filter_excluded_vision_total: u64,
+    pub filter_excluded_context_total: u64,
+    pub provider_fallback_total: u64,
+    pub model_fallback_total: u64,
+    pub all_candidates_excluded_total: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsResponseCacheDiagnostics {
+    pub config: DiagnosticsMetricConfig,
+    pub stats: serde_json::Value,
+    pub hit_rate_percent: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsRequestDedupDiagnostics {
+    pub config: DiagnosticsMetricConfig,
+    pub stats: serde_json::Value,
+    pub replay_rate_percent: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsIdempotencyDiagnostics {
+    pub config: DiagnosticsMetricConfig,
+    pub stats: serde_json::Value,
+    pub replay_rate_percent: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerDiagnosticsResponse {
+    pub generated_at: String,
+    pub running: bool,
+    pub host: String,
+    pub port: u16,
+    pub telemetry_summary: DiagnosticsTelemetrySummary,
+    pub capability_routing: DiagnosticsCapabilityRoutingMetricsSnapshot,
+    pub response_cache: DiagnosticsResponseCacheDiagnostics,
+    pub request_dedup: DiagnosticsRequestDedupDiagnostics,
+    pub idempotency: DiagnosticsIdempotencyDiagnostics,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsStartupCheck {
+    pub key: String,
+    pub status: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsStartupDiagnosticsResponse {
+    pub platform: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_data_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_lime_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub db_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webview2_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_exe: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell_env: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comspec_env: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_terminal_shell: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installation_kind_guess: Option<String>,
+    #[serde(default)]
+    pub checks: Vec<WindowsStartupCheck>,
+    pub has_blocking_issues: bool,
+    pub has_warnings: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct UsageStatsRangeParams {
     pub time_range: String,
 }
@@ -2672,6 +4930,41 @@ pub struct AgentSessionActionScope {
     pub thread_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionActionReplayParams {
+    pub session_id: String,
+    pub request_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionReplayedActionRequired {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub request_id: String,
+    pub action_type: AgentSessionActionType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub questions: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_schema: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<AgentSessionActionScope>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionActionReplayResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<AgentSessionReplayedActionRequired>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -3371,9 +5664,37 @@ mod tests {
     }
 
     #[test]
-    fn agent_session_action_respond_request_matches_protocol_fixture_shape() {
+    fn agent_session_action_replay_request_matches_protocol_fixture_shape() {
         let value = serde_json::to_value(JsonRpcRequest::new(
             RequestId::Integer(4),
+            METHOD_AGENT_SESSION_ACTION_REPLAY,
+            Some(
+                serde_json::to_value(AgentSessionActionReplayParams {
+                    session_id: "sess_1".to_string(),
+                    request_id: "req_confirm_1".to_string(),
+                })
+                .expect("serialize replay params"),
+            ),
+        ))
+        .expect("serialize replay request");
+
+        assert_eq!(
+            value,
+            json!({
+                "id": 4,
+                "method": "agentSession/action/replay",
+                "params": {
+                    "sessionId": "sess_1",
+                    "requestId": "req_confirm_1"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn agent_session_action_respond_request_matches_protocol_fixture_shape() {
+        let value = serde_json::to_value(JsonRpcRequest::new(
+            RequestId::Integer(5),
             METHOD_AGENT_SESSION_ACTION_RESPOND,
             Some(
                 serde_json::to_value(AgentSessionActionRespondParams {
@@ -3399,7 +5720,7 @@ mod tests {
         assert_eq!(
             value,
             json!({
-                "id": 4,
+                "id": 5,
                 "method": "agentSession/action/respond",
                 "params": {
                     "sessionId": "sess_1",
@@ -3493,8 +5814,27 @@ mod tests {
                 METHOD_FILE_SYSTEM_RENAME_FILE,
                 METHOD_FILE_SYSTEM_DELETE_FILE,
                 METHOD_EVIDENCE_EXPORT,
+                METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
+                METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
+                METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+                METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+                METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
                 METHOD_AGENT_SESSION_LIST,
                 METHOD_AGENT_SESSION_UPDATE,
+                METHOD_AGENT_SESSION_OBJECTIVE_READ,
+                METHOD_AGENT_SESSION_OBJECTIVE_SET,
+                METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+                METHOD_AGENT_SESSION_OBJECTIVE_CLEAR,
+                METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE,
+                METHOD_AGENT_SESSION_OBJECTIVE_AUDIT,
+                METHOD_AGENT_SESSION_COMPACT,
+                METHOD_AGENT_SESSION_THREAD_RESUME,
+                METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE,
+                METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE,
+                METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST,
+                METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET,
+                METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
+                METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE,
                 METHOD_WORKSPACE_LIST,
                 METHOD_WORKSPACE_READ,
                 METHOD_WORKSPACE_BY_PATH_READ,
@@ -3505,14 +5845,37 @@ mod tests {
                 METHOD_WORKSPACE_ENSURE_READY,
                 METHOD_SKILL_LIST,
                 METHOD_SKILL_READ,
+                METHOD_SKILL_LOCAL_DETAIL_INSPECT,
+                METHOD_SKILL_LOCAL_RENAME,
+                METHOD_SKILL_PACKAGE_LOCAL_INSPECT,
+                METHOD_SKILL_PACKAGE_LOCAL_INSTALL,
+                METHOD_SKILL_PACKAGE_LOCAL_REPLACE,
+                METHOD_SKILL_PACKAGE_EXPORT,
+                METHOD_SKILL_MARKETPLACE_INSTALL,
+                METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL,
+                METHOD_GATEWAY_CHANNEL_STATUS,
+                METHOD_WECHAT_CHANNEL_ACCOUNT_LIST,
                 METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
                 METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
+                METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+                METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
+                METHOD_AGENT_APP_INSTALLED_SAVE,
                 METHOD_AGENT_APP_INSTALLED_LIST,
+                METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
+                METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+                METHOD_AGENT_APP_INSTALLED_UNINSTALL,
+                METHOD_AGENT_APP_SHELL_PREPARE,
                 METHOD_AGENT_APP_UI_RUNTIME_START,
                 METHOD_AGENT_APP_UI_RUNTIME_STATUS,
                 METHOD_AGENT_APP_UI_RUNTIME_STOP,
                 METHOD_KNOWLEDGE_PACK_LIST,
                 METHOD_KNOWLEDGE_PACK_READ,
+                METHOD_KNOWLEDGE_SOURCE_IMPORT,
+                METHOD_KNOWLEDGE_PACK_COMPILE,
+                METHOD_KNOWLEDGE_PACK_DEFAULT_SET,
+                METHOD_KNOWLEDGE_PACK_STATUS_UPDATE,
+                METHOD_KNOWLEDGE_CONTEXT_RESOLVE,
+                METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE,
                 METHOD_AUTOMATION_SCHEDULER_CONFIG_READ,
                 METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE,
                 METHOD_AUTOMATION_SCHEDULER_STATUS,
@@ -3546,6 +5909,9 @@ mod tests {
                 METHOD_MCP_RESOURCE_LIST,
                 METHOD_MCP_RESOURCE_READ,
                 METHOD_PROJECT_MEMORY_READ,
+                METHOD_USAGE_STATS_READ,
+                METHOD_USAGE_STATS_MODEL_RANKING_LIST,
+                METHOD_USAGE_STATS_DAILY_TRENDS_LIST,
                 METHOD_MODEL_LIST,
                 METHOD_MODEL_PREFERENCES_LIST,
                 METHOD_MODEL_SYNC_STATE_READ,
@@ -3588,6 +5954,31 @@ mod tests {
         assert_eq!(unique_methods.len(), methods.len());
         assert!(is_app_server_request_method(METHOD_INITIALIZE));
         assert!(is_app_server_request_method(METHOD_EVIDENCE_EXPORT));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE
+        ));
+        assert!(is_app_server_request_method(METHOD_AGENT_SESSION_COMPACT));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_SESSION_THREAD_RESUME
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE
+        ));
+        assert!(is_app_server_request_method(
+            METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE
+        ));
         assert!(is_app_server_request_method(
             METHOD_AGENT_SESSION_TURN_START
         ));

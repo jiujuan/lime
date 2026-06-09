@@ -10,7 +10,6 @@ import type { AgentUiProjectionScopeFilter } from "../projection/conversationPro
 import { useAgentUiProjectionEvents } from "../projection/useConversationProjectionStore";
 import type { ActionRequired } from "../types";
 import { buildThreadReliabilityView } from "../utils/threadReliabilityView";
-import { RuntimeReviewDecisionDialog } from "./RuntimeReviewDecisionDialog";
 import { HarnessPreviewDialog } from "./HarnessPreviewDialog";
 import { HarnessStatusPanelSections } from "./HarnessStatusPanelSections";
 import { HarnessStatusPanelShell } from "./HarnessStatusPanelShell";
@@ -140,14 +139,7 @@ export function HarnessStatusPanel({
     handleOpenPath,
   } = previewModel;
   const handoffExports = useHarnessHandoffExports(currentSessionId);
-  const {
-    handoffBundle,
-    reviewDecisionTemplate,
-    reviewDecisionEditorOpen,
-    reviewDecisionSaving,
-    setReviewDecisionEditorOpen,
-    handleSaveReviewDecision,
-  } = handoffExports;
+  const { evidencePack } = handoffExports;
   const agentUiProjectionFilter = useMemo<AgentUiProjectionScopeFilter | null>(
     () => (currentSessionId ? { sessionId: currentSessionId } : null),
     [currentSessionId],
@@ -312,7 +304,7 @@ export function HarnessStatusPanel({
           summaryValue: fileReviewSummaryValue,
           emptyHint: fileReviewEmptyHint,
         },
-        handoffBundle,
+        evidencePack,
         hasAgentUiProjectionSection,
         hasHandoffSection,
         hasSelectedTeamConfig,
@@ -342,7 +334,7 @@ export function HarnessStatusPanel({
       fileReviewEmptyHint,
       fileReviewSummaryValue,
       fileReviewTitle,
-      handoffBundle,
+      evidencePack,
       hasAgentUiProjectionSection,
       hasHandoffSection,
       hasSelectedTeamConfig,
@@ -450,14 +442,6 @@ export function HarnessStatusPanel({
       >
         <HarnessStatusPanelSections {...sectionModels} />
       </HarnessStatusPanelShell>
-
-      <RuntimeReviewDecisionDialog
-        open={reviewDecisionEditorOpen}
-        template={reviewDecisionTemplate}
-        saving={reviewDecisionSaving}
-        onOpenChange={setReviewDecisionEditorOpen}
-        onSave={handleSaveReviewDecision}
-      />
 
       <HarnessPreviewDialog
         previewDialog={previewDialog}

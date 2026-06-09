@@ -797,42 +797,6 @@ async function cancelAppServerTurn(
   return true;
 }
 
-async function restoreOriginalProviderConfig(
-  options,
-  originalProviderConfig,
-  sessionId,
-) {
-  if (
-    !originalProviderConfig?.providerName ||
-    !originalProviderConfig?.modelName
-  ) {
-    return;
-  }
-
-  const providerSelector =
-    originalProviderConfig.providerSelector ||
-    originalProviderConfig.providerName;
-  const request = {
-    provider_id:
-      providerSelector &&
-      providerSelector !== originalProviderConfig.providerName
-        ? providerSelector
-        : undefined,
-    provider_name: originalProviderConfig.providerName,
-    model_name: originalProviderConfig.modelName,
-  };
-
-  await invoke(
-    options,
-    "aster_agent_configure_provider",
-    {
-      request,
-      sessionId: sessionId || "agent-qc-provider-restore",
-    },
-    45_000,
-  );
-}
-
 async function waitForCondition(label, predicate, timeoutMs, intervalMs) {
   const startedAt = Date.now();
   let lastValue = null;
@@ -1698,6 +1662,17 @@ async function main() {
     workspaceId,
     providerPreference: preferredProvider,
     modelPreference: preferredModel,
+    providerSelectionBoundary: {
+      providerReadMethods: [
+        APP_SERVER_METHOD_MODEL_PROVIDER_LIST,
+        APP_SERVER_METHOD_MODEL_PROVIDER_READ,
+        APP_SERVER_METHOD_MODEL_PROVIDER_TEST_CHAT,
+        APP_SERVER_METHOD_MODEL_PROVIDER_UI_STATE_READ,
+      ],
+      runtimeSelection: "turn_config",
+      backendProviderMutation: false,
+      legacyConfigureProviderCommand: "retired-not-invoked",
+    },
     agentStatusBefore: {
       initialized: Boolean(agentStatus?.initialized),
       provider_configured: Boolean(agentStatus?.provider_configured),
@@ -1707,11 +1682,6 @@ async function main() {
       credential_uuid: providerUiState?.credential_uuid ? "[redacted]" : null,
     },
     steps: [],
-  };
-  const originalProviderConfig = {
-    providerName: agentStatus?.provider_name || "",
-    providerSelector: agentStatus?.provider_selector || "",
-    modelName: agentStatus?.model_name || "",
   };
   let submittedSessionId = "";
   let submittedLongTurnId = "";
@@ -2991,17 +2961,6 @@ async function main() {
           .evaluate(buildRestoreLocalStorageScript(storageMarker))
           .catch(() => undefined);
       }
-      await restoreOriginalProviderConfig(
-        options,
-        originalProviderConfig,
-        submittedSessionId,
-      ).catch((error) => {
-        console.warn(
-          `[smoke:claw-chat-ready-streaming] 恢复原 provider 配置失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      });
     } finally {
       await context.close().catch(() => undefined);
       fs.rmSync(userDataDir, { recursive: true, force: true });

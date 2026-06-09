@@ -7,232 +7,217 @@ import {
   getWindowsStartupDiagnostics,
 } from "./serverRuntime";
 
+const appServerMocks = vi.hoisted(() => ({
+  readServerDiagnostics: vi.fn(),
+  readLogStorageDiagnostics: vi.fn(),
+  exportSupportBundle: vi.fn(),
+  readWindowsStartupDiagnostics: vi.fn(),
+}));
+
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
-const telemetrySummary = {
-  total_requests: 0,
-  successful_requests: 0,
-  failed_requests: 0,
-  timeout_requests: 0,
-  success_rate: 0,
-  avg_latency_ms: 0,
-  min_latency_ms: null,
-  max_latency_ms: null,
-  total_input_tokens: 0,
-  total_output_tokens: 0,
-  total_tokens: 0,
-};
-
-const capabilityRouting = {
-  filter_eval_total: 0,
-  filter_excluded_total: 0,
-  filter_excluded_tools_total: 0,
-  filter_excluded_vision_total: 0,
-  filter_excluded_context_total: 0,
-  provider_fallback_total: 0,
-  model_fallback_total: 0,
-  all_candidates_excluded_total: 0,
-};
-
-const responseCache = {
-  config: {
-    enabled: true,
-    ttl_secs: 600,
-    max_entries: 200,
-    max_body_bytes: 1048576,
-    cacheable_status_codes: [200],
-  },
-  stats: {
-    size: 0,
-    hits: 0,
-    misses: 0,
-    evictions: 0,
-  },
-  hit_rate_percent: 0,
-};
-
-const requestDedup = {
-  config: {
-    enabled: true,
-    ttl_secs: 30,
-    wait_timeout_ms: 3000,
-  },
-  stats: {
-    inflight_size: 0,
-    completed_size: 0,
-    check_new_total: 0,
-    check_in_progress_total: 0,
-    check_completed_total: 0,
-    wait_success_total: 0,
-    wait_timeout_total: 0,
-    wait_no_result_total: 0,
-    complete_total: 0,
-    remove_total: 0,
-  },
-  replay_rate_percent: 0,
-};
-
-const idempotency = {
-  config: {
-    enabled: true,
-    ttl_secs: 300,
-    header_name: "idempotency-key",
-  },
-  stats: {
-    entries_size: 0,
-    in_progress_size: 0,
-    completed_size: 0,
-    check_new_total: 0,
-    check_in_progress_total: 0,
-    check_completed_total: 0,
-    complete_total: 0,
-    remove_total: 0,
-  },
-  replay_rate_percent: 0,
-};
+vi.mock("./appServer", () => ({
+  createAppServerClient: () => appServerMocks,
+}));
 
 describe("serverRuntime API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("应代理诊断类命令", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({
-        generated_at: "now",
+  it("应通过 App Server current 读取 server diagnostics 并保留旧 API 返回形态", async () => {
+    appServerMocks.readServerDiagnostics.mockResolvedValueOnce({
+      result: {
+        generatedAt: "2026-06-09T00:00:00Z",
         running: true,
         host: "127.0.0.1",
-        port: 17333,
-        telemetry_summary: telemetrySummary,
-        capability_routing: capabilityRouting,
-        response_cache: responseCache,
-        request_dedup: requestDedup,
-        idempotency,
-      })
-      .mockResolvedValueOnce({
-        current_log_exists: true,
-        in_memory_log_count: 0,
-        related_log_files: [],
-        raw_response_files: [],
-      })
-      .mockResolvedValueOnce({
-        bundle_path: "/tmp/a.zip",
-        output_directory: "/tmp",
-        generated_at: "now",
-        platform: "darwin",
-        included_sections: ["meta/manifest.json"],
-        omitted_sections: [],
-      })
-      .mockResolvedValueOnce({
-        platform: "windows",
-        checks: [],
-        has_blocking_issues: false,
-        has_warnings: false,
-      });
-
-    await expect(getServerDiagnostics()).resolves.toEqual(
-      expect.objectContaining({ running: true }),
-    );
-    await expect(getLogStorageDiagnostics()).resolves.toEqual(
-      expect.objectContaining({ current_log_exists: true }),
-    );
-    await expect(exportSupportBundle()).resolves.toEqual(
-      expect.objectContaining({ bundle_path: "/tmp/a.zip" }),
-    );
-    await expect(getWindowsStartupDiagnostics()).resolves.toEqual(
-      expect.objectContaining({ platform: "windows" }),
-    );
-  });
-
-  it("诊断命令遇到 degraded diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      generated_at: "now",
-      running: false,
-      diagnostic: {
-        source: "electron-host-diagnostic",
-        command: "get_server_diagnostics",
-        status: "degraded",
+        port: 0,
+        telemetrySummary: {
+          totalRequests: 0,
+          successfulRequests: 0,
+          failedRequests: 0,
+          timeoutRequests: 0,
+          successRate: 0,
+          avgLatencyMs: 0,
+          minLatencyMs: null,
+          maxLatencyMs: null,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalTokens: 0,
+        },
+        capabilityRouting: {
+          filterEvalTotal: 0,
+          filterExcludedTotal: 0,
+          filterExcludedToolsTotal: 0,
+          filterExcludedVisionTotal: 0,
+          filterExcludedContextTotal: 0,
+          providerFallbackTotal: 0,
+          modelFallbackTotal: 0,
+          allCandidatesExcludedTotal: 0,
+        },
+        responseCache: {
+          config: {
+            enabled: false,
+            ttlSecs: 0,
+            maxEntries: 0,
+            maxBodyBytes: 0,
+            cacheableStatusCodes: [],
+          },
+          stats: { size: 0, hits: 0, misses: 0, evictions: 0 },
+          hitRatePercent: 0,
+        },
+        requestDedup: {
+          config: {
+            enabled: false,
+            ttlSecs: 0,
+            waitTimeoutMs: 0,
+          },
+          stats: {},
+          replayRatePercent: 0,
+        },
+        idempotency: {
+          config: {
+            enabled: false,
+            ttlSecs: 0,
+            headerName: "idempotency-key",
+          },
+          stats: {},
+          replayRatePercent: 0,
+        },
       },
     });
 
-    await expect(getServerDiagnostics()).rejects.toThrow(
-      "get_server_diagnostics 尚未接入真实诊断 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    await expect(getServerDiagnostics()).resolves.toEqual(
+      expect.objectContaining({
+        generated_at: "2026-06-09T00:00:00Z",
+        running: true,
+        host: "127.0.0.1",
+        port: 0,
+        telemetry_summary: expect.objectContaining({ total_requests: 0 }),
+        response_cache: expect.objectContaining({
+          config: expect.objectContaining({ ttl_secs: 0 }),
+        }),
+      }),
     );
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("诊断命令遇到非诊断结果形状时应 fail closed", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({
-        current_log_exists: true,
-        in_memory_log_count: 0,
-      })
-      .mockResolvedValueOnce({ bundle_path: "/tmp/a.zip" })
-      .mockResolvedValueOnce({
-        platform: "windows",
-        checks: [],
-        has_blocking_issues: false,
-      });
-
-    await expect(getServerDiagnostics()).rejects.toThrow(
-      "get_server_diagnostics did not return diagnostics",
-    );
-    await expect(getLogStorageDiagnostics()).rejects.toThrow(
-      "get_log_storage_diagnostics did not return log diagnostics",
-    );
-    await expect(exportSupportBundle()).rejects.toThrow(
-      "export_support_bundle did not return support bundle",
-    );
-    await expect(getWindowsStartupDiagnostics()).rejects.toThrow(
-      "get_windows_startup_diagnostics did not return startup diagnostics",
-    );
-  });
-
-  it("server diagnostics nested DTO 为空对象时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      generated_at: "now",
-      running: true,
-      host: "127.0.0.1",
-      port: 17333,
-      telemetry_summary: {},
-      capability_routing: capabilityRouting,
-      response_cache: responseCache,
-      request_dedup: requestDedup,
-      idempotency,
+  it("应通过 App Server current 读取日志存储诊断并保留旧 API 返回形态", async () => {
+    appServerMocks.readLogStorageDiagnostics.mockResolvedValueOnce({
+      result: {
+        logDirectory: "/tmp/logs",
+        currentLogPath: "/tmp/logs/lime.log",
+        currentLogExists: true,
+        currentLogSizeBytes: 128,
+        inMemoryLogCount: 0,
+        relatedLogFiles: [
+          {
+            fileName: "lime.log",
+            path: "/tmp/logs/lime.log",
+            sizeBytes: 128,
+            modifiedAt: "2026-06-09T00:00:00Z",
+            compressed: false,
+          },
+        ],
+        rawResponseFiles: [],
+      },
     });
 
-    await expect(getServerDiagnostics()).rejects.toThrow(
-      "get_server_diagnostics did not return diagnostics",
-    );
+    await expect(getLogStorageDiagnostics()).resolves.toEqual({
+      log_directory: "/tmp/logs",
+      current_log_path: "/tmp/logs/lime.log",
+      current_log_exists: true,
+      current_log_size_bytes: 128,
+      in_memory_log_count: 0,
+      related_log_files: [
+        {
+          file_name: "lime.log",
+          path: "/tmp/logs/lime.log",
+          size_bytes: 128,
+          modified_at: "2026-06-09T00:00:00Z",
+          compressed: false,
+        },
+      ],
+      raw_response_files: [],
+    });
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("support bundle 遇到 desktop-host mock marker 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      bundle_path: "mock://Lime-Support.zip",
-      output_directory: "mock://",
-      generated_at: "now",
-      platform: "mock-web",
+  it("应通过 App Server current 导出支持包并保留旧 API 返回形态", async () => {
+    appServerMocks.exportSupportBundle.mockResolvedValueOnce({
+      result: {
+        bundlePath: "/tmp/Lime-Support.zip",
+        outputDirectory: "/tmp",
+        generatedAt: "2026-06-09T00:00:00Z",
+        platform: "darwin",
+        includedSections: ["meta/manifest.json"],
+        omittedSections: ["Windows 启动诊断（Desktop Host current 待迁移）"],
+      },
+    });
+
+    await expect(exportSupportBundle()).resolves.toEqual({
+      bundle_path: "/tmp/Lime-Support.zip",
+      output_directory: "/tmp",
+      generated_at: "2026-06-09T00:00:00Z",
+      platform: "darwin",
       included_sections: ["meta/manifest.json"],
-      omitted_sections: [],
+      omitted_sections: ["Windows 启动诊断（Desktop Host current 待迁移）"],
     });
-
-    await expect(exportSupportBundle()).rejects.toThrow(
-      "export_support_bundle 尚未接入真实诊断 current 通道，收到 desktop-host mock 返回。",
-    );
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
-  it("Windows 启动诊断遇到 desktop-host mock marker 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      platform: "mock-web",
-      checks: [],
+  it("应通过 App Server current 读取 Windows 启动诊断并保留旧 API 返回形态", async () => {
+    appServerMocks.readWindowsStartupDiagnostics.mockResolvedValueOnce({
+      result: {
+        platform: "darwin",
+        appDataDir: "/tmp/data",
+        legacyLimeDir: "/tmp/.lime",
+        dbPath: "/tmp/data/lime.db",
+        currentExe: "/Applications/Lime.app",
+        currentDir: "/tmp",
+        homeDir: "/Users/coso",
+        shellEnv: "/bin/zsh",
+        checks: [
+          {
+            key: "app_data_dir",
+            status: "ok",
+            message: "应用数据目录可写",
+          },
+        ],
+        hasBlockingIssues: false,
+        hasWarnings: false,
+        summaryMessage: "App Server 启动环境自检通过。",
+      },
+    });
+
+    await expect(getWindowsStartupDiagnostics()).resolves.toEqual({
+      platform: "darwin",
+      app_data_dir: "/tmp/data",
+      legacy_lime_dir: "/tmp/.lime",
+      db_path: "/tmp/data/lime.db",
+      webview2_version: null,
+      current_exe: "/Applications/Lime.app",
+      current_dir: "/tmp",
+      resource_dir: null,
+      home_dir: "/Users/coso",
+      shell_env: "/bin/zsh",
+      comspec_env: null,
+      resolved_terminal_shell: null,
+      installation_kind_guess: null,
+      checks: [
+        {
+          key: "app_data_dir",
+          status: "ok",
+          message: "应用数据目录可写",
+          detail: null,
+        },
+      ],
       has_blocking_issues: false,
       has_warnings: false,
+      summary_message: "App Server 启动环境自检通过。",
     });
-
-    await expect(getWindowsStartupDiagnostics()).rejects.toThrow(
-      "get_windows_startup_diagnostics 尚未接入真实诊断 current 通道，收到 desktop-host mock 返回。",
-    );
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 });

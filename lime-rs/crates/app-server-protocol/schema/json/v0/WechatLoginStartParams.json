@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "baseUrl": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "botType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionKey": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "title": "WechatLoginStartParams",
+  "type": "object"
+}

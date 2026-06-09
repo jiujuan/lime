@@ -20,145 +20,10 @@
       "docsSection": "agent-runtime.thread"
     },
     {
-      "command": "agent_runtime_compact_session",
-      "domain": "thread",
-      "requestType": "AgentRuntimeCompactSessionRequest",
-      "responseType": "void",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_resume_thread",
-      "domain": "thread",
-      "requestType": "AgentRuntimeResumeThreadRequest",
-      "responseType": "boolean",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_replay_request",
-      "domain": "thread",
-      "requestType": "AgentRuntimeReplayRequestRequest",
-      "responseType": "AgentRuntimeReplayedActionRequiredView | null",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
       "command": "agent_runtime_get_thread_read",
       "domain": "thread",
       "requestType": "{ sessionId: string }",
       "responseType": "AgentRuntimeThreadReadModel",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_get_objective",
-      "domain": "thread",
-      "requestType": "{ sessionId: string }",
-      "responseType": "ManagedObjective | null",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_set_objective",
-      "domain": "thread",
-      "requestType": "AgentRuntimeSetObjectiveRequest",
-      "responseType": "ManagedObjective",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_update_objective_status",
-      "domain": "thread",
-      "requestType": "AgentRuntimeUpdateObjectiveStatusRequest",
-      "responseType": "ManagedObjective | null",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_clear_objective",
-      "domain": "thread",
-      "requestType": "AgentRuntimeObjectiveSessionRequest",
-      "responseType": "AgentRuntimeClearObjectiveResult",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_continue_objective",
-      "domain": "thread",
-      "requestType": "AgentRuntimeObjectiveSessionRequest",
-      "responseType": "AgentRuntimeContinueObjectiveResult",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_audit_objective",
-      "domain": "thread",
-      "requestType": "AgentRuntimeObjectiveSessionRequest",
-      "responseType": "ManagedObjective",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_list_file_checkpoints",
-      "domain": "thread",
-      "requestType": "AgentRuntimeListFileCheckpointsRequest",
-      "responseType": "AgentRuntimeFileCheckpointListResult",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_get_file_checkpoint",
-      "domain": "thread",
-      "requestType": "AgentRuntimeGetFileCheckpointRequest",
-      "responseType": "AgentRuntimeFileCheckpointDetail",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_diff_file_checkpoint",
-      "domain": "thread",
-      "requestType": "AgentRuntimeDiffFileCheckpointRequest",
-      "responseType": "AgentRuntimeFileCheckpointDiffResult",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_restore_file_checkpoint",
-      "domain": "thread",
-      "requestType": "AgentRuntimeRestoreFileCheckpointRequest",
-      "responseType": "AgentRuntimeFileCheckpointRestoreResult",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_promote_queued_turn",
-      "domain": "thread",
-      "requestType": "AgentRuntimePromoteQueuedTurnRequest",
-      "responseType": "boolean",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.thread"
-    },
-    {
-      "command": "agent_runtime_remove_queued_turn",
-      "domain": "thread",
-      "requestType": "AgentRuntimeRemoveQueuedTurnRequest",
-      "responseType": "boolean",
       "lifecycle": "current",
       "mockStrategy": "bridge-only",
       "docsSection": "agent-runtime.thread"
@@ -209,66 +74,12 @@
       "docsSection": "agent-runtime.session"
     },
     {
-      "command": "agent_runtime_delete_session",
-      "domain": "session",
-      "requestType": "{ sessionId: string }",
-      "responseType": "void",
-      "lifecycle": "compat",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.session"
-    },
-    {
-      "command": "agent_runtime_export_analysis_handoff",
-      "domain": "export",
-      "requestType": "{ sessionId: string }",
-      "responseType": "AgentRuntimeAnalysisHandoff",
-      "lifecycle": "current",
-      "mockStrategy": "mock-priority",
-      "docsSection": "agent-runtime.export"
-    },
-    {
-      "command": "agent_runtime_export_handoff_bundle",
-      "domain": "export",
-      "requestType": "{ sessionId: string }",
-      "responseType": "AgentRuntimeHandoffBundle",
-      "lifecycle": "current",
-      "mockStrategy": "mock-priority",
-      "docsSection": "agent-runtime.export"
-    },
-    {
       "command": "agent_runtime_export_evidence_pack",
       "domain": "export",
       "requestType": "{ sessionId: string }",
       "responseType": "AgentRuntimeEvidencePack",
       "lifecycle": "current",
-      "mockStrategy": "mock-priority",
-      "docsSection": "agent-runtime.export"
-    },
-    {
-      "command": "agent_runtime_export_review_decision_template",
-      "domain": "export",
-      "requestType": "{ sessionId: string }",
-      "responseType": "AgentRuntimeReviewDecisionTemplate",
-      "lifecycle": "current",
-      "mockStrategy": "mock-priority",
-      "docsSection": "agent-runtime.export"
-    },
-    {
-      "command": "agent_runtime_save_review_decision",
-      "domain": "export",
-      "requestType": "AgentRuntimeSaveReviewDecisionRequest",
-      "responseType": "AgentRuntimeReviewDecisionTemplate",
-      "lifecycle": "current",
-      "mockStrategy": "mock-priority",
-      "docsSection": "agent-runtime.export"
-    },
-    {
-      "command": "agent_runtime_export_replay_case",
-      "domain": "export",
-      "requestType": "{ sessionId: string }",
-      "responseType": "AgentRuntimeReplayCase",
-      "lifecycle": "current",
-      "mockStrategy": "mock-priority",
+      "mockStrategy": "bridge-only",
       "docsSection": "agent-runtime.export"
     },
     {
@@ -288,51 +99,6 @@
       "lifecycle": "compat",
       "mockStrategy": "bridge-only",
       "docsSection": "agent-runtime.inventory"
-    },
-    {
-      "command": "agent_runtime_spawn_subagent",
-      "domain": "subagent",
-      "requestType": "AgentRuntimeSpawnSubagentRequest",
-      "responseType": "AgentRuntimeSpawnSubagentResponse",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.subagent"
-    },
-    {
-      "command": "agent_runtime_send_subagent_input",
-      "domain": "subagent",
-      "requestType": "AgentRuntimeSendSubagentInputRequest",
-      "responseType": "AgentRuntimeSendSubagentInputResponse",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.subagent"
-    },
-    {
-      "command": "agent_runtime_wait_subagents",
-      "domain": "subagent",
-      "requestType": "AgentRuntimeWaitSubagentsRequest",
-      "responseType": "AgentRuntimeWaitSubagentsResponse",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.subagent"
-    },
-    {
-      "command": "agent_runtime_resume_subagent",
-      "domain": "subagent",
-      "requestType": "AgentRuntimeResumeSubagentRequest",
-      "responseType": "AgentRuntimeResumeSubagentResponse",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.subagent"
-    },
-    {
-      "command": "agent_runtime_close_subagent",
-      "domain": "subagent",
-      "requestType": "AgentRuntimeCloseSubagentRequest",
-      "responseType": "AgentRuntimeCloseSubagentResponse",
-      "lifecycle": "current",
-      "mockStrategy": "bridge-only",
-      "docsSection": "agent-runtime.subagent"
     }
   ]
 }

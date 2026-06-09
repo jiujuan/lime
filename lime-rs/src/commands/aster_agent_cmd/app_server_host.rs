@@ -10,7 +10,6 @@ use super::{
 };
 use crate::agent::runtime_queue_service::{
     finish_active_runtime_turn_if_matches as finish_active_runtime_turn_if_matches_service,
-    RuntimeQueueEventPort, TauriRuntimeQueueEventPort,
 };
 use crate::agent_tools::catalog::{ToolLifecycle, WorkspaceToolSurface};
 use crate::agent_tools::inventory::{
@@ -55,58 +54,6 @@ const HOST_OPTIONS_ASTER_CHAT_REQUEST: &str = "asterChatRequest";
 type RuntimeEventBridgeCallback = Arc<dyn Fn(EventId, &str) + Send + Sync + 'static>;
 type DesktopWorkspaceRootResolver =
     Arc<dyn Fn(&str) -> Result<Option<String>, String> + Send + Sync + 'static>;
-
-struct AppServerRuntimeQueueEventPort {
-    delegate: Option<TauriRuntimeQueueEventPort>,
-    bridge: Arc<OnceLock<AppServerEventBridge>>,
-    scopes: Arc<Mutex<HashMap<String, (String, String)>>>,
-}
-
-impl AppServerRuntimeQueueEventPort {
-    fn new(
-        app_handle: tauri::AppHandle,
-        bridge: Arc<OnceLock<AppServerEventBridge>>,
-        scopes: Arc<Mutex<HashMap<String, (String, String)>>>,
-    ) -> Self {
-        Self {
-            delegate: Some(TauriRuntimeQueueEventPort::new(app_handle)),
-            bridge,
-            scopes,
-        }
-    }
-}
-
-impl RuntimeQueueEventPort for AppServerRuntimeQueueEventPort {
-    fn emit_runtime_queue_event(&self, event_name: &str, event: &lime_agent::AgentEvent) {
-        if let Some(app_server_bridge) = self.bridge.get() {
-            let scope = self
-                .scopes
-                .lock()
-                .ok()
-                .and_then(|scopes| scopes.get(event_name).cloned());
-            if let Err(error) = append_lime_agent_event_to_app_server_bridge(
-                app_server_bridge,
-                event_name,
-                scope,
-                event,
-            ) {
-                tracing::warn!(
-                    "[AppServerHost] direct runtime event bridge failed: event_name={}, error={}",
-                    event_name,
-                    error
-                );
-            }
-            if should_close_app_server_event_bridge(event) {
-                if let Ok(mut scopes) = self.scopes.lock() {
-                    scopes.remove(event_name);
-                }
-            }
-        }
-        if let Some(delegate) = &self.delegate {
-            delegate.emit_runtime_queue_event(event_name, event);
-        }
-    }
-}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct RuntimeHostCancelOutcome {
@@ -266,7 +213,6 @@ struct RuntimeEventBridgeSubscriptions {
     app_server_bridge: Option<Arc<OnceLock<AppServerEventBridge>>>,
     event_registry: Arc<dyn RuntimeEventBridgeRegistry>,
     active_event_bridges: Arc<Mutex<HashMap<String, EventId>>>,
-    direct_event_scopes: Option<Arc<Mutex<HashMap<String, (String, String)>>>>,
 }
 
 impl RuntimeEventBridgeSubscriptions {
@@ -278,20 +224,6 @@ impl RuntimeEventBridgeSubscriptions {
             app_server_bridge,
             event_registry,
             active_event_bridges: Arc::new(Mutex::new(HashMap::new())),
-            direct_event_scopes: None,
-        }
-    }
-
-    fn new_direct(
-        event_registry: Arc<dyn RuntimeEventBridgeRegistry>,
-        app_server_bridge: Arc<OnceLock<AppServerEventBridge>>,
-        direct_event_scopes: Arc<Mutex<HashMap<String, (String, String)>>>,
-    ) -> Self {
-        Self {
-            app_server_bridge: Some(app_server_bridge),
-            event_registry,
-            active_event_bridges: Arc::new(Mutex::new(HashMap::new())),
-            direct_event_scopes: Some(direct_event_scopes),
         }
     }
 
@@ -308,19 +240,6 @@ impl RuntimeEventBridgeSubscriptions {
     }
 
     fn register(&self, registration: &DesktopAsterEventBridgeRegistration) -> Option<String> {
-        if let Some(direct_event_scopes) = &self.direct_event_scopes {
-            if let Ok(mut scopes) = direct_event_scopes.lock() {
-                scopes.insert(
-                    registration.event_name.clone(),
-                    (
-                        registration.session_id.clone(),
-                        registration.turn_id.clone(),
-                    ),
-                );
-            }
-            return Some(app_server_event_bridge_key(&registration.session_id));
-        }
-
         let app_server_bridge = self.app_server_bridge.as_ref()?.get()?.clone();
         let bridge_key = app_server_event_bridge_key(&registration.session_id);
         self.unregister(&bridge_key);
@@ -372,12 +291,6 @@ impl RuntimeEventBridgeSubscriptions {
     }
 
     fn unregister(&self, bridge_key: &str) {
-        if let Some(direct_event_scopes) = &self.direct_event_scopes {
-            if let Ok(mut scopes) = direct_event_scopes.lock() {
-                scopes.retain(|_, (session_id, _)| session_id != bridge_key);
-            }
-        }
-
         let Some(listener_id) = self
             .active_event_bridges
             .lock()
@@ -411,24 +324,6 @@ impl TauriAsterBackendHost {
     ) -> Self {
         let event_subscriptions =
             RuntimeEventBridgeSubscriptions::from_runtime(&runtime, Some(app_server_bridge));
-        Self {
-            runtime_host: Arc::new(RuntimeCommandContextHost::new(runtime)),
-            event_subscriptions,
-        }
-    }
-
-    fn with_direct_app_server_bridge(
-        runtime: RuntimeCommandContext,
-        app_server_bridge: Arc<OnceLock<AppServerEventBridge>>,
-        direct_event_scopes: Arc<Mutex<HashMap<String, (String, String)>>>,
-    ) -> Self {
-        let event_subscriptions = RuntimeEventBridgeSubscriptions::new_direct(
-            Arc::new(TauriRuntimeEventBridgeRegistry::new(
-                runtime.app_handle().clone(),
-            )),
-            app_server_bridge,
-            direct_event_scopes,
-        );
         Self {
             runtime_host: Arc::new(RuntimeCommandContextHost::new(runtime)),
             event_subscriptions,
@@ -1469,65 +1364,6 @@ fn desktop_aster_queued_turn_from_backend_request(
     })
 }
 
-static TAURI_APP_SERVER: OnceLock<InProcessAppServerState> = OnceLock::new();
-
-struct InProcessAppServerState {
-    server: AppServer,
-}
-
-fn in_process_app_server(runtime: RuntimeCommandContext) -> &'static InProcessAppServerState {
-    TAURI_APP_SERVER.get_or_init(|| {
-        let app_server_bridge = Arc::new(OnceLock::new());
-        let direct_event_scopes = Arc::new(Mutex::new(HashMap::new()));
-        let event_port = Arc::new(AppServerRuntimeQueueEventPort::new(
-            runtime.app_handle().clone(),
-            app_server_bridge.clone(),
-            direct_event_scopes.clone(),
-        ));
-        let runtime = runtime.with_runtime_queue_event_port(event_port);
-        let capability_source = desktop_app_server_capability_source_with_runtime(runtime.clone());
-        let artifact_content_provider = desktop_artifact_content_provider_with_runtime(&runtime);
-        let evidence_export_provider = desktop_evidence_export_provider_with_runtime(&runtime);
-        let host: Arc<dyn AsterBackendHost> =
-            Arc::new(TauriAsterBackendHost::with_direct_app_server_bridge(
-                runtime,
-                app_server_bridge.clone(),
-                direct_event_scopes,
-            ));
-        let server = AppServer::with_runtime(
-            AppServerRuntimeFactory::aster_runtime_core_with_sources_and_evidence_export_provider(
-                host,
-                capability_source,
-                artifact_content_provider,
-                evidence_export_provider,
-            ),
-        );
-        let _ = app_server_bridge.set(server.event_bridge());
-        InProcessAppServerState { server }
-    })
-}
-
-pub(crate) async fn handle_in_process_app_server_json_lines(
-    runtime: RuntimeCommandContext,
-    request_lines: Vec<String>,
-) -> Result<Vec<String>, String> {
-    let app_server = in_process_app_server(runtime);
-    let mut lines = Vec::new();
-    for line in request_lines {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let responses = app_server
-            .server
-            .handle_json_line(trimmed)
-            .await
-            .map_err(|error| error.to_string())?;
-        lines.extend(responses);
-    }
-    Ok(lines)
-}
-
 #[async_trait]
 impl AsterBackendHost for TauriAsterBackendHost {
     async fn submit_turn(
@@ -1631,15 +1467,6 @@ fn parse_lime_agent_event_payload(payload: &str) -> Result<lime_agent::AgentEven
         .map_err(|error| format!("failed to parse lime-agent event payload: {error}"))
 }
 
-fn app_server_session_id_from_event_name(event_name: &str) -> Option<String> {
-    event_name
-        .trim()
-        .strip_prefix("agentSession/event/")
-        .map(str::trim)
-        .filter(|session_id| !session_id.is_empty())
-        .map(str::to_string)
-}
-
 fn desktop_aster_action_response_input_from_backend_request(
     request: AsterBackendActionRespondRequest,
 ) -> DesktopAsterActionResponseInput {
@@ -1732,31 +1559,6 @@ fn runtime_event_turn_id(event: &RuntimeEvent) -> Option<String> {
         .map(str::trim)
         .filter(|turn_id| !turn_id.is_empty())
         .map(str::to_string)
-}
-
-fn append_lime_agent_event_to_app_server_bridge(
-    app_server_bridge: &AppServerEventBridge,
-    event_name: &str,
-    scope: Option<(String, String)>,
-    event: &lime_agent::AgentEvent,
-) -> Result<bool, String> {
-    let (session_id, fallback_turn_id) = scope.unwrap_or_else(|| {
-        (
-            app_server_session_id_from_event_name(event_name).unwrap_or_default(),
-            String::new(),
-        )
-    });
-    if session_id.trim().is_empty() {
-        return Err(format!(
-            "runtime event name is not an app server session event: {event_name}"
-        ));
-    }
-    let append = desktop_aster_runtime_event_bridge_append_from_event(
-        session_id,
-        Some(fallback_turn_id),
-        event,
-    )?;
-    append_desktop_aster_runtime_event_to_app_server_bridge(app_server_bridge, append)
 }
 
 fn append_lime_agent_payload_to_app_server_bridge(
@@ -4525,87 +4327,4 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn app_server_runtime_queue_event_port_appends_direct_runtime_event() {
-        let runtime = RuntimeCore::with_backend(Arc::new(MockBackend));
-        let server = AppServer::with_runtime(runtime.clone());
-        let bridge = Arc::new(OnceLock::new());
-        assert!(bridge.set(server.event_bridge()).is_ok());
-        let scopes = Arc::new(Mutex::new(HashMap::from([(
-            "agentSession/event/sess_direct".to_string(),
-            ("sess_direct".to_string(), "turn_direct".to_string()),
-        )])));
-        let port = AppServerRuntimeQueueEventPort {
-            delegate: None,
-            bridge,
-            scopes: scopes.clone(),
-        };
-        let mut outbound = server.subscribe_outbound_messages();
-        runtime
-            .start_session(AgentSessionStartParams {
-                session_id: Some("sess_direct".to_string()),
-                thread_id: Some("thread_direct".to_string()),
-                app_id: "content-studio".to_string(),
-                workspace_id: Some("workspace_1".to_string()),
-                business_object_ref: None,
-                locale: None,
-            })
-            .expect("session");
-        runtime
-            .start_turn(
-                AgentSessionTurnStartParams {
-                    session_id: "sess_direct".to_string(),
-                    turn_id: Some("turn_direct".to_string()),
-                    input: AgentInput {
-                        text: "生成草稿".to_string(),
-                        attachments: Vec::new(),
-                    },
-                    runtime_options: None,
-                    queue_if_busy: false,
-                    skip_pre_submit_resume: false,
-                },
-                RuntimeHostContext::default(),
-            )
-            .await
-            .expect("turn");
-
-        port.emit_runtime_queue_event(
-            "agentSession/event/sess_direct",
-            &lime_agent::AgentEvent::TextDelta {
-                text: "direct".to_string(),
-            },
-        );
-
-        let events = runtime.events_for_session("sess_direct").expect("events");
-        assert_eq!(
-            events.last().expect("last event").event_type,
-            "message.delta"
-        );
-        assert_eq!(
-            events.last().expect("last event").turn_id.as_deref(),
-            Some("turn_direct")
-        );
-        let notification = tokio::time::timeout(std::time::Duration::from_secs(1), outbound.recv())
-            .await
-            .expect("outbound timeout")
-            .expect("outbound message");
-        match notification {
-            app_server::JsonRpcMessage::Notification(notification) => {
-                let event = &notification.params.as_ref().expect("params")["event"];
-                assert_eq!(event["sessionId"], "sess_direct");
-                assert_eq!(event["turnId"], "turn_direct");
-                assert_eq!(event["payload"]["text"], "direct");
-            }
-            other => panic!("expected outbound notification, got {other:?}"),
-        }
-
-        port.emit_runtime_queue_event(
-            "agentSession/event/sess_direct",
-            &lime_agent::AgentEvent::FinalDone { usage: None },
-        );
-        assert!(!scopes
-            .lock()
-            .expect("scopes lock")
-            .contains_key("agentSession/event/sess_direct"));
-    }
 }

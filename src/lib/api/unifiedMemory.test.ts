@@ -13,11 +13,51 @@ import {
   searchUnifiedMemories,
   semanticSearch,
   updateUnifiedMemory,
+  type MemoryCategory,
+  type UnifiedMemory,
 } from "./unifiedMemory";
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
+
+function createUnifiedMemoryFixture(
+  overrides: Partial<UnifiedMemory> = {},
+): UnifiedMemory {
+  return {
+    id: "m1",
+    session_id: "session-1",
+    memory_type: "conversation",
+    category: "experience",
+    title: "标题",
+    content: "内容",
+    summary: "摘要",
+    tags: ["复盘"],
+    metadata: {
+      confidence: 0.9,
+      importance: 8,
+      access_count: 0,
+      last_accessed_at: null,
+      source: "manual",
+      embedding: null,
+    },
+    created_at: 1_717_200_000_000,
+    updated_at: 1_717_200_001_000,
+    archived: false,
+    ...overrides,
+  };
+}
+
+function createStatsFixture(
+  categories: Array<{ category: MemoryCategory; count: number }> = [],
+) {
+  return {
+    total_entries: 3,
+    storage_used: 100,
+    memory_count: 2,
+    categories,
+  };
+}
 
 describe("unifiedMemory API", () => {
   beforeEach(() => {
@@ -27,18 +67,17 @@ describe("unifiedMemory API", () => {
 
   it("应代理统一记忆 CRUD 与查询命令", async () => {
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([{ id: "m1" }])
-      .mockResolvedValueOnce([{ id: "m2" }])
-      .mockResolvedValueOnce({ id: "m1" })
-      .mockResolvedValueOnce({ id: "m3" })
-      .mockResolvedValueOnce({ id: "m3", title: "更新后" })
+      .mockResolvedValueOnce([createUnifiedMemoryFixture()])
+      .mockResolvedValueOnce([
+        createUnifiedMemoryFixture({ id: "m2", title: "搜索结果" }),
+      ])
+      .mockResolvedValueOnce(createUnifiedMemoryFixture())
+      .mockResolvedValueOnce(createUnifiedMemoryFixture({ id: "m3" }))
+      .mockResolvedValueOnce(
+        createUnifiedMemoryFixture({ id: "m3", title: "更新后" }),
+      )
       .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce({
-        total_entries: 3,
-        storage_used: 100,
-        memory_count: 2,
-        categories: [],
-      })
+      .mockResolvedValueOnce(createStatsFixture())
       .mockResolvedValueOnce({
         analyzed_sessions: 1,
         analyzed_messages: 10,
@@ -131,10 +170,15 @@ describe("unifiedMemory API", () => {
   });
 
   it("统一记忆列表遇到非数组返回时不应伪装成空列表", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
-      memories: [],
-    });
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        memories: [],
+      })
+      .mockResolvedValueOnce([{ id: "m1" }]);
 
+    await expect(listUnifiedMemories()).rejects.toThrow(
+      "unified_memory_list did not return a memories array",
+    );
     await expect(listUnifiedMemories()).rejects.toThrow(
       "unified_memory_list did not return a memories array",
     );
@@ -149,10 +193,18 @@ describe("unifiedMemory API", () => {
           status: "degraded",
         },
       })
-      .mockResolvedValueOnce({ memories: [] });
+      .mockResolvedValueOnce({ memories: [] })
+      .mockResolvedValueOnce([
+        createUnifiedMemoryFixture({
+          metadata: { source: "manual" } as UnifiedMemory["metadata"],
+        }),
+      ]);
 
     await expect(searchUnifiedMemories("关键词")).rejects.toThrow(
       "unified_memory_search 尚未接入真实统一记忆 current 通道，收到 electron-host-diagnostic 诊断返回。",
+    );
+    await expect(searchUnifiedMemories("关键词")).rejects.toThrow(
+      "unified_memory_search did not return a memories array",
     );
     await expect(searchUnifiedMemories("关键词")).rejects.toThrow(
       "unified_memory_search did not return a memories array",
@@ -237,6 +289,58 @@ describe("unifiedMemory API", () => {
     );
   });
 
+  it("统一记忆对象缺少核心字段时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ id: "m1" })
+      .mockResolvedValueOnce(
+        createUnifiedMemoryFixture({
+          category: "invalid" as UnifiedMemory["category"],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createUnifiedMemoryFixture({
+          metadata: {
+            confidence: 0.9,
+            importance: 8,
+            access_count: 0,
+            last_accessed_at: null,
+            source: "manual",
+            embedding: [Number.NaN],
+          },
+        }),
+      );
+
+    await expect(getUnifiedMemory("m1")).rejects.toThrow(
+      "unified_memory_get did not return a memory object or null",
+    );
+    await expect(
+      createUnifiedMemory({
+        session_id: "session-1",
+        title: "标题",
+        content: "内容",
+        summary: "摘要",
+      }),
+    ).rejects.toThrow("unified_memory_create did not return a memory object");
+    await expect(updateUnifiedMemory("m1", { title: "更新" })).rejects.toThrow(
+      "unified_memory_update did not return a memory object",
+    );
+  });
+
+  it("统一记忆统计缺少核心字段时应 fail closed", async () => {
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({ total_entries: 3 })
+      .mockResolvedValueOnce(
+        createStatsFixture([{ category: "invalid" as MemoryCategory, count: 1 }]),
+      );
+
+    await expect(getUnifiedMemoryStats()).rejects.toThrow(
+      "unified_memory_stats did not return unified memory stats",
+    );
+    await expect(getUnifiedMemoryStats()).rejects.toThrow(
+      "unified_memory_stats did not return unified memory stats",
+    );
+  });
+
   it("统一记忆分析遇到 diagnostic facade 或错误形状时应 fail closed", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({
@@ -260,8 +364,8 @@ describe("unifiedMemory API", () => {
 
   it("应代理语义搜索与混合搜索命令", async () => {
     vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([{ id: "m4" }])
-      .mockResolvedValueOnce([{ id: "m5" }]);
+      .mockResolvedValueOnce([createUnifiedMemoryFixture({ id: "m4" })])
+      .mockResolvedValueOnce([createUnifiedMemoryFixture({ id: "m5" })]);
 
     await expect(semanticSearch("语义", "context", 0.8, 5)).resolves.toEqual([
       expect.objectContaining({ id: "m4" }),

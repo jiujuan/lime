@@ -12,6 +12,11 @@ const appServerMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./appServer", () => ({
+  APP_SERVER_METHOD_USAGE_STATS_READ: "usageStats/read",
+  APP_SERVER_METHOD_USAGE_STATS_MODEL_RANKING_LIST:
+    "usageStats/modelRanking/list",
+  APP_SERVER_METHOD_USAGE_STATS_DAILY_TRENDS_LIST:
+    "usageStats/dailyTrends/list",
   createAppServerClient: () => appServerMocks,
 }));
 
@@ -89,7 +94,7 @@ describe("usageStats API", () => {
     });
 
     await expect(getUsageStats("month")).rejects.toThrow(
-      "get_usage_stats 未返回有效使用统计数据",
+      "usageStats/read 未返回有效使用统计数据",
     );
   });
 
@@ -107,20 +112,19 @@ describe("usageStats API", () => {
       });
 
     await expect(getModelUsageRanking("month")).rejects.toThrow(
-      "get_model_usage_ranking 未返回有效模型使用排行",
+      "usageStats/modelRanking/list 未返回有效模型使用排行",
     );
     await expect(getModelUsageRanking("month")).rejects.toThrow(
-      "get_model_usage_ranking 未返回有效模型使用排行",
+      "usageStats/modelRanking/list 未返回有效模型使用排行",
     );
   });
 
   it("应拒绝 daily usage trends 非数组或条目缺字段返回", async () => {
-    appServerMocks.listUsageStatsDailyTrends
-      .mockResolvedValueOnce({
-        result: {
-          trends: { items: [] },
-        },
-      });
+    appServerMocks.listUsageStatsDailyTrends.mockResolvedValueOnce({
+      result: {
+        trends: { items: [] },
+      },
+    });
     appServerMocks.listUsageStatsDailyTrends.mockResolvedValueOnce({
       result: {
         trends: [{ date: "2025-01-01", conversations: 1 }],
@@ -128,10 +132,10 @@ describe("usageStats API", () => {
     });
 
     await expect(getDailyUsageTrends("month")).rejects.toThrow(
-      "get_daily_usage_trends 未返回有效每日使用趋势",
+      "usageStats/dailyTrends/list 未返回有效每日使用趋势",
     );
     await expect(getDailyUsageTrends("month")).rejects.toThrow(
-      "get_daily_usage_trends 未返回有效每日使用趋势",
+      "usageStats/dailyTrends/list 未返回有效每日使用趋势",
     );
   });
 });

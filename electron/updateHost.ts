@@ -111,7 +111,7 @@ export class ElectronUpdateHost {
       case "get_update_check_settings":
         return this.#updateSettings();
       case "set_update_check_settings":
-        return { success: true };
+        return null;
       case "get_update_notification_metrics":
         return this.#updateMetrics();
       case "dismiss_update_notification":
@@ -119,17 +119,17 @@ export class ElectronUpdateHost {
         return Math.floor(Date.now() / 1000) + 24 * 3600;
       case "record_update_notification_action":
       case "skip_update_version":
-        return {};
+        return null;
       case "close_update_window":
         await this.#windowController.close();
-        return {};
+        return null;
       case "open_update_window":
       case "test_update_window":
         await this.#windowController.open({
           ...this.#currentVersionInfo(),
           anchorRect: parseUpdateNotificationAnchorRect(args?.anchorRect),
         });
-        return {};
+        return null;
       default:
         throw new Error(
           `Electron update command is not implemented: ${command}`,

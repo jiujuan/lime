@@ -1073,6 +1073,58 @@ describe("agentApps API", () => {
     );
   });
 
+  it("Agent App keep-data uninstall 成功时应接受 current uninstalled 状态并回写空列表", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        status: "uninstalled",
+        rehearsal: {
+          appId: "content-factory-app",
+          packageHash: PACKAGE_HASH,
+          mode: "keep-data",
+          generatedAt: "2026-05-15T00:03:00.000Z",
+          deletedTargetCount: 2,
+          retainedTargetCount: 3,
+          targets: [],
+          warnings: [],
+        },
+        list: {
+          states: [],
+          issues: [],
+        },
+        removedTargetCount: 2,
+        missingTargetCount: 0,
+        blockerCodes: [],
+        deleteEvidence: null,
+      },
+    });
+
+    await expect(
+      uninstallAgentApp({
+        appId: "content-factory-app",
+        mode: "keep-data",
+      }),
+    ).resolves.toMatchObject({
+      status: "uninstalled",
+      list: {
+        states: [],
+        issues: [],
+      },
+      removedTargetCount: 2,
+      missingTargetCount: 0,
+    });
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/uninstall",
+      {
+        appId: "content-factory-app",
+        mode: "keep-data",
+      },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "agent_app_uninstall",
+      expect.anything(),
+    );
+  });
+
   it("Agent App 宿主目录选择网关应走 current Desktop Host 命令", async () => {
     vi.mocked(safeInvoke).mockResolvedValue({
       path: LOCAL_APP_DIR,

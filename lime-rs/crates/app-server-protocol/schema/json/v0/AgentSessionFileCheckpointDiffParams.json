@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "checkpointId": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "checkpointId",
+    "sessionId"
+  ],
+  "title": "AgentSessionFileCheckpointDiffParams",
+  "type": "object"
+}

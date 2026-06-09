@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attempted": {
+      "type": "boolean"
+    },
+    "command": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "exitCode": {
+      "format": "int32",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "installed": {
+      "type": "boolean"
+    },
+    "message": {
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "packageManager": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "platform": {
+      "type": "string"
+    },
+    "stderr": {
+      "type": "string"
+    },
+    "stdout": {
+      "type": "string"
+    },
+    "version": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "attempted",
+    "installed",
+    "message",
+    "ok",
+    "platform",
+    "stderr",
+    "stdout"
+  ],
+  "title": "GatewayTunnelCloudflaredInstallResponse",
+  "type": "object"
+}

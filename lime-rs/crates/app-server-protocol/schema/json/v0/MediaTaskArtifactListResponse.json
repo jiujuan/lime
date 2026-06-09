@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "MediaTaskArtifactListFilters": {
+      "properties": {
+        "limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "modality_contract_key": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "routing_outcome": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "task_family": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "task_type": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "MediaTaskArtifactResponse": {
+      "properties": {
+        "absolute_artifact_path": {
+          "default": "",
+          "type": "string"
+        },
+        "absolute_path": {
+          "default": "",
+          "type": "string"
+        },
+        "artifact_path": {
+          "default": "",
+          "type": "string"
+        },
+        "current_attempt_id": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "idempotency_key": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "normalized_status": {
+          "type": "string"
+        },
+        "path": {
+          "default": "",
+          "type": "string"
+        },
+        "record": {
+          "default": null
+        },
+        "reused_existing": {
+          "default": false,
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "task_family": {
+          "default": "",
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "task_type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "normalized_status",
+        "status",
+        "success",
+        "task_id",
+        "task_type"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "artifact_root": {
+      "type": "string"
+    },
+    "filters": {
+      "$ref": "#/$defs/MediaTaskArtifactListFilters"
+    },
+    "modality_runtime_contracts": {
+      "default": null
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "tasks": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MediaTaskArtifactResponse"
+      },
+      "type": "array"
+    },
+    "total": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "workspace_root": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "artifact_root",
+    "filters",
+    "success",
+    "total",
+    "workspace_root"
+  ],
+  "title": "MediaTaskArtifactListResponse",
+  "type": "object"
+}

@@ -25,6 +25,7 @@
 
 - `lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。
 - 新增 Rust 后端能力必须进入 App Server crates / RuntimeCore / services；窗口、托盘、Dock、updater、shell、deep link 等桌面壳能力进入 Electron Desktop Host。
+- `src/lib/dev-bridge/**` 需要按职责治理，不是整体删除对象：`safeInvoke`、HTTP client、`app_server_handle_json_lines`、bridge availability / event listener capability 是 current renderer bridge；旧命令 policy / no-mock fallback 是迁移期 `compat / deprecated`；已迁旧命令名只能留作 `dead` / `test-only` guard。
 - 相关规则入口：`aiprompts/commands.md`、`aiprompts/governance.md`、`aiprompts/quality-workflow.md`、`roadmap/appserver/README.md`、`exec-plans/tauri-wrapper-quick-cleanup-queue.md`、`exec-plans/tauri-wrapper-command-inventory.md`。
 
 ## 阅读顺序

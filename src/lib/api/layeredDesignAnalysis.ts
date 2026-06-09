@@ -51,6 +51,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function assertNotErrorEnvelope(command: string, value: unknown): void {
+  if (isRecord(value) && "error" in value) {
+    throw new Error(`${command} returned an error envelope`);
+  }
+}
+
 function isString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -88,6 +94,7 @@ function isTextBlock(value: unknown): value is LayeredDesignRecognizedTextBlock 
 function assertRecognizeTextOutput(
   value: unknown,
 ): asserts value is RecognizeLayeredDesignTextOutput {
+  assertNotErrorEnvelope("recognize_layered_design_text", value);
   if (
     !isRecord(value) ||
     typeof value.supported !== "boolean" ||
@@ -103,6 +110,7 @@ function assertRecognizeTextOutput(
 function assertFlatImageAnalysisOutput(
   value: unknown,
 ): asserts value is AnalyzeLayeredDesignFlatImageNativeOutput {
+  assertNotErrorEnvelope("analyze_layered_design_flat_image", value);
   if (
     !isRecord(value) ||
     typeof value.supported !== "boolean" ||

@@ -8,7 +8,13 @@ use app_server::ExternalBackendConfig;
 use app_server::LocalAppDataSource;
 use app_server::DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS;
 use app_server_transport::DEFAULT_LISTEN_URL;
+use lime_core::database;
+use lime_core::database::DbConnection;
+use std::ffi::OsString;
+use std::path::PathBuf;
 use std::sync::Arc;
+
+const APP_SERVER_DATA_DIR_ENV: &str = "APP_SERVER_DATA_DIR";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -30,6 +36,7 @@ struct CliConfig {
     backend_command: Option<String>,
     backend_args: Vec<String>,
     backend_timeout_ms: u64,
+    data_dir: Option<PathBuf>,
 }
 
 impl CliConfig {
@@ -44,14 +51,21 @@ impl CliConfig {
 }
 
 fn parse_args() -> anyhow::Result<CliConfig> {
-    parse_args_from(std::env::args().skip(1))
+    parse_args_from_with_data_dir_env(
+        std::env::args().skip(1),
+        std::env::var_os(APP_SERVER_DATA_DIR_ENV),
+    )
 }
 
 async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
-    let app_data_source: Arc<dyn AppDataSource> =
-        Arc::new(LocalAppDataSource::initialize().await.map_err(|error| {
-            anyhow::anyhow!("failed to initialize local app data source: {error}")
-        })?);
+    let db = initialize_database(config)?;
+    let app_data_source: Arc<dyn AppDataSource> = Arc::new(
+        LocalAppDataSource::initialize_with_db(db.clone())
+            .await
+            .map_err(|error| {
+                anyhow::anyhow!("failed to initialize local app data source: {error}")
+            })?,
+    );
     let capability_source = config
         .app_policy_path
         .as_deref()
@@ -70,9 +84,14 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
             AppServerRuntimeFactory::external_runtime_core(config.external_backend_config()?)
         }
         (AppServerBackendMode::Runtime, Some(capability_source)) => {
-            AppServerRuntimeFactory::runtime_backend_core_with_capability_source(capability_source)
+            AppServerRuntimeFactory::runtime_backend_core_with_db_and_capability_source(
+                db,
+                capability_source,
+            )
         }
-        (AppServerBackendMode::Runtime, None) => AppServerRuntimeFactory::runtime_backend_core(),
+        (AppServerBackendMode::Runtime, None) => {
+            AppServerRuntimeFactory::runtime_backend_core_with_db(db)
+        }
         (AppServerBackendMode::Mock, Some(capability_source)) => {
             AppServerRuntimeFactory::mock_runtime_core_with_capability_source(capability_source)
         }
@@ -91,7 +110,28 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
     Ok(AppServer::with_runtime(runtime))
 }
 
+fn initialize_database(config: &CliConfig) -> anyhow::Result<DbConnection> {
+    match config.data_dir.as_ref() {
+        Some(data_dir) => database::init_database_with_data_dir(data_dir).map_err(|error| {
+            anyhow::anyhow!(
+                "failed to initialize app-server database at {}: {error}",
+                data_dir.display()
+            )
+        }),
+        None => database::init_database()
+            .map_err(|error| anyhow::anyhow!("failed to initialize app-server database: {error}")),
+    }
+}
+
+#[cfg(test)]
 fn parse_args_from(args: impl IntoIterator<Item = String>) -> anyhow::Result<CliConfig> {
+    parse_args_from_with_data_dir_env(args, None)
+}
+
+fn parse_args_from_with_data_dir_env(
+    args: impl IntoIterator<Item = String>,
+    data_dir_env: Option<OsString>,
+) -> anyhow::Result<CliConfig> {
     let mut args = args.into_iter();
     let mut listen = DEFAULT_LISTEN_URL.to_string();
     let mut backend_mode = AppServerBackendMode::Unavailable;
@@ -99,8 +139,19 @@ fn parse_args_from(args: impl IntoIterator<Item = String>) -> anyhow::Result<Cli
     let mut backend_command = None;
     let mut backend_args = Vec::new();
     let mut backend_timeout_ms = DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS;
+    let mut data_dir = data_dir_env
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
 
     while let Some(arg) = args.next() {
+        if let Some(value) = arg.strip_prefix("--data-dir=") {
+            if value.is_empty() {
+                anyhow::bail!("--data-dir requires a path");
+            }
+            data_dir = Some(PathBuf::from(value));
+            continue;
+        }
+
         match arg.as_str() {
             "--stdio" => listen = DEFAULT_LISTEN_URL.to_string(),
             "--listen" => {
@@ -140,9 +191,15 @@ fn parse_args_from(args: impl IntoIterator<Item = String>) -> anyhow::Result<Cli
                         .ok_or_else(|| anyhow::anyhow!("--app-policy requires a path"))?,
                 );
             }
+            "--data-dir" => {
+                data_dir =
+                    Some(PathBuf::from(args.next().ok_or_else(|| {
+                        anyhow::anyhow!("--data-dir requires a path")
+                    })?));
+            }
             "--help" | "-h" => {
                 println!(
-                    "Usage: app-server [--stdio] [--listen stdio://] [--backend external|runtime|mock|unavailable] [--backend-command path] [--backend-arg value] [--backend-timeout-ms ms] [--app-policy path]"
+                    "Usage: app-server [--stdio] [--listen stdio://] [--backend external|runtime|mock|unavailable] [--backend-command path] [--backend-arg value] [--backend-timeout-ms ms] [--app-policy path] [--data-dir path]"
                 );
                 std::process::exit(0);
             }
@@ -157,6 +214,7 @@ fn parse_args_from(args: impl IntoIterator<Item = String>) -> anyhow::Result<Cli
         backend_command,
         backend_args,
         backend_timeout_ms,
+        data_dir,
     })
 }
 
@@ -184,6 +242,7 @@ mod tests {
             config.backend_timeout_ms,
             DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS
         );
+        assert_eq!(config.data_dir, None);
     }
 
     #[test]
@@ -220,6 +279,72 @@ mod tests {
         assert_eq!(config.app_policy_path, None);
         assert_eq!(config.backend_command, None);
         assert!(config.backend_args.is_empty());
+    }
+
+    #[test]
+    fn parse_args_accepts_data_dir() {
+        let config = parse_args_from(
+            ["--stdio", "--data-dir", "/tmp/platform-app-server"].map(str::to_string),
+        )
+        .expect("config");
+
+        assert_eq!(
+            config.data_dir,
+            Some(PathBuf::from("/tmp/platform-app-server"))
+        );
+    }
+
+    #[test]
+    fn parse_args_accepts_data_dir_equals_form() {
+        let config = parse_args_from(["--data-dir=/tmp/platform-app-server"].map(str::to_string))
+            .expect("config");
+
+        assert_eq!(
+            config.data_dir,
+            Some(PathBuf::from("/tmp/platform-app-server"))
+        );
+    }
+
+    #[test]
+    fn parse_args_data_dir_cli_wins_over_env() {
+        let config = parse_args_from_with_data_dir_env(
+            ["--data-dir", "/tmp/cli-app-server"].map(str::to_string),
+            Some(OsString::from("/tmp/env-app-server")),
+        )
+        .expect("config");
+
+        assert_eq!(config.data_dir, Some(PathBuf::from("/tmp/cli-app-server")));
+    }
+
+    #[test]
+    fn parse_args_accepts_data_dir_env_fallback() {
+        let config = parse_args_from_with_data_dir_env(
+            Vec::new(),
+            Some(OsString::from("/tmp/env-app-server")),
+        )
+        .expect("config");
+
+        assert_eq!(config.data_dir, Some(PathBuf::from("/tmp/env-app-server")));
+    }
+
+    #[test]
+    fn initialize_database_uses_configured_data_dir() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let data_dir = temp_dir.path().join("desktop-platform").join("app-server");
+        let config = CliConfig {
+            listen: DEFAULT_LISTEN_URL.to_string(),
+            backend_mode: AppServerBackendMode::Unavailable,
+            app_policy_path: None,
+            backend_command: None,
+            backend_args: Vec::new(),
+            backend_timeout_ms: DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS,
+            data_dir: Some(data_dir.clone()),
+        };
+
+        let db = initialize_database(&config).expect("initialize database");
+        drop(db);
+
+        assert!(data_dir.join("lime.db").is_file());
     }
 
     #[test]

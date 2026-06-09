@@ -57,7 +57,6 @@ function renderSkillCard(skill: Skill): RenderResult {
         skill,
         onInstall: () => {},
         onUninstall: () => {},
-        onExecute: () => {},
         onViewContent: () => {},
         installing: false,
       }),
@@ -408,11 +407,11 @@ describe("SkillCard", () => {
     expect(text).toContain("No description yet");
     expect(text).toContain("Built-in");
     expect(text).toContain("Installed");
-    expect(text).toContain("Run");
     expect(text).toContain("View content");
     expect(text).toContain("Standard");
     expect(text).not.toContain("暂无描述");
     expect(text).not.toContain("已安装");
+    expect(text).not.toContain("Run");
     expect(text).not.toContain("执行");
   });
 });

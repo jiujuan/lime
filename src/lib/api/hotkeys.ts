@@ -19,8 +19,34 @@ export interface HotkeyRuntimeStatus {
   voice: VoiceShortcutRuntimeStatus;
 }
 
+function isNullableString(value: unknown): value is string | null | undefined {
+  return value === null || value === undefined || typeof value === "string";
+}
+
+function assertVoiceShortcutRuntimeStatus(
+  command: string,
+  value: unknown,
+): asserts value is VoiceShortcutRuntimeStatus {
+  const status = value as Partial<VoiceShortcutRuntimeStatus>;
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    typeof status.shortcut_registered !== "boolean" ||
+    typeof status.fn_supported !== "boolean" ||
+    typeof status.fn_registered !== "boolean" ||
+    !isNullableString(status.registered_shortcut) ||
+    !isNullableString(status.fn_fallback_shortcut) ||
+    typeof status.fn_note !== "string"
+  ) {
+    throw new Error(
+      `${command} did not return voice shortcut runtime status`,
+    );
+  }
+}
+
 export async function getVoiceShortcutRuntimeStatus(): Promise<VoiceShortcutRuntimeStatus> {
-  const result = await safeInvoke<VoiceShortcutRuntimeStatus>(
+  const result = await safeInvoke<unknown>(
     "get_voice_shortcut_runtime_status",
   );
   assertNotDiagnosticFacade(
@@ -28,6 +54,7 @@ export async function getVoiceShortcutRuntimeStatus(): Promise<VoiceShortcutRunt
     result,
     "真实语音快捷键 current 通道",
   );
+  assertVoiceShortcutRuntimeStatus("get_voice_shortcut_runtime_status", result);
   return result;
 }
 

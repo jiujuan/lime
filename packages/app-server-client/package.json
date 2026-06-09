@@ -1,6 +1,6 @@
 {
   "name": "app-server-client",
-  "version": "1.62.0",
+  "version": "1.63.0",
   "type": "module",
   "description": "App Server JSON-RPC client and sidecar launch helpers for independent apps.",
   "license": "MIT",
@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && cd \"../..\" && npx vitest run \"packages/app-server-client/tests/client.test.mjs\" --silent=passed-only --disableConsoleIntercept"
+    "test": "npm run build && cd \"../..\" && npx vitest run \"packages/app-server-client/tests\" --silent=passed-only --disableConsoleIntercept"
   },
   "sideEffects": false
 }

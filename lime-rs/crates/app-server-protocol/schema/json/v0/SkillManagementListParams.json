@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "app": {
+      "type": "string"
+    },
+    "refreshRemote": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "app"
+  ],
+  "title": "SkillManagementListParams",
+  "type": "object"
+}

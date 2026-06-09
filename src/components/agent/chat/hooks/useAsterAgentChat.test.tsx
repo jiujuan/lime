@@ -24,8 +24,6 @@ const {
   mockParseAgentEvent,
   mockSafeListen,
   mockToast,
-  mockParseSkillSlashCommand,
-  mockTryExecuteSlashSkillCommand,
   mockWechatChannelSetRuntimeModel,
   mockGetDefaultProvider,
   mockResolveClawWorkspaceProviderSelection,
@@ -55,10 +53,6 @@ const {
     info: vi.fn(),
     warning: vi.fn(),
   },
-  mockParseSkillSlashCommand: vi.fn(
-    (): { skillName: string; userInput: string } | null => null,
-  ),
-  mockTryExecuteSlashSkillCommand: vi.fn(async () => false),
   mockWechatChannelSetRuntimeModel: vi.fn(async () => undefined),
   mockGetDefaultProvider: vi.fn(),
   mockResolveClawWorkspaceProviderSelection: vi.fn(),
@@ -123,11 +117,6 @@ vi.mock("@/lib/dev-bridge", () => ({
 
 vi.mock("sonner", () => ({
   toast: mockToast,
-}));
-
-vi.mock("./skillCommand", () => ({
-  parseSkillSlashCommand: mockParseSkillSlashCommand,
-  tryExecuteSlashSkillCommand: mockTryExecuteSlashSkillCommand,
 }));
 
 vi.mock("@/lib/api/channelsRuntime", () => ({
@@ -412,8 +401,6 @@ beforeEach(() => {
   mockRespondAgentRuntimeAction.mockReset();
   mockParseAgentEvent.mockReset();
   mockSafeListen.mockReset();
-  mockParseSkillSlashCommand.mockReset();
-  mockTryExecuteSlashSkillCommand.mockReset();
   mockWechatChannelSetRuntimeModel.mockReset();
   mockGetDefaultProvider.mockReset();
   mockResolveClawWorkspaceProviderSelection.mockReset();
@@ -450,8 +437,6 @@ beforeEach(() => {
   mockRespondAgentRuntimeAction.mockResolvedValue(undefined);
   mockParseAgentEvent.mockImplementation((payload: unknown) => payload);
   mockSafeListen.mockResolvedValue(() => {});
-  mockParseSkillSlashCommand.mockReturnValue(null);
-  mockTryExecuteSlashSkillCommand.mockResolvedValue(false);
   mockGetDefaultProvider.mockResolvedValue("openai");
   mockResolveClawWorkspaceProviderSelection.mockResolvedValue(null);
   clearAllAgentStreamTextOverlays();
@@ -4161,15 +4146,9 @@ describe("useAsterAgentChat runtime routing", () => {
 });
 
 describe("useAsterAgentChat slash skill 执行链路", () => {
-  it("命中 slash skill 时应走 execute_skill 分支而非 chat_stream", async () => {
+  it("普通 slash skill 应回到 Agent Runtime turn 主链而不是预执行 execute_skill", async () => {
     const workspaceId = "ws-slash-skill";
     const harness = mountHook(workspaceId);
-
-    mockParseSkillSlashCommand.mockReturnValue({
-      skillName: "content_post_with_cover",
-      userInput: "写一篇春季新品文案",
-    });
-    mockTryExecuteSlashSkillCommand.mockResolvedValue(true);
 
     try {
       await flushEffects();
@@ -4186,25 +4165,20 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
           );
       });
 
-      expect(mockParseSkillSlashCommand).toHaveBeenCalledWith(
-        "/content_post_with_cover 写一篇春季新品文案",
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          message: "/content_post_with_cover 写一篇春季新品文案",
+        }),
       );
-      expect(mockTryExecuteSlashSkillCommand).toHaveBeenCalledTimes(1);
-      expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
   });
 
-  it("slash skill 未处理时应回退到 chat_stream", async () => {
+  it("普通 slash skill 不再尝试旧 preflight，直接进入 Agent Runtime turn", async () => {
     const workspaceId = "ws-slash-fallback";
     const harness = mountHook(workspaceId);
-
-    mockParseSkillSlashCommand.mockReturnValue({
-      skillName: "content_post_with_cover",
-      userInput: "写一篇春季新品文案",
-    });
-    mockTryExecuteSlashSkillCommand.mockResolvedValue(false);
 
     try {
       await flushEffects();
@@ -4221,7 +4195,6 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
           );
       });
 
-      expect(mockTryExecuteSlashSkillCommand).toHaveBeenCalledTimes(1);
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
     } finally {
       harness.unmount();
@@ -4247,7 +4220,6 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         event_name: stream.getEventName(),
       });
       expect(mockSubmitAgentRuntimeTurn).not.toHaveBeenCalled();
-      expect(mockParseSkillSlashCommand).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -4885,9 +4857,6 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         expect.objectContaining({
           message: expect.stringContaining("lime-rs"),
         }),
-      );
-      expect(mockParseSkillSlashCommand).toHaveBeenCalledWith(
-        expect.stringContaining("请对以下对象进行代码审查"),
       );
     } finally {
       harness.unmount();

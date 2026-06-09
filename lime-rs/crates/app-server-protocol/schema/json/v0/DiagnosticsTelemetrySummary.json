@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "avgLatencyMs": {
+      "format": "double",
+      "type": "number"
+    },
+    "failedRequests": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "maxLatencyMs": {
+      "format": "double",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "minLatencyMs": {
+      "format": "double",
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "successRate": {
+      "format": "double",
+      "type": "number"
+    },
+    "successfulRequests": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "timeoutRequests": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "totalInputTokens": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "totalOutputTokens": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "totalRequests": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "totalTokens": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "avgLatencyMs",
+    "failedRequests",
+    "successRate",
+    "successfulRequests",
+    "timeoutRequests",
+    "totalInputTokens",
+    "totalOutputTokens",
+    "totalRequests",
+    "totalTokens"
+  ],
+  "title": "DiagnosticsTelemetrySummary",
+  "type": "object"
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "channel": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "channel"
+  ],
+  "title": "GatewayChannelStatusParams",
+  "type": "object"
+}

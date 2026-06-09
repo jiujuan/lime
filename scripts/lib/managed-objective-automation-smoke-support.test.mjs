@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import {
   buildAutomationFixtureMarkdown,
@@ -7,6 +10,7 @@ import {
   buildCapabilityDraftRequest,
   fixtureChatRequestCount,
   metadataFromRun,
+  registerAutomationSmokeWorkspaceSkill,
   sessionIdFromRun,
   workspaceIdFromDefaultProject,
   workspaceRootFromDefaultProject,
@@ -133,6 +137,74 @@ describe("managed-objective-automation-smoke-support", () => {
     expect(skillMd).toContain("## 执行步骤");
     expect(skillMd).toContain("## 输出");
     expect(JSON.stringify(request)).not.toMatch(/deepseek|api\.deepseek/);
+  });
+
+  it("注册 automation smoke workspace skill 时不再调用退役 Capability Draft authoring 命令", async () => {
+    const workspaceRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), "lime-managed-objective-smoke-"),
+    );
+    const invokedCommands = [];
+    const invoke = async (_options, command, payload) => {
+      invokedCommands.push(command);
+      if (command !== "app_server_handle_json_lines") {
+        throw new Error(`unexpected command: ${command}`);
+      }
+      const requestLine = payload?.request?.lines?.[0];
+      const request = JSON.parse(requestLine);
+      expect(request.method).toBe("workspaceSkillBindings/list");
+      return {
+        result: {
+          lines: [
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: request.id,
+              result: {
+                bindings: [
+                  {
+                    directory: "managed-objective-automation-smoke-report",
+                    skillName:
+                      "project:managed-objective-automation-smoke-report",
+                    registeredSkillDirectory: path.join(
+                      workspaceRoot,
+                      ".agents",
+                      "skills",
+                      "managed-objective-automation-smoke-report",
+                    ),
+                    bindingStatus: "ready_for_manual_enable",
+                  },
+                ],
+              },
+            }),
+          ],
+        },
+      };
+    };
+
+    const registration = await registerAutomationSmokeWorkspaceSkill(
+      {},
+      workspaceRoot,
+      invoke,
+    );
+
+    expect(registration).toMatchObject({
+      workspaceRoot,
+      skillDirectory: "managed-objective-automation-smoke-report",
+      skillName: "project:managed-objective-automation-smoke-report",
+      bindingStatus: "ready_for_manual_enable",
+    });
+    await expect(
+      fs.readFile(
+        path.join(
+          workspaceRoot,
+          ".agents",
+          "skills",
+          "managed-objective-automation-smoke-report",
+          "SKILL.md",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("# Managed Objective Automation Smoke Report");
+    expect(invokedCommands).toEqual(["app_server_handle_json_lines"]);
   });
 
   it("fixture 应返回 Markdown 报告而不是模型自报标记", () => {

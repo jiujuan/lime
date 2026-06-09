@@ -6,6 +6,7 @@ use super::*;
 use chrono::Utc;
 use lime_agent::restore_aster_runtime_queued_turns;
 use lime_agent::AgentEvent as RuntimeAgentEvent;
+use lime_services::skill_service::SkillService;
 use serde_json::json;
 use std::ffi::OsStr;
 use std::process::Output;
@@ -523,11 +524,9 @@ async fn register_spawned_teammate(
 fn build_local_subagent_skill_payload(
     directory: &str,
 ) -> Result<(SubagentSkillSummary, SubagentSkillPromptBlock), String> {
-    let inspection = crate::commands::skill_cmd::inspect_local_skill_for_app(
-        "lime".to_string(),
-        directory.to_string(),
-    )
-    .map_err(|error| format!("读取本地 skill 失败 `{directory}`: {error}"))?;
+    let skill_dir = resolve_lime_subagent_skill_dir(directory)?;
+    let inspection = SkillService::inspect_skill_dir(&skill_dir)
+        .map_err(|error| format!("读取本地 skill 失败 `{directory}`: {error}"))?;
     let name = inspection
         .metadata
         .get("name")
@@ -555,6 +554,55 @@ fn build_local_subagent_skill_payload(
             content: inspection.content,
         },
     ))
+}
+
+fn validate_lime_subagent_skill_directory(directory: &str) -> Result<(), String> {
+    if directory.trim().is_empty() {
+        return Err("Skill directory is required".to_string());
+    }
+    if directory.contains("..") || directory.contains('/') || directory.contains('\\') {
+        return Err("Invalid skill directory".to_string());
+    }
+
+    let mut components = Path::new(directory).components();
+    let first = components
+        .next()
+        .ok_or_else(|| "Skill directory is required".to_string())?;
+    if components.next().is_some() {
+        return Err("Invalid skill directory".to_string());
+    }
+
+    match first {
+        std::path::Component::Normal(_) => Ok(()),
+        _ => Err("Invalid skill directory".to_string()),
+    }
+}
+
+fn resolve_lime_subagent_skill_dir(directory: &str) -> Result<PathBuf, String> {
+    validate_lime_subagent_skill_directory(directory)?;
+    for root in lime_core::app_paths::resolve_lime_skill_roots()? {
+        if !root.exists() {
+            continue;
+        }
+        let canonical_root = root
+            .canonicalize()
+            .map_err(|error| format!("Failed to resolve skills directory: {error}"))?;
+        let skill_dir = root.join(directory);
+        if !skill_dir.exists() {
+            continue;
+        }
+        let canonical_skill_dir = skill_dir
+            .canonicalize()
+            .map_err(|error| format!("Failed to resolve skill directory: {error}"))?;
+        if !canonical_skill_dir.starts_with(&canonical_root) {
+            return Err("Invalid skill directory path".to_string());
+        }
+        if canonical_skill_dir.join("SKILL.md").is_file() {
+            return Ok(canonical_skill_dir);
+        }
+    }
+
+    Err(format!("Skill not found: {directory}"))
 }
 
 #[cfg(test)]

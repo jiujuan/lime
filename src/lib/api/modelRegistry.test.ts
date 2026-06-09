@@ -353,12 +353,26 @@ describe("modelRegistry API", () => {
     );
   });
 
+  it("模型隐藏和使用记录只接受真实空返回", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined).mockResolvedValueOnce(null);
+
+    await expect(hideModel("gpt-4.1")).resolves.toBeUndefined();
+    await expect(recordModelUsage("gpt-4.1")).resolves.toBeUndefined();
+
+    expect(safeInvoke).toHaveBeenNthCalledWith(1, "hide_model", {
+      modelId: "gpt-4.1",
+    });
+    expect(safeInvoke).toHaveBeenNthCalledWith(2, "record_model_usage", {
+      modelId: "gpt-4.1",
+    });
+  });
+
   it("模型注册表 compat 命令返回错误形态时不应吞成成功", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({ success: true })
       .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true });
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ error: "not available" });
 
     await expect(refreshModelRegistry()).rejects.toThrow(
       "refresh_model_registry did not return a finite number",

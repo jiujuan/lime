@@ -10,6 +10,9 @@ use crate::AgentAppLocalPackageInspectParams;
 use crate::AgentAppLocalPackageInspectResponse;
 use crate::AgentAppPackageCacheEntry;
 use crate::AgentAppPackageIdentity;
+use crate::AgentAppShellPackageMount;
+use crate::AgentAppShellPrepareParams;
+use crate::AgentAppShellPrepareResponse;
 use crate::AgentAppUiRuntimeStartParams;
 use crate::AgentAppUiRuntimeStatusParams;
 use crate::AgentAppUiRuntimeStatusResponse;
@@ -23,19 +26,63 @@ use crate::AgentAttachment;
 use crate::AgentEvent;
 use crate::AgentInput;
 use crate::AgentSession;
+use crate::AgentSessionActionReplayParams;
+use crate::AgentSessionActionReplayResponse;
 use crate::AgentSessionActionRespondParams;
 use crate::AgentSessionActionRespondResponse;
 use crate::AgentSessionActionScope;
 use crate::AgentSessionActionType;
+use crate::AgentSessionAnalysisHandoffExportParams;
+use crate::AgentSessionAnalysisHandoffExportResponse;
+use crate::AgentSessionCompactParams;
+use crate::AgentSessionCompactResponse;
 use crate::AgentSessionEventParams;
+use crate::AgentSessionFileCheckpointDetail;
+use crate::AgentSessionFileCheckpointDiffParams;
+use crate::AgentSessionFileCheckpointDiffResponse;
+use crate::AgentSessionFileCheckpointGetParams;
+use crate::AgentSessionFileCheckpointListParams;
+use crate::AgentSessionFileCheckpointListResponse;
+use crate::AgentSessionFileCheckpointRestoreParams;
+use crate::AgentSessionFileCheckpointRestoreResponse;
+use crate::AgentSessionFileCheckpointSummary;
+use crate::AgentSessionFileCheckpointThreadSummary;
+use crate::AgentSessionHandoffArtifact;
+use crate::AgentSessionHandoffBundleExportParams;
+use crate::AgentSessionHandoffBundleExportResponse;
 use crate::AgentSessionListParams;
 use crate::AgentSessionListResponse;
+use crate::AgentSessionObjectiveAuditParams;
+use crate::AgentSessionObjectiveAuditResponse;
+use crate::AgentSessionObjectiveClearParams;
+use crate::AgentSessionObjectiveClearResponse;
+use crate::AgentSessionObjectiveContinueParams;
+use crate::AgentSessionObjectiveContinueResponse;
+use crate::AgentSessionObjectiveReadParams;
+use crate::AgentSessionObjectiveReadResponse;
+use crate::AgentSessionObjectiveSetParams;
+use crate::AgentSessionObjectiveSetResponse;
+use crate::AgentSessionObjectiveStatusUpdateParams;
+use crate::AgentSessionObjectiveStatusUpdateResponse;
 use crate::AgentSessionOverview;
+use crate::AgentSessionQueuedTurnPromoteParams;
+use crate::AgentSessionQueuedTurnPromoteResponse;
+use crate::AgentSessionQueuedTurnRemoveParams;
+use crate::AgentSessionQueuedTurnRemoveResponse;
 use crate::AgentSessionReadParams;
 use crate::AgentSessionReadResponse;
+use crate::AgentSessionReplayCaseExportParams;
+use crate::AgentSessionReplayCaseExportResponse;
+use crate::AgentSessionReplayedActionRequired;
+use crate::AgentSessionReviewDecision;
+use crate::AgentSessionReviewDecisionSaveParams;
+use crate::AgentSessionReviewDecisionTemplateExportParams;
+use crate::AgentSessionReviewDecisionTemplateExportResponse;
 use crate::AgentSessionStartParams;
 use crate::AgentSessionStartResponse;
 use crate::AgentSessionStatus;
+use crate::AgentSessionThreadResumeParams;
+use crate::AgentSessionThreadResumeResponse;
 use crate::AgentSessionTurnCancelParams;
 use crate::AgentSessionTurnCancelResponse;
 use crate::AgentSessionTurnStartParams;
@@ -72,6 +119,8 @@ use crate::BusinessObjectRef;
 use crate::CapabilityDescriptor;
 use crate::CapabilityListParams;
 use crate::CapabilityListResponse;
+use crate::ChannelProbeParams;
+use crate::ChannelProbeResponse;
 use crate::ClientCapabilities;
 use crate::ClientInfo;
 use crate::ConnectCallbackSendParams;
@@ -84,6 +133,12 @@ use crate::ConnectOpenDeepLinkResolveResponse;
 use crate::ConnectPayload;
 use crate::ConnectRelayApiKeySaveParams;
 use crate::ConnectRelayApiKeySaveResponse;
+use crate::DiagnosticsCapabilityRoutingMetricsSnapshot;
+use crate::DiagnosticsIdempotencyDiagnostics;
+use crate::DiagnosticsMetricConfig;
+use crate::DiagnosticsRequestDedupDiagnostics;
+use crate::DiagnosticsResponseCacheDiagnostics;
+use crate::DiagnosticsTelemetrySummary;
 use crate::EvidenceExportParams;
 use crate::EvidenceExportResponse;
 use crate::EvidencePackArtifact;
@@ -98,6 +153,21 @@ use crate::FileSystemListDirectoryParams;
 use crate::FileSystemMutationResponse;
 use crate::FileSystemReadFilePreviewParams;
 use crate::FileSystemRenameFileParams;
+use crate::GatewayChannelStartParams;
+use crate::GatewayChannelStatusParams;
+use crate::GatewayChannelStatusResponse;
+use crate::GatewayChannelStopParams;
+use crate::GatewayTunnelCloudflaredDetectResponse;
+use crate::GatewayTunnelCloudflaredInstallParams;
+use crate::GatewayTunnelCloudflaredInstallResponse;
+use crate::GatewayTunnelCreateParams;
+use crate::GatewayTunnelCreateResponse;
+use crate::GatewayTunnelCreateResult;
+use crate::GatewayTunnelProbeResponse;
+use crate::GatewayTunnelStatusResponse;
+use crate::GatewayTunnelSyncWebhookUrlParams;
+use crate::GatewayTunnelSyncWebhookUrlResponse;
+use crate::ImageStoryboardSlotInput;
 use crate::InitializeParams;
 use crate::InitializeResponse;
 use crate::JsonRpcError;
@@ -123,6 +193,15 @@ use crate::KnowledgeUpdatePackStatusParams;
 use crate::KnowledgeUpdatePackStatusResponse;
 use crate::KnowledgeValidateContextRunParams;
 use crate::KnowledgeValidateContextRunResponse;
+use crate::LogArtifactEntry;
+use crate::LogClearResponse;
+use crate::LogEntry;
+use crate::LogListResponse;
+use crate::LogPersistedTailParams;
+use crate::LogPersistedTailResponse;
+use crate::LogStorageDiagnosticsResponse;
+use crate::ManagedObjective;
+use crate::ManagedObjectiveStatus;
 use crate::McpContent;
 use crate::McpPromptGetParams;
 use crate::McpPromptGetResponse;
@@ -148,6 +227,14 @@ use crate::McpToolCallWithCallerParams;
 use crate::McpToolListForContextParams;
 use crate::McpToolListResponse;
 use crate::McpToolSearchParams;
+use crate::MediaTaskArtifactAudioCompleteParams;
+use crate::MediaTaskArtifactAudioCreateParams;
+use crate::MediaTaskArtifactImageCreateParams;
+use crate::MediaTaskArtifactListFilters;
+use crate::MediaTaskArtifactListParams;
+use crate::MediaTaskArtifactListResponse;
+use crate::MediaTaskArtifactLookupParams;
+use crate::MediaTaskArtifactResponse;
 use crate::ModelListParams;
 use crate::ModelListResponse;
 use crate::ModelPreferencesListResponse;
@@ -195,10 +282,46 @@ use crate::ProjectMemoryReadResponse;
 use crate::RequestId;
 use crate::RuntimeOptions;
 use crate::ServerCapabilities;
+use crate::ServerDiagnosticsResponse;
 use crate::ServerInfo;
+use crate::SkillDownloadInstallParams;
+use crate::SkillDownloadInstallResponse;
+use crate::SkillInstalledDirectoriesListResponse;
 use crate::SkillListResponse;
+use crate::SkillLocalDetailInspectParams;
+use crate::SkillLocalDetailInspectResponse;
+use crate::SkillLocalImportParams;
+use crate::SkillLocalImportResponse;
+use crate::SkillLocalInspectParams;
+use crate::SkillLocalInspectResponse;
+use crate::SkillLocalRenameParams;
+use crate::SkillLocalRenameResponse;
+use crate::SkillManagementInstallParams;
+use crate::SkillManagementListParams;
+use crate::SkillManagementUninstallParams;
+use crate::SkillManagementWriteResponse;
+use crate::SkillMarketplaceBundleFile;
+use crate::SkillMarketplaceInstallParams;
+use crate::SkillMarketplaceInstallResponse;
+use crate::SkillPackageExportParams;
+use crate::SkillPackageExportResponse;
+use crate::SkillPackageLocalInspectParams;
+use crate::SkillPackageLocalInspectResponse;
+use crate::SkillPackageLocalInstallParams;
+use crate::SkillPackageLocalInstallResponse;
+use crate::SkillPackageLocalReplaceParams;
+use crate::SkillPackageLocalReplaceResponse;
 use crate::SkillReadParams;
 use crate::SkillReadResponse;
+use crate::SkillRemoteInspectParams;
+use crate::SkillRemoteInspectResponse;
+use crate::SkillRepositoryDeleteParams;
+use crate::SkillRepositoryEntry;
+use crate::SkillRepositoryListResponse;
+use crate::SkillRepositorySaveParams;
+use crate::SkillScaffoldCreateParams;
+use crate::SkillScaffoldCreateResponse;
+use crate::SupportBundleExportResponse;
 use crate::UsageStatsDailyTrendsListResponse;
 use crate::UsageStatsDailyUsage;
 use crate::UsageStatsModelRankingListResponse;
@@ -206,6 +329,18 @@ use crate::UsageStatsModelUsage;
 use crate::UsageStatsRangeParams;
 use crate::UsageStatsReadResponse;
 use crate::UsageStatsSummary;
+use crate::WechatChannelAccountListResponse;
+use crate::WechatChannelAccountRemoveParams;
+use crate::WechatChannelAccountRemoveResponse;
+use crate::WechatConfiguredAccount;
+use crate::WechatLoginStartParams;
+use crate::WechatLoginStartResponse;
+use crate::WechatLoginWaitParams;
+use crate::WechatLoginWaitResponse;
+use crate::WechatRuntimeModelSetParams;
+use crate::WechatRuntimeModelSetResponse;
+use crate::WindowsStartupCheck;
+use crate::WindowsStartupDiagnosticsResponse;
 use crate::WorkspaceEnsureParams;
 use crate::WorkspaceEnsureReadyResponse;
 use crate::WorkspaceListResponse;
@@ -376,11 +511,94 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<EvidenceExportResponse>("EvidenceExportResponse"),
         typed_schema::<EvidencePackSummary>("EvidencePackSummary"),
         typed_schema::<EvidencePackArtifact>("EvidencePackArtifact"),
+        typed_schema::<AgentSessionHandoffBundleExportParams>(
+            "AgentSessionHandoffBundleExportParams",
+        ),
+        typed_schema::<AgentSessionHandoffBundleExportResponse>(
+            "AgentSessionHandoffBundleExportResponse",
+        ),
+        typed_schema::<AgentSessionHandoffArtifact>("AgentSessionHandoffArtifact"),
+        typed_schema::<AgentSessionReplayCaseExportParams>("AgentSessionReplayCaseExportParams"),
+        typed_schema::<AgentSessionReplayCaseExportResponse>(
+            "AgentSessionReplayCaseExportResponse",
+        ),
+        typed_schema::<AgentSessionAnalysisHandoffExportParams>(
+            "AgentSessionAnalysisHandoffExportParams",
+        ),
+        typed_schema::<AgentSessionAnalysisHandoffExportResponse>(
+            "AgentSessionAnalysisHandoffExportResponse",
+        ),
+        typed_schema::<AgentSessionReviewDecisionTemplateExportParams>(
+            "AgentSessionReviewDecisionTemplateExportParams",
+        ),
+        typed_schema::<AgentSessionReviewDecisionTemplateExportResponse>(
+            "AgentSessionReviewDecisionTemplateExportResponse",
+        ),
+        typed_schema::<AgentSessionReviewDecisionSaveParams>(
+            "AgentSessionReviewDecisionSaveParams",
+        ),
+        typed_schema::<AgentSessionReviewDecision>("AgentSessionReviewDecision"),
         typed_schema::<AgentSessionListParams>("AgentSessionListParams"),
         typed_schema::<AgentSessionOverview>("AgentSessionOverview"),
         typed_schema::<AgentSessionListResponse>("AgentSessionListResponse"),
         typed_schema::<AgentSessionUpdateParams>("AgentSessionUpdateParams"),
         typed_schema::<AgentSessionUpdateResponse>("AgentSessionUpdateResponse"),
+        typed_schema::<ManagedObjectiveStatus>("ManagedObjectiveStatus"),
+        typed_schema::<ManagedObjective>("ManagedObjective"),
+        typed_schema::<AgentSessionObjectiveReadParams>("AgentSessionObjectiveReadParams"),
+        typed_schema::<AgentSessionObjectiveReadResponse>("AgentSessionObjectiveReadResponse"),
+        typed_schema::<AgentSessionObjectiveSetParams>("AgentSessionObjectiveSetParams"),
+        typed_schema::<AgentSessionObjectiveSetResponse>("AgentSessionObjectiveSetResponse"),
+        typed_schema::<AgentSessionObjectiveStatusUpdateParams>(
+            "AgentSessionObjectiveStatusUpdateParams",
+        ),
+        typed_schema::<AgentSessionObjectiveStatusUpdateResponse>(
+            "AgentSessionObjectiveStatusUpdateResponse",
+        ),
+        typed_schema::<AgentSessionObjectiveClearParams>("AgentSessionObjectiveClearParams"),
+        typed_schema::<AgentSessionObjectiveClearResponse>("AgentSessionObjectiveClearResponse"),
+        typed_schema::<AgentSessionObjectiveContinueParams>("AgentSessionObjectiveContinueParams"),
+        typed_schema::<AgentSessionObjectiveContinueResponse>(
+            "AgentSessionObjectiveContinueResponse",
+        ),
+        typed_schema::<AgentSessionObjectiveAuditParams>("AgentSessionObjectiveAuditParams"),
+        typed_schema::<AgentSessionObjectiveAuditResponse>("AgentSessionObjectiveAuditResponse"),
+        typed_schema::<AgentSessionCompactParams>("AgentSessionCompactParams"),
+        typed_schema::<AgentSessionCompactResponse>("AgentSessionCompactResponse"),
+        typed_schema::<AgentSessionThreadResumeParams>("AgentSessionThreadResumeParams"),
+        typed_schema::<AgentSessionThreadResumeResponse>("AgentSessionThreadResumeResponse"),
+        typed_schema::<AgentSessionQueuedTurnRemoveParams>("AgentSessionQueuedTurnRemoveParams"),
+        typed_schema::<AgentSessionQueuedTurnRemoveResponse>(
+            "AgentSessionQueuedTurnRemoveResponse",
+        ),
+        typed_schema::<AgentSessionQueuedTurnPromoteParams>("AgentSessionQueuedTurnPromoteParams"),
+        typed_schema::<AgentSessionQueuedTurnPromoteResponse>(
+            "AgentSessionQueuedTurnPromoteResponse",
+        ),
+        typed_schema::<AgentSessionFileCheckpointListParams>(
+            "AgentSessionFileCheckpointListParams",
+        ),
+        typed_schema::<AgentSessionFileCheckpointGetParams>("AgentSessionFileCheckpointGetParams"),
+        typed_schema::<AgentSessionFileCheckpointDiffParams>(
+            "AgentSessionFileCheckpointDiffParams",
+        ),
+        typed_schema::<AgentSessionFileCheckpointRestoreParams>(
+            "AgentSessionFileCheckpointRestoreParams",
+        ),
+        typed_schema::<AgentSessionFileCheckpointSummary>("AgentSessionFileCheckpointSummary"),
+        typed_schema::<AgentSessionFileCheckpointThreadSummary>(
+            "AgentSessionFileCheckpointThreadSummary",
+        ),
+        typed_schema::<AgentSessionFileCheckpointListResponse>(
+            "AgentSessionFileCheckpointListResponse",
+        ),
+        typed_schema::<AgentSessionFileCheckpointDetail>("AgentSessionFileCheckpointDetail"),
+        typed_schema::<AgentSessionFileCheckpointDiffResponse>(
+            "AgentSessionFileCheckpointDiffResponse",
+        ),
+        typed_schema::<AgentSessionFileCheckpointRestoreResponse>(
+            "AgentSessionFileCheckpointRestoreResponse",
+        ),
         typed_schema::<WorkspaceReadParams>("WorkspaceReadParams"),
         typed_schema::<WorkspacePathReadParams>("WorkspacePathReadParams"),
         typed_schema::<WorkspaceProjectPathResolveParams>("WorkspaceProjectPathResolveParams"),
@@ -393,6 +611,85 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<SkillReadParams>("SkillReadParams"),
         typed_schema::<SkillListResponse>("SkillListResponse"),
         typed_schema::<SkillReadResponse>("SkillReadResponse"),
+        typed_schema::<SkillManagementListParams>("SkillManagementListParams"),
+        typed_schema::<SkillManagementInstallParams>("SkillManagementInstallParams"),
+        typed_schema::<SkillManagementUninstallParams>("SkillManagementUninstallParams"),
+        typed_schema::<SkillRepositoryEntry>("SkillRepositoryEntry"),
+        typed_schema::<SkillRepositorySaveParams>("SkillRepositorySaveParams"),
+        typed_schema::<SkillRepositoryDeleteParams>("SkillRepositoryDeleteParams"),
+        typed_schema::<SkillLocalInspectParams>("SkillLocalInspectParams"),
+        typed_schema::<SkillScaffoldCreateParams>("SkillScaffoldCreateParams"),
+        typed_schema::<SkillLocalImportParams>("SkillLocalImportParams"),
+        typed_schema::<SkillRemoteInspectParams>("SkillRemoteInspectParams"),
+        typed_schema::<SkillManagementWriteResponse>("SkillManagementWriteResponse"),
+        typed_schema::<SkillRepositoryListResponse>("SkillRepositoryListResponse"),
+        typed_schema::<SkillInstalledDirectoriesListResponse>(
+            "SkillInstalledDirectoriesListResponse",
+        ),
+        typed_schema::<SkillLocalInspectResponse>("SkillLocalInspectResponse"),
+        typed_schema::<SkillScaffoldCreateResponse>("SkillScaffoldCreateResponse"),
+        typed_schema::<SkillLocalImportResponse>("SkillLocalImportResponse"),
+        typed_schema::<SkillRemoteInspectResponse>("SkillRemoteInspectResponse"),
+        typed_schema::<SkillLocalDetailInspectParams>("SkillLocalDetailInspectParams"),
+        typed_schema::<SkillLocalRenameParams>("SkillLocalRenameParams"),
+        typed_schema::<SkillPackageLocalReplaceParams>("SkillPackageLocalReplaceParams"),
+        typed_schema::<SkillLocalDetailInspectResponse>("SkillLocalDetailInspectResponse"),
+        typed_schema::<SkillLocalRenameResponse>("SkillLocalRenameResponse"),
+        typed_schema::<SkillPackageLocalReplaceResponse>("SkillPackageLocalReplaceResponse"),
+        typed_schema::<SkillPackageLocalInspectParams>("SkillPackageLocalInspectParams"),
+        typed_schema::<SkillPackageLocalInstallParams>("SkillPackageLocalInstallParams"),
+        typed_schema::<SkillPackageExportParams>("SkillPackageExportParams"),
+        typed_schema::<SkillMarketplaceBundleFile>("SkillMarketplaceBundleFile"),
+        typed_schema::<SkillMarketplaceInstallParams>("SkillMarketplaceInstallParams"),
+        typed_schema::<SkillDownloadInstallParams>("SkillDownloadInstallParams"),
+        typed_schema::<SkillPackageLocalInspectResponse>("SkillPackageLocalInspectResponse"),
+        typed_schema::<SkillPackageLocalInstallResponse>("SkillPackageLocalInstallResponse"),
+        typed_schema::<SkillMarketplaceInstallResponse>("SkillMarketplaceInstallResponse"),
+        typed_schema::<SkillDownloadInstallResponse>("SkillDownloadInstallResponse"),
+        typed_schema::<SkillPackageExportResponse>("SkillPackageExportResponse"),
+        typed_schema::<GatewayChannelStartParams>("GatewayChannelStartParams"),
+        typed_schema::<GatewayChannelStopParams>("GatewayChannelStopParams"),
+        typed_schema::<GatewayChannelStatusParams>("GatewayChannelStatusParams"),
+        typed_schema::<GatewayChannelStatusResponse>("GatewayChannelStatusResponse"),
+        typed_schema::<ChannelProbeParams>("ChannelProbeParams"),
+        typed_schema::<ChannelProbeResponse>("ChannelProbeResponse"),
+        typed_schema::<WechatLoginStartParams>("WechatLoginStartParams"),
+        typed_schema::<WechatLoginStartResponse>("WechatLoginStartResponse"),
+        typed_schema::<WechatLoginWaitParams>("WechatLoginWaitParams"),
+        typed_schema::<WechatLoginWaitResponse>("WechatLoginWaitResponse"),
+        typed_schema::<WechatConfiguredAccount>("WechatConfiguredAccount"),
+        typed_schema::<WechatChannelAccountListResponse>("WechatChannelAccountListResponse"),
+        typed_schema::<WechatChannelAccountRemoveParams>("WechatChannelAccountRemoveParams"),
+        typed_schema::<WechatChannelAccountRemoveResponse>("WechatChannelAccountRemoveResponse"),
+        typed_schema::<WechatRuntimeModelSetParams>("WechatRuntimeModelSetParams"),
+        typed_schema::<WechatRuntimeModelSetResponse>("WechatRuntimeModelSetResponse"),
+        typed_schema::<GatewayTunnelCreateParams>("GatewayTunnelCreateParams"),
+        typed_schema::<GatewayTunnelCreateResult>("GatewayTunnelCreateResult"),
+        typed_schema::<GatewayTunnelCreateResponse>("GatewayTunnelCreateResponse"),
+        typed_schema::<GatewayTunnelProbeResponse>("GatewayTunnelProbeResponse"),
+        typed_schema::<GatewayTunnelStatusResponse>("GatewayTunnelStatusResponse"),
+        typed_schema::<GatewayTunnelCloudflaredDetectResponse>(
+            "GatewayTunnelCloudflaredDetectResponse",
+        ),
+        typed_schema::<GatewayTunnelCloudflaredInstallParams>(
+            "GatewayTunnelCloudflaredInstallParams",
+        ),
+        typed_schema::<GatewayTunnelCloudflaredInstallResponse>(
+            "GatewayTunnelCloudflaredInstallResponse",
+        ),
+        typed_schema::<GatewayTunnelSyncWebhookUrlParams>("GatewayTunnelSyncWebhookUrlParams"),
+        typed_schema::<GatewayTunnelSyncWebhookUrlResponse>("GatewayTunnelSyncWebhookUrlResponse"),
+        typed_schema::<ImageStoryboardSlotInput>("ImageStoryboardSlotInput"),
+        typed_schema::<MediaTaskArtifactImageCreateParams>("MediaTaskArtifactImageCreateParams"),
+        typed_schema::<MediaTaskArtifactAudioCreateParams>("MediaTaskArtifactAudioCreateParams"),
+        typed_schema::<MediaTaskArtifactAudioCompleteParams>(
+            "MediaTaskArtifactAudioCompleteParams",
+        ),
+        typed_schema::<MediaTaskArtifactLookupParams>("MediaTaskArtifactLookupParams"),
+        typed_schema::<MediaTaskArtifactListParams>("MediaTaskArtifactListParams"),
+        typed_schema::<MediaTaskArtifactListFilters>("MediaTaskArtifactListFilters"),
+        typed_schema::<MediaTaskArtifactResponse>("MediaTaskArtifactResponse"),
+        typed_schema::<MediaTaskArtifactListResponse>("MediaTaskArtifactListResponse"),
         typed_schema::<WorkspaceSkillBindingsListParams>("WorkspaceSkillBindingsListParams"),
         typed_schema::<WorkspaceSkillBindingsListResponse>("WorkspaceSkillBindingsListResponse"),
         typed_schema::<WorkspaceRegisteredSkillsListParams>("WorkspaceRegisteredSkillsListParams"),
@@ -418,6 +715,9 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentAppDeleteDataPostDeleteResidualAudit>(
             "AgentAppDeleteDataPostDeleteResidualAudit",
         ),
+        typed_schema::<AgentAppShellPrepareParams>("AgentAppShellPrepareParams"),
+        typed_schema::<AgentAppShellPrepareResponse>("AgentAppShellPrepareResponse"),
+        typed_schema::<AgentAppShellPackageMount>("AgentAppShellPackageMount"),
         typed_schema::<AgentAppUiRuntimeStartParams>("AgentAppUiRuntimeStartParams"),
         typed_schema::<AgentAppUiRuntimeStatusParams>("AgentAppUiRuntimeStatusParams"),
         typed_schema::<AgentAppUiRuntimeStopParams>("AgentAppUiRuntimeStopParams"),
@@ -491,6 +791,25 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<McpResourceListResponse>("McpResourceListResponse"),
         typed_schema::<ProjectMemoryReadParams>("ProjectMemoryReadParams"),
         typed_schema::<ProjectMemoryReadResponse>("ProjectMemoryReadResponse"),
+        typed_schema::<LogEntry>("LogEntry"),
+        typed_schema::<LogListResponse>("LogListResponse"),
+        typed_schema::<LogPersistedTailParams>("LogPersistedTailParams"),
+        typed_schema::<LogPersistedTailResponse>("LogPersistedTailResponse"),
+        typed_schema::<LogClearResponse>("LogClearResponse"),
+        typed_schema::<LogArtifactEntry>("LogArtifactEntry"),
+        typed_schema::<LogStorageDiagnosticsResponse>("LogStorageDiagnosticsResponse"),
+        typed_schema::<SupportBundleExportResponse>("SupportBundleExportResponse"),
+        typed_schema::<DiagnosticsMetricConfig>("DiagnosticsMetricConfig"),
+        typed_schema::<DiagnosticsTelemetrySummary>("DiagnosticsTelemetrySummary"),
+        typed_schema::<DiagnosticsCapabilityRoutingMetricsSnapshot>(
+            "DiagnosticsCapabilityRoutingMetricsSnapshot",
+        ),
+        typed_schema::<DiagnosticsResponseCacheDiagnostics>("DiagnosticsResponseCacheDiagnostics"),
+        typed_schema::<DiagnosticsRequestDedupDiagnostics>("DiagnosticsRequestDedupDiagnostics"),
+        typed_schema::<DiagnosticsIdempotencyDiagnostics>("DiagnosticsIdempotencyDiagnostics"),
+        typed_schema::<ServerDiagnosticsResponse>("ServerDiagnosticsResponse"),
+        typed_schema::<WindowsStartupCheck>("WindowsStartupCheck"),
+        typed_schema::<WindowsStartupDiagnosticsResponse>("WindowsStartupDiagnosticsResponse"),
         typed_schema::<UsageStatsRangeParams>("UsageStatsRangeParams"),
         typed_schema::<UsageStatsSummary>("UsageStatsSummary"),
         typed_schema::<UsageStatsReadResponse>("UsageStatsReadResponse"),
@@ -559,6 +878,9 @@ fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentSessionTurnCancelResponse>("AgentSessionTurnCancelResponse"),
         typed_schema::<AgentSessionActionType>("AgentSessionActionType"),
         typed_schema::<AgentSessionActionScope>("AgentSessionActionScope"),
+        typed_schema::<AgentSessionActionReplayParams>("AgentSessionActionReplayParams"),
+        typed_schema::<AgentSessionActionReplayResponse>("AgentSessionActionReplayResponse"),
+        typed_schema::<AgentSessionReplayedActionRequired>("AgentSessionReplayedActionRequired"),
         typed_schema::<AgentSessionActionRespondParams>("AgentSessionActionRespondParams"),
         typed_schema::<AgentSessionActionRespondResponse>("AgentSessionActionRespondResponse"),
         typed_schema::<AgentSessionEventParams>("AgentSessionEventParams"),

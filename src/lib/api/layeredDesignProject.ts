@@ -96,10 +96,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function assertNotErrorEnvelope(command: string, value: unknown): void {
+  if (isRecord(value) && "error" in value) {
+    throw new Error(`${command} returned an error envelope`);
+  }
+}
+
 function assertSaveLayeredDesignProjectExportOutput(
   command: string,
   value: unknown,
 ): asserts value is SaveLayeredDesignProjectExportOutput {
+  assertNotErrorEnvelope(command, value);
   if (
     !isRecord(value) ||
     typeof value.projectRootPath !== "string" ||
@@ -124,6 +131,7 @@ function assertReadLayeredDesignProjectExportOutput(
   command: string,
   value: unknown,
 ): asserts value is ReadLayeredDesignProjectExportOutput {
+  assertNotErrorEnvelope(command, value);
   if (
     !isRecord(value) ||
     typeof value.projectRootPath !== "string" ||

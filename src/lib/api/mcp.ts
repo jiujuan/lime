@@ -24,6 +24,7 @@ import {
   type McpResourceListResponse as AppServerMcpResourceListResponse,
   type McpResourceReadResponse as AppServerMcpResourceReadResponse,
   type McpServerImportFromAppResponse as AppServerMcpServerImportFromAppResponse,
+  type McpServerLifecycleResponse as AppServerMcpServerLifecycleResponse,
   type McpServerListResponse as AppServerMcpServerListResponse,
   type McpServerStatusListResponse as AppServerMcpServerStatusListResponse,
   type McpToolCallResponse as AppServerMcpToolCallResponse,
@@ -152,6 +153,107 @@ function assertArrayField<T>(
   return (response as Record<string, T[]>)[field];
 }
 
+function assertRecord(
+  method: string,
+  response: unknown,
+  description: string,
+): Record<string, unknown> {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    throw new Error(`${method} did not return ${description}`);
+  }
+  return response as Record<string, unknown>;
+}
+
+function assertServerListResponse(method: string, response: unknown): void {
+  assertArrayField<McpServer>(method, response, "servers");
+}
+
+function assertLifecycleResponse(method: string, response: unknown): void {
+  const record = assertRecord(method, response, "empty lifecycle result");
+  if (Object.keys(record).length > 0) {
+    throw new Error(`${method} did not return empty lifecycle result`);
+  }
+}
+
+function isMcpContent(value: unknown): value is McpContent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.type === "text") {
+    return typeof record.text === "string";
+  }
+  if (record.type === "image") {
+    return (
+      typeof record.data === "string" && typeof record.mime_type === "string"
+    );
+  }
+  if (record.type === "resource") {
+    return (
+      typeof record.uri === "string" &&
+      (record.text === undefined || typeof record.text === "string") &&
+      (record.blob === undefined || typeof record.blob === "string")
+    );
+  }
+  return false;
+}
+
+function assertMcpToolResult(
+  method: string,
+  response: unknown,
+): McpToolResult {
+  const record = assertRecord(method, response, "tool result");
+  if (
+    !Array.isArray(record.content) ||
+    typeof record.is_error !== "boolean" ||
+    !record.content.every(isMcpContent)
+  ) {
+    throw new Error(`${method} did not return tool result`);
+  }
+  return response as McpToolResult;
+}
+
+function assertMcpPromptResult(
+  method: string,
+  response: unknown,
+): McpPromptResult {
+  const record = assertRecord(method, response, "prompt result");
+  const hasValidDescription =
+    record.description === undefined || typeof record.description === "string";
+  const hasValidMessages =
+    Array.isArray(record.messages) &&
+    record.messages.every((message) => {
+      if (!message || typeof message !== "object" || Array.isArray(message)) {
+        return false;
+      }
+      const messageRecord = message as Record<string, unknown>;
+      return (
+        typeof messageRecord.role === "string" &&
+        isMcpContent(messageRecord.content)
+      );
+    });
+  if (!hasValidDescription || !hasValidMessages) {
+    throw new Error(`${method} did not return prompt result`);
+  }
+  return response as McpPromptResult;
+}
+
+function assertMcpResourceContent(
+  method: string,
+  response: unknown,
+): McpResourceContent {
+  const record = assertRecord(method, response, "resource content");
+  if (
+    typeof record.uri !== "string" ||
+    (record.mime_type !== undefined && typeof record.mime_type !== "string") ||
+    (record.text !== undefined && typeof record.text !== "string") ||
+    (record.blob !== undefined && typeof record.blob !== "string")
+  ) {
+    throw new Error(`${method} did not return resource content`);
+  }
+  return response as McpResourceContent;
+}
+
 // ============================================================================
 // 提示词类型
 // ============================================================================
@@ -224,19 +326,28 @@ export const mcpApi = {
     requestMcpAppServer<AppServerMcpServerListResponse>(
       METHOD_MCP_SERVER_CREATE,
       { server },
-    ).then(() => undefined),
+    ).then((response) => {
+      assertServerListResponse(METHOD_MCP_SERVER_CREATE, response);
+      return undefined;
+    }),
 
   updateServer: (server: McpServer): Promise<void> =>
     requestMcpAppServer<AppServerMcpServerListResponse>(
       METHOD_MCP_SERVER_UPDATE,
       { server },
-    ).then(() => undefined),
+    ).then((response) => {
+      assertServerListResponse(METHOD_MCP_SERVER_UPDATE, response);
+      return undefined;
+    }),
 
   deleteServer: (id: string): Promise<void> =>
     requestMcpAppServer<AppServerMcpServerListResponse>(
       METHOD_MCP_SERVER_DELETE,
       { id },
-    ).then(() => undefined),
+    ).then((response) => {
+      assertServerListResponse(METHOD_MCP_SERVER_DELETE, response);
+      return undefined;
+    }),
 
   toggleServer: (
     id: string,
@@ -250,7 +361,10 @@ export const mcpApi = {
         appType,
         enabled,
       },
-    ).then(() => undefined),
+    ).then((response) => {
+      assertServerListResponse(METHOD_MCP_SERVER_ENABLED_SET, response);
+      return undefined;
+    }),
 
   /** 从外部应用导入 MCP 配置 */
   importFromApp: (appType: string): Promise<number> =>
@@ -263,6 +377,7 @@ export const mcpApi = {
           `${METHOD_MCP_SERVER_IMPORT_FROM_APP} did not return importedCount`,
         );
       }
+      assertServerListResponse(METHOD_MCP_SERVER_IMPORT_FROM_APP, response);
       return response.importedCount;
     }),
 
@@ -270,7 +385,10 @@ export const mcpApi = {
   syncAllToLive: (): Promise<void> =>
     requestMcpAppServer<AppServerMcpServerListResponse>(
       METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE,
-    ).then(() => undefined),
+    ).then((response) => {
+      assertServerListResponse(METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, response);
+      return undefined;
+    }),
 
   // --------------------------------------------------------------------------
   // 生命周期管理 API
@@ -290,13 +408,23 @@ export const mcpApi = {
 
   /** 启动 MCP 服务器 */
   startServer: (name: string): Promise<void> =>
-    requestMcpAppServer(METHOD_MCP_SERVER_START, { name }).then(
-      () => undefined,
-    ),
+    requestMcpAppServer<AppServerMcpServerLifecycleResponse>(
+      METHOD_MCP_SERVER_START,
+      { name },
+    ).then((response) => {
+      assertLifecycleResponse(METHOD_MCP_SERVER_START, response);
+      return undefined;
+    }),
 
   /** 停止 MCP 服务器 */
   stopServer: (name: string): Promise<void> =>
-    requestMcpAppServer(METHOD_MCP_SERVER_STOP, { name }).then(() => undefined),
+    requestMcpAppServer<AppServerMcpServerLifecycleResponse>(
+      METHOD_MCP_SERVER_STOP,
+      { name },
+    ).then((response) => {
+      assertLifecycleResponse(METHOD_MCP_SERVER_STOP, response);
+      return undefined;
+    }),
 
   // --------------------------------------------------------------------------
   // 工具管理 API
@@ -359,7 +487,7 @@ export const mcpApi = {
     requestMcpAppServer<AppServerMcpToolCallResponse>(METHOD_MCP_TOOL_CALL, {
       toolName,
       arguments: args,
-    }),
+    }).then((response) => assertMcpToolResult(METHOD_MCP_TOOL_CALL, response)),
 
   /** 带 caller 校验调用工具，`toolName` 当前格式为 `mcp__<server>__<tool>`。 */
   callToolWithCaller: (
@@ -374,6 +502,8 @@ export const mcpApi = {
         arguments: args,
         caller,
       },
+    ).then((response) =>
+      assertMcpToolResult(METHOD_MCP_TOOL_CALL_WITH_CALLER, response),
     ),
 
   // --------------------------------------------------------------------------
@@ -400,7 +530,9 @@ export const mcpApi = {
     requestMcpAppServer<AppServerMcpPromptGetResponse>(METHOD_MCP_PROMPT_GET, {
       name,
       arguments: args,
-    }),
+    }).then((response) =>
+      assertMcpPromptResult(METHOD_MCP_PROMPT_GET, response),
+    ),
 
   // --------------------------------------------------------------------------
   // 资源管理 API
@@ -423,5 +555,7 @@ export const mcpApi = {
     requestMcpAppServer<AppServerMcpResourceReadResponse>(
       METHOD_MCP_RESOURCE_READ,
       { uri },
+    ).then((response) =>
+      assertMcpResourceContent(METHOD_MCP_RESOURCE_READ, response),
     ),
 };

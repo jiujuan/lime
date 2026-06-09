@@ -424,63 +424,6 @@ impl RuntimeTurnPreparedExecution {
                 .await;
         }
 
-        match execute_image_skill_launch_direct_task(
-            skill_launch_host,
-            request,
-            session_id,
-            self.thread_id(),
-            self.turn_id(),
-            request_metadata,
-        ) {
-            Ok(true) => {
-                let terminal_timeline_port = RecorderRuntimeTurnTerminalTimelinePort::new(
-                    Arc::clone(&self.runtime_turn_execution_context.timeline_recorder),
-                );
-                return finalize_runtime_turn_result(
-                    event_port.clone(),
-                    &terminal_timeline_port,
-                    agent,
-                    host,
-                    &request.event_name,
-                    &self.runtime_turn_execution_context.timeline_recorder,
-                    workspace_root,
-                    &self
-                        .runtime_turn_execution_context
-                        .runtime_status_session_config,
-                    &self.runtime_turn_execution_context.profile_stream,
-                    &self.runtime_turn_execution_context.task_profile_refs,
-                    session_id,
-                    request_metadata,
-                    Ok(String::new()),
-                )
-                .await;
-            }
-            Ok(false) => {}
-            Err(error) => {
-                let terminal_timeline_port = RecorderRuntimeTurnTerminalTimelinePort::new(
-                    Arc::clone(&self.runtime_turn_execution_context.timeline_recorder),
-                );
-                return finalize_runtime_turn_result(
-                    event_port.clone(),
-                    &terminal_timeline_port,
-                    agent,
-                    host,
-                    &request.event_name,
-                    &self.runtime_turn_execution_context.timeline_recorder,
-                    workspace_root,
-                    &self
-                        .runtime_turn_execution_context
-                        .runtime_status_session_config,
-                    &self.runtime_turn_execution_context.profile_stream,
-                    &self.runtime_turn_execution_context.task_profile_refs,
-                    session_id,
-                    request_metadata,
-                    Err(error),
-                )
-                .await;
-            }
-        }
-
         self.runtime_turn_execution_context
             .execute_and_finalize(
                 event_port,

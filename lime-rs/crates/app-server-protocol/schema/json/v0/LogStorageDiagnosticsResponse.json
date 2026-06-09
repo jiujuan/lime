@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "LogArtifactEntry": {
+      "properties": {
+        "compressed": {
+          "type": "boolean"
+        },
+        "fileName": {
+          "type": "string"
+        },
+        "modifiedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "sizeBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "compressed",
+        "fileName",
+        "path",
+        "sizeBytes"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "currentLogExists": {
+      "type": "boolean"
+    },
+    "currentLogPath": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "currentLogSizeBytes": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "inMemoryLogCount": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "logDirectory": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "rawResponseFiles": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LogArtifactEntry"
+      },
+      "type": "array"
+    },
+    "relatedLogFiles": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LogArtifactEntry"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "currentLogExists",
+    "inMemoryLogCount"
+  ],
+  "title": "LogStorageDiagnosticsResponse",
+  "type": "object"
+}

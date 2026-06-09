@@ -58,11 +58,42 @@ describe("layeredDesignAnalysis API", () => {
   });
 
   it("recognizeLayeredDesignText 应保留合法 unsupported fallback", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        supported: false,
+        engine: "vision_unsupported",
+        blocks: [],
+        message: "当前平台不支持 native OCR",
+      })
+      .mockResolvedValueOnce({
+        supported: false,
+        engine: "vision_unsupported",
+        blocks: [],
+        message: "Electron host command is not supported",
+        error:
+          "Electron host command is not supported: recognize_layered_design_text",
+      });
+
+    const request = {
+      imageSrc: "data:image/png;base64,ZmFrZQ==",
+      width: 640,
+      height: 180,
+    };
+
+    await expect(recognizeLayeredDesignText(request)).resolves.toEqual({
       supported: false,
       engine: "vision_unsupported",
       blocks: [],
       message: "当前平台不支持 native OCR",
+    });
+    await expect(recognizeLayeredDesignText(request)).rejects.toThrow(
+      "recognize_layered_design_text returned an error envelope",
+    );
+  });
+
+  it("recognizeLayeredDesignText 收到 unsupported host error envelope 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      error: "Electron host command is not supported: recognize_layered_design_text",
     });
 
     await expect(
@@ -71,12 +102,9 @@ describe("layeredDesignAnalysis API", () => {
         width: 640,
         height: 180,
       }),
-    ).resolves.toEqual({
-      supported: false,
-      engine: "vision_unsupported",
-      blocks: [],
-      message: "当前平台不支持 native OCR",
-    });
+    ).rejects.toThrow(
+      "recognize_layered_design_text returned an error envelope",
+    );
   });
 
   it("recognizeLayeredDesignText 遇到 diagnostic facade 时应 fail closed", async () => {
@@ -184,10 +212,43 @@ describe("layeredDesignAnalysis API", () => {
   });
 
   it("analyzeLayeredDesignFlatImageNative 应保留合法 unsupported fallback", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce({
+    vi.mocked(safeInvoke)
+      .mockResolvedValueOnce({
+        supported: false,
+        engine: "native_heuristic_analyzer",
+        message: "当前来源不支持 native structured analyzer",
+      })
+      .mockResolvedValueOnce({
+        supported: false,
+        engine: "native_heuristic_analyzer",
+        message: "Electron host command is not supported",
+        error:
+          "Electron host command is not supported: analyze_layered_design_flat_image",
+      });
+
+    const request = {
+      image: {
+        src: "https://example.com/remote.png",
+        width: 900,
+        height: 1400,
+        mimeType: "image/png",
+      },
+    };
+
+    await expect(analyzeLayeredDesignFlatImageNative(request)).resolves.toEqual({
       supported: false,
       engine: "native_heuristic_analyzer",
       message: "当前来源不支持 native structured analyzer",
+    });
+    await expect(analyzeLayeredDesignFlatImageNative(request)).rejects.toThrow(
+      "analyze_layered_design_flat_image returned an error envelope",
+    );
+  });
+
+  it("analyzeLayeredDesignFlatImageNative 收到 unsupported host error envelope 时应 fail closed", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      error:
+        "Electron host command is not supported: analyze_layered_design_flat_image",
     });
 
     await expect(
@@ -199,11 +260,9 @@ describe("layeredDesignAnalysis API", () => {
           mimeType: "image/png",
         },
       }),
-    ).resolves.toEqual({
-      supported: false,
-      engine: "native_heuristic_analyzer",
-      message: "当前来源不支持 native structured analyzer",
-    });
+    ).rejects.toThrow(
+      "analyze_layered_design_flat_image returned an error envelope",
+    );
   });
 
   it("analyzeLayeredDesignFlatImageNative 遇到 diagnostic facade 时应 fail closed", async () => {

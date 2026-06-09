@@ -21,7 +21,6 @@ import { useSkills } from "@/hooks/useSkills";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { SkillCard } from "./SkillCard";
 import { RepoManagerPanel } from "./RepoManagerPanel";
-import { SkillExecutionDialog } from "./SkillExecutionDialog";
 import { SkillContentDialog } from "./SkillContentDialog";
 import { SkillScaffoldDialog } from "./SkillScaffoldDialog";
 import {
@@ -101,10 +100,6 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
     const [installingSkills, setInstallingSkills] = useState<Set<string>>(
       new Set(),
     );
-    // 执行对话框状态
-    const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
-    const [selectedSkillForExecution, setSelectedSkillForExecution] =
-      useState<Skill | null>(null);
     // 内容查看对话框状态
     const [contentDialogOpen, setContentDialogOpen] = useState(false);
     const [selectedSkillForContent, setSelectedSkillForContent] =
@@ -255,28 +250,6 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
         );
       } finally {
         setImportingLocalSkill(false);
-      }
-    };
-
-    /**
-     * 处理执行按钮点击
-     * 打开执行对话框并设置选中的 Skill
-     *
-     * @param skill - 要执行的 Skill
-     * @requirements 6.3
-     */
-    const handleExecute = (skill: Skill) => {
-      setSelectedSkillForExecution(skill);
-      setExecutionDialogOpen(true);
-    };
-
-    /**
-     * 处理执行对话框关闭
-     */
-    const handleExecutionDialogClose = (open: boolean) => {
-      setExecutionDialogOpen(open);
-      if (!open) {
-        setSelectedSkillForExecution(null);
       }
     };
 
@@ -571,7 +544,6 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                             skill={skill}
                             onInstall={handleInstall}
                             onUninstall={handleUninstall}
-                            onExecute={handleExecute}
                             onViewContent={handleViewContent}
                             installing={installingSkills.has(skill.directory)}
                           />
@@ -611,15 +583,6 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
           sourceHint={scaffoldDialogDraft?.sourceExcerpt ?? null}
           onBringBackToCreation={onBringScaffoldToCreation}
         />
-
-        {/* Skill 执行对话框 */}
-        {selectedSkillForExecution && (
-          <SkillExecutionDialog
-            skillName={selectedSkillForExecution.name}
-            open={executionDialogOpen}
-            onOpenChange={handleExecutionDialogClose}
-          />
-        )}
 
         {/* Skill 内容查看对话框 */}
         {selectedSkillForContent && (

@@ -14,8 +14,43 @@ export const METHOD_FILE_SYSTEM_CREATE_DIRECTORY = "fileSystem/createDirectory";
 export const METHOD_FILE_SYSTEM_RENAME_FILE = "fileSystem/renameFile";
 export const METHOD_FILE_SYSTEM_DELETE_FILE = "fileSystem/deleteFile";
 export const METHOD_EVIDENCE_EXPORT = "evidence/export";
+export const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
+  "agentSession/handoffBundle/export";
+export const METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT =
+  "agentSession/replayCase/export";
+export const METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT =
+  "agentSession/analysisHandoff/export";
+export const METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT =
+  "agentSession/reviewDecisionTemplate/export";
+export const METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE =
+  "agentSession/reviewDecision/save";
 export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
 export const METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
+export const METHOD_AGENT_SESSION_OBJECTIVE_READ =
+  "agentSession/objective/read";
+export const METHOD_AGENT_SESSION_OBJECTIVE_SET = "agentSession/objective/set";
+export const METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE =
+  "agentSession/objective/status/update";
+export const METHOD_AGENT_SESSION_OBJECTIVE_CLEAR =
+  "agentSession/objective/clear";
+export const METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE =
+  "agentSession/objective/continue";
+export const METHOD_AGENT_SESSION_OBJECTIVE_AUDIT =
+  "agentSession/objective/audit";
+export const METHOD_AGENT_SESSION_COMPACT = "agentSession/compact";
+export const METHOD_AGENT_SESSION_THREAD_RESUME = "agentSession/thread/resume";
+export const METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE =
+  "agentSession/queuedTurn/remove";
+export const METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE =
+  "agentSession/queuedTurn/promote";
+export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =
+  "agentSession/fileCheckpoint/list";
+export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET =
+  "agentSession/fileCheckpoint/get";
+export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =
+  "agentSession/fileCheckpoint/diff";
+export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE =
+  "agentSession/fileCheckpoint/restore";
 export const METHOD_WORKSPACE_LIST = "workspace/list";
 export const METHOD_WORKSPACE_READ = "workspace/read";
 export const METHOD_WORKSPACE_BY_PATH_READ = "workspace/byPath/read";
@@ -28,6 +63,28 @@ export const METHOD_WORKSPACE_PROJECT_PATH_RESOLVE =
 export const METHOD_WORKSPACE_ENSURE_READY = "workspace/ensureReady";
 export const METHOD_SKILL_LIST = "skill/list";
 export const METHOD_SKILL_READ = "skill/read";
+export const METHOD_SKILL_MANAGEMENT_LIST = "skillManagement/list";
+export const METHOD_SKILL_MANAGEMENT_INSTALL = "skillManagement/install";
+export const METHOD_SKILL_MANAGEMENT_UNINSTALL = "skillManagement/uninstall";
+export const METHOD_SKILL_REPOSITORY_LIST = "skillRepository/list";
+export const METHOD_SKILL_REPOSITORY_SAVE = "skillRepository/save";
+export const METHOD_SKILL_REPOSITORY_DELETE = "skillRepository/delete";
+export const METHOD_SKILL_CACHE_REFRESH = "skillCache/refresh";
+export const METHOD_SKILL_INSTALLED_DIRECTORIES_LIST =
+  "skillInstalledDirectories/list";
+export const METHOD_SKILL_LOCAL_INSPECT = "skillLocal/inspect";
+export const METHOD_SKILL_LOCAL_DETAIL_INSPECT = "skillLocal/detail/inspect";
+export const METHOD_SKILL_LOCAL_SCAFFOLD_CREATE =
+  "skillLocal/scaffold/create";
+export const METHOD_SKILL_LOCAL_IMPORT = "skillLocal/import";
+export const METHOD_SKILL_LOCAL_RENAME = "skillLocal/rename";
+export const METHOD_SKILL_REMOTE_INSPECT = "skillRemote/inspect";
+export const METHOD_SKILL_PACKAGE_LOCAL_INSPECT = "skillPackage/local/inspect";
+export const METHOD_SKILL_PACKAGE_LOCAL_INSTALL = "skillPackage/local/install";
+export const METHOD_SKILL_PACKAGE_LOCAL_REPLACE = "skillPackage/local/replace";
+export const METHOD_SKILL_PACKAGE_EXPORT = "skillPackage/export";
+export const METHOD_SKILL_MARKETPLACE_INSTALL = "skillMarketplace/install";
+export const METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL = "skillPackage/download/install";
 export const METHOD_WORKSPACE_SKILL_BINDINGS_LIST =
   "workspaceSkillBindings/list";
 export const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST =
@@ -94,6 +151,54 @@ export const METHOD_MCP_PROMPT_GET = "mcpPrompt/get";
 export const METHOD_MCP_RESOURCE_LIST = "mcpResource/list";
 export const METHOD_MCP_RESOURCE_READ = "mcpResource/read";
 export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
+export const METHOD_LOG_LIST = "log/list";
+export const METHOD_LOG_PERSISTED_TAIL = "log/persistedTail";
+export const METHOD_LOG_CLEAR = "log/clear";
+export const METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR =
+  "log/diagnosticHistory/clear";
+export const METHOD_DIAGNOSTICS_LOG_STORAGE_READ =
+  "diagnostics/logStorage/read";
+export const METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT =
+  "diagnostics/supportBundle/export";
+export const METHOD_DIAGNOSTICS_SERVER_READ = "diagnostics/server/read";
+export const METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ =
+  "diagnostics/windowsStartup/read";
+export const METHOD_GATEWAY_CHANNEL_START = "gatewayChannel/start";
+export const METHOD_GATEWAY_CHANNEL_STOP = "gatewayChannel/stop";
+export const METHOD_GATEWAY_CHANNEL_STATUS = "gatewayChannel/status";
+export const METHOD_TELEGRAM_CHANNEL_PROBE = "telegramChannel/probe";
+export const METHOD_FEISHU_CHANNEL_PROBE = "feishuChannel/probe";
+export const METHOD_DISCORD_CHANNEL_PROBE = "discordChannel/probe";
+export const METHOD_WECHAT_CHANNEL_PROBE = "wechatChannel/probe";
+export const METHOD_WECHAT_CHANNEL_LOGIN_START = "wechatChannel/login/start";
+export const METHOD_WECHAT_CHANNEL_LOGIN_WAIT = "wechatChannel/login/wait";
+export const METHOD_WECHAT_CHANNEL_ACCOUNT_LIST =
+  "wechatChannel/accounts/list";
+export const METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE =
+  "wechatChannel/account/remove";
+export const METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET =
+  "wechatChannel/runtimeModel/set";
+export const METHOD_GATEWAY_TUNNEL_PROBE = "gatewayTunnel/probe";
+export const METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT =
+  "gatewayTunnel/cloudflared/detect";
+export const METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL =
+  "gatewayTunnel/cloudflared/install";
+export const METHOD_GATEWAY_TUNNEL_CREATE = "gatewayTunnel/create";
+export const METHOD_GATEWAY_TUNNEL_START = "gatewayTunnel/start";
+export const METHOD_GATEWAY_TUNNEL_STOP = "gatewayTunnel/stop";
+export const METHOD_GATEWAY_TUNNEL_RESTART = "gatewayTunnel/restart";
+export const METHOD_GATEWAY_TUNNEL_STATUS = "gatewayTunnel/status";
+export const METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL =
+  "gatewayTunnel/syncWebhookUrl";
+export const METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE =
+  "mediaTaskArtifact/image/create";
+export const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE =
+  "mediaTaskArtifact/audio/create";
+export const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE =
+  "mediaTaskArtifact/audio/complete";
+export const METHOD_MEDIA_TASK_ARTIFACT_GET = "mediaTaskArtifact/get";
+export const METHOD_MEDIA_TASK_ARTIFACT_LIST = "mediaTaskArtifact/list";
+export const METHOD_MEDIA_TASK_ARTIFACT_CANCEL = "mediaTaskArtifact/cancel";
 export const METHOD_USAGE_STATS_READ = "usageStats/read";
 export const METHOD_USAGE_STATS_MODEL_RANKING_LIST =
   "usageStats/modelRanking/list";
@@ -103,6 +208,7 @@ export const METHOD_AGENT_SESSION_START = "agentSession/start";
 export const METHOD_AGENT_SESSION_READ = "agentSession/read";
 export const METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
 export const METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
+export const METHOD_AGENT_SESSION_ACTION_REPLAY = "agentSession/action/replay";
 export const METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
 export const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
@@ -161,8 +267,33 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
   { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
   { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
+  { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
+  { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
+  { method: METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT, kind: "request" },
+  {
+    method: METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+    kind: "request",
+  },
+  { method: METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, kind: "request" },
   { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
   { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
+  { method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" },
+  { method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" },
+  {
+    method: METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
+    kind: "request",
+  },
+  { method: METHOD_AGENT_SESSION_OBJECTIVE_CLEAR, kind: "request" },
+  { method: METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE, kind: "request" },
+  { method: METHOD_AGENT_SESSION_OBJECTIVE_AUDIT, kind: "request" },
+  { method: METHOD_AGENT_SESSION_COMPACT, kind: "request" },
+  { method: METHOD_AGENT_SESSION_THREAD_RESUME, kind: "request" },
+  { method: METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE, kind: "request" },
+  { method: METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE, kind: "request" },
+  { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST, kind: "request" },
+  { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET, kind: "request" },
+  { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF, kind: "request" },
+  { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, kind: "request" },
   { method: METHOD_WORKSPACE_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_READ, kind: "request" },
   { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
@@ -173,6 +304,47 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_WORKSPACE_ENSURE_READY, kind: "request" },
   { method: METHOD_SKILL_LIST, kind: "request" },
   { method: METHOD_SKILL_READ, kind: "request" },
+  { method: METHOD_SKILL_MANAGEMENT_LIST, kind: "request" },
+  { method: METHOD_SKILL_MANAGEMENT_INSTALL, kind: "request" },
+  { method: METHOD_SKILL_MANAGEMENT_UNINSTALL, kind: "request" },
+  { method: METHOD_SKILL_REPOSITORY_LIST, kind: "request" },
+  { method: METHOD_SKILL_REPOSITORY_SAVE, kind: "request" },
+  { method: METHOD_SKILL_REPOSITORY_DELETE, kind: "request" },
+  { method: METHOD_SKILL_CACHE_REFRESH, kind: "request" },
+  { method: METHOD_SKILL_INSTALLED_DIRECTORIES_LIST, kind: "request" },
+  { method: METHOD_SKILL_LOCAL_INSPECT, kind: "request" },
+  { method: METHOD_SKILL_LOCAL_DETAIL_INSPECT, kind: "request" },
+  { method: METHOD_SKILL_LOCAL_SCAFFOLD_CREATE, kind: "request" },
+  { method: METHOD_SKILL_LOCAL_IMPORT, kind: "request" },
+  { method: METHOD_SKILL_LOCAL_RENAME, kind: "request" },
+  { method: METHOD_SKILL_REMOTE_INSPECT, kind: "request" },
+  { method: METHOD_SKILL_PACKAGE_LOCAL_INSPECT, kind: "request" },
+  { method: METHOD_SKILL_PACKAGE_LOCAL_INSTALL, kind: "request" },
+  { method: METHOD_SKILL_PACKAGE_LOCAL_REPLACE, kind: "request" },
+  { method: METHOD_SKILL_PACKAGE_EXPORT, kind: "request" },
+  { method: METHOD_SKILL_MARKETPLACE_INSTALL, kind: "request" },
+  { method: METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL, kind: "request" },
+  { method: METHOD_GATEWAY_CHANNEL_START, kind: "request" },
+  { method: METHOD_GATEWAY_CHANNEL_STOP, kind: "request" },
+  { method: METHOD_GATEWAY_CHANNEL_STATUS, kind: "request" },
+  { method: METHOD_TELEGRAM_CHANNEL_PROBE, kind: "request" },
+  { method: METHOD_FEISHU_CHANNEL_PROBE, kind: "request" },
+  { method: METHOD_DISCORD_CHANNEL_PROBE, kind: "request" },
+  { method: METHOD_WECHAT_CHANNEL_PROBE, kind: "request" },
+  { method: METHOD_WECHAT_CHANNEL_LOGIN_START, kind: "request" },
+  { method: METHOD_WECHAT_CHANNEL_LOGIN_WAIT, kind: "request" },
+  { method: METHOD_WECHAT_CHANNEL_ACCOUNT_LIST, kind: "request" },
+  { method: METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE, kind: "request" },
+  { method: METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_PROBE, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_CREATE, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_START, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_STOP, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_RESTART, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_STATUS, kind: "request" },
+  { method: METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL, kind: "request" },
   { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
   { method: METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, kind: "request" },
@@ -230,6 +402,20 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
   { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
   { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
+  { method: METHOD_LOG_LIST, kind: "request" },
+  { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
+  { method: METHOD_LOG_CLEAR, kind: "request" },
+  { method: METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR, kind: "request" },
+  { method: METHOD_DIAGNOSTICS_LOG_STORAGE_READ, kind: "request" },
+  { method: METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT, kind: "request" },
+  { method: METHOD_DIAGNOSTICS_SERVER_READ, kind: "request" },
+  { method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, kind: "request" },
+  { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
+  { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
+  { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, kind: "request" },
+  { method: METHOD_MEDIA_TASK_ARTIFACT_GET, kind: "request" },
+  { method: METHOD_MEDIA_TASK_ARTIFACT_LIST, kind: "request" },
+  { method: METHOD_MEDIA_TASK_ARTIFACT_CANCEL, kind: "request" },
   { method: METHOD_USAGE_STATS_READ, kind: "request" },
   { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
   { method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST, kind: "request" },
@@ -266,6 +452,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_SESSION_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
+  { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
   { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
   { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
 ] as const satisfies readonly AppServerMethodSpec[];
@@ -523,6 +710,148 @@ export type EvidencePackArtifact = {
   bytes: number;
 };
 
+export type AgentSessionHandoffBundleExportParams = {
+  sessionId: string;
+  locale?: string;
+};
+
+export type AgentSessionHandoffBundleExportResponse = {
+  sessionId: string;
+  threadId: string;
+  workspaceId?: string;
+  workspaceRoot: string;
+  bundleRelativeRoot: string;
+  bundleAbsoluteRoot: string;
+  exportedAt: string;
+  threadStatus: string;
+  latestTurnStatus?: string;
+  pendingRequestCount: number;
+  queuedTurnCount: number;
+  activeSubagentCount: number;
+  todoTotal: number;
+  todoPending: number;
+  todoInProgress: number;
+  todoCompleted: number;
+  artifacts: AgentSessionHandoffArtifact[];
+};
+
+export type AgentSessionHandoffArtifact = {
+  kind: string;
+  title: string;
+  relativePath: string;
+  absolutePath: string;
+  bytes: number;
+};
+
+export type AgentSessionReplayCaseExportParams = {
+  sessionId: string;
+  locale?: string;
+};
+
+export type AgentSessionReplayCaseExportResponse = {
+  sessionId: string;
+  threadId: string;
+  workspaceId?: string;
+  workspaceRoot: string;
+  replayRelativeRoot: string;
+  replayAbsoluteRoot: string;
+  handoffBundleRelativeRoot: string;
+  evidencePackRelativeRoot: string;
+  exportedAt: string;
+  threadStatus: string;
+  latestTurnStatus?: string;
+  pendingRequestCount: number;
+  queuedTurnCount: number;
+  linkedHandoffArtifactCount: number;
+  linkedEvidenceArtifactCount: number;
+  recentArtifactCount: number;
+  artifacts: AgentSessionHandoffArtifact[];
+};
+
+export type AgentSessionAnalysisHandoffExportParams = {
+  sessionId: string;
+  locale?: string;
+};
+
+export type AgentSessionAnalysisHandoffExportResponse = {
+  sessionId: string;
+  threadId: string;
+  workspaceId?: string;
+  workspaceRoot: string;
+  sanitizedWorkspaceRoot: string;
+  analysisRelativeRoot: string;
+  analysisAbsoluteRoot: string;
+  handoffBundleRelativeRoot: string;
+  evidencePackRelativeRoot: string;
+  replayCaseRelativeRoot: string;
+  exportedAt: string;
+  threadStatus: string;
+  latestTurnStatus?: string;
+  pendingRequestCount: number;
+  queuedTurnCount: number;
+  title: string;
+  copyPrompt: string;
+  artifacts: AgentSessionHandoffArtifact[];
+};
+
+export type AgentSessionReviewDecisionTemplateExportParams = {
+  sessionId: string;
+  locale?: string;
+};
+
+export type AgentSessionReviewDecisionSaveParams = {
+  sessionId: string;
+  decisionStatus: string;
+  decisionSummary?: string;
+  chosenFixStrategy?: string;
+  riskLevel: string;
+  riskTags?: string[];
+  humanReviewer?: string;
+  followupActions?: string[];
+  regressionRequirements?: string[];
+  notes?: string;
+  locale?: string;
+};
+
+export type AgentSessionReviewDecision = {
+  decisionStatus: string;
+  decisionSummary?: string;
+  chosenFixStrategy?: string;
+  riskLevel: string;
+  riskTags: string[];
+  humanReviewer?: string;
+  followupActions: string[];
+  regressionRequirements: string[];
+  notes?: string;
+};
+
+export type AgentSessionReviewDecisionTemplateExportResponse = {
+  sessionId: string;
+  threadId: string;
+  workspaceId?: string;
+  workspaceRoot: string;
+  reviewRelativeRoot: string;
+  reviewAbsoluteRoot: string;
+  analysisRelativeRoot: string;
+  analysisAbsoluteRoot: string;
+  handoffBundleRelativeRoot: string;
+  evidencePackRelativeRoot: string;
+  replayCaseRelativeRoot: string;
+  exportedAt: string;
+  threadStatus: string;
+  latestTurnStatus?: string;
+  pendingRequestCount: number;
+  queuedTurnCount: number;
+  title: string;
+  defaultDecisionStatus: string;
+  decision: AgentSessionReviewDecision;
+  decisionStatusOptions: string[];
+  riskLevelOptions: string[];
+  reviewChecklist: string[];
+  analysisArtifacts: AgentSessionHandoffArtifact[];
+  artifacts: AgentSessionHandoffArtifact[];
+};
+
 export type BusinessObjectRef = {
   kind: string;
   id: string;
@@ -599,6 +928,27 @@ export type AgentSessionActionScope = {
   sessionId?: string;
   threadId?: string;
   turnId?: string;
+};
+
+export type AgentSessionActionReplayParams = {
+  sessionId: string;
+  requestId: string;
+};
+
+export type AgentSessionReplayedActionRequired = {
+  type: "action_required";
+  requestId: string;
+  actionType: AgentSessionActionType;
+  toolName?: string;
+  arguments?: unknown;
+  prompt?: string;
+  questions?: unknown;
+  requestedSchema?: unknown;
+  scope?: AgentSessionActionScope;
+};
+
+export type AgentSessionActionReplayResponse = {
+  action?: AgentSessionReplayedActionRequired;
 };
 
 export type AgentSessionActionRespondParams = {
@@ -700,6 +1050,228 @@ export type AgentSessionUpdateResponse = {
   session: AgentSessionOverview;
 };
 
+export type ManagedObjectiveStatus =
+  | "active"
+  | "verifying"
+  | "needs_input"
+  | "blocked"
+  | "budget_limited"
+  | "paused"
+  | "completed"
+  | "failed";
+
+export type ManagedObjective = {
+  objectiveId: string;
+  workspaceId?: string;
+  ownerKind: string;
+  ownerId: string;
+  objectiveText: string;
+  successCriteria: string[];
+  status: ManagedObjectiveStatus;
+  budgetPolicy?: unknown;
+  riskPolicy?: unknown;
+  approvalPolicy?: unknown;
+  continuationPolicy?: unknown;
+  lastAuditSummary?: string;
+  lastEvidencePackRef?: string;
+  lastArtifactRefs: string[];
+  blockerReason?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentSessionObjectiveReadParams = {
+  sessionId: string;
+};
+
+export type AgentSessionObjectiveReadResponse = {
+  objective?: ManagedObjective;
+};
+
+export type AgentSessionObjectiveSetParams = {
+  sessionId: string;
+  workspaceId?: string;
+  objectiveText: string;
+  successCriteria?: string[];
+  budgetPolicy?: unknown;
+  riskPolicy?: unknown;
+  approvalPolicy?: unknown;
+  continuationPolicy?: unknown;
+};
+
+export type AgentSessionObjectiveSetResponse = {
+  objective: ManagedObjective;
+};
+
+export type AgentSessionObjectiveStatusUpdateParams = {
+  sessionId: string;
+  status: ManagedObjectiveStatus;
+  blockerReason?: string;
+};
+
+export type AgentSessionObjectiveStatusUpdateResponse = {
+  objective?: ManagedObjective;
+};
+
+export type AgentSessionObjectiveClearParams = {
+  sessionId: string;
+};
+
+export type AgentSessionObjectiveClearResponse = {
+  cleared: boolean;
+};
+
+export type AgentSessionObjectiveContinueParams = {
+  sessionId: string;
+  ownerKind?: string;
+  ownerId?: string;
+};
+
+export type AgentSessionObjectiveContinueResponse = {
+  submitted: boolean;
+  queuedTurnId: string;
+  objective: ManagedObjective;
+  turn: AgentTurn;
+};
+
+export type AgentSessionObjectiveAuditParams = {
+  sessionId: string;
+  ownerKind?: string;
+  ownerId?: string;
+};
+
+export type AgentSessionObjectiveAuditResponse = {
+  objective: ManagedObjective;
+};
+
+export type AgentSessionCompactParams = {
+  sessionId: string;
+  eventName?: string;
+};
+
+export type AgentSessionCompactResponse = {
+  session: AgentSession;
+  turns: AgentTurn[];
+  compacted: boolean;
+};
+
+export type AgentSessionThreadResumeParams = {
+  sessionId: string;
+};
+
+export type AgentSessionThreadResumeResponse = {
+  session: AgentSession;
+  turns: AgentTurn[];
+  resumed: boolean;
+};
+
+export type AgentSessionQueuedTurnRemoveParams = {
+  sessionId: string;
+  queuedTurnId: string;
+};
+
+export type AgentSessionQueuedTurnRemoveResponse = {
+  session: AgentSession;
+  turns: AgentTurn[];
+  queuedTurnId: string;
+  removed: boolean;
+};
+
+export type AgentSessionQueuedTurnPromoteParams = {
+  sessionId: string;
+  queuedTurnId: string;
+};
+
+export type AgentSessionQueuedTurnPromoteResponse = {
+  session: AgentSession;
+  turns: AgentTurn[];
+  queuedTurnId: string;
+  promoted: boolean;
+};
+
+export type AgentSessionFileCheckpointListParams = {
+  sessionId: string;
+};
+
+export type AgentSessionFileCheckpointGetParams = {
+  sessionId: string;
+  checkpointId: string;
+};
+
+export type AgentSessionFileCheckpointDiffParams = {
+  sessionId: string;
+  checkpointId: string;
+};
+
+export type AgentSessionFileCheckpointRestoreParams = {
+  sessionId: string;
+  checkpointId: string;
+  confirmRestore: boolean;
+  createBackup?: boolean;
+};
+
+export type AgentSessionFileCheckpointSummary = {
+  checkpointId: string;
+  turnId: string;
+  path: string;
+  source: string;
+  updatedAt: string;
+  versionNo?: number;
+  versionId?: string;
+  requestId?: string;
+  title?: string;
+  kind?: string;
+  status?: string;
+  previewText?: string;
+  snapshotPath?: string;
+  validationIssueCount: number;
+};
+
+export type AgentSessionFileCheckpointThreadSummary = {
+  count: number;
+  latestCheckpoint?: AgentSessionFileCheckpointSummary;
+};
+
+export type AgentSessionFileCheckpointListResponse = {
+  sessionId: string;
+  threadId: string;
+  checkpointCount: number;
+  checkpoints: AgentSessionFileCheckpointSummary[];
+};
+
+export type AgentSessionFileCheckpointDetail = {
+  sessionId: string;
+  threadId: string;
+  checkpoint: AgentSessionFileCheckpointSummary;
+  livePath: string;
+  snapshotPath: string;
+  checkpointDocument?: unknown;
+  liveDocument?: unknown;
+  versionHistory: unknown[];
+  validationIssues: string[];
+  metadata?: unknown;
+  content?: string;
+};
+
+export type AgentSessionFileCheckpointDiffResponse = {
+  sessionId: string;
+  threadId: string;
+  checkpoint: AgentSessionFileCheckpointSummary;
+  currentVersionId?: string;
+  previousVersionId?: string;
+  diff?: unknown;
+};
+
+export type AgentSessionFileCheckpointRestoreResponse = {
+  sessionId: string;
+  threadId: string;
+  checkpoint: AgentSessionFileCheckpointSummary;
+  livePath: string;
+  snapshotPath: string;
+  backupPath?: string | null;
+  restoredAt: string;
+};
+
 export type WorkspaceReadParams = {
   id: string;
 };
@@ -749,6 +1321,175 @@ export type SkillReadResponse = {
   skill: unknown;
 };
 
+export type SkillManagementListParams = {
+  app: string;
+  refreshRemote?: boolean;
+};
+
+export type SkillManagementInstallParams = {
+  app: string;
+  directory: string;
+};
+
+export type SkillManagementUninstallParams = {
+  app: string;
+  directory: string;
+};
+
+export type SkillRepositoryEntry = {
+  owner: string;
+  name: string;
+  branch: string;
+  enabled: boolean;
+};
+
+export type SkillRepositorySaveParams = {
+  repo: SkillRepositoryEntry;
+};
+
+export type SkillRepositoryDeleteParams = {
+  owner: string;
+  name: string;
+};
+
+export type SkillLocalInspectParams = {
+  app: string;
+  directory: string;
+};
+
+export type SkillScaffoldCreateParams = {
+  app: string;
+  request: unknown;
+};
+
+export type SkillLocalImportParams = {
+  app: string;
+  sourcePath: string;
+};
+
+export type SkillRemoteInspectParams = {
+  owner: string;
+  name: string;
+  branch: string;
+  directory: string;
+};
+
+export type SkillManagementWriteResponse = {
+  success: boolean;
+};
+
+export type SkillRepositoryListResponse = {
+  repos: SkillRepositoryEntry[];
+};
+
+export type SkillInstalledDirectoriesListResponse = {
+  directories: string[];
+};
+
+export type SkillLocalInspectResponse = {
+  inspection: unknown;
+};
+
+export type SkillScaffoldCreateResponse = {
+  inspection: unknown;
+};
+
+export type SkillLocalImportResponse = {
+  directory: string;
+};
+
+export type SkillRemoteInspectResponse = {
+  inspection: unknown;
+};
+
+export type SkillLocalDetailInspectParams = {
+  app: string;
+  directory: string;
+};
+
+export type SkillLocalRenameParams = {
+  app: string;
+  directory: string;
+  newDirectory: string;
+};
+
+export type SkillPackageLocalReplaceParams = {
+  app: string;
+  directory: string;
+  sourcePath: string;
+};
+
+export type SkillPackageLocalInspectParams = {
+  app: string;
+  sourcePath: string;
+};
+
+export type SkillPackageLocalInstallParams = {
+  app: string;
+  sourcePath: string;
+  skillName?: string;
+};
+
+export type SkillPackageExportParams = {
+  app: string;
+  directory: string;
+  targetPath: string;
+};
+
+export type SkillMarketplaceBundleFile = {
+  path: string;
+  content: string;
+  encoding?: string;
+  sha256?: string;
+};
+
+export type SkillMarketplaceInstallParams = {
+  app: string;
+  manifestVersion: string;
+  name: string;
+  aliases?: string[];
+  version: string;
+  contentHash?: string;
+  fileCount?: number;
+  files: SkillMarketplaceBundleFile[];
+};
+
+export type SkillDownloadInstallParams = {
+  app: string;
+  skillName: string;
+  downloadUrl: string;
+};
+
+export type SkillPackageLocalInspectResponse = {
+  directory: string;
+  inspection: unknown;
+  files: unknown[];
+};
+
+export type SkillLocalDetailInspectResponse = SkillPackageLocalInspectResponse;
+
+export type SkillLocalRenameResponse = {
+  directory: string;
+};
+
+export type SkillPackageLocalInstallResponse = {
+  directory: string;
+  inspection: unknown;
+};
+
+export type SkillPackageLocalReplaceResponse = SkillPackageLocalInstallResponse;
+
+export type SkillMarketplaceInstallResponse = SkillPackageLocalInstallResponse;
+
+export type SkillDownloadInstallResponse = SkillPackageLocalInstallResponse;
+
+export type SkillPackageExportResponse = {
+  directory: string;
+  outputPath: string;
+  fileCount: number;
+  bytesWritten: number;
+};
+
 export type WorkspaceSkillBindingsListParams = {
   workspaceRoot: string;
   caller?: string;
@@ -758,6 +1499,468 @@ export type WorkspaceSkillBindingsListParams = {
 
 export type WorkspaceSkillBindingsListResponse = {
   bindings: unknown;
+};
+
+export type LogEntry = {
+  timestamp: string;
+  level: string;
+  message: string;
+};
+
+export type LogListResponse = {
+  entries: LogEntry[];
+};
+
+export type LogPersistedTailParams = {
+  lines?: number;
+};
+
+export type LogPersistedTailResponse = {
+  entries: LogEntry[];
+};
+
+export type LogClearResponse = {
+  cleared: boolean;
+};
+
+export type LogArtifactEntry = {
+  fileName: string;
+  path: string;
+  sizeBytes: number;
+  modifiedAt?: string;
+  compressed: boolean;
+};
+
+export type LogStorageDiagnosticsResponse = {
+  logDirectory?: string;
+  currentLogPath?: string;
+  currentLogExists: boolean;
+  currentLogSizeBytes?: number;
+  inMemoryLogCount: number;
+  relatedLogFiles: LogArtifactEntry[];
+  rawResponseFiles: LogArtifactEntry[];
+};
+
+export type SupportBundleExportResponse = {
+  bundlePath: string;
+  outputDirectory: string;
+  generatedAt: string;
+  platform: string;
+  includedSections: string[];
+  omittedSections: string[];
+};
+
+export type DiagnosticsMetricConfig = {
+  enabled: boolean;
+  ttlSecs: number;
+  maxEntries?: number;
+  maxBodyBytes?: number;
+  cacheableStatusCodes: number[];
+  waitTimeoutMs?: number;
+  headerName?: string;
+};
+
+export type DiagnosticsTelemetrySummary = {
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  timeoutRequests: number;
+  successRate: number;
+  avgLatencyMs: number;
+  minLatencyMs?: number | null;
+  maxLatencyMs?: number | null;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+};
+
+export type DiagnosticsCapabilityRoutingMetricsSnapshot = {
+  filterEvalTotal: number;
+  filterExcludedTotal: number;
+  filterExcludedToolsTotal: number;
+  filterExcludedVisionTotal: number;
+  filterExcludedContextTotal: number;
+  providerFallbackTotal: number;
+  modelFallbackTotal: number;
+  allCandidatesExcludedTotal: number;
+};
+
+export type DiagnosticsResponseCacheDiagnostics = {
+  config: DiagnosticsMetricConfig;
+  stats: unknown;
+  hitRatePercent: number;
+};
+
+export type DiagnosticsRequestDedupDiagnostics = {
+  config: DiagnosticsMetricConfig;
+  stats: unknown;
+  replayRatePercent: number;
+};
+
+export type DiagnosticsIdempotencyDiagnostics = {
+  config: DiagnosticsMetricConfig;
+  stats: unknown;
+  replayRatePercent: number;
+};
+
+export type ServerDiagnosticsResponse = {
+  generatedAt: string;
+  running: boolean;
+  host: string;
+  port: number;
+  telemetrySummary: DiagnosticsTelemetrySummary;
+  capabilityRouting: DiagnosticsCapabilityRoutingMetricsSnapshot;
+  responseCache: DiagnosticsResponseCacheDiagnostics;
+  requestDedup: DiagnosticsRequestDedupDiagnostics;
+  idempotency: DiagnosticsIdempotencyDiagnostics;
+};
+
+export type WindowsStartupCheck = {
+  key: string;
+  status: "ok" | "warning" | "error" | string;
+  message: string;
+  detail?: string;
+};
+
+export type WindowsStartupDiagnosticsResponse = {
+  platform: string;
+  appDataDir?: string;
+  legacyLimeDir?: string;
+  dbPath?: string;
+  webview2Version?: string;
+  currentExe?: string;
+  currentDir?: string;
+  resourceDir?: string;
+  homeDir?: string;
+  shellEnv?: string;
+  comspecEnv?: string;
+  resolvedTerminalShell?: string;
+  installationKindGuess?: string;
+  checks: WindowsStartupCheck[];
+  hasBlockingIssues: boolean;
+  hasWarnings: boolean;
+  summaryMessage?: string;
+};
+
+export type GatewayChannelStatusParams = {
+  channel: string;
+};
+
+export type GatewayChannelStartParams = {
+  channel: string;
+  accountId?: string;
+  pollTimeoutSecs?: number;
+};
+
+export type GatewayChannelStopParams = {
+  channel: string;
+  accountId?: string;
+};
+
+export type GatewayChannelStatusResponse = {
+  channel: string;
+  status: unknown;
+};
+
+export type ChannelProbeParams = {
+  accountId?: string;
+};
+
+export type ChannelProbeResponse = {
+  accountId?: string;
+  ok: boolean;
+  message: string;
+  [key: string]: unknown;
+};
+
+export type WechatLoginStartParams = {
+  baseUrl?: string;
+  botType?: string;
+  sessionKey?: string;
+};
+
+export type WechatLoginStartResponse = {
+  sessionKey: string;
+  qrcodeUrl: string;
+  message: string;
+};
+
+export type WechatLoginWaitParams = {
+  sessionKey: string;
+  baseUrl?: string;
+  botType?: string;
+  timeoutMs?: number;
+  accountName?: string;
+};
+
+export type WechatLoginWaitResponse = {
+  connected: boolean;
+  message: string;
+  botToken?: string;
+  accountId?: string;
+  userId?: string;
+  baseUrl?: string;
+};
+
+export type WechatConfiguredAccount = {
+  account_id: string;
+  enabled: boolean;
+  name?: string;
+  base_url?: string;
+  cdn_base_url?: string;
+  has_token: boolean;
+  scanner_user_id?: string;
+};
+
+export type WechatChannelAccountListResponse = {
+  accounts: WechatConfiguredAccount[];
+};
+
+export type WechatChannelAccountRemoveParams = {
+  accountId: string;
+  purgeData?: boolean;
+};
+
+export type WechatChannelAccountRemoveResponse = Record<string, never>;
+
+export type WechatRuntimeModelSetParams = {
+  providerId: string;
+  modelId: string;
+};
+
+export type WechatRuntimeModelSetResponse = {
+  runtimeModel: string;
+};
+
+export type GatewayTunnelCreateParams = {
+  tunnelName?: string;
+  dnsName?: string;
+  persist?: boolean;
+};
+
+export type GatewayTunnelCreateResult = {
+  ok: boolean;
+  tunnelName: string;
+  tunnelId?: string;
+  credentialsFile?: string;
+  dnsName?: string;
+  publicBaseUrl?: string;
+  message: string;
+};
+
+export type GatewayTunnelStatusResponse = {
+  running: boolean;
+  provider: string;
+  mode: string;
+  binary: string;
+  localUrl: string;
+  publicBaseUrl?: string;
+  pid?: number;
+  startedAt?: string;
+  lastError?: string;
+  lastExit?: string;
+  commandPreview?: string;
+  connectorActive?: boolean;
+  connectorMessage?: string;
+};
+
+export type GatewayTunnelProbeResponse = {
+  ok: boolean;
+  provider: string;
+  mode: string;
+  binary: string;
+  version?: string;
+  configReady: boolean;
+  message: string;
+};
+
+export type GatewayTunnelCloudflaredDetectResponse = {
+  installed: boolean;
+  binary: string;
+  version?: string;
+  platform: string;
+  packageManager?: string;
+  installSupported: boolean;
+  installCommand?: string;
+  requiresPrivilege: boolean;
+  message: string;
+};
+
+export type GatewayTunnelCloudflaredInstallParams = {
+  confirm?: boolean;
+};
+
+export type GatewayTunnelCloudflaredInstallResponse = {
+  ok: boolean;
+  attempted: boolean;
+  platform: string;
+  packageManager?: string;
+  command?: string;
+  exitCode?: number;
+  installed: boolean;
+  version?: string;
+  stdout: string;
+  stderr: string;
+  message: string;
+};
+
+export type GatewayTunnelCreateResponse = {
+  result: GatewayTunnelCreateResult;
+  status: GatewayTunnelStatusResponse;
+};
+
+export type GatewayTunnelSyncWebhookUrlParams = {
+  channel: string;
+  accountId?: string;
+  webhookPath?: string;
+  persist?: boolean;
+};
+
+export type GatewayTunnelSyncWebhookUrlResponse = {
+  channel: string;
+  accountId?: string;
+  webhookPath: string;
+  publicBaseUrl: string;
+  webhookUrl: string;
+  persisted: boolean;
+};
+
+export type ImageStoryboardSlotInput = {
+  prompt: string;
+  slotId?: string;
+  label?: string;
+  shotType?: string;
+};
+
+export type MediaTaskArtifactImageCreateParams = {
+  projectRootPath: string;
+  prompt: string;
+  title?: string;
+  titleGenerationResult?: unknown;
+  personaContext?: unknown;
+  presentation?: unknown;
+  tasteContext?: unknown;
+  mode?: string;
+  rawText?: string;
+  layoutHint?: string;
+  size?: string;
+  aspectRatio?: string;
+  count?: number;
+  usage?: string;
+  style?: string;
+  providerId?: string;
+  model?: string;
+  executorMode?: string;
+  outerModel?: string;
+  sessionId?: string;
+  threadId?: string;
+  turnId?: string;
+  projectId?: string;
+  contentId?: string;
+  entrySource?: string;
+  modalityContractKey?: string;
+  modality?: string;
+  requiredCapabilities?: string[];
+  routingSlot?: string;
+  runtimeContract?: unknown;
+  requestedTarget?: string;
+  slotId?: string;
+  anchorHint?: string;
+  anchorSectionTitle?: string;
+  anchorText?: string;
+  targetOutputId?: string;
+  targetOutputRefId?: string;
+  referenceImages?: string[];
+  storyboardSlots?: ImageStoryboardSlotInput[];
+};
+
+export type MediaTaskArtifactAudioCreateParams = {
+  projectRootPath: string;
+  sourceText: string;
+  title?: string;
+  rawText?: string;
+  voice?: string;
+  voiceStyle?: string;
+  targetLanguage?: string;
+  mimeType?: string;
+  audioPath?: string;
+  durationMs?: number;
+  providerId?: string;
+  model?: string;
+  sessionId?: string;
+  threadId?: string;
+  turnId?: string;
+  projectId?: string;
+  contentId?: string;
+  entrySource?: string;
+  modalityContractKey?: string;
+  modality?: string;
+  requiredCapabilities?: string[];
+  routingSlot?: string;
+  runtimeContract?: unknown;
+  requestedTarget?: string;
+  outputPath?: string;
+};
+
+export type MediaTaskArtifactAudioCompleteParams = {
+  projectRootPath: string;
+  taskRef: string;
+  audioPath: string;
+  mimeType?: string;
+  durationMs?: number;
+  providerId?: string;
+  model?: string;
+};
+
+export type MediaTaskArtifactLookupParams = {
+  projectRootPath: string;
+  taskRef: string;
+};
+
+export type MediaTaskArtifactListParams = {
+  projectRootPath: string;
+  status?: string;
+  taskFamily?: string;
+  taskType?: string;
+  modalityContractKey?: string;
+  routingOutcome?: string;
+  limit?: number;
+};
+
+export type MediaTaskArtifactListFilters = {
+  status?: string;
+  task_family?: string;
+  task_type?: string;
+  modality_contract_key?: string;
+  routing_outcome?: string;
+  limit?: number;
+};
+
+export type MediaTaskArtifactResponse = {
+  success: boolean;
+  task_id: string;
+  task_type: string;
+  task_family: string;
+  status: string;
+  normalized_status: string;
+  current_attempt_id?: string;
+  path: string;
+  absolute_path: string;
+  artifact_path: string;
+  absolute_artifact_path: string;
+  reused_existing: boolean;
+  idempotency_key?: string;
+  record: unknown;
+};
+
+export type MediaTaskArtifactListResponse = {
+  success: boolean;
+  workspace_root: string;
+  artifact_root: string;
+  filters: MediaTaskArtifactListFilters;
+  total: number;
+  modality_runtime_contracts: unknown;
+  tasks: MediaTaskArtifactResponse[];
 };
 
 export type WorkspaceRegisteredSkillsListParams = {

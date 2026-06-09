@@ -1,7 +1,5 @@
-import { safeInvoke } from "@/lib/dev-bridge";
 import { AppServerClient } from "@/lib/api/appServer";
 import { METHOD_WORKSPACE_REGISTERED_SKILLS_LIST } from "../../../packages/app-server-client/src/protocol";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 
 export type CapabilityDraftStatus =
   | "unverified"
@@ -482,11 +480,6 @@ type RawCapabilityDraftVerificationReport =
       checks?: RawCapabilityDraftVerificationCheck[];
     };
 
-type RawVerifyCapabilityDraftResult = {
-  draft?: RawCapabilityDraftRecord;
-  report?: RawCapabilityDraftVerificationReport;
-};
-
 type RawCapabilityDraftRegistrationSummary =
   Partial<CapabilityDraftRegistrationSummary> & {
     registration_id?: string;
@@ -640,11 +633,6 @@ type RawCapabilityDraftRegistrationCredentialResolver =
     blocked_reason?: string;
     next_action?: string;
   };
-
-type RawRegisterCapabilityDraftResult = {
-  draft?: RawCapabilityDraftRecord;
-  registration?: RawCapabilityDraftRegistrationSummary;
-};
 
 type RawSubmitCapabilityDraftApprovalSessionInputsResult =
   Partial<SubmitCapabilityDraftApprovalSessionInputsResult> & {
@@ -1896,93 +1884,43 @@ function normalizeDraft(raw: RawCapabilityDraftRecord): CapabilityDraftRecord {
   };
 }
 
-async function invokeCapabilityDraftCommand<T>(
-  command: string,
-  args: Record<string, unknown>,
-): Promise<T> {
-  const result = await safeInvoke<T>(command, args);
-  assertNotDiagnosticFacade(
-    command,
-    result,
-    "真实 Capability Draft current 通道",
+function rejectRetiredCapabilityDraftCommand(command: string): never {
+  throw new Error(
+    `${command} retired: Capability Draft authoring commands have no production current surface; workspace registered skills discovery must use App Server workspaceRegisteredSkills/list.`,
   );
-  return result;
 }
 
 export const capabilityDraftsApi = {
   appServerClient: new AppServerClient() as CapabilityDraftsAppServerClient,
 
   async create(
-    request: CreateCapabilityDraftRequest,
+    _request: CreateCapabilityDraftRequest,
   ): Promise<CapabilityDraftRecord> {
-    const draft = await invokeCapabilityDraftCommand<RawCapabilityDraftRecord>(
-      "capability_draft_create",
-      { request },
-    );
-    return normalizeDraft(draft);
+    return rejectRetiredCapabilityDraftCommand("capability_draft_create");
   },
 
   async list(
-    request: CapabilityDraftListRequest,
+    _request: CapabilityDraftListRequest,
   ): Promise<CapabilityDraftRecord[]> {
-    const drafts =
-      await invokeCapabilityDraftCommand<RawCapabilityDraftRecord[]>(
-        "capability_draft_list",
-        { request },
-      );
-    if (!Array.isArray(drafts)) {
-      throw new Error("capability_draft_list did not return drafts");
-    }
-    return drafts.map(normalizeDraft);
+    return rejectRetiredCapabilityDraftCommand("capability_draft_list");
   },
 
   async get(
-    request: CapabilityDraftLookupRequest,
+    _request: CapabilityDraftLookupRequest,
   ): Promise<CapabilityDraftRecord | null> {
-    const draft =
-      await invokeCapabilityDraftCommand<RawCapabilityDraftRecord | null>(
-        "capability_draft_get",
-        { request },
-      );
-    return draft ? normalizeDraft(draft) : null;
+    return rejectRetiredCapabilityDraftCommand("capability_draft_get");
   },
 
   async verify(
-    request: VerifyCapabilityDraftRequest,
+    _request: VerifyCapabilityDraftRequest,
   ): Promise<VerifyCapabilityDraftResult> {
-    const result =
-      await invokeCapabilityDraftCommand<RawVerifyCapabilityDraftResult>(
-        "capability_draft_verify",
-        { request },
-      );
-    return {
-      draft: normalizeDraft(result.draft ?? {}),
-      report: normalizeVerificationReport(result.report ?? {}),
-    };
+    return rejectRetiredCapabilityDraftCommand("capability_draft_verify");
   },
 
   async register(
-    request: RegisterCapabilityDraftRequest,
+    _request: RegisterCapabilityDraftRequest,
   ): Promise<RegisterCapabilityDraftResult> {
-    const result =
-      await invokeCapabilityDraftCommand<RawRegisterCapabilityDraftResult>(
-        "capability_draft_register",
-        { request },
-      );
-    return {
-      draft: normalizeDraft(result.draft ?? {}),
-      registration: normalizeRegistrationSummary(result.registration) ?? {
-        registrationId: "",
-        registeredAt: "",
-        skillDirectory: "",
-        registeredSkillDirectory: "",
-        sourceDraftId: "",
-        sourceVerificationReportId: null,
-        generatedFileCount: 0,
-        permissionSummary: [],
-        verificationGates: [],
-      },
-    };
+    return rejectRetiredCapabilityDraftCommand("capability_draft_register");
   },
 
   async listRegisteredSkills(
@@ -2008,25 +1946,19 @@ export const capabilityDraftsApi = {
   },
 
   async submitApprovalSessionInputs(
-    request: SubmitCapabilityDraftApprovalSessionInputsRequest,
+    _request: SubmitCapabilityDraftApprovalSessionInputsRequest,
   ): Promise<SubmitCapabilityDraftApprovalSessionInputsResult> {
-    const result =
-      await invokeCapabilityDraftCommand<RawSubmitCapabilityDraftApprovalSessionInputsResult>(
-        "capability_draft_submit_approval_session_inputs",
-        { request },
-      );
-    return normalizeApprovalSessionSubmissionResult(result ?? {});
+    return rejectRetiredCapabilityDraftCommand(
+      "capability_draft_submit_approval_session_inputs",
+    );
   },
 
   async executeControlledGet(
-    request: ExecuteCapabilityDraftControlledGetRequest,
+    _request: ExecuteCapabilityDraftControlledGetRequest,
   ): Promise<ExecuteCapabilityDraftControlledGetResult> {
-    const result =
-      await invokeCapabilityDraftCommand<RawExecuteCapabilityDraftControlledGetResult>(
-        "capability_draft_execute_controlled_get",
-        { request },
-      );
-    return normalizeControlledGetExecutionResult(result ?? {});
+    return rejectRetiredCapabilityDraftCommand(
+      "capability_draft_execute_controlled_get",
+    );
   },
 };
 

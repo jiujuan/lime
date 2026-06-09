@@ -65,7 +65,7 @@ describe("ElectronUpdateHost", () => {
       host.invoke("open_update_window", {
         anchorRect: { x: 18, y: 816, width: 30, height: 30 },
       }),
-    ).resolves.toEqual({});
+    ).resolves.toBeNull();
 
     expect(open).toHaveBeenCalledWith(
       expect.objectContaining({
