@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "vitest";
-import {
+const require = createRequire(import.meta.url);
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+execFileSync(
+  process.execPath,
+  [
+    require.resolve("typescript/bin/tsc"),
+    "--project",
+    join(packageRoot, "tsconfig.json"),
+  ],
+  { cwd: packageRoot, stdio: "inherit" },
+);
+
+const {
   AppServerClient,
   METHOD_SKILL_CACHE_REFRESH,
   METHOD_SKILL_INSTALLED_DIRECTORIES_LIST,
@@ -22,7 +39,9 @@ import {
   METHOD_SKILL_REPOSITORY_DELETE,
   METHOD_SKILL_REPOSITORY_LIST,
   METHOD_SKILL_REPOSITORY_SAVE,
-} from "../dist/index.js";
+} = await import(
+  /* @vite-ignore */ pathToFileURL(join(packageRoot, "dist/index.js")).href
+);
 
 test("builds skill management requests with current methods", () => {
   const client = new AppServerClient();

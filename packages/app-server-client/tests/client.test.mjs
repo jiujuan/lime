@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   chmod,
   copyFile,
@@ -7,11 +8,25 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "vitest";
-import {
+const require = createRequire(import.meta.url);
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+execFileSync(
+  process.execPath,
+  [
+    require.resolve("typescript/bin/tsc"),
+    "--project",
+    join(packageRoot, "tsconfig.json"),
+  ],
+  { cwd: packageRoot, stdio: "inherit" },
+);
+
+const {
   APP_SERVER_METHODS,
   AppServerAgentEventRouter,
   AppServerAgentRuntimeClient,
@@ -294,7 +309,9 @@ import {
   startPackagedAppServerSidecar,
   stdioSidecar,
   sidecarRestartDelayMs,
-} from "../dist/index.js";
+} = await import(
+  /* @vite-ignore */ pathToFileURL(join(packageRoot, "dist/index.js")).href
+);
 
 const repoRoot = join(
   dirname(fileURLToPath(import.meta.url)),

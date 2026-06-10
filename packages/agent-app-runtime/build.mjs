@@ -9,6 +9,29 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
 const require = createRequire(import.meta.url);
 const distDir = resolve(__dirname, 'dist');
+const workspaceAliases = [
+  { find: '@', replacement: resolve(root, 'src') },
+  {
+    find: 'app-server-client',
+    replacement: resolve(root, 'packages/app-server-client/src/index.ts'),
+  },
+  {
+    find: '@limecloud/agent-runtime-client',
+    replacement: resolve(root, 'packages/agent-runtime-client/src/index.ts'),
+  },
+  {
+    find: '@limecloud/agent-ui-contracts',
+    replacement: resolve(root, 'packages/agent-ui-contracts/src/index.ts'),
+  },
+  {
+    find: '@limecloud/agent-runtime-projection',
+    replacement: resolve(root, 'packages/agent-runtime-projection/src/index.ts'),
+  },
+  {
+    find: '@limecloud/agent-runtime-ui',
+    replacement: resolve(root, 'packages/agent-runtime-ui/src/index.ts'),
+  },
+];
 
 if (existsSync(distDir)) {
   rmSync(distDir, { recursive: true });
@@ -19,7 +42,7 @@ const sharedBuildOptions = {
   configFile: false,
   publicDir: false,
   resolve: {
-    alias: [{ find: '@', replacement: resolve(root, 'src') }],
+    alias: workspaceAliases,
   },
   build: {
     outDir: distDir,
@@ -50,7 +73,7 @@ await build({
   configFile: false,
   publicDir: false,
   resolve: {
-    alias: [{ find: '@', replacement: resolve(root, 'src') }],
+    alias: workspaceAliases,
   },
   build: {
     outDir: distDir,
