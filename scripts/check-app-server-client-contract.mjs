@@ -4623,6 +4623,7 @@ const checks = [
     ],
     snippets: [
       'from "./contracts.js"',
+      'export * from "./actions.js"',
       'export * from "./envelope.js"',
       'export * from "./eventStore.js"',
       'export * from "./normalization.js"',
@@ -4644,6 +4645,7 @@ const checks = [
   {
     name: "Agent Runtime projection package keeps host-neutral modules split by responsibility",
     files: [
+      "packages/agent-runtime-projection/src/actions.ts",
       "packages/agent-runtime-projection/src/contracts.ts",
       "packages/agent-runtime-projection/src/envelope.ts",
       "packages/agent-runtime-projection/src/eventStore.ts",
@@ -4657,6 +4659,8 @@ const checks = [
     ],
     snippets: [
       'from "@limecloud/agent-ui-contracts"',
+      "buildAgentUiActionRequiredEvent",
+      "buildAgentUiActionResolvedEvent",
       "buildAgentUiProjectionBase",
       "sequenceAgentUiProjectionEvents",
       "AgentUiProjectionEventStoreState",
@@ -4707,6 +4711,34 @@ const checks = [
       "taskId: definedString",
       "events.map((event, index)",
       "startSequence + index",
+    ],
+  },
+  {
+    name: "Renderer Agent UI action projection delegates HITL builders to standard projection package",
+    file: "src/components/agent/chat/projection/actionProjection.ts",
+    snippets: [
+      'from "@limecloud/agent-runtime-projection"',
+      "buildAgentUiActionRequiredEvent",
+      "buildAgentUiActionResolvedEvent",
+      "sourceType: event.type",
+      "requestId: event.request_id",
+      "actionType: event.action_type",
+      "sessionId: event.scope?.session_id",
+      "return buildAgentUiActionRequiredEvent(",
+      "return buildAgentUiActionResolvedEvent(",
+    ],
+    absentSnippets: [
+      "function actionControl",
+      "function resolvedActionControl",
+      "metadataKeys",
+      "readBooleanField",
+      "readRecord",
+      "readStringField",
+      "truncateText",
+      'owner: "action"',
+      'scope: "action_request"',
+      'surface: "hitl"',
+      'control: ',
     ],
   },
   {

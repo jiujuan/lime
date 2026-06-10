@@ -640,11 +640,7 @@ CONTENT`,
           experts: selectedReviewExperts,
         };
       },
-      [
-        editingContent,
-        selectedReviewExperts,
-        state.platform,
-      ],
+      [editingContent, selectedReviewExperts, state.platform],
     );
 
     const handleTextStylize = useCallback(async () => {
@@ -685,12 +681,7 @@ CONTENT`,
         console.error("[DocumentCanvas] 文本风格化失败:", error);
         showMessage("⚠️ 文本风格化失败，请重试");
       }
-    }, [
-      onTextStylizeRun,
-      editingContent,
-      state.platform,
-      showMessage,
-    ]);
+    }, [onTextStylizeRun, editingContent, state.platform, showMessage]);
 
     const handleCloseContentReview = useCallback(() => {
       setContentReviewOpen(false);

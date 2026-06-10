@@ -1,5 +1,10 @@
 use super::*;
 use app_server_protocol::AgentInput;
+use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
+use app_server_protocol::AgentSessionHandoffBundleExportParams;
+use app_server_protocol::AgentSessionReplayCaseExportParams;
+use app_server_protocol::AgentSessionReviewDecisionSaveParams;
+use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
 use app_server_protocol::CapabilityDescriptor;
 use app_server_protocol::EvidencePackArtifact;
 use app_server_protocol::RuntimeOptions;

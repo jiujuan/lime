@@ -742,28 +742,26 @@ test("action projection helpers build standard HITL events", () => {
     },
   );
 
-  assert.deepEqual(required, {
-    sourceType: "action_required",
-    timestamp: "2026-06-07T00:00:00.000Z",
-    sessionId: "session-action",
-    threadId: "thread-action",
-    turnId: "turn-action",
-    runtimeEntity: "agent_turn",
-    type: "action.required",
-    actionId: "approval-1",
-    owner: "action",
-    scope: "action_request",
-    phase: "waiting",
-    surface: "hitl",
-    persistence: "snapshot",
-    control: "approve",
-    payload: {
-      actionType: "tool_confirmation",
-      toolName: "shell",
-      promptPreview: "允许执行命令？",
-      questionCount: 1,
-      hasRequestedSchema: true,
-    },
+  assert.equal(required.sourceType, "action_required");
+  assert.equal(required.timestamp, "2026-06-07T00:00:00.000Z");
+  assert.equal(required.sessionId, "session-action");
+  assert.equal(required.threadId, "thread-action");
+  assert.equal(required.turnId, "turn-action");
+  assert.equal(required.runtimeEntity, "agent_turn");
+  assert.equal(required.type, "action.required");
+  assert.equal(required.actionId, "approval-1");
+  assert.equal(required.owner, "action");
+  assert.equal(required.scope, "action_request");
+  assert.equal(required.phase, "waiting");
+  assert.equal(required.surface, "hitl");
+  assert.equal(required.persistence, "snapshot");
+  assert.equal(required.control, "approve");
+  assert.deepEqual(required.payload, {
+    actionType: "tool_confirmation",
+    toolName: "shell",
+    promptPreview: "允许执行命令？",
+    questionCount: 1,
+    hasRequestedSchema: true,
   });
 
   const resolved = buildAgentUiActionResolvedEvent(

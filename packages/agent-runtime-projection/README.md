@@ -30,6 +30,7 @@ Agent UI / Runtime 的标准链路由四个包共同组成：
 实现必须按职责拆分，`src/index.ts`、`src/index.js` 和 `src/index.d.ts` 只能做 barrel exports only：
 
 ```text
+src/actions.ts     -> HITL action.required / action.resolved projection helpers
 src/contracts.ts   -> contracts 类型转导
 src/envelope.ts    -> Agent UI event base fields / runtime entity envelope / sequence helper
 src/eventStore.ts  -> event store / scope / latest selectors
@@ -60,7 +61,7 @@ npm install @limecloud/agent-ui-contracts @limecloud/agent-runtime-projection
 - 给 UI 提供 `UIMessageParts`、`ProcessTimeline`、`ExecutionGraph`、`actions`、`tools` 和 `readModel` 等标准渲染对象。
 - 为 `AgentUiProjectionEvent` 提供 host-neutral 的索引、scope selector 和 latest selector，宿主 store 只负责持久化和订阅。
 - 为 `AgentUiProjectionEvent` 提供 host-neutral 的 summary selector，包括 action / task / artifact / evidence / diagnostics 计数、notable latest events、Team Workbench surface / lane 聚合和 artifact latest lookup。
-- 为宿主事件 adapter 提供 host-neutral 的 event base 字段、sequence 编排、字段规整、artifact refs 提取、routing decision payload、runtime entity/status/phase/topology 和 worker usage 解释函数。
+- 为宿主事件 adapter 提供 host-neutral 的 action event builder、event base 字段、sequence 编排、字段规整、artifact refs 提取、routing decision payload、runtime entity/status/phase/topology 和 worker usage 解释函数。
 
 这个包不负责：
 
@@ -178,7 +179,7 @@ const summary = summarizeAgentUiProjectionEvents(visible);
 
 不要在业务宿主里重新实现 `session / thread / run / turn / task` scope 匹配、latest event 索引、artifact / evidence / action lookup、事件类型分组、Team Workbench surface / lane 聚合或 notable event summary。否则不同 App 会逐步长出不同的 Agent UI 解释口径。
 
-也不要在业务宿主里重新实现 `buildAgentUiProjectionBase`、`sequenceAgentUiProjectionEvents`、`definedString`、`truncateText`、`metadataKeys`、`extractArtifactRefs`、`buildRoutingDecisionPayload`、`buildWorkerUsageProjection`、runtime entity/status/phase/topology 这类通用事实解释。宿主 adapter 只把自己的事件 shape 映射到标准 projection event，通用规整与事实解释必须回到本包。
+也不要在业务宿主里重新实现 `buildAgentUiActionRequiredEvent`、`buildAgentUiActionResolvedEvent`、`buildAgentUiProjectionBase`、`sequenceAgentUiProjectionEvents`、`definedString`、`truncateText`、`metadataKeys`、`extractArtifactRefs`、`buildRoutingDecisionPayload`、`buildWorkerUsageProjection`、runtime entity/status/phase/topology 这类通用事实解释。宿主 adapter 只把自己的事件 shape 映射到标准 projection event，通用规整与事实解释必须回到本包。
 
 主聊天、Agent App、content-studio 等宿主可以继续保留本地化 label、文案格式化、点击行为和业务卡片，但这些属于 presentation adapter，不是 runtime projection 标准事实源。
 
