@@ -1,5 +1,9 @@
 # Tauri wrapper command inventory
 
+> **状态：superseded（2026-06-10）**
+>
+> 本 inventory 跟踪的 `lime-rs/src/commands/**` 旧 Tauri wrapper、runner.rs 注册、DevBridge dispatcher、`*_cmd.rs` 文件全部随 `lime-rs/src/**` 整目录在 2026-06-10 物理删除。下面的命令对照表、low-reference 候选、devbridge-only 候选**全部 superseded**，不再作为可执行参考；仅保留作历史快照与 `current-rules-guard` 守卫所要求的字串证据（`lime-rs/src/commands/**` 旧 Tauri wrapper 清理区）。
+
 生成时间：2026-06-08 CST  
 状态：`snapshot_current_dirty_worktree`  
 关联队列：`internal/exec-plans/tauri-wrapper-quick-cleanup-queue.md`

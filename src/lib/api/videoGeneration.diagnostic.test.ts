@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -10,8 +10,19 @@ const RETIRED_VIDEO_GENERATION_COMMANDS = [
   "cancel_video_generation_task",
 ];
 
+const RETIRED_VIDEO_GENERATION_FILES = [
+  "lime-rs/src/app/runner.rs",
+  "lime-rs/src/dev_bridge/dispatcher.rs",
+  "lime-rs/src/commands/mod.rs",
+];
+
 function readRepoFile(path: string): string {
   return readFileSync(resolve(cwd(), path), "utf8");
+}
+
+function readOptionalRepoFile(path: string): string {
+  const absolutePath = resolve(cwd(), path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
 }
 
 function expectStringLiteralsAbsent(source: string, literals: string[]): void {
@@ -43,9 +54,7 @@ describe("videoGeneration current boundary", () => {
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
       readRepoFile("electron/ipcChannels.ts"),
       readRepoFile("electron/hostCommands.ts"),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
-      readRepoFile("lime-rs/src/commands/mod.rs"),
+      ...RETIRED_VIDEO_GENERATION_FILES.map(readOptionalRepoFile),
     ].join("\n");
 
     expectStringLiteralsAbsent(
@@ -53,5 +62,8 @@ describe("videoGeneration current boundary", () => {
       RETIRED_VIDEO_GENERATION_COMMANDS,
     );
     expect(restrictedProductionSources).not.toContain("video_generation_cmd");
+    for (const retiredPath of RETIRED_VIDEO_GENERATION_FILES) {
+      expect(existsSync(resolve(cwd(), retiredPath))).toBe(false);
+    }
   });
 });

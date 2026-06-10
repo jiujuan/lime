@@ -152,9 +152,9 @@ describe("galleryMaterials current App Server boundary", () => {
 
   it("旧 Gallery material Rust wrapper / runner / dispatcher 不应回流", () => {
     const legacyRustSources = [
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/commands/mod.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readOptionalRepoFile("lime-rs/src/app/runner.rs"),
+      readOptionalRepoFile("lime-rs/src/commands/mod.rs"),
+      readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
       readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher/files.rs"),
       readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher/materials.rs"),
     ].join("\n");

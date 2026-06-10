@@ -11,11 +11,7 @@ import type {
   AgentUiProjectionContext,
   AgentUiProjectionEvent,
 } from "@limecloud/agent-ui-contracts";
-import {
-  buildRoutingDecisionPayload,
-  truncateText,
-} from "@limecloud/agent-runtime-projection";
-import { buildAgentUiProjectionBase as buildBase } from "./projectionBase";
+import { buildAgentUiRoutingStatusEvent } from "@limecloud/agent-runtime-projection";
 
 type RoutingDecisionEvent = Extract<
   AgentEvent,
@@ -44,47 +40,34 @@ export function buildRoutingProjectionEvent(
   event: AgentUiRoutingProjectionEvent,
   context: AgentUiProjectionContext,
 ): AgentUiProjectionEvent {
-  return {
-    ...buildBase(event, context),
-    type: "run.status",
-    owner: "runtime",
-    scope: "run",
-    phase:
-      event.type === "routing_not_possible" || event.type === "quota_blocked"
-        ? "failed"
-        : "routing",
-    surface: "runtime_status",
-    persistence: "snapshot",
-    payload: {
-      runtimeEvent: event.type,
-      ...buildRoutingPayload(event),
-    },
-  };
-}
-
-function buildRoutingPayload(
-  event: AgentUiRoutingProjectionEvent,
-): Record<string, unknown> {
   if (isRoutingDecisionEvent(event)) {
-    return buildRoutingDecisionPayload(event);
+    return buildAgentUiRoutingStatusEvent(
+      {
+        sourceType: event.type,
+        runtimeEvent: event.type,
+        routingDecision: event.routing_decision,
+      },
+      context,
+    );
   }
   if (isLimitStateEvent(event)) {
-    return {
-      limitStatus: event.limit_state.status,
-      singleCandidateOnly: event.limit_state.singleCandidateOnly,
-      providerLocked: event.limit_state.providerLocked,
-      settingsLocked: event.limit_state.settingsLocked,
-      oemLocked: event.limit_state.oemLocked,
-      candidateCount: event.limit_state.candidateCount,
-      capabilityGap: event.limit_state.capabilityGap,
-      notes: event.limit_state.notes ?? [],
-    };
+    return buildAgentUiRoutingStatusEvent(
+      {
+        sourceType: event.type,
+        runtimeEvent: event.type,
+        limitState: event.limit_state,
+      },
+      context,
+    );
   }
-  return {
-    limitEventKind: event.limit_event.eventKind,
-    messagePreview: truncateText(event.limit_event.message),
-    retryable: event.limit_event.retryable,
-  };
+  return buildAgentUiRoutingStatusEvent(
+    {
+      sourceType: event.type,
+      runtimeEvent: event.type,
+      limitEvent: event.limit_event,
+    },
+    context,
+  );
 }
 
 function isRoutingDecisionEvent(

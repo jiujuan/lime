@@ -142,12 +142,13 @@ function main() {
     "src/components/agent/chat/utils/harnessRequestMetadata.ts";
   const executionRuntimePath =
     "src/components/agent/chat/utils/sessionExecutionRuntime.ts";
-  const requestMetadataPath =
-    "lime-rs/src/commands/aster_agent_cmd/run_metadata/request_metadata.rs";
+  // 旧 backend `lime-rs/src/commands/aster_agent_cmd/run_metadata/request_metadata.rs`
+  // 已随 `lime-rs/src/**` 整目录在 2026-06-10 删除；harness metadata 的 backend 事实源
+  // 现在落在 `lime-rs/crates/agent/src/session_execution_runtime.rs` 等 crate 模块，
+  // 字段映射的写法不再是 `("frontKey","backKey")` 元组，本脚本只继续守住前端约束。
 
   const harnessMetadataSource = readSource(harnessMetadataPath);
   const executionRuntimeSource = readSource(executionRuntimePath);
-  const requestMetadataSource = readSource(requestMetadataPath);
 
   const legacyKeysBlock = extractBalancedBlock(
     harnessMetadataSource,
@@ -211,31 +212,6 @@ function main() {
     "turn_team_blueprint",
   ];
 
-  const requiredBackendMappings = [
-    '("preferred_team_preset_id", "preferred_team_preset_id")',
-    '("preferredTeamPresetId", "preferred_team_preset_id")',
-    '("selected_team_id", "selected_team_id")',
-    '("selectedTeamId", "selected_team_id")',
-    '("selected_team_source", "selected_team_source")',
-    '("selectedTeamSource", "selected_team_source")',
-    '("selected_team_label", "selected_team_label")',
-    '("selectedTeamLabel", "selected_team_label")',
-    '("selected_team_description", "selected_team_description")',
-    '("selectedTeamDescription", "selected_team_description")',
-    '("selected_team_summary", "selected_team_summary")',
-    '("selectedTeamSummary", "selected_team_summary")',
-    '("selected_team_roles", "selected_team_roles")',
-    '("selectedTeamRoles", "selected_team_roles")',
-    '("team_memory_shadow", "team_memory_shadow")',
-    '("teamMemoryShadow", "team_memory_shadow")',
-    '("browser_requirement", "browser_requirement")',
-    '("browserRequirement", "browser_requirement")',
-    '("browser_requirement_reason", "browser_requirement_reason")',
-    '("browserRequirementReason", "browser_requirement_reason")',
-    '("browser_launch_url", "browser_launch_url")',
-    '("browserLaunchUrl", "browser_launch_url")',
-  ];
-
   const requiredRuntimeFields = [
     "session_id:",
     "execution_strategy:",
@@ -284,40 +260,6 @@ function main() {
     failures,
   );
 
-  requiredBackendMappings.forEach((mapping) => {
-    assertIncludes(
-      requestMetadataSource,
-      mapping,
-      `[harness-contracts] 后端 request metadata 映射缺少字段: ${mapping}`,
-      failures,
-    );
-  });
-
-  assertMatch(
-    requestMetadataSource,
-    /\("web_search_enabled",\s*&\["web_search", "webSearch"\]\[\.\.\]\)/,
-    "[harness-contracts] 后端未从 preferences 回填 web_search_enabled",
-    failures,
-  );
-  assertIncludes(
-    requestMetadataSource,
-    '&["thinking", "thinking_enabled", "thinkingEnabled"][..]',
-    "[harness-contracts] 后端未从 preferences 回填 thinking_enabled",
-    failures,
-  );
-  assertMatch(
-    requestMetadataSource,
-    /\("task_mode_enabled",\s*&\["task", "task_mode", "taskMode"\]\[\.\.\]\)/,
-    "[harness-contracts] 后端未从 preferences 回填 task_mode_enabled",
-    failures,
-  );
-  assertIncludes(
-    requestMetadataSource,
-    '&["subagent", "subagent_mode", "subagentMode"][..]',
-    "[harness-contracts] 后端未从 preferences 回填 subagent_mode_enabled",
-    failures,
-  );
-
   requiredRuntimeFields.forEach((field) => {
     assertIncludes(
       executionRuntimeSource,
@@ -349,7 +291,6 @@ function main() {
   console.log("[harness-contracts] 检查文件:");
   console.log(`- ${harnessMetadataPath}`);
   console.log(`- ${executionRuntimePath}`);
-  console.log(`- ${requestMetadataPath}`);
 
   if (failures.length > 0) {
     console.error("\n[harness-contracts] 发现契约漂移：");

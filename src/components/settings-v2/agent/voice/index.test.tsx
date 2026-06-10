@@ -19,8 +19,6 @@ const {
   mockSaveConfig,
   mockGetVoiceInputConfig,
   mockSaveVoiceInputConfig,
-  mockGetAsrCredentials,
-  mockGetVoiceShortcutRuntimeStatus,
   mockListVoiceModelCatalog,
   mockGetVoiceModelInstallState,
   mockDownloadVoiceModel,
@@ -29,15 +27,12 @@ const {
   mockSetDefaultVoiceModel,
   mockTestTranscribeVoiceModelFile,
   mockOpenDialog,
-  mockValidateShortcut,
 } = vi.hoisted(() => {
   return {
     mockGetConfig: vi.fn(),
     mockSaveConfig: vi.fn(),
     mockGetVoiceInputConfig: vi.fn(),
     mockSaveVoiceInputConfig: vi.fn(),
-    mockGetAsrCredentials: vi.fn(),
-    mockGetVoiceShortcutRuntimeStatus: vi.fn(),
     mockListVoiceModelCatalog: vi.fn(),
     mockGetVoiceModelInstallState: vi.fn(),
     mockDownloadVoiceModel: vi.fn(),
@@ -46,7 +41,6 @@ const {
     mockSetDefaultVoiceModel: vi.fn(),
     mockTestTranscribeVoiceModelFile: vi.fn(),
     mockOpenDialog: vi.fn(),
-    mockValidateShortcut: vi.fn(),
   };
 });
 
@@ -58,12 +52,6 @@ vi.mock("@/lib/api/appConfig", () => ({
 vi.mock("@/lib/api/asrProvider", () => ({
   getVoiceInputConfig: mockGetVoiceInputConfig,
   saveVoiceInputConfig: mockSaveVoiceInputConfig,
-  getAsrCredentials: mockGetAsrCredentials,
-}));
-
-vi.mock("@/lib/api/hotkeys", () => ({
-  getVoiceShortcutRuntimeStatus: mockGetVoiceShortcutRuntimeStatus,
-  validateShortcut: mockValidateShortcut,
 }));
 
 vi.mock("@/lib/api/voiceModels", () => ({
@@ -117,56 +105,6 @@ vi.mock("@/components/input-kit", () => ({
   }) => (
     <div data-testid="voice-model-selector">
       {providerType || "自动选择"} / {model || "自动选择"}
-    </div>
-  ),
-}));
-
-vi.mock("@/components/settings-v2/shared/ShortcutSettings", () => ({
-  ShortcutSettings: ({
-    currentShortcut,
-    onShortcutChange,
-    emptyLabel,
-  }: {
-    currentShortcut: string;
-    onShortcutChange: (shortcut: string) => Promise<void>;
-    emptyLabel?: string;
-  }) => (
-    <div data-testid={`shortcut-${currentShortcut || "empty"}`}>
-      <span>{currentShortcut || emptyLabel || "未设置快捷键"}</span>
-      <button
-        type="button"
-        onClick={() =>
-          void onShortcutChange(
-            currentShortcut
-              ? `${currentShortcut}-updated`
-              : "CommandOrControl+Shift+T",
-          )
-        }
-      >
-        更新快捷键
-      </button>
-      {!currentShortcut ? (
-        <button type="button" onClick={() => void onShortcutChange("")}>
-          清空快捷键
-        </button>
-      ) : null}
-    </div>
-  ),
-}));
-
-vi.mock("@/components/voice/MicrophoneTest", () => ({
-  MicrophoneTest: ({
-    selectedDeviceId,
-    onDeviceChange,
-  }: {
-    selectedDeviceId?: string;
-    onDeviceChange: (deviceId?: string) => void;
-  }) => (
-    <div data-testid="microphone-test">
-      <span>{selectedDeviceId || "系统默认"}</span>
-      <button type="button" onClick={() => onDeviceChange("usb-mic")}>
-        切换设备
-      </button>
     </div>
   ),
 }));
@@ -292,26 +230,6 @@ beforeEach(async () => {
 
   mockGetVoiceInputConfig.mockResolvedValue(createVoiceInputConfig());
 
-  mockGetAsrCredentials.mockResolvedValue([
-    {
-      id: "openai-default",
-      provider: "openai",
-      name: "OpenAI Whisper 默认凭证",
-      is_default: true,
-      disabled: false,
-      language: "zh-CN",
-    },
-  ]);
-
-  mockGetVoiceShortcutRuntimeStatus.mockResolvedValue({
-    shortcut_registered: true,
-    registered_shortcut: "CommandOrControl+Shift+V",
-    fn_supported: false,
-    fn_registered: false,
-    fn_fallback_shortcut: "CommandOrControl+Shift+V",
-    fn_note: "Fn 按住录音当前仅支持 macOS；已使用普通语音快捷键回退。",
-  });
-
   mockListVoiceModelCatalog.mockResolvedValue([
     {
       id: "sensevoice-small-int8-2024-07-17",
@@ -389,7 +307,6 @@ beforeEach(async () => {
     language: "auto",
   });
   mockOpenDialog.mockResolvedValue("/tmp/interview.wav");
-  mockValidateShortcut.mockResolvedValue(true);
   mockSaveConfig.mockResolvedValue(undefined);
   mockSaveVoiceInputConfig.mockResolvedValue(undefined);
 });
@@ -420,16 +337,12 @@ afterEach(async () => {
 });
 
 describe("VoiceSettings", () => {
-  it("应同时渲染语音输入、语音模型、语音处理和语音服务模型设置", async () => {
+  it("应渲染语音模型、语音处理和语音服务模型设置，并下线实时语音入口", async () => {
     const container = renderComponent();
     await flushEffects(6);
 
     const text = container.textContent ?? "";
-    expect(text).toContain("Voice Input");
     expect(text).toContain("Voice Models");
-    expect(text).toContain("Voice input shortcut");
-    expect(text).toContain("Hold to record, release to transcribe");
-    expect(text).toContain("🌐 Fn");
     expect(text).toContain("SenseVoice Small");
     expect(text).toContain("Local");
     expect(text).toContain("Not installed (ONNX int8 quantized");
@@ -437,33 +350,23 @@ describe("VoiceSettings", () => {
       "Local offline ASR; the model is downloaded to user data on demand.",
     );
     expect(text).toContain("Download model");
-    expect(text).toContain(
-      "Fn is not supported on this platform; shortcut fallback is used",
-    );
     expect(text).toContain("Voice Processing");
     expect(text).toContain("Voice Service Model");
-    expect(text).toContain("OpenAI Whisper 默认凭证");
     expect(text).toContain("openai / gpt-4.1-mini");
     expect(text).toContain("openai / gpt-4o-mini-tts");
-    expect(text).toContain("Registered in runtime");
     expect(text).toContain("Translation mode instruction");
+    expect(text).not.toContain("Voice Input");
+    expect(text).not.toContain("Voice input shortcut");
+    expect(text).not.toContain("Hold to record, release to transcribe");
+    expect(text).not.toContain("🌐 Fn");
+    expect(
+      container.querySelector("button[aria-label='Toggle voice input']"),
+    ).toBeNull();
+    expect(
+      container.querySelector("[data-testid='microphone-test']"),
+    ).toBeNull();
     expect(text).not.toContain("Translation mode shortcut registered");
     expect(text).not.toContain("settings.voice");
-  });
-
-  it("关闭语音输入时应展示 Fn 快捷键未开启状态", async () => {
-    mockGetVoiceInputConfig.mockResolvedValueOnce(
-      createVoiceInputConfig({ enabled: false }),
-    );
-
-    const container = renderComponent();
-    await flushEffects(6);
-
-    const text = container.textContent ?? "";
-    expect(text).toContain(
-      "Voice input is disabled; Fn and global shortcuts will not be registered.",
-    );
-    expect(text).toContain("Disabled; no global shortcut will be registered");
   });
 
   it("点击下载模型时应调用本地模型下载命令", async () => {
@@ -675,51 +578,6 @@ describe("VoiceSettings", () => {
     );
     expect(container.textContent ?? "").toContain(
       "这是测试音频的本地转写结果。",
-    );
-  });
-
-  it("切换语音输入开关时应保存 voice_input 配置", async () => {
-    const container = renderComponent();
-    await flushEffects(6);
-
-    const toggle = container.querySelector(
-      "button[aria-label='Toggle voice input']",
-    );
-    expect(toggle).toBeInstanceOf(HTMLButtonElement);
-
-    await act(async () => {
-      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await flushEffects(2);
-    });
-
-    expect(mockSaveVoiceInputConfig).toHaveBeenCalledTimes(1);
-    expect(mockSaveVoiceInputConfig.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        enabled: false,
-        shortcut: "CommandOrControl+Shift+V",
-      }),
-    );
-  });
-
-  it("切换麦克风设备时应保存 selected_device_id", async () => {
-    const container = renderComponent();
-    await flushEffects(6);
-
-    const button = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent?.includes("切换设备"),
-    );
-    expect(button).toBeInstanceOf(HTMLButtonElement);
-
-    await act(async () => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await flushEffects(2);
-    });
-
-    expect(mockSaveVoiceInputConfig).toHaveBeenCalledTimes(1);
-    expect(mockSaveVoiceInputConfig.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        selected_device_id: "usb-mic",
-      }),
     );
   });
 

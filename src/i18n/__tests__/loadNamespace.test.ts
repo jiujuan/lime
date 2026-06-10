@@ -588,27 +588,6 @@ describe("i18n namespace loader", () => {
         "skills.scaffoldDialog.validation.directory",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "skills.executionDialog.mode.workflow",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "skills.executionDialog.argumentHint",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "skills.executionDialog.loadFailed.title",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "capabilityDraft.panel.title",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "capabilityDraft.panel.action.verify",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "capabilityDraft.panel.feedback.registered",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "capabilityDraft.panel.summary.filesWithMore",
-      );
-      expect(resources[locale].agent).toHaveProperty(
         "agentChat.sessionOverview.panel.title",
       );
       expect(resources[locale].agent).toHaveProperty(
@@ -1155,9 +1134,6 @@ describe("i18n namespace loader", () => {
         "settings.hotkeys.title",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.hotkeys.summary.globalReady",
-      );
-      expect(resources[locale].settings).toHaveProperty(
         "settings.hotkeys.catalog.scene.global.title",
       );
       expect(resources[locale].settings).toHaveProperty(
@@ -1602,13 +1578,7 @@ describe("i18n namespace loader", () => {
         "settings.agent.skills.advancedEntry.tipAria",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.voice.input.title",
-      );
-      expect(resources[locale].settings).toHaveProperty(
         "settings.voice.model.action.download",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.voice.shortcut.status.fnUnsupported",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.voice.processing.title",
@@ -2046,18 +2016,10 @@ describe("i18n namespace loader", () => {
       ],
     ).toBe("标准");
     expect(
-      loadNamespaceResource("fr-FR", "settings")["settings.voice.input.title"],
-    ).toBe("语音输入");
-    expect(
       loadNamespaceResource("fr-FR", "settings")[
         "settings.voice.model.action.download"
       ],
     ).toBe("下载模型");
-    expect(
-      loadNamespaceResource("fr-FR", "settings")[
-        "settings.voice.shortcut.status.fnUnsupported"
-      ],
-    ).toBe("当前平台不支持 Fn，已使用快捷键回退");
     expect(
       loadNamespaceResource("fr-FR", "settings")[
         "settings.voice.processing.title"

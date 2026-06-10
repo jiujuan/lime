@@ -15,7 +15,6 @@ import {
   FolderOpen,
   HardDrive,
   Loader2,
-  Mic,
   Trash2,
   Wand2,
   type LucideIcon,
@@ -23,25 +22,16 @@ import {
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
-import { ShortcutSettings } from "@/components/settings-v2/shared/ShortcutSettings";
-import { MicrophoneTest } from "@/components/voice/MicrophoneTest";
 import { InstructionEditor } from "@/components/voice/InstructionEditor";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
 import {
-  getAsrCredentials,
   getVoiceInputConfig,
   saveVoiceInputConfig,
-  type AsrCredentialEntry,
   type VoiceInputConfig,
   type VoiceInstruction,
 } from "@/lib/api/asrProvider";
-import {
-  getVoiceShortcutRuntimeStatus,
-  validateShortcut,
-  type VoiceShortcutRuntimeStatus,
-} from "@/lib/api/hotkeys";
 import {
   deleteVoiceModel,
   downloadVoiceModel,
@@ -302,81 +292,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function buildPrimaryShortcutStatus(
-  t: VoiceSettingsTranslate,
-  voiceConfig: VoiceInputConfig | null,
-  runtimeStatus: VoiceShortcutRuntimeStatus | null,
-): { text: string; tone: PillTone } {
-  if (!voiceConfig) {
-    return {
-      text: t("settings.voice.shortcut.status.loading"),
-      tone: "neutral",
-    };
-  }
-
-  if (!voiceConfig.enabled) {
-    return {
-      text: t("settings.voice.shortcut.status.primaryDisabled"),
-      tone: "neutral",
-    };
-  }
-
-  if (
-    runtimeStatus?.shortcut_registered &&
-    runtimeStatus.registered_shortcut === voiceConfig.shortcut
-  ) {
-    return {
-      text: t("settings.voice.shortcut.status.primaryRegistered"),
-      tone: "success",
-    };
-  }
-
-  return {
-    text: t("settings.voice.shortcut.status.primaryPending"),
-    tone: "warning",
-  };
-}
-
-function buildFnShortcutStatus(
-  t: VoiceSettingsTranslate,
-  runtimeStatus: VoiceShortcutRuntimeStatus | null,
-): { text: string; tone: PillTone } {
-  if (!runtimeStatus) {
-    return {
-      text: t("settings.voice.shortcut.status.fnLoading"),
-      tone: "neutral",
-    };
-  }
-
-  if (runtimeStatus.fn_registered) {
-    return {
-      text: t("settings.voice.shortcut.status.fnRegistered"),
-      tone: "success",
-    };
-  }
-
-  if (runtimeStatus.fn_supported) {
-    return {
-      text: t("settings.voice.shortcut.status.fnPending"),
-      tone: "warning",
-    };
-  }
-
-  return {
-    text: t("settings.voice.shortcut.status.fnUnsupported"),
-    tone: "warning",
-  };
-}
-
 export function VoiceSettings() {
   const { t } = useTranslation("settings");
   const [config, setConfig] = useState<Config | null>(null);
   const [voiceConfig, setVoiceConfig] = useState<VoiceInputConfig | null>(null);
-  const [voiceShortcutStatus, setVoiceShortcutStatus] =
-    useState<VoiceShortcutRuntimeStatus | null>(null);
-  const [asrCredentials, setAsrCredentials] = useState<AsrCredentialEntry[]>(
-    [],
-  );
   const [voiceModelCatalog, setVoiceModelCatalog] = useState<
     VoiceModelCatalogEntry[]
   >([]);
@@ -405,19 +324,12 @@ export function VoiceSettings() {
     setLoading(true);
 
     try {
-      const [
-        nextConfig,
-        nextVoiceConfig,
-        nextVoiceShortcutStatus,
-        nextAsr,
-        nextVoiceModelCatalog,
-      ] = await Promise.all([
-        getConfig(),
-        getVoiceInputConfig(),
-        getVoiceShortcutRuntimeStatus().catch(() => null),
-        getAsrCredentials().catch(() => []),
-        listVoiceModelCatalog().catch(() => []),
-      ]);
+      const [nextConfig, nextVoiceConfig, nextVoiceModelCatalog] =
+        await Promise.all([
+          getConfig(),
+          getVoiceInputConfig(),
+          listVoiceModelCatalog().catch(() => []),
+        ]);
       const primaryVoiceModel = nextVoiceModelCatalog[0] ?? null;
       const nextVoiceModelState = primaryVoiceModel
         ? await getVoiceModelInstallState(primaryVoiceModel.id).catch(
@@ -430,8 +342,6 @@ export function VoiceSettings() {
 
       setConfig(nextConfig);
       setVoiceConfig(normalizedVoiceConfig);
-      setVoiceShortcutStatus(nextVoiceShortcutStatus);
-      setAsrCredentials(nextAsr);
       setVoiceModelCatalog(nextVoiceModelCatalog);
       setVoiceModelState(nextVoiceModelState);
       setGlobalVoicePreference(
@@ -508,20 +418,13 @@ export function VoiceSettings() {
         );
         await saveVoiceInputConfig(nextVoiceConfig);
         setVoiceConfig(nextVoiceConfig);
-        const nextRuntimeStatus = await getVoiceShortcutRuntimeStatus().catch(
-          () => null,
-        );
-        setVoiceShortcutStatus(nextRuntimeStatus);
-        if (nextVoiceConfig.enabled !== voiceConfig.enabled) {
-          await loadVoiceSettings();
-        }
         showMessage("success", t("settings.voice.message.saved"));
       } catch (error) {
         console.error("保存语音设置失败:", error);
         showMessage("error", t("settings.voice.message.saveFailed"));
       }
     },
-    [loadVoiceSettings, showMessage, t, voiceConfig],
+    [showMessage, t, voiceConfig],
   );
 
   const persistGlobalVoicePreference = useCallback(
@@ -561,16 +464,6 @@ export function VoiceSettings() {
     [config, showMessage, t],
   );
 
-  const enabledAsrCredentials = useMemo(
-    () => asrCredentials.filter((credential) => !credential.disabled),
-    [asrCredentials],
-  );
-  const defaultAsrCredential = useMemo(
-    () =>
-      enabledAsrCredentials.find((credential) => credential.is_default) ?? null,
-    [enabledAsrCredentials],
-  );
-
   const voiceProviders = useMemo(
     () =>
       providers.filter((provider) =>
@@ -608,21 +501,8 @@ export function VoiceSettings() {
         })
       : undefined;
 
-  const primaryShortcutStatus = useMemo(
-    () => buildPrimaryShortcutStatus(t, voiceConfig, voiceShortcutStatus),
-    [t, voiceConfig, voiceShortcutStatus],
-  );
-
-  const fnShortcutStatus = useMemo(
-    () => buildFnShortcutStatus(t, voiceShortcutStatus),
-    [t, voiceShortcutStatus],
-  );
-
   const primaryVoiceModel = voiceModelCatalog[0] ?? null;
-  const isVoiceModelDefault = Boolean(
-    voiceModelState?.default_credential_id ||
-    defaultAsrCredential?.provider === "sensevoice_local",
-  );
+  const isVoiceModelDefault = Boolean(voiceModelState?.default_credential_id);
   const voiceModelDownloadReady = Boolean(
     primaryVoiceModel?.download_url?.trim() &&
     primaryVoiceModel?.vad_download_url?.trim(),
@@ -657,39 +537,6 @@ export function VoiceSettings() {
     : providers.length === 0
       ? t("settings.voice.processing.modelHint.empty")
       : t("settings.voice.processing.modelHint.ready");
-
-  const handleVoiceEnabledChange = (enabled: boolean) => {
-    void persistVoiceConfig((current) => ({
-      ...current,
-      enabled,
-    }));
-  };
-
-  const handleSoundEnabledChange = (soundEnabled: boolean) => {
-    void persistVoiceConfig((current) => ({
-      ...current,
-      sound_enabled: soundEnabled,
-    }));
-  };
-
-  const handleDeviceChange = (selectedDeviceId?: string) => {
-    void persistVoiceConfig((current) => ({
-      ...current,
-      selected_device_id: selectedDeviceId,
-    }));
-  };
-
-  const handlePrimaryShortcutChange = async (shortcut: string) => {
-    const normalizedShortcut = shortcut.trim();
-    if (!normalizedShortcut) {
-      return;
-    }
-
-    await persistVoiceConfig((current) => ({
-      ...current,
-      shortcut: normalizedShortcut,
-    }));
-  };
 
   const handlePolishEnabledChange = (enabled: boolean) => {
     void persistVoiceConfig((current) => ({
@@ -997,159 +844,6 @@ export function VoiceSettings() {
 
   return (
     <div className="max-w-[820px] space-y-4">
-      {voiceConfig?.enabled && !defaultAsrCredential ? (
-        <div className="rounded-[22px] border border-amber-200 bg-amber-50/85 px-4 py-3 text-sm text-amber-800">
-          {t("settings.voice.warning.noDefaultAsr")}
-        </div>
-      ) : null}
-
-      <SettingCard
-        title={t("settings.voice.input.title")}
-        description={t("settings.voice.input.description")}
-        icon={Mic}
-        tipAriaLabel={t("settings.voice.card.tipAria", {
-          title: t("settings.voice.input.title"),
-        })}
-      >
-        <SettingRow
-          label={t("settings.voice.input.shortcut.label")}
-          description={t("settings.voice.input.shortcut.description")}
-        >
-          <div
-            className={cn(
-              "space-y-3 rounded-[20px] border px-4 py-4 transition-colors",
-              voiceConfig?.enabled
-                ? "border-emerald-200 bg-emerald-50/80"
-                : "border-slate-200/80 bg-slate-50/80",
-            )}
-          >
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 space-y-1">
-                <p className="text-sm font-semibold text-slate-900">
-                  {t("settings.voice.input.holdToRecord")}
-                </p>
-                <p className="text-xs leading-5 text-slate-500">
-                  {defaultAsrCredential
-                    ? t("settings.voice.input.defaultAsrCredential", {
-                        name:
-                          defaultAsrCredential.name ||
-                          defaultAsrCredential.provider,
-                      })
-                    : t("settings.voice.input.noDefaultAsrCredential")}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {voiceConfig?.enabled ? (
-                  <span className="inline-flex h-7 items-center rounded-full border border-emerald-200 bg-white px-2.5 text-xs font-semibold text-emerald-800 shadow-sm">
-                    {t("settings.voice.input.fn.activeKeyLabel")}
-                  </span>
-                ) : null}
-                <Switch
-                  checked={voiceConfig?.enabled ?? false}
-                  onCheckedChange={handleVoiceEnabledChange}
-                  disabled={!voiceConfig}
-                  aria-label={t("settings.voice.input.toggleAria")}
-                  className={
-                    voiceConfig?.enabled ? "!bg-emerald-800" : "!bg-slate-300"
-                  }
-                />
-              </div>
-            </div>
-            {voiceConfig?.enabled ? (
-              <div className="rounded-[16px] border border-slate-200/80 bg-slate-100/90 px-3 py-2.5 text-xs leading-5 text-slate-600">
-                <span className="mr-2 inline-flex h-6 items-center rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-700">
-                  {t("settings.voice.input.fn.keyLabel")}
-                </span>
-                {voiceShortcutStatus?.fn_note ??
-                  t("settings.voice.input.fnHoldDescription")}
-                {voiceShortcutStatus?.fn_fallback_shortcut ? (
-                  <>
-                    {" "}
-                    {t("settings.voice.input.fnFallbackShortcut", {
-                      shortcut: voiceShortcutStatus.fn_fallback_shortcut,
-                    })}
-                  </>
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-xs leading-5 text-slate-500">
-                {t("settings.voice.input.disabledHint")}
-              </p>
-            )}
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.voice.input.primaryShortcut.label")}
-          description={t("settings.voice.input.primaryShortcut.description")}
-        >
-          <div className="space-y-3">
-            <ShortcutSettings
-              currentShortcut={voiceConfig?.shortcut ?? ""}
-              onShortcutChange={handlePrimaryShortcutChange}
-              onValidate={validateShortcut}
-              disabled={!voiceConfig}
-            />
-            <StatusPill tone={primaryShortcutStatus.tone}>
-              {primaryShortcutStatus.text}
-            </StatusPill>
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.voice.input.fn.label")}
-          description={t("settings.voice.input.fn.description")}
-        >
-          <div className="space-y-3 rounded-[18px] bg-slate-50/80 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-8 items-center rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">
-                {t("settings.voice.input.fn.keyLabel")}
-              </span>
-              <StatusPill tone={fnShortcutStatus.tone}>
-                {fnShortcutStatus.text}
-              </StatusPill>
-            </div>
-            <p className="text-xs leading-5 text-slate-500">
-              {voiceShortcutStatus?.fn_note ??
-                t("settings.voice.input.fn.statusLoading")}
-              {voiceShortcutStatus?.fn_fallback_shortcut ? (
-                <>
-                  {" "}
-                  {t("settings.voice.input.fnFallbackShortcut", {
-                    shortcut: voiceShortcutStatus.fn_fallback_shortcut,
-                  })}
-                </>
-              ) : null}
-            </p>
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.voice.input.microphone.label")}
-          description={t("settings.voice.input.microphone.description")}
-        >
-          <MicrophoneTest
-            selectedDeviceId={voiceConfig?.selected_device_id}
-            onDeviceChange={handleDeviceChange}
-            disabled={!voiceConfig}
-          />
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.voice.input.sound.label")}
-          description={t("settings.voice.input.sound.description")}
-        >
-          <div className="flex items-center justify-end">
-            <Switch
-              checked={voiceConfig?.sound_enabled ?? true}
-              onCheckedChange={handleSoundEnabledChange}
-              disabled={!voiceConfig}
-              aria-label={t("settings.voice.input.sound.toggleAria")}
-            />
-          </div>
-        </SettingRow>
-      </SettingCard>
-
       <SettingCard
         title={t("settings.voice.model.title")}
         description={t("settings.voice.model.description")}

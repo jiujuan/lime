@@ -19,9 +19,11 @@
 
 生产路径不能 mock。mock 只允许作为测试夹具、契约守卫或已标明测试场景的本地 fixture；如果生产入口需要靠 `defaultMocks`、`mockPriorityCommands`、`invokeMockOnly`、renderer mock fallback 或 App Server mock backend 才能跑通，该入口应判为阻塞缺口，而不是可交付降级。
 
-`lime-rs/src/**` 是旧主 crate、启动/注册、legacy facade 和迁移来源区，不再作为业务逻辑、领域服务、runtime 分支、API adapter、数据访问或跨 App 复用能力的长期 owner。触碰其中逻辑时，默认优先迁到 `lime-rs/crates/**` 的 App Server、RuntimeCore、services、core、agent 或协议/client crate；桌面壳能力迁到 Electron Desktop Host。只能保留必要 bootstrap / runner 接线、compat facade 委托、撤注册机械修复和带退出条件的 blocker 记录。
+用户问“结论 / 复核 / 是否能删 / 是否 dead”时，先给短结论和关键证据，不自动扩展成全量治理清理。目录级旧实现如果同时满足：已脱离构建 / workspace manifest、当前工作树已物理删除或 staged delete、已有 current owner 承接、边界守卫能防回流，可直接按目录级 `dead / deleted / forbidden-to-restore` 处理；不要求逐文件证明“业务语义无价值”。执行计划历史 checkpoint、旧路线图和 git history 里的旧路径默认是 evidence，不是 current owner 残留，除非它们正在当前规则或 active checklist 中被当成现役落点。
 
-`lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。新增 Rust 后端能力必须进入 App Server crates / RuntimeCore / services 等 current 事实源；桌面壳能力进入 Electron Desktop Host。该目录只允许删除旧 wrapper、撤 runner / DevBridge dispatcher / catalog / mock 注册后的机械编译修复，或登记无法删除的 blocker。
+`lime-rs/src/**` 旧主 crate / legacy facade / 迁移来源目录已于 `2026-06-10` 物理删除，当前 Cargo workspace 只以 `lime-rs/crates/**` 为 Rust 事实源。不得恢复该目录、不得新增 bootstrap / runner / compat facade / tombstone / stub，也不得把历史路径当新增后端业务、领域服务、runtime 分支、API adapter、数据访问或跨 App 复用能力的落点。需要参考旧实现时只读 git history / 执行计划，落地必须进入 App Server、RuntimeCore、services、core、agent、协议/client crate 或 Electron Desktop Host。
+
+`lime-rs/src/commands/**` 已随 `lime-rs/src/**` 删除；旧 Tauri command wrapper、runner / dispatcher / catalog / mock 注册只能作为 retired guard / 历史引用存在。新增 Rust 后端能力必须进入 App Server crates / RuntimeCore / services 等 current 事实源；桌面壳能力进入 Electron Desktop Host。任何恢复旧 wrapper、fail-closed stub、compat wrapper 或退场 stub 的改动都应被视为旧路回流。
 
 非生成代码文件接近 `800` 行时进入拆分预警，超过 `1000` 行时必须把它视为治理风险。触碰这类文件前，优先按领域、职责、数据边界或协议边界拆成小模块，并复用项目已有的 facade + 子模块、service / repository 分层、projection / selector / helper 分离等模式；如果本轮无法拆分，必须在执行计划登记原因、风险、退出条件和下一次拆分入口。不得因为“顺手加一点”继续向巨型文件追加新业务逻辑。
 

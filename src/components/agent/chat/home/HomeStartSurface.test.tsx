@@ -91,11 +91,11 @@ function createStarterChips(): HomeStarterChip[] {
 function createGuideCards(): HomeGuideCard[] {
   return [
     {
-      id: "guide-voice",
-      title: "语音输入怎么设置？",
-      summary: "把灵感直接说进生成容器。",
-      prompt: "请告诉我语音输入怎么设置。",
-      testId: "home-guide-voice",
+      id: "guide-model",
+      title: "怎么添加模型？",
+      summary: "配置模型后再开始生成。",
+      prompt: "请告诉我怎么添加模型。",
+      testId: "home-guide-model",
     },
   ];
 }
@@ -204,14 +204,14 @@ describe("HomeStartSurface", () => {
     ).toBeTruthy();
 
     const card = container.querySelector(
-      '[data-testid="home-guide-voice"]',
+      '[data-testid="home-guide-model"]',
     ) as HTMLButtonElement | null;
     act(() => {
       card?.click();
     });
 
     expect(onSelectGuideCard).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "guide-voice" }),
+      expect.objectContaining({ id: "guide-model" }),
     );
   });
 

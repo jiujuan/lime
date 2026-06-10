@@ -3,8 +3,6 @@
  * @description 快捷键页的共享事实源
  */
 
-import type { VoiceInputConfig } from "@/lib/api/asrProvider";
-import type { HotkeyRuntimeStatus } from "@/lib/api/hotkeys";
 import {
   formatShortcutTokens,
   type HotkeyPlatform,
@@ -40,11 +38,6 @@ type AuditedHotkeyCopyFields = Pick<
   "label" | "description" | "source" | "condition"
 >;
 
-interface HotkeyStatusCopy {
-  label: string;
-  description: string;
-}
-
 export type HotkeyCatalogTranslate = (
   key: string,
   options?: Record<string, unknown>,
@@ -55,12 +48,6 @@ export interface HotkeyCatalogCopy {
   scenes: Record<HotkeyScene, { title: string; description: string }>;
   status: {
     staticReadyLabel: string;
-    voiceInput: {
-      inactive: HotkeyStatusCopy;
-      needsConfig: HotkeyStatusCopy;
-      runtimeError: HotkeyStatusCopy;
-      ready: HotkeyStatusCopy;
-    };
   };
 }
 
@@ -78,23 +65,8 @@ interface AuditedHotkeyCatalog {
 
 interface BuildHotkeyCatalogParams {
   platform: HotkeyPlatform;
-  voiceConfig: Partial<VoiceInputConfig>;
-  runtimeStatus: HotkeyRuntimeStatus | null;
   copy?: HotkeyCatalogCopy;
 }
-
-const GLOBAL_SHORTCUT_DEFINITIONS: AuditedHotkeyDefinition[] = [
-  {
-    id: "voice-input",
-    label: "语音输入",
-    description: "按下开始录音，松开后识别并输出文本。",
-    shortcut: "",
-    scope: "global",
-    scene: "global",
-    source: "语音服务",
-    condition: "依赖语音输入已启用且系统允许注册全局快捷键。",
-  },
-];
 
 function buildDefinitionCopy(
   definitions: AuditedHotkeyDefinition[],
@@ -117,16 +89,6 @@ export function createHotkeyCatalogCopy(
 ): HotkeyCatalogCopy {
   return {
     definitions: {
-      "voice-input": {
-        label: t("settings.hotkeys.catalog.definitions.voiceInput.label"),
-        description: t(
-          "settings.hotkeys.catalog.definitions.voiceInput.description",
-        ),
-        source: t("settings.hotkeys.catalog.definitions.voiceInput.source"),
-        condition: t(
-          "settings.hotkeys.catalog.definitions.voiceInput.condition",
-        ),
-      },
       "workspace-sidebar-toggle": {
         label: t(
           "settings.hotkeys.catalog.definitions.workspaceSidebarToggle.label",
@@ -222,43 +184,12 @@ export function createHotkeyCatalogCopy(
     },
     status: {
       staticReadyLabel: t("settings.hotkeys.catalog.status.static.readyLabel"),
-      voiceInput: {
-        inactive: {
-          label: t("settings.hotkeys.catalog.status.voiceInput.inactive.label"),
-          description: t(
-            "settings.hotkeys.catalog.status.voiceInput.inactive.description",
-          ),
-        },
-        needsConfig: {
-          label: t(
-            "settings.hotkeys.catalog.status.voiceInput.needsConfig.label",
-          ),
-          description: t(
-            "settings.hotkeys.catalog.status.voiceInput.needsConfig.description",
-          ),
-        },
-        runtimeError: {
-          label: t(
-            "settings.hotkeys.catalog.status.voiceInput.runtimeError.label",
-          ),
-          description: t(
-            "settings.hotkeys.catalog.status.voiceInput.runtimeError.description",
-          ),
-        },
-        ready: {
-          label: t("settings.hotkeys.catalog.status.voiceInput.ready.label"),
-          description: t(
-            "settings.hotkeys.catalog.status.voiceInput.ready.description",
-          ),
-        },
-      },
     },
   };
 }
 
 const DEFAULT_HOTKEY_CATALOG_COPY: HotkeyCatalogCopy = {
   definitions: buildDefinitionCopy([
-    ...GLOBAL_SHORTCUT_DEFINITIONS,
     WORKBENCH_SIDEBAR_TOGGLE_HOTKEY,
     ...DOCUMENT_EDITOR_HOTKEYS,
     ...DOCUMENT_CANVAS_HOTKEYS,
@@ -283,24 +214,6 @@ const DEFAULT_HOTKEY_CATALOG_COPY: HotkeyCatalogCopy = {
   },
   status: {
     staticReadyLabel: "可直接使用",
-    voiceInput: {
-      inactive: {
-        label: "功能未启用",
-        description: "去语音服务里开启语音输入后才会注册全局快捷键。",
-      },
-      needsConfig: {
-        label: "未设置快捷键",
-        description: "语音输入已启用，但没有配置可注册的快捷键。",
-      },
-      runtimeError: {
-        label: "未注册到系统",
-        description: "语音输入已启用，但运行时未成功注册快捷键。",
-      },
-      ready: {
-        label: "运行中",
-        description: "已完成注册，可以直接唤起语音输入。",
-      },
-    },
   },
 };
 
@@ -331,79 +244,11 @@ function createStaticHotkeyItem(
   };
 }
 
-function buildVoiceInputHotkey(
-  platform: HotkeyPlatform,
-  voiceConfig: Partial<VoiceInputConfig>,
-  runtimeStatus: HotkeyRuntimeStatus | null,
-  copy: HotkeyCatalogCopy,
-): AuditedHotkeyItem {
-  const definition = applyDefinitionCopy(GLOBAL_SHORTCUT_DEFINITIONS[0]!, copy);
-  const shortcut = voiceConfig.shortcut ?? "";
-  const enabled = voiceConfig.enabled ?? false;
-  const registered = runtimeStatus?.voice.shortcut_registered ?? enabled;
-  const statusCopy = copy.status.voiceInput;
-
-  if (!enabled) {
-    return {
-      ...definition,
-      shortcut,
-      keys: formatShortcutTokens(shortcut, platform),
-      status: "inactive",
-      statusLabel: statusCopy.inactive.label,
-      statusDescription: statusCopy.inactive.description,
-      available: false,
-    };
-  }
-
-  if (!shortcut.trim()) {
-    return {
-      ...definition,
-      shortcut,
-      keys: formatShortcutTokens(shortcut, platform),
-      status: "needs-config",
-      statusLabel: statusCopy.needsConfig.label,
-      statusDescription: statusCopy.needsConfig.description,
-      available: false,
-    };
-  }
-
-  if (!registered) {
-    return {
-      ...definition,
-      shortcut,
-      keys: formatShortcutTokens(shortcut, platform),
-      status: "runtime-error",
-      statusLabel: statusCopy.runtimeError.label,
-      statusDescription: statusCopy.runtimeError.description,
-      available: false,
-    };
-  }
-
-  return {
-    ...definition,
-    shortcut,
-    keys: formatShortcutTokens(shortcut, platform),
-    status: "ready",
-    statusLabel: statusCopy.ready.label,
-    statusDescription: statusCopy.ready.description,
-    available: true,
-  };
-}
-
 export function buildAuditedHotkeyCatalog({
   platform,
-  voiceConfig,
-  runtimeStatus,
   copy = DEFAULT_HOTKEY_CATALOG_COPY,
 }: BuildHotkeyCatalogParams): AuditedHotkeyCatalog {
   const sections: AuditedHotkeySection[] = [
-    {
-      scene: "global",
-      ...copy.scenes.global,
-      hotkeys: [
-        buildVoiceInputHotkey(platform, voiceConfig, runtimeStatus, copy),
-      ],
-    },
     {
       scene: "workspace",
       ...copy.scenes.workspace,
@@ -429,8 +274,6 @@ export function buildAuditedHotkeyCatalog({
 
   const hotkeys = sections.flatMap((section) => section.hotkeys);
   const ready = hotkeys.filter((item) => item.available).length;
-  const globalReady =
-    sections[0]?.hotkeys.filter((item) => item.available).length ?? 0;
 
   return {
     sections,
@@ -438,7 +281,7 @@ export function buildAuditedHotkeyCatalog({
       total: hotkeys.length,
       ready,
       attention: hotkeys.length - ready,
-      globalReady,
+      globalReady: 0,
     },
   };
 }

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -72,6 +72,25 @@ const RETIRED_VOICE_REALTIME_FACADE_COMMANDS = [
   "cancel_recording",
   "get_recording_status",
 ];
+const RETIRED_VOICE_REALTIME_FRONTEND_HELPERS = [
+  "transcribeAudio",
+  "polishVoiceText",
+  "outputVoiceText",
+  "startRecording",
+  "stopRecording",
+  "getRecordingSnapshot",
+  "getRecordingSegment",
+  "cancelRecording",
+  "getRecordingStatus",
+];
+const RETIRED_VOICE_REALTIME_GUI_FALSE_ENTRY_LITERALS = [
+  "guide-voice-input",
+  "home-guide-voice-input",
+  "guide-voice",
+  "home-guide-voice",
+  "voice-input",
+  "listenForVoiceShortcut",
+];
 const RETIRED_VOICE_MODEL_DEFAULT_FACADE_COMMAND = "voice_models_set_default";
 const RETIRED_VOICE_MODEL_TEST_TRANSCRIBE_FACADE_COMMAND =
   "voice_models_test_transcribe_file";
@@ -86,6 +105,42 @@ function repoFileExists(path: string): boolean {
 
 function readRepoFileIfExists(path: string): string {
   return repoFileExists(path) ? readRepoFile(path) : "";
+}
+
+function listProductionTsFiles(rootPath: string): string[] {
+  const absoluteRoot = resolve(cwd(), rootPath);
+  if (!existsSync(absoluteRoot)) {
+    return [];
+  }
+
+  return readdirSync(absoluteRoot, { withFileTypes: true }).flatMap((entry) => {
+    const relativePath = `${rootPath}/${entry.name}`;
+    if (
+      entry.name === "__tests__" ||
+      entry.name === "test" ||
+      entry.name === "tests"
+    ) {
+      return [];
+    }
+    if (entry.isDirectory()) {
+      return listProductionTsFiles(relativePath);
+    }
+    if (
+      !/\.(ts|tsx)$/.test(entry.name) ||
+      /\.(test|spec)\.(ts|tsx)$/.test(entry.name)
+    ) {
+      return [];
+    }
+    return [relativePath];
+  });
+}
+
+function listProductionGuiTsFiles(): string[] {
+  return [
+    ...listProductionTsFiles("src/components"),
+    ...listProductionTsFiles("src/hooks"),
+    ...listProductionTsFiles("src/lib"),
+  ];
 }
 
 function expectStringLiteralsAbsent(source: string, literals: string[]): void {
@@ -123,6 +178,32 @@ function expectStringSetExcludes(
       `${setName} should not include ${command}`,
     ).toBe(false);
   }
+}
+
+function findAsrProviderNamedImports(
+  source: string,
+  helpers: string[],
+): string[] {
+  const imported = new Set<string>();
+  const importPattern =
+    /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["'][^"']*asrProvider["'];/g;
+  for (const match of source.matchAll(importPattern)) {
+    const names = match[1]
+      .split(",")
+      .map((name) =>
+        name
+          .replace(/^type\s+/, "")
+          .split(/\s+as\s+/)[0]
+          .trim(),
+      )
+      .filter(Boolean);
+    for (const name of names) {
+      if (helpers.includes(name)) {
+        imported.add(name);
+      }
+    }
+  }
+  return [...imported].sort();
 }
 
 function expectRustRunnerDoesNotRegister(
@@ -526,5 +607,37 @@ describe("ASR / Voice current boundary", () => {
       RETIRED_VOICE_REALTIME_FACADE_COMMANDS,
     );
     expect(() => readRepoFile("lime-rs/src/voice/commands.rs")).toThrow();
+  });
+
+  it("生产 GUI 不应重新 import 实时语音 fail-closed wrapper", () => {
+    const productionFiles = listProductionGuiTsFiles().filter(
+      (path) => path !== "src/lib/api/asrProvider.ts",
+    );
+    const violations = productionFiles.flatMap((path) => {
+      const imports = findAsrProviderNamedImports(
+        readRepoFile(path),
+        RETIRED_VOICE_REALTIME_FRONTEND_HELPERS,
+      );
+      return imports.map((name) => `${path}: ${name}`);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it("生产 GUI 不应重新暴露实时语音默认入口", () => {
+    const productionFiles = listProductionGuiTsFiles().filter(
+      (path) => path !== "src/lib/api/asrProvider.ts",
+    );
+    const violations = productionFiles.flatMap((path) => {
+      const source = readRepoFile(path);
+      return RETIRED_VOICE_REALTIME_GUI_FALSE_ENTRY_LITERALS.flatMap(
+        (literal) =>
+          source.includes(`"${literal}"`) || source.includes(`'${literal}'`)
+            ? [`${path}: ${literal}`]
+            : [],
+      );
+    });
+
+    expect(violations).toEqual([]);
   });
 });

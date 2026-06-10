@@ -47,6 +47,9 @@ const CURRENT_MEDIA_TASK_METHODS = [
 ];
 
 const RETIRED_MEDIA_TASK_FILES = [
+  "lime-rs/src/app/runner.rs",
+  "lime-rs/src/dev_bridge/dispatcher.rs",
+  "lime-rs/src/commands/mod.rs",
   "lime-rs/src/commands/media_task_cmd.rs",
   "lime-rs/src/commands/aster_agent_cmd/tool_runtime/creation_tools.rs",
   "lime-rs/src/dev_bridge/dispatcher/media_tasks.rs",
@@ -136,9 +139,6 @@ describe("mediaTasks current App Server boundary", () => {
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
       readRepoFile("electron/ipcChannels.ts"),
       readRepoFile("electron/hostCommands.ts"),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
-      readRepoFile("lime-rs/src/commands/mod.rs"),
       ...RETIRED_MEDIA_TASK_FILES.map(readOptionalRepoFile),
     ].join("\n");
 

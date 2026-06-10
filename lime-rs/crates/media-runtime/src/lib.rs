@@ -12,6 +12,13 @@ use thiserror::Error;
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
+mod video_worker;
+
+pub use video_worker::{
+    execute_video_generation_task, execute_video_generation_task_with_hook,
+    VideoGenerationRunnerConfig, VIDEO_TASK_RUNNER_WORKER_ID,
+};
+
 pub const DEFAULT_ARTIFACT_ROOT: &str = ".lime/tasks";
 pub const IMAGE_TASK_RUNNER_WORKER_ID: &str = "lime-image-api-worker";
 pub const IMAGE_TASK_RUNNER_TIMEOUT_SECS: u64 = 300;

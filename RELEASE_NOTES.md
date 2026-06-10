@@ -1,36 +1,34 @@
-## Lime v1.64.0
+## Lime v1.65.0
 
 ### 新功能
-- App Server JSON-RPC current 协议继续扩展，补齐图库素材、项目素材、会话文件、统一记忆、语音 ASR 凭证、语音指令和视频任务产物等 schema 与客户端类型。
-- 新增 Agent Runtime 标准化 npm 包面，包括 `@limecloud/agent-runtime-client` 与 `@limecloud/agent-ui-contracts`，并增强 Agent Runtime projection / UI 的共享事件、read model、runtime facts 与路由能力。
-- App Server local data source 按领域拆分为 agent apps、automation、channels、connect、diagnostics、gallery、knowledge、MCP、media、model providers、project materials、session files、skills、unified memory、voice 与 workspaces 等 current 模块。
-- Agent App、Skills、Resource Manager、Memory、Connect、Artifact、Video Workspace 与 Agent Chat 工作台继续接入 current App Server / Desktop Host 主链。
+- `lime media video generate` 接入 current media runtime，可直接创建并执行视频生成任务，按本地配置或环境变量解析服务端点与 API Key，并写回进度、错误和产物状态。
+- `@limecloud/agent-runtime-projection` 新增 artifact、context、conversation、diagnostic、hydration、lifecycle、permission、plan approval、queue、thread item 与 tool event 等标准投影构建模块。
+- Agent Chat 投影继续复用共享 projection 包，统一运行态、队列、权限、历史 hydrate、工具轨迹、线程条目与上下文事件的 read model 语义。
 
 ### 修复
-- 修复多组前端 API、Desktop Host、DevBridge 与 command contract 仍可能引用旧命令、旧 mock 或 legacy wrapper 的边界缺口。
-- 修复 App Server client 对 session files、gallery materials、materials、media tasks、voice models、ASR、unified memory、system settings 与 agent runtime current 方法的返回形状和测试覆盖缺口。
-- 修复 Agent Chat 工作台在 session files、外链、Markdown 渲染、工具过程、工作台上下文与空态输入流中的回归风险。
-- 修复 Electron host command / IPC channel current 白名单与命令合同守卫中的残留旧入口。
+- 修复视频生成 skill 的推荐命令，优先指向 `lime media video generate --prompt "..." --aspect-ratio 9:16` current 入口。
+- 修复旧 `lime-rs/src/**` 仍可能被误判为 current Rust owner 的治理口径，明确恢复旧 Tauri wrapper、stub 或 legacy facade 都属于回流。
+- 修复语音设置页对 ASR credential 与快捷键运行态的重复依赖，降低旧命令面影响，默认语音模型状态以 current voice model install state 为准。
 
 ### 优化与重构
-- 继续下线旧 Tauri command wrapper，收缩 ASR、execution run、gallery material、layered design、material、session files、video generation、voice model、memory feedback 等 legacy 命令面。
-- 将 App Server protocol v0 从巨型文件拆成领域模块，并把 schema export registry 独立出来，降低协议维护成本。
-- 将 App Server local data source 从单文件巨型实现拆成领域模块，减少交叉修改和重复分支。
-- 收缩 Agent Runtime UI 包中的重复实现，把共享合同、事件存储、read model、summary、UI state 与 runtime facts 放到更明确的包边界。
-- 继续更新治理、质量工作流、并行协作、App Server 路线图和 current migration 执行计划，明确 current / compat / deprecated / dead 边界。
+- 物理删除旧 `lime-rs/src/**` 孤儿目录及旧 Tauri command / service / dev_bridge / runner 实现，Rust 后端事实源收敛到 `lime-rs/crates/**`。
+- 将 agent tools catalog、execution 与 inventory 迁入 `lime-rs/crates/agent`，旧路径只保留为删除记录，不再作为运行时 owner。
+- 将视频生成 CLI 逻辑拆到 `lime-rs/crates/lime-cli/src/video.rs`，并把视频任务执行能力沉入 `lime-rs/crates/media-runtime/src/video_worker.rs`。
+- 收缩 Agent Chat 前端投影中的重复状态机，把可复用事件规范沉淀到 npm projection 包，减少 React 组件侧重复分支。
+- 简化语音与热键设置边界：语音页聚焦模型、指令和偏好，快捷键页承接全局热键配置与校验。
 
 ### 测试与质量
-- 扩展 App Server client contract、command contracts、Rust current boundary、legacy surface catalog、desktop-host core 与 Electron host / IPC 回归。
-- 新增 session files Electron fixture smoke，并补充 session files、gallery materials、materials、media tasks、voice、ASR、document import、frontend diagnostics、image search、logs、skills 与 system settings current boundary 测试。
-- 扩展 Agent App runtime、Agent Runtime projection、Agent Runtime UI、Agent UI contracts、Skills workspace、Resource Manager、Memory page、Artifact toolbar、Connect external link 与 Agent Chat 工作台测试。
-- 根应用、Rust workspace、CLI npm package、Agent App runtime package、App Server client package、Agent Runtime client 依赖、App Server release manifest 与锁文件版本统一更新到 `1.64.0`。
+- 新增 Agent Runtime projection 的 artifact、context、diagnostic、hydration、lifecycle、permission、routing 与 turn context 单测，并扩展主 projection 回归。
+- 更新 App Server client contract、Harness contract、Rust current boundary、legacy tool permission guard 与 Electron current rules guard，防止旧路径重新成为事实源。
+- 扩展输入框、Markdown、Agent Chat home surface、语音设置、热键设置、媒体任务、图库素材、session images 与视频诊断相关回归。
+- 根应用、Rust workspace、CLI npm package、Agent App runtime package、App Server client package、Agent Runtime client 依赖与锁文件版本统一更新到 `1.65.0`。
 
 ### 文档
-- 新增 Agent UI Runtime 标准文档，更新工程导航、命令边界、治理、质量工作流、远程 runtime、并行协作和路线图入口。
-- 更新 production command current migration、Tauri wrapper cleanup、diagnostics fail-closed、tech debt tracker 与下一阶段实现路线图。
-- 更新 Agent Runtime UI、App Server client、default video generation skill、voice current 边界和相关 package 文档。
+- 更新 AGENTS、工程质量、治理、命令边界与并行协作文档，记录 `lime-rs/src/**` 已于 2026-06-10 删除以及目录级 dead 判定口径。
+- 更新 production command current migration、Tauri wrapper inventory / cleanup queue、tech debt tracker 与 App Server frontend integration matrix。
+- 更新 Agent Runtime projection 与 Lime CLI npm package 文档，补充 current 投影模块与视频生成入口说明。
 
 ### 其他
-- 继续以 App Server JSON-RPC、Electron Desktop Host、current clients、机器可读 schema 与领域化模块作为发布事实源，减少旧 wrapper、legacy dispatcher 与 renderer mock 对 GUI 主路径的影响。
+- 本版继续以 App Server JSON-RPC、Electron Desktop Host、current clients、`lime-rs/crates/**` 与机器可读守卫作为发布事实源，阻断旧 Tauri wrapper 和 renderer mock 对 GUI 主路径的回流。
 
-**完整变更**: `v1.63.0` -> `v1.64.0`
+**完整变更**: `v1.64.0` -> `v1.65.0`

@@ -31,14 +31,26 @@ Agent UI / Runtime 的标准链路由四个包共同组成：
 
 ```text
 src/actions.ts     -> HITL action.required / action.resolved projection helpers
+src/artifactEvents.ts -> artifact_snapshot projection helpers
+src/contextEvents.ts -> context_trace / turn_context projection helpers
+src/conversationEvents.ts -> message / text delta / reasoning delta projection helpers
 src/contracts.ts   -> contracts 类型转导
+src/diagnosticEvents.ts -> warning / cost metric projection helpers
 src/envelope.ts    -> Agent UI event base fields / runtime entity envelope / sequence helper
 src/eventStore.ts  -> event store / scope / latest selectors
+src/hydrationEvents.ts -> historical hydration projection helpers
+src/lifecycle.ts   -> session.opened / run lifecycle / runtime team / model routing / task profile projection helpers
 src/normalization.ts -> 字段读取、文本预览、ID 列表与 payload compact
+src/planApproval.ts -> plan approval metadata parser / action projection builders
+src/permissionEvents.ts -> runtime_status permission.changed projection helpers
+src/queueEvents.ts -> queue_added / queue lifecycle projection helpers
 src/refs.ts        -> artifact refs 等跨宿主引用提取
-src/routing.ts     -> routing decision payload 标准化
+src/routing.ts     -> routing run.status / decision payload projection helpers
 src/runtimeFacts.ts  -> runtime entity/status/phase/topology 标准事实解释
 src/summary.ts     -> summary / surface / lane selectors
+src/subagentStatusEvents.ts -> subagent_status_changed team / handoff / worker notification projection helpers
+src/threadItems.ts -> thread item -> AgentUiProjectionEvent builders / action item builders / subagent activity builders / task owner metadata parser
+src/toolEvents.ts  -> tool_start / tool_end / tool_progress / tool delta -> AgentUiProjectionEvent builders
 src/readModel.ts   -> execution events -> read model
 src/uiState.ts     -> execution events -> AgentUiProjectionState / projector
 src/index.ts       -> barrel exports only
@@ -55,13 +67,14 @@ npm install @limecloud/agent-ui-contracts @limecloud/agent-runtime-projection
 这个包负责：
 
 - 识别事件属于 action、evidence、artifact、tool、permission、context、runtime status 还是 message。
+- 构建历史恢复 / 快照 hydration 的标准 session、message snapshot 与 stale diagnostic 事件。
 - 把 `action.required` 投影成可点击的人类待办。
 - 用 `action.resolved` 标记已处理 action。
 - 聚合 artifact refs、evidence refs、task refs、source count。
 - 给 UI 提供 `UIMessageParts`、`ProcessTimeline`、`ExecutionGraph`、`actions`、`tools` 和 `readModel` 等标准渲染对象。
 - 为 `AgentUiProjectionEvent` 提供 host-neutral 的索引、scope selector 和 latest selector，宿主 store 只负责持久化和订阅。
 - 为 `AgentUiProjectionEvent` 提供 host-neutral 的 summary selector，包括 action / task / artifact / evidence / diagnostics 计数、notable latest events、Team Workbench surface / lane 聚合和 artifact latest lookup。
-- 为宿主事件 adapter 提供 host-neutral 的 action event builder、event base 字段、sequence 编排、字段规整、artifact refs 提取、routing decision payload、runtime entity/status/phase/topology 和 worker usage 解释函数。
+- 为宿主事件 adapter 提供 host-neutral 的 action event builder、artifact snapshot builder、context trace / turn context builder、conversation event builder、diagnostic / cost metric builder、historical hydration builder、plan approval metadata parser / builder、runtime permission builder、queue event builder、routing status builder、runtime lifecycle / runtime team / model routing / task profile builder、subagent status changed builder、thread item builder、thread item action builder、subagent activity / worker notification builder、tool lifecycle builder、TaskUpdate owner metadata parser、event base 字段、sequence 编排、字段规整、artifact refs 提取、routing decision payload、runtime entity/status/phase/topology 和 worker usage 解释函数。
 
 这个包不负责：
 
@@ -179,7 +192,7 @@ const summary = summarizeAgentUiProjectionEvents(visible);
 
 不要在业务宿主里重新实现 `session / thread / run / turn / task` scope 匹配、latest event 索引、artifact / evidence / action lookup、事件类型分组、Team Workbench surface / lane 聚合或 notable event summary。否则不同 App 会逐步长出不同的 Agent UI 解释口径。
 
-也不要在业务宿主里重新实现 `buildAgentUiActionRequiredEvent`、`buildAgentUiActionResolvedEvent`、`buildAgentUiProjectionBase`、`sequenceAgentUiProjectionEvents`、`definedString`、`truncateText`、`metadataKeys`、`extractArtifactRefs`、`buildRoutingDecisionPayload`、`buildWorkerUsageProjection`、runtime entity/status/phase/topology 这类通用事实解释。宿主 adapter 只把自己的事件 shape 映射到标准 projection event，通用规整与事实解释必须回到本包。
+也不要在业务宿主里重新实现 `buildAgentUiActionRequiredEvent`、`buildAgentUiActionResolvedEvent`、`buildAgentUiArtifactSnapshotEvent`、`buildAgentUiContextTraceEvent`、`buildAgentUiTurnContextEvents`、`buildAgentUiMessageSnapshotEvent`、`buildAgentUiTextDeltaEvent`、`buildAgentUiReasoningDeltaEvent`、`buildAgentUiHistoricalHydrationEvents`、`buildAgentUiPlanApprovalRequiredEvent`、`buildAgentUiPlanApprovalResolvedEvent`、`extractAgentUiPlanApprovalProjection`、`extractAgentUiPlanApprovalResponseProjection`、`buildAgentUiRuntimePermissionChangedEvent`、`buildAgentUiQueueAddedEvents`、`buildAgentUiQueueLifecycleEvents`、`buildAgentUiRoutingStatusEvent`、`buildAgentUiThreadStartedEvent`、`buildAgentUiRunStartedEvent`、`buildAgentUiRunFinishedEvent`、`buildAgentUiRunFailedEvent`、`buildAgentUiRuntimeStatusEvent`、`buildAgentUiRuntimeTeamChangedEvent`、`buildAgentUiModelChangeEvent`、`buildAgentUiTaskProfileResolvedEvent`、`buildAgentUiSubagentStatusChangedEvents`、`buildAgentUiThreadItemEvent`、`buildAgentUiThreadItemActionEvent`、`buildAgentUiThreadItemSubagentActivityEvent`、`buildAgentUiThreadItemSubagentWorkerNotificationEvent`、`buildAgentUiThreadItemBase`、`buildAgentUiToolStartEvents`、`buildAgentUiToolEndEvent`、`buildAgentUiToolEndEvents`、`buildAgentUiToolProgressEvent`、`buildAgentUiToolOutputDeltaEvent`、`buildAgentUiToolInputDeltaEvent`、`extractAgentUiTaskOwnerChangeProjection`、`buildAgentUiProjectionBase`、`sequenceAgentUiProjectionEvents`、`definedString`、`truncateText`、`metadataKeys`、`extractArtifactRefs`、`buildRoutingDecisionPayload`、`buildWorkerUsageProjection`、runtime entity/status/phase/topology 这类通用事实解释。宿主 adapter 只把自己的事件 shape 映射到标准 projection event，通用规整与事实解释必须回到本包。
 
 主聊天、Agent App、content-studio 等宿主可以继续保留本地化 label、文案格式化、点击行为和业务卡片，但这些属于 presentation adapter，不是 runtime projection 标准事实源。
 

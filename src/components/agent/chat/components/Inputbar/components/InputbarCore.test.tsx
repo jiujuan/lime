@@ -2,118 +2,16 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OPEN_VOICE_MODEL_SETTINGS_EVENT } from "@/lib/voiceModelSettingsNavigation";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import { agentEnUSResource, agentZhCNResource } from "@/i18n/agentResources";
+import { agentZhCNResource } from "@/i18n/agentResources";
 import { InputbarCore } from "./InputbarCore";
 import {
   buildInputbarCoreCopy,
   type InputbarCoreCopyKey,
 } from "./inputbarCoreCopy";
 
-const {
-  mockGetVoiceInputConfig,
-  mockStartRecording,
-  mockStopRecording,
-  mockTranscribeAudio,
-  mockPolishVoiceText,
-  mockCancelRecording,
-  mockGetRecordingSegment,
-  mockGetRecordingStatus,
-  mockGetDefaultLocalVoiceModelReadiness,
-  mockOnVoiceStartRecording,
-  mockOnVoiceStopRecording,
-  mockToastError,
-  mockToastInfo,
-} = vi.hoisted(() => ({
-  mockGetVoiceInputConfig: vi.fn(async () => ({
-    enabled: true,
-    shortcut: "Alt+Space",
-    processor: {
-      polish_enabled: true,
-      default_instruction_id: "default",
-    },
-    output: {
-      mode: "type",
-      type_delay_ms: 0,
-    },
-    instructions: [],
-    sound_enabled: false,
-    translate_instruction_id: "",
-  })),
-  mockStartRecording: vi.fn(async () => undefined),
-  mockStopRecording: vi.fn(async () => ({
-    audio_data: [1, 2, 3, 4],
-    sample_rate: 16000,
-    duration: 1.2,
-  })),
-  mockTranscribeAudio: vi.fn(async () => ({
-    text: "原始识别文本",
-    provider: "mock",
-  })),
-  mockPolishVoiceText: vi.fn(async () => ({
-    text: "润色后的文本",
-    instruction_name: "默认润色",
-  })),
-  mockCancelRecording: vi.fn(async () => undefined),
-  mockGetRecordingSegment: vi.fn(async () => ({
-    audio_data: [1, 2, 3, 4],
-    sample_rate: 16000,
-    duration: 0.8,
-    start_sample: 0,
-    end_sample: 12800,
-    total_samples: 12800,
-  })),
-  mockGetRecordingStatus: vi.fn(async () => ({
-    is_recording: true,
-    volume: 62,
-    duration: 3.4,
-  })),
-  mockGetDefaultLocalVoiceModelReadiness: vi.fn(async () => ({
-    ready: true,
-  })),
-  mockOnVoiceStartRecording: vi.fn(),
-  mockOnVoiceStopRecording: vi.fn(),
-  mockToastError: vi.fn(),
-  mockToastInfo: vi.fn(),
-}));
-
 vi.mock("./InputbarTools", () => ({
   InputbarTools: () => <div data-testid="inputbar-tools">tools</div>,
-}));
-
-vi.mock("@/lib/api/asrProvider", () => ({
-  getVoiceInputConfig: mockGetVoiceInputConfig,
-  startRecording: mockStartRecording,
-  stopRecording: mockStopRecording,
-  transcribeAudio: mockTranscribeAudio,
-  polishVoiceText: mockPolishVoiceText,
-  cancelRecording: mockCancelRecording,
-  getRecordingSegment: mockGetRecordingSegment,
-  getRecordingStatus: mockGetRecordingStatus,
-}));
-
-vi.mock("@/lib/api/voiceModels", () => ({
-  getDefaultLocalVoiceModelReadiness: mockGetDefaultLocalVoiceModelReadiness,
-}));
-
-vi.mock("@/lib/api/voiceShortcutEvents", () => ({
-  onVoiceStartRecording: mockOnVoiceStartRecording,
-  onVoiceStopRecording: mockOnVoiceStopRecording,
-}));
-
-vi.mock("sonner", () => ({
-  toast: {
-    error: mockToastError,
-    info: mockToastInfo,
-  },
-}));
-
-vi.mock("@/hooks/useVoiceSound", () => ({
-  useVoiceSound: () => ({
-    playStartSound: vi.fn(),
-    playStopSound: vi.fn(),
-  }),
 }));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
@@ -132,9 +30,6 @@ function translateResource(
 const TEST_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
   translateResource(agentZhCNResource, key, values),
 );
-const TEST_EN_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
-  translateResource(agentEnUSResource, key, values),
-);
 
 beforeEach(async () => {
   (
@@ -143,8 +38,6 @@ beforeEach(async () => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   await changeLimeLocale("zh-CN");
-  mockOnVoiceStartRecording.mockImplementation(async () => vi.fn());
-  mockOnVoiceStopRecording.mockImplementation(async () => vi.fn());
 });
 
 afterEach(() => {
@@ -192,17 +85,20 @@ const renderInputbarCore = async (
   return container;
 };
 
-const waitForMinimumDictationDuration = () =>
-  new Promise((resolve) => window.setTimeout(resolve, 650));
-
 describe("InputbarCore", () => {
-  it("挂载时不应主动预取语音配置", async () => {
+  it("挂载时不应渲染或触发 retired 实时语音入口", async () => {
     await renderInputbarCore({
       visualVariant: "default",
       toolMode: "default",
     });
 
-    expect(mockGetVoiceInputConfig).not.toHaveBeenCalled();
+    expect(
+      document.querySelector('button[aria-label="开始语音输入"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('button[aria-label="Start voice input"]'),
+    ).toBeNull();
+    expect(document.querySelector('[aria-live="polite"]')).toBeNull();
   });
 
   it("主题工作台空输入时应保持单行紧凑态，聚焦后也不应放大", async () => {
@@ -518,366 +414,6 @@ describe("InputbarCore", () => {
     expect(
       container.querySelector('button[aria-label="收起输入框"]'),
     ).toBeTruthy();
-  });
-
-  it("点击麦克风按钮应执行语音识别并把结果写回输入框", async () => {
-    const setText = vi.fn();
-    const container = await renderInputbarCore({
-      visualVariant: "default",
-      toolMode: "default",
-      setText,
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const micButton = container.querySelector(
-      'button[aria-label="开始语音输入"]',
-    ) as HTMLButtonElement | null;
-    expect(micButton).toBeTruthy();
-
-    await act(async () => {
-      micButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(mockGetVoiceInputConfig).toHaveBeenCalledTimes(1);
-    expect(mockStartRecording).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[aria-live="polite"]')).toBeNull();
-
-    const stopDictationButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) =>
-      button.getAttribute("aria-label")?.startsWith("录音中"),
-    ) as HTMLButtonElement | undefined;
-    expect(stopDictationButton).toBeTruthy();
-    expect(stopDictationButton?.textContent).toMatch(/\d+:\d{2}/);
-
-    await act(async () => {
-      stopDictationButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockStopRecording).toHaveBeenCalledTimes(1);
-    expect(mockTranscribeAudio).toHaveBeenCalledTimes(1);
-    expect(mockPolishVoiceText).toHaveBeenCalledWith("原始识别文本");
-    expect(setText).toHaveBeenCalledWith("润色后的文本");
-  });
-
-  it("录音中应定时写回实时识别文本", async () => {
-    vi.useFakeTimers();
-    mockTranscribeAudio.mockResolvedValueOnce({
-      text: "实时识别文本",
-      provider: "mock",
-    });
-    const setText = vi.fn();
-    const container = await renderInputbarCore({
-      visualVariant: "default",
-      toolMode: "default",
-      setText,
-    });
-
-    const micButton = container.querySelector(
-      'button[aria-label="开始语音输入"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      micButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(750);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockGetRecordingSegment).toHaveBeenCalledWith(0, 1.2);
-    expect(mockTranscribeAudio).toHaveBeenCalledWith(
-      new Uint8Array([1, 2, 3, 4]),
-      16000,
-    );
-    expect(setText).toHaveBeenCalledWith("实时识别文本");
-    const recordingButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.getAttribute("aria-label")?.includes("实时识别"));
-    expect(recordingButton).toBeTruthy();
-  });
-
-  it("录音中遇到静音片段时不应触发实时识别", async () => {
-    vi.useFakeTimers();
-    mockGetRecordingSegment.mockResolvedValueOnce({
-      audio_data: [0, 0, 0, 0],
-      sample_rate: 16000,
-      duration: 0.8,
-      start_sample: 0,
-      end_sample: 12800,
-      total_samples: 12800,
-    });
-    const setText = vi.fn();
-    const container = await renderInputbarCore({
-      visualVariant: "default",
-      toolMode: "default",
-      setText,
-    });
-
-    const micButton = container.querySelector(
-      'button[aria-label="开始语音输入"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      micButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(750);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockGetRecordingSegment).toHaveBeenCalledWith(0, 1.2);
-    expect(mockTranscribeAudio).not.toHaveBeenCalled();
-    expect(setText).not.toHaveBeenCalledWith("实时识别文本");
-  });
-
-  it("语音润色失败时应保留原始识别内容且不弹错误提示", async () => {
-    mockPolishVoiceText.mockRejectedValueOnce(new Error("模型不可用"));
-    const setText = vi.fn();
-    const container = await renderInputbarCore({
-      visualVariant: "default",
-      toolMode: "default",
-      setText,
-    });
-
-    const micButton = container.querySelector(
-      'button[aria-label="开始语音输入"]',
-    ) as HTMLButtonElement | null;
-
-    await act(async () => {
-      micButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-      await waitForMinimumDictationDuration();
-    });
-    await vi.waitFor(() => {
-      expect(mockGetRecordingStatus).toHaveBeenCalled();
-    });
-
-    let stopDictationButton: HTMLButtonElement | undefined;
-    await vi.waitFor(() => {
-      stopDictationButton = Array.from(
-        container.querySelectorAll("button"),
-      ).find((button) =>
-        button.getAttribute("aria-label")?.startsWith("录音中"),
-      ) as HTMLButtonElement | undefined;
-      expect(stopDictationButton).toBeTruthy();
-    });
-
-    await act(async () => {
-      stopDictationButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await vi.waitFor(() => {
-      expect(mockPolishVoiceText).toHaveBeenCalledWith("原始识别文本");
-    });
-    expect(setText).toHaveBeenCalledWith("原始识别文本");
-    expect(mockToastError).not.toHaveBeenCalled();
-  });
-
-  it("本地语音模型未安装时不应开始录音", async () => {
-    mockGetDefaultLocalVoiceModelReadiness.mockResolvedValueOnce({
-      ready: false,
-      model_id: "sensevoice-small-int8-2024-07-17",
-      installed: false,
-      message: "先下载语音模型",
-    } as any);
-    const navigationRequests: unknown[] = [];
-    const handleNavigationRequest = (event: Event) => {
-      navigationRequests.push(
-        event instanceof CustomEvent ? event.detail : undefined,
-      );
-    };
-    window.addEventListener(
-      OPEN_VOICE_MODEL_SETTINGS_EVENT,
-      handleNavigationRequest,
-    );
-    const container = await renderInputbarCore({
-      visualVariant: "default",
-      toolMode: "default",
-    });
-
-    const micButton = container.querySelector(
-      'button[aria-label="开始语音输入"]',
-    ) as HTMLButtonElement | null;
-    expect(micButton).toBeTruthy();
-
-    await act(async () => {
-      micButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-    window.removeEventListener(
-      OPEN_VOICE_MODEL_SETTINGS_EVENT,
-      handleNavigationRequest,
-    );
-
-    expect(mockGetDefaultLocalVoiceModelReadiness).toHaveBeenCalledTimes(1);
-    expect(mockStartRecording).not.toHaveBeenCalled();
-    expect(mockToastInfo).toHaveBeenCalledWith("先下载语音模型");
-    expect(container.querySelector('[aria-live="polite"]')).toBeNull();
-    expect(navigationRequests).toEqual([
-      expect.objectContaining({
-        source: "inputbar",
-        reason: "missing-model",
-        modelId: "sensevoice-small-int8-2024-07-17",
-      }),
-    ]);
-  });
-
-  it("语音输入未启用反馈应跟随 en-US 资源", async () => {
-    await changeLimeLocale("en-US");
-    mockGetVoiceInputConfig.mockResolvedValueOnce({
-      enabled: false,
-      shortcut: "Alt+Space",
-      processor: {
-        polish_enabled: true,
-        default_instruction_id: "default",
-      },
-      output: {
-        mode: "type",
-        type_delay_ms: 0,
-      },
-      instructions: [],
-      sound_enabled: false,
-      translate_instruction_id: "",
-    });
-    const container = await renderInputbarCore({
-      uiCopy: TEST_EN_INPUTBAR_CORE_COPY,
-      visualVariant: "default",
-      toolMode: "default",
-    });
-
-    const micButton = container.querySelector(
-      'button[aria-label="Start voice input"]',
-    ) as HTMLButtonElement | null;
-    expect(micButton).toBeTruthy();
-
-    await act(async () => {
-      micButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockToastInfo).toHaveBeenCalledWith(
-      "Enable voice input in Settings first",
-    );
-    expect(mockGetDefaultLocalVoiceModelReadiness).not.toHaveBeenCalled();
-    expect(mockStartRecording).not.toHaveBeenCalled();
-  });
-
-  it("启用快捷键监听后应复用输入框录音状态机完成开始和停止", async () => {
-    let startHandler: (() => void | Promise<void>) | null = null;
-    let stopHandler: (() => void | Promise<void>) | null = null;
-    const setText = vi.fn();
-
-    mockOnVoiceStartRecording.mockImplementationOnce(async (handler) => {
-      startHandler = handler;
-      return vi.fn();
-    });
-    mockOnVoiceStopRecording.mockImplementationOnce(async (handler) => {
-      stopHandler = handler;
-      return vi.fn();
-    });
-
-    await renderInputbarCore({
-      setText,
-      listenForVoiceShortcut: true,
-      visualVariant: "default",
-      toolMode: "default",
-    });
-
-    await act(async () => {
-      await startHandler?.();
-      await Promise.resolve();
-      await Promise.resolve();
-      await waitForMinimumDictationDuration();
-    });
-
-    expect(mockStartRecording).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => {
-      expect(mockGetRecordingStatus).toHaveBeenCalled();
-    });
-
-    await act(async () => {
-      await stopHandler?.();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockStopRecording).toHaveBeenCalledTimes(1);
-    expect(mockTranscribeAudio).toHaveBeenCalled();
-    await vi.waitFor(() => {
-      expect(mockPolishVoiceText).toHaveBeenCalledWith("原始识别文本");
-      expect(setText).toHaveBeenLastCalledWith("润色后的文本");
-    });
-  });
-
-  it("语音快捷键订阅失败时应保持输入框可用", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    mockOnVoiceStartRecording.mockRejectedValueOnce(
-      new Error("bridge unavailable"),
-    );
-    mockOnVoiceStopRecording.mockRejectedValueOnce(
-      new Error("bridge unavailable"),
-    );
-
-    try {
-      const container = await renderInputbarCore({
-        listenForVoiceShortcut: true,
-        visualVariant: "default",
-        toolMode: "default",
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(container.querySelector("textarea")).toBeTruthy();
-      expect(mockOnVoiceStartRecording).toHaveBeenCalledTimes(1);
-      expect(mockOnVoiceStopRecording).toHaveBeenCalledTimes(1);
-      expect(warnSpy).toHaveBeenCalledWith(
-        "[输入栏] 注册语音开始快捷键失败:",
-        expect.any(Error),
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        "[输入栏] 注册语音停止快捷键失败:",
-        expect.any(Error),
-      );
-    } finally {
-      warnSpy.mockRestore();
-    }
-  });
-
-  it("未启用快捷键监听时不应注册语音快捷键事件", async () => {
-    await renderInputbarCore({
-      listenForVoiceShortcut: false,
-      visualVariant: "default",
-      toolMode: "default",
-    });
-
-    expect(mockOnVoiceStartRecording).not.toHaveBeenCalled();
-    expect(mockOnVoiceStopRecording).not.toHaveBeenCalled();
   });
 
   it("生成中应显示稍后处理与停止按钮，并渲染待处理列表", async () => {

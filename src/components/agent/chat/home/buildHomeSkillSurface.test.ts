@@ -157,20 +157,20 @@ describe("buildHomeSkillSurface", () => {
         },
       },
       {
-        id: "home:guide:voice",
+        id: "home:guide:model",
         kind: "command",
-        title: "语音输入怎么设置？",
-        summary: "了解语音输入。",
-        commandKey: "home_guide_voice",
+        title: "怎么添加模型？",
+        summary: "配置模型后再开始生成。",
+        commandKey: "home_guide_model",
         surfaceScopes: ["home"],
         triggers: [],
         homePresentation: {
           slot: "guide_card",
-          title: "语音输入怎么设置？",
-          summary: "把灵感直接说进生成容器。",
+          title: "怎么添加模型？",
+          summary: "配置模型后再开始生成。",
           order: 10,
           groupKey: "guide_help",
-          prompt: "请告诉我语音输入怎么设置。",
+          prompt: "请告诉我怎么添加模型。",
         },
       },
     ];
@@ -194,8 +194,8 @@ describe("buildHomeSkillSurface", () => {
     ]);
     expect(buildHomeGuideCards(entries, TEST_HOME_SURFACE_COPY)).toEqual([
       expect.objectContaining({
-        title: "语音输入怎么设置？",
-        prompt: "请告诉我语音输入怎么设置。",
+        title: "怎么添加模型？",
+        prompt: "请告诉我怎么添加模型。",
       }),
     ]);
   });

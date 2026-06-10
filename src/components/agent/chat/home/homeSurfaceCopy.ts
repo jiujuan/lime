@@ -106,9 +106,6 @@ export type HomeSurfaceCopyKey =
   | "agentChat.home.guide.knowledge.title"
   | "agentChat.home.guide.knowledge.summary"
   | "agentChat.home.guide.knowledge.prompt"
-  | "agentChat.home.guide.voiceInput.title"
-  | "agentChat.home.guide.voiceInput.summary"
-  | "agentChat.home.guide.voiceInput.prompt"
   | "agentChat.home.guideCards.label"
   | "agentChat.home.moreSkills.drawerLabel"
   | "agentChat.home.gallery.title"
@@ -275,7 +272,9 @@ export function buildHomeSurfaceCopy(
       plusMenu: {
         open: translate("agentChat.inputbar.plusMenu.open"),
         addFiles: translate("agentChat.inputbar.plusMenu.addFiles"),
-        attachKnowledge: translate("agentChat.inputbar.plusMenu.attachKnowledge"),
+        attachKnowledge: translate(
+          "agentChat.inputbar.plusMenu.attachKnowledge",
+        ),
         planMode: translate("agentChat.inputbar.plusMenu.planMode"),
         subagent: translate("agentChat.inputbar.tools.subagent.label"),
         objective: translate("agentChat.inputbar.plusMenu.objective"),
@@ -306,8 +305,7 @@ export function buildHomeSurfaceCopy(
     quickActions: {
       title: translate("agentChat.home.quickActions.title"),
       description: translate("agentChat.home.quickActions.description"),
-      badge: (icon) =>
-        translate("agentChat.home.quickActions.badge", { icon }),
+      badge: (icon) => translate("agentChat.home.quickActions.badge", { icon }),
       presets: [
         {
           key: "generate-image",
@@ -586,14 +584,6 @@ export function buildHomeSurfaceCopy(
         prompt: translate("agentChat.home.guide.knowledge.prompt"),
         groupKey: "guide_help",
         testId: "home-guide-knowledge",
-      },
-      {
-        id: "guide-voice-input",
-        title: translate("agentChat.home.guide.voiceInput.title"),
-        summary: translate("agentChat.home.guide.voiceInput.summary"),
-        prompt: translate("agentChat.home.guide.voiceInput.prompt"),
-        groupKey: "guide_help",
-        testId: "home-guide-voice-input",
       },
     ],
   };

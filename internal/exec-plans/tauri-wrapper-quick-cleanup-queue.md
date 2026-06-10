@@ -1,5 +1,17 @@
 # Tauri wrapper 快速清理队列
 
+> **状态：superseded（2026-06-10）**
+>
+> 整个 `lime-rs/src/**` 旧 Tauri wrapper 清理区已物理删除（约 18.7 万行 / 113 个 `#[tauri::command]` / 19 个 `*_cmd.rs` 文件）。该目录是脱离 cargo 构建图的孤儿目录（workspace 只含 `crates/*`，`src/` 没有 `lib.rs` / `main.rs` 也没有 `[package]` 段），cargo metadata 已确认 27 个包源码根全在 `crates/*`，删除不影响构建。
+>
+> 本队列下面的 TW-Q* 子任务、认领记录、推荐执行顺序、按命令族切片清理策略**全部 superseded**，不再按此推进。下面所有“lime-rs/src/commands/** 是旧 Tauri wrapper 清理区”的描述只保留为历史背景与 `current-rules-guard` 守卫所要求的字串证据，不再作为可执行计划。
+>
+> Current 事实源：
+>
+> - 新 Rust 后端能力 → `lime-rs/crates/**`（App Server / RuntimeCore / services / agent / 协议）
+> - 桌面壳能力 → Electron Desktop Host
+> - 守卫：`src/lib/governance/rustCommandsCurrentBoundary.test.ts` 强制 `lime-rs/src/**` 路径不可恢复
+
 创建时间：2026-06-08 CST  
 状态：`parallel_dispatch_ready`  
 关联计划：

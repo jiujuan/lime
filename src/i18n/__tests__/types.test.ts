@@ -712,23 +712,6 @@ function assertI18nKeyTypes() {
     hint: "research result",
   });
   i18n.t("skills.scaffoldDialog.validation.directory", { ns: "agent" });
-  i18n.t("skills.executionDialog.mode.workflow", { ns: "agent" });
-  i18n.t("skills.executionDialog.argumentHint", {
-    ns: "agent",
-    hint: "topic",
-  });
-  i18n.t("skills.executionDialog.loadFailed.title", { ns: "agent" });
-  i18n.t("capabilityDraft.panel.title", { ns: "agent" });
-  i18n.t("capabilityDraft.panel.action.verify", { ns: "agent" });
-  i18n.t("capabilityDraft.panel.feedback.registered", {
-    ns: "agent",
-    directory: "capability-register",
-  });
-  i18n.t("capabilityDraft.panel.summary.filesWithMore", {
-    ns: "agent",
-    files: "SKILL.md",
-    total: 4,
-  });
   i18n.t("agentChat.sessionOverview.panel.title", { ns: "agent" });
   i18n.t("agentChat.sessionOverview.status.turn.running", { ns: "agent" });
   i18n.t("agentChat.sessionOverview.timeline.empty", { ns: "agent" });
@@ -1251,7 +1234,6 @@ function assertI18nKeyTypes() {
   i18n.t("settings.home.quickAccess.cardTipAria", { ns: "settings" });
   i18n.t("settings.home.current.title", { ns: "settings" });
   i18n.t("settings.hotkeys.title", { ns: "settings" });
-  i18n.t("settings.hotkeys.summary.globalReady", { ns: "settings" });
   i18n.t("settings.hotkeys.catalog.scene.global.title", { ns: "settings" });
   i18n.t("settings.memory.title", { ns: "settings" });
   i18n.t("settings.memory.soul.title", { ns: "settings" });
@@ -1615,11 +1597,7 @@ function assertI18nKeyTypes() {
   i18n.t("settings.userCenterSession.login.google.title", { ns: "settings" });
   i18n.t("settings.agent.skills.advancedEntry.title", { ns: "settings" });
   i18n.t("settings.agent.skills.advancedEntry.tipAria", { ns: "settings" });
-  i18n.t("settings.voice.input.title", { ns: "settings" });
   i18n.t("settings.voice.model.action.download", { ns: "settings" });
-  i18n.t("settings.voice.shortcut.status.fnUnsupported", {
-    ns: "settings",
-  });
   i18n.t("settings.voice.processing.title", { ns: "settings" });
   i18n.t("settings.voice.media.title", { ns: "settings" });
   i18n.t("settings.voice.model.message.downloaded", {

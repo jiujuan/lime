@@ -29,10 +29,10 @@ function expectAppServerAgentRule(content, label) {
 function expectRustCommandsCleanupRule(content, label) {
   expect(content, label).toContain("lime-rs/src/commands/**");
   expect(content, label).toMatch(
-    /旧 (?:Tauri )?(?:command )?wrapper (?:删除)?清理|清理区/,
+    /已删除|已物理删除|已随 `lime-rs\/src\/\*\*` 删除|旧 (?:Tauri )?(?:command )?wrapper (?:删除)?清理|清理区/,
   );
   expect(content, label).toMatch(
-    /不再承接|不得.*新增|不再落|不能.*新增|新增 stub|新增业务逻辑/,
+    /不得恢复|不再承接|不得.*新增|不再落|不能.*新增|新增 stub|新增业务逻辑/,
   );
   expect(content, label).toMatch(
     /App Server|RuntimeCore|services|Electron Desktop Host/,

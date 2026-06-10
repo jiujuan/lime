@@ -15,6 +15,7 @@ Lime 的官方命令行入口，面向统一任务编排。
 当前主线提供：
 
 - `lime media image generate`
+- `lime media video generate`
 - `lime task create image`
 - `lime task create cover`
 - `lime task create video`
@@ -53,6 +54,15 @@ lime media image generate \
   --idempotency-key "image-future-city"
 ```
 
+```bash
+lime media video generate \
+  --prompt "产品发布短视频，干净工作台场景" \
+  --aspect-ratio "16:9" \
+  --duration 6 \
+  --workspace "." \
+  --idempotency-key "video-launch-demo"
+```
+
 成功时标准输出为 JSON，包含：
 
 - `task_id`
@@ -86,7 +96,9 @@ lime doctor
 
 - 图片主线推荐使用 `lime media image generate`，它会在创建 task artifact 后继续推进真实图片执行链。
 - `lime task create image` 作为兼容入口仍可使用，但现在也会复用同一条图片执行链，不会只停在 `pending_submit`。
-- `lime media cover|video generate` 仍保留为兼容别名。
+- 视频主线推荐使用 `lime media video generate`，它会在创建 task artifact 后继续推进真实视频执行链。
+- `lime task create video` 作为兼容入口仍可使用，但现在也会复用同一条视频执行链，不会只停在 `pending_submit`。
+- `lime media cover generate` 仍保留为兼容别名。
 - 如果你现在只发布 npm、不发布 GitHub Release，请至少准备一种运行方式：
   - 设置 `LIME_CLI_BINARY_PATH`
   - 或在 Lime 源码仓库内使用该 wrapper，让它自动回退到 `cargo run`

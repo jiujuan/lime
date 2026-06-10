@@ -11,6 +11,7 @@ AI Agent 技能:
 
 示例:
   lime media image generate --prompt \"未来城市插图\" --size \"1024x1024\"
+  lime media video generate --prompt \"产品发布短视频\" --aspect-ratio 9:16
   lime task create transcription --source-path \"/tmp/interview.wav\" --output-format srt
   lime task create broadcast --title \"播客摘要\" --content \"原文内容\"
   lime task list --family image --status running
@@ -22,6 +23,7 @@ AI Agent 技能:
 pub const TASK_AFTER_HELP: &str = "\
 常用命令:
   lime media image generate --prompt \"未来城市插图\"
+  lime media video generate --prompt \"产品发布短视频\" --aspect-ratio 9:16
   lime task create transcription --source-url \"https://example.com/demo.mp4\"
   lime task create url-parse --url \"https://example.com\" --summary \"摘要\"
   lime task list --family image
@@ -65,10 +67,10 @@ pub const TASK_ENTRIES: &[TaskCatalogEntry] = &[
     TaskCatalogEntry {
         command_name: "video",
         task_type: TaskType::VideoGenerate,
-        description: "创建视频生成任务记录，不伪造已完成结果。",
+        description: "根据提示词提交视频任务，并推进真实视频执行链。",
         skill_name: "video_generate",
         docs_dir: "lime-rs/resources/default-skills/video_generate",
-        example: "lime task create video --prompt \"产品发布短视频\" --aspect-ratio 9:16",
+        example: "lime media video generate --prompt \"产品发布短视频\" --aspect-ratio 9:16",
     },
     TaskCatalogEntry {
         command_name: "transcription",
@@ -161,7 +163,7 @@ pub const SKILL_ENTRIES: &[SkillCatalogEntry] = &[
     SkillCatalogEntry {
         name: "video_generate",
         description: "视频任务编排技能。",
-        recommended_command: "lime task create video --prompt \"...\" --aspect-ratio 9:16",
+        recommended_command: "lime media video generate --prompt \"...\" --aspect-ratio 9:16",
         skill_path: "lime-rs/resources/default-skills/video_generate/SKILL.md",
         references: &[],
     },

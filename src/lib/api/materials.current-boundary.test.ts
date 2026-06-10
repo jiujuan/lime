@@ -45,8 +45,8 @@ function stripRustTestModules(source: string): string {
   );
 }
 
-function readRustProductionRepoFile(path: string): string {
-  return stripRustTestModules(readRepoFile(path));
+function readOptionalRustProductionRepoFile(path: string): string {
+  return stripRustTestModules(readOptionalRepoFile(path));
 }
 
 function expectStringLiteralsAbsent(source: string, literals: string[]): void {
@@ -110,19 +110,25 @@ describe("Materials current App Server boundary", () => {
   });
 
   it("legacy Rust Materials wrapper / runner / dispatcher 应保持删除状态", () => {
-    const runnerSource = readRustProductionRepoFile("lime-rs/src/app/runner.rs");
-    const commandsModSource = readRustProductionRepoFile(
+    const runnerSource = readOptionalRustProductionRepoFile(
+      "lime-rs/src/app/runner.rs",
+    );
+    const commandsModSource = readOptionalRustProductionRepoFile(
       "lime-rs/src/commands/mod.rs",
     );
     const dispatcherSources = [
-      readRustProductionRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
-      readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher/project_resources.rs"),
+      readOptionalRustProductionRepoFile(
+        "lime-rs/src/dev_bridge/dispatcher.rs",
+      ),
+      readOptionalRustProductionRepoFile(
+        "lime-rs/src/dev_bridge/dispatcher/project_resources.rs",
+      ),
     ].join("\n");
 
     expect(commandsModSource).not.toContain("material_cmd");
-    expect(existsSync(resolve(cwd(), "lime-rs/src/commands/material_cmd.rs"))).toBe(
-      false,
-    );
+    expect(
+      existsSync(resolve(cwd(), "lime-rs/src/commands/material_cmd.rs")),
+    ).toBe(false);
     for (const command of LEGACY_RUST_MATERIAL_FACADE_COMMANDS) {
       expect(runnerSource).not.toContain(`commands::material_cmd::${command}`);
     }

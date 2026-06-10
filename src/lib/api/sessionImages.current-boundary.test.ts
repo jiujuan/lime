@@ -47,6 +47,21 @@ describe("Session image legacy facade boundary", () => {
     expectStringLiteralAbsent(source, RETIRED_READ_IMAGE_COMMAND);
   });
 
+  it("图片任务恢复应走 media task artifact 与 App Server 文件预览 current 链路", () => {
+    const source = readRepoFile(
+      "src/components/agent/chat/workspace/useWorkspaceImageTaskPreviewRuntime.ts",
+    );
+
+    expect(source).toContain('from "@/lib/api/mediaTasks"');
+    expect(source).toContain('from "@/lib/api/fileBrowser"');
+    expect(source).toContain("getMediaTaskArtifact");
+    expect(source).toContain("listMediaTaskArtifacts");
+    expect(source).toContain("readFilePreview");
+    expect(source).not.toContain("safeInvoke(");
+    expectStringLiteralAbsent(source, RETIRED_UPLOAD_IMAGE_COMMAND);
+    expectStringLiteralAbsent(source, RETIRED_READ_IMAGE_COMMAND);
+  });
+
   it("旧图片会话 facade 不应回到 Electron、DevBridge、mock 或 legacy Rust", () => {
     const restrictedSources =
       FORBIDDEN_SESSION_IMAGE_SOURCES.map(readOptionalRepoFile).join("\n");

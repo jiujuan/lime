@@ -4,16 +4,43 @@ import assert from "node:assert/strict";
 import {
   buildAgentUiActionRequiredEvent,
   buildAgentUiActionResolvedEvent,
+  buildAgentUiMessageSnapshotEvent,
+  buildAgentUiPlanApprovalRequiredEvent,
+  buildAgentUiPlanApprovalResolvedEvent,
   buildAgentUiProjectionBase,
+  buildAgentUiQueueAddedEvents,
+  buildAgentUiQueueLifecycleEvents,
+  buildAgentUiReasoningDeltaEvent,
+  buildAgentUiRunFailedEvent,
+  buildAgentUiRunFinishedEvent,
+  buildAgentUiRunStartedEvent,
+  buildAgentUiRuntimeStatusEvent,
+  buildAgentUiTextDeltaEvent,
+  buildAgentUiThreadItemActionEvent,
+  buildAgentUiThreadItemBase,
+  buildAgentUiThreadItemEvent,
+  buildAgentUiThreadItemSubagentActivityEvent,
+  buildAgentUiThreadItemSubagentWorkerNotificationEvent,
+  buildAgentUiToolEndEvent,
+  buildAgentUiToolEndEvents,
+  buildAgentUiToolInputDeltaEvent,
+  buildAgentUiToolOutputDeltaEvent,
+  buildAgentUiToolProgressEvent,
+  buildAgentUiToolStartEvents,
   createAgentUiProjector,
   createEmptyAgentUiProjectionEventStoreState,
   definedString,
+  extractAgentUiPlanApprovalProjection,
+  extractAgentUiPlanApprovalResponseProjection,
+  extractAgentUiTaskOwnerChangeProjection,
   findLatestAgentUiProjectionEventForArtifact,
   inferAgentUiRuntimeEntity,
   indexAgentUiProjectionEvents,
+  isAgentUiTaskUpdateToolName,
   isAgentInputSourceRecoveryEvent,
   isSubagentTerminalStatus,
   metadataKeys,
+  normalizeAgentUiProjectionToolName,
   normalizeProjectionIdList,
   normalizeRuntimePhaseFromRuntimeStatusPhase,
   normalizeRuntimeStatusFromRuntimePhase,
@@ -30,8 +57,12 @@ import {
   selectLatestAgentUiProjectionEventForScopeFromStore,
   selectLatestAgentUiProjectionEventForToolCallFromStore,
   sequenceAgentUiProjectionEvents,
+  resolveAgentUiThreadItemActionControl,
   resolveAgentUiActionRequiredControl,
   resolveAgentUiActionResolvedControl,
+  resolveAgentUiThreadItemPhase,
+  resolveAgentUiThreadItemSubagentRuntimeStatus,
+  resolveAgentUiThreadItemToolResultType,
   resolveSubagentStatusControl,
   resolveSubagentStatusPhase,
   resolveTeamTopology,
@@ -55,7 +86,10 @@ test("projectAgentRuntimeReadModel projects actions, evidence and artifacts", ()
     eventClass: "action.required",
     title: "需要补充输入源",
     actionId: "action-1",
-    payload: { actionKind: "add-input-source", targetModule: "knowledge-inputs" },
+    payload: {
+      actionKind: "add-input-source",
+      targetModule: "knowledge-inputs",
+    },
     createdAt: "2026-06-07T00:00:00.000Z",
   };
   const model = projectAgentRuntimeReadModel({
@@ -86,9 +120,10 @@ test("projectAgentRuntimeReadModel projects actions, evidence and artifacts", ()
   assert.equal(model.sourceCount, 2);
   assert.equal(model.pendingActions.length, 1);
   assert.equal(model.pendingActions[0].action?.decision, "open-input-source");
-  assert.deepEqual(model.pendingActions[0].actions?.map((action) => action.decision), [
-    "open-input-source",
-  ]);
+  assert.deepEqual(
+    model.pendingActions[0].actions?.map((action) => action.decision),
+    ["open-input-source"],
+  );
   assert.deepEqual(model.evidenceRefs, ["input-source:1"]);
   assert.deepEqual(model.artifactRefs, ["prompt-draft:1"]);
   assert.equal(isAgentInputSourceRecoveryEvent(actionEvent), true);
@@ -110,10 +145,10 @@ test("projectAgentRuntimeReadModel projects multiple HITL controls as standard a
     ],
   });
 
-  assert.deepEqual(model.pendingActions[0].actions?.map((action) => action.decision), [
-    "approve",
-    "reject",
-  ]);
+  assert.deepEqual(
+    model.pendingActions[0].actions?.map((action) => action.decision),
+    ["approve", "reject"],
+  );
 });
 
 test("projectAgentRuntimeReadModel marks resolved actions", () => {
@@ -204,9 +239,16 @@ test("projectAgentUiState exposes standard message, timeline and graph projectio
   assert.equal(state.messages[0].text, "你好");
   assert.equal(state.timeline.length, 4);
   assert.equal(state.timeline[2].kind, "tool");
-  assert.equal(state.graph.some((node) => node.nodeId === "tool-1" && node.nodeType === "tool"), true);
+  assert.equal(
+    state.graph.some(
+      (node) => node.nodeId === "tool-1" && node.nodeType === "tool",
+    ),
+    true,
+  );
   assert.equal(state.actions.length, 1);
-  assert.deepEqual(state.artifacts, [{ id: "artifact-1", sourceEventId: "artifact-1" }]);
+  assert.deepEqual(state.artifacts, [
+    { id: "artifact-1", sourceEventId: "artifact-1" },
+  ]);
   assert.equal(state.hydration.status, "live");
 });
 
@@ -260,10 +302,13 @@ test("projectAgentUiState merges streaming text and reasoning parts by scope", (
     ],
   });
 
-  assert.deepEqual(state.messages.map((part) => [part.type, part.text]), [
-    ["reasoning", "Call the"],
-    ["text", "第一段继续"],
-  ]);
+  assert.deepEqual(
+    state.messages.map((part) => [part.type, part.text]),
+    [
+      ["reasoning", "Call the"],
+      ["text", "第一段继续"],
+    ],
+  );
 });
 
 test("projectAgentUiState resolves runtime status from the latest lifecycle event", () => {
@@ -401,11 +446,16 @@ test("Agent UI projection event selectors index host-neutral events", () => {
   ];
   const state = {
     events,
-    ...indexAgentUiProjectionEvents(events, createEmptyAgentUiProjectionEventStoreState()),
+    ...indexAgentUiProjectionEvents(
+      events,
+      createEmptyAgentUiProjectionEventStoreState(),
+    ),
   };
 
   assert.deepEqual(
-    selectAgentUiProjectionEventsForScopeFromStore(state, { sessionId: "session-a" }),
+    selectAgentUiProjectionEventsForScopeFromStore(state, {
+      sessionId: "session-a",
+    }),
     [events[0], events[1]],
   );
   assert.deepEqual(
@@ -420,7 +470,10 @@ test("Agent UI projection event selectors index host-neutral events", () => {
     ),
     [events[1]],
   );
-  assert.equal(selectLatestAgentUiProjectionEventForRunFromStore(state, "run-a"), events[1]);
+  assert.equal(
+    selectLatestAgentUiProjectionEventForRunFromStore(state, "run-a"),
+    events[1],
+  );
   assert.equal(
     selectLatestAgentUiProjectionEventForToolCallFromStore(state, "tool-a"),
     events[0],
@@ -430,7 +483,9 @@ test("Agent UI projection event selectors index host-neutral events", () => {
     events[1],
   );
   assert.equal(
-    selectLatestAgentUiProjectionEventForScopeFromStore(state, { sessionId: "session-b" }),
+    selectLatestAgentUiProjectionEventForScopeFromStore(state, {
+      sessionId: "session-b",
+    }),
     events[2],
   );
 });
@@ -644,7 +699,10 @@ test("Agent UI artifact lookup resolves direct and referenced artifact ids", () 
     findLatestAgentUiProjectionEventForArtifact(events, " artifact-ref "),
     events[1],
   );
-  assert.equal(findLatestAgentUiProjectionEventForArtifact(events, "missing"), null);
+  assert.equal(
+    findLatestAgentUiProjectionEventForArtifact(events, "missing"),
+    null,
+  );
 });
 
 test("normalization helpers provide host-neutral field cleanup", () => {
@@ -717,6 +775,224 @@ test("projection envelope helpers normalize base fields and sequence", () => {
     [10, 11],
   );
   assert.equal(sequenceAgentUiProjectionEvents(events, undefined), events);
+});
+
+test("conversation event helpers build standard message and model output events", () => {
+  const context = {
+    sessionId: "session-conversation",
+    runId: "agent_turn_stream:session-conversation",
+    messageId: "assistant-1",
+    timestamp: "2026-06-07T00:00:00.000Z",
+  };
+
+  const snapshot = buildAgentUiMessageSnapshotEvent(
+    {
+      role: "assistant",
+      partCount: 2,
+    },
+    context,
+  );
+
+  assert.equal(snapshot.sourceType, "message");
+  assert.equal(snapshot.type, "messages.snapshot");
+  assert.equal(snapshot.owner, "session");
+  assert.equal(snapshot.scope, "message");
+  assert.equal(snapshot.phase, "hydrating");
+  assert.equal(snapshot.surface, "conversation");
+  assert.equal(snapshot.persistence, "snapshot");
+  assert.equal(snapshot.messageId, "assistant-1");
+  assert.deepEqual(snapshot.payload, {
+    role: "assistant",
+    partCount: 2,
+  });
+
+  const textDelta = buildAgentUiTextDeltaEvent(
+    {
+      text: "最终答案",
+    },
+    context,
+  );
+
+  assert.equal(textDelta.sourceType, "text_delta");
+  assert.equal(textDelta.type, "text.delta");
+  assert.equal(textDelta.owner, "model");
+  assert.equal(textDelta.scope, "part");
+  assert.equal(textDelta.phase, "producing");
+  assert.equal(textDelta.surface, "conversation");
+  assert.equal(textDelta.persistence, "transcript");
+  assert.deepEqual(textDelta.payload, {
+    textLength: 4,
+    preview: "最终答案",
+  });
+
+  const batchDelta = buildAgentUiTextDeltaEvent(
+    {
+      sourceType: "text_delta_batch",
+      text: "第一段\n第二段",
+      chunkCount: 2,
+      boundary: "newline",
+    },
+    context,
+  );
+
+  assert.deepEqual(batchDelta.payload, {
+    textLength: 7,
+    preview: "第一段\n第二段",
+    chunkCount: 2,
+    boundary: "newline",
+  });
+
+  const reasoning = buildAgentUiReasoningDeltaEvent(
+    {
+      text: "先分析",
+    },
+    context,
+  );
+
+  assert.equal(reasoning.sourceType, "thinking_delta");
+  assert.equal(reasoning.type, "reasoning.delta");
+  assert.equal(reasoning.owner, "model");
+  assert.equal(reasoning.scope, "part");
+  assert.equal(reasoning.phase, "reasoning");
+  assert.equal(reasoning.surface, "inline_process");
+  assert.equal(reasoning.persistence, "ephemeral_live");
+  assert.deepEqual(reasoning.payload, {
+    textLength: 3,
+    preview: "先分析",
+  });
+});
+
+test("queue event helpers build standard queue and steer task events", () => {
+  const context = {
+    sessionId: "session-queue",
+    timestamp: "2026-06-07T00:00:00.000Z",
+  };
+
+  const added = buildAgentUiQueueAddedEvents(
+    {
+      sessionId: "session-queue",
+      queuedTurn: {
+        queuedTurnId: "queued-1",
+        messagePreview: "下一轮",
+        messageText: "下一轮",
+        createdAt: 0,
+        imageCount: 0,
+        position: 1,
+      },
+    },
+    context,
+  );
+
+  assert.equal(added.length, 2);
+  assert.equal(added[0].sourceType, "queue_added");
+  assert.equal(added[0].type, "queue.changed");
+  assert.equal(added[0].taskId, "queued-1");
+  assert.equal(added[0].owner, "task");
+  assert.equal(added[0].scope, "task");
+  assert.equal(added[0].phase, "waiting");
+  assert.equal(added[0].surface, "task_capsule");
+  assert.equal(added[0].persistence, "snapshot");
+  assert.equal(added[0].control, "queue");
+  assert.equal(added[0].runtimeStatus, "queued");
+  assert.equal(added[0].queuedTurnCount, 1);
+  assert.deepEqual(added[0].payload, {
+    runtimeEntity: "agent_turn",
+    queueEvent: "queue_added",
+    queuedTurnCount: 1,
+    queuedTurnId: "queued-1",
+    position: 1,
+    messagePreview: "下一轮",
+    imageCount: 0,
+    createdAt: 0,
+  });
+
+  assert.equal(added[1].type, "task.changed");
+  assert.equal(added[1].taskId, "queued-1");
+  assert.equal(added[1].owner, "task");
+  assert.equal(added[1].scope, "turn");
+  assert.equal(added[1].phase, "submitted");
+  assert.equal(added[1].surface, "task_capsule");
+  assert.equal(added[1].persistence, "snapshot");
+  assert.equal(added[1].control, "steer");
+  assert.equal(added[1].runtimeStatus, "queued");
+  assert.deepEqual(added[1].payload, {
+    runtimeEntity: "agent_turn",
+    taskEvent: "steer_intent",
+    intentKind: "queued_user_input",
+    queuedTurnId: "queued-1",
+    position: 1,
+    messagePreview: "下一轮",
+    messageLength: 3,
+    imageCount: 0,
+    createdAt: 0,
+  });
+
+  const started = buildAgentUiQueueLifecycleEvents(
+    {
+      eventType: "queue_started",
+      sessionId: "session-queue",
+      queuedTurnId: "queued-1",
+    },
+    context,
+  );
+
+  assert.equal(started.length, 2);
+  assert.equal(started[0].type, "queue.changed");
+  assert.equal(started[0].phase, "accepted");
+  assert.equal(started[0].runtimeStatus, "running");
+  assert.equal(started[1].type, "task.changed");
+  assert.equal(started[1].phase, "accepted");
+  assert.equal(started[1].control, "steer");
+  assert.deepEqual(started[1].payload, {
+    runtimeEntity: "agent_turn",
+    taskEvent: "steer_started",
+    intentKind: "queued_user_input",
+    queueEvent: "queue_started",
+    queuedTurnId: "queued-1",
+  });
+
+  const removed = buildAgentUiQueueLifecycleEvents(
+    {
+      eventType: "queue_removed",
+      sessionId: "session-queue",
+      queuedTurnId: "queued-1",
+    },
+    context,
+  );
+
+  assert.equal(removed[1].type, "task.changed");
+  assert.equal(removed[1].phase, "cancelled");
+  assert.equal(removed[1].control, "remove");
+  assert.deepEqual(removed[1].payload, {
+    runtimeEntity: "agent_turn",
+    taskEvent: "steer_removed",
+    intentKind: "queued_user_input",
+    queueEvent: "queue_removed",
+    queuedTurnId: "queued-1",
+  });
+
+  const cleared = buildAgentUiQueueLifecycleEvents(
+    {
+      eventType: "queue_cleared",
+      sessionId: "session-queue",
+      queuedTurnIds: ["queued-1", "queued-2"],
+    },
+    context,
+  );
+
+  assert.equal(cleared.length, 3);
+  assert.equal(cleared[0].type, "queue.changed");
+  assert.equal(cleared[0].queuedTurnCount, 2);
+  assert.equal(cleared[1].taskId, "queued-1");
+  assert.deepEqual(cleared[1].payload, {
+    runtimeEntity: "agent_turn",
+    taskEvent: "steer_removed",
+    intentKind: "queued_user_input",
+    queueEvent: "queue_cleared",
+    queuedTurnId: "queued-1",
+    clearedIndex: 0,
+    clearedCount: 2,
+  });
 });
 
 test("action projection helpers build standard HITL events", () => {
@@ -816,6 +1092,908 @@ test("action projection helpers build standard HITL events", () => {
   );
 });
 
+test("plan approval projection helpers build standard HITL events", () => {
+  const metadata = {
+    plan_approval_request: {
+      type: "plan_approval_request",
+      from: "researcher",
+      requestId: "plan-req-1",
+      planFilePath: "plans/alpha.md",
+      planContent: "# 计划\n- 第一步",
+      timestamp: "2026-05-09T00:00:00.000Z",
+    },
+    plan_approval_delivery: {
+      target: "lead-session",
+      submissionId: "submit-1",
+    },
+    pending_request_id: "plan-req-1",
+  };
+  const projection = extractAgentUiPlanApprovalProjection(metadata);
+  assert.deepEqual(projection, {
+    requestId: "plan-req-1",
+    from: "researcher",
+    planFilePath: "plans/alpha.md",
+    planContent: "# 计划\n- 第一步",
+    timestamp: "2026-05-09T00:00:00.000Z",
+    deliveryTarget: "lead-session",
+    deliverySubmissionId: "submit-1",
+    awaitingLeaderApproval: true,
+  });
+  assert.equal(extractAgentUiPlanApprovalProjection({}), null);
+
+  const required = buildAgentUiPlanApprovalRequiredEvent({
+    base: {
+      sourceType: "tool_end",
+      timestamp: "2026-06-07T00:00:00.000Z",
+      sessionId: "session-plan",
+      threadId: "thread-plan",
+      turnId: "turn-plan",
+      runtimeEntity: "agent_turn",
+    },
+    projection,
+    persistence: "snapshot",
+    toolCallId: "tool-plan",
+  });
+
+  assert.equal(required.type, "action.required");
+  assert.equal(required.actionId, "plan-req-1");
+  assert.equal(required.toolCallId, "tool-plan");
+  assert.equal(required.owner, "action");
+  assert.equal(required.scope, "action_request");
+  assert.equal(required.phase, "waiting");
+  assert.equal(required.surface, "hitl");
+  assert.equal(required.persistence, "snapshot");
+  assert.equal(required.control, "approve");
+  assert.deepEqual(required.payload, {
+    actionType: "plan_approval",
+    decisionKind: "plan_approval_request",
+    from: "researcher",
+    planFilePath: "plans/alpha.md",
+    planContentPreview: "# 计划\n- 第一步",
+    planContentLength: 10,
+    timestamp: "2026-05-09T00:00:00.000Z",
+    deliveryTarget: "lead-session",
+    deliverySubmissionId: "submit-1",
+    awaitingLeaderApproval: true,
+  });
+
+  const responseProjection = extractAgentUiPlanApprovalResponseProjection({
+    send_message: {
+      target: "researcher",
+      plan_approval_response: {
+        type: "plan_approval_response",
+        request_id: "plan-req-1",
+        approved: false,
+        feedback: "请补充验收项",
+        permission_mode: "ask",
+        delivery_submission_id: "submit-response-1",
+        target_session_id: "child-session",
+      },
+    },
+  });
+  assert.deepEqual(responseProjection, {
+    requestId: "plan-req-1",
+    approved: false,
+    feedback: "请补充验收项",
+    permissionMode: "ask",
+    timestamp: undefined,
+    targetSessionId: "child-session",
+    deliveryTarget: "researcher",
+    deliverySubmissionId: "submit-response-1",
+  });
+  assert.equal(extractAgentUiPlanApprovalResponseProjection({}), null);
+
+  const resolved = buildAgentUiPlanApprovalResolvedEvent({
+    base: {
+      sourceType: "tool_end",
+      timestamp: "2026-06-07T00:00:01.000Z",
+      sessionId: "session-plan",
+      threadId: "thread-plan",
+      turnId: "turn-plan",
+      runtimeEntity: "agent_turn",
+    },
+    projection: responseProjection,
+    persistence: "archive",
+    toolCallId: "tool-plan-response",
+  });
+
+  assert.equal(resolved.type, "action.resolved");
+  assert.equal(resolved.actionId, "plan-req-1");
+  assert.equal(resolved.toolCallId, "tool-plan-response");
+  assert.equal(resolved.control, "reject");
+  assert.deepEqual(resolved.payload, {
+    actionType: "plan_approval",
+    decisionKind: "plan_approval_response",
+    approved: false,
+    feedbackPreview: "请补充验收项",
+    permissionMode: "ask",
+    timestamp: undefined,
+    targetSessionId: "child-session",
+    deliveryTarget: "researcher",
+    deliverySubmissionId: "submit-response-1",
+  });
+});
+
+test("tool event helpers build standard tool lifecycle events", () => {
+  const context = {
+    sessionId: "session-tool",
+    threadId: "thread-tool",
+    turnId: "turn-tool",
+    timestamp: "2026-06-07T00:00:00.000Z",
+  };
+
+  const started = buildAgentUiToolStartEvents(
+    {
+      toolCallId: "tool-1",
+      toolName: "read_file",
+      input: JSON.stringify({ path: "README.md" }),
+    },
+    context,
+  );
+
+  assert.equal(started.length, 2);
+  assert.deepEqual(
+    started.map((event) => event.type),
+    ["tool.started", "tool.args"],
+  );
+  assert.equal(started[0].sourceType, "tool_start");
+  assert.equal(started[0].toolCallId, "tool-1");
+  assert.equal(started[0].owner, "tool");
+  assert.equal(started[0].scope, "tool_call");
+  assert.equal(started[0].phase, "acting");
+  assert.equal(started[0].surface, "tool_ui");
+  assert.equal(started[0].persistence, "ephemeral_live");
+  assert.deepEqual(started[0].payload, { toolName: "read_file" });
+  assert.deepEqual(started[1].payload, {
+    toolName: "read_file",
+    inputAvailable: true,
+    inputSummary: '{"path":"README.md"}',
+    inputLength: 20,
+  });
+
+  const result = buildAgentUiToolEndEvent(
+    {
+      toolCallId: "tool-1",
+      result: {
+        success: true,
+        output: "已读取文件",
+        metadata: {
+          artifact_id: "artifact-1",
+          artifact_path: "docs/readme.md",
+        },
+      },
+    },
+    context,
+  );
+
+  assert.equal(result.type, "tool.result");
+  assert.equal(result.phase, "completed");
+  assert.equal(result.persistence, "archive");
+  assert.deepEqual(result.payload, {
+    success: true,
+    outputPreview: "已读取文件",
+    errorPreview: undefined,
+    outputLength: 5,
+    hasImages: false,
+    metadataKeys: ["artifact_id", "artifact_path"],
+  });
+  assert.deepEqual(result.refs, {
+    artifactIds: ["artifact-1"],
+    artifactPaths: ["docs/readme.md"],
+    diagnosticKeys: ["artifact_id", "artifact_path"],
+  });
+
+  const failed = buildAgentUiToolEndEvent(
+    {
+      toolCallId: "tool-2",
+      result: {
+        success: false,
+        output: "",
+        error: "权限不足",
+      },
+    },
+    context,
+  );
+
+  assert.equal(failed.type, "tool.failed");
+  assert.equal(failed.phase, "failed");
+  assert.deepEqual(failed.payload, {
+    success: false,
+    outputPreview: undefined,
+    errorPreview: "权限不足",
+    outputLength: 0,
+    hasImages: false,
+    metadataKeys: [],
+  });
+  assert.deepEqual(failed.refs, {});
+
+  const progress = buildAgentUiToolProgressEvent(
+    {
+      toolCallId: "tool-1",
+      progress: {
+        message: "正在处理第 2 项",
+        progress: 2,
+        total: 4,
+        metadata: {
+          notification_kind: "mcp_progress",
+        },
+      },
+    },
+    context,
+  );
+
+  assert.equal(progress.type, "tool.progress");
+  assert.equal(progress.persistence, "ephemeral_live");
+  assert.deepEqual(progress.payload, {
+    messagePreview: "正在处理第 2 项",
+    progress: 2,
+    total: 4,
+    metadataKeys: ["notification_kind"],
+  });
+  assert.deepEqual(progress.refs, {
+    diagnosticKeys: ["notification_kind"],
+  });
+
+  const outputDelta = buildAgentUiToolOutputDeltaEvent(
+    {
+      toolCallId: "tool-1",
+      delta: "partial output",
+      outputKind: "log",
+      metadata: {
+        notification_kind: "mcp_log",
+      },
+    },
+    context,
+  );
+
+  assert.equal(outputDelta.type, "tool.output.delta");
+  assert.deepEqual(outputDelta.payload, {
+    outputKind: "log",
+    deltaPreview: "partial output",
+    deltaLength: 14,
+    metadataKeys: ["notification_kind"],
+  });
+  assert.deepEqual(outputDelta.refs, {
+    diagnosticKeys: ["notification_kind"],
+  });
+
+  const inputDelta = buildAgentUiToolInputDeltaEvent(
+    {
+      toolCallId: "tool-1",
+      toolName: "read_file",
+      delta: '{"path"',
+      accumulatedInput: '{"path"',
+      provider: "openai_compatible",
+    },
+    context,
+  );
+
+  assert.equal(inputDelta.type, "tool.args.delta");
+  assert.deepEqual(inputDelta.payload, {
+    toolName: "read_file",
+    provider: "openai_compatible",
+    inputStreaming: true,
+    deltaPreview: '{"path"',
+    deltaLength: 7,
+    accumulatedInputLength: 7,
+    accumulatedInputPreview: '{"path"',
+  });
+});
+
+test("tool end helper appends standard plan approval actions", () => {
+  const context = {
+    sessionId: "session-tool",
+    threadId: "thread-tool",
+    turnId: "turn-tool",
+    timestamp: "2026-06-07T00:00:00.000Z",
+  };
+
+  const requiredEvents = buildAgentUiToolEndEvents(
+    {
+      toolCallId: "tool-plan",
+      result: {
+        success: true,
+        output: "已提交计划审批",
+        metadata: {
+          plan_approval_request: {
+            request_id: "plan-req-1",
+            from: "researcher",
+            plan_file_path: "plans/alpha.md",
+            plan_content: "# 计划\n- 第一步",
+          },
+          plan_approval_delivery: {
+            target: "lead-session",
+            submission_id: "submit-1",
+          },
+        },
+      },
+    },
+    context,
+  );
+
+  assert.equal(requiredEvents.length, 2);
+  assert.equal(requiredEvents[0].type, "tool.result");
+  assert.equal(requiredEvents[1].type, "action.required");
+  assert.equal(requiredEvents[1].actionId, "plan-req-1");
+  assert.equal(requiredEvents[1].toolCallId, "tool-plan");
+  assert.equal(requiredEvents[1].persistence, "snapshot");
+  assert.deepEqual(requiredEvents[1].payload, {
+    actionType: "plan_approval",
+    decisionKind: "plan_approval_request",
+    from: "researcher",
+    planFilePath: "plans/alpha.md",
+    planContentPreview: "# 计划\n- 第一步",
+    planContentLength: 10,
+    timestamp: undefined,
+    deliveryTarget: "lead-session",
+    deliverySubmissionId: "submit-1",
+    awaitingLeaderApproval: true,
+  });
+
+  const resolvedEvents = buildAgentUiToolEndEvents(
+    {
+      sourceType: "tool_end",
+      toolCallId: "tool-send-message",
+      result: {
+        success: true,
+        output: "结构化发送结果",
+        metadata: {
+          send_message: {
+            target: "researcher",
+            plan_approval_response: {
+              request_id: "plan-req-2",
+              approved: true,
+              delivery_submission_id: "submit-response-1",
+              target_session_id: "child-session",
+            },
+          },
+        },
+      },
+    },
+    context,
+  );
+
+  assert.equal(resolvedEvents.length, 2);
+  assert.equal(resolvedEvents[1].type, "action.resolved");
+  assert.equal(resolvedEvents[1].actionId, "plan-req-2");
+  assert.equal(resolvedEvents[1].toolCallId, "tool-send-message");
+  assert.deepEqual(resolvedEvents[1].payload, {
+    actionType: "plan_approval",
+    decisionKind: "plan_approval_response",
+    approved: true,
+    feedbackPreview: undefined,
+    permissionMode: undefined,
+    timestamp: undefined,
+    targetSessionId: "child-session",
+    deliveryTarget: "researcher",
+    deliverySubmissionId: "submit-response-1",
+  });
+});
+
+test("runtime lifecycle helpers build standard run events", () => {
+  const context = {
+    sessionId: " session-run ",
+    threadId: " fallback-thread ",
+    turnId: " fallback-turn ",
+    timestamp: "2026-06-07T00:00:00.000Z",
+  };
+
+  const started = buildAgentUiRunStartedEvent(
+    {
+      threadId: " thread-run ",
+      turnId: " turn-run ",
+      status: "running",
+      promptText: "整理今天的国际新闻",
+    },
+    context,
+  );
+
+  assert.equal(started.sourceType, "turn_started");
+  assert.equal(started.sessionId, "session-run");
+  assert.equal(started.threadId, "thread-run");
+  assert.equal(started.turnId, "turn-run");
+  assert.equal(started.type, "run.started");
+  assert.equal(started.owner, "runtime");
+  assert.equal(started.scope, "turn");
+  assert.equal(started.phase, "accepted");
+  assert.equal(started.surface, "runtime_status");
+  assert.equal(started.persistence, "snapshot");
+  assert.deepEqual(started.payload, {
+    status: "running",
+    promptLength: 9,
+  });
+
+  const finished = buildAgentUiRunFinishedEvent(
+    { sourceType: "final_done" },
+    context,
+  );
+  assert.equal(finished.sourceType, "final_done");
+  assert.equal(finished.type, "run.finished");
+  assert.equal(finished.phase, "completed");
+  assert.equal(finished.persistence, "archive");
+
+  const failed = buildAgentUiRunFailedEvent(
+    {
+      sourceType: "turn_failed",
+      errorMessage: "权限不足",
+    },
+    context,
+  );
+  assert.equal(failed.type, "run.failed");
+  assert.equal(failed.phase, "failed");
+  assert.deepEqual(failed.payload, { errorPreview: "权限不足" });
+
+  const status = buildAgentUiRuntimeStatusEvent(
+    {
+      phase: "permission_review",
+      title: "等待确认",
+      detail: "需要人工批准工具调用",
+      checkpoints: ["plan", "permission"],
+      metadata: {
+        team_phase: "waiting",
+        team_parallel_budget: 3,
+        team_active_count: 1,
+        team_queued_count: 2,
+        provider_concurrency_group: "default",
+        provider_parallel_budget: 4,
+        queue_reason: "provider_limit",
+        retryable_overload: true,
+      },
+    },
+    context,
+  );
+
+  assert.equal(status.sourceType, "runtime_status");
+  assert.equal(status.type, "run.status");
+  assert.equal(status.phase, "waiting");
+  assert.equal(status.runtimeStatus, "waiting");
+  assert.equal(status.latestTurnStatus, "waiting");
+  assert.equal(status.teamPhase, "waiting");
+  assert.equal(status.teamParallelBudget, 3);
+  assert.equal(status.teamActiveCount, 1);
+  assert.equal(status.teamQueuedCount, 2);
+  assert.equal(status.queuedTurnCount, 2);
+  assert.equal(status.providerConcurrencyGroup, "default");
+  assert.equal(status.providerParallelBudget, 4);
+  assert.equal(status.queueReason, "provider_limit");
+  assert.equal(status.retryableOverload, true);
+  assert.deepEqual(status.payload, {
+    runtimeEntity: "agent_turn",
+    title: "等待确认",
+    detailPreview: "需要人工批准工具调用",
+    sourcePhase: "permission_review",
+    checkpointCount: 2,
+    metadataKeys: [
+      "provider_concurrency_group",
+      "provider_parallel_budget",
+      "queue_reason",
+      "retryable_overload",
+      "team_active_count",
+      "team_parallel_budget",
+      "team_phase",
+      "team_queued_count",
+    ],
+    teamPhase: "waiting",
+    teamParallelBudget: 3,
+    teamActiveCount: 1,
+    teamQueuedCount: 2,
+    queuedTurnCount: 2,
+    providerConcurrencyGroup: "default",
+    providerParallelBudget: 4,
+    queueReason: "provider_limit",
+    retryableOverload: true,
+  });
+});
+
+test("thread item helpers build standard projection events", () => {
+  const context = {
+    sessionId: "session-thread",
+    runId: "run-thread",
+    timestamp: "2026-06-07T00:00:00.000Z",
+  };
+
+  const base = buildAgentUiThreadItemBase(
+    "item_completed",
+    {
+      id: "part-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+    },
+    context,
+  );
+
+  assert.equal(base.sessionId, "session-thread");
+  assert.equal(base.threadId, "thread-1");
+  assert.equal(base.turnId, "turn-1");
+  assert.equal(base.partId, "part-1");
+  assert.equal(base.runtimeEntity, "agent_turn");
+
+  assert.equal(resolveAgentUiThreadItemPhase({ status: "failed" }), "failed");
+  assert.equal(
+    resolveAgentUiThreadItemToolResultType({
+      type: "command_execution",
+      status: "completed",
+      exit_code: 1,
+    }),
+    "tool.failed",
+  );
+  assert.equal(
+    resolveAgentUiThreadItemActionControl({ type: "request_user_input" }),
+    "answer",
+  );
+  assert.equal(
+    resolveAgentUiThreadItemSubagentRuntimeStatus({ status: "in_progress" }),
+    "running",
+  );
+
+  const userInputAction = buildAgentUiThreadItemEvent(
+    "item_updated",
+    {
+      id: "ask-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "request_user_input",
+      status: "in_progress",
+      request_id: "request-ask-1",
+      action_type: "ask_user",
+      prompt: "请补充发布渠道",
+      questions: [{ question: "发布到哪里？" }, { question: "是否加封面？" }],
+    },
+    context,
+  );
+  assert.equal(userInputAction?.type, "action.required");
+  assert.equal(userInputAction?.actionId, "request-ask-1");
+  assert.equal(userInputAction?.owner, "action");
+  assert.equal(userInputAction?.scope, "action_request");
+  assert.equal(userInputAction?.phase, "waiting");
+  assert.equal(userInputAction?.surface, "hitl");
+  assert.equal(userInputAction?.persistence, "archive");
+  assert.equal(userInputAction?.control, "answer");
+  assert.equal(userInputAction?.partId, "ask-1");
+  assert.deepEqual(userInputAction?.payload, {
+    actionType: "ask_user",
+    promptPreview: "请补充发布渠道",
+    questionCount: 2,
+    hasResponse: false,
+  });
+
+  const resolvedApprovalAction = buildAgentUiThreadItemActionEvent(
+    "item_completed",
+    {
+      id: "approval-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "approval_request",
+      status: "completed",
+      request_id: "request-approval-1",
+      action_type: "tool_confirmation",
+      prompt: "允许执行命令？",
+      response: { approved: true },
+    },
+    context,
+  );
+  assert.equal(resolvedApprovalAction?.type, "action.resolved");
+  assert.equal(resolvedApprovalAction?.actionId, "request-approval-1");
+  assert.equal(resolvedApprovalAction?.phase, "completed");
+  assert.equal(resolvedApprovalAction?.control, "approve");
+  assert.deepEqual(resolvedApprovalAction?.payload, {
+    actionType: "tool_confirmation",
+    promptPreview: "允许执行命令？",
+    questionCount: 0,
+    hasResponse: true,
+  });
+
+  const subagentActivity = buildAgentUiThreadItemEvent(
+    "item_updated",
+    {
+      id: "worker-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "subagent_activity",
+      status: "in_progress",
+      status_label: "执行中",
+      title: "整理资料",
+      role: "researcher",
+      model: "model-a",
+      session_id: "child-session-1",
+    },
+    context,
+  );
+  assert.equal(subagentActivity?.type, "agent.changed");
+  assert.equal(subagentActivity?.taskId, "child-session-1");
+  assert.equal(subagentActivity?.agentId, "child-session-1");
+  assert.equal(subagentActivity?.owner, "task");
+  assert.equal(subagentActivity?.scope, "agent");
+  assert.equal(subagentActivity?.phase, "acting");
+  assert.equal(subagentActivity?.surface, "task_capsule");
+  assert.equal(subagentActivity?.persistence, "archive");
+  assert.equal(subagentActivity?.runtimeEntity, "subagent_turn");
+  assert.equal(subagentActivity?.runtimeStatus, "running");
+  assert.equal(subagentActivity?.latestTurnStatus, "running");
+  assert.equal(subagentActivity?.topology, "coordinator_team");
+  assert.deepEqual(subagentActivity?.payload, {
+    runtimeEntity: "subagent_turn",
+    statusLabel: "执行中",
+    title: "整理资料",
+    role: "researcher",
+    model: "model-a",
+    childSessionId: "child-session-1",
+  });
+  assert.equal(
+    buildAgentUiThreadItemSubagentWorkerNotificationEvent(
+      "item_updated",
+      {
+        id: "worker-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        type: "subagent_activity",
+        status: "in_progress",
+      },
+      context,
+    ),
+    null,
+  );
+
+  const completedWorkerNotification =
+    buildAgentUiThreadItemSubagentWorkerNotificationEvent(
+      "item_completed",
+      {
+        id: "worker-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        type: "subagent_activity",
+        status: "completed",
+        status_label: "已完成",
+        title: "整理资料",
+        summary: "已完成资料整理",
+        role: "researcher",
+        model: "model-a",
+        session_id: "child-session-1",
+      },
+      context,
+    );
+  assert.equal(completedWorkerNotification?.type, "worker.notification");
+  assert.equal(completedWorkerNotification?.taskId, "child-session-1");
+  assert.equal(completedWorkerNotification?.agentId, "child-session-1");
+  assert.equal(completedWorkerNotification?.workerNotificationId, "worker-1");
+  assert.equal(
+    completedWorkerNotification?.transcriptRef,
+    "thread-1:turn-1:worker-1",
+  );
+  assert.equal(completedWorkerNotification?.owner, "agent");
+  assert.equal(completedWorkerNotification?.phase, "completed");
+  assert.equal(
+    completedWorkerNotification?.surface,
+    "worker_notifications",
+  );
+  assert.equal(completedWorkerNotification?.runtimeEntity, "subagent_turn");
+  assert.equal(completedWorkerNotification?.runtimeStatus, "completed");
+  assert.deepEqual(completedWorkerNotification?.payload, {
+    runtimeEntity: "subagent_turn",
+    notificationKind: "worker_result",
+    statusLabel: "已完成",
+    title: "整理资料",
+    summaryPreview: "已完成资料整理",
+    role: "researcher",
+    model: "model-a",
+    childSessionId: "child-session-1",
+  });
+  assert.equal(
+    buildAgentUiThreadItemSubagentActivityEvent(
+      "item_completed",
+      {
+        id: "tool-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        type: "tool_call",
+        status: "completed",
+      },
+      context,
+    ),
+    null,
+  );
+
+  const reasoning = buildAgentUiThreadItemEvent(
+    "item_completed",
+    {
+      id: "reasoning-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "reasoning",
+      status: "completed",
+      text: "完整推理",
+      summary: ["完成推理"],
+    },
+    context,
+  );
+  assert.equal(reasoning?.type, "reasoning.summary");
+  assert.equal(reasoning?.phase, "completed");
+  assert.deepEqual(reasoning?.payload, {
+    textLength: 4,
+    summaryCount: 1,
+    preview: "完成推理",
+  });
+
+  const tool = buildAgentUiThreadItemEvent(
+    "item_completed",
+    {
+      id: "tool-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "tool_call",
+      status: "completed",
+      tool_name: "write_file",
+      success: true,
+      output: "已写入文件",
+      metadata: {
+        artifact_id: "artifact-1",
+        artifact_path: "docs/a.md",
+      },
+    },
+    context,
+  );
+  assert.equal(tool?.type, "tool.result");
+  assert.equal(tool?.toolCallId, "tool-1");
+  assert.deepEqual(tool?.refs, {
+    artifactIds: ["artifact-1"],
+    artifactPaths: ["docs/a.md"],
+  });
+  assert.deepEqual(tool?.payload, {
+    toolName: "write_file",
+    success: true,
+    outputPreview: "已写入文件",
+    errorPreview: undefined,
+    metadataKeys: ["artifact_id", "artifact_path"],
+  });
+
+  assert.equal(normalizeAgentUiProjectionToolName("Task-Update Tool"), "taskupdatetool");
+  assert.equal(isAgentUiTaskUpdateToolName("TaskUpdateTool"), true);
+  assert.deepEqual(
+    extractAgentUiTaskOwnerChangeProjection({
+      toolName: "TaskUpdate",
+      status: "completed",
+      success: true,
+      metadata: {
+        task_id: "task-1",
+        task_list_id: "board-main",
+        updated_fields: ["owner"],
+        owner_change: {
+          from: "researcher",
+          to: "implementer",
+        },
+      },
+    }),
+    {
+      action: "reassign",
+      taskId: "task-1",
+      previousAssigneeId: "researcher",
+      nextAssigneeId: "implementer",
+      sourceTaskListId: "board-main",
+      sourceToolName: "TaskUpdate",
+      reassignmentReason: "TaskUpdate owner change",
+    },
+  );
+  assert.equal(
+    extractAgentUiTaskOwnerChangeProjection({
+      toolName: "TaskUpdate",
+      status: "completed",
+      success: true,
+      metadata: {
+        task_id: "task-1",
+        updated_fields: ["status"],
+      },
+    }),
+    null,
+  );
+
+  const command = buildAgentUiThreadItemEvent(
+    "item_completed",
+    {
+      id: "command-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "command_execution",
+      status: "completed",
+      command: "npm test",
+      cwd: "/tmp/project",
+      aggregated_output: "失败",
+      exit_code: 1,
+    },
+    context,
+  );
+  assert.equal(command?.type, "tool.failed");
+  assert.equal(command?.phase, "failed");
+  assert.deepEqual(command?.payload, {
+    toolName: "command_execution",
+    commandPreview: "npm test",
+    cwd: "/tmp/project",
+    exitCode: 1,
+    outputPreview: "失败",
+    errorPreview: undefined,
+  });
+
+  const artifact = buildAgentUiThreadItemEvent(
+    "item_completed",
+    {
+      id: "artifact-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "file_artifact",
+      status: "completed",
+      path: "docs/a.md",
+      source: "tool",
+      content: "正文",
+      metadata: { kind: "draft" },
+    },
+    context,
+  );
+  assert.equal(artifact?.type, "artifact.preview.ready");
+  assert.equal(artifact?.artifactId, "artifact-1");
+  assert.deepEqual(artifact?.refs, {
+    artifactIds: ["artifact-1"],
+    artifactPaths: ["docs/a.md"],
+  });
+
+  const compaction = buildAgentUiThreadItemEvent(
+    "item_completed",
+    {
+      id: "compact-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "context_compaction",
+      status: "completed",
+      stage: "completed",
+      trigger: "token_budget",
+      detail: "已压缩上下文",
+    },
+    context,
+  );
+  assert.equal(compaction?.type, "context.compaction.completed");
+  assert.deepEqual(compaction?.payload, {
+    stage: "completed",
+    trigger: "token_budget",
+    detailPreview: "已压缩上下文",
+  });
+
+  const summary = buildAgentUiThreadItemEvent(
+    "item_completed",
+    {
+      id: "summary-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "turn_summary",
+      status: "completed",
+      text: "本轮已完成检索与归档。",
+    },
+    context,
+  );
+  assert.equal(summary?.type, "state.snapshot");
+  assert.deepEqual(summary?.payload, {
+    textLength: 11,
+    preview: "本轮已完成检索与归档。",
+  });
+
+  const diagnostic = buildAgentUiThreadItemEvent(
+    "item_updated",
+    {
+      id: "warning-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      type: "warning",
+      status: "in_progress",
+      code: "runtime.warning",
+      message: "运行时提示",
+    },
+    context,
+  );
+  assert.equal(diagnostic?.type, "diagnostic.changed");
+  assert.equal(diagnostic?.phase, "acting");
+  assert.deepEqual(diagnostic?.payload, {
+    code: "runtime.warning",
+    messagePreview: "运行时提示",
+  });
+});
+
 test("artifact ref helpers extract stable artifact ids and paths", () => {
   assert.deepEqual(
     extractArtifactRefs({
@@ -885,8 +2063,14 @@ test("runtime fact helpers normalize shared Agent UI status semantics", () => {
     inferAgentUiRuntimeEntity({ runtimeEntity: "external_task" }),
     "external_task",
   );
-  assert.equal(normalizeRuntimeStatusFromRuntimePhase("permission_review"), "waiting");
-  assert.equal(normalizeRuntimePhaseFromRuntimeStatusPhase("routing"), "routing");
+  assert.equal(
+    normalizeRuntimeStatusFromRuntimePhase("permission_review"),
+    "waiting",
+  );
+  assert.equal(
+    normalizeRuntimePhaseFromRuntimeStatusPhase("routing"),
+    "routing",
+  );
   assert.equal(normalizeSubagentRuntimeStatus("cancelled"), "cancelled");
   assert.equal(resolveSubagentStatusPhase("running"), "acting");
   assert.equal(resolveSubagentStatusControl("running"), "stop");

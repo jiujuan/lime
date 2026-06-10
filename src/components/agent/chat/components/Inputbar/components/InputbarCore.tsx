@@ -4,8 +4,6 @@ import {
   Container,
   InputBarContainer,
   InputColumn,
-  DictationRecordingDuration,
-  DictationRecordingGlyph,
   InputIconButton,
   InputSuggestionKeycap,
   InputSuggestionLayer,
@@ -40,8 +38,6 @@ import {
   FileText,
   Folder,
   ImagePlus,
-  Loader2,
-  Mic,
   Plus,
   Square,
   X,
@@ -51,7 +47,6 @@ import { isKnowledgeTextSourceCandidate } from "@/features/knowledge/import/know
 import type { MessageImage, MessagePathReference } from "../../../types";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import { QueuedTurnsPanel } from "./QueuedTurnsPanel";
-import { useInputbarDictation } from "../hooks/useInputbarDictation";
 import type { InputbarCoreCopy } from "./inputbarCoreCopy";
 import {
   InputbarPlusMenu,
@@ -60,31 +55,6 @@ import {
 
 const INTERACTIVE_TARGET_SELECTOR =
   "button, a, input, textarea, select, option, [role='button'], [contenteditable=''], [contenteditable='true'], [contenteditable='plaintext-only']";
-
-function formatDictationDuration(duration = 0): string {
-  const safeDuration = Number.isFinite(duration) ? Math.max(0, duration) : 0;
-  const minutes = Math.floor(safeDuration / 60);
-  const seconds = Math.floor(safeDuration % 60);
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function buildDictationStatusText(
-  state: "idle" | "listening" | "transcribing" | "polishing",
-  copy: InputbarCoreCopy,
-  duration = 0,
-): string {
-  switch (state) {
-    case "listening":
-      return copy.dictation.recording(formatDictationDuration(duration));
-    case "transcribing":
-      return copy.dictation.transcribing;
-    case "polishing":
-      return copy.dictation.polishing;
-    case "idle":
-    default:
-      return "";
-  }
-}
 
 function shouldFocusComposerTextarea(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
@@ -147,7 +117,6 @@ interface InputbarCoreProps {
     prompt: string;
     testId?: string;
   }) => void;
-  listenForVoiceShortcut?: boolean;
 }
 
 export const InputbarCore: React.FC<InputbarCoreProps> = ({
@@ -186,30 +155,12 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   plusMenu,
   inputSuggestion = null,
   onAcceptInputSuggestion,
-  listenForVoiceShortcut = false,
 }) => {
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const inputBarContainerRef = useRef<HTMLDivElement | null>(null);
   const fallbackTextareaRef = useRef<HTMLTextAreaElement>(null);
   const resolvedTextareaRef = externalTextareaRef ?? fallbackTextareaRef;
   const isFloatingVariant = visualVariant === "floating";
-  const {
-    dictationEnabled,
-    voiceConfigLoaded,
-    dictationState,
-    recordingStatus,
-    liveTranscript,
-    isDictating,
-    isDictationBusy,
-    isDictationProcessing,
-    handleDictationToggle,
-  } = useInputbarDictation({
-    text,
-    setText,
-    textareaRef: resolvedTextareaRef,
-    disabled,
-    listenForVoiceShortcut,
-  });
   const hasInlineComposerContent =
     text.trim().length > 0 ||
     pendingImages.length > 0 ||
@@ -267,27 +218,6 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
         !shouldCollapseFloatingTools));
   const shouldShowInputSuggestion =
     Boolean(inputSuggestion) && text.trim().length === 0 && !disabled;
-  const dictationStatusText = buildDictationStatusText(
-    dictationState,
-    uiCopy,
-    recordingStatus?.duration,
-  );
-  const dictationStatusLabel =
-    dictationState === "listening" && liveTranscript
-      ? `${dictationStatusText} · ${uiCopy.dictation.liveTranscript}`
-      : dictationStatusText;
-  const dictationButtonTitle = isDictationProcessing
-    ? dictationState === "polishing"
-      ? uiCopy.dictation.polishingTitle
-      : uiCopy.dictation.transcribingTitle
-    : isDictating
-      ? uiCopy.dictation.stopRecording(
-          dictationStatusLabel || uiCopy.dictation.recordingLabel,
-        )
-      : dictationEnabled || !voiceConfigLoaded
-        ? uiCopy.dictation.start
-        : uiCopy.dictation.disabled;
-
   const handleInputSuggestionKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (
@@ -589,33 +519,6 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                       <ChevronUp size={14} />
                     )}
                   </InputIconButton>
-                  <InputIconButton
-                    type="button"
-                    onClick={() => void handleDictationToggle()}
-                    disabled={disabled || isDictationProcessing}
-                    className={
-                      isDictationProcessing
-                        ? "is-processing"
-                        : isDictating
-                          ? "is-recording"
-                          : ""
-                    }
-                    aria-label={dictationButtonTitle}
-                    title={dictationButtonTitle}
-                  >
-                    {isDictationProcessing ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : isDictating ? (
-                      <>
-                        <DictationRecordingGlyph aria-hidden="true" />
-                        <DictationRecordingDuration>
-                          {formatDictationDuration(recordingStatus?.duration)}
-                        </DictationRecordingDuration>
-                      </>
-                    ) : (
-                      <Mic size={14} />
-                    )}
-                  </InputIconButton>
                   {isLoading ? (
                     <SecondaryActionButton
                       type="button"
@@ -637,7 +540,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                       <Square size={14} fill="currentColor" />
                     </InputIconButton>
                   ) : null}
-                  {!isLoading && !isDictationBusy ? (
+                  {!isLoading ? (
                     <SendButton
                       type="button"
                       onClick={onPrimaryAction}

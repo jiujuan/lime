@@ -1,4 +1,5 @@
 mod catalog;
+mod video;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -618,7 +619,7 @@ fn run_task_create_command(command: TaskCreateCommand) -> Result<Value, MediaRun
     match command.command {
         TaskCreateSubcommand::Image(args) => create_image_task(args),
         TaskCreateSubcommand::Cover(args) => create_cover_task(args),
-        TaskCreateSubcommand::Video(args) => create_video_task(args),
+        TaskCreateSubcommand::Video(args) => video::create_video_task(args),
         TaskCreateSubcommand::Transcription(args) => create_transcription_task(args),
         TaskCreateSubcommand::Broadcast(args) => create_broadcast_task(args),
         TaskCreateSubcommand::UrlParse(args) => create_url_parse_task(args),
@@ -636,7 +637,7 @@ fn run_media_command(command: MediaCommand) -> Result<Value, MediaRuntimeError> 
             CoverSubcommand::Generate(args) => create_cover_task(args),
         },
         MediaSubcommand::Video(video) => match video.command {
-            VideoSubcommand::Generate(args) => create_video_task(args),
+            VideoSubcommand::Generate(args) => video::generate_video_task(args),
         },
         MediaSubcommand::Transcription(transcription) => match transcription.command {
             TranscriptionSubcommand::Generate(args) => create_transcription_task(args),
@@ -926,31 +927,6 @@ fn create_cover_task(args: CoverGenerateArgs) -> Result<Value, MediaRuntimeError
             "project_id": args.project_id,
             "content_id": args.content_id,
             "entry_source": args.entry_source,
-        }),
-        task_write_options(&args.output),
-    )?;
-    Ok(json!(output))
-}
-
-fn create_video_task(args: VideoGenerateArgs) -> Result<Value, MediaRuntimeError> {
-    let workspace_root = resolve_workspace_root(args.output.workspace.clone())?;
-    let output = write_task_artifact(
-        &workspace_root,
-        TaskType::VideoGenerate,
-        args.title,
-        json!({
-            "prompt": args.prompt,
-            "projectId": args.project_id,
-            "providerId": args.provider_id,
-            "model": args.model,
-            "aspectRatio": args.aspect_ratio,
-            "resolution": args.resolution,
-            "duration": args.duration,
-            "imageUrl": args.image_url,
-            "endImageUrl": args.end_image_url,
-            "seed": args.seed,
-            "generateAudio": args.generate_audio,
-            "cameraFixed": args.camera_fixed,
         }),
         task_write_options(&args.output),
     )?;
@@ -1275,6 +1251,23 @@ mod tests {
         assert_eq!(
             output["skill"]["recommended_command"],
             "lime media image generate --prompt \"...\""
+        );
+    }
+
+    #[test]
+    fn skill_show_video_generate_prefers_media_command() {
+        let output = run(Cli {
+            command: Command::Skill(SkillCommand {
+                command: SkillSubcommand::Show(SkillShowArgs {
+                    name: "video_generate".to_string(),
+                }),
+            }),
+        })
+        .expect("show video skill");
+
+        assert_eq!(
+            output["skill"]["recommended_command"],
+            "lime media video generate --prompt \"...\" --aspect-ratio 9:16"
         );
     }
 

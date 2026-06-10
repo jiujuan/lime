@@ -4,15 +4,8 @@
  * 展示已经审计、已接入实现并具备测试覆盖的快捷键。
  */
 
+import { useCallback, useMemo, type ReactNode } from "react";
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  AlertCircle,
   FileText,
   Keyboard,
   PanelsTopLeft,
@@ -24,14 +17,6 @@ import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { cn } from "@/lib/utils";
 import {
-  getVoiceInputConfig,
-  type VoiceInputConfig,
-} from "@/lib/api/asrProvider";
-import {
-  getHotkeyRuntimeStatus,
-  type HotkeyRuntimeStatus,
-} from "@/lib/api/hotkeys";
-import {
   resolveHotkeyPlatform,
   UNSET_SHORTCUT_TOKEN,
 } from "@/lib/hotkeys/platform";
@@ -42,8 +27,6 @@ import {
   type AuditedHotkeySection,
   type HotkeyCatalogTranslate,
 } from "./hotkeyCatalog";
-
-type RuntimeAvailability = "ready" | "fallback";
 
 interface HotkeysPageCopy {
   itemTipAria: (label: string) => string;
@@ -201,58 +184,8 @@ function HotkeySectionCard({
   );
 }
 
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-5 pb-8">
-      <div className="h-[180px] animate-pulse rounded-[28px] border border-slate-200/80 bg-slate-50" />
-      <div className="h-[260px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
-      <div className="h-[260px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
-    </div>
-  );
-}
-
 export function HotkeysSettings() {
   const { t } = useTranslation("settings");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [voiceConfig, setVoiceConfig] = useState<VoiceInputConfig | null>(null);
-  const [runtimeStatus, setRuntimeStatus] =
-    useState<HotkeyRuntimeStatus | null>(null);
-  const [runtimeAvailability, setRuntimeAvailability] =
-    useState<RuntimeAvailability>("ready");
-  const unknownLoadErrorMessage = t("settings.hotkeys.error.loadUnknown");
-
-  const loadHotkeys = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const [voiceResult, runtimeResult] = await Promise.all([
-        getVoiceInputConfig(),
-        getHotkeyRuntimeStatus()
-          .then((result) => ({ ok: true as const, result }))
-          .catch(() => ({ ok: false as const, result: null })),
-      ]);
-
-      setVoiceConfig(voiceResult);
-      setRuntimeStatus(runtimeResult.result);
-      setRuntimeAvailability(runtimeResult.ok ? "ready" : "fallback");
-    } catch (loadError) {
-      console.error("加载快捷键信息失败:", loadError);
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : unknownLoadErrorMessage,
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [unknownLoadErrorMessage]);
-
-  useEffect(() => {
-    void loadHotkeys();
-  }, [loadHotkeys]);
-
   const platform = useMemo(
     () =>
       resolveHotkeyPlatform(
@@ -316,74 +249,14 @@ export function HotkeysSettings() {
   );
 
   const catalog = useMemo(() => {
-    if (!voiceConfig) {
-      return null;
-    }
-
     return buildAuditedHotkeyCatalog({
       platform,
-      voiceConfig,
-      runtimeStatus,
       copy: catalogCopy,
     });
-  }, [catalogCopy, platform, runtimeStatus, voiceConfig]);
-
-  if (loading) {
-    return <LoadingSkeleton />;
-  }
-
-  if (!catalog) {
-    return (
-      <div className="space-y-3">
-        {error ? (
-          <div className="flex items-center justify-between gap-4 rounded-[20px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-sm shadow-slate-950/5">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              <span>
-                {t("settings.hotkeys.error.load", {
-                  error,
-                })}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => void loadHotkeys()}
-              className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
-            >
-              {t("settings.hotkeys.action.retry")}
-            </button>
-          </div>
-        ) : null}
-
-        <div className="rounded-[20px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700">
-          {t("settings.hotkeys.error.unavailable")}
-        </div>
-      </div>
-    );
-  }
+  }, [catalogCopy, platform]);
 
   return (
     <div className="space-y-4 pb-8">
-      {error ? (
-        <div className="flex items-center justify-between gap-4 rounded-[20px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-sm shadow-slate-950/5">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            <span>
-              {t("settings.hotkeys.error.load", {
-                error,
-              })}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => void loadHotkeys()}
-            className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
-          >
-            {t("settings.hotkeys.action.retry")}
-          </button>
-        </div>
-      ) : null}
-
       <section className="rounded-[28px] border border-slate-200/80 bg-white px-5 py-4 shadow-sm shadow-slate-950/5">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -407,19 +280,6 @@ export function HotkeysSettings() {
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <SummaryChip>{platformLabel}</SummaryChip>
-              <SummaryChip tone="success">
-                {t("settings.hotkeys.summary.globalReady", {
-                  ready: catalog.summary.globalReady,
-                  total: catalog.sections[0]?.hotkeys.length ?? 0,
-                })}
-              </SummaryChip>
-              <SummaryChip
-                tone={runtimeAvailability === "ready" ? "success" : "warning"}
-              >
-                {runtimeAvailability === "ready"
-                  ? t("settings.hotkeys.summary.runtime.ready")
-                  : t("settings.hotkeys.summary.runtime.fallback")}
-              </SummaryChip>
               <SummaryChip>
                 {t("settings.hotkeys.summary.audited", {
                   count: catalog.summary.total,

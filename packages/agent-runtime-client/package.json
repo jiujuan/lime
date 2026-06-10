@@ -38,7 +38,7 @@
     "test": "npm run build && node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "app-server-client": "1.64.0"
+    "app-server-client": "1.65.0"
   },
   "sideEffects": false
 }

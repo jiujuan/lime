@@ -9,10 +9,7 @@ const LEGACY_PERMISSION_FIXTURE_RS = join(
   REPO_ROOT,
   "lime-rs/crates/agent/tests/legacy_permission_surfaces.rs",
 );
-const RUST_SCAN_ROOTS = [
-  join(REPO_ROOT, "lime-rs/src"),
-  join(REPO_ROOT, "lime-rs/crates"),
-];
+const RUST_SCAN_ROOTS = [join(REPO_ROOT, "lime-rs/crates")];
 const EXCLUDED_RUST_FILES = new Set([
   "lime-rs/crates/agent/src/tool_permissions.rs",
   "lime-rs/crates/agent/src/shell_security.rs",

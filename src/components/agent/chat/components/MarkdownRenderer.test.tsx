@@ -584,6 +584,39 @@ describe("MarkdownRenderer", () => {
     }
   });
 
+  it("Desktop Host 下绝对路径图片点击不应回退 window.open", () => {
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(true);
+    const originalWindowOpen = window.open;
+    const windowOpen = vi.fn();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    window.open = windowOpen as unknown as typeof window.open;
+
+    try {
+      const container = render("![配图](/tmp/project/assets/cover.png)");
+      const image = container.querySelector("img");
+      const clickEvent = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      expect(image).not.toBeNull();
+
+      image?.dispatchEvent(clickEvent);
+
+      expect(clickEvent.defaultPrevented).toBe(true);
+      expect(windowOpen).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[MarkdownRenderer] Desktop Host image preview cannot fall back to browser window",
+        "asset:///tmp/project/assets/cover.png",
+      );
+    } finally {
+      window.open = originalWindowOpen;
+      consoleError.mockRestore();
+    }
+  });
+
   it("非 Desktop Host 下本地图片点击保留浏览器预览", () => {
     const originalWindowOpen = window.open;
     const windowOpen = vi.fn();

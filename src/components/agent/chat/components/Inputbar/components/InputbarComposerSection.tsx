@@ -439,7 +439,6 @@ export const InputbarComposerSection: React.FC<
         trailingMeta={trailingMeta}
         showMetaTools={false}
         plusMenu={plusMenu}
-        listenForVoiceShortcut={isWorkspaceVariant}
       />
     </>
   );

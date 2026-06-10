@@ -720,7 +720,6 @@ export function EmptyStateComposerPanel({
         plusMenu={plusMenu}
         inputSuggestion={activeInputSuggestion}
         onAcceptInputSuggestion={handleAcceptInputSuggestion}
-        listenForVoiceShortcut
       />
     </>
   );
