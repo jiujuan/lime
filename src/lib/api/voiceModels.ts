@@ -140,14 +140,18 @@ function unwrapEnvelope<T>(payload: unknown): T {
   return payload as T;
 }
 
-async function invokeVoiceModelCommand<T>(
+async function invokeVoiceModelShellCommand<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
   const result = args
     ? await safeInvoke(command, args)
     : await safeInvoke(command);
-  assertNotDiagnosticFacade(command, result, "真实语音模型 current 通道");
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实本地语音模型 Desktop Host current 通道",
+  );
   return result as T;
 }
 
@@ -318,13 +322,8 @@ export async function listVoiceModelCatalog(): Promise<
     return oemCatalog;
   }
 
-  const result = await safeInvoke<VoiceModelCatalogEntry[]>(
+  const result = await invokeVoiceModelShellCommand<VoiceModelCatalogEntry[]>(
     "voice_models_list_catalog",
-  );
-  assertNotDiagnosticFacade(
-    "voice_models_list_catalog",
-    result,
-    "真实语音模型 current 通道",
   );
   return assertCatalog("voice_models_list_catalog", result);
 }
@@ -332,7 +331,7 @@ export async function listVoiceModelCatalog(): Promise<
 export async function getVoiceModelInstallState(
   modelId: string,
 ): Promise<VoiceModelInstallState> {
-  const result = await invokeVoiceModelCommand<unknown>(
+  const result = await invokeVoiceModelShellCommand<unknown>(
     "voice_models_get_install_state",
     {
       modelId,
@@ -376,7 +375,7 @@ export async function downloadVoiceModel(
 ): Promise<VoiceModelDownloadResult> {
   const oemCatalog = await fetchOemVoiceModelCatalog();
   const catalogEntry = oemCatalog?.find((item) => item.id === modelId);
-  const result = await invokeVoiceModelCommand<unknown>(
+  const result = await invokeVoiceModelShellCommand<unknown>(
     "voice_models_download",
     {
       modelId,
@@ -398,9 +397,12 @@ export async function listenVoiceModelDownloadProgress(
 export async function deleteVoiceModel(
   modelId: string,
 ): Promise<VoiceModelInstallState> {
-  const result = await invokeVoiceModelCommand<unknown>("voice_models_delete", {
-    modelId,
-  });
+  const result = await invokeVoiceModelShellCommand<unknown>(
+    "voice_models_delete",
+    {
+      modelId,
+    },
+  );
   return assertInstallState("voice_models_delete", result);
 }
 

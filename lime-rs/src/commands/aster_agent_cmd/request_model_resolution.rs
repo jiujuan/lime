@@ -1,6 +1,6 @@
 use super::*;
+use crate::app::model_registry_state::ModelRegistryState;
 use crate::commands::aster_agent_cmd::service_skill_launch::extract_service_scene_launch_context;
-use crate::commands::model_registry_cmd::ModelRegistryState;
 use crate::config::GlobalConfigManagerState;
 mod fast_response;
 mod responsive_chat;

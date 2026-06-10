@@ -46,7 +46,18 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_automation_status")).toBe(false);
     expect(isElectronHostCommand("get_automation_health")).toBe(false);
     expect(isElectronHostCommand("project_memory_get")).toBe(true);
-    expect(isElectronHostCommand("get_model_registry")).toBe(true);
+    for (const command of [
+      "get_model_registry",
+      "get_model_preferences",
+      "get_model_sync_state",
+      "get_model_registry_provider_ids",
+      "get_models_for_provider",
+      "get_models_by_tier",
+      "get_provider_alias_config",
+      "get_all_alias_configs",
+    ]) {
+      expect(isElectronHostCommand(command)).toBe(false);
+    }
     expect(isElectronHostCommand("get_api_key_providers")).toBe(false);
     expect(isElectronHostCommand("list_dir")).toBe(false);
     expect(isElectronHostCommand("read_file_preview_cmd")).toBe(false);
@@ -184,16 +195,8 @@ describe("electron/ipcChannels", () => {
       "agent_runtime_submit_turn",
       "agent_runtime_update_session",
       "aster_agent_init",
-      "get_all_alias_configs",
       "get_default_provider",
       "get_local_skills_for_app",
-      "get_model_preferences",
-      "get_model_registry",
-      "get_model_registry_provider_ids",
-      "get_model_sync_state",
-      "get_models_by_tier",
-      "get_models_for_provider",
-      "get_provider_alias_config",
       "project_memory_get",
       "workspace_ensure_default_ready",
       "workspace_ensure_ready",

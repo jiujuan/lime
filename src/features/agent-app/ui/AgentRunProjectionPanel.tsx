@@ -28,7 +28,7 @@ export interface AgentRunProjectionPanelLabels {
 
 export interface AgentRunProjectionPanelProps {
   view: AgentAppRunProjectionViewModel;
-  standardState?: AgentUiProjectionState;
+  standardState: AgentUiProjectionState;
   labels: AgentRunProjectionPanelLabels;
   className?: string;
   onAction?: (
@@ -44,7 +44,6 @@ export function AgentRunProjectionPanel({
   className = "space-y-3",
   onAction,
 }: AgentRunProjectionPanelProps) {
-  const hasStandardState = Boolean(standardState);
   const resolveStandardAction = onAction
     ? standardAgentActionResolver(onAction)
     : undefined;
@@ -54,7 +53,7 @@ export function AgentRunProjectionPanel({
       className={className}
       data-testid="agent-run-projection-panel"
       data-agent-run-projection-terminal={view.task.terminal ? "true" : "false"}
-      data-agent-run-standard-projection={hasStandardState ? "true" : "false"}
+      data-agent-run-standard-projection="true"
     >
       <div
         className="grid grid-cols-2 gap-2"
@@ -86,175 +85,49 @@ export function AgentRunProjectionPanel({
         />
       </div>
 
-      {standardState ? (
-        <div
-          className="space-y-2"
-          data-testid="agent-run-standard-projection"
-          data-agent-run-standard-runtime-status={standardState.runtime.status}
-        >
-          <AgentUiProjectionView
-            state={standardState}
-            emptyMessages={null}
-            onResolveAction={resolveStandardAction}
-          />
-        </div>
-      ) : null}
-
-      <div className="space-y-2" data-testid="agent-run-projection-parts">
-        {view.orderedParts.length > 0 ? (
-          view.orderedParts.map((part) => (
-            <details
-              key={part.id}
-              className="rounded-2xl border border-slate-200 bg-white"
-              open={!part.collapsedByDefault}
-              data-agent-run-projection-part-kind={part.kind}
-              data-agent-run-projection-event-type={part.type}
-            >
-              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-700">
-                <span>{part.displayName ?? labels.parts[part.label]}</span>
-                {part.runtimeStatus ? (
-                  <span className="ml-2 text-xs font-normal text-slate-500">
-                    {part.runtimeStatus}
-                  </span>
-                ) : null}
-              </summary>
-              {part.preview ? (
-                <div className="border-t border-slate-100 px-3 py-2 text-sm leading-6 text-slate-700">
-                  {part.preview}
-                </div>
-              ) : null}
-            </details>
-          ))
-        ) : (
-          <p className="rounded-2xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
-            {labels.empty}
-          </p>
-        )}
+      <div
+        className="space-y-2"
+        data-testid="agent-run-standard-projection"
+        data-agent-run-standard-runtime-status={standardState.runtime.status}
+      >
+        <AgentUiProjectionView
+          state={standardState}
+          emptyMessages={
+            <p className="rounded-2xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
+              {labels.empty}
+            </p>
+          }
+          labels={{
+            messagePartsAriaLabel: labels.parts.answer,
+            processTimelineAriaLabel: labels.parts.status,
+            executionGraphAriaLabel: labels.summary.tools,
+            runtimeSummaryAriaLabel: labels.summary.status,
+            executionEventsAriaLabel: labels.parts.status,
+            toolGroupAriaLabel: labels.parts.tool,
+            actionRequiredAriaLabel: labels.parts.actionRequired,
+            summaryLabels: {
+              sources: labels.parts.answer,
+              actions: labels.summary.pendingActions,
+              artifacts: labels.summary.artifacts,
+              evidence: labels.summary.evidence,
+            },
+            roleLabel: roleShortLabel,
+            messagePartTitle: (part) =>
+              part.role === "user"
+                ? "用户"
+                : part.role === "assistant"
+                  ? "助手"
+                  : labels.parts[partLabel(part.type)],
+            actionButtonLabel: (action) =>
+              labels.actionControls?.[
+                actionControlFromDecision(action.decision) ?? "approve"
+              ] ?? "处理",
+            eventStatusLabel: (event) =>
+              event.displayStatus ?? event.displayStatusKey,
+          }}
+          onResolveAction={resolveStandardAction}
+        />
       </div>
-
-      {view.actions.length > 0 ? (
-        <div className="space-y-2" data-testid="agent-run-projection-actions">
-          {view.actions.map((action) => (
-            <article
-              key={action.actionId}
-              className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2"
-              data-agent-run-projection-action-id={action.actionId}
-              data-agent-run-projection-action-task-id={action.taskId}
-              data-agent-run-projection-action-session-id={action.sessionId}
-              data-agent-run-projection-action-run-id={action.runId}
-              data-agent-run-projection-action-status={action.status}
-              data-agent-run-projection-action-control={action.control}
-            >
-              <p className="text-sm font-semibold text-amber-900">
-                {labels.parts[action.label]}
-              </p>
-              {action.preview ? (
-                <p className="mt-1 text-xs leading-5 text-amber-800">
-                  {action.preview}
-                </p>
-              ) : null}
-              {onAction &&
-              action.status === "pending" &&
-              action.controls.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {action.controls.map((control) => (
-                    <button
-                      key={control}
-                      type="button"
-                      className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900"
-                      data-agent-run-projection-action-control-button={control}
-                      onClick={() => onAction(action, control)}
-                    >
-                      {labels.actionControls?.[control] ??
-                        labels.parts[action.label]}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      ) : null}
-
-      {view.artifacts.length > 0 ? (
-        <div className="space-y-2" data-testid="agent-run-projection-artifacts">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-            {labels.summary.artifacts}
-          </p>
-          {view.artifacts.map((artifact) => (
-            <article
-              key={artifact.artifactId}
-              className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2"
-              data-agent-run-projection-artifact-id={artifact.artifactId}
-            >
-              <p className="text-sm font-semibold text-blue-950">
-                {artifact.preview || labels.parts.artifact}
-              </p>
-              {artifact.ref ? (
-                <p className="mt-1 truncate text-xs text-blue-800">
-                  {artifact.ref}
-                </p>
-              ) : null}
-              {artifact.status ? (
-                <p className="mt-1 text-xs text-blue-700">{artifact.status}</p>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      ) : null}
-
-      {view.evidence.length > 0 ? (
-        <div className="space-y-2" data-testid="agent-run-projection-evidence">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-            {labels.summary.evidence}
-          </p>
-          {view.evidence.map((evidence) => (
-            <article
-              key={evidence.evidenceId}
-              className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2"
-              data-agent-run-projection-evidence-id={evidence.evidenceId}
-            >
-              <p className="text-sm font-semibold text-emerald-950">
-                {evidence.preview || labels.parts.evidence}
-              </p>
-              {evidence.status ? (
-                <p className="mt-1 text-xs text-emerald-700">
-                  {evidence.status}
-                </p>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      ) : null}
-
-      {view.diagnostics.length > 0 ? (
-        <div
-          className="space-y-2"
-          data-testid="agent-run-projection-diagnostics"
-        >
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-            {labels.parts.diagnostic}
-          </p>
-          {view.diagnostics.map((diagnostic) => (
-            <article
-              key={diagnostic.diagnosticId}
-              className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
-              data-agent-run-projection-diagnostic-id={
-                diagnostic.diagnosticId
-              }
-            >
-              <p className="text-sm font-semibold text-slate-950">
-                {diagnostic.preview || labels.parts.diagnostic}
-              </p>
-              {diagnostic.status ? (
-                <p className="mt-1 text-xs text-slate-600">
-                  {diagnostic.status}
-                </p>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -358,6 +231,22 @@ function actionControlFromDecision(value: unknown): AgentAppRunProjectionActionC
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function roleShortLabel(role: string): string {
+  if (role === "user") return "用";
+  if (role === "assistant") return "助";
+  if (role === "system") return "系";
+  return "讯";
+}
+
+function partLabel(type: string): AgentAppRunProjectionLabel {
+  if (type === "reasoning") return "reasoning";
+  if (type === "tool-preview") return "tool";
+  if (type === "artifact-card") return "artifact";
+  if (type === "evidence-citation") return "evidence";
+  if (type === "diagnostic-ref") return "diagnostic";
+  return "answer";
 }
 
 function SummaryCard({ label, value }: { label: string; value: string }) {

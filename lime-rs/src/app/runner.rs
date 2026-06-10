@@ -595,7 +595,7 @@ pub fn run() {
                             tracing::info!("[启动] Model Registry 服务初始化成功");
                             // 更新状态
                             if let Some(state) = app_handle
-                                .try_state::<crate::commands::model_registry_cmd::ModelRegistryState>()
+                                .try_state::<crate::app::model_registry_state::ModelRegistryState>()
                             {
                                 let mut guard = state.write().await;
                                 *guard = Some(service);
@@ -947,20 +947,6 @@ pub fn run() {
             commands::machine_id_cmd::get_system_info,
             commands::agent_cmd::agent_generate_title,
             commands::aster_agent_cmd::tool_runtime::social_tools::social_generate_cover_image_cmd,
-            // Model Registry commands
-            commands::model_registry_cmd::get_model_registry,
-            commands::model_registry_cmd::get_model_registry_provider_ids,
-            commands::model_registry_cmd::refresh_model_registry,
-            commands::model_registry_cmd::search_models,
-            commands::model_registry_cmd::get_model_preferences,
-            commands::model_registry_cmd::toggle_model_favorite,
-            commands::model_registry_cmd::hide_model,
-            commands::model_registry_cmd::record_model_usage,
-            commands::model_registry_cmd::get_model_sync_state,
-            commands::model_registry_cmd::get_models_for_provider,
-            commands::model_registry_cmd::get_models_by_tier,
-            commands::model_registry_cmd::get_provider_alias_config,
-            commands::model_registry_cmd::get_all_alias_configs,
             // Browser environment preset commands
             commands::browser_environment_cmd::list_browser_environment_presets_cmd,
             commands::browser_environment_cmd::save_browser_environment_preset_cmd,
@@ -1023,21 +1009,6 @@ pub fn run() {
             commands::workspace_cmd::workspace_resolve_project_path,
             commands::workspace_cmd::get_or_create_default_project,
             commands::workspace_cmd::build_project_system_prompt,
-            // Persona commands
-            // Memory commands (Character, WorldBuilding, Outline)
-            commands::memory_cmd::character_create,
-            commands::memory_cmd::character_get,
-            commands::memory_cmd::character_list,
-            commands::memory_cmd::character_update,
-            commands::memory_cmd::character_delete,
-            commands::memory_cmd::world_building_get,
-            commands::memory_cmd::world_building_update,
-            commands::memory_cmd::outline_node_create,
-            commands::memory_cmd::outline_node_get,
-            commands::memory_cmd::outline_node_list,
-            commands::memory_cmd::outline_node_update,
-            commands::memory_cmd::outline_node_delete,
-            commands::memory_cmd::project_memory_get,
         ])
         .build(tauri::generate_context!())
         .map(|app| {

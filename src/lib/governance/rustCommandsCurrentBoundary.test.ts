@@ -175,12 +175,10 @@ const COMMAND_BOUNDARY_MARKER_BUDGET_BY_FILE = new Map<string, number>([
   ["lime-rs/src/commands/content_cmd.rs", 26],
   ["lime-rs/src/commands/gateway_tunnel_cmd.rs", 40],
   ["lime-rs/src/commands/machine_id_cmd.rs", 27],
-  ["lime-rs/src/commands/memory_cmd.rs", 42],
   ["lime-rs/src/commands/memory_feedback_cmd.rs", 8],
   ["lime-rs/src/commands/memory_management_cmd.rs", 48],
   ["lime-rs/src/commands/memory_search_cmd.rs", 35],
   ["lime-rs/src/commands/modality_runtime_contracts.rs", 2],
-  ["lime-rs/src/commands/model_registry_cmd.rs", 26],
   ["lime-rs/src/commands/security_perf_cmd.rs", 2],
   ["lime-rs/src/commands/skill_cmd.rs", 228],
   ["lime-rs/src/commands/unified_memory_cmd.rs", 50],
@@ -305,6 +303,32 @@ describe("rust commands current boundary", () => {
     );
   });
 
+  it("Memory CRUD / legacy project memory 旧 Tauri wrapper 不应恢复", () => {
+    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
+    const retiredMemoryCrudCommands = [
+      "character_create",
+      "character_get",
+      "character_list",
+      "character_update",
+      "character_delete",
+      "world_building_get",
+      "world_building_update",
+      "outline_node_create",
+      "outline_node_get",
+      "outline_node_list",
+      "outline_node_update",
+      "outline_node_delete",
+      "project_memory_get",
+    ];
+
+    expect(commandsModSource).not.toContain("pub mod memory_cmd;");
+    expectStandaloneIdentifiersAbsent(runnerSource, retiredMemoryCrudCommands);
+    expect(
+      existsSync(join(REPO_ROOT, "lime-rs/src/commands/memory_cmd.rs")),
+    ).toBe(false);
+  });
+
   it("Media task artifact 旧 Tauri wrapper 和旧 creation tool runtime 不应恢复", () => {
     const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
     const toolRuntimeSource = readRepoFile(
@@ -375,9 +399,7 @@ describe("rust commands current boundary", () => {
       retiredLayeredDesignCommands,
     );
     expect(
-      existsSync(
-        join(REPO_ROOT, "lime-rs/src/commands/layered_design_cmd.rs"),
-      ),
+      existsSync(join(REPO_ROOT, "lime-rs/src/commands/layered_design_cmd.rs")),
     ).toBe(false);
   });
 
@@ -397,9 +419,7 @@ describe("rust commands current boundary", () => {
       retiredExecutionRunCommands,
     );
     expect(
-      existsSync(
-        join(REPO_ROOT, "lime-rs/src/commands/execution_run_cmd.rs"),
-      ),
+      existsSync(join(REPO_ROOT, "lime-rs/src/commands/execution_run_cmd.rs")),
     ).toBe(false);
   });
 
@@ -417,17 +437,42 @@ describe("rust commands current boundary", () => {
     }
   });
 
-  it("Model registry 旧 Rust DevBridge 读 facade 不应恢复", () => {
+  it("Model registry 旧 Rust DevBridge 读 facade 和 Tauri wrapper 不应恢复", () => {
+    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
     const modelsDispatcherSource = readRepoFile(
       "lime-rs/src/dev_bridge/dispatcher/models.rs",
     );
+    const retiredModelRegistryTauriCommands = [
+      "get_model_registry",
+      "get_model_registry_provider_ids",
+      "refresh_model_registry",
+      "search_models",
+      "get_model_preferences",
+      "toggle_model_favorite",
+      "hide_model",
+      "record_model_usage",
+      "get_model_sync_state",
+      "get_models_for_provider",
+      "get_models_by_tier",
+      "get_provider_alias_config",
+      "get_all_alias_configs",
+    ];
 
     expect(modelsDispatcherSource).not.toContain('"get_models"');
     expect(modelsDispatcherSource).not.toContain(
       '"get_model_registry_provider_ids"',
     );
+    expect(modelsDispatcherSource).not.toContain('"refresh_model_registry"');
     expect(modelsDispatcherSource).not.toContain("claude-sonnet-4-20250514");
-    expect(modelsDispatcherSource).toContain('"refresh_model_registry"');
+    expect(commandsModSource).not.toContain("pub mod model_registry_cmd;");
+    expectStandaloneIdentifiersAbsent(
+      runnerSource,
+      retiredModelRegistryTauriCommands,
+    );
+    expect(
+      existsSync(join(REPO_ROOT, "lime-rs/src/commands/model_registry_cmd.rs")),
+    ).toBe(false);
   });
 
   it("Aster 旧自动压缩残留文件不应恢复", () => {

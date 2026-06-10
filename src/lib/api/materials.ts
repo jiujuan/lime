@@ -19,8 +19,7 @@ import type {
   UploadMaterialRequest,
 } from "@/types/material";
 
-type RawMaterial = Partial<Omit<Material, "type">> & {
-  type?: string;
+type LegacyProjectMaterialFields = {
   material_type?: string;
   project_id?: string;
   file_path?: string;
@@ -28,6 +27,10 @@ type RawMaterial = Partial<Omit<Material, "type">> & {
   mime_type?: string;
   created_at?: number;
 };
+
+type MaterialRecord = Partial<Omit<Material, "type">> &
+  Partial<AppServerProjectMaterial> &
+  LegacyProjectMaterialFields;
 
 export interface ImportMaterialFromUrlRequest {
   projectId: string;
@@ -82,11 +85,11 @@ const assertMaterialResult = (
     throw new Error(`${command} did not return a material object`);
   }
 
-  return normalizeMaterial(material as RawMaterial, fallbackProjectId);
+  return normalizeMaterial(material as MaterialRecord, fallbackProjectId);
 };
 
 export function normalizeMaterial(
-  material: RawMaterial | AppServerProjectMaterial,
+  material: MaterialRecord,
   fallbackProjectId: string = "",
 ): Material {
   return {

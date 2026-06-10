@@ -13,7 +13,7 @@
 6. **新增 Agent 逻辑默认走 App Server** - 新 AI Agent、runtime、host integration、跨 App 复用能力先落到 `app-server` crates、JSON-RPC 协议、client 与 RuntimeCore；Electron 只作为 Desktop Host bridge，负责 IPC 和桌面壳能力，不是第二套后端或业务 adapter；`agent_runtime_*` / Aster 旧命令只作为 Lime Desktop 兼容 facade
 7. `lime-rs/src/**` 逐步收缩到 `lime-rs/crates/**` - 旧主 crate 只保留必要 bootstrap / runner 接线、compat facade 委托、撤注册机械修复和 blocker 记录；业务逻辑、领域服务、runtime 分支、API adapter、数据访问或跨 App 复用能力默认迁往 App Server / RuntimeCore / services / core / agent / 协议 client crates，桌面壳能力进 Electron Desktop Host
 8. `lime-rs/src/commands/**` 只做旧 wrapper 清理 - 该目录不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub；新增后端能力进 App Server crates / RuntimeCore / services，桌面壳能力进 Electron Desktop Host
-9. 超过 `1000` 行的非生成代码先拆分 - 触碰前优先按领域、职责、数据边界或协议边界拆小；无法本轮拆分时，必须在执行计划登记 blocker、风险和退出条件，不继续追加新业务逻辑
+9. 超过 `1000` 行的非生成代码先拆分 - 接近 `800` 行进入预警；触碰前优先按领域、职责、数据边界或协议边界拆小，并复用项目已有模块化模式；无法本轮拆分时，必须在执行计划登记 blocker、风险和退出条件，不继续追加新业务逻辑
 10. `src/lib/dev-bridge/**` 按职责治理 - `safeInvoke`、HTTP client、`app_server_handle_json_lines`、bridge availability / event listener capability 是 current renderer bridge；旧命令 policy / mock fallback 是迁移期 `compat / deprecated`；清命令时先收缩 policy、mock、旧 smoke 和 contract guard，不要把整目录删除当作默认动作；跨命令组长期残留必须回挂 `../exec-plans/tech-debt-tracker.md` 的 `CCD-012`
 
 ## 按场景导航
@@ -87,7 +87,7 @@
 - **改 Electron IPC / App Server / Bridge / mock / legacy desktop facade**：先读 `commands.md`，再看 `quality-workflow.md`
 - **碰到 `lime-rs/src/**`**：先判断是否只是 bootstrap / runner 接线、compat facade 委托或撤注册机械修复；凡是业务逻辑、领域服务、runtime 分支、API adapter、数据访问或跨 App 复用能力，默认迁往 `lime-rs/crates/**` 或 Electron Desktop Host。先读 `commands.md`、`governance.md` 与 `quality-workflow.md`
 - **碰到 `lime-rs/src/commands/**`**：默认只做旧 Tauri wrapper 删除清理、撤注册后的机械编译修复或 blocker 登记；不要在该目录新增实现、compat wrapper 或退场 stub。先读 `commands.md`、`governance.md`、`../exec-plans/tauri-wrapper-quick-cleanup-queue.md`和`../exec-plans/tauri-wrapper-command-inventory.md`
-- **碰到超过 `1000` 行的非生成代码文件**：优先拆分，不继续追加新业务逻辑；无法本轮拆分时，把原因、风险、退出条件和下一次拆分入口登记到执行计划
+- **碰到超过 `1000` 行的非生成代码文件**：优先按领域、职责、数据边界或协议边界拆分，不继续追加新业务逻辑；接近 `800` 行时也要优先拆新模块。无法本轮拆分时，把原因、风险、退出条件和下一次拆分入口登记到执行计划
 - **碰到 `src/lib/dev-bridge/**`**：先读 `commands.md`与`governance.md`；保留 current renderer bridge 传输，按命令组清 `commandPolicy`、`mockPriorityCommands`、旧 smoke、负向测试和 contract guard，把删不动的旧 policy 登记到对应执行计划；跨命令组长期 residual 必须同步回挂 `../exec-plans/tech-debt-tracker.md`的`CCD-012`
 - **改 `@` / `/` / 轻卡 / viewer / ServiceSkill 场景**：先读 `command-runtime.md`
 - **改 Claw 技能 / Service Skill / 统一 Skills 标准**：先读 `skill-standard.md`

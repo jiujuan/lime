@@ -75,6 +75,19 @@ export type AgentRuntimeLifecycleClient = Pick<
   "startTurn" | "cancelTurn" | "respondAction" | "readThread"
 >;
 
+type AgentRuntimeLifecycleStartTurnParams = Parameters<
+  AgentRuntimeLifecycleClient["startTurn"]
+>[0];
+type AgentRuntimeLifecycleCancelTurnParams = Parameters<
+  AgentRuntimeLifecycleClient["cancelTurn"]
+>[0];
+type AgentRuntimeLifecycleRespondActionParams = Parameters<
+  AgentRuntimeLifecycleClient["respondAction"]
+>[0];
+type AgentRuntimeLifecycleReadThreadParams = Parameters<
+  AgentRuntimeLifecycleClient["readThread"]
+>[0];
+
 export interface AgentRuntimeThreadClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeAppServerClient;
@@ -356,19 +369,19 @@ function createAppServerAgentRuntimeLifecycleClient(
   appServerClient: AgentRuntimeAppServerClient,
 ): AgentRuntimeLifecycleClient {
   return {
-    startTurn: (params) =>
+    startTurn: (params: AgentRuntimeLifecycleStartTurnParams) =>
       appServerClient.startTurn(
         params as unknown as AppServerAgentSessionTurnStartParams,
       ) as ReturnType<AgentRuntimeLifecycleClient["startTurn"]>,
-    cancelTurn: (params) =>
+    cancelTurn: (params: AgentRuntimeLifecycleCancelTurnParams) =>
       appServerClient.cancelTurn(
         params as unknown as AppServerAgentSessionTurnCancelParams,
       ) as ReturnType<AgentRuntimeLifecycleClient["cancelTurn"]>,
-    respondAction: (params) =>
+    respondAction: (params: AgentRuntimeLifecycleRespondActionParams) =>
       appServerClient.respondAction(
         params as unknown as AppServerAgentSessionActionRespondParams,
       ) as ReturnType<AgentRuntimeLifecycleClient["respondAction"]>,
-    readThread: (params) =>
+    readThread: (params: AgentRuntimeLifecycleReadThreadParams) =>
       appServerClient.readSession(
         params as unknown as AppServerAgentSessionReadParams,
       ) as ReturnType<AgentRuntimeLifecycleClient["readThread"]>,

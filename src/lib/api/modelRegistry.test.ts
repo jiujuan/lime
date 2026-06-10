@@ -114,7 +114,6 @@ describe("modelRegistry API", () => {
         },
       ],
     });
-    vi.mocked(safeInvoke).mockResolvedValueOnce(0);
     resolveAppServerRequest({
       models: [
         {
@@ -127,17 +126,14 @@ describe("modelRegistry API", () => {
     });
 
     await getModelRegistry();
-    await expect(refreshModelRegistry()).resolves.toBe(0);
+    await expect(refreshModelRegistry()).resolves.toBe(1);
     await expect(getModelRegistry()).resolves.toEqual([
       expect.objectContaining({ id: "gpt-5" }),
     ]);
 
     expectAppServerRequest(1, "model/list", {});
     expectAppServerRequest(2, "model/list", {});
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
-      "refresh_model_registry",
-    );
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("searchModels 应基于 App Server current 模型列表做前端过滤", async () => {
@@ -331,60 +327,17 @@ describe("modelRegistry API", () => {
     );
   });
 
-  it("模型注册表 compat 命令收到 diagnostic facade 时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValue({
-      diagnostic: {
-        category: "electron-diagnostic-facade",
-        source: "electron-host-diagnostic",
-      },
-    });
-
-    await expect(refreshModelRegistry()).rejects.toThrow(
-      "refresh_model_registry 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
-    );
+  it("模型偏好写链缺少 App Server current owner 时应 fail closed", async () => {
     await expect(toggleModelFavorite("gpt-4.1")).rejects.toThrow(
-      "toggle_model_favorite 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "toggleModelFavorite 尚未接入 App Server model preference current 写链；旧 Tauri 模型注册表业务命令已退役。",
     );
     await expect(hideModel("gpt-4.1")).rejects.toThrow(
-      "hide_model 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "hideModel 尚未接入 App Server model preference current 写链；旧 Tauri 模型注册表业务命令已退役。",
     );
     await expect(recordModelUsage("gpt-4.1")).rejects.toThrow(
-      "record_model_usage 尚未接入真实模型注册表 current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "recordModelUsage 尚未接入 App Server model preference current 写链；旧 Tauri 模型注册表业务命令已退役。",
     );
-  });
-
-  it("模型隐藏和使用记录只接受真实空返回", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined).mockResolvedValueOnce(null);
-
-    await expect(hideModel("gpt-4.1")).resolves.toBeUndefined();
-    await expect(recordModelUsage("gpt-4.1")).resolves.toBeUndefined();
-
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "hide_model", {
-      modelId: "gpt-4.1",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "record_model_usage", {
-      modelId: "gpt-4.1",
-    });
-  });
-
-  it("模型注册表 compat 命令返回错误形态时不应吞成成功", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({ error: "not available" });
-
-    await expect(refreshModelRegistry()).rejects.toThrow(
-      "refresh_model_registry did not return a finite number",
-    );
-    await expect(toggleModelFavorite("gpt-4.1")).rejects.toThrow(
-      "toggle_model_favorite did not return a boolean",
-    );
-    await expect(hideModel("gpt-4.1")).rejects.toThrow(
-      "hide_model did not return an empty result",
-    );
-    await expect(recordModelUsage("gpt-4.1")).rejects.toThrow(
-      "record_model_usage did not return an empty result",
-    );
+    expect(appServerRequestMock).not.toHaveBeenCalled();
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 });

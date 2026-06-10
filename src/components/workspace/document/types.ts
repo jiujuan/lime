@@ -89,8 +89,6 @@ export interface DocumentCanvasProps {
   projectId?: string | null;
   /** 当前文稿 ID（用于跨页面插图匹配） */
   contentId?: string | null;
-  /** 自动配图的主题关键词 */
-  autoImageTopic?: string;
   /** 自动续写同步的 Provider */
   autoContinueProviderType?: string;
   /** 自动续写 Provider 切换 */
@@ -205,8 +203,6 @@ export interface DocumentToolbarProps {
   isStreaming?: boolean;
   /** 导出回调 */
   onExport: (format: ExportFormat) => void;
-  /** 自动配图动作 */
-  onAutoInsertImages?: () => void;
   /** 添加图片动作 */
   onAddImage?: () => Promise<void> | void;
   /** 导入文稿动作 */

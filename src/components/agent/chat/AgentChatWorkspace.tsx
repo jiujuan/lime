@@ -6584,7 +6584,6 @@ export function AgentChatWorkspace({
     imageGenerationSelectionReady,
     imageGenerationSelectionWarning,
     sourceThreadId: sessionId ?? null,
-    projectName: project?.name || undefined,
     providerType,
     setProviderType,
     model,

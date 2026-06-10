@@ -23,12 +23,7 @@ import {
   METHOD_CAPABILITY_LIST,
   METHOD_EVIDENCE_EXPORT,
   METHOD_MODEL_LIST,
-  METHOD_MODEL_PREFERENCES_LIST,
-  METHOD_MODEL_PROVIDER_ALIAS_LIST,
-  METHOD_MODEL_PROVIDER_ALIAS_READ,
-  METHOD_MODEL_PROVIDER_CATALOG_LIST,
   METHOD_MODEL_PROVIDER_LIST,
-  METHOD_MODEL_SYNC_STATE_READ,
   METHOD_PROJECT_MEMORY_READ,
   METHOD_SKILL_LIST,
   METHOD_WORKSPACE_BY_PATH_READ,
@@ -59,12 +54,7 @@ import {
   type CapabilityListResponse,
   type EvidenceExportResponse,
   type ModelListResponse,
-  type ModelPreferencesListResponse,
-  type ModelProviderAliasListResponse,
-  type ModelProviderAliasReadResponse,
-  type ModelProviderCatalogListResponse,
   type ModelProviderListResponse,
-  type ModelSyncStateReadResponse,
   type ProjectMemoryReadResponse,
   type SkillListResponse,
   type WorkspaceEnsureReadyResponse,
@@ -367,22 +357,6 @@ export class ElectronHostCommands {
         return await this.#getAgentRuntimeToolInventory(args);
       case "agent_runtime_list_workspace_skill_bindings":
         return await this.#listWorkspaceSkillBindings(args);
-      case "get_model_registry":
-        return await this.#listModels();
-      case "get_model_preferences":
-        return await this.#listModelPreferences();
-      case "get_model_sync_state":
-        return await this.#readModelSyncState();
-      case "get_model_registry_provider_ids":
-        return await this.#listModelRegistryProviderIds();
-      case "get_models_for_provider":
-        return await this.#listModelsForProvider(args);
-      case "get_models_by_tier":
-        return await this.#listModelsByTier(args);
-      case "get_provider_alias_config":
-        return await this.#readProviderAliasConfig(args);
-      case "get_all_alias_configs":
-        return await this.#listProviderAliasConfigs();
       case "workspace_list":
         return await this.#listWorkspaces();
       case "workspace_get_default":
@@ -1648,68 +1622,6 @@ export class ElectronHostCommands {
       params,
     );
     return response.models;
-  }
-
-  async #listModelPreferences(): Promise<unknown[]> {
-    const response = await this.#appServerRequest<ModelPreferencesListResponse>(
-      METHOD_MODEL_PREFERENCES_LIST,
-    );
-    return response.preferences;
-  }
-
-  async #readModelSyncState(): Promise<unknown> {
-    const response = await this.#appServerRequest<ModelSyncStateReadResponse>(
-      METHOD_MODEL_SYNC_STATE_READ,
-    );
-    return response.syncState;
-  }
-
-  async #listModelRegistryProviderIds(): Promise<string[]> {
-    await this.#appServerRequest<ModelProviderCatalogListResponse>(
-      METHOD_MODEL_PROVIDER_CATALOG_LIST,
-    );
-    return [];
-  }
-
-  async #listModelsForProvider(args: HostArgs): Promise<unknown[]> {
-    const request = readRequest(args);
-    const providerId =
-      readString(request, "providerId") ?? readString(request, "provider_id");
-    if (!providerId) {
-      return [];
-    }
-    return await this.#listModels({ providerId });
-  }
-
-  async #listModelsByTier(args: HostArgs): Promise<unknown[]> {
-    const request = readRequest(args);
-    const tier = readString(request, "tier");
-    if (!tier) {
-      return [];
-    }
-    return await this.#listModels({ tier });
-  }
-
-  async #readProviderAliasConfig(args: HostArgs): Promise<unknown | null> {
-    const request = readRequest(args);
-    const provider = readString(request, "provider");
-    if (!provider) {
-      return null;
-    }
-    const response =
-      await this.#appServerRequest<ModelProviderAliasReadResponse>(
-        METHOD_MODEL_PROVIDER_ALIAS_READ,
-        { provider },
-      );
-    return response.config ?? null;
-  }
-
-  async #listProviderAliasConfigs(): Promise<Record<string, unknown>> {
-    const response =
-      await this.#appServerRequest<ModelProviderAliasListResponse>(
-        METHOD_MODEL_PROVIDER_ALIAS_LIST,
-      );
-    return response.configs;
   }
 
   async #getAgentRuntimeToolInventory(

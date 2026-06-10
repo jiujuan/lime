@@ -90,8 +90,23 @@ function renderPanel(
   return container;
 }
 
+function standardPartTypes(container: Element): (string | null)[] {
+  return Array.from(container.querySelectorAll(".agent-message-part")).map(
+    (node) => node.getAttribute("data-part-type"),
+  );
+}
+
+function standardActionButton(
+  container: Element,
+  decision: string,
+): HTMLButtonElement | null {
+  return container.querySelector(
+    `.agent-event-action[data-action-decision="${decision}"]`,
+  );
+}
+
 describe("AgentRunProjectionPanel", () => {
-  it("按 ordered parts 渲染 reasoning / tool / answer，并展示摘要", () => {
+  it("通过标准 projection 渲染 reasoning / tool / answer，并展示摘要", () => {
     const container = renderPanel([
       {
         id: "thinking",
@@ -118,13 +133,7 @@ describe("AgentRunProjectionPanel", () => {
       },
     ]);
 
-    const kinds = Array.from(
-      container.querySelectorAll("[data-agent-run-projection-part-kind]"),
-    ).map((node) =>
-      node.getAttribute("data-agent-run-projection-part-kind"),
-    );
-
-    expect(kinds).toEqual(["reasoning", "tool", "text"]);
+    expect(standardPartTypes(container)).toEqual(["reasoning", "text"]);
     expect(container.textContent).toContain("思考过程");
     expect(container.textContent).toContain("Skill");
     expect(container.textContent).toContain("成稿输出");
@@ -138,8 +147,9 @@ describe("AgentRunProjectionPanel", () => {
     expect(container.querySelector(".agent-message-parts")).not.toBeNull();
     expect(container.querySelector(".agent-process-timeline")).not.toBeNull();
     expect(container.querySelector(".agent-execution-graph")).not.toBeNull();
-    const details = Array.from(container.querySelectorAll("details"));
-    expect(details.map((detail) => detail.open)).toEqual([true, true, true]);
+    expect(
+      container.querySelector('.agent-process-entry[data-entry-kind="tool"]'),
+    ).not.toBeNull();
   });
 
   it("同一 reasoning 流只渲染一个思考过程卡片", () => {
@@ -171,14 +181,14 @@ describe("AgentRunProjectionPanel", () => {
     ]);
 
     const reasoningParts = container.querySelectorAll(
-      "[data-agent-run-projection-part-kind='reasoning']",
+      '.agent-message-part[data-part-type="reasoning"]',
     );
 
     expect(reasoningParts).toHaveLength(1);
     expect(container.textContent).toContain("Call the `article-writer` skill.");
   });
 
-  it("终态折叠工具过程，但保留成稿默认展开", () => {
+  it("终态保留成稿和工具结果", () => {
     const container = renderPanel([
       {
         id: "text",
@@ -204,14 +214,13 @@ describe("AgentRunProjectionPanel", () => {
       },
     ]);
 
-    const details = Array.from(container.querySelectorAll("details"));
-
+    expect(standardPartTypes(container)).toContain("text");
+    expect(standardPartTypes(container)).toContain("tool-preview");
     expect(
-      details.map((detail) =>
-        detail.getAttribute("data-agent-run-projection-part-kind"),
+      container.querySelector(
+        '.agent-process-entry[data-entry-kind="tool"][data-entry-status="completed"]',
       ),
-    ).toEqual(["text", "tool", "status"]);
-    expect(details.map((detail) => detail.open)).toEqual([true, false, false]);
+    ).not.toBeNull();
     expect(container.textContent).toContain("最终成稿。");
     expect(container.textContent).toContain("Skill 已完成");
   });
@@ -241,13 +250,11 @@ describe("AgentRunProjectionPanel", () => {
     ]);
 
     expect(
-      container.querySelector(
-        "[data-agent-run-projection-artifact-id='artifact-1']",
-      ),
+      container.querySelector('.agent-message-part[data-part-type="artifact-card"]'),
     ).not.toBeNull();
     expect(
       container.querySelector(
-        "[data-agent-run-projection-evidence-id='evidence://task-panel/runtime']",
+        '.agent-message-part[data-part-type="evidence-citation"]',
       ),
     ).not.toBeNull();
     expect(container.textContent).toContain("内容批次");
@@ -272,9 +279,7 @@ describe("AgentRunProjectionPanel", () => {
     ]);
 
     expect(
-      container.querySelector(
-        "[data-agent-run-projection-diagnostic-id='metric:metric.changed:1']",
-      ),
+      container.querySelector('.agent-message-part[data-part-type="diagnostic-ref"]'),
     ).not.toBeNull();
     expect(container.textContent).toContain("诊断");
     expect(container.textContent).toContain("deepseek-v4-flash · 120 tokens");
@@ -302,24 +307,19 @@ describe("AgentRunProjectionPanel", () => {
         .querySelector("[data-testid='agent-run-projection-panel']")
         ?.getAttribute("data-agent-run-projection-terminal"),
     ).toBe("true");
-    expect(container.textContent).toContain("等待确认");
+    expect(
+      container
+        .querySelector(".agent-action-required-list")
+        ?.getAttribute("aria-label"),
+    ).toBe("等待确认");
     expect(container.textContent).toContain("需要确认发布范围");
     expect(container.textContent).toContain("completed");
     expect(
       container
-        .querySelector("[data-agent-run-projection-action-status='pending']")
-        ?.getAttribute("data-agent-run-projection-action-control"),
-    ).toBe("approve");
-    expect(
-      container
-        .querySelector("[data-agent-run-projection-action-status='pending']")
-        ?.getAttribute("data-agent-run-projection-action-id"),
+        .querySelector('.agent-action-required-list [data-action-id="approval-1"]')
+        ?.getAttribute("data-action-id"),
     ).toBe("approval-1");
-    expect(
-      container
-        .querySelector("[data-agent-run-projection-action-status='pending']")
-        ?.getAttribute("data-agent-run-projection-action-task-id"),
-    ).toBe("task-panel");
+    expect(container.querySelector(".agent-event-action")).toBeNull();
   });
 
   it("通过外部回调提交受控 HITL action", () => {
@@ -347,12 +347,8 @@ describe("AgentRunProjectionPanel", () => {
       },
     );
 
-    const approveButton = container.querySelector(
-      "[data-agent-run-projection-action-control-button='approve']",
-    );
-    const rejectButton = container.querySelector(
-      "[data-agent-run-projection-action-control-button='reject']",
-    );
+    const approveButton = standardActionButton(container, "approve");
+    const rejectButton = standardActionButton(container, "reject");
 
     expect(approveButton?.textContent).toBe("确认");
     expect(rejectButton?.textContent).toBe("拒绝");
@@ -391,11 +387,11 @@ describe("AgentRunProjectionPanel", () => {
       },
     );
 
-    const standardActionButton = container.querySelector(".agent-event-action");
+    const approveButton = standardActionButton(container, "approve");
 
-    expect(standardActionButton?.textContent).toBe("处理");
+    expect(approveButton?.textContent).toBe("确认");
     act(() => {
-      standardActionButton?.dispatchEvent(
+      approveButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });

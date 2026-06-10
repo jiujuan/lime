@@ -206,7 +206,6 @@ interface WorkspaceCanvasPreviewFactoryParams {
   imageGenerationSelectionWarning: ComponentProps<
     typeof CanvasFactory
   >["imageGenerationSelectionWarning"];
-  autoImageTopic?: string;
   autoContinueProviderType: ComponentProps<
     typeof CanvasFactory
   >["autoContinueProviderType"];
@@ -1163,7 +1162,6 @@ function useWorkspaceCanvasPreviewRuntime({
               canvasFactory.imageGenerationSelectionReady,
             imageGenerationSelectionWarning:
               canvasFactory.imageGenerationSelectionWarning,
-            autoImageTopic: canvasFactory.autoImageTopic,
             autoContinueProviderType: canvasFactory.autoContinueProviderType,
             onAutoContinueProviderTypeChange:
               canvasFactory.onAutoContinueProviderTypeChange,
@@ -1183,7 +1181,6 @@ function useWorkspaceCanvasPreviewRuntime({
     [
       canvasFactory.autoContinueModel,
       canvasFactory.autoContinueProviderType,
-      canvasFactory.autoImageTopic,
       canvasFactory.canvasRenderTheme,
       canvasFactory.contentId,
       canvasFactory.imageGenerationModelId,
@@ -1638,7 +1635,6 @@ interface UseWorkspaceCanvasSceneRuntimeParams {
   imageGenerationSelectionReady: CanvasFactoryParams["imageGenerationSelectionReady"];
   imageGenerationSelectionWarning: CanvasFactoryParams["imageGenerationSelectionWarning"];
   sourceThreadId?: string | null;
-  projectName?: CanvasFactoryParams["autoImageTopic"];
   providerType: CanvasFactoryParams["autoContinueProviderType"];
   setProviderType: CanvasFactoryParams["onAutoContinueProviderTypeChange"];
   model: CanvasFactoryParams["autoContinueModel"];
@@ -1701,7 +1697,6 @@ export function useWorkspaceCanvasSceneRuntime({
   imageGenerationSelectionReady,
   imageGenerationSelectionWarning,
   sourceThreadId,
-  projectName,
   providerType,
   setProviderType,
   model,
@@ -1826,7 +1821,6 @@ export function useWorkspaceCanvasSceneRuntime({
         imageGenerationModelId: imageWorkbenchGenerationRuntime.selectedModelId,
         imageGenerationSelectionReady,
         imageGenerationSelectionWarning,
-        autoImageTopic: projectName,
         autoContinueProviderType: providerType,
         onAutoContinueProviderTypeChange: setProviderType,
         autoContinueModel: model,

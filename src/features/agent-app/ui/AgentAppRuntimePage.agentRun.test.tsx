@@ -240,15 +240,15 @@ describe("AgentAppRuntimePage Host AI run surface", () => {
     ).not.toBeNull();
     expect(
       container.querySelector(
-        '[data-agent-run-projection-action-id="review-content-batch"]',
+        '.agent-action-required-list [data-action-id="review-content-batch"]',
       ),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-agent-run-projection-part-kind="tool"]'),
+      container.querySelector('.agent-process-entry[data-entry-kind="tool"]'),
     ).not.toBeNull();
     expect(
       container.querySelector(
-        '[data-agent-run-projection-part-kind="artifact"]',
+        '.agent-message-part[data-part-type="artifact-card"]',
       ),
     ).not.toBeNull();
     expect(container.textContent).toContain("交付物");
@@ -256,7 +256,7 @@ describe("AgentAppRuntimePage Host AI run surface", () => {
     expect(container.textContent).toContain("证据");
     expect(container.textContent).toContain("内容批次 evidence 已记录。");
     const rejectButton = container.querySelector<HTMLButtonElement>(
-      '[data-agent-run-projection-action-control-button="reject"]',
+      '.agent-event-action[data-action-decision="reject"]',
     );
     expect(rejectButton?.textContent).toBe("拒绝");
 
@@ -289,7 +289,7 @@ describe("AgentAppRuntimePage Host AI run surface", () => {
     });
     expect(
       container.querySelector(
-        '[data-agent-run-projection-action-id="review-content-batch"][data-agent-run-projection-action-status="resolved"]',
+        '[data-action-id="review-content-batch"][data-action-resolved="true"]',
       ),
     ).not.toBeNull();
 

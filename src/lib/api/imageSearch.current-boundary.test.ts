@@ -55,4 +55,32 @@ describe("image search current boundary", () => {
       existsSync(resolve(cwd(), "lime-rs/src/commands/image_search_cmd.rs")),
     ).toBe(false);
   });
+
+  it("文档画布不应重新接回缺失 current owner 的自动联网配图入口", () => {
+    const documentCanvasSource = readRepoFile(
+      "src/components/workspace/document/DocumentCanvas.tsx",
+    );
+    const documentToolbarSource = readRepoFile(
+      "src/components/workspace/document/DocumentToolbar.tsx",
+    );
+    const canvasFactorySource = readRepoFile(
+      "src/components/workspace/canvas/CanvasFactory.tsx",
+    );
+    const sceneRuntimeSource = readRepoFile(
+      "src/components/agent/chat/workspace/useWorkspaceCanvasSceneRuntime.tsx",
+    );
+    const guiSources = [
+      documentCanvasSource,
+      documentToolbarSource,
+      canvasFactorySource,
+      sceneRuntimeSource,
+    ].join("\n");
+
+    expect(documentCanvasSource).not.toContain("@/lib/api/imageSearch");
+    expect(documentCanvasSource).not.toContain("searchWebImages");
+    expect(documentCanvasSource).not.toContain("searchPixabayImages");
+    expect(guiSources).not.toContain("onAutoInsertImages");
+    expect(guiSources).not.toContain("autoImageTopic");
+    expect(guiSources).not.toContain("自动配图");
+  });
 });

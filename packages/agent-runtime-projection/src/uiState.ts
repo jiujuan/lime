@@ -99,6 +99,8 @@ function uiPartForEvent(
   }
   if (
     eventClass === "runtime.error" ||
+    eventClass === "snapshot.updated" ||
+    event.owner === "diagnostics" ||
     event.status === "failed" ||
     event.status === "blocked"
   ) {
@@ -114,6 +116,79 @@ function uiPartForEvent(
     };
   }
   return undefined;
+}
+
+function messageScopeKey(event: AgentRuntimeExecutionEvent): string {
+  return [
+    event.runtimeId,
+    event.threadId,
+    event.runId,
+    event.turnId,
+    event.taskId,
+    typeof event.payload?.messageId === "string" ? event.payload.messageId : undefined,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(":") || "default";
+}
+
+function messagePartGroupKey(
+  event: AgentRuntimeExecutionEvent,
+  part: UIMessagePart,
+): string | null {
+  const eventClass = event.eventClass ?? "";
+  if (part.type === "text" && eventClass === "model.delta") {
+    return `stream:text:${messageScopeKey(event)}`;
+  }
+  if (part.type === "reasoning" && eventClass.startsWith("reasoning.")) {
+    return `stream:reasoning:${messageScopeKey(event)}`;
+  }
+  return null;
+}
+
+function mergeStreamText(current = "", next = ""): string {
+  if (!current) return next;
+  if (!next) return current;
+  if (next.startsWith(current)) return next;
+  const needsSpace =
+    /[A-Za-z0-9`)]$/.test(current) && /^[A-Za-z0-9`(]/.test(next);
+  return `${current}${needsSpace ? " " : ""}${next}`;
+}
+
+function mergeMessagePart(current: UIMessagePart, next: UIMessagePart): UIMessagePart {
+  return {
+    ...current,
+    text: mergeStreamText(current.text, next.text),
+    state: next.state ?? current.state,
+    sourceEventId: next.sourceEventId,
+    createdAt: current.createdAt ?? next.createdAt,
+    refs: [...new Set([...(current.refs ?? []), ...(next.refs ?? [])])],
+  };
+}
+
+function collectMessageParts(
+  events: AgentRuntimeExecutionEvent[],
+): UIMessagePart[] {
+  const parts: UIMessagePart[] = [];
+  const groups = new Map<string, number>();
+
+  events.forEach((event) => {
+    const part = uiPartForEvent(event);
+    if (!part) return;
+    const groupKey = messagePartGroupKey(event, part);
+    if (!groupKey) {
+      parts.push(part);
+      return;
+    }
+    const existingIndex = groups.get(groupKey);
+    if (typeof existingIndex === "number") {
+      parts[existingIndex] = mergeMessagePart(parts[existingIndex], part);
+      return;
+    }
+    groups.set(groupKey, parts.length);
+    parts.push(part);
+  });
+
+  return parts;
 }
 
 function timelineKindForEvent(
@@ -278,9 +353,7 @@ export function projectAgentUiState<
 >(input?: AgentRuntimeProjectionInput<TEvent>): AgentUiProjectionState<TEvent> {
   const executionEvents = input?.executionEvents ?? [];
   const readModel = projectAgentRuntimeReadModel(input);
-  const messages = executionEvents
-    .map(uiPartForEvent)
-    .filter((part): part is UIMessagePart => Boolean(part));
+  const messages = collectMessageParts(executionEvents);
   const timeline = executionEvents.map(timelineEntryForEvent);
   const graphNodes = new Map<string, ExecutionGraphNode>();
   executionEvents.forEach((event) => upsertGraphNode(graphNodes, event));

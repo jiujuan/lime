@@ -66,8 +66,6 @@ interface CanvasFactoryProps {
   designCreateImageTaskArtifact?: DesignCanvasProps["createImageTaskArtifact"];
   /** 图层设计图片任务查询函数注入（DEV smoke / 测试使用） */
   designGetImageTaskArtifact?: DesignCanvasProps["getImageTaskArtifact"];
-  /** 自动配图主题关键词 */
-  autoImageTopic?: string;
   /** 自动续写同步的 Provider */
   autoContinueProviderType?: string;
   /** 自动续写 Provider 切换 */
@@ -120,7 +118,6 @@ export const CanvasFactory: React.FC<CanvasFactoryProps> = memo(
     designAnalyzerModelSlotConfigs,
     designCreateImageTaskArtifact,
     designGetImageTaskArtifact,
-    autoImageTopic,
     autoContinueProviderType,
     onAutoContinueProviderTypeChange,
     autoContinueModel,
@@ -157,7 +154,6 @@ export const CanvasFactory: React.FC<CanvasFactoryProps> = memo(
           onSelectionTextChange={onSelectionTextChange}
           projectId={projectId}
           contentId={contentId}
-          autoImageTopic={autoImageTopic}
           autoContinueProviderType={autoContinueProviderType}
           onAutoContinueProviderTypeChange={onAutoContinueProviderTypeChange}
           autoContinueModel={autoContinueModel}

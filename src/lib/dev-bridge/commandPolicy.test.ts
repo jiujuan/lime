@@ -25,8 +25,18 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("app_server_handle_json_lines")).toBe(true);
     expect(isBridgeTruthCommand("agent_runtime_submit_turn")).toBe(true);
     expect(isBridgeTruthCommand("workspace_list")).toBe(true);
-    expect(isBridgeTruthCommand("get_model_registry")).toBe(true);
-    expect(isBridgeTruthCommand("get_model_registry_provider_ids")).toBe(false);
+    for (const command of [
+      "get_model_registry",
+      "get_model_registry_provider_ids",
+      "get_models_for_provider",
+      "get_models_by_tier",
+      "get_provider_alias_config",
+      "get_all_alias_configs",
+      "refresh_model_registry",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
+    }
     expect(isBridgeTruthCommand("agent_app_list_installed")).toBe(false);
     expect(isBridgeTruthCommand("agent_app_launch_shell")).toBe(false);
     expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(false);

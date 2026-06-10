@@ -10,6 +10,7 @@ export function AgentUiProjectionView<TEvent extends AgentRuntimeExecutionEvent 
   state,
   artifact,
   emptyMessages,
+  labels,
   onResolveAction,
 }: AgentUiProjectionViewProps<TEvent>) {
   const otherEvents = state.readModel.visibleEvents.filter(
@@ -22,16 +23,54 @@ export function AgentUiProjectionView<TEvent extends AgentRuntimeExecutionEvent 
       data-hydration-status={state.hydration.status}
     >
       <div className="agent-ui-main">
-        <UIMessagePartsView parts={state.messages} empty={emptyMessages} />
-        <ProcessTimelineView entries={state.timeline} />
+        <UIMessagePartsView
+          parts={state.messages}
+          empty={emptyMessages}
+          ariaLabel={labels?.messagePartsAriaLabel}
+          roleLabel={labels?.roleLabel}
+          partTitle={labels?.messagePartTitle}
+          partMeta={labels?.messagePartMeta}
+          partPreview={labels?.messagePartPreview}
+        />
+        <ProcessTimelineView
+          entries={state.timeline}
+          ariaLabel={labels?.processTimelineAriaLabel}
+          entryTitle={labels?.timelineEntryTitle}
+          entryMeta={labels?.timelineEntryMeta}
+        />
       </div>
       <aside className="agent-ui-sidecar">
-        <RuntimeFactsSummary readModel={state.readModel} />
-        <ActionRequiredList actions={state.actions} onResolveAction={onResolveAction} />
-        <ToolGroup tools={state.tools} />
-        <RuntimeEventList events={otherEvents} onResolveAction={onResolveAction} />
+        <RuntimeFactsSummary
+          readModel={state.readModel}
+          ariaLabel={labels?.runtimeSummaryAriaLabel}
+          summaryLabels={labels?.summaryLabels}
+        />
+        <ActionRequiredList
+          actions={state.actions}
+          onResolveAction={onResolveAction}
+          ariaLabel={labels?.actionRequiredAriaLabel}
+          actionButtonLabel={labels?.actionButtonLabel}
+          eventStatusLabel={labels?.eventStatusLabel}
+        />
+        <ToolGroup
+          tools={state.tools}
+          ariaLabel={labels?.toolGroupAriaLabel}
+          eventStatusLabel={labels?.eventStatusLabel}
+        />
+        <RuntimeEventList
+          events={otherEvents}
+          onResolveAction={onResolveAction}
+          ariaLabel={labels?.executionEventsAriaLabel}
+          actionButtonLabel={labels?.actionButtonLabel}
+          eventStatusLabel={labels?.eventStatusLabel}
+        />
         {artifact ? <div className="agent-session-artifact">{artifact}</div> : null}
-        <ExecutionGraphView nodes={state.graph} />
+        <ExecutionGraphView
+          nodes={state.graph}
+          ariaLabel={labels?.executionGraphAriaLabel}
+          nodeTitle={labels?.graphNodeTitle}
+          nodeMeta={labels?.graphNodeMeta}
+        />
       </aside>
     </section>
   );

@@ -322,7 +322,6 @@ export const DocumentToolbar: React.FC<DocumentToolbarProps> = memo(
   ({
     isStreaming = false,
     onExport,
-    onAutoInsertImages,
     onAddImage,
     onImportDocument,
     onTextStylize,
@@ -459,15 +458,7 @@ export const DocumentToolbar: React.FC<DocumentToolbarProps> = memo(
                 </QuickInsertMenu>
               </PopoverContent>
             </Popover>
-          ) : (
-            <IconButton
-              onClick={onAutoInsertImages}
-              title="自动配图"
-              disabled={!onAutoInsertImages}
-            >
-              <PlusCircle size={16} />
-            </IconButton>
-          )}
+          ) : null}
           <Popover
             modal={false}
             open={exportPopoverOpen}

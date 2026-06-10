@@ -4,6 +4,8 @@
 
 这个包是 UI 渲染层，不直接调用 JSON-RPC，不依赖 Electron，不绑定任何宿主应用的业务 store。宿主应用负责后端交互、session 持久化、业务对象和页面布局。
 
+默认 label 只作为英文 fallback。宿主应用必须通过 `labels` / formatter props 注入自己的 aria、标题、按钮和状态文案，并负责 Lime current 五语言资源覆盖。
+
 ## Installation
 
 ```bash
@@ -30,6 +32,7 @@ React 是 peer dependency：
 - 渲染 Agent 消息时间线。
 - 渲染运行事实摘要。
 - 渲染 action、evidence、artifact、tool 等 runtime facts。
+- 渲染标准多 action controls，并通过 `data-action-decision` 暴露稳定 DOM contract。
 - 通过 callback 把用户处理 action 的意图交还给宿主应用。
 
 这个包不负责：
@@ -58,6 +61,12 @@ export function AgentPanel() {
       onResolveAction={(event, action) => {
         // 宿主应用决定打开哪个业务模块或发送哪个 action response。
         console.log(event.id, action.decision);
+      }}
+      labels={{
+        messagePartsAriaLabel: t("agent.messages"),
+        processTimelineAriaLabel: t("agent.timeline"),
+        actionRequiredAriaLabel: t("agent.actionRequired"),
+        actionButtonLabel: (action) => t(`agent.action.${action.decision}`),
       }}
     />
   );
@@ -126,6 +135,7 @@ src/index.ts           -> barrel exports only
 - `agent-execution-node`
 - `agent-event-surface`
 - `agent-event-action`
+- `agent-event-actions`
 - `agent-session-artifact`
 - `agent-ui-projection` class name
 - `agent-ui-main`

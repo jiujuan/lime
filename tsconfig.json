@@ -29,6 +29,7 @@
       "@limecloud/agent-ui-contracts": [
         "./packages/agent-ui-contracts/src/index.ts"
       ],
+      "app-server-client": ["./packages/app-server-client/src/index.ts"],
       "@/*": ["./src/*"]
     }
   },

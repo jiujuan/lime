@@ -5,8 +5,6 @@
  */
 
 import { AppServerClient } from "@/lib/api/appServer";
-import { safeInvoke } from "@/lib/dev-bridge";
-import { assertNotDiagnosticFacade } from "./diagnosticFacade";
 import type {
   EnhancedModelMetadata,
   ModelSyncState,
@@ -52,8 +50,6 @@ type ModelProviderAliasListAppServerResponse = {
 type ModelProviderIdRecord = {
   id?: unknown;
 };
-
-const MODEL_REGISTRY_CURRENT_SURFACE = "真实模型注册表 current 通道";
 
 async function requestModelRegistryAppServer<T>(
   method: string,
@@ -142,17 +138,6 @@ export function invalidateModelRegistryCache(): void {
   invalidateAliasConfigCache();
 }
 
-async function invokeModelRegistryCompatCommand<T>(
-  command: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
-  const result = args
-    ? await safeInvoke(command, args)
-    : await safeInvoke(command);
-  assertNotDiagnosticFacade(command, result, MODEL_REGISTRY_CURRENT_SURFACE);
-  return result as T;
-}
-
 function assertModelProviderIds(
   response: ModelProviderListResponse | null | undefined,
 ): string[] {
@@ -178,27 +163,6 @@ function assertModelProviderIds(
   );
 }
 
-function assertNumber(command: string, value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`${command} did not return a finite number`);
-  }
-  return value;
-}
-
-function assertBoolean(command: string, value: unknown): boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${command} did not return a boolean`);
-  }
-  return value;
-}
-
-function assertVoidLike(command: string, value: unknown): void {
-  if (value == null) {
-    return;
-  }
-  throw new Error(`${command} did not return an empty result`);
-}
-
 function modelMatchesSearchQuery(
   model: EnhancedModelMetadata,
   normalizedQuery: string,
@@ -213,6 +177,12 @@ function modelMatchesSearchQuery(
     model.provider_id,
     model.provider_name,
   ].some((value) => value?.toLowerCase().includes(normalizedQuery));
+}
+
+function modelPreferenceMutationUnavailable(operation: string): never {
+  throw new Error(
+    `${operation} 尚未接入 App Server model preference current 写链；旧 Tauri 模型注册表业务命令已退役。`,
+  );
 }
 
 /**
@@ -245,10 +215,11 @@ export async function getModelRegistry(
 }
 
 export async function getModelRegistryProviderIds(): Promise<string[]> {
-  const response = await requestModelRegistryAppServer<ModelProviderListResponse>(
-    METHOD_MODEL_PROVIDER_LIST,
-    {},
-  );
+  const response =
+    await requestModelRegistryAppServer<ModelProviderListResponse>(
+      METHOD_MODEL_PROVIDER_LIST,
+      {},
+    );
   return assertModelProviderIds(response);
 }
 
@@ -257,12 +228,10 @@ export async function getModelRegistryProviderIds(): Promise<string[]> {
  * @returns 当前模型数量
  */
 export async function refreshModelRegistry(): Promise<number> {
-  const result = await invokeModelRegistryCompatCommand<unknown>(
-    "refresh_model_registry",
-  );
-  const count = assertNumber("refresh_model_registry", result);
   invalidateModelRegistryCache();
-  return count;
+  const models = await readModelsFromAppServer();
+  modelRegistryCache = cloneValue(models);
+  return models.length;
 }
 
 /**
@@ -311,11 +280,8 @@ export async function getModelPreferences(): Promise<UserModelPreference[]> {
  * @returns 新的收藏状态
  */
 export async function toggleModelFavorite(modelId: string): Promise<boolean> {
-  const result = await invokeModelRegistryCompatCommand<unknown>(
-    "toggle_model_favorite",
-    { modelId },
-  );
-  return assertBoolean("toggle_model_favorite", result);
+  void modelId;
+  return modelPreferenceMutationUnavailable("toggleModelFavorite");
 }
 
 /**
@@ -323,10 +289,8 @@ export async function toggleModelFavorite(modelId: string): Promise<boolean> {
  * @param modelId 模型 ID
  */
 export async function hideModel(modelId: string): Promise<void> {
-  const result = await invokeModelRegistryCompatCommand<unknown>("hide_model", {
-    modelId,
-  });
-  assertVoidLike("hide_model", result);
+  void modelId;
+  modelPreferenceMutationUnavailable("hideModel");
 }
 
 /**
@@ -334,11 +298,8 @@ export async function hideModel(modelId: string): Promise<void> {
  * @param modelId 模型 ID
  */
 export async function recordModelUsage(modelId: string): Promise<void> {
-  const result = await invokeModelRegistryCompatCommand<unknown>(
-    "record_model_usage",
-    { modelId },
-  );
-  assertVoidLike("record_model_usage", result);
+  void modelId;
+  modelPreferenceMutationUnavailable("recordModelUsage");
 }
 
 /**

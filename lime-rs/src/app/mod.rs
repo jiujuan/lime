@@ -13,6 +13,7 @@
 pub mod bootstrap;
 pub mod commands;
 pub mod connect_state;
+pub mod model_registry_state;
 pub mod runner;
 pub mod scheduler_service;
 mod state;

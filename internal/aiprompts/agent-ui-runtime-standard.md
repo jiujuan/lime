@@ -58,7 +58,12 @@ App Server JSON-RPC current methods
 
 ```text
 src/contracts.ts   -> contracts 类型转导
+src/envelope.ts    -> Agent UI event base fields / runtime entity envelope / sequence helper
 src/eventStore.ts  -> Agent UI event store / scope / latest selectors
+src/normalization.ts -> 字段读取、文本预览、ID 列表与 payload compact
+src/refs.ts        -> artifact refs 等跨宿主引用提取
+src/routing.ts     -> routing decision payload 标准化
+src/runtimeFacts.ts -> runtime entity/status/phase/topology 标准事实解释
 src/summary.ts     -> host-neutral summary / surface / lane selectors
 src/readModel.ts   -> execution events -> read model
 src/uiState.ts     -> execution events -> AgentUiProjectionState / projector
@@ -82,12 +87,16 @@ src/index.ts            -> barrel exports only
 
 `src/index.ts` 只能转导。新增 primitive 必须落在对应职责文件，或先新增职责明确的小模块；不得把实现重新合并回单文件。
 
-标准包源码只能依赖 `@limecloud/agent-ui-contracts` 和同包相邻模块。禁止依赖：
+`@limecloud/agent-runtime-client`、`@limecloud/agent-ui-contracts`、`@limecloud/agent-runtime-projection` 只能依赖同包相邻模块、底层协议/client 类型和标准 contracts；它们禁止依赖 React、DOM、宿主业务路径、桥接、mock 或网络传输。
+
+`@limecloud/agent-runtime-ui` 是唯一允许依赖 React peer dependency 的标准 UI 包。它只能消费 `AgentUiProjectionState` 并通过 props / callback 与宿主交互，不能持有运行时连接、session store、全局 i18n hook 或业务路由。
+
+标准包源码共同禁止依赖：
 
 - `@/` alias
 - `src/components/**`
 - `src/features/**`
-- React / DOM / i18n hook
+- i18n hook / host store / business route
 - `safeInvoke` / Electron bridge
 - `mockPriorityCommands` / `defaultMocks` / `invokeMockOnly`
 - `fetch` / `EventSource` / WebSocket / model provider HTTP
@@ -123,7 +132,8 @@ src/index.ts            -> barrel exports only
 
 | 路径 / 能力 | 分类 | 说明 | 退出条件 |
 | --- | --- | --- | --- |
-| `agentUiEventProjection.ts` 中从主聊天事件构建 `AgentUiProjectionEvent` 的代码 | compat adapter | 仍依赖主聊天 `agentProtocol` 和历史事件形状，是迁移输入适配层 | host-neutral 构建规则分批迁入标准 projection 包或 App Server event adapter 后收缩 |
+| `projectionBase.ts` | compat adapter | 只允许把主聊天 `AgentEvent` 的 `type` / `item.type` 映射到标准 `buildAgentUiProjectionBase` 与 `sequenceAgentUiProjectionEvents` | 周边投影模块改为直接消费标准 helper 后删除 |
+| `agentUiEventProjection.ts` 中从主聊天事件构建 `AgentUiProjectionEvent` 的代码 | compat adapter | 仍依赖主聊天 `agentProtocol` 和历史事件形状，是迁移输入适配层；通用 envelope / sequence 规则已迁入标准 projection 包 | host-neutral 构建规则继续分批迁入标准 projection 包或 App Server event adapter 后收缩 |
 | `conversationProjectionStore.ts` | current host store adapter | 只保留 external store、订阅、stream diagnostics 和兼容导出名，selector 委托标准包 | 标准 store adapter 被两个宿主复用后继续收缩 |
 | `agentUiProjectionSummary.ts` 中本地化 label / formatter | current presentation adapter | 只负责中文/本地化展示和主聊天 UI 细节 | 标准 UI package 提供可配置 formatter 后再迁 |
 | `agentUiProjectionSummary.ts` 中 selector / event type set / surface lane | moved current | 已迁到 `@limecloud/agent-runtime-projection` | 守卫阻止回流 |
@@ -144,9 +154,11 @@ Agent App host run state
   -> Agent App presentation adapter / action callback
 ```
 
-`src/features/agent-app/runtime/agentRunProjectionState.ts` 负责把 Agent App host run state 投影成标准 `AgentUiProjectionState`。`src/features/agent-app/ui/AgentRunProjectionPanel.tsx` 必须直接渲染 `AgentUiProjectionView`，不能只拼装 `UIMessagePartsView`、`ProcessTimelineView`、`ToolGroup`、`ExecutionGraphView` 等内部 primitives 来冒充标准入口。
+`src/features/agent-app/runtime/agentRunProjectionState.ts` 负责把 Agent App host run state 投影成标准 `AgentUiProjectionState`。`src/features/agent-app/ui/AgentRunProjectionPanel.tsx` 必须接收必填 `standardState` 并直接渲染 `AgentUiProjectionView`，不能只拼装 `UIMessagePartsView`、`ProcessTimelineView`、`ToolGroup`、`ExecutionGraphView` 等内部 primitives 来冒充标准入口，也不能继续渲染旧的 ordered parts / actions / artifacts / evidence / diagnostics 私有 DOM。
 
-Agent App 可以继续保留自己的 summary、运行抽屉、业务 action 卡片、artifact / evidence presentation adapter 和 `onAction` 回调；这些属于宿主 presentation，不是 runtime fact source。宿主 action 仍必须经 callback 交还宿主，由宿主调用 current action respond 或业务 route，不得让 UI package 直接调用 App Server。
+Agent App 可以继续保留自己的 summary、运行抽屉、业务对象 presentation adapter 和 `onAction` 回调；这些属于宿主 presentation，不是 runtime fact source。宿主 action 仍必须经 callback 交还宿主，由宿主调用 current action respond 或业务 route，不得让 UI package 直接调用 App Server。
+
+标准 UI 必须支持多 action controls。`AgentRuntimeEventProjection.action` 保持兼容单按钮读取，`AgentRuntimeEventProjection.actions` 承接 approve / reject / answer / retry / stop 等多按钮 intent；`agent-runtime-ui` 只能渲染这些 intent 并回调宿主，不得自行解释业务结果。
 
 ## App Server 与 Runtime 配合
 
@@ -164,17 +176,17 @@ Electron 只作为 Desktop Host bridge 和 sidecar lifecycle host。新增 runti
 
 ## UI 文案与本地化归属
 
-标准 projection 层输出 semantic facts、status key、action decision、refs 和结构化 state。展示文案归属：
+标准 projection 层输出 semantic facts、status key、action decision、refs 和结构化 state。`agent-runtime-ui` 默认只提供稳定英文 fallback，宿主必须通过 labels / formatter props 注入自己的 aria、标题、按钮和状态文案。展示文案归属：
 
 | 内容 | 归属 |
 | --- | --- |
 | semantic status / label key | contracts / projection |
-| 中文、英文、日文、韩文等展示文本 | 宿主 i18n 或 UI package resource |
+| 中文、英文、日文、韩文等展示文本 | 宿主 i18n 注入；UI package 仅提供英文 fallback |
 | 业务对象标题、摘要、错误补充说明 | 宿主业务 adapter |
 | CSS class contract | `@limecloud/agent-runtime-ui` |
 | Lime 桌面具体样式 | Lime GUI 宿主 |
 
-新增用户可见文案必须覆盖 Lime current 五语言资源；标准包不得把某个宿主语言写死为 runtime fact。
+新增用户可见文案必须覆盖 Lime current 五语言资源；标准包不得把某个宿主语言写死为 runtime fact，也不得在 `agent-runtime-ui` 中硬编码 Lime 桌面中文文案。
 
 ## 守卫要求
 
@@ -184,12 +196,16 @@ Electron 只作为 Desktop Host bridge 和 sidecar lifecycle host。新增 runti
 2. projection package 不得依赖宿主、React、bridge、mock 或直接网络传输。
 3. 主聊天 projection store 必须委托标准 event store selector。
 4. 主聊天 summary 必须委托标准 summary selector。
-5. 标准包源码不得重新合并为单文件实现。
-6. `agent_runtime_*` 不得作为新增 current 能力证据。
-7. mock fallback 只能在测试夹具中显式使用。
-8. 文档与路线图不得引导新能力回到旧命令或旧 projection 事实源。
-9. Agent App Runtime 的标准 projection panel 必须渲染 `AgentUiProjectionView`，证明第二宿主消费同一个 UI 入口。
-10. `agent-runtime-ui` 的 `index.ts` 必须保持 barrel exports，React primitives 必须按 messages / processTimeline / executionGraph / runtimeFacts / projectionView 等职责拆分。
+5. 主聊天 projection base 必须委托标准 `buildAgentUiProjectionBase` / `sequenceAgentUiProjectionEvents`，不得重新实现 scope 字段规整、runtime entity 推断或 sequence map。
+6. 标准包源码不得重新合并为单文件实现。
+7. `agent_runtime_*` 不得作为新增 current 能力证据。
+8. mock fallback 只能在测试夹具中显式使用。
+9. 文档与路线图不得引导新能力回到旧命令或旧 projection 事实源。
+10. Agent App Runtime 的标准 projection panel 必须渲染 `AgentUiProjectionView`，证明第二宿主消费同一个 UI 入口。
+11. `agent-runtime-ui` 的 `index.ts` 必须保持 barrel exports，React primitives 必须按 messages / processTimeline / executionGraph / runtimeFacts / projectionView 等职责拆分。
+12. `agent-ui-contracts` 的 `index.ts` 只能做 barrel exports，events / runtime / projection / messages / timeline / graph 必须按职责拆分。
+13. 标准 UI 不得恢复旧私有 tree 命名或旧 Agent App `data-agent-run-projection-*` DOM；过程结构以 message parts、process timeline、execution graph 和 runtime facts 为标准 surface。
+14. `agent-runtime-ui` 用户可见文案必须可由 labels / formatter props 注入；默认 fallback 不得替代宿主五语言 i18n。
 
 最低验证入口：
 
@@ -203,7 +219,7 @@ npm run test:contracts
 
 ## 下一步收缩顺序
 
-1. 继续把 `agentUiEventProjection.ts` 中 host-neutral 的事件构建规则迁入标准 projection 包或 App Server event adapter。
+1. 继续把 `agentUiEventProjection.ts` 中 host-neutral 的事件构建规则迁入标准 projection 包或 App Server event adapter，下一步优先收 thread item / lifecycle / action 的标准 event builder。
 2. 给 `agent-ui-contracts` 增加更清晰的 event taxonomy / schema fixture，减少 string-only 事件漂移。
 3. 让第二个真实宿主完整消费 `AgentRuntimeClient -> projectAgentUiState -> AgentUiProjectionView`。
 4. 收缩主聊天旧 projection 的兼容导出名和旧生成物。

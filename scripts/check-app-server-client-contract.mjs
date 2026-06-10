@@ -26,6 +26,10 @@ const protocolV0ModuleFiles = collectRustFiles(
 const schemaExportModuleFiles = collectRustFiles(
   "lime-rs/crates/app-server-protocol/src/schema_export",
 );
+const appServerRuntimeFiles = [
+  "lime-rs/crates/app-server/src/runtime.rs",
+  ...collectRustFiles("lime-rs/crates/app-server/src/runtime"),
+];
 const rustProtocolFiles = [
   "lime-rs/crates/app-server-protocol/src/lib.rs",
   "lime-rs/crates/app-server-protocol/src/jsonrpc_lite.rs",
@@ -52,6 +56,9 @@ const retiredTreeProjectionNames = [
   ["View", "Tree"].join(""),
   ["View", "tree"].join(""),
   ["view", "tree"].join(""),
+  ["Process", "Tree"].join(""),
+  ["Process", "tree"].join(""),
+  ["process", "tree"].join(""),
 ];
 const canonicalAgentUiPackages = [
   "@limecloud/agent-runtime-client",
@@ -604,7 +611,7 @@ const checks = [
   },
   {
     name: "Rust runtime uses injected capability source",
-    file: "lime-rs/crates/app-server/src/runtime.rs",
+    files: appServerRuntimeFiles,
     snippets: [
       "capability_source: Arc<dyn CapabilitySource>",
       "pub fn with_backend_and_capability_source(",
@@ -628,7 +635,7 @@ const checks = [
   },
   {
     name: "Rust runtime routes action responses through injected backend",
-    file: "lime-rs/crates/app-server/src/runtime.rs",
+    files: appServerRuntimeFiles,
     snippets: [
       "pub struct ActionRespondRequest",
       "async fn respond_action(",
@@ -642,7 +649,7 @@ const checks = [
   },
   {
     name: "Rust runtime replays pending action from RuntimeCore current timeline",
-    file: "lime-rs/crates/app-server/src/runtime.rs",
+    files: appServerRuntimeFiles,
     snippets: [
       "pub async fn replay_action(",
       "params: AgentSessionActionReplayParams",
@@ -654,7 +661,7 @@ const checks = [
   },
   {
     name: "Rust runtime routes fileSystem mutations through services crate",
-    file: "lime-rs/crates/app-server/src/runtime.rs",
+    files: appServerRuntimeFiles,
     snippets: [
       "params: FileSystemCreateFileParams",
       "params: FileSystemCreateDirectoryParams",
@@ -675,7 +682,7 @@ const checks = [
   },
   {
     name: "Rust runtime indexes artifact summaries from stored events",
-    file: "lime-rs/crates/app-server/src/runtime.rs",
+    files: appServerRuntimeFiles,
     snippets: [
       "pub fn read_artifacts(",
       "params: ArtifactReadParams",
@@ -702,7 +709,7 @@ const checks = [
   },
   {
     name: "Rust runtime exports evidence snapshot from current session events",
-    file: "lime-rs/crates/app-server/src/runtime.rs",
+    files: appServerRuntimeFiles,
     snippets: [
       "pub async fn export_evidence(",
       "params: EvidenceExportParams",
@@ -1028,7 +1035,9 @@ const checks = [
     name: "Rust App Server runtime and data source expose current app data surface",
     files: [
       "lime-rs/crates/app-server/src/runtime.rs",
+      "lime-rs/crates/app-server/src/runtime/agent_apps.rs",
       "lime-rs/crates/app-server/src/local_data_source.rs",
+      "lime-rs/crates/app-server/src/local_data_source/agent_apps.rs",
       "lime-rs/crates/app-server/src/local_data_source/automation.rs",
       "lime-rs/crates/app-server/src/local_data_source/knowledge.rs",
     ],
@@ -2238,7 +2247,7 @@ const checks = [
   },
   {
     name: "App Server session read projects runtime events into thread_read",
-    file: "lime-rs/crates/app-server/src/runtime.rs",
+    files: appServerRuntimeFiles,
     snippets: [
       "let detail = runtime_session_read_detail(stored);",
       "detail: Some(detail)",
@@ -2254,8 +2263,8 @@ const checks = [
       '"tool.failed" => "failed"',
       "read_session_projects_runtime_events_into_thread_read_tool_calls",
       "read_session_projects_runtime_events_into_thread_read_artifacts",
-      'sink.emit(RuntimeEvent::new(\n                "tool.started"',
-      'sink.emit(RuntimeEvent::new(\n                "tool.result"',
+      '"tool.started"',
+      '"tool.result"',
       '"artifact.snapshot"',
       '"contentFactoryWorkspacePatch"',
       'assert_eq!(web_fetch["status"], "completed")',
@@ -3045,7 +3054,7 @@ const checks = [
   },
   {
     name: "RuntimeCore rolls back turn state when backend start fails",
-    file: "lime-rs/crates/app-server/src/runtime.rs",
+    files: appServerRuntimeFiles,
     snippets: [
       "pub struct UnavailableBackend",
       "standalone app-server backend is not configured",
@@ -4549,6 +4558,63 @@ const checks = [
     ],
   },
   {
+    name: "Agent UI contracts package keeps index as barrel exports",
+    file: "packages/agent-ui-contracts/src/index.ts",
+    snippets: [
+      'export type * from "./events"',
+      'export type * from "./graph"',
+      'export type * from "./messages"',
+      'export type * from "./projection"',
+      'export type * from "./runtime"',
+      'export type * from "./timeline"',
+    ],
+    absentSnippets: [
+      "function ",
+      "interface ",
+      "const ",
+      "import ",
+      "AgentRuntimeExecutionEventKind",
+      "AgentUiProjectionEvent",
+      "AgentUiProjectionState",
+    ],
+  },
+  {
+    name: "Agent UI contracts package keeps type modules split by responsibility",
+    files: [
+      "packages/agent-ui-contracts/src/events.ts",
+      "packages/agent-ui-contracts/src/runtime.ts",
+      "packages/agent-ui-contracts/src/projection.ts",
+      "packages/agent-ui-contracts/src/messages.ts",
+      "packages/agent-ui-contracts/src/timeline.ts",
+      "packages/agent-ui-contracts/src/graph.ts",
+    ],
+    snippets: [
+      "export type AgentUiEventClass",
+      "export interface AgentUiProjectionEvent",
+      "export interface AgentRuntimeExecutionEvent",
+      "export interface AgentRuntimeEventProjection",
+      "actions?: AgentRuntimeActionProjection[]",
+      "export interface AgentUiProjectionState",
+      "export interface UIMessagePart",
+      "export interface ProcessTimelineEntry",
+      "export interface ExecutionGraphNode",
+    ],
+    absentSnippets: [
+      'from "@/',
+      'from "src/',
+      'from "react"',
+      "React",
+      "safeInvoke",
+      "mockPriorityCommands",
+      "defaultMocks",
+      "invokeMockOnly",
+      "EventSource",
+      "new WebSocket",
+      "fetch(",
+      "XMLHttpRequest",
+    ],
+  },
+  {
     name: "Agent Runtime projection package keeps index as barrel exports",
     files: [
       "packages/agent-runtime-projection/src/index.ts",
@@ -4557,6 +4623,7 @@ const checks = [
     ],
     snippets: [
       'from "./contracts.js"',
+      'export * from "./envelope.js"',
       'export * from "./eventStore.js"',
       'export * from "./normalization.js"',
       'export * from "./refs.js"',
@@ -4578,6 +4645,7 @@ const checks = [
     name: "Agent Runtime projection package keeps host-neutral modules split by responsibility",
     files: [
       "packages/agent-runtime-projection/src/contracts.ts",
+      "packages/agent-runtime-projection/src/envelope.ts",
       "packages/agent-runtime-projection/src/eventStore.ts",
       "packages/agent-runtime-projection/src/normalization.ts",
       "packages/agent-runtime-projection/src/refs.ts",
@@ -4589,6 +4657,8 @@ const checks = [
     ],
     snippets: [
       'from "@limecloud/agent-ui-contracts"',
+      "buildAgentUiProjectionBase",
+      "sequenceAgentUiProjectionEvents",
       "AgentUiProjectionEventStoreState",
       "definedString",
       "extractArtifactRefs",
@@ -4612,6 +4682,31 @@ const checks = [
       "new WebSocket",
       "fetch(",
       "XMLHttpRequest",
+    ],
+  },
+  {
+    name: "Renderer Agent UI projection base delegates envelope and sequence to standard projection package",
+    file: "src/components/agent/chat/projection/projectionBase.ts",
+    snippets: [
+      'from "@limecloud/agent-runtime-projection"',
+      "buildAgentUiProjectionBase as buildStandardAgentUiProjectionBase",
+      "sequenceAgentUiProjectionEvents",
+      "typeof event.item?.type === \"string\"",
+      "return buildStandardAgentUiProjectionBase(",
+      "return sequenceAgentUiProjectionEvents(events, startSequence)",
+    ],
+    absentSnippets: [
+      "function inferRuntimeEntityFromSource",
+      "inferAgentUiRuntimeEntity",
+      "definedString(context",
+      "sessionId: definedString",
+      "threadId: definedString",
+      "runId: definedString",
+      "turnId: definedString",
+      "messageId: definedString",
+      "taskId: definedString",
+      "events.map((event, index)",
+      "startSequence + index",
     ],
   },
   {
@@ -4673,6 +4768,75 @@ const checks = [
     ],
   },
   {
+    name: "Agent Runtime UI labels stay injectable and host-neutral",
+    files: [
+      "packages/agent-runtime-ui/src/types.ts",
+      "packages/agent-runtime-ui/src/labels.ts",
+      "packages/agent-runtime-ui/src/messages.tsx",
+      "packages/agent-runtime-ui/src/processTimeline.tsx",
+      "packages/agent-runtime-ui/src/executionGraph.tsx",
+      "packages/agent-runtime-ui/src/runtimeFacts.tsx",
+      "packages/agent-runtime-ui/src/projectionView.tsx",
+    ],
+    snippets: [
+      "AgentUiProjectionViewLabels",
+      "messagePartsAriaLabel",
+      "processTimelineAriaLabel",
+      "actionButtonLabel",
+      "eventStatusLabel",
+      "data-action-decision",
+      "event.actions?.length",
+      "Open model settings",
+      "Message parts",
+      "Process timeline",
+      "Execution graph",
+    ],
+    absentSnippets: [
+      "消息部分",
+      "过程时间线",
+      "工具调用",
+      "待处理动作",
+      "协作事实摘要",
+      "打开模型设置",
+      "补输入源",
+    ],
+  },
+  {
+    name: "Agent App run projection panel uses the standard projection view only",
+    files: [
+      "src/features/agent-app/ui/AgentRunProjectionPanel.tsx",
+      "src/features/agent-app/ui/AgentRunProjectionPanel.test.tsx",
+      "src/features/agent-app/ui/AgentAppRuntimePage.agentRun.test.tsx",
+    ],
+    snippets: [
+      'import { AgentUiProjectionView } from "@limecloud/agent-runtime-ui"',
+      "standardState: AgentUiProjectionState",
+      'data-testid="agent-run-standard-projection"',
+      "<AgentUiProjectionView",
+      "data-action-decision",
+      "agent-message-part",
+      "agent-process-entry",
+      "agent-action-required-list",
+    ],
+    absentSnippets: [
+      "orderedParts.map",
+      "view.actions.map",
+      "view.artifacts.map",
+      "view.evidence.map",
+      "view.diagnostics.map",
+      "data-agent-run-projection-parts",
+      "data-agent-run-projection-actions",
+      "data-agent-run-projection-artifacts",
+      "data-agent-run-projection-evidence",
+      "data-agent-run-projection-diagnostics",
+      "data-agent-run-projection-part-kind",
+      "data-agent-run-projection-action-id",
+      "data-agent-run-projection-artifact-id",
+      "data-agent-run-projection-evidence-id",
+      "data-agent-run-projection-diagnostic-id",
+    ],
+  },
+  {
     name: "Agent UI Runtime standard document is the current package and host integration fact source",
     files: [
       "internal/aiprompts/agent-ui-runtime-standard.md",
@@ -4689,10 +4853,13 @@ const checks = [
       "@limecloud/agent-runtime-ui",
       "Standard Package Layering",
       "Source Layout",
+      "src/envelope.ts",
       "src/normalization.ts",
       "src/refs.ts",
       "src/routing.ts",
       "src/runtimeFacts.ts",
+      "buildAgentUiProjectionBase",
+      "sequenceAgentUiProjectionEvents",
       "AgentRuntimeClient -> projectAgentUiState -> AgentUiProjectionView",
       "主聊天 projection 迁移分类",
       "projection package `index` 只能做 barrel exports",

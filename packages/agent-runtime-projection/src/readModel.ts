@@ -87,6 +87,43 @@ export function projectAgentRuntimeAction(
   };
 }
 
+function projectAgentRuntimeActions(
+  event: AgentRuntimeExecutionEvent,
+): AgentRuntimeActionProjection[] {
+  const baseAction = projectAgentRuntimeAction(event);
+  const controls = readActionControls(event);
+  if (!controls.length) {
+    return [baseAction];
+  }
+  return controls.map((control) => ({
+    ...baseAction,
+    labelKey: actionLabelKey(control),
+    decision: control,
+  }));
+}
+
+function readActionControls(event: AgentRuntimeExecutionEvent): string[] {
+  const payloadControls = event.payload?.controls;
+  const controls = Array.isArray(payloadControls) ? payloadControls : [];
+  return [
+    ...new Set(
+      controls.filter(
+        (control): control is string =>
+          typeof control === "string" && Boolean(control.trim()),
+      ),
+    ),
+  ];
+}
+
+function actionLabelKey(control: string): string {
+  if (control === "approve") return "agent.action.approve";
+  if (control === "reject") return "agent.action.reject";
+  if (control === "answer") return "agent.action.answer";
+  if (control === "retry") return "agent.action.retry";
+  if (control === "stop") return "agent.action.stop";
+  return `agent.action.${control}`;
+}
+
 function resolvedFromEventId(event: AgentRuntimeExecutionEvent): string {
   return typeof event.payload?.resolvedFromEventId === "string"
     ? event.payload.resolvedFromEventId
@@ -189,6 +226,10 @@ export function projectAgentRuntimeEvent<
     event.eventClass === "action.required" && !resolved
       ? projectAgentRuntimeAction(event)
       : undefined;
+  const actions =
+    event.eventClass === "action.required" && !resolved
+      ? projectAgentRuntimeActions(event)
+      : undefined;
   return {
     id: event.id,
     source: event,
@@ -200,6 +241,7 @@ export function projectAgentRuntimeEvent<
       ? "agent.status.actionResolved"
       : agentEventDisplayStatusKey(event),
     action,
+    actions,
     actionId: event.actionId,
     resolved,
     actionKind: agentEventActionKind(event),

@@ -13,12 +13,6 @@ import React, {
   useRef,
 } from "react";
 import styled from "styled-components";
-import {
-  searchPixabayImages,
-  searchWebImages,
-  type PixabaySearchResponse,
-  type WebImageSearchResponse,
-} from "@/lib/api/imageSearch";
 import type {
   AutoContinueSettings,
   ContentReviewExpert,
@@ -48,12 +42,7 @@ import {
   type CanvasImageInsertRequest,
   type InsertableImage,
 } from "@/lib/canvasImageInsertBus";
-import {
-  applySectionImageAssignments,
-  appendImageToMarkdown,
-  buildSectionSearchQuery,
-  extractLevel2Sections,
-} from "./utils/autoImageInsert";
+import { appendImageToMarkdown } from "./utils/autoImageInsert";
 import {
   loadAutoContinueSettings,
   saveAutoContinueSettings,
@@ -159,7 +148,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
     onSelectionTextChange,
     projectId,
     contentId,
-    autoImageTopic,
     autoContinueProviderType,
     onAutoContinueProviderTypeChange,
     autoContinueModel,
@@ -174,7 +162,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
     const [editingContent, setEditingContent] = useState(state.content);
     const [toastMessage, setToastMessage] = useState("");
     const [showToast, setShowToast] = useState(false);
-    const [autoInsertLoading, setAutoInsertLoading] = useState(false);
 
     // Undo/Redo 历史栈
     const undoStackRef = useRef<string[]>([]);
@@ -320,7 +307,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
         contentChars: state.content.length,
         editingChars: editingContent.length,
         hasPendingEditorInsert: Boolean(pendingEditorInsert),
-        autoInsertLoading,
       });
     });
 
@@ -440,171 +426,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
         processInsertRequest(request);
       });
     }, [processInsertRequest]);
-
-    const mapWebHitToInsertable = useCallback(
-      (hit: WebImageSearchResponse["hits"][number], provider: string) => {
-        const contentUrl = hit.content_url || hit.thumbnail_url || "";
-        const previewUrl = hit.thumbnail_url || hit.content_url || "";
-        if (!contentUrl || !previewUrl) {
-          return null;
-        }
-        return {
-          id: hit.id || crypto.randomUUID(),
-          previewUrl,
-          contentUrl,
-          pageUrl: hit.host_page_url,
-          title: hit.name || "插图",
-          width: hit.width,
-          height: hit.height,
-          attributionName: provider || "Pexels",
-          provider,
-        } as InsertableImage;
-      },
-      [],
-    );
-
-    const mapPixabayHitToInsertable = useCallback(
-      (hit: PixabaySearchResponse["hits"][number]) => {
-        const contentUrl = hit.large_image_url || hit.preview_url || "";
-        const previewUrl = hit.preview_url || hit.large_image_url || "";
-        if (!contentUrl || !previewUrl) {
-          return null;
-        }
-        return {
-          id: String(hit.id || crypto.randomUUID()),
-          previewUrl,
-          contentUrl,
-          pageUrl: hit.page_url,
-          title: hit.tags || "插图",
-          width: hit.image_width,
-          height: hit.image_height,
-          attributionName: "Pixabay",
-          provider: "pixabay",
-        } as InsertableImage;
-      },
-      [],
-    );
-
-    const searchImageWithFallback = useCallback(
-      async (query: string): Promise<InsertableImage | null> => {
-        if (!query.trim()) {
-          return null;
-        }
-
-        try {
-          const webResp = await searchWebImages({
-            query,
-            page: 1,
-            perPage: 6,
-          });
-          const fromWeb = webResp.hits
-            .map((hit) =>
-              mapWebHitToInsertable(hit, webResp.provider || "pexels"),
-            )
-            .find(Boolean);
-          if (fromWeb) {
-            return fromWeb;
-          }
-        } catch {
-          // 回退到 Pixabay
-        }
-
-        try {
-          const pixabayResp = await searchPixabayImages({
-            query,
-            page: 1,
-            perPage: 6,
-          });
-          const fromPixabay = pixabayResp.hits
-            .map((hit) => mapPixabayHitToInsertable(hit))
-            .find(Boolean);
-          return fromPixabay || null;
-        } catch {
-          return null;
-        }
-      },
-      [mapPixabayHitToInsertable, mapWebHitToInsertable],
-    );
-
-    const handleAutoInsertImages = useCallback(async () => {
-      if (autoInsertLoading) {
-        return;
-      }
-
-      setAutoInsertLoading(true);
-      try {
-        const latestState = latestStateRef.current;
-        const baseContent = flushEditorDraft();
-        const sections = extractLevel2Sections(baseContent).slice(0, 6);
-        const sectionTitles =
-          sections.length > 0
-            ? sections.map((section) => section.title)
-            : [autoImageTopic || "文稿主题"];
-
-        const assignments: Array<{
-          sectionTitle: string;
-          image: InsertableImage;
-        }> = [];
-
-        for (let index = 0; index < sectionTitles.length; index += 1) {
-          const sectionTitle = sectionTitles[index];
-          const query = buildSectionSearchQuery(autoImageTopic, sectionTitle);
-          if (!query) {
-            continue;
-          }
-          showMessage(`🖼️ 正在匹配配图 ${index + 1}/${sectionTitles.length}`);
-          const image = await searchImageWithFallback(query);
-          if (image) {
-            assignments.push({
-              sectionTitle,
-              image,
-            });
-          }
-        }
-
-        if (!assignments.length) {
-          showMessage("⚠️ 未找到可用图片，建议手动插图");
-          return;
-        }
-
-        const nextContent = applySectionImageAssignments(
-          baseContent,
-          assignments,
-          {
-            includeAttribution: true,
-          },
-        );
-
-        if (nextContent === baseContent) {
-          showMessage("ℹ️ 当前小节已有图片，未重复插入");
-          return;
-        }
-
-        const newVersion = {
-          id: crypto.randomUUID(),
-          content: nextContent,
-          createdAt: Date.now(),
-          description: "主题自动配图",
-        };
-        onStateChange({
-          ...latestState,
-          content: nextContent,
-          versions: [...latestState.versions, newVersion],
-          currentVersionId: newVersion.id,
-        });
-        setEditingContent(nextContent);
-        showMessage(`✅ 自动配图完成，已插入 ${assignments.length} 张`);
-      } finally {
-        setAutoInsertLoading(false);
-      }
-    }, [
-      autoImageTopic,
-      autoInsertLoading,
-      flushEditorDraft,
-      onStateChange,
-      searchImageWithFallback,
-      showMessage,
-    ]);
 
     // 保存快照（快捷键 Cmd/Ctrl + S）
     const handleSave = useCallback(
@@ -1007,7 +828,6 @@ CONTENT`,
           <DocumentToolbar
             isStreaming={isStreaming}
             onExport={handleExport}
-            onAutoInsertImages={handleAutoInsertImages}
             onAddImage={onAddImage}
             onImportDocument={onImportDocument}
             onTextStylize={handleTextStylize}

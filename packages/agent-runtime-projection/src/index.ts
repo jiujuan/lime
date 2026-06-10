@@ -1,4 +1,6 @@
 export type * from "./contracts.js";
+export * from "./actions.js";
+export * from "./envelope.js";
 export * from "./eventStore.js";
 export * from "./normalization.js";
 export * from "./refs.js";

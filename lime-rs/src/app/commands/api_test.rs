@@ -2,8 +2,8 @@
 //!
 //! 保留面向开发者与内部工具的只读能力。
 
+use crate::app::model_registry_state::ModelRegistryState;
 use crate::app::types::{AppState, LogState, ProviderType};
-use crate::commands::model_registry_cmd::ModelRegistryState;
 
 /// 模型信息
 #[derive(serde::Serialize)]

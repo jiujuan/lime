@@ -7,7 +7,7 @@ import {
   defaultMessagePartTitle,
   defaultMessagePreview,
   defaultMessageTitle,
-  roleLabel,
+  roleLabel as defaultRoleLabel,
 } from "./labels.js";
 import type { AgentTimelineMessage, AgentTimelineProps, UIMessagePartsViewProps } from "./types.js";
 
@@ -15,6 +15,10 @@ export function AgentTimeline<TMessage extends AgentTimelineMessage = AgentTimel
   messages = [],
   empty,
   runningLabel,
+  runtimeStatusLabel = "Running",
+  contextDetailsLabel = "View context",
+  fullOutputDetailsLabel = "View full output",
+  roleLabel = defaultRoleLabel,
   messageTitle = defaultMessageTitle as (message: TMessage) => ReactNode,
   messageMeta = defaultMessageMeta as (message: TMessage) => ReactNode,
   messagePreview = defaultMessagePreview as (message: TMessage) => ReactNode,
@@ -40,7 +44,7 @@ export function AgentTimeline<TMessage extends AgentTimelineMessage = AgentTimel
                 {message.model ? <small className="agent-turn-model">{message.model}</small> : null}
                 {canExpand ? (
                   <details className="agent-turn-details">
-                    <summary>{message.role === "user" ? "查看上下文" : "查看完整输出"}</summary>
+                    <summary>{message.role === "user" ? contextDetailsLabel : fullOutputDetailsLabel}</summary>
                     <pre>{rawContent}</pre>
                   </details>
                 ) : null}
@@ -52,8 +56,8 @@ export function AgentTimeline<TMessage extends AgentTimelineMessage = AgentTimel
         <div className="agent-empty-session">
           {empty === undefined ? (
             <>
-              <strong>还没有消息</strong>
-              <span>补齐输入源后开始记录本次协作。</span>
+              <strong>No messages yet</strong>
+              <span>Add input sources to begin recording this collaboration.</span>
             </>
           ) : (
             empty
@@ -63,7 +67,7 @@ export function AgentTimeline<TMessage extends AgentTimelineMessage = AgentTimel
 
       {runningLabel ? (
         <div className="agent-runtime-event">
-          <strong>执行中</strong>
+          <strong>{runtimeStatusLabel}</strong>
           <span>{runningLabel}</span>
         </div>
       ) : null}
@@ -74,6 +78,8 @@ export function AgentTimeline<TMessage extends AgentTimelineMessage = AgentTimel
 export function UIMessagePartsView({
   parts = [],
   empty,
+  ariaLabel = "Message parts",
+  roleLabel = defaultRoleLabel,
   partTitle = defaultMessagePartTitle,
   partMeta = defaultMessagePartMeta,
   partPreview = defaultMessagePartPreview,
@@ -84,8 +90,8 @@ export function UIMessagePartsView({
       <div className="agent-empty-session">
         {empty === undefined ? (
           <>
-            <strong>还没有消息</strong>
-            <span>补齐输入源后开始记录本次协作。</span>
+            <strong>No messages yet</strong>
+            <span>Add input sources to begin recording this collaboration.</span>
           </>
         ) : (
           empty
@@ -94,7 +100,7 @@ export function UIMessagePartsView({
     );
   }
   return (
-    <div className="agent-message-parts" aria-label="消息部分">
+    <div className="agent-message-parts" aria-label={ariaLabel}>
       {parts.map((part) => (
         <article
           key={part.partId}

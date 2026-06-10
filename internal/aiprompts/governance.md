@@ -23,7 +23,7 @@
 
 `lime-rs/src/commands/**` 是旧 Tauri command wrapper 删除清理区，不再承接新的业务逻辑、API adapter、runtime 分支、领域服务实现、compat wrapper 或退场 stub。新增 Rust 后端能力必须进入 App Server crates / RuntimeCore / services 等 current 事实源；桌面壳能力进入 Electron Desktop Host。该目录只允许删除旧 wrapper、撤 runner / DevBridge dispatcher / catalog / mock 注册后的机械编译修复，或登记无法删除的 blocker。
 
-非生成代码文件超过 `1000` 行时，必须把它视为治理风险。触碰这类文件前，优先按领域、职责、数据边界或协议边界拆成小模块；如果本轮无法拆分，必须在执行计划登记原因、风险、退出条件和下一次拆分入口。不得因为“顺手加一点”继续向巨型文件追加新业务逻辑。
+非生成代码文件接近 `800` 行时进入拆分预警，超过 `1000` 行时必须把它视为治理风险。触碰这类文件前，优先按领域、职责、数据边界或协议边界拆成小模块，并复用项目已有的 facade + 子模块、service / repository 分层、projection / selector / helper 分离等模式；如果本轮无法拆分，必须在执行计划登记原因、风险、退出条件和下一次拆分入口。不得因为“顺手加一点”继续向巨型文件追加新业务逻辑。
 
 ## 无历史包袱原则
 

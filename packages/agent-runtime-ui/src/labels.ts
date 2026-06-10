@@ -11,9 +11,9 @@ import type {
 import type { AgentMessageRole, AgentTimelineMessage } from "./types.js";
 
 export function defaultMessageTitle(message: AgentTimelineMessage): ReactNode {
-  if (message.role === "user") return "用户";
-  if (message.role === "assistant") return "助手";
-  return "系统";
+  if (message.role === "user") return "User";
+  if (message.role === "assistant") return "Assistant";
+  return "System";
 }
 
 export function defaultMessageMeta(message: AgentTimelineMessage): ReactNode {
@@ -25,21 +25,21 @@ export function defaultMessagePreview(message: AgentTimelineMessage): ReactNode 
 }
 
 export function roleLabel(role: AgentMessageRole): string {
-  if (role === "user") return "用";
-  if (role === "assistant") return "助";
-  if (role === "system") return "系";
-  return "讯";
+  if (role === "user") return "U";
+  if (role === "assistant") return "A";
+  if (role === "system") return "S";
+  return "M";
 }
 
 export function defaultMessagePartTitle(part: UIMessagePart): ReactNode {
-  if (part.role === "user") return "用户";
-  if (part.role === "assistant") return "助手";
-  if (part.type === "reasoning") return "推理";
-  if (part.type === "tool-preview") return "工具";
-  if (part.type === "artifact-card") return "产物";
-  if (part.type === "evidence-citation") return "证据";
-  if (part.type === "diagnostic-ref") return "诊断";
-  return "消息";
+  if (part.role === "user") return "User";
+  if (part.role === "assistant") return "Assistant";
+  if (part.type === "reasoning") return "Reasoning";
+  if (part.type === "tool-preview") return "Tool";
+  if (part.type === "artifact-card") return "Artifact";
+  if (part.type === "evidence-citation") return "Evidence";
+  if (part.type === "diagnostic-ref") return "Diagnostic";
+  return "Message";
 }
 
 export function defaultMessagePartMeta(part: UIMessagePart): ReactNode {
@@ -64,18 +64,23 @@ export function defaultGraphNodeMeta(node: ExecutionGraphNode): ReactNode {
 
 export function defaultActionButtonLabel(action: AgentRuntimeActionProjection): ReactNode {
   if (action.buttonLabel) return action.buttonLabel;
-  if (action.labelKey === "agent.action.addInputSource") return "补输入源";
-  if (action.labelKey === "agent.action.configureTextModel") return "打开模型设置";
-  return "处理";
+  if (action.labelKey === "agent.action.addInputSource") return "Add input source";
+  if (action.labelKey === "agent.action.configureTextModel") return "Open model settings";
+  if (action.labelKey === "agent.action.approve" || action.decision === "approve") return "Approve";
+  if (action.labelKey === "agent.action.reject" || action.decision === "reject") return "Reject";
+  if (action.labelKey === "agent.action.answer" || action.decision === "answer") return "Answer";
+  if (action.labelKey === "agent.action.retry" || action.decision === "retry") return "Retry";
+  if (action.labelKey === "agent.action.stop" || action.decision === "stop") return "Stop";
+  return "Resolve";
 }
 
 export function defaultEventStatusLabel(event: AgentRuntimeEventProjection): ReactNode {
   if (event.displayStatus) return event.displayStatus;
-  if (event.displayStatusKey === "agent.status.completed") return "完成";
-  if (event.displayStatusKey === "agent.status.running") return "执行中";
-  if (event.displayStatusKey === "agent.status.blocked") return "待配置";
-  if (event.displayStatusKey === "agent.status.failed") return "失败";
-  if (event.displayStatusKey === "agent.status.actionRequired") return "待处理";
-  if (event.displayStatusKey === "agent.status.actionResolved") return "已处理";
-  return "等待";
+  if (event.displayStatusKey === "agent.status.completed") return "Completed";
+  if (event.displayStatusKey === "agent.status.running") return "Running";
+  if (event.displayStatusKey === "agent.status.blocked") return "Blocked";
+  if (event.displayStatusKey === "agent.status.failed") return "Failed";
+  if (event.displayStatusKey === "agent.status.actionRequired") return "Action required";
+  if (event.displayStatusKey === "agent.status.actionResolved") return "Resolved";
+  return "Pending";
 }

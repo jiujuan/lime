@@ -707,34 +707,43 @@ describe("skillsApi", () => {
   });
 
   it("打开本地 Skill 目录应走 skill/list 路径投影和 Electron 文件壳", async () => {
-    vi.mocked(safeInvoke)
-      .mockResolvedValueOnce([
-        {
-          key: "local:article-typesetting-master",
-          name: "写作排版",
-          description: "测试技能",
-          directory: "article-typesetting-master",
-          localDirectoryPath:
-            "  /Users/demo/.agents/skills/article-typesetting-master  ",
-          installed: true,
-          sourceKind: "other",
-          standardCompliance: {
-            isStandard: true,
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        skills: [
+          {
+            key: "local:article-typesetting-master",
+            name: "写作排版",
+            description: "测试技能",
+            directory: "article-typesetting-master",
+            localDirectoryPath:
+              "  /Users/demo/.agents/skills/article-typesetting-master  ",
+            installed: true,
+            sourceKind: "other",
+            standardCompliance: {
+              isStandard: true,
+            },
           },
-        },
-      ])
-      .mockResolvedValueOnce(undefined);
+        ],
+      },
+    });
+    vi.mocked(safeInvoke).mockResolvedValueOnce(undefined);
 
     await expect(
       skillsApi.revealLocalSkill("article-typesetting-master"),
     ).resolves.toBe(true);
 
-    expect(safeInvoke).toHaveBeenNthCalledWith(1, "get_local_skills_for_app", {
+    expect(appServerRequestMock).toHaveBeenCalledWith("skillManagement/list", {
       app: "lime",
+      refreshRemote: false,
+      scope: "user",
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(2, "reveal_in_finder", {
+    expect(safeInvoke).toHaveBeenCalledWith("reveal_in_finder", {
       path: "/Users/demo/.agents/skills/article-typesetting-master",
     });
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "get_local_skills_for_app",
+      expect.anything(),
+    );
     expect(safeInvoke).not.toHaveBeenCalledWith(
       "reveal_local_skill_for_app",
       expect.anything(),
@@ -742,16 +751,20 @@ describe("skillsApi", () => {
   });
 
   it("打开本地 Skill 目录缺少 current 本地路径投影时应 fail closed", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce([
-      {
-        key: "local:article-typesetting-master",
-        name: "写作排版",
-        description: "测试技能",
-        directory: "article-typesetting-master",
-        installed: true,
-        sourceKind: "other",
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        skills: [
+          {
+            key: "local:article-typesetting-master",
+            name: "写作排版",
+            description: "测试技能",
+            directory: "article-typesetting-master",
+            installed: true,
+            sourceKind: "other",
+          },
+        ],
       },
-    ]);
+    });
 
     await expect(
       skillsApi.revealLocalSkill("article-typesetting-master"),
@@ -759,10 +772,12 @@ describe("skillsApi", () => {
       "skill/list did not return localDirectoryPath for article-typesetting-master",
     );
 
-    expect(safeInvoke).toHaveBeenCalledTimes(1);
-    expect(safeInvoke).toHaveBeenCalledWith("get_local_skills_for_app", {
+    expect(appServerRequestMock).toHaveBeenCalledWith("skillManagement/list", {
       app: "lime",
+      refreshRemote: false,
+      scope: "user",
     });
+    expect(safeInvoke).not.toHaveBeenCalled();
   });
 
   it("本地 Skill 安装包 App Server current 缺少 result 时应 fail closed", async () => {

@@ -7,10 +7,10 @@ use tokio::sync::RwLock;
 
 use crate::agent::{initialize_aster_runtime, AsterAgentState};
 use crate::app::connect_state::ConnectStateWrapper;
+use crate::app::model_registry_state::ModelRegistryState;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::context_memory::ContextMemoryServiceState;
 use crate::commands::machine_id_cmd::MachineIdState;
-use crate::commands::model_registry_cmd::ModelRegistryState;
 use crate::commands::webview_cmd::ChromeProfileManagerWrapper;
 use crate::config::{GlobalConfigManager, GlobalConfigManagerState};
 use crate::database::{self, DbConnection};

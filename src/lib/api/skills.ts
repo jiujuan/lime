@@ -177,14 +177,18 @@ export type AppType = "claude" | "codex" | "gemini" | "lime";
 
 export const SKILL_PACKAGE_OPEN_EVENT = "skill-package://open";
 
-async function invokeSkillsCommand<T>(
+async function invokeSkillPackageShellCommand<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
   const result = args
     ? await safeInvoke(command, args)
     : await safeInvoke(command);
-  assertNotDiagnosticFacade(command, result, "真实 Skill 管理 current 通道");
+  assertNotDiagnosticFacade(
+    command,
+    result,
+    "真实 Skill package Desktop Host current 通道",
+  );
   return result as T;
 }
 
@@ -617,13 +621,16 @@ export const skillsApi = {
     app: AppType = "lime",
   ): Promise<boolean> {
     const normalizedDirectory = directory.trim();
-    const skills = await invokeSkillsCommand<Skill[]>(
-      "get_local_skills_for_app",
+    const result = await requestSkillAppServer<unknown>(
+      METHOD_SKILL_MANAGEMENT_LIST,
       {
         app,
-      },
+        refreshRemote: false,
+        scope: "user",
+      } satisfies SkillManagementListParams,
     );
-    const skill = normalizeSkills(skills).find(
+    assertSkillListResult(METHOD_SKILL_MANAGEMENT_LIST, result);
+    const skill = normalizeSkills(result.skills).find(
       (item) => item.directory === normalizedDirectory,
     );
     const localDirectoryPath = normalizeOptionalPath(skill?.localDirectoryPath);
@@ -744,14 +751,14 @@ export const skillsApi = {
   },
 
   async takePendingSkillPackageOpenRequests(): Promise<string[]> {
-    const paths = await invokeSkillsCommand<string[]>(
+    const paths = await invokeSkillPackageShellCommand<string[]>(
       "take_pending_skill_package_open_requests",
     );
     return normalizeStringList(paths);
   },
 
   async getSkillPackageFileAssociationStatus(): Promise<SkillPackageFileAssociationStatus> {
-    const result = await invokeSkillsCommand<unknown>(
+    const result = await invokeSkillPackageShellCommand<unknown>(
       "get_skill_package_file_association_status",
     );
     if (!isSkillPackageFileAssociationStatus(result)) {
@@ -763,7 +770,7 @@ export const skillsApi = {
   },
 
   async setSkillPackageFileAssociationDefault(): Promise<SkillPackageFileAssociationApplyResult> {
-    const result = await invokeSkillsCommand<unknown>(
+    const result = await invokeSkillPackageShellCommand<unknown>(
       "set_skill_package_file_association_default",
     );
     if (!isSkillPackageFileAssociationApplyResult(result)) {

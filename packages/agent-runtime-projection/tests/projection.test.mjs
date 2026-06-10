@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildAgentUiActionRequiredEvent,
+  buildAgentUiActionResolvedEvent,
+  buildAgentUiProjectionBase,
   createAgentUiProjector,
   createEmptyAgentUiProjectionEventStoreState,
   definedString,
@@ -26,6 +29,9 @@ import {
   selectLatestAgentUiProjectionEventForRunFromStore,
   selectLatestAgentUiProjectionEventForScopeFromStore,
   selectLatestAgentUiProjectionEventForToolCallFromStore,
+  sequenceAgentUiProjectionEvents,
+  resolveAgentUiActionRequiredControl,
+  resolveAgentUiActionResolvedControl,
   resolveSubagentStatusControl,
   resolveSubagentStatusPhase,
   resolveTeamTopology,
@@ -80,9 +86,34 @@ test("projectAgentRuntimeReadModel projects actions, evidence and artifacts", ()
   assert.equal(model.sourceCount, 2);
   assert.equal(model.pendingActions.length, 1);
   assert.equal(model.pendingActions[0].action?.decision, "open-input-source");
+  assert.deepEqual(model.pendingActions[0].actions?.map((action) => action.decision), [
+    "open-input-source",
+  ]);
   assert.deepEqual(model.evidenceRefs, ["input-source:1"]);
   assert.deepEqual(model.artifactRefs, ["prompt-draft:1"]);
   assert.equal(isAgentInputSourceRecoveryEvent(actionEvent), true);
+});
+
+test("projectAgentRuntimeReadModel projects multiple HITL controls as standard actions", () => {
+  const model = projectAgentRuntimeReadModel({
+    executionEvents: [
+      {
+        id: "evt-action",
+        kind: "action",
+        status: "pending",
+        eventClass: "action.required",
+        title: "需要确认",
+        actionId: "action-1",
+        payload: { controls: ["approve", "reject"] },
+        createdAt: "2026-06-07T00:00:00.000Z",
+      },
+    ],
+  });
+
+  assert.deepEqual(model.pendingActions[0].actions?.map((action) => action.decision), [
+    "approve",
+    "reject",
+  ]);
 });
 
 test("projectAgentRuntimeReadModel marks resolved actions", () => {
@@ -177,6 +208,62 @@ test("projectAgentUiState exposes standard message, timeline and graph projectio
   assert.equal(state.actions.length, 1);
   assert.deepEqual(state.artifacts, [{ id: "artifact-1", sourceEventId: "artifact-1" }]);
   assert.equal(state.hydration.status, "live");
+});
+
+test("projectAgentUiState merges streaming text and reasoning parts by scope", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-reasoning-1",
+        kind: "note",
+        status: "running",
+        eventClass: "reasoning.delta",
+        title: "思考",
+        detail: "Call",
+        turnId: "turn-1",
+        sequence: 1,
+        createdAt: "2026-06-07T00:00:00.000Z",
+      },
+      {
+        id: "evt-reasoning-2",
+        kind: "note",
+        status: "running",
+        eventClass: "reasoning.delta",
+        title: "思考",
+        detail: "the",
+        turnId: "turn-1",
+        sequence: 2,
+        createdAt: "2026-06-07T00:00:01.000Z",
+      },
+      {
+        id: "evt-model-1",
+        kind: "model",
+        status: "running",
+        eventClass: "model.delta",
+        title: "模型输出",
+        payload: { messageId: "msg-1", text: "第一段" },
+        turnId: "turn-1",
+        sequence: 3,
+        createdAt: "2026-06-07T00:00:02.000Z",
+      },
+      {
+        id: "evt-model-2",
+        kind: "model",
+        status: "running",
+        eventClass: "model.delta",
+        title: "模型输出",
+        payload: { messageId: "msg-1", text: "继续" },
+        turnId: "turn-1",
+        sequence: 4,
+        createdAt: "2026-06-07T00:00:03.000Z",
+      },
+    ],
+  });
+
+  assert.deepEqual(state.messages.map((part) => [part.type, part.text]), [
+    ["reasoning", "Call the"],
+    ["text", "第一段继续"],
+  ]);
 });
 
 test("projectAgentUiState resolves runtime status from the latest lifecycle event", () => {
@@ -577,6 +664,158 @@ test("normalization helpers provide host-neutral field cleanup", () => {
   ]);
   assert.equal(readRecord(metadata)?.nested, metadata.nested);
   assert.equal(readNumberField({ count: "42" }, ["count"]), 42);
+});
+
+test("projection envelope helpers normalize base fields and sequence", () => {
+  const base = buildAgentUiProjectionBase(
+    {
+      sourceType: "item_started",
+      itemType: "subagent_activity",
+    },
+    {
+      timestamp: "2026-06-07T00:00:00.000Z",
+      sessionId: " session-1 ",
+      threadId: " thread-1 ",
+      runId: "agent_subagent_stream:run-1",
+      turnId: " turn-1 ",
+      messageId: " ",
+      taskId: "task-1",
+    },
+  );
+
+  assert.deepEqual(base, {
+    sourceType: "item_started",
+    timestamp: "2026-06-07T00:00:00.000Z",
+    sessionId: "session-1",
+    threadId: "thread-1",
+    runId: "agent_subagent_stream:run-1",
+    turnId: "turn-1",
+    messageId: undefined,
+    taskId: "task-1",
+    runtimeEntity: "subagent_turn",
+  });
+
+  const events = [
+    {
+      type: "run.started",
+      sourceType: "turn_started",
+      owner: "runtime",
+      scope: "turn",
+      phase: "submitted",
+    },
+    {
+      type: "run.finished",
+      sourceType: "turn_completed",
+      owner: "runtime",
+      scope: "turn",
+      phase: "completed",
+    },
+  ];
+
+  assert.deepEqual(
+    sequenceAgentUiProjectionEvents(events, 10).map((event) => event.sequence),
+    [10, 11],
+  );
+  assert.equal(sequenceAgentUiProjectionEvents(events, undefined), events);
+});
+
+test("action projection helpers build standard HITL events", () => {
+  const required = buildAgentUiActionRequiredEvent(
+    {
+      requestId: "approval-1",
+      actionType: "tool_confirmation",
+      scope: {
+        sessionId: " session-action ",
+        threadId: " thread-action ",
+        turnId: " turn-action ",
+      },
+      toolName: "shell",
+      prompt: "允许执行命令？",
+      questions: [{ question: "确认？" }],
+      requestedSchema: { type: "object" },
+    },
+    {
+      sessionId: "fallback-session",
+      threadId: "fallback-thread",
+      turnId: "fallback-turn",
+      timestamp: "2026-06-07T00:00:00.000Z",
+    },
+  );
+
+  assert.deepEqual(required, {
+    sourceType: "action_required",
+    timestamp: "2026-06-07T00:00:00.000Z",
+    sessionId: "session-action",
+    threadId: "thread-action",
+    turnId: "turn-action",
+    runtimeEntity: "agent_turn",
+    type: "action.required",
+    actionId: "approval-1",
+    owner: "action",
+    scope: "action_request",
+    phase: "waiting",
+    surface: "hitl",
+    persistence: "snapshot",
+    control: "approve",
+    payload: {
+      actionType: "tool_confirmation",
+      toolName: "shell",
+      promptPreview: "允许执行命令？",
+      questionCount: 1,
+      hasRequestedSchema: true,
+    },
+  });
+
+  const resolved = buildAgentUiActionResolvedEvent(
+    {
+      requestId: "approval-1",
+      actionType: "plan_approval",
+      approved: false,
+      feedback: "需要修改",
+      permissionMode: "ask",
+      data: {
+        decision_kind: "plan_approval_response",
+        target_session_id: "child-session-1",
+        plan_file: ".lime/plans/child-session-1.md",
+        plan_id: "plan-1",
+        awaiting_leader_approval: true,
+      },
+    },
+    {
+      sessionId: "fallback-session",
+      threadId: "fallback-thread",
+      turnId: "fallback-turn",
+    },
+  );
+
+  assert.equal(resolved.type, "action.resolved");
+  assert.equal(resolved.actionId, "approval-1");
+  assert.equal(resolved.control, "reject");
+  assert.equal(resolved.sessionId, "fallback-session");
+  assert.deepEqual(resolved.payload, {
+    actionType: "plan_approval",
+    decisionKind: "plan_approval_response",
+    approved: false,
+    feedbackPreview: "需要修改",
+    permissionMode: "ask",
+    targetSessionId: "child-session-1",
+    planFile: ".lime/plans/child-session-1.md",
+    planId: "plan-1",
+    awaitingLeaderApproval: true,
+    responseMetadataKeys: [
+      "awaiting_leader_approval",
+      "decision_kind",
+      "plan_file",
+      "plan_id",
+      "target_session_id",
+    ],
+  });
+
+  assert.equal(resolveAgentUiActionRequiredControl("ask_user"), "answer");
+  assert.equal(
+    resolveAgentUiActionResolvedControl("tool_confirmation", true),
+    "approve",
+  );
 });
 
 test("artifact ref helpers extract stable artifact ids and paths", () => {

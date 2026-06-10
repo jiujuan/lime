@@ -4,12 +4,13 @@ import type { ProcessTimelineViewProps } from "./types.js";
 export function ProcessTimelineView({
   entries = [],
   empty,
+  ariaLabel = "Process timeline",
   entryTitle = (entry) => entry.title,
   entryMeta = defaultTimelineEntryMeta,
 }: ProcessTimelineViewProps) {
   if (!entries.length) return empty === undefined ? null : <div className="agent-process-empty">{empty}</div>;
   return (
-    <ol className="agent-process-timeline" aria-label="过程时间线">
+    <ol className="agent-process-timeline" aria-label={ariaLabel}>
       {entries.map((entry) => (
         <li
           key={entry.entryId}

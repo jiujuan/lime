@@ -88,6 +88,21 @@ const retiredApiKeyProviderFacadeCommands = new Set([
   "fetch_provider_models_auto",
   "fetch_provider_models_from_api",
 ]);
+const retiredModelRegistryFacadeCommands = new Set([
+  "get_model_registry",
+  "get_model_registry_provider_ids",
+  "refresh_model_registry",
+  "search_models",
+  "get_model_preferences",
+  "toggle_model_favorite",
+  "hide_model",
+  "record_model_usage",
+  "get_model_sync_state",
+  "get_models_for_provider",
+  "get_models_by_tier",
+  "get_provider_alias_config",
+  "get_all_alias_configs",
+]);
 const retiredAgentAppPackageFacadeCommands = new Set([
   "agent_app_fetch_cloud_package",
   "agent_app_inspect_local_package",
@@ -460,6 +475,36 @@ const retiredMemoryRuntimeTauriGenerateHandlerCommands = new Set([
   "memory_scaffold_runtime_agents_template",
   "memory_ensure_workspace_local_agents_gitignore",
 ]);
+const retiredMemoryCrudTauriGenerateHandlerCommands = new Set([
+  "character_create",
+  "character_get",
+  "character_list",
+  "character_update",
+  "character_delete",
+  "world_building_get",
+  "world_building_update",
+  "outline_node_create",
+  "outline_node_get",
+  "outline_node_list",
+  "outline_node_update",
+  "outline_node_delete",
+  "project_memory_get",
+]);
+const retiredModelRegistryTauriGenerateHandlerCommands = new Set([
+  "get_model_registry",
+  "get_model_registry_provider_ids",
+  "refresh_model_registry",
+  "search_models",
+  "get_model_preferences",
+  "toggle_model_favorite",
+  "hide_model",
+  "record_model_usage",
+  "get_model_sync_state",
+  "get_models_for_provider",
+  "get_models_by_tier",
+  "get_provider_alias_config",
+  "get_all_alias_configs",
+]);
 const retiredMemoryRuntimeCatalogSections = new Set(["memoryRuntimeCommands"]);
 const retiredAgentRuntimeRustCommands = new Set([
   ...retiredAgentRuntimeSessionRustCommands,
@@ -482,6 +527,7 @@ const retiredTauriGenerateHandlerCommands = new Set([
   ...retiredLogTauriGenerateHandlerCommands,
   ...retiredFrontendDiagnosticsTauriGenerateHandlerCommands,
   ...retiredConfigTauriGenerateHandlerCommands,
+  ...retiredModelRegistryFacadeCommands,
   ...retiredGalleryMaterialFacadeCommands,
   ...retiredProjectMaterialFacadeCommands,
   ...retiredVideoGenerationFacadeCommands,
@@ -490,6 +536,8 @@ const retiredTauriGenerateHandlerCommands = new Set([
   ...retiredExecutionRunFacadeCommands,
   ...retiredUnifiedMemoryFacadeCommands,
   ...retiredMemoryRuntimeTauriGenerateHandlerCommands,
+  ...retiredMemoryCrudTauriGenerateHandlerCommands,
+  ...retiredModelRegistryTauriGenerateHandlerCommands,
   "unified_memory_feedback",
   "add_mcp_server",
   "add_model_to_provider",
@@ -658,8 +706,10 @@ const retiredTauriCommandModules = new Set([
   "injection_cmd",
   "knowledge_cmd",
   "layered_design_cmd",
+  "memory_cmd",
   "memory_feedback_cmd",
   "models_cmd",
+  "model_registry_cmd",
   "execution_run_cmd",
   "video_generation_cmd",
   "mcp_cmd",
@@ -712,16 +762,8 @@ const currentElectronHostRequiredCommands = new Set([
   "agent_app_runtime_cancel_task",
   "agent_app_runtime_get_task",
   "agent_app_runtime_submit_host_response",
-  "get_all_alias_configs",
   "get_default_provider",
   "get_experimental_config",
-  "get_model_preferences",
-  "get_model_registry",
-  "get_model_registry_provider_ids",
-  "get_model_sync_state",
-  "get_models_by_tier",
-  "get_models_for_provider",
-  "get_provider_alias_config",
   "open_external_url",
   "open_system_settings_url",
   "project_memory_get",
@@ -4560,6 +4602,15 @@ function collectRetiredTauriCommandModuleFailures() {
         file: source.path,
         message: source.message,
         token: moduleName,
+      });
+    }
+    const modulePath = `lime-rs/src/commands/${moduleName}.rs`;
+    if (fs.existsSync(path.join(repoRoot, modulePath))) {
+      failures.push({
+        file: modulePath,
+        message:
+          "已撤注册的 legacy Tauri command module 文件不能恢复；旧能力必须迁到 App Server current 或 Electron Desktop Host current",
+        token: modulePath,
       });
     }
   }

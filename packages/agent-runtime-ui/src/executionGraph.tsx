@@ -4,12 +4,13 @@ import type { ExecutionGraphViewProps } from "./types.js";
 export function ExecutionGraphView({
   nodes = [],
   empty,
+  ariaLabel = "Execution graph",
   nodeTitle = (node) => node.title,
   nodeMeta = defaultGraphNodeMeta,
 }: ExecutionGraphViewProps) {
   if (!nodes.length) return empty === undefined ? null : <div className="agent-execution-graph-empty">{empty}</div>;
   return (
-    <div className="agent-execution-graph" aria-label="执行图">
+    <div className="agent-execution-graph" aria-label={ariaLabel}>
       {nodes.map((node) => (
         <article
           key={node.nodeId}
