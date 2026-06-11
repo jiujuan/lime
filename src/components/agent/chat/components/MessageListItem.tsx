@@ -2,7 +2,7 @@ import React from "react";
 import { Check, Copy, Pencil } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Artifact } from "@/lib/artifact/types";
-import type { A2UIFormData } from "@/lib/workspace/a2ui";
+import type { A2UIFormData } from "@/components/workspace/a2ui/types";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import { formatDate } from "@/i18n/format";
 import { MessageWrapper, ContentColumn, MessageBubble } from "../styles";

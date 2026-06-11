@@ -1,4 +1,4 @@
-import { parseAIResponse } from "@/lib/workspace/a2ui";
+import { parseAIResponse } from "@/components/workspace/a2ui/parser";
 import { normalizeProcessDisplayText } from "../utils/processDisplayText";
 import { sanitizeThinkingDisplayText } from "./timeline-utils/textFormatting";
 

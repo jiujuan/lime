@@ -1,4 +1,4 @@
-import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
+import type { A2UIFormData, A2UIResponse } from "@/components/workspace/a2ui/types";
 import {
   createDefaultServiceSkillSlotValues,
   resolveServiceSkillSlotValue,

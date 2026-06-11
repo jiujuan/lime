@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { A2UIResponse } from "@/lib/workspace/a2ui";
+import type { A2UIResponse } from "@/components/workspace/a2ui/types";
 
 interface UseStickyA2UIFormParams {
   form?: A2UIResponse | null;

@@ -85,31 +85,6 @@
       "rule": "lib→features"
     },
     {
-      "file": "src/lib/workspace/a2ui.ts",
-      "import": "@/components/workspace/a2ui/types",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/a2ui.ts",
-      "import": "@/components/workspace/a2ui/parser",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/a2ui.ts",
-      "import": "@/components/workspace/a2ui",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/a2ui.ts",
-      "import": "@/components/workspace/a2ui/taskCardPresets",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/a2ui.ts",
-      "import": "@/components/workspace/a2ui/taskCardPrimitives",
-      "rule": "lib→components"
-    },
-    {
       "file": "src/lib/workspace/workbenchCanvas.ts",
       "import": "@/components/workspace/canvas/CanvasFactory",
       "rule": "lib→components"

@@ -20,13 +20,13 @@ import { DecisionPanel } from "./DecisionPanel";
 import { AgentPlanBlock } from "./AgentPlanBlock";
 import { RuntimePeerMessageCards } from "./RuntimePeerMessageCards";
 import { FileChangesSummaryCard } from "./FileChangesSummaryCard";
-import { parseAIResponse } from "@/lib/workspace/a2ui";
+import { parseAIResponse } from "@/components/workspace/a2ui/parser";
 import type {
   A2UIFormData,
   ParseResult,
   ParsedMessageContent,
-} from "@/lib/workspace/a2ui";
-import { CHAT_A2UI_TASK_CARD_PRESET } from "@/lib/workspace/a2ui";
+} from "@/components/workspace/a2ui/taskCardPresets";
+import { CHAT_A2UI_TASK_CARD_PRESET } from "@/components/workspace/a2ui/taskCardPresets";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import type {
   AgentRuntimeStatus,

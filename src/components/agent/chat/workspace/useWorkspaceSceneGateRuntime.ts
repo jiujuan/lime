@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { listProjects, type Project } from "@/lib/api/project";
-import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
+import type { A2UIFormData, A2UIResponse } from "@/components/workspace/a2ui/types";
 import type { PendingA2UISource } from "../types";
 import {
   getSlashEntryUsageMap,

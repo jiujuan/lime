@@ -1,17 +1,20 @@
-import { A2UIRenderer } from "@/lib/workspace/a2ui";
+import { A2UIRenderer } from "@/components/workspace/a2ui";
 import { cn } from "@/lib/utils";
-import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
+import type {
+  A2UIFormData,
+  A2UIResponse,
+} from "@/components/workspace/a2ui/types";
 import {
   DEFAULT_A2UI_TASK_CARD_PRESET,
   type A2UITaskCardPreset,
-} from "@/lib/workspace/a2ui";
+} from "@/components/workspace/a2ui/taskCardPresets";
 import {
   A2UITaskCardBody,
   A2UITaskCardHeader,
   A2UITaskCardLoadingBody,
   A2UITaskCardShell,
   type A2UITaskCardSurface,
-} from "@/lib/workspace/a2ui";
+} from "@/components/workspace/a2ui/taskCardPrimitives";
 
 interface A2UITaskCardProps {
   response: A2UIResponse;

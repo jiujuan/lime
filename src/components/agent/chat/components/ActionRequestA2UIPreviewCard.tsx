@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
-import type { A2UIFormData } from "@/lib/workspace/a2ui";
+import type { A2UIFormData } from "@/components/workspace/a2ui/types";
 import {
   CHAT_A2UI_TASK_CARD_PRESET,
   TIMELINE_A2UI_TASK_CARD_PRESET,
-} from "@/lib/workspace/a2ui";
+} from "@/components/workspace/a2ui/taskCardPresets";
 import type { ActionRequired } from "../types";
 import {
   buildActionRequestA2UI,

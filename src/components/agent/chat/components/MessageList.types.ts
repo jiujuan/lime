@@ -1,6 +1,6 @@
 import type React from "react";
 import type { Artifact } from "@/lib/artifact/types";
-import type { A2UIFormData } from "@/lib/workspace/a2ui";
+import type { A2UIFormData } from "@/components/workspace/a2ui/types";
 import type {
   AsterSubagentSessionInfo,
   AgentRuntimeThreadReadModel,

@@ -9,9 +9,9 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import styled from "styled-components";
 import { Copy, Check, Quote } from "lucide-react";
-import { parseA2UIJson } from "@/lib/workspace/a2ui";
-import type { A2UIFormData } from "@/lib/workspace/a2ui";
-import { CHAT_A2UI_TASK_CARD_PRESET } from "@/lib/workspace/a2ui";
+import { parseA2UIJson } from "@/components/workspace/a2ui/parser";
+import type { A2UIFormData } from "@/components/workspace/a2ui/types";
+import { CHAT_A2UI_TASK_CARD_PRESET } from "@/components/workspace/a2ui/taskCardPresets";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import { readFilePreview } from "@/lib/api/fileBrowser";
 import {

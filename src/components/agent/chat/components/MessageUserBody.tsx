@@ -1,5 +1,5 @@
 import React from "react";
-import type { A2UIFormData } from "@/lib/workspace/a2ui";
+import type { A2UIFormData } from "@/components/workspace/a2ui/types";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { RuntimePeerMessageCards } from "./RuntimePeerMessageCards";
 import {

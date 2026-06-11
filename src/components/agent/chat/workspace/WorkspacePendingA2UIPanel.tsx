@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
-import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
-import { CHAT_A2UI_TASK_CARD_PRESET } from "@/lib/workspace/a2ui";
+import type { A2UIFormData, A2UIResponse } from "@/components/workspace/a2ui/types";
+import { CHAT_A2UI_TASK_CARD_PRESET } from "@/components/workspace/a2ui/taskCardPresets";
 import { A2UITaskCard } from "../components/A2UITaskCard";
 import {
   A2UISubmissionNotice,

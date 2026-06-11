@@ -13,7 +13,7 @@ import {
   type AutomationJobDialogInitialValues,
   type AutomationJobDialogSubmit,
 } from "@/components/settings-v2/system/automation/AutomationJobDialog";
-import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
+import type { A2UIFormData, A2UIResponse } from "@/components/workspace/a2ui/types";
 import type { BrowserRuntimePageParams, Page, PageParams } from "@/types/page";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { CreationMode } from "../components/types";

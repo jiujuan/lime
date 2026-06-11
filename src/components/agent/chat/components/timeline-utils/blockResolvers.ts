@@ -1,7 +1,7 @@
 import type { ActionRequired, AgentThreadItem, AgentThreadTurn } from "../../types";
 import type { AgentThreadOrderedBlock } from "../../utils/agentThreadGrouping";
 import { hasAnyPrefix, shortenInlineText } from "./textFormatting";
-import { parseAIResponse } from "@/lib/workspace/a2ui";
+import { parseAIResponse } from "@/components/workspace/a2ui/parser";
 import { resolveReasoningDisplayText, resolveTurnSummaryDisplayText } from "./displayTextResolvers";
 import { shouldHideTurnSummaryFromConversation } from "../../utils/turnSummaryPresentation";
 

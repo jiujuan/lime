@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
-import type { A2UIFormData } from "@/lib/workspace/a2ui";
+import type { A2UIFormData } from "@/components/workspace/a2ui/types";
 import type { ConfirmResponse } from "../types";
 import type { SendMessageFn } from "../hooks/agentChatShared";
 import type { ActionRequired } from "../types";
