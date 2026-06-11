@@ -75,11 +75,6 @@
       "rule": "lib→components"
     },
     {
-      "file": "src/lib/imageGeneration.ts",
-      "import": "@/components/image-gen/types",
-      "rule": "lib→components"
-    },
-    {
       "file": "src/lib/navigation/sidebarNav.ts",
       "import": "@/features/agent-app/featureFlag",
       "rule": "lib→features"

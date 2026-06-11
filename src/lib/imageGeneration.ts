@@ -7,7 +7,7 @@
 import {
   IMAGE_GEN_MODELS,
   type ImageGenModel,
-} from "@/components/image-gen/types";
+} from "@/lib/imageGen/models";
 import { inferModelTaskFamilies } from "@/lib/model/inferModelCapabilities";
 
 export type ImageModelPreset = "basic" | "jimeng" | "kling";
