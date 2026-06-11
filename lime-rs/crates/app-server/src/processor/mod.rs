@@ -8,6 +8,9 @@ mod model;
 mod knowledge;
 mod project_git;
 mod skill;
+mod gallery;
+mod project;
+mod unified;
 mod voice;
 mod workspace;
 
@@ -587,40 +590,40 @@ impl RequestProcessor {
             METHOD_MEDIA_TASK_ARTIFACT_CANCEL => {
                 self.handle_media_task_artifact_cancel_impl(params).await
             }
-            METHOD_GALLERY_MATERIAL_GET => self.handle_gallery_material_get(params).await,
+            METHOD_GALLERY_MATERIAL_GET => self.handle_gallery_material_get_impl(params).await,
             METHOD_GALLERY_MATERIAL_METADATA_CREATE => {
-                self.handle_gallery_material_metadata_create(params).await
+                self.handle_gallery_material_metadata_create_impl(params).await
             }
             METHOD_GALLERY_MATERIAL_METADATA_GET => {
-                self.handle_gallery_material_metadata_get(params).await
+                self.handle_gallery_material_metadata_get_impl(params).await
             }
             METHOD_GALLERY_MATERIAL_METADATA_UPDATE => {
-                self.handle_gallery_material_metadata_update(params).await
+                self.handle_gallery_material_metadata_update_impl(params).await
             }
             METHOD_GALLERY_MATERIAL_METADATA_DELETE => {
-                self.handle_gallery_material_metadata_delete(params).await
+                self.handle_gallery_material_metadata_delete_impl(params).await
             }
             METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY => {
-                self.handle_gallery_material_list_by_image_category(params)
+                self.handle_gallery_material_list_by_image_category_impl(params)
                     .await
             }
             METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY => {
-                self.handle_gallery_material_list_by_layout_category(params)
+                self.handle_gallery_material_list_by_layout_category_impl(params)
                     .await
             }
             METHOD_GALLERY_MATERIAL_LIST_BY_MOOD => {
-                self.handle_gallery_material_list_by_mood(params).await
+                self.handle_gallery_material_list_by_mood_impl(params).await
             }
-            METHOD_PROJECT_MATERIAL_LIST => self.handle_project_material_list(params).await,
-            METHOD_PROJECT_MATERIAL_GET => self.handle_project_material_get(params).await,
-            METHOD_PROJECT_MATERIAL_COUNT => self.handle_project_material_count(params).await,
-            METHOD_PROJECT_MATERIAL_UPLOAD => self.handle_project_material_upload(params).await,
+            METHOD_PROJECT_MATERIAL_LIST => self.handle_project_material_list_impl(params).await,
+            METHOD_PROJECT_MATERIAL_GET => self.handle_project_material_get_impl(params).await,
+            METHOD_PROJECT_MATERIAL_COUNT => self.handle_project_material_count_impl(params).await,
+            METHOD_PROJECT_MATERIAL_UPLOAD => self.handle_project_material_upload_impl(params).await,
             METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL => {
-                self.handle_project_material_import_from_url(params).await
+                self.handle_project_material_import_from_url_impl(params).await
             }
-            METHOD_PROJECT_MATERIAL_UPDATE => self.handle_project_material_update(params).await,
-            METHOD_PROJECT_MATERIAL_DELETE => self.handle_project_material_delete(params).await,
-            METHOD_PROJECT_MATERIAL_CONTENT => self.handle_project_material_content(params).await,
+            METHOD_PROJECT_MATERIAL_UPDATE => self.handle_project_material_update_impl(params).await,
+            METHOD_PROJECT_MATERIAL_DELETE => self.handle_project_material_delete_impl(params).await,
+            METHOD_PROJECT_MATERIAL_CONTENT => self.handle_project_material_content_impl(params).await,
             METHOD_VOICE_ASR_CREDENTIAL_LIST => self.handle_voice_asr_credential_list_impl().await,
             METHOD_VOICE_ASR_CREDENTIAL_CREATE => {
                 self.handle_voice_asr_credential_create_impl(params).await
@@ -732,20 +735,20 @@ impl RequestProcessor {
             METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get_impl(params).await,
             METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list_impl().await,
             METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read_impl(params).await,
-            METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
-            METHOD_UNIFIED_MEMORY_LIST => self.handle_unified_memory_list(params).await,
-            METHOD_UNIFIED_MEMORY_GET => self.handle_unified_memory_get(params).await,
-            METHOD_UNIFIED_MEMORY_CREATE => self.handle_unified_memory_create(params).await,
-            METHOD_UNIFIED_MEMORY_UPDATE => self.handle_unified_memory_update(params).await,
-            METHOD_UNIFIED_MEMORY_DELETE => self.handle_unified_memory_delete(params).await,
-            METHOD_UNIFIED_MEMORY_SEARCH => self.handle_unified_memory_search(params).await,
-            METHOD_UNIFIED_MEMORY_STATS => self.handle_unified_memory_stats().await,
-            METHOD_UNIFIED_MEMORY_ANALYZE => self.handle_unified_memory_analyze(params).await,
+            METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read_impl(params).await,
+            METHOD_UNIFIED_MEMORY_LIST => self.handle_unified_memory_list_impl(params).await,
+            METHOD_UNIFIED_MEMORY_GET => self.handle_unified_memory_get_impl(params).await,
+            METHOD_UNIFIED_MEMORY_CREATE => self.handle_unified_memory_create_impl(params).await,
+            METHOD_UNIFIED_MEMORY_UPDATE => self.handle_unified_memory_update_impl(params).await,
+            METHOD_UNIFIED_MEMORY_DELETE => self.handle_unified_memory_delete_impl(params).await,
+            METHOD_UNIFIED_MEMORY_SEARCH => self.handle_unified_memory_search_impl(params).await,
+            METHOD_UNIFIED_MEMORY_STATS => self.handle_unified_memory_stats_impl().await,
+            METHOD_UNIFIED_MEMORY_ANALYZE => self.handle_unified_memory_analyze_impl(params).await,
             METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH => {
-                self.handle_unified_memory_semantic_search(params).await
+                self.handle_unified_memory_semantic_search_impl(params).await
             }
             METHOD_UNIFIED_MEMORY_HYBRID_SEARCH => {
-                self.handle_unified_memory_hybrid_search(params).await
+                self.handle_unified_memory_hybrid_search_impl(params).await
             }
             METHOD_LOG_LIST => self.handle_log_list().await,
             METHOD_LOG_PERSISTED_TAIL => self.handle_log_persisted_tail(params).await,
@@ -1010,382 +1013,9 @@ impl RequestProcessor {
     }
 
     // media handlers 已提取到 processor/media.rs
-    async fn handle_gallery_material_get(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GalleryMaterialLookupParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .get_gallery_material(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // gallery handlers 已提取到 processor/gallery.rs
 
-    async fn handle_gallery_material_metadata_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GalleryMaterialMetadataCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_gallery_material_metadata(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gallery_material_metadata_get(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GalleryMaterialLookupParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .get_gallery_material_metadata(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gallery_material_metadata_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GalleryMaterialMetadataUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_gallery_material_metadata(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gallery_material_metadata_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GalleryMaterialLookupParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_gallery_material_metadata(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gallery_material_list_by_image_category(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GalleryMaterialFilterParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_gallery_materials_by_image_category(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gallery_material_list_by_layout_category(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GalleryMaterialFilterParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_gallery_materials_by_layout_category(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gallery_material_list_by_mood(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GalleryMaterialFilterParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_gallery_materials_by_mood(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_material_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMaterialListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_project_materials(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_material_get(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMaterialLookupParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .get_project_material(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_material_count(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMaterialListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .count_project_materials(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_material_upload(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMaterialUploadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .upload_project_material(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_material_import_from_url(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMaterialImportFromUrlParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .import_project_material_from_url(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_material_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMaterialUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_project_material(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_material_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMaterialLookupParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_project_material(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_material_content(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMaterialLookupParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_project_material_content(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-    // voice handlers 已提取到 processor/voice.rs
-
-    // agent_app handlers 已提取到 processor/agent_app.rs
-
-    async fn handle_project_memory_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectMemoryReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_project_memory(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemoryListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_unified_memories(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_get(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemoryGetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .get_unified_memory(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemoryCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_unified_memory(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemoryUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_unified_memory(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemoryDeleteParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_unified_memory(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_search(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemorySearchParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .search_unified_memories(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_stats(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_unified_memory_stats()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_analyze(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemoryAnalyzeParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .analyze_unified_memories(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_semantic_search(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemorySemanticSearchParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .semantic_search_unified_memories(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_unified_memory_hybrid_search(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: UnifiedMemoryHybridSearchParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .hybrid_search_unified_memories(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // project handlers 已提取到 processor/project.rs
     // mcp handlers 已提取到 processor/mcp.rs
 
     async fn handle_log_list(&self) -> Result<RpcDispatch, JsonRpcError> {
