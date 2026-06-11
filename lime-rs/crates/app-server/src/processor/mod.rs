@@ -1,4 +1,8 @@
+mod agent_app;
 mod agent_session;
+mod automation;
+mod gateway;
+mod media;
 mod knowledge;
 mod project_git;
 mod skill;
@@ -9,16 +13,6 @@ use crate::RuntimeCore;
 use crate::RuntimeCoreError;
 use crate::RuntimeHostContext;
 use app_server_protocol::error_codes;
-use app_server_protocol::AgentAppFetchCloudPackageParams;
-use app_server_protocol::AgentAppInstalledDisabledSetParams;
-use app_server_protocol::AgentAppInstalledSaveParams;
-use app_server_protocol::AgentAppLocalPackageInspectParams;
-use app_server_protocol::AgentAppShellPrepareParams;
-use app_server_protocol::AgentAppUiRuntimeStartParams;
-use app_server_protocol::AgentAppUiRuntimeStatusParams;
-use app_server_protocol::AgentAppUiRuntimeStopParams;
-use app_server_protocol::AgentAppUninstallParams;
-use app_server_protocol::AgentAppUninstallRehearsalParams;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSessionActionReplayParams;
 use app_server_protocol::AgentSessionActionRespondParams;
@@ -29,13 +23,6 @@ use app_server_protocol::AgentSessionReplayCaseExportParams;
 use app_server_protocol::AgentSessionReviewDecisionSaveParams;
 use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
 use app_server_protocol::ArtifactReadParams;
-use app_server_protocol::AutomationJobCreateParams;
-use app_server_protocol::AutomationJobHealthParams;
-use app_server_protocol::AutomationJobIdParams;
-use app_server_protocol::AutomationJobRunHistoryParams;
-use app_server_protocol::AutomationJobUpdateParams;
-use app_server_protocol::AutomationScheduleParams;
-use app_server_protocol::AutomationSchedulerConfigUpdateParams;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::ChannelProbeParams;
 use app_server_protocol::ClientInfo;
@@ -54,12 +41,6 @@ use app_server_protocol::GalleryMaterialFilterParams;
 use app_server_protocol::GalleryMaterialLookupParams;
 use app_server_protocol::GalleryMaterialMetadataCreateParams;
 use app_server_protocol::GalleryMaterialMetadataUpdateParams;
-use app_server_protocol::GatewayChannelStartParams;
-use app_server_protocol::GatewayChannelStatusParams;
-use app_server_protocol::GatewayChannelStopParams;
-use app_server_protocol::GatewayTunnelCloudflaredInstallParams;
-use app_server_protocol::GatewayTunnelCreateParams;
-use app_server_protocol::GatewayTunnelSyncWebhookUrlParams;
 use app_server_protocol::InitializeParams;
 use app_server_protocol::InitializeResponse;
 use app_server_protocol::JsonRpcError;
@@ -82,12 +63,6 @@ use app_server_protocol::McpToolCallParams;
 use app_server_protocol::McpToolCallWithCallerParams;
 use app_server_protocol::McpToolListForContextParams;
 use app_server_protocol::McpToolSearchParams;
-use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
-use app_server_protocol::MediaTaskArtifactAudioCreateParams;
-use app_server_protocol::MediaTaskArtifactImageCreateParams;
-use app_server_protocol::MediaTaskArtifactListParams;
-use app_server_protocol::MediaTaskArtifactLookupParams;
-use app_server_protocol::MediaTaskArtifactVideoCreateParams;
 use app_server_protocol::ModelListParams;
 use app_server_protocol::ModelProviderAliasReadParams;
 use app_server_protocol::ModelProviderConfigExportParams;
@@ -560,23 +535,23 @@ impl RequestProcessor {
             METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL => {
                 self.handle_skill_download_install_impl(params).await
             }
-            METHOD_GATEWAY_CHANNEL_START => self.handle_gateway_channel_start(params).await,
-            METHOD_GATEWAY_CHANNEL_STOP => self.handle_gateway_channel_stop(params).await,
-            METHOD_GATEWAY_CHANNEL_STATUS => self.handle_gateway_channel_status(params).await,
-            METHOD_GATEWAY_TUNNEL_PROBE => self.handle_gateway_tunnel_probe().await,
+            METHOD_GATEWAY_CHANNEL_START => self.handle_gateway_channel_start_impl(params).await,
+            METHOD_GATEWAY_CHANNEL_STOP => self.handle_gateway_channel_stop_impl(params).await,
+            METHOD_GATEWAY_CHANNEL_STATUS => self.handle_gateway_channel_status_impl(params).await,
+            METHOD_GATEWAY_TUNNEL_PROBE => self.handle_gateway_tunnel_probe_impl().await,
             METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT => {
-                self.handle_gateway_tunnel_cloudflared_detect().await
+                self.handle_gateway_tunnel_cloudflared_detect_impl().await
             }
             METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL => {
-                self.handle_gateway_tunnel_cloudflared_install(params).await
+                self.handle_gateway_tunnel_cloudflared_install_impl(params).await
             }
-            METHOD_GATEWAY_TUNNEL_CREATE => self.handle_gateway_tunnel_create(params).await,
-            METHOD_GATEWAY_TUNNEL_START => self.handle_gateway_tunnel_start().await,
-            METHOD_GATEWAY_TUNNEL_STOP => self.handle_gateway_tunnel_stop().await,
-            METHOD_GATEWAY_TUNNEL_RESTART => self.handle_gateway_tunnel_restart().await,
-            METHOD_GATEWAY_TUNNEL_STATUS => self.handle_gateway_tunnel_status().await,
+            METHOD_GATEWAY_TUNNEL_CREATE => self.handle_gateway_tunnel_create_impl(params).await,
+            METHOD_GATEWAY_TUNNEL_START => self.handle_gateway_tunnel_start_impl().await,
+            METHOD_GATEWAY_TUNNEL_STOP => self.handle_gateway_tunnel_stop_impl().await,
+            METHOD_GATEWAY_TUNNEL_RESTART => self.handle_gateway_tunnel_restart_impl().await,
+            METHOD_GATEWAY_TUNNEL_STATUS => self.handle_gateway_tunnel_status_impl().await,
             METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL => {
-                self.handle_gateway_tunnel_sync_webhook_url(params).await
+                self.handle_gateway_tunnel_sync_webhook_url_impl(params).await
             }
             METHOD_TELEGRAM_CHANNEL_PROBE => self.handle_telegram_channel_probe(params).await,
             METHOD_FEISHU_CHANNEL_PROBE => self.handle_feishu_channel_probe(params).await,
@@ -594,21 +569,21 @@ impl RequestProcessor {
                 self.handle_wechat_channel_runtime_model_set(params).await
             }
             METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE => {
-                self.handle_media_task_artifact_image_create(params).await
+                self.handle_media_task_artifact_image_create_impl(params).await
             }
             METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE => {
-                self.handle_media_task_artifact_audio_create(params).await
+                self.handle_media_task_artifact_audio_create_impl(params).await
             }
             METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE => {
-                self.handle_media_task_artifact_video_create(params).await
+                self.handle_media_task_artifact_video_create_impl(params).await
             }
             METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE => {
-                self.handle_media_task_artifact_audio_complete(params).await
+                self.handle_media_task_artifact_audio_complete_impl(params).await
             }
-            METHOD_MEDIA_TASK_ARTIFACT_GET => self.handle_media_task_artifact_get(params).await,
-            METHOD_MEDIA_TASK_ARTIFACT_LIST => self.handle_media_task_artifact_list(params).await,
+            METHOD_MEDIA_TASK_ARTIFACT_GET => self.handle_media_task_artifact_get_impl(params).await,
+            METHOD_MEDIA_TASK_ARTIFACT_LIST => self.handle_media_task_artifact_list_impl(params).await,
             METHOD_MEDIA_TASK_ARTIFACT_CANCEL => {
-                self.handle_media_task_artifact_cancel(params).await
+                self.handle_media_task_artifact_cancel_impl(params).await
             }
             METHOD_GALLERY_MATERIAL_GET => self.handle_gallery_material_get(params).await,
             METHOD_GALLERY_MATERIAL_METADATA_CREATE => {
@@ -672,31 +647,31 @@ impl RequestProcessor {
                 self.handle_workspace_registered_skills_list_impl(params).await
             }
             METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT => {
-                self.handle_agent_app_local_package_inspect(params).await
+                self.handle_agent_app_local_package_inspect_impl(params).await
             }
             METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD => {
-                self.handle_agent_app_package_fetch_cloud(params).await
+                self.handle_agent_app_package_fetch_cloud_impl(params).await
             }
-            METHOD_AGENT_APP_INSTALLED_SAVE => self.handle_agent_app_installed_save(params).await,
-            METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list().await,
+            METHOD_AGENT_APP_INSTALLED_SAVE => self.handle_agent_app_installed_save_impl(params).await,
+            METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list_impl().await,
             METHOD_AGENT_APP_INSTALLED_DISABLED_SET => {
-                self.handle_agent_app_installed_disabled_set(params).await
+                self.handle_agent_app_installed_disabled_set_impl(params).await
             }
             METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL => {
-                self.handle_agent_app_installed_uninstall_rehearsal(params)
+                self.handle_agent_app_installed_uninstall_rehearsal_impl(params)
                     .await
             }
             METHOD_AGENT_APP_INSTALLED_UNINSTALL => {
-                self.handle_agent_app_installed_uninstall(params).await
+                self.handle_agent_app_installed_uninstall_impl(params).await
             }
-            METHOD_AGENT_APP_SHELL_PREPARE => self.handle_agent_app_shell_prepare(params).await,
+            METHOD_AGENT_APP_SHELL_PREPARE => self.handle_agent_app_shell_prepare_impl(params).await,
             METHOD_AGENT_APP_UI_RUNTIME_START => {
-                self.handle_agent_app_ui_runtime_start(params).await
+                self.handle_agent_app_ui_runtime_start_impl(params).await
             }
             METHOD_AGENT_APP_UI_RUNTIME_STATUS => {
-                self.handle_agent_app_ui_runtime_status(params).await
+                self.handle_agent_app_ui_runtime_status_impl(params).await
             }
-            METHOD_AGENT_APP_UI_RUNTIME_STOP => self.handle_agent_app_ui_runtime_stop(params).await,
+            METHOD_AGENT_APP_UI_RUNTIME_STOP => self.handle_agent_app_ui_runtime_stop_impl(params).await,
             METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list_impl(params).await,
             METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read_impl(params).await,
             METHOD_KNOWLEDGE_SOURCE_IMPORT => self.handle_knowledge_source_import_impl(params).await,
@@ -712,27 +687,27 @@ impl RequestProcessor {
                 self.handle_knowledge_context_run_validate_impl(params).await
             }
             METHOD_AUTOMATION_SCHEDULER_CONFIG_READ => {
-                self.handle_automation_scheduler_config_read().await
+                self.handle_automation_scheduler_config_read_impl().await
             }
             METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE => {
-                self.handle_automation_scheduler_config_update(params).await
+                self.handle_automation_scheduler_config_update_impl(params).await
             }
-            METHOD_AUTOMATION_SCHEDULER_STATUS => self.handle_automation_scheduler_status().await,
-            METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list().await,
-            METHOD_AUTOMATION_JOB_READ => self.handle_automation_job_read(params).await,
-            METHOD_AUTOMATION_JOB_CREATE => self.handle_automation_job_create(params).await,
-            METHOD_AUTOMATION_JOB_UPDATE => self.handle_automation_job_update(params).await,
-            METHOD_AUTOMATION_JOB_DELETE => self.handle_automation_job_delete(params).await,
-            METHOD_AUTOMATION_JOB_RUN_NOW => self.handle_automation_job_run_now(params).await,
-            METHOD_AUTOMATION_JOB_HEALTH => self.handle_automation_job_health(params).await,
+            METHOD_AUTOMATION_SCHEDULER_STATUS => self.handle_automation_scheduler_status_impl().await,
+            METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list_impl().await,
+            METHOD_AUTOMATION_JOB_READ => self.handle_automation_job_read_impl(params).await,
+            METHOD_AUTOMATION_JOB_CREATE => self.handle_automation_job_create_impl(params).await,
+            METHOD_AUTOMATION_JOB_UPDATE => self.handle_automation_job_update_impl(params).await,
+            METHOD_AUTOMATION_JOB_DELETE => self.handle_automation_job_delete_impl(params).await,
+            METHOD_AUTOMATION_JOB_RUN_NOW => self.handle_automation_job_run_now_impl(params).await,
+            METHOD_AUTOMATION_JOB_HEALTH => self.handle_automation_job_health_impl(params).await,
             METHOD_AUTOMATION_JOB_RUN_HISTORY => {
-                self.handle_automation_job_run_history(params).await
+                self.handle_automation_job_run_history_impl(params).await
             }
             METHOD_AUTOMATION_SCHEDULE_PREVIEW => {
-                self.handle_automation_schedule_preview(params).await
+                self.handle_automation_schedule_preview_impl(params).await
             }
             METHOD_AUTOMATION_SCHEDULE_VALIDATE => {
-                self.handle_automation_schedule_validate(params).await
+                self.handle_automation_schedule_validate_impl(params).await
             }
             METHOD_MCP_SERVER_LIST => self.handle_mcp_server_list().await,
             METHOD_MCP_SERVER_STATUS_LIST => self.handle_mcp_server_status_list().await,
@@ -909,150 +884,7 @@ impl RequestProcessor {
     // workspace + session_file handlers 已提取到 processor/workspace.rs
     // skill handlers 已提取到 processor/skill.rs
 
-    async fn handle_gateway_channel_status(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GatewayChannelStatusParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_gateway_channel_status(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_channel_start(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GatewayChannelStartParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .start_gateway_channel(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_channel_stop(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GatewayChannelStopParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .stop_gateway_channel(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_probe(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .probe_gateway_tunnel()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_cloudflared_detect(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .detect_gateway_tunnel_cloudflared()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_cloudflared_install(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GatewayTunnelCloudflaredInstallParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .install_gateway_tunnel_cloudflared(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GatewayTunnelCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_gateway_tunnel(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_start(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .start_gateway_tunnel()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_stop(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .stop_gateway_tunnel()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_restart(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .restart_gateway_tunnel()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_status(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_gateway_tunnel_status()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_gateway_tunnel_sync_webhook_url(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: GatewayTunnelSyncWebhookUrlParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .sync_gateway_tunnel_webhook_url(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
+    // gateway handlers 已提取到 processor/gateway.rs
     async fn handle_telegram_channel_probe(
         &self,
         params: Option<serde_json::Value>,
@@ -1175,104 +1007,7 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    async fn handle_media_task_artifact_image_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: MediaTaskArtifactImageCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_image_media_task_artifact(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_media_task_artifact_audio_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: MediaTaskArtifactAudioCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_audio_media_task_artifact(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_media_task_artifact_video_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: MediaTaskArtifactVideoCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_video_media_task_artifact(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_media_task_artifact_audio_complete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: MediaTaskArtifactAudioCompleteParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .complete_audio_media_task_artifact(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_media_task_artifact_get(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: MediaTaskArtifactLookupParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .get_media_task_artifact(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_media_task_artifact_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: MediaTaskArtifactListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_media_task_artifacts(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_media_task_artifact_cancel(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: MediaTaskArtifactLookupParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .cancel_media_task_artifact(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
+    // media handlers 已提取到 processor/media.rs
     async fn handle_gallery_material_get(
         &self,
         params: Option<serde_json::Value>,
@@ -1644,327 +1379,7 @@ impl RequestProcessor {
     }
 
 
-    async fn handle_agent_app_installed_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_agent_app_installed()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_local_package_inspect(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppLocalPackageInspectParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .inspect_agent_app_local_package(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_package_fetch_cloud(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppFetchCloudPackageParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .fetch_agent_app_cloud_package(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_installed_save(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppInstalledSaveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .save_agent_app_installed(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_installed_disabled_set(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppInstalledDisabledSetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .set_agent_app_installed_disabled(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_installed_uninstall_rehearsal(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppUninstallRehearsalParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .preview_agent_app_uninstall(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_installed_uninstall(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppUninstallParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .uninstall_agent_app(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_shell_prepare(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppShellPrepareParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .prepare_agent_app_shell(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_ui_runtime_start(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppUiRuntimeStartParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .start_agent_app_ui_runtime(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_ui_runtime_status(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppUiRuntimeStatusParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .agent_app_ui_runtime_status(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_agent_app_ui_runtime_stop(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentAppUiRuntimeStopParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .stop_agent_app_ui_runtime(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    // knowledge handlers 已提取到 processor/knowledge.rs
-
-    async fn handle_automation_job_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_automation_jobs()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_scheduler_config_read(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_automation_scheduler_config()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_scheduler_config_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationSchedulerConfigUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_automation_scheduler_config(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_scheduler_status(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_automation_scheduler_status()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_job_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationJobIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_automation_job(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_job_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationJobCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_automation_job(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_job_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationJobUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_automation_job(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_job_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationJobIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_automation_job(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_job_run_now(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationJobIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .run_automation_job_now(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_job_health(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationJobHealthParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_automation_health(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_job_run_history(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationJobRunHistoryParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_automation_run_history(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_schedule_preview(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationScheduleParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .preview_automation_schedule(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_automation_schedule_validate(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AutomationScheduleParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .validate_automation_schedule(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // agent_app handlers 已提取到 processor/agent_app.rs
 
     async fn handle_project_memory_read(
         &self,
