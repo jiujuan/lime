@@ -24,7 +24,7 @@ import {
   McpResourceContent,
   McpServerCapabilities,
 } from "@/lib/api/mcp";
-import { safeListen } from "@/lib/dev-bridge";
+import { safeListen } from "@/lib/api/bridgeEvents";
 
 // ============================================================================
 // 事件 Payload 类型

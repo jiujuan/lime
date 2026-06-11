@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { safeListen } from "@/lib/dev-bridge";
+import { safeListen } from "@/lib/api/bridgeEvents";
 import {
   TRAY_MODEL_SELECTED_EVENT,
   type SyncTrayModelShortcutsPayload,

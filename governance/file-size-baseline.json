@@ -640,8 +640,9 @@
         "lines": 5618
       },
       {
-        "path": "lime-rs/crates/app-server/src/processor.rs",
-        "lines": 5103
+        "path": "lime-rs/crates/app-server/src/processor/mod.rs",
+        "lines": 5048,
+        "comment": "R-20: 已转为目录模块，继续按 domain 拆分"
       },
       {
         "path": "lime-rs/crates/media-runtime/src/lib.rs",

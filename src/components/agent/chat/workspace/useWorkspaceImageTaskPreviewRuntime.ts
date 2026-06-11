@@ -11,7 +11,7 @@ import {
   listMediaTaskArtifacts,
   type MediaTaskArtifactOutput,
 } from "@/lib/api/mediaTasks";
-import { safeListen } from "@/lib/dev-bridge";
+import { safeListen } from "@/lib/api/bridgeEvents";
 import {
   hasDesktopHostInvokeCapability,
   hasDesktopHostRuntimeMarkers,

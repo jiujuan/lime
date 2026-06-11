@@ -5,4 +5,9 @@
  * 详见 internal/refactor/progressive-refactor-plan.md R-40。
  */
 
-export { safeListen, safeEmit } from "@/lib/dev-bridge";
+export {
+  safeListen,
+  safeEmit,
+  hasDevBridgeEventListenerCapability,
+} from "@/lib/dev-bridge";
+export { hasNativeDesktopHostEventSupport } from "@/lib/dev-bridge/safeInvoke";

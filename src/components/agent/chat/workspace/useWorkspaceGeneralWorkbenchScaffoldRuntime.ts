@@ -5,7 +5,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { safeListen } from "@/lib/dev-bridge";
+import { safeListen } from "@/lib/api/bridgeEvents";
 import {
   createInitialCanvasState,
   type CanvasStateUnion,

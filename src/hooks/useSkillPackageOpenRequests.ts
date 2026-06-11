@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { safeListen } from "@/lib/dev-bridge";
+import { safeListen } from "@/lib/api/bridgeEvents";
 import { SKILL_PACKAGE_OPEN_EVENT, skillsApi } from "@/lib/api/skills";
 import { hasDesktopHostInvokeCapability } from "@/lib/desktop-runtime";
 import type { Page, PageParams, SkillsPageParams } from "@/types/page";

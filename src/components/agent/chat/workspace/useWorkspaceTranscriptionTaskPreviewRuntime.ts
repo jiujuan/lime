@@ -9,7 +9,7 @@ import {
 } from "@/lib/api/mediaTasks";
 import { readFilePreview } from "@/lib/api/fileBrowser";
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
-import { safeListen } from "@/lib/dev-bridge";
+import { safeListen } from "@/lib/api/bridgeEvents";
 import type { Message, MessageGenericTaskPreview } from "../types";
 import {
   buildArtifactFromWrite,

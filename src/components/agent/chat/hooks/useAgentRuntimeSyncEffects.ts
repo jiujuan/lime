@@ -1,6 +1,6 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
-import { hasDevBridgeEventListenerCapability } from "@/lib/dev-bridge";
+import { hasDevBridgeEventListenerCapability } from "@/lib/api/bridgeEvents";
 import { parseAgentEvent } from "@/lib/api/agentProtocol";
 import {
   dedupeAgentRuntimeEventNames,

@@ -62,7 +62,7 @@ import {
 import {
   hasNativeDesktopHostEventSupport,
   safeListen,
-} from "@/lib/dev-bridge/safeInvoke";
+} from "@/lib/api/bridgeEvents";
 
 export type {
   BrowserEvent,

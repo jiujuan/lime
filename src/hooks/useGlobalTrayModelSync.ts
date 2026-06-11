@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { safeListen } from "@/lib/dev-bridge";
+import { safeListen } from "@/lib/api/bridgeEvents";
 import { subscribeProviderDataChanged } from "@/lib/providerDataEvents";
 import {
   DEFAULT_AGENT_MODEL,

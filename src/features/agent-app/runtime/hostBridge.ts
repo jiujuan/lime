@@ -16,7 +16,7 @@ import {
   OEM_CLOUD_BOOTSTRAP_CHANGED_EVENT,
   OEM_CLOUD_SESSION_CHANGED_EVENT,
 } from "@/lib/oemCloudSession";
-import { safeListen } from "@/lib/dev-bridge";
+import { safeListen } from "@/lib/api/bridgeEvents";
 import {
   buildLimeCapabilityInvokeRequest,
   createLimeCapabilitySuccessResponse,

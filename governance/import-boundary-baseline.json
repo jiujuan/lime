@@ -243,61 +243,6 @@
       "file": "src/features/resource-manager/TextResourceRenderer.tsx",
       "import": "@/components/agent/chat/components/MarkdownRenderer",
       "rule": "features→components"
-    },
-    {
-      "file": "src/components/agent/chat/workspace/useWorkspaceAudioTaskPreviewRuntime.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/components/agent/chat/workspace/useWorkspaceGeneralWorkbenchScaffoldRuntime.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/components/agent/chat/workspace/useWorkspaceTranscriptionTaskPreviewRuntime.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/components/agent/chat/workspace/useWorkspaceImageTaskPreviewRuntime.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/components/agent/chat/hooks/useTrayModelShortcuts.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/features/browser-runtime/api.ts",
-      "import": "@/lib/dev-bridge/safeInvoke",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/features/agent-app/runtime/hostBridge.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/hooks/useSkillPackageOpenRequests.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/hooks/useMcp.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
-    },
-    {
-      "file": "src/hooks/useGlobalTrayModelSync.ts",
-      "import": "@/lib/dev-bridge",
-      "rule": "business→dev-bridge"
     }
   ]
 }
