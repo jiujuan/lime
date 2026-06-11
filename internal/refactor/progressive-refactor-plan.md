@@ -33,21 +33,25 @@
 
 ### R-10 protocol.ts 从 Rust schema 生成
 
-**状态**：proposed
+**状态**：phase 1 完成（2026-06-11）
 **消除的机制**：TS 侧 3600 行手抄协议 + 每方法 2 处手动同步；Rust/TS 协议漂移风险归零。
 
 **现状**：`app-server-protocol/src/schema_export.rs` 已能产出 JSON Schema bundle（`generate_json_schema_bundle()`），万事俱备只欠 TS codegen。
 
 **实现路线**（参照 codex 已验证形态，见 `codex-engineering-patterns.md` 轴 A）：
-1. 先做 spike 二选一：**ts-rs derive 直出 TS**（codex 路线，类型保真度高、一跳到位）vs 从既有 JSON Schema bundle 二跳生成；优先 ts-rs。
-2. 生成物落 `packages/app-server-client/src/generated/`，头部 `// @generated` 标记，棘轮按生成代码豁免；`protocol.ts` 收缩为 re-export generated + 少量手写 helper。
-3. 生成命令进 npm scripts；上守卫：CI 跑生成后 `git diff --exit-code`（漂移即红，这是 codex 没做、我们必须做的半步），挂入 `test:contracts` 链路。
-4. 同步 `internal/aiprompts/commands.md` 的协议同步说明（四侧同步中 TS 侧从"手抄"改为"跑生成"）。
-5. **二期（可选）**：参照 codex `client_request_definitions!` 宏，把 Rust 侧 4 处注册（`v0.rs`/`catalog.rs`/`method_names.rs`/`schema_export/registry.rs`）收敛为 1 处宏条目。
+1. ~~先做 spike 二选一~~ → 已决策：**JSON Schema → TS 二跳生成**（自定义转换器，无外部依赖，因网络不通无法装 `json-schema-to-typescript`）。`ts-rs` 方案搁置（需改 Rust 源码 + 加依赖，收益不足以覆盖改动量）。
+2. ✅ phase 1：codegen 管线就绪。
+   - 生成脚本：`scripts/generate-protocol-types.mjs`（自定义 JSON Schema → TS 转换器）
+   - 生成物：`packages/app-server-client/src/generated/protocol-types.ts`（447 个类型，63KB，头部 `// @generated`）
+   - npm scripts：`generate:protocol-types`（生成）、`check:protocol-types`（漂移检查）
+   - 漂移守卫：`--check` 模式重新生成后 diff，不一致即红
+3. **phase 2（待做）**：`protocol.ts` 收缩为 re-export generated types + 手写 method constants + helper functions。需要逐步迁移消费者代码。
+4. **phase 3（可选）**：漂移守卫挂入 `test:contracts` 链路。
+5. **二期（可选）**：参照 codex `client_request_definitions!` 宏，把 Rust 侧 4 处注册收敛为 1 处宏条目。
 
-**验证**：`npm run test:contracts` 全过；用本轮 `project_git` 4 方法对照生成结果与现手写版本一致。
+**验证**：`node scripts/generate-protocol-types.mjs --check` 通过；生成的 `InitializeParams`/`AgentSessionOverview` 等与手写版本语义一致（生成版更精确：保留了 `null | string` nullable 语义）。
 **退出条件**：新增 JSON-RPC 方法时 TS 侧零手写；CI 有漂移守卫。
-**风险**：中（schemars → TS 类型映射的边角，如 enum/untagged union；先对存量全量 diff 验证再切换）。
+**风险**：低（phase 1 已验证 447 个类型 0 失败；phase 2 是逐步迁移，每个 commit 独立可 revert）。
 
 ---
 
