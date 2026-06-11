@@ -226,6 +226,7 @@ import {
   resolveLaunchScopedRequestContext,
 } from "./commands/skillSlotUtils";
 import { waitForNextPaint, hasHarnessLaunchRequestMetadata } from "./commands/sendHelpers";
+import { readFastResponseMode, withFastResponseMetadata } from "./commands/fastResponseHelpers";
 import { buildFileReadSkillLaunchRequestContext, buildVideoSkillLaunchRequestContext, buildCoverSkillLaunchRequestContext, buildResearchSkillLaunchRequestContext, buildDeepSearchSkillLaunchRequestContext, buildReportSkillLaunchRequestContext, buildCompetitorSkillLaunchRequestContext, buildSiteSearchSkillLaunchRequestContext, buildPdfReadSkillLaunchRequestContext } from "./commands/skillLaunchContextBuilders";
 import { resolveGrowthSkillLaunchRequestContext, resolveVoiceSkillLaunchRequestContext, type VoiceSkillLaunchRequest } from "./commands/skillLaunchResolvers";
 import {
@@ -400,35 +401,6 @@ function resolveServiceModelSendOverrides(params: {
         ? serviceScenePreferredModel
         : undefined),
   };
-}
-
-function readFastResponseMode(): AgentFastResponseMode {
-  if (typeof window === "undefined") {
-    return "auto";
-  }
-
-  return window.localStorage.getItem(AGENT_FAST_RESPONSE_MODE_STORAGE_KEY) ===
-    "off"
-    ? "off"
-    : "auto";
-}
-
-function withFastResponseMetadata(
-  requestMetadata: Record<string, unknown> | undefined,
-  decision: AgentFastResponseRoutingDecision,
-): Record<string, unknown> | undefined {
-  const fastResponseMetadata = buildAgentFastResponseMetadata(decision);
-  if (!fastResponseMetadata) {
-    return requestMetadata;
-  }
-
-  const nextMetadata = { ...(requestMetadata || {}) };
-  const harness = asRecord(nextMetadata.harness) || {};
-  nextMetadata.harness = {
-    ...harness,
-    fast_response_routing: fastResponseMetadata,
-  };
-  return nextMetadata;
 }
 
 function shouldSkipBrowserAssistPrimeForPlainFirstTurn(params: {
