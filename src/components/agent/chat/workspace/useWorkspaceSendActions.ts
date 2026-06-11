@@ -236,6 +236,7 @@ import {
   resolveMentionCommandReplayText,
   resolveBareMentionCommandPrefillSourceText,
 } from "./commands/mentionCommandUtils";
+import { resolveMentionCommandUsage } from "./commands/mentionCommandUtils";
 
 type CurrentExecutionStrategy = "react";
 type SetStringState = (value: string) => void;
@@ -582,50 +583,6 @@ function buildImageWorkbenchAssistantDraft(
 // 命令 recent defaults 合并函数已提取到 ./commands/commandRecentDefaults.ts
 
 // build*DispatchBody 函数已提取到 ./commands/dispatchBodyBuilders.ts
-
-function resolveMentionCommandUsage(params: {
-  commandKey: string;
-  serviceSkills: ServiceSkillHomeItem[];
-  requestMetadata?: Record<string, unknown>;
-  mentionCommandSkillIdMap: Map<string, string>;
-}): CompletedMentionUsage | null {
-  const normalizedCommandKey = params.commandKey.trim();
-  if (!normalizedCommandKey) {
-    return null;
-  }
-
-  const boundSkillId =
-    params.mentionCommandSkillIdMap.get(normalizedCommandKey);
-  if (!boundSkillId) {
-    return null;
-  }
-
-  const matchedSkill = params.serviceSkills.find((skill) => {
-    const normalizedSkillId = skill.id.trim();
-    const normalizedSkillKey = skill.skillKey?.trim();
-    return (
-      normalizedSkillId === boundSkillId || normalizedSkillKey === boundSkillId
-    );
-  });
-
-  if (!matchedSkill) {
-    return null;
-  }
-
-  const slotValues = resolveMentionCommandUsageSlotValues(
-    params.requestMetadata,
-  );
-  const launchUserInput = resolveMentionCommandUsageLaunchUserInput(
-    params.requestMetadata,
-  );
-
-  return {
-    skillId: matchedSkill.id,
-    runnerType: matchedSkill.runnerType,
-    ...(slotValues ? { slotValues } : {}),
-    ...(launchUserInput ? { launchUserInput } : {}),
-  };
-}
 }
 
 // matchesVoice/GrowthCommandSkill + resolve*CommandServiceSkill 已提取到 ./commands/serviceSkillMatch.ts

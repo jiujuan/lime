@@ -6,7 +6,17 @@
  * @module mentionCommandUtils
  */
 
-import type { ServiceSkillSlotValues } from "../../service-skills/types";
+import type {
+  ServiceSkillHomeItem,
+  ServiceSkillSlotValues,
+} from "../../service-skills/types";
+
+export type CompletedMentionUsage = {
+  skillId: string;
+  runnerType: ServiceSkillHomeItem["runnerType"];
+  slotValues?: ServiceSkillSlotValues;
+  launchUserInput?: string;
+};
 import {
   buildMentionCommandReplayText,
   resolveMentionCommandPrefillReplayText,
@@ -401,4 +411,48 @@ export function resolveBareMentionCommandPrefillSourceText(
   }
 
   return `${matched.commandPrefix} ${replayText}`;
+}
+
+export function resolveMentionCommandUsage(params: {
+  commandKey: string;
+  serviceSkills: ServiceSkillHomeItem[];
+  requestMetadata?: Record<string, unknown>;
+  mentionCommandSkillIdMap: Map<string, string>;
+}): CompletedMentionUsage | null {
+  const normalizedCommandKey = params.commandKey.trim();
+  if (!normalizedCommandKey) {
+    return null;
+  }
+
+  const boundSkillId =
+    params.mentionCommandSkillIdMap.get(normalizedCommandKey);
+  if (!boundSkillId) {
+    return null;
+  }
+
+  const matchedSkill = params.serviceSkills.find((skill) => {
+    const normalizedSkillId = skill.id.trim();
+    const normalizedSkillKey = skill.skillKey?.trim();
+    return (
+      normalizedSkillId === boundSkillId || normalizedSkillKey === boundSkillId
+    );
+  });
+
+  if (!matchedSkill) {
+    return null;
+  }
+
+  const slotValues = resolveMentionCommandUsageSlotValues(
+    params.requestMetadata,
+  );
+  const launchUserInput = resolveMentionCommandUsageLaunchUserInput(
+    params.requestMetadata,
+  );
+
+  return {
+    skillId: matchedSkill.id,
+    runnerType: matchedSkill.runnerType,
+    ...(slotValues ? { slotValues } : {}),
+    ...(launchUserInput ? { launchUserInput } : {}),
+  };
 }
