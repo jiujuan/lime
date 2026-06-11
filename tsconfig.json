@@ -26,6 +26,9 @@
       "@limecloud/agent-runtime-client/sessionGateway": [
         "./packages/agent-runtime-client/src/sessionGateway.ts"
       ],
+      "@limecloud/app-server-client": [
+        "./packages/app-server-client/src/index.ts"
+      ],
       "@limecloud/agent-runtime-ui": [
         "./packages/agent-runtime-ui/src/index.ts"
       ],
