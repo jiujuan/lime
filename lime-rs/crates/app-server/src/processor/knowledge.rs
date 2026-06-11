@@ -2,9 +2,10 @@
 
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
-    JsonRpcError, KnowledgeCompilePackParams, KnowledgeImportSourceParams, KnowledgeListPacksParams,
-    KnowledgeReadPackParams, KnowledgeResolveContextParams, KnowledgeSetDefaultPackParams,
-    KnowledgeUpdatePackStatusParams, KnowledgeValidateContextRunParams,
+    JsonRpcError, KnowledgeCompilePackParams, KnowledgeImportSourceParams,
+    KnowledgeListPacksParams, KnowledgeReadPackParams, KnowledgeResolveContextParams,
+    KnowledgeSetDefaultPackParams, KnowledgeUpdatePackStatusParams,
+    KnowledgeValidateContextRunParams,
 };
 use serde_json::Value;
 
