@@ -229,6 +229,7 @@ import { waitForNextPaint, hasHarnessLaunchRequestMetadata } from "./commands/se
 import { readFastResponseMode, withFastResponseMetadata } from "./commands/fastResponseHelpers";
 import { isImageGenerationPlainInputIntent, isPlainInputIntentAffirmativeReply } from "./commands/intentHelpers";
 import { resolveServiceModelSendOverrides } from "./commands/serviceModelHelpers";
+import { shouldSkipBrowserAssistPrimeForPlainFirstTurn, buildFastResponseAssistantDraft } from "./commands/browserAssistHelpers";
 import { buildFileReadSkillLaunchRequestContext, buildVideoSkillLaunchRequestContext, buildCoverSkillLaunchRequestContext, buildResearchSkillLaunchRequestContext, buildDeepSearchSkillLaunchRequestContext, buildReportSkillLaunchRequestContext, buildCompetitorSkillLaunchRequestContext, buildSiteSearchSkillLaunchRequestContext, buildPdfReadSkillLaunchRequestContext } from "./commands/skillLaunchContextBuilders";
 import { resolveGrowthSkillLaunchRequestContext, resolveVoiceSkillLaunchRequestContext, type VoiceSkillLaunchRequest } from "./commands/skillLaunchResolvers";
 import {
@@ -328,60 +329,6 @@ type CompletedMentionCommandUsage = {
   slotValues?: ServiceSkillSlotValues;
 };
 type RewritePurpose = NonNullable<HandleSendOptions["purpose"]>;
-
-function shouldSkipBrowserAssistPrimeForPlainFirstTurn(params: {
-  activeTheme: string;
-  browserRequirementMatch: GeneralWorkbenchSendBoundaryState["browserRequirementMatch"];
-  hasBoundSkillLaunch: boolean;
-  imagesCount: number;
-  messagesCount: number;
-  sendOptions?: HandleSendOptions;
-  sourceText: string;
-}): boolean {
-  if (
-    params.activeTheme !== "general" ||
-    params.browserRequirementMatch ||
-    params.hasBoundSkillLaunch ||
-    params.messagesCount > 0 ||
-    params.imagesCount > 0 ||
-    params.sendOptions?.purpose ||
-    params.sendOptions?.skillRequest
-  ) {
-    return false;
-  }
-
-  const text = params.sourceText.trim();
-  return Boolean(text && !text.startsWith("/") && !text.startsWith("@"));
-}
-
-function buildFastResponseAssistantDraft(
-  decision: AgentFastResponseRoutingDecision,
-): HandleSendOptions["assistantDraft"] {
-  if (!decision.enabled) {
-    return undefined;
-  }
-
-  const checkpoints = [
-    "已启用短提示词快速响应",
-    "仅当前轻量首轮请求生效",
-    "复杂任务仍保留原模型与工具策略",
-  ];
-
-  return {
-    initialRuntimeStatus: {
-      phase: "routing",
-      title: "快速响应已启用",
-      detail: "这轮使用更短的系统提示降低首字等待。",
-      checkpoints,
-    },
-    waitingRuntimeStatus: {
-      phase: "routing",
-      title: "快速响应处理中",
-      detail: "已提交请求，正在等待首个模型事件。",
-      checkpoints,
-    },
-  };
-}
 
 function readImageSkillLaunchContext(
   requestMetadata: Record<string, unknown> | undefined,
