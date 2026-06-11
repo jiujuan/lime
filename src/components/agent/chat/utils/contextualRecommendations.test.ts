@@ -62,7 +62,7 @@ describe("getContextualRecommendations", () => {
     expect(recommendations.length).toBeGreaterThan(0);
     expect(
       recommendations.some(
-        ([label]) => label.includes("任务拆分") || label.includes("父子线程"),
+        ([label]) => label.includes("Subagents") || label.includes("父子线程"),
       ),
     ).toBe(true);
   });
@@ -82,7 +82,7 @@ describe("getContextualRecommendations", () => {
     expect(
       recommendations.some(
         ([label, prompt]) =>
-          label.includes("任务拆分") && prompt.includes("任务拆分方式"),
+          label.includes("Subagents") && prompt.includes("Subagents方式"),
       ),
     ).toBe(true);
   });
@@ -102,7 +102,7 @@ describe("getContextualRecommendations", () => {
     expect(
       recommendations.some(
         ([label, prompt]) =>
-          label.includes("任务拆分") && prompt.includes("任务拆分偏好"),
+          label.includes("Subagents") && prompt.includes("Subagents偏好"),
       ),
     ).toBe(true);
   });
@@ -152,8 +152,8 @@ describe("getContextualRecommendations", () => {
   it("应识别 team runtime 类推荐", () => {
     expect(
       isTeamRuntimeRecommendation(
-        "任务拆分冒烟测试",
-        "请按任务拆分方式做一次冒烟测试：创建 explorer 与 executor 两个子任务并行处理。",
+        "Subagents冒烟测试",
+        "请按Subagents方式做一次冒烟测试：创建 explorer 与 executor 两个子任务并行处理。",
       ),
     ).toBe(true);
   });

@@ -15,6 +15,15 @@ pub struct WorkspacePathReadParams {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkspaceEnsureProjectParams {
+    pub name: String,
+    pub root_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceProjectPathResolveParams {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,6 +48,14 @@ pub struct WorkspaceListResponse {
 pub struct WorkspaceReadResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceEnsureProjectResponse {
+    pub workspace: serde_json::Value,
+    pub created: bool,
+    pub root_created: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

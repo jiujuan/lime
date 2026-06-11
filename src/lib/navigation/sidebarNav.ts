@@ -1,7 +1,6 @@
 import {
   BadgeCheck,
   BrainCircuit,
-  Bot,
   BookOpen,
   Boxes,
   FlaskConical,
@@ -43,17 +42,6 @@ function isAgentEntryActive(
   );
 }
 
-function isCompanionSettingsView(currentParams?: PageParams): boolean {
-  const settingsParams = currentParams as
-    | { tab?: SettingsTabs; providerView?: string }
-    | undefined;
-
-  return (
-    settingsParams?.tab === SettingsTabs.Providers &&
-    settingsParams.providerView === "companion"
-  );
-}
-
 const BASE_MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
   {
     id: "home-general",
@@ -81,6 +69,14 @@ const BASE_MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     icon: Sparkles,
     page: "skills",
     isActive: (currentPage) => currentPage === "skills",
+    configurable: false,
+  },
+  {
+    id: "agent-apps",
+    label: "Agent Apps",
+    icon: Boxes,
+    page: "agent-apps",
+    isActive: (currentPage) => currentPage === "agent-apps",
     configurable: false,
   },
   {
@@ -124,16 +120,7 @@ export const FOOTER_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     params: {
       tab: SettingsTabs.Home,
     },
-    isActive: (currentPage, currentParams) =>
-      currentPage === "settings" && !isCompanionSettingsView(currentParams),
-    configurable: false,
-  },
-  {
-    id: "agent-apps",
-    label: "Agent Apps",
-    icon: Boxes,
-    page: "agent-apps",
-    isActive: (currentPage) => currentPage === "agent-apps",
+    isActive: (currentPage) => currentPage === "settings",
     configurable: false,
   },
   {
@@ -159,19 +146,6 @@ export const FOOTER_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     page: "channels",
     isActive: (currentPage) => currentPage === "channels",
     configurable: false,
-  },
-  {
-    id: "companion",
-    label: "桌宠",
-    icon: Bot,
-    page: "settings",
-    params: {
-      tab: SettingsTabs.Providers,
-      providerView: "companion",
-    },
-    isActive: (currentPage, currentParams) =>
-      currentPage === "settings" && isCompanionSettingsView(currentParams),
-    configurable: true,
   },
 ];
 

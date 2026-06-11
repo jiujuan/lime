@@ -3,7 +3,9 @@ import type { AgentRuntimeExecutionEvent } from "@limecloud/agent-ui-contracts";
 import { ExecutionGraphView } from "./executionGraph.js";
 import { UIMessagePartsView } from "./messages.js";
 import { ProcessTimelineView } from "./processTimeline.js";
+import { ArtifactRefList, EvidenceRefList } from "./refs.js";
 import { ActionRequiredList, RuntimeEventList, RuntimeFactsSummary, ToolGroup } from "./runtimeFacts.js";
+import { SubagentsView } from "./subagents.js";
 import type { AgentUiProjectionViewProps } from "./types.js";
 
 export function AgentUiProjectionView<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent>({
@@ -12,6 +14,9 @@ export function AgentUiProjectionView<TEvent extends AgentRuntimeExecutionEvent 
   emptyMessages,
   labels,
   onResolveAction,
+  onSelectArtifactRef,
+  onSelectEvidenceRef,
+  onOpenSubagentThread,
 }: AgentUiProjectionViewProps<TEvent>) {
   const otherEvents = state.readModel.visibleEvents.filter(
     (event) => event.surface !== "human-action" && event.surface !== "tool",
@@ -63,6 +68,29 @@ export function AgentUiProjectionView<TEvent extends AgentRuntimeExecutionEvent 
           ariaLabel={labels?.executionEventsAriaLabel}
           actionButtonLabel={labels?.actionButtonLabel}
           eventStatusLabel={labels?.eventStatusLabel}
+        />
+        <ArtifactRefList
+          refs={state.artifacts}
+          ariaLabel={labels?.artifactRefsAriaLabel}
+          refTitle={labels?.artifactRefTitle}
+          refMeta={labels?.artifactRefMeta}
+          refPreview={labels?.artifactRefPreview}
+          refActionLabel={labels?.artifactRefActionLabel}
+          onSelectRef={onSelectArtifactRef}
+        />
+        <EvidenceRefList
+          refs={state.evidence}
+          ariaLabel={labels?.evidenceRefsAriaLabel}
+          refTitle={labels?.evidenceRefTitle}
+          refMeta={labels?.evidenceRefMeta}
+          refPreview={labels?.evidenceRefPreview}
+          refActionLabel={labels?.evidenceRefActionLabel}
+          onSelectRef={onSelectEvidenceRef}
+        />
+        <SubagentsView
+          state={state}
+          labels={labels}
+          onOpenThread={onOpenSubagentThread}
         />
         {artifact ? <div className="agent-session-artifact">{artifact}</div> : null}
         <ExecutionGraphView

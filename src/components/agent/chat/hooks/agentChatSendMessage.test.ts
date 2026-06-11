@@ -124,6 +124,76 @@ describe("createAgentChatSendMessage", () => {
     ]);
   });
 
+  it("命中 /subagents 时应打开 Subagents 面板并跳过 rawSendMessage", async () => {
+    const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
+    const onOpenSubagents = vi.fn();
+    const sendMessage = createAgentChatSendMessage({
+      baseStatusSnapshot: {
+        sessionId: "session-subagents",
+        currentTurnId: "turn-subagents",
+        providerType: "openai",
+        model: "gpt-5",
+        executionStrategy: "react",
+        queuedTurnsCount: 0,
+        isSending: false,
+      },
+      rawSendMessage,
+      compactSession: vi.fn(async () => undefined),
+      clearMessages: vi.fn(),
+      createFreshSession: vi.fn(async () => null),
+      appendAssistantMessage: vi.fn(),
+      notifyInfo: vi.fn(),
+      notifySuccess: vi.fn(),
+      onOpenSubagents,
+    });
+
+    await sendMessage("/subagents", [], false, false, false);
+
+    expect(rawSendMessage).not.toHaveBeenCalled();
+    expect(onOpenSubagents).toHaveBeenCalledTimes(1);
+    expect(listSlashEntryUsage()).toEqual([
+      expect.objectContaining({
+        kind: "command",
+        entryId: "subagents",
+      }),
+    ]);
+  });
+
+  it("命中 /agent alias 时也应打开 Subagents 面板", async () => {
+    const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
+    const onOpenSubagents = vi.fn();
+    const sendMessage = createAgentChatSendMessage({
+      baseStatusSnapshot: {
+        sessionId: "session-agent-alias",
+        currentTurnId: "turn-agent-alias",
+        providerType: "openai",
+        model: "gpt-5",
+        executionStrategy: "react",
+        queuedTurnsCount: 0,
+        isSending: false,
+      },
+      rawSendMessage,
+      compactSession: vi.fn(async () => undefined),
+      clearMessages: vi.fn(),
+      createFreshSession: vi.fn(async () => null),
+      appendAssistantMessage: vi.fn(),
+      notifyInfo: vi.fn(),
+      notifySuccess: vi.fn(),
+      onOpenSubagents,
+    });
+
+    await sendMessage("/agent", [], false, false, false);
+
+    expect(rawSendMessage).not.toHaveBeenCalled();
+    expect(onOpenSubagents).toHaveBeenCalledTimes(1);
+    expect(listSlashEntryUsage()).toEqual([
+      expect.objectContaining({
+        kind: "command",
+        entryId: "subagents",
+      }),
+    ]);
+  });
+
   it("skipUserMessage 为 true 时应绕过 slash 分流", async () => {
     const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
     const appendAssistantMessage = vi.fn();

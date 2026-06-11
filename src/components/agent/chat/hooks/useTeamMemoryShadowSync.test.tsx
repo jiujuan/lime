@@ -105,7 +105,7 @@ describe("useTeamMemoryShadowSync", () => {
     localStorage.clear();
   });
 
-  it("应把 Team 选择与子代理概览写入 repo 作用域快照", () => {
+  it("应把 Subagents profile 选择与子代理概览写入 repo 作用域快照", () => {
     const storage = createMemoryStorage();
     const harness = mountHook({
       storage,
@@ -149,7 +149,7 @@ describe("useTeamMemoryShadowSync", () => {
     try {
       const snapshot = readTeamMemorySnapshot(storage, "/tmp/repo");
       expect(snapshot?.entries["team.selection"]?.content).toContain(
-        "Team：研究双人组",
+        "Subagents profile：研究双人组",
       );
       expect(snapshot?.entries["team.selection"]?.content).toContain("角色：");
       expect(snapshot?.entries["team.subagents"]?.content).toContain(

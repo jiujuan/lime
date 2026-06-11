@@ -38,10 +38,6 @@ vi.mock("../components/MessageList", () => ({
   ),
 }));
 
-vi.mock("../components/TeamWorkspaceDock", () => ({
-  TeamWorkspaceDock: () => <div data-testid="team-dock-stub" />,
-}));
-
 vi.mock("./WorkspacePendingA2UIPanel", () => ({
   WorkspacePendingA2UIPanel: (props: {
     pendingA2UIForm?: { id?: string } | null;
@@ -148,8 +144,6 @@ function renderScene(
       },
       onToolPreferenceChange: vi.fn(),
       selectedTeam: null,
-      onSelectTeam: vi.fn(),
-      onEnableSuggestedTeam: vi.fn(),
       creationMode: "guided",
       onCreationModeChange: vi.fn(),
       activeTheme: "general",
@@ -204,7 +198,6 @@ function renderScene(
       liveCanvasPreview: null,
       currentImageWorkbenchActive: false,
       shouldShowCanvasLoadingState: false,
-      teamWorkbenchView: null,
       canvasWorkbenchLayoutProps: {
         artifacts: [],
       } as any,

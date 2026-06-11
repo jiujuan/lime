@@ -12,20 +12,19 @@ describe("sidebarNav", () => {
       "新建任务",
       "专家",
       "Skills",
+      "Agent Apps",
       "项目资料",
     ]);
 
     expect(FOOTER_SIDEBAR_NAV_ITEMS.map((item) => item.label)).toEqual([
       "设置",
-      "Agent Apps",
       "灵感",
       "持续流程",
       "消息渠道",
-      "桌宠",
     ]);
   });
 
-  it("恢复导航设置时应过滤固定系统入口，只保留显式开启的可选系统项", () => {
+  it("恢复导航设置时应过滤固定系统入口和已下线 companion", () => {
     expect(
       resolveEnabledSidebarNavItems([
         "video",
@@ -38,7 +37,7 @@ describe("sidebarNav", () => {
         "plugins",
         "companion",
       ]),
-    ).toEqual(["companion"]);
+    ).toEqual([]);
   });
 
   it("没有显式设置时不应默认恢复任何可选入口", () => {
@@ -53,7 +52,7 @@ describe("sidebarNav", () => {
   it("Agent App Lab 只在实验开关开启时进入左侧栏", () => {
     expect(
       buildMainSidebarNavItems({ labEnabled: false }).map((item) => item.id),
-    ).not.toContain("agent-apps");
+    ).toContain("agent-apps");
     expect(
       buildMainSidebarNavItems({ labEnabled: true }).map((item) => item.id),
     ).toContain("agent-app-lab");

@@ -10,7 +10,6 @@ import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurface
 import { EmptyState } from "../components/EmptyState";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import { MessageList } from "../components/MessageList";
-import { TeamWorkspaceDock } from "../components/TeamWorkspaceDock";
 import { WorkspaceMainArea } from "./WorkspaceMainArea";
 import { WorkspacePendingA2UIPanel } from "./WorkspacePendingA2UIPanel";
 import {
@@ -49,7 +48,6 @@ type ChatToolPreferences = {
 type ChatToolPreferenceKey = keyof ChatToolPreferences;
 type StepProgressProps = ComponentProps<typeof StepProgress>;
 type MessageListProps = ComponentProps<typeof MessageList>;
-type TeamWorkspaceDockProps = ComponentProps<typeof TeamWorkspaceDock>;
 type EmptyStateProps = ComponentProps<typeof EmptyState>;
 type AgentNamespaceTranslation = (
   key: string,
@@ -70,7 +68,6 @@ interface WorkspaceChatContentParams {
   contextWorkspaceEnabled: boolean;
   generalWorkbenchMessageViewportBottomPadding?: string;
   messageListProps: MessageListProps;
-  teamWorkspaceDockProps?: TeamWorkspaceDockProps | null;
   emptyStateProps: EmptyStateProps;
   showWorkspaceAlert: boolean;
   onSelectWorkspaceDirectory: () => void;
@@ -131,7 +128,6 @@ function renderWorkspaceChatContent({
   contextWorkspaceEnabled,
   generalWorkbenchMessageViewportBottomPadding,
   messageListProps,
-  teamWorkspaceDockProps,
   emptyStateProps,
   showWorkspaceAlert,
   onSelectWorkspaceDirectory,
@@ -224,9 +220,6 @@ function renderWorkspaceChatContent({
               ) : (
                 messageListNode
               )}
-              {teamWorkspaceDockProps ? (
-                <TeamWorkspaceDock {...teamWorkspaceDockProps} />
-              ) : null}
               {showWorkspaceAlert ? (
                 <div className="mx-4 mb-2 flex items-center gap-2 rounded-[18px] border border-amber-200/90 bg-amber-50/86 px-3.5 py-2.5 text-sm text-amber-800 shadow-sm shadow-amber-950/5 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                   <span className="flex-1">{copy.workspaceMissing}</span>
@@ -297,7 +290,6 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   contextWorkspaceEnabled: boolean;
   generalWorkbenchMessageViewportBottomPadding?: string;
   messageListProps: WorkspaceChatContentParams["messageListProps"];
-  teamWorkspaceDockProps?: WorkspaceChatContentParams["teamWorkspaceDockProps"];
   workspaceAlertVisible: boolean;
   onSelectWorkspaceDirectory: () => void;
   onDismissWorkspaceAlert: () => void;
@@ -328,11 +320,6 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onObjectiveEnabledChange?: ComponentProps<
     typeof EmptyState
   >["onObjectiveEnabledChange"];
-  selectedTeam: ComponentProps<typeof EmptyState>["selectedTeam"];
-  onSelectTeam?: ComponentProps<typeof EmptyState>["onSelectTeam"];
-  onEnableSuggestedTeam?: ComponentProps<
-    typeof EmptyState
-  >["onEnableSuggestedTeam"];
   creationMode: ComponentProps<typeof EmptyState>["creationMode"];
   onCreationModeChange?: ComponentProps<
     typeof EmptyState
@@ -380,8 +367,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     typeof EmptyState
   >["onResumeRecentSession"];
   projectId: string | null;
+  openedProjects?: ComponentProps<typeof EmptyState>["openedProjects"];
   sessionId?: ComponentProps<typeof EmptyState>["sessionId"];
-  onProjectChange?: ComponentProps<typeof ChatNavbar>["onProjectChange"];
+  onProjectChange?: (projectId: string | null) => void;
   deferWorkspaceListLoad?: ComponentProps<
     typeof ChatNavbar
   >["deferWorkspaceListLoad"];
@@ -468,8 +456,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   liveCanvasPreview: ReactNode;
   currentImageWorkbenchActive: boolean;
   shouldShowCanvasLoadingState: boolean;
-  teamWorkbenchView: CanvasWorkbenchLayoutProps["teamView"];
-  canvasWorkbenchLayoutProps: Omit<CanvasWorkbenchLayoutProps, "teamView">;
+  canvasWorkbenchLayoutProps: CanvasWorkbenchLayoutProps;
 }
 
 export function WorkspaceConversationScene({
@@ -494,7 +481,6 @@ export function WorkspaceConversationScene({
   contextWorkspaceEnabled,
   generalWorkbenchMessageViewportBottomPadding,
   messageListProps,
-  teamWorkspaceDockProps,
   workspaceAlertVisible,
   onSelectWorkspaceDirectory,
   onDismissWorkspaceAlert,
@@ -521,9 +507,6 @@ export function WorkspaceConversationScene({
   onToolPreferenceChange,
   objectiveEnabled,
   onObjectiveEnabledChange,
-  selectedTeam,
-  onSelectTeam,
-  onEnableSuggestedTeam,
   creationMode,
   onCreationModeChange,
   activeTheme,
@@ -550,6 +533,7 @@ export function WorkspaceConversationScene({
   recentSessionActionLabel,
   onResumeRecentSession,
   projectId,
+  openedProjects,
   sessionId,
   onProjectChange,
   deferWorkspaceListLoad,
@@ -598,7 +582,6 @@ export function WorkspaceConversationScene({
   liveCanvasPreview,
   currentImageWorkbenchActive,
   shouldShowCanvasLoadingState,
-  teamWorkbenchView,
   canvasWorkbenchLayoutProps,
   shellBottomInset,
   chatPanelWidth,
@@ -631,9 +614,6 @@ export function WorkspaceConversationScene({
     onToolPreferenceChange,
     objectiveEnabled,
     onObjectiveEnabledChange,
-    selectedTeam,
-    onSelectTeam,
-    onEnableSuggestedTeam,
     creationMode,
     onCreationModeChange,
     activeTheme,
@@ -661,6 +641,10 @@ export function WorkspaceConversationScene({
     recentSessionActionLabel,
     onResumeRecentSession,
     projectId,
+    openedProjects,
+    onProjectChange: onProjectChange
+      ? (nextProjectId) => onProjectChange(nextProjectId)
+      : undefined,
     sessionId,
     runtimeToolAvailability,
     initialInputCapability,
@@ -701,7 +685,6 @@ export function WorkspaceConversationScene({
     contextWorkspaceEnabled,
     generalWorkbenchMessageViewportBottomPadding,
     messageListProps,
-    teamWorkspaceDockProps,
     emptyStateProps,
     showWorkspaceAlert: workspaceAlertVisible,
     onSelectWorkspaceDirectory,
@@ -734,6 +717,7 @@ export function WorkspaceConversationScene({
     isCanvasOpen: layoutMode !== "chat",
     onToggleCanvas,
     projectId,
+    openedProjects,
     onProjectChange,
     deferWorkspaceListLoad,
     workspaceHintMessage,
@@ -780,19 +764,14 @@ export function WorkspaceConversationScene({
       })()
     : null;
   const canvasContent =
-    !liveCanvasPreview &&
-    !teamWorkbenchView ? null : currentImageWorkbenchActive ||
-      (!teamWorkbenchView && shouldShowCanvasLoadingState) ? (
+    !liveCanvasPreview ? null : currentImageWorkbenchActive ||
+      shouldShowCanvasLoadingState ? (
       liveCanvasPreview
     ) : (
-      <CanvasWorkbenchLayout
-        {...canvasWorkbenchLayoutProps}
-        teamView={teamWorkbenchView}
-      />
+      <CanvasWorkbenchLayout {...canvasWorkbenchLayoutProps} />
     );
   const forceCanvasMode = Boolean(
-    isThemeWorkbench &&
-    (hasLiveCanvasPreviewContent || Boolean(teamWorkbenchView)),
+    isThemeWorkbench && hasLiveCanvasPreviewContent,
   );
 
   return (

@@ -20,6 +20,27 @@ export type InputbarCoreCopyKey =
   | "agentChat.inputbar.core.path.importAsKnowledge"
   | "agentChat.inputbar.core.path.importAction"
   | "agentChat.inputbar.core.path.remove"
+  | "agentChat.inputbar.core.projectContext.projectAria"
+  | "agentChat.inputbar.core.projectContext.searchPlaceholder"
+  | "agentChat.inputbar.core.projectContext.openedLabel"
+  | "agentChat.inputbar.core.projectContext.currentBadge"
+  | "agentChat.inputbar.core.projectContext.noProjectLabel"
+  | "agentChat.inputbar.core.projectContext.noProjectDescription"
+  | "agentChat.inputbar.core.projectContext.noOpenedProjects"
+  | "agentChat.inputbar.core.projectContext.addNewProject"
+  | "agentChat.inputbar.core.projectContext.createBlankProject"
+  | "agentChat.inputbar.core.projectContext.useExistingFolder"
+  | "agentChat.inputbar.core.projectContext.selectFolderDialogTitle"
+  | "agentChat.inputbar.core.projectContext.newProjectNameFallback"
+  | "agentChat.inputbar.core.projectContext.projectCreated"
+  | "agentChat.inputbar.core.projectContext.projectOpened"
+  | "agentChat.inputbar.core.projectContext.projectCreateFailed"
+  | "agentChat.inputbar.core.projectContext.projectOpenFailed"
+  | "agentChat.inputbar.core.projectContext.noProjectAction"
+  | "agentChat.inputbar.core.projectContext.modeLabel"
+  | "agentChat.inputbar.core.projectContext.localMode"
+  | "agentChat.inputbar.core.projectContext.branchLabel"
+  | "agentChat.inputbar.core.projectContext.branchFallback"
   | "agentChat.inputbar.core.suggestion.acceptTitle"
   | "agentChat.inputbar.core.suggestion.acceptKey"
   | "agentChat.inputbar.core.textarea.expand"
@@ -64,6 +85,29 @@ export interface InputbarCoreCopy {
     importAsKnowledge: (name: string) => string;
     importAction: string;
     remove: (name: string) => string;
+  };
+  projectContext: {
+    projectAria: string;
+    searchPlaceholder: string;
+    openedLabel: string;
+    currentBadge: string;
+    noProjectLabel: string;
+    noProjectDescription: string;
+    noOpenedProjects: string;
+    addNewProject: string;
+    createBlankProject: string;
+    useExistingFolder: string;
+    selectFolderDialogTitle: string;
+    newProjectNameFallback: string;
+    projectCreated: string;
+    projectOpened: string;
+    projectCreateFailed: string;
+    projectOpenFailed: string;
+    noProjectAction: string;
+    modeLabel: string;
+    localMode: string;
+    branchLabel: string;
+    branchFallback: string;
   };
   suggestion: {
     acceptTitle: string;
@@ -134,6 +178,71 @@ export function buildInputbarCoreCopy(
       importAction: translate("agentChat.inputbar.core.path.importAction"),
       remove: (name) =>
         translate("agentChat.inputbar.core.path.remove", { name }),
+    },
+    projectContext: {
+      projectAria: translate(
+        "agentChat.inputbar.core.projectContext.projectAria",
+      ),
+      searchPlaceholder: translate(
+        "agentChat.inputbar.core.projectContext.searchPlaceholder",
+      ),
+      openedLabel: translate(
+        "agentChat.inputbar.core.projectContext.openedLabel",
+      ),
+      currentBadge: translate(
+        "agentChat.inputbar.core.projectContext.currentBadge",
+      ),
+      noProjectLabel: translate(
+        "agentChat.inputbar.core.projectContext.noProjectLabel",
+      ),
+      noProjectDescription: translate(
+        "agentChat.inputbar.core.projectContext.noProjectDescription",
+      ),
+      noOpenedProjects: translate(
+        "agentChat.inputbar.core.projectContext.noOpenedProjects",
+      ),
+      addNewProject: translate(
+        "agentChat.inputbar.core.projectContext.addNewProject",
+      ),
+      createBlankProject: translate(
+        "agentChat.inputbar.core.projectContext.createBlankProject",
+      ),
+      useExistingFolder: translate(
+        "agentChat.inputbar.core.projectContext.useExistingFolder",
+      ),
+      selectFolderDialogTitle: translate(
+        "agentChat.inputbar.core.projectContext.selectFolderDialogTitle",
+      ),
+      newProjectNameFallback: translate(
+        "agentChat.inputbar.core.projectContext.newProjectNameFallback",
+      ),
+      projectCreated: translate(
+        "agentChat.inputbar.core.projectContext.projectCreated",
+      ),
+      projectOpened: translate(
+        "agentChat.inputbar.core.projectContext.projectOpened",
+      ),
+      projectCreateFailed: translate(
+        "agentChat.inputbar.core.projectContext.projectCreateFailed",
+      ),
+      projectOpenFailed: translate(
+        "agentChat.inputbar.core.projectContext.projectOpenFailed",
+      ),
+      noProjectAction: translate(
+        "agentChat.inputbar.core.projectContext.noProjectAction",
+      ),
+      modeLabel: translate(
+        "agentChat.inputbar.core.projectContext.modeLabel",
+      ),
+      localMode: translate(
+        "agentChat.inputbar.core.projectContext.localMode",
+      ),
+      branchLabel: translate(
+        "agentChat.inputbar.core.projectContext.branchLabel",
+      ),
+      branchFallback: translate(
+        "agentChat.inputbar.core.projectContext.branchFallback",
+      ),
     },
     suggestion: {
       acceptTitle: translate("agentChat.inputbar.core.suggestion.acceptTitle"),

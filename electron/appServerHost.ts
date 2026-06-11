@@ -20,7 +20,7 @@ import {
   type JsonRpcMessage,
   type RequestId,
   type SidecarLaunchConfig,
-} from "app-server-client";
+} from "@limecloud/app-server-client";
 import { app } from "./electronRuntime";
 import { readFileSync } from "node:fs";
 import path from "node:path";

@@ -4,7 +4,7 @@ import {
   encodeMessage,
   type JsonRpcMessage,
   type JsonRpcRequest,
-} from "app-server-client";
+} from "@limecloud/app-server-client";
 
 const {
   fakeConnection,
@@ -118,8 +118,8 @@ Object.defineProperty(process, "resourcesPath", {
   value: process.cwd(),
 });
 
-vi.mock("app-server-client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("app-server-client")>();
+vi.mock("@limecloud/app-server-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@limecloud/app-server-client")>();
   return {
     ...actual,
     AppServerSidecarLifecycle: FakeAppServerSidecarLifecycle,

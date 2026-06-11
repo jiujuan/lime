@@ -208,7 +208,7 @@ describe("ToolCallDisplay tool search and actions", () => {
         {
           id: "tool-team-create-1",
           name: "TeamCreate",
-          arguments: JSON.stringify({ team_name: "当前团队" }),
+          arguments: JSON.stringify({ team_name: "当前子代理组" }),
           status: "completed",
           result: { success: true, output: "{}" },
           startTime: new Date("2026-03-20T12:20:11.000Z"),
@@ -217,7 +217,7 @@ describe("ToolCallDisplay tool search and actions", () => {
         {
           id: "tool-team-delete-1",
           name: "TeamDelete",
-          arguments: JSON.stringify({ team_name: "当前团队" }),
+          arguments: JSON.stringify({ team_name: "当前子代理组" }),
           status: "completed",
           result: { success: true, output: "{}" },
           startTime: new Date("2026-03-20T12:20:12.000Z"),
@@ -255,9 +255,9 @@ describe("ToolCallDisplay tool search and actions", () => {
     expect(container.textContent).toContain("等待输入 需要继续吗？");
     expect(container.textContent).toContain("已发送");
     expect(container.textContent).toContain("修复已完成");
-    expect(container.textContent).toContain("已查看 当前团队");
-    expect(container.textContent).toContain("已创建 当前团队");
-    expect(container.textContent).toContain("已删除 当前团队");
+    expect(container.textContent).toContain("已查看 当前子代理组");
+    expect(container.textContent).toContain("已创建 当前子代理组");
+    expect(container.textContent).toContain("已删除 当前子代理组");
     expect(container.textContent).toContain("已处理 remote-1");
     expect(container.textContent).toContain("已删除 cron-job-1");
   });
@@ -293,8 +293,7 @@ describe("ToolCallDisplay tool search and actions", () => {
           status: "failed",
           result: {
             success: false,
-            error:
-              "-32603: -32002: remote trigger runtime is not configured",
+            error: "-32603: -32002: remote trigger runtime is not configured",
             output: "",
           },
           startTime: new Date("2026-03-20T12:30:04.000Z"),

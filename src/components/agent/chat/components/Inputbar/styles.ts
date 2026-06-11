@@ -35,6 +35,10 @@ export const Container = styled.div`
   &.floating-composer {
     padding: 0 0 6px;
   }
+
+  &.floating-composer.context-connected {
+    padding-bottom: 0;
+  }
 `;
 
 export const InputBarContainer = styled.div`
@@ -72,6 +76,14 @@ export const InputBarContainer = styled.div`
     border-color: var(--lime-composer-border, rgba(110, 231, 183, 0.84));
     box-shadow:
       0 28px 56px -38px var(--lime-shadow-color),
+      inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  }
+
+  &.floating-composer.context-connected {
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+    box-shadow:
+      0 18px 42px -36px var(--lime-shadow-color),
       inset 0 1px 0 rgba(255, 255, 255, 0.88);
   }
 

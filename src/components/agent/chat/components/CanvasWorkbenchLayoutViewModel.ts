@@ -137,10 +137,6 @@ export type CanvasWorkbenchPreviewTarget =
   | {
       kind: "empty";
       title: string;
-    }
-  | {
-      kind: "team-workbench";
-      title: string;
     };
 
 export interface CanvasWorkbenchSelectionContextLike {

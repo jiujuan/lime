@@ -206,7 +206,7 @@ describe("remoteTaskAgentUiProjection", () => {
     );
   });
 
-  it("应写入 conversationProjectionStore.agentUi 供 Team Workbench 消费", () => {
+  it("应写入 conversationProjectionStore.agentUi 供 Subagents 消费", () => {
     const recorded = recordRemoteTaskAgentUiProjection(
       {
         remoteTaskId: "remote-task-store",

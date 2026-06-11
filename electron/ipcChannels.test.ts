@@ -63,6 +63,7 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("read_file_preview_cmd")).toBe(false);
     expect(isElectronHostCommand("list_executable_skills")).toBe(false);
     expect(isElectronHostCommand("workspace_list")).toBe(true);
+    expect(isElectronHostCommand("workspace_ensure")).toBe(true);
     expect(isElectronHostCommand("workspace_get_by_path")).toBe(true);
     expect(isElectronHostCommand("workspace_set_default")).toBe(false);
     expect(isElectronHostCommand("get_config")).toBe(true);
@@ -198,6 +199,7 @@ describe("electron/ipcChannels", () => {
       "get_default_provider",
       "get_local_skills_for_app",
       "project_memory_get",
+      "workspace_ensure",
       "workspace_ensure_default_ready",
       "workspace_ensure_ready",
       "workspace_get",

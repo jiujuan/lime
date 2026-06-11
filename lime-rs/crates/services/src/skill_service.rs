@@ -201,11 +201,7 @@ impl SkillService {
         app_type: &AppType,
         _installed_states: &HashMap<String, SkillState>,
     ) -> Result<Vec<Skill>> {
-        self.list_local_skills_with_scope(
-            app_type,
-            _installed_states,
-            LocalSkillCatalogScope::All,
-        )
+        self.list_local_skills_with_scope(app_type, _installed_states, LocalSkillCatalogScope::All)
     }
 
     pub fn list_local_skills_with_scope(
@@ -1820,11 +1816,9 @@ metadata:
 
     #[test]
     fn user_scope_catalog_roots_should_exclude_project_roots() {
-        let roots = SkillService::get_catalog_roots_for_scope(
-            &AppType::Lime,
-            LocalSkillCatalogScope::User,
-        )
-        .expect("resolve user skill roots");
+        let roots =
+            SkillService::get_catalog_roots_for_scope(&AppType::Lime, LocalSkillCatalogScope::User)
+                .expect("resolve user skill roots");
 
         assert!(roots
             .iter()

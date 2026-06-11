@@ -95,7 +95,7 @@ export const BUILTIN_TEAM_PROFILE_OPTIONS: BuiltinTeamProfileOption[] = [
     id: "doc-writer",
     label: "文档起草员",
     roleKey: "writer",
-    description: "负责把分析结果转成方案、说明、PRD 或团队文档。",
+    description: "负责把分析结果转成方案、说明、PRD 或协作说明。",
     theme: "documentation",
     skillIds: ["structured-writing"],
   },
@@ -120,7 +120,7 @@ export const BUILTIN_TEAM_PROFILE_OPTIONS: BuiltinTeamProfileOption[] = [
 export const TEAM_PRESET_OPTIONS: TeamPresetOption[] = [
   {
     id: "code-triage-team",
-    label: "代码排障团队",
+    label: "代码排障 profile",
     description: "分析、实现、验证三段式闭环，适合工程问题与多文件改动。",
     theme: "engineering",
     profileLabels: ["分析", "执行", "验证"],
@@ -154,7 +154,7 @@ export const TEAM_PRESET_OPTIONS: TeamPresetOption[] = [
   },
   {
     id: "research-team",
-    label: "研究团队",
+    label: "研究 profile",
     description: "适合多源调研、事实归并、方案沉淀与文档汇总。",
     theme: "research",
     profileLabels: ["调研", "写作", "复核"],
@@ -188,7 +188,7 @@ export const TEAM_PRESET_OPTIONS: TeamPresetOption[] = [
   },
   {
     id: "content-creation-team",
-    label: "内容创作团队",
+    label: "内容创作 profile",
     description: "适合创意拆分、内容起草、发布前复核。",
     theme: "content",
     profileLabels: ["创意", "起草", "复核"],

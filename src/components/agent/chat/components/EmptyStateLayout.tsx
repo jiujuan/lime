@@ -109,6 +109,14 @@ const ComposerGlowFrame = styled.div`
   }
 `;
 
+const PrimaryStackFrame = styled.div`
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+`;
+
 const ScrollCue = styled.a`
   position: absolute;
   left: 50%;
@@ -251,11 +259,25 @@ export function EmptyStateComposerFrame({
   return <ComposerGlowFrame>{children}</ComposerGlowFrame>;
 }
 
+interface EmptyStatePrimaryStackProps {
+  children: React.ReactNode;
+}
+
+export function EmptyStatePrimaryStack({
+  children,
+}: EmptyStatePrimaryStackProps) {
+  return (
+    <PrimaryStackFrame data-testid="empty-state-primary-stack">
+      {children}
+    </PrimaryStackFrame>
+  );
+}
+
 interface EmptyStateLayoutProps {
   heroCopy: HomeSurfaceHeroCopy;
   chromeCopy: HomeSurfaceChromeCopy;
   prioritySlot: React.ReactNode;
-  supportingSlot: React.ReactNode;
+  supportingSlot?: React.ReactNode;
   isGeneralTheme: boolean;
   galleryItems: HomeSkillSurfaceItem[];
   onSelectGalleryItem: (item: HomeSkillSurfaceItem) => void;
@@ -290,7 +312,6 @@ export function EmptyStateLayout({
           title=""
           slogan={heroCopy.slogan}
           description={heroCopy.description}
-          supportingDescription={heroCopy.supportingDescription}
           cards={[]}
           prioritySlot={prioritySlot}
           supportingSlot={supportingSlot}

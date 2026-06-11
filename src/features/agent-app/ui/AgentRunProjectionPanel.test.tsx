@@ -244,7 +244,10 @@ describe("AgentRunProjectionPanel", () => {
         id: "evidence",
         eventType: "evidence:recorded",
         status: "recorded",
-        evidenceRef: "evidence://task-panel/runtime",
+        refs: ["evidence:.lime/artifacts/content-batch.json"],
+        payload: {
+          artifactRef: ".lime/artifacts/content-batch.json",
+        },
         message: "运行证据",
       },
     ]);
@@ -260,6 +263,11 @@ describe("AgentRunProjectionPanel", () => {
     expect(container.textContent).toContain("内容批次");
     expect(container.textContent).toContain(".lime/artifacts/content-batch.json");
     expect(container.textContent).toContain("运行证据");
+    expect(
+      container
+        .querySelector('.agent-evidence-refs [data-ref-kind="evidence"]')
+        ?.getAttribute("data-ref-id"),
+    ).toBe("evidence:.lime/artifacts/content-batch.json");
   });
 
   it("把模型、Token、费用指标渲染为 diagnostics 卡片", () => {

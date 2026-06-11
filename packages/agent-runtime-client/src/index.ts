@@ -21,4 +21,10 @@ export {
   type AppServerRequestResult,
   type EvidenceExportParams,
   type EvidenceExportResponse,
-} from "app-server-client";
+} from "@limecloud/app-server-client";
+
+export {
+  createAgentRuntimeClientFromSessionGateway,
+  type AgentRuntimeLifecycleClient,
+  type AgentRuntimeSessionGateway,
+} from "./sessionGateway.js";

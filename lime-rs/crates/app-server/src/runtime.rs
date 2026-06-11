@@ -347,6 +347,8 @@ use app_server_protocol::WechatRuntimeModelSetParams;
 use app_server_protocol::WechatRuntimeModelSetResponse;
 use app_server_protocol::WindowsStartupDiagnosticsResponse;
 use app_server_protocol::WorkspaceEnsureParams;
+use app_server_protocol::WorkspaceEnsureProjectParams;
+use app_server_protocol::WorkspaceEnsureProjectResponse;
 use app_server_protocol::WorkspaceEnsureReadyResponse;
 use app_server_protocol::WorkspaceListResponse;
 use app_server_protocol::WorkspacePathReadParams;
@@ -637,6 +639,15 @@ pub trait AppDataSource: Send + Sync {
         &self,
         params: WorkspacePathReadParams,
     ) -> Result<WorkspaceReadResponse, RuntimeCoreError>;
+
+    async fn ensure_project_workspace(
+        &self,
+        _params: WorkspaceEnsureProjectParams,
+    ) -> Result<WorkspaceEnsureProjectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "workspace/ensure is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn read_default_workspace(&self) -> Result<WorkspaceReadResponse, RuntimeCoreError>;
 
@@ -2304,6 +2315,15 @@ impl AppDataSource for NoopAppDataSource {
         _params: WorkspacePathReadParams,
     ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
         Ok(WorkspaceReadResponse::default())
+    }
+
+    async fn ensure_project_workspace(
+        &self,
+        _params: WorkspaceEnsureProjectParams,
+    ) -> Result<WorkspaceEnsureProjectResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "workspace/ensure is not available without an app data source".to_string(),
+        ))
     }
 
     async fn read_default_workspace(&self) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
@@ -4492,6 +4512,13 @@ impl RuntimeCore {
         params: WorkspacePathReadParams,
     ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
         self.app_data_source.read_workspace_by_path(params).await
+    }
+
+    pub async fn ensure_project_workspace(
+        &self,
+        params: WorkspaceEnsureProjectParams,
+    ) -> Result<WorkspaceEnsureProjectResponse, RuntimeCoreError> {
+        self.app_data_source.ensure_project_workspace(params).await
     }
 
     pub async fn read_default_workspace(&self) -> Result<WorkspaceReadResponse, RuntimeCoreError> {

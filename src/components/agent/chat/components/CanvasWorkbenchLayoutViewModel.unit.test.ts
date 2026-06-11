@@ -287,9 +287,6 @@ describe("CanvasWorkbenchLayoutViewModel", () => {
         absolutePath: "/workspace/draft.md",
       }),
     ).toBe("/workspace/draft.md");
-    expect(
-      resolvePreviewPath({ kind: "team-workbench", title: "团队工作台" }),
-    ).toBeUndefined();
   });
 
   it("应识别 HTML 预览上下文并生成 coding 预览标签", () => {

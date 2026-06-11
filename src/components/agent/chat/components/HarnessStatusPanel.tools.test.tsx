@@ -21,7 +21,7 @@ describe("HarnessStatusPanel tools", () => {
     expect(document.body.textContent).toContain("Catalog 工具");
   });
 
-  it("runtime tool surface 应在工具库存中展示 team/task current gaps", () => {
+  it("runtime tool surface 应在工具库存中展示 subagents/task current gaps", () => {
     renderPanel({
       toolInventory: createToolInventory(),
     });
@@ -34,7 +34,7 @@ describe("HarnessStatusPanel tools", () => {
     expect(summary?.textContent).toContain("来源 runtime_tools");
     expect(summary?.textContent).toContain("WebSearch 未接通");
     expect(summary?.textContent).toContain("子任务核心 tools 缺 1 项");
-    expect(summary?.textContent).toContain("Team current tools 缺 3 项");
+    expect(summary?.textContent).toContain("Subagents 协作 tools 缺 3 项");
     expect(summary?.textContent).toContain("Task current tools 缺 6 项");
     expect(summary?.textContent).toContain("SendMessage");
     expect(summary?.textContent).toContain(
@@ -45,7 +45,7 @@ describe("HarnessStatusPanel tools", () => {
     );
   });
 
-  it("runtime tool surface 应在工具库存中展示已接通的 team/task current surface", () => {
+  it("runtime tool surface 应在工具库存中展示已接通的 subagents/task current surface", () => {
     renderPanel({
       toolInventory: createAlignedRuntimeToolInventory(),
     });
@@ -57,10 +57,10 @@ describe("HarnessStatusPanel tools", () => {
     expect(summary?.textContent).toContain("来源 runtime_tools");
     expect(summary?.textContent).toContain("WebSearch 已接通");
     expect(summary?.textContent).toContain("子任务核心 tools 已接通");
-    expect(summary?.textContent).toContain("Team current tools 已接通");
+    expect(summary?.textContent).toContain("Subagents 协作 tools 已接通");
     expect(summary?.textContent).toContain("Task current tools 已接通");
     expect(summary?.textContent).toContain(
-      "当前 runtime current surface 已覆盖 WebSearch、子任务、Team 与 Task 主链。",
+      "当前 runtime current surface 已覆盖 WebSearch、子任务、Subagents 协作与 Task 主链。",
     );
   });
 

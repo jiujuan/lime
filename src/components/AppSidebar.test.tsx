@@ -12,7 +12,7 @@ import {
   mockScheduleMinimumDelayIdleTask,
   mountSidebar,
   mountSidebarContainer,
-  resetAppSidebarTest
+  resetAppSidebarTest,
 } from "./AppSidebar.testFixtures";
 import type { AgentPageParams } from "./AppSidebar.testFixtures";
 import { LIME_BRAND_LOGO_SRC } from "@/lib/branding";
@@ -203,7 +203,7 @@ describe("AppSidebar navigation", () => {
     expect(container.textContent).not.toContain("生成");
     expect(container.textContent).toContain("专家");
     expect(container.textContent).toContain("Skills");
-    expect(container.textContent).not.toContain("Agent Apps");
+    expect(container.textContent).toContain("Agent Apps");
     expect(container.textContent).not.toContain("灵感");
     expect(container.textContent).toContain("项目资料");
     expect(container.textContent).not.toContain("设置");
@@ -226,6 +226,7 @@ describe("AppSidebar navigation", () => {
       "新建任务",
       "专家",
       "Skills",
+      "Agent Apps",
       "项目资料",
     ]);
     expect(
@@ -247,7 +248,7 @@ describe("AppSidebar navigation", () => {
       '[data-testid="app-sidebar-account-menu"]',
     );
     expect(accountMenu?.textContent).toContain("设置");
-    expect(accountMenu?.textContent).toContain("Agent Apps");
+    expect(accountMenu?.textContent).not.toContain("Agent Apps");
     expect(accountMenu?.textContent).toContain("灵感");
     expect(accountMenu?.textContent).toContain("持续流程");
     expect(accountMenu?.textContent).toContain("消息渠道");
@@ -275,9 +276,8 @@ describe("AppSidebar navigation", () => {
     const homeButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="返回 Lime 首页"]',
     );
-    const homeLogo = homeButton?.querySelector<HTMLImageElement>(
-      'img[alt="Lime"]',
-    );
+    const homeLogo =
+      homeButton?.querySelector<HTMLImageElement>('img[alt="Lime"]');
     const mainNav = container.querySelector(
       '[data-testid="app-sidebar-main-nav"]',
     );
@@ -293,7 +293,7 @@ describe("AppSidebar navigation", () => {
         mainNav &&
         (header.compareDocumentPosition(mainNav) &
           Node.DOCUMENT_POSITION_FOLLOWING) !==
-        0,
+          0,
       ),
     ).toBe(true);
 

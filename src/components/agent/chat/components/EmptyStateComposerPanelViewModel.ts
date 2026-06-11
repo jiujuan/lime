@@ -206,7 +206,6 @@ export function buildEmptyStateAdvancedControlsState({
   knowledgePackEnabled,
   accessMode,
   isGeneralTheme,
-  shouldShowTeamSelector,
   showCreationModeSelector,
   hasAccessModeSetter,
   hasFileManagerToggle,
@@ -219,7 +218,6 @@ export function buildEmptyStateAdvancedControlsState({
   knowledgePackEnabled: boolean;
   accessMode?: AgentAccessMode;
   isGeneralTheme: boolean;
-  shouldShowTeamSelector: boolean;
   showCreationModeSelector: boolean;
   hasAccessModeSetter: boolean;
   hasFileManagerToggle: boolean;
@@ -239,7 +237,6 @@ export function buildEmptyStateAdvancedControlsState({
     accessMode === "full-access";
   const shouldShowAdvancedToggle =
     isGeneralTheme ||
-    shouldShowTeamSelector ||
     shouldShowModelControls ||
     hasAccessModeSetter ||
     shouldShowThemeSpecificExtra ||

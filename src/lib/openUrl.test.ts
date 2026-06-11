@@ -17,11 +17,11 @@ describe("openUrl", () => {
     );
 
     await expect(
-      openUrl("https://github.com/limecloud/lime-pet/releases/latest"),
+      openUrl("https://limechat.app/releases/latest"),
     ).resolves.toBeUndefined();
 
     expect(openExternalUrlWithSystemBrowser).toHaveBeenCalledWith(
-      "https://github.com/limecloud/lime-pet/releases/latest",
+      "https://limechat.app/releases/latest",
     );
   });
 
@@ -35,7 +35,7 @@ describe("openUrl", () => {
     );
 
     await expect(
-      openUrl("https://github.com/limecloud/lime-pet/releases/latest"),
+      openUrl("https://limechat.app/releases/latest"),
     ).rejects.toThrow("open_external_url unavailable");
 
     expect(windowOpenSpy).not.toHaveBeenCalled();

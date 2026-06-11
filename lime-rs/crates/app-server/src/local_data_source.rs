@@ -291,6 +291,8 @@ use app_server_protocol::WechatRuntimeModelSetParams;
 use app_server_protocol::WechatRuntimeModelSetResponse;
 use app_server_protocol::WindowsStartupDiagnosticsResponse;
 use app_server_protocol::WorkspaceEnsureParams;
+use app_server_protocol::WorkspaceEnsureProjectParams;
+use app_server_protocol::WorkspaceEnsureProjectResponse;
 use app_server_protocol::WorkspaceEnsureReadyResponse;
 use app_server_protocol::WorkspaceListResponse;
 use app_server_protocol::WorkspacePathReadParams;
@@ -509,6 +511,13 @@ impl AppDataSource for LocalAppDataSource {
         params: WorkspacePathReadParams,
     ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
         workspaces::read_workspace_by_path(&self.db, params)
+    }
+
+    async fn ensure_project_workspace(
+        &self,
+        params: WorkspaceEnsureProjectParams,
+    ) -> Result<WorkspaceEnsureProjectResponse, RuntimeCoreError> {
+        workspaces::ensure_project_workspace(&self.db, params)
     }
 
     async fn read_default_workspace(&self) -> Result<WorkspaceReadResponse, RuntimeCoreError> {

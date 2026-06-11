@@ -79,4 +79,25 @@ describe("useSettingsCategory", () => {
     expect(developerItem?.label).not.toContain("settings.tab.developerLab");
     expect(developerItem?.experimental).toBe(true);
   });
+
+  it("通用导航应包含已归档对话入口", () => {
+    let groups: CategoryGroup[] = [];
+
+    renderHookProbe((nextGroups) => {
+      groups = nextGroups;
+    });
+
+    const generalGroup = groups.find(
+      (group) => group.key === SettingsGroupKey.General,
+    );
+    const archivedItem = generalGroup?.items.find(
+      (item) => item.key === SettingsTabs.ArchivedConversations,
+    );
+
+    expect(generalGroup?.title).toBe("General");
+    expect(archivedItem?.label).toBe("Archived Conversations");
+    expect(generalGroup?.items.map((item) => item.key)).toContain(
+      SettingsTabs.ArchivedConversations,
+    );
+  });
 });

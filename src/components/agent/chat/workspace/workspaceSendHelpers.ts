@@ -1107,7 +1107,7 @@ function buildRuntimeTeamAssistantDraft(
 
   const teamLabel =
     normalizeTeamWorkspaceDisplayValue(state.label || state.blueprint?.label) ||
-    "当前分工方案";
+    "当前 Subagents profile";
   const summary =
     normalizeTeamWorkspaceDisplayValue(
       state.summary || state.blueprint?.summary,
@@ -1116,17 +1116,18 @@ function buildRuntimeTeamAssistantDraft(
   const contentSections = [
     `我已经为这项任务准备了「${teamLabel}」。`,
     summary ? `会先按“${summary}”来推进。` : null,
-    planLines.length > 0 ? `分工如下：\n${planLines.join("\n")}` : null,
+    planLines.length > 0 ? `Subagents 如下：\n${planLines.join("\n")}` : null,
     "接下来这些任务会分别展开处理，再把关键进展、风险和需要你确认的事项汇总给你。",
   ].filter(Boolean);
 
   const initialRuntimeStatus: AgentRuntimeStatus = {
     phase: "routing",
-    title: "任务分工已准备好",
+    title: "Subagents 已准备好",
     detail:
-      summary || "已整理好当前任务的分工，接下来会分别展开处理并同步结果。",
+      summary ||
+      "已整理好当前任务的 Subagents，接下来会分别展开处理并同步结果。",
     checkpoints: [
-      `当前方案：${teamLabel}`,
+      `当前 Subagents profile：${teamLabel}`,
       `已安排 ${Math.max(state.members.length, 1)} 项任务`,
       "主对话会持续同步关键进展",
     ],
@@ -1136,9 +1137,10 @@ function buildRuntimeTeamAssistantDraft(
     phase: "routing",
     title: "任务开始接手",
     detail:
-      summary || "分工已经确认，这些任务会按各自职责继续处理并回传关键结果。",
+      summary ||
+      "Subagents 已经确认，这些任务会按各自职责继续处理并回传关键结果。",
     checkpoints: [
-      `当前方案：${teamLabel}`,
+      `当前 Subagents profile：${teamLabel}`,
       planLines[0] || "这些任务会分别接手自己的部分",
       "主对话会持续同步关键进展",
     ],
@@ -1164,7 +1166,7 @@ export function buildRuntimeTeamDispatchPreviewMessages(
     normalizeTeamWorkspaceDisplayValue(
       snapshot.formationState?.label ||
         snapshot.formationState?.blueprint?.label,
-    ) || "当前分工方案";
+    ) || "当前 Subagents profile";
   const formedSummary =
     normalizeTeamWorkspaceDisplayValue(
       snapshot.formationState?.summary ||
@@ -1174,32 +1176,32 @@ export function buildRuntimeTeamDispatchPreviewMessages(
     snapshot.status === "failed"
       ? {
           phase: "failed" as const,
-          title: "任务分工准备失败",
+          title: "Subagents 准备失败",
           detail:
             normalizeTeamWorkspaceDisplayValue(snapshot.failureMessage) ||
-            "这次任务分工准备失败，已回退到普通对话发送。",
+            "这次 Subagents 准备失败，已回退到普通对话发送。",
         }
       : snapshot.status === "formed"
         ? formedAssistantDraft?.initialRuntimeStatus || {
             phase: "routing" as const,
-            title: "任务分工已准备好",
+            title: "Subagents 已准备好",
             detail:
               formedSummary ||
-              "已整理好当前任务的分工，接下来会分别展开处理并同步结果。",
+              "已整理好当前任务的 Subagents，接下来会分别展开处理并同步结果。",
             checkpoints: [
-              `当前方案：${formedTeamLabel}`,
-              "这些任务会按分工开始接手",
+              `当前 Subagents profile：${formedTeamLabel}`,
+              "这些任务会按 Subagents 安排开始接手",
               "主对话会持续同步关键进展",
             ],
           }
         : {
             phase: "routing" as const,
-            title: "正在准备任务分工",
+            title: "正在准备 Subagents",
             detail:
-              "系统正在根据当前任务安排分工，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
+              "系统正在根据当前任务准备 Subagents，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
             checkpoints: [
               "确认当前任务目标",
-              "安排任务分工",
+              "准备 Subagents",
               "等待任务接手处理",
             ],
           };
@@ -1217,11 +1219,11 @@ export function buildRuntimeTeamDispatchPreviewMessages(
       role: "assistant",
       content:
         snapshot.status === "failed"
-          ? "这次任务分工准备失败，已回退到普通执行。"
+          ? "这次 Subagents 准备失败，已回退到普通执行。"
           : snapshot.status === "formed"
             ? formedAssistantDraft?.content ||
               `我已经为这项任务准备了「${formedTeamLabel}」。\n\n接下来这些任务会分别展开处理，再把关键进展和结果汇总给你。`
-            : "我会先安排任务分工，再把关键进展和结果汇总给你。",
+            : "我会先准备 Subagents，再把关键进展和结果汇总给你。",
       timestamp: new Date(timestamp.getTime() + 1),
       isThinking: snapshot.status === "forming",
       runtimeStatus: assistantRuntimeStatus,

@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Home,
+  Archive,
   User,
   BarChart3,
   Palette,
@@ -105,6 +106,11 @@ export function useSettingsCategory(): CategoryGroup[] {
           key: SettingsTabs.Memory,
           label: t("settings.tab.memory"),
           icon: Brain,
+        },
+        {
+          key: SettingsTabs.ArchivedConversations,
+          label: t("settings.tab.archivedConversations"),
+          icon: Archive,
         },
       ],
     });

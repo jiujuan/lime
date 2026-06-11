@@ -70,6 +70,7 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     method!(METHOD_SESSION_FILE_LIST, Request),
     method!(METHOD_WORKSPACE_LIST, Request),
     method!(METHOD_WORKSPACE_READ, Request),
+    method!(METHOD_WORKSPACE_ENSURE, Request),
     method!(METHOD_WORKSPACE_BY_PATH_READ, Request),
     method!(METHOD_WORKSPACE_DEFAULT_READ, Request),
     method!(METHOD_WORKSPACE_DEFAULT_ENSURE, Request),

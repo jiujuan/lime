@@ -28,6 +28,7 @@ export enum SettingsTabs {
   Appearance = "appearance",
   Hotkeys = "hotkeys",
   Memory = "memory",
+  ArchivedConversations = "archived-conversations",
 
   // 智能体
   Providers = "providers",
@@ -75,6 +76,7 @@ export const SETTINGS_GROUPS: Record<SettingsGroupKey, SettingsTabs[]> = {
     SettingsTabs.Appearance,
     SettingsTabs.Hotkeys,
     SettingsTabs.Memory,
+    SettingsTabs.ArchivedConversations,
   ],
   [SettingsGroupKey.Agent]: [
     SettingsTabs.Providers,

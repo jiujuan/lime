@@ -75,7 +75,6 @@ describe("Legacy Patch Coverage", () => {
         "项目资料",
         "持续流程",
         "消息渠道",
-        "桌宠",
       ];
 
       navItems.forEach((item) => {

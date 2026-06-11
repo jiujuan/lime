@@ -5,12 +5,12 @@ import type {
   AgentUiSurface,
 } from "./agentUiEventProjection";
 import {
-  summarizeAgentUiTeamWorkbenchSurfaceLanes as summarizeAgentUiTeamWorkbenchSurfaceLanesBase,
-  summarizeAgentUiTeamWorkbenchSurfaces as summarizeAgentUiTeamWorkbenchSurfacesBase,
+  summarizeAgentUiSubagentsSurfaceLanes as summarizeAgentUiSubagentsSurfaceLanesBase,
+  summarizeAgentUiSubagentsSurfaces as summarizeAgentUiSubagentsSurfacesBase,
 } from "@limecloud/agent-runtime-projection";
 import type {
-  AgentUiTeamWorkbenchSurfaceLaneSummary,
-  AgentUiTeamWorkbenchSurfaceSummary,
+  AgentUiSubagentsSurfaceLaneSummary,
+  AgentUiSubagentsSurfaceSummary,
 } from "@limecloud/agent-runtime-projection";
 
 export {
@@ -20,23 +20,23 @@ export {
   AGENT_UI_EVIDENCE_EVENT_TYPES,
   AGENT_UI_NOTABLE_EVENT_TYPES,
   AGENT_UI_TASK_EVENT_TYPES,
-  AGENT_UI_TEAM_WORKBENCH_EVENT_TYPES,
-  AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS,
-  AGENT_UI_TEAM_WORKBENCH_SURFACE_LANES,
-  AGENT_UI_TEAM_WORKBENCH_SURFACES,
+  AGENT_UI_SUBAGENTS_EVENT_TYPES,
+  AGENT_UI_SUBAGENTS_SURFACE_DEFINITIONS,
+  AGENT_UI_SUBAGENTS_SURFACE_LANES,
+  AGENT_UI_SUBAGENTS_SURFACES,
   EMPTY_AGENT_UI_PROJECTION_SUMMARY,
-  EMPTY_AGENT_UI_TEAM_WORKBENCH_PROJECTION_SUMMARY,
+  EMPTY_AGENT_UI_SUBAGENTS_PROJECTION_SUMMARY,
   findLatestAgentUiProjectionEventForArtifact,
   summarizeAgentUiProjectionEvents,
-  summarizeAgentUiTeamWorkbenchProjectionEvents,
+  summarizeAgentUiSubagentsProjectionEvents,
 } from "@limecloud/agent-runtime-projection";
 export type {
   AgentUiProjectionSummary,
-  AgentUiTeamWorkbenchProjectionSummary,
-  AgentUiTeamWorkbenchSurfaceDefinition,
-  AgentUiTeamWorkbenchSurfaceLaneDefinition,
-  AgentUiTeamWorkbenchSurfaceLaneSummary,
-  AgentUiTeamWorkbenchSurfaceSummary,
+  AgentUiSubagentsProjectionSummary,
+  AgentUiSubagentsSurfaceDefinition,
+  AgentUiSubagentsSurfaceLaneDefinition,
+  AgentUiSubagentsSurfaceLaneSummary,
+  AgentUiSubagentsSurfaceSummary,
 } from "@limecloud/agent-runtime-projection";
 
 export type AgentUiProjectionTranslation = (
@@ -67,7 +67,7 @@ export const AGENT_UI_EVENT_LABELS: Partial<Record<AgentUiEventClass, string>> =
     "run.started": "Run 开始",
     "run.status": "Run 状态",
     "task.changed": "Task",
-    "team.changed": "Team 状态",
+    "team.changed": "Subagents 状态",
     "tool.failed": "Tool 失败",
     "tool.output.delta": "Tool 输出",
     "tool.progress": "Tool 进度",
@@ -97,8 +97,8 @@ const AGENT_UI_SOURCE_TYPE_LABELS: Record<string, string> = {
   remote_task_projection: "远端任务",
   runtime_status: "运行状态",
   subagent_status_changed: "子任务状态",
-  team_control_projection: "团队控制",
-  team_formation_projection: "团队编队",
+  team_control_projection: "Subagents 控制",
+  team_formation_projection: "Subagents 编排",
   tool_call: "工具调用",
   tool_start: "工具开始",
 };
@@ -534,11 +534,11 @@ export function formatAgentUiProjectionEventAuxiliaryDetail(
   return detailParts.length > 0 ? detailParts.join(" / ") : null;
 }
 
-export function summarizeAgentUiTeamWorkbenchSurfaceLanes(
+export function summarizeAgentUiSubagentsSurfaceLanes(
   events: AgentUiProjectionEvent[],
   options: { t?: AgentUiProjectionTranslation } = {},
-): AgentUiTeamWorkbenchSurfaceLaneSummary[] {
-  return summarizeAgentUiTeamWorkbenchSurfaceLanesBase(events).map((lane) => ({
+): AgentUiSubagentsSurfaceLaneSummary[] {
+  return summarizeAgentUiSubagentsSurfaceLanesBase(events).map((lane) => ({
     ...lane,
     label: translateAgentUiProjectionLabel(
       options.t,
@@ -553,14 +553,14 @@ export function summarizeAgentUiTeamWorkbenchSurfaceLanes(
   }));
 }
 
-export function summarizeAgentUiTeamWorkbenchSurfaces(
+export function summarizeAgentUiSubagentsSurfaces(
   events: AgentUiProjectionEvent[],
   options: {
     latestLimit?: number;
     t?: AgentUiProjectionTranslation;
   } = {},
-): AgentUiTeamWorkbenchSurfaceSummary[] {
-  return summarizeAgentUiTeamWorkbenchSurfacesBase(events, {
+): AgentUiSubagentsSurfaceSummary[] {
+  return summarizeAgentUiSubagentsSurfacesBase(events, {
     latestLimit: options.latestLimit,
   }).map((surface) => ({
     ...surface,

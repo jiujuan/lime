@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -10,6 +10,11 @@ const FRONTEND_DIAGNOSTIC_COMMANDS = [
 
 function readRepoFile(path: string): string {
   return readFileSync(resolve(cwd(), path), "utf8");
+}
+
+function readOptionalRepoFile(path: string): string {
+  const absolutePath = resolve(cwd(), path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
 }
 
 function expectStringLiteralsAbsent(source: string, literals: string[]): void {
@@ -56,8 +61,8 @@ describe("frontend diagnostics current Electron Host boundary", () => {
       readRepoFile("src/lib/dev-bridge/mockPriorityCommands.ts"),
       readRepoFile("src/lib/desktop-host/core.ts"),
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readOptionalRepoFile("lime-rs/src/app/runner.rs"),
+      readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
     ].join("\n");
     const contractSource = readRepoFile("scripts/check-command-contracts.mjs");
 
@@ -68,6 +73,12 @@ describe("frontend diagnostics current Electron Host boundary", () => {
     expect(contractSource).toContain(
       "retiredFrontendDiagnosticsTauriGenerateHandlerCommands",
     );
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(resolve(cwd(), "lime-rs/src/dev_bridge/dispatcher.rs")),
+    ).toBe(false);
     for (const command of FRONTEND_DIAGNOSTIC_COMMANDS) {
       expect(contractSource).toContain(`"${command}"`);
     }

@@ -48,15 +48,6 @@ vi.mock("../skill-selection/SkillSelector", () => ({
   SkillSelector: () => <div data-testid="empty-state-skill-selector" />,
 }));
 
-vi.mock("./Inputbar/components/TeamSelector", () => ({
-  TeamSelector: (props: { autoOpenToken?: number | null }) => (
-    <div
-      data-testid="empty-state-team-selector"
-      data-auto-open-token={String(props.autoOpenToken ?? "")}
-    />
-  ),
-}));
-
 function translateResource(
   resource: Partial<
     Record<
@@ -92,7 +83,7 @@ export const TEST_EN_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
 export const mockSelectedTeam = {
   id: "frontend-triage-team",
   source: "builtin" as const,
-  label: "前端联调团队",
+  label: "前端联调子代理组",
   description: "分析、实现、验证三段式推进。",
   roles: [
     {

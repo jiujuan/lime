@@ -243,6 +243,7 @@ import {
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
+  METHOD_WORKSPACE_ENSURE,
   METHOD_WORKSPACE_ENSURE_READY,
   METHOD_WORKSPACE_LIST,
   METHOD_WORKSPACE_PROJECTS_ROOT_READ,
@@ -593,6 +594,8 @@ import {
   type WechatRuntimeModelSetParams,
   type WechatRuntimeModelSetResponse,
   type WorkspaceEnsureParams,
+  type WorkspaceEnsureProjectParams,
+  type WorkspaceEnsureProjectResponse,
   type WorkspaceEnsureReadyResponse,
   type WorkspaceListResponse,
   type WorkspacePathReadParams,
@@ -977,6 +980,10 @@ export class AppServerClient {
 
   readWorkspace(params: WorkspaceReadParams): JsonRpcRequest {
     return this.request(METHOD_WORKSPACE_READ, params);
+  }
+
+  ensureWorkspace(params: WorkspaceEnsureProjectParams): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_ENSURE, params);
   }
 
   readWorkspaceByPath(params: WorkspacePathReadParams): JsonRpcRequest {
@@ -2250,6 +2257,17 @@ export class AppServerConnection {
     return await this.request<WorkspaceReadResponse>(
       this.client.readWorkspace(params),
       METHOD_WORKSPACE_READ,
+      options,
+    );
+  }
+
+  async ensureWorkspace(
+    params: WorkspaceEnsureProjectParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceEnsureProjectResponse>> {
+    return await this.request<WorkspaceEnsureProjectResponse>(
+      this.client.ensureWorkspace(params),
+      METHOD_WORKSPACE_ENSURE,
       options,
     );
   }

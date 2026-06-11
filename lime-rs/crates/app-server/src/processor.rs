@@ -126,12 +126,12 @@ use app_server_protocol::ModelProviderUiStateReadParams;
 use app_server_protocol::ModelProviderUiStateWriteParams;
 use app_server_protocol::ModelProviderUpdateParams;
 use app_server_protocol::PlatformInfo;
-use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ProjectMaterialImportFromUrlParams;
 use app_server_protocol::ProjectMaterialListParams;
 use app_server_protocol::ProjectMaterialLookupParams;
 use app_server_protocol::ProjectMaterialUpdateParams;
 use app_server_protocol::ProjectMaterialUploadParams;
+use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
 use app_server_protocol::SessionFileGetOrCreateParams;
@@ -156,7 +156,6 @@ use app_server_protocol::SkillRemoteInspectParams;
 use app_server_protocol::SkillRepositoryDeleteParams;
 use app_server_protocol::SkillRepositorySaveParams;
 use app_server_protocol::SkillScaffoldCreateParams;
-use app_server_protocol::UsageStatsRangeParams;
 use app_server_protocol::UnifiedMemoryAnalyzeParams;
 use app_server_protocol::UnifiedMemoryCreateParams;
 use app_server_protocol::UnifiedMemoryDeleteParams;
@@ -166,6 +165,7 @@ use app_server_protocol::UnifiedMemoryListParams;
 use app_server_protocol::UnifiedMemorySearchParams;
 use app_server_protocol::UnifiedMemorySemanticSearchParams;
 use app_server_protocol::UnifiedMemoryUpdateParams;
+use app_server_protocol::UsageStatsRangeParams;
 use app_server_protocol::VoiceAsrCredentialCreateParams;
 use app_server_protocol::VoiceAsrCredentialIdParams;
 use app_server_protocol::VoiceAsrCredentialUpdateParams;
@@ -178,6 +178,7 @@ use app_server_protocol::WechatLoginStartParams;
 use app_server_protocol::WechatLoginWaitParams;
 use app_server_protocol::WechatRuntimeModelSetParams;
 use app_server_protocol::WorkspaceEnsureParams;
+use app_server_protocol::WorkspaceEnsureProjectParams;
 use app_server_protocol::WorkspacePathReadParams;
 use app_server_protocol::WorkspaceProjectPathResolveParams;
 use app_server_protocol::WorkspaceReadParams;
@@ -339,7 +340,6 @@ use app_server_protocol::METHOD_MODEL_PROVIDER_UI_STATE_READ;
 use app_server_protocol::METHOD_MODEL_PROVIDER_UI_STATE_WRITE;
 use app_server_protocol::METHOD_MODEL_PROVIDER_UPDATE;
 use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
-use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_CONTENT;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_COUNT;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_DELETE;
@@ -348,6 +348,7 @@ use app_server_protocol::METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_LIST;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_UPDATE;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_UPLOAD;
+use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 use app_server_protocol::METHOD_SESSION_FILE_DELETE;
 use app_server_protocol::METHOD_SESSION_FILE_GET_OR_CREATE;
 use app_server_protocol::METHOD_SESSION_FILE_LIST;
@@ -378,9 +379,6 @@ use app_server_protocol::METHOD_SKILL_REPOSITORY_DELETE;
 use app_server_protocol::METHOD_SKILL_REPOSITORY_LIST;
 use app_server_protocol::METHOD_SKILL_REPOSITORY_SAVE;
 use app_server_protocol::METHOD_TELEGRAM_CHANNEL_PROBE;
-use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
-use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
-use app_server_protocol::METHOD_USAGE_STATS_READ;
 use app_server_protocol::METHOD_UNIFIED_MEMORY_ANALYZE;
 use app_server_protocol::METHOD_UNIFIED_MEMORY_CREATE;
 use app_server_protocol::METHOD_UNIFIED_MEMORY_DELETE;
@@ -391,6 +389,9 @@ use app_server_protocol::METHOD_UNIFIED_MEMORY_SEARCH;
 use app_server_protocol::METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH;
 use app_server_protocol::METHOD_UNIFIED_MEMORY_STATS;
 use app_server_protocol::METHOD_UNIFIED_MEMORY_UPDATE;
+use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
+use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
+use app_server_protocol::METHOD_USAGE_STATS_READ;
 use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_CREATE;
 use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET;
 use app_server_protocol::METHOD_VOICE_ASR_CREDENTIAL_DELETE;
@@ -411,6 +412,7 @@ use app_server_protocol::METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET;
 use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
+use app_server_protocol::METHOD_WORKSPACE_ENSURE;
 use app_server_protocol::METHOD_WORKSPACE_ENSURE_READY;
 use app_server_protocol::METHOD_WORKSPACE_LIST;
 use app_server_protocol::METHOD_WORKSPACE_PROJECTS_ROOT_READ;
@@ -545,6 +547,7 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_READ => self.handle_session_read(params).await,
             METHOD_WORKSPACE_LIST => self.handle_workspace_list().await,
             METHOD_WORKSPACE_READ => self.handle_workspace_read(params).await,
+            METHOD_WORKSPACE_ENSURE => self.handle_workspace_ensure(params).await,
             METHOD_WORKSPACE_BY_PATH_READ => self.handle_workspace_by_path_read(params).await,
             METHOD_WORKSPACE_DEFAULT_READ => self.handle_workspace_default_read().await,
             METHOD_WORKSPACE_DEFAULT_ENSURE => self.handle_workspace_default_ensure().await,
@@ -1308,6 +1311,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .read_workspace_by_path(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    async fn handle_workspace_ensure(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: WorkspaceEnsureProjectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .ensure_project_workspace(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

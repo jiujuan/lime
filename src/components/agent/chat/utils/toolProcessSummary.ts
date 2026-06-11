@@ -813,18 +813,18 @@ function buildGenericPostSummary(params: {
   }
   if (normalizedName === "teamcreate") {
     return normalizedSubject
-      ? `已创建团队 ${normalizedSubject}`
-      : "已创建协作团队";
+      ? `已创建子代理组 ${normalizedSubject}`
+      : "已创建子代理组";
   }
   if (normalizedName === "teamdelete") {
     return normalizedSubject
-      ? `已删除团队 ${normalizedSubject}`
-      : "已删除协作团队";
+      ? `已删除子代理组 ${normalizedSubject}`
+      : "已删除子代理组";
   }
   if (normalizedName === "listpeers") {
     return normalizedSubject
       ? `已查看 ${normalizedSubject} 的协作成员`
-      : "已查看团队成员";
+      : "已查看子代理成员";
   }
   if (normalizedName === "waitagent") {
     return normalizedSubject
@@ -1082,20 +1082,20 @@ function buildGenericPreSummary(params: {
 
   if (normalizedName === "teamcreate") {
     return normalizedSubject
-      ? `先创建团队 ${normalizedSubject}`
-      : "先创建协作团队";
+      ? `先创建子代理组 ${normalizedSubject}`
+      : "先创建子代理组";
   }
 
   if (normalizedName === "teamdelete") {
     return normalizedSubject
-      ? `先删除团队 ${normalizedSubject}`
-      : "先删除协作团队";
+      ? `先删除子代理组 ${normalizedSubject}`
+      : "先删除子代理组";
   }
 
   if (normalizedName === "listpeers") {
     return normalizedSubject
       ? `先查看 ${normalizedSubject} 的协作成员`
-      : "先查看团队成员";
+      : "先查看子代理成员";
   }
 
   if (normalizedName === "croncreate") {

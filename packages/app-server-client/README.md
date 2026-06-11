@@ -1,6 +1,6 @@
-# app-server-client
+# @limecloud/app-server-client
 
-`app-server-client` is the TypeScript client surface for independent apps
+`@limecloud/app-server-client` is the TypeScript client surface for independent apps
 that talk to `app-server` over JSON-RPC.
 
 Current scope:
@@ -34,7 +34,7 @@ Electron main integration shape:
 import {
   AppServerAgentEventRouter,
   startPackagedAppServerSidecar,
-} from "app-server-client";
+} from "@limecloud/app-server-client";
 
 const { connected, lifecycle } = await startPackagedAppServerSidecar(
   {
@@ -87,7 +87,7 @@ void (async () => {
 Agent runtime SDK facade:
 
 ```ts
-import { createAgentRuntimeClient } from "app-server-client";
+import { createAgentRuntimeClient } from "@limecloud/app-server-client";
 
 const runtime = createAgentRuntimeClient(connection, {
   request: { timeoutMs: 120_000 },

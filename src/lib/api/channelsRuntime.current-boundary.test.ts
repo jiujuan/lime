@@ -40,6 +40,11 @@ function readRepoFile(path: string): string {
   );
 }
 
+function readOptionalRepoFile(path: string): string {
+  const absolutePath = resolve(cwd(), path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
+}
+
 describe("channelsRuntime current App Server boundary", () => {
   it("已迁 Channels / WeChat 旧 wrapper 文件不应回流", () => {
     for (const relativePath of [
@@ -60,8 +65,8 @@ describe("channelsRuntime current App Server boundary", () => {
   });
 
   it("旧 Channels facade 不应回到 runner、DevBridge truth 或 mock priority", () => {
-    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
-    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+    const runnerSource = readOptionalRepoFile("lime-rs/src/app/runner.rs");
+    const commandsModSource = readOptionalRepoFile("lime-rs/src/commands/mod.rs");
     const commandPolicySource = readRepoFile("src/lib/dev-bridge/commandPolicy.ts");
     const mockPrioritySource = readRepoFile(
       "src/lib/dev-bridge/mockPriorityCommands.ts",
@@ -69,6 +74,12 @@ describe("channelsRuntime current App Server boundary", () => {
 
     expect(commandsModSource).not.toContain("gateway_channel_cmd");
     expect(commandsModSource).not.toContain("wechat_channel_cmd");
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
+      false,
+    );
+    expect(existsSync(resolve(cwd(), "lime-rs/src/commands/mod.rs"))).toBe(
+      false,
+    );
     for (const registration of LEGACY_CHANNEL_TAURI_REGISTRATIONS) {
       expect(runnerSource).not.toContain(registration);
     }

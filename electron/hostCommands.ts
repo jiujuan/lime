@@ -29,6 +29,7 @@ import {
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
+  METHOD_WORKSPACE_ENSURE,
   METHOD_WORKSPACE_ENSURE_READY,
   METHOD_WORKSPACE_LIST,
   METHOD_WORKSPACE_PROJECTS_ROOT_READ,
@@ -56,6 +57,7 @@ import {
   type ModelListResponse,
   type ModelProviderListResponse,
   type ProjectMemoryReadResponse,
+  type WorkspaceEnsureProjectResponse,
   type SkillListResponse,
   type WorkspaceEnsureReadyResponse,
   type WorkspaceListResponse,
@@ -63,7 +65,7 @@ import {
   type WorkspaceProjectsRootReadResponse,
   type WorkspaceReadResponse,
   type WorkspaceSkillBindingsListResponse,
-} from "app-server-client";
+} from "@limecloud/app-server-client";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -367,6 +369,8 @@ export class ElectronHostCommands {
         return await this.#readWorkspace(args);
       case "workspace_get_by_path":
         return await this.#readWorkspaceByPath(args);
+      case "workspace_ensure":
+        return await this.#ensureWorkspace(args);
       case "workspace_get_projects_root":
         return await this.#readWorkspaceProjectsRoot();
       case "workspace_resolve_project_path":
@@ -1730,6 +1734,34 @@ export class ElectronHostCommands {
         },
       );
     return response.rootPath;
+  }
+
+  async #ensureWorkspace(args: HostArgs): Promise<unknown> {
+    const request = readRequest(args);
+    const name =
+      readString(request, "name") ?? readString(args, "name") ?? "untitled";
+    const rootPath =
+      readString(request, "rootPath") ??
+      readString(request, "root_path") ??
+      readString(args, "rootPath") ??
+      readString(args, "root_path");
+    if (!rootPath) {
+      throw new Error("workspace_ensure requires rootPath");
+    }
+    const workspaceType =
+      readString(request, "workspaceType") ??
+      readString(request, "workspace_type") ??
+      readString(args, "workspaceType") ??
+      readString(args, "workspace_type");
+    const response = await this.#appServerRequest<WorkspaceEnsureProjectResponse>(
+      METHOD_WORKSPACE_ENSURE,
+      {
+        name,
+        rootPath,
+        ...(workspaceType ? { workspaceType } : {}),
+      },
+    );
+    return response.workspace;
   }
 
   async #ensureDefaultWorkspaceReady(): Promise<unknown | null> {
@@ -4197,7 +4229,6 @@ function buildDefaultConfig(): Record<string, unknown> {
     workspace_preferences: {
       schema_version: 3,
       media_defaults: {},
-      companion_defaults: {},
       service_models: {},
     },
     navigation: { schema_version: 3, enabled_items: [] },

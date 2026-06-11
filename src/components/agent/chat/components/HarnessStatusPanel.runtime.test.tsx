@@ -29,7 +29,7 @@ describe("HarnessStatusPanel runtime", () => {
     expect(document.body.textContent).toContain("429 rate limit");
   });
 
-  it("存在 selectedTeam 时应在工作台展示当前任务分工", () => {
+  it("存在 selectedTeam 时应在工作台展示当前 Subagents", () => {
     renderPanel({
       selectedTeamLabel: "前端联调团队",
       selectedTeamSummary: "分析、实现、验证三段式推进。",
@@ -45,8 +45,8 @@ describe("HarnessStatusPanel runtime", () => {
       ],
     });
 
-    expect(document.body.textContent).toContain("任务分工");
-    expect(document.body.textContent).toContain("当前任务分工");
+    expect(document.body.textContent).toContain("Subagents");
+    expect(document.body.textContent).toContain("当前 Subagents");
     expect(document.body.textContent).toContain("前端联调团队");
     expect(document.body.textContent).toContain("分析、实现、验证三段式推进。");
     expect(document.body.textContent).toContain("模板 code-explorer");

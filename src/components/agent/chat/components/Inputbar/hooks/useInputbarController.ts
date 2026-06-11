@@ -28,8 +28,6 @@ import type {
   WorkflowStep,
 } from "../../../utils/workflowInputState";
 import { useWorkflowInputState } from "../../../utils/workflowInputState";
-import { TeamSuggestionBar } from "@/components/agent/chat/components/TeamSuggestionBar";
-import { getTeamSuggestion } from "@/components/agent/chat/utils/teamSuggestion";
 import type { ServiceSkillHomeItem } from "@/components/agent/chat/service-skills/types";
 import type { MessagePathReference } from "../../../types";
 import {
@@ -75,13 +73,11 @@ interface UseInputbarControllerParams {
   setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
   toolStates?: Partial<InputbarToolStates>;
   onToolStatesChange?: (states: Partial<InputbarToolStates>) => void;
-  activeTheme?: string;
   initialInputCapability?: AgentInitialInputCapabilityParams;
   variant?: "default" | "workspace";
   workflowGate?: WorkflowGateState | null;
   workflowSteps?: WorkflowStep[];
   workflowRunState?: "idle" | "auto_running" | "await_user_decision";
-  onEnableSuggestedTeam?: (suggestedPresetId?: string) => void;
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
@@ -107,13 +103,11 @@ export function useInputbarController({
   setReasoningEffort,
   toolStates,
   onToolStatesChange,
-  activeTheme,
   initialInputCapability,
   variant = "default",
   workflowGate,
   workflowSteps = [],
   workflowRunState,
-  onEnableSuggestedTeam,
   knowledgePackSelection,
   onStartKnowledgeOrganize,
   onManageKnowledgePacks,
@@ -309,9 +303,7 @@ export function useInputbarController({
   const {
     activeTools,
     handleToolClick,
-    setSubagentEnabled,
     isFullscreen,
-    subagentEnabled,
   } = useInputbarToolState({
     toolStates,
     onToolStatesChange,
@@ -379,32 +371,11 @@ export function useInputbarController({
     copy: workflowCopy,
   });
 
-  const [dismissedTeamSuggestionKey, setDismissedTeamSuggestionKey] = useState<
-    string | null
-  >(null);
-  const teamSuggestionKey = `${activeTheme ?? "default"}:${input
-    .trim()
-    .toLowerCase()}`;
-  const teamSuggestion = useMemo(
-    () =>
-      getTeamSuggestion({
-        input,
-        activeTheme,
-        subagentEnabled,
-      }),
-    [activeTheme, input, subagentEnabled],
-  );
-  const shouldShowTeamSuggestion =
-    activeTheme === "general" &&
-    teamSuggestion.shouldSuggest &&
-    dismissedTeamSuggestionKey !== teamSuggestionKey;
-
   const topExtra =
     activeSkill ||
     activeBuiltinCommand ||
     activeRuntimeScene ||
-    activeCuratedTask ||
-    shouldShowTeamSuggestion
+    activeCuratedTask
       ? React.createElement(
           React.Fragment,
           null,
@@ -480,23 +451,6 @@ export function useInputbarController({
                   });
                 },
                 onClear: () => setActiveCapability(null),
-              })
-            : null,
-          shouldShowTeamSuggestion
-            ? React.createElement(TeamSuggestionBar, {
-                compact: true,
-                score: teamSuggestion.score,
-                reasons: teamSuggestion.reasons,
-                suggestedRoles: teamSuggestion.suggestedRoles,
-                suggestedPresetLabel: teamSuggestion.suggestedPresetLabel,
-                onEnableTeam: () => {
-                  setSubagentEnabled(true);
-                  onEnableSuggestedTeam?.(teamSuggestion.suggestedPresetId);
-                  setDismissedTeamSuggestionKey(teamSuggestionKey);
-                },
-                onContinueSingleAgent: () => {
-                  setDismissedTeamSuggestionKey(teamSuggestionKey);
-                },
               })
             : null,
         )

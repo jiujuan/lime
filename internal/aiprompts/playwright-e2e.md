@@ -29,8 +29,8 @@
 - 如果 Playwright 工具当前还在 deferred surface，优先用 `ToolSearch` 的精确选择名，例如 `select:mcp__playwright__browser_click`；不要把 `playwright_browser_click`、`browser click` 之类同义词反复丢给 `ToolSearch`
 - 能走真实后端就走真实后端；浏览器模式暂不支持或尚未桥接的能力，允许走 mock
 - `verify:gui-smoke` 内部的 browser runtime 校验默认走无界面浏览器会话；它只证明主链可启动，不替代后续真实页面交互验证
-- `lime-pet` 原生桌宠属于独立仓库与原生窗口壳，不纳入当前 WebView Playwright 的直接操控范围；在 Lime 主仓里只验证 `companion_*` API、状态事件与主窗口唤起链路，桌宠窗口移动、点击命中与原生层动画仍需额外手工 smoke
-- 如果 companion 协议新增了 provider 摘要、桌宠回跳设置、桌宠主动请求同步，或双击 / 三击 / 文本对话触发的桌宠 LLM 交互事件，Playwright 续测只覆盖 Lime 主仓内的“状态事件是否触发”“是否跳到 `设置 -> AI 服务商`”“是否重发脱敏摘要”“是否调用宿主侧 LLM 代理逻辑”和“主窗口是否被唤起”，不在 WebView 层尝试直接操控原生桌宠 UI
+- Companion 桌宠链路已在 Lime 主仓下线并归类为 `dead`；Playwright 续测不再验证 `companion_*` API、`companion-pet-status` 状态事件、桌宠设置回跳或主窗口唤起链路
+- 如未来重新设计独立桌面伴随能力，必须先定义新的 current 协议与 GUI 入口，再补对应 Playwright 覆盖；不得复用旧 `companion_*` 命令或本地 `companion/pet` 协议作为续测依据
 - 共享网关控制页已下线，托盘也不再展示网关状态或地址；共享网关 `/v1/routes` 与 selector HTTP 路由也已下线，不再对“启动/停止网关、复制网关地址、路由/curl 示例、selector 路由、托盘运行态文案”做 GUI 续测；server 验证只关注标准 `/v1/messages` 与 `/v1/chat/completions` 主链，如需看运行时状态，走开发者页或实验页的诊断面板
 - 旧设置页里的“安全与性能 / 容错配置”已经下线，不再对这些页签、表单或命令写入路径做 GUI 续测；如果还要验证提示路由，只围绕当前输入框 `get_hint_routes` 读取链与提示展示，不再寻找旧设置页入口
 - 初装引导里的旧插件选择 / 插件安装 / 配置切换链路已经下线，不再对 `config-switch` 推荐安装、Provider Switch 页面或相关命令做 GUI 续测；当前 onboarding 只围绕现役语音体验流程验证
@@ -464,20 +464,20 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 4. 验证工具开关恢复的是该话题最近一次 session runtime，而不是主题级 localStorage 默认值
 5. 如首次切回旧话题时只能命中 fallback，再继续切换一次，确认第二次开始已优先走 runtime 恢复
 
-### 话题 Team 恢复验证
+### 话题 Subagents 恢复验证
 
 1. 进入同一工作区中的两个话题
-2. 在话题 A 里选择一个 builtin Team，在话题 B 里选择另一个 builtin 或 custom Team
+2. 在话题 A 里选择一个 builtin Subagents profile，在话题 B 里选择另一个 builtin 或 custom profile
 3. 在两个话题之间来回切换，必要时新建一个空白话题再切回
-4. 验证 Team 选择器、摘要区和 Team Workbench 展示恢复的是该话题最近一次 `recent_team_selection`，而不是主题级 localStorage 的旧值
-5. 对 custom Team 额外确认：切回后 label / description / roles 没丢；如果本轮是从 fallback 回填，继续切换一次确认第二次开始已优先走 runtime 恢复
-6. 如果当前项目已有子代理或父会话上下文，再发送一条新消息，确认 Team Workbench 的 shadow 卡片与当前 Team 恢复一致，不会退回到全局 theme fallback；本轮如涉及 `harness.team_memory_shadow`，这里就是最小 GUI 续测锚点
+4. 验证 Subagents profile 选择器、摘要区和子代理展示恢复的是该话题最近一次 `recent_team_selection`，而不是主题级 localStorage 的旧值
+5. 对 custom profile 额外确认：切回后 label / description / roles 没丢；如果本轮是从 fallback 回填，继续切换一次确认第二次开始已优先走 runtime 恢复
+6. 如果当前项目已有子代理或父会话上下文，再发送一条新消息，确认子代理影子卡片与当前 profile 恢复一致，不会退回到全局 theme fallback；本轮如涉及 `harness.team_memory_shadow`，这里就是最小 GUI 续测锚点
 
 ### 子代理 current 字段验证
 
 1. 准备一个带 Team 或父子会话上下文的工作区，并触发一次子代理创建
 2. 如果当前入口支持显式名称或工作目录，优先带上 `name` 与绝对 `cwd`；如果 UI 暂无显式入口，至少复用现有 flow 创建一个 child session，并在详情区观察其展示名与工作目录
-3. 验证 child session / Team Workbench 优先显示显式 `name`，而不是退回 `agent_type`、profile label 或 task summary fallback
+3. 验证 child session / Subagents 展示优先显示显式 `name`，而不是退回 `agent_type`、profile label 或 task summary fallback
 4. 如果本轮涉及 `teamName`，确认 child 会回挂到当前 Team，上下文里能按该名字识别，不会出现重复成员或错挂到其它 Team
 5. 验证 child 的 `working_dir` 与详情展示反映请求的绝对 `cwd`；如果请求非法相对路径，前端应看到明确失败，而不是静默回退父目录
 6. 如果当前入口或调试面板暴露 `mode / isolation`，传入非空值时前端应看到明确 unsupported，而不是静默创建 child session

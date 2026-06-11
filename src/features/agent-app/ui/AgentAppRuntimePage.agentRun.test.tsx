@@ -6,7 +6,7 @@ import {
   flush,
   getRuntimeFrame,
   renderPage,
-  runtimeApiMocks,
+  appServerClientMocks,
   unmountLastRenderedPage,
   useAgentAppRuntimePageTestLifecycle,
 } from "./AgentAppRuntimePage.testFixtures";
@@ -27,6 +27,7 @@ describe("AgentAppRuntimePage Host AI run surface", () => {
         capability: "lime.agent",
         method: "startTask",
         input: {
+          taskId: "agent-app-task-1",
           title: "生成内容批次",
           prompt: "基于项目知识生成内容批次",
           taskKind: "content.production",
@@ -205,33 +206,38 @@ describe("AgentAppRuntimePage Host AI run surface", () => {
     expect(container.textContent).toContain("已拿到页面快照");
     expect(container.textContent).toContain("页面截图已读取");
     expect(
-      container.querySelector('[data-agent-run-timeline-kind="skill"]'),
+      container.querySelector("[data-testid='agent-run-standard-projection']"),
     ).not.toBeNull();
+    expect(container.querySelector(".agent-ui-projection")).not.toBeNull();
+    expect(container.querySelector(".agent-ui-main")).not.toBeNull();
+    expect(container.querySelector(".agent-ui-sidecar")).not.toBeNull();
+    expect(
+      container.querySelector('[data-agent-run-timeline-kind="skill"]'),
+    ).toBeNull();
     expect(
       container.querySelector('[data-agent-run-timeline-kind="tool"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="inline-tool-process-step"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector(
         '[data-agent-run-timeline-group="collapse:stream:assistant_text:main"]',
       ),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(container.textContent).toContain("正在规划内容结构");
     expect(container.textContent).toContain("第一段流式文案。");
     expect(container.textContent).toContain("第二段流式文案。");
-    expect(container.textContent).toContain("×2");
     expect(
       container.querySelector('[data-testid="agent-run-markdown-output"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-run-markdown-execution"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(container.textContent).toContain("执行过程");
     expect(container.textContent).toContain("首批文案");
-    expect(container.querySelector('[data-testid="thinking-block"]')).not.toBeNull();
-    expect(container.textContent).toContain("思考中");
+    expect(container.querySelector('[data-testid="thinking-block"]')).toBeNull();
+    expect(container.textContent).toContain("思考过程");
     expect(container.textContent).toContain("先确认项目资料");
     expect(container.textContent).toContain("待确认");
     expect(container.textContent).toContain("请确认首批内容选题。");
@@ -256,37 +262,41 @@ describe("AgentAppRuntimePage Host AI run surface", () => {
     expect(container.textContent).toContain("证据");
     expect(container.textContent).toContain("内容批次 evidence 已记录。");
     const rejectButton = container.querySelector<HTMLButtonElement>(
-      '.agent-event-action[data-action-decision="reject"]',
+      '.agent-action-required-list .agent-event-action[data-action-decision="reject"]',
     );
     expect(rejectButton?.textContent).toBe("拒绝");
 
     await act(async () => {
-      rejectButton?.click();
+      rejectButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
     await flush();
 
-    expect(
-      runtimeApiMocks.submitAgentAppRuntimeHostResponse,
-    ).toHaveBeenCalledWith({
-      appId: "content-factory-app",
-      taskId: "agent-app-task-1",
-      runtimeRequest: expect.objectContaining({
-        session_id: "agent-app-session-1",
-        request_id: "review-content-batch",
-        action_type: "ask_user",
+    expect(appServerClientMocks.respondAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "agent-app-session-1",
+        requestId: "review-content-batch",
+        actionType: "ask_user",
         confirmed: false,
         response: "reject",
         metadata: expect.objectContaining({
           source: "host_agent_run_panel",
           control: "reject",
+          agent_app_runtime: expect.objectContaining({
+            app_id: "content-factory-app",
+            entry_key: "dashboard",
+            task_id: "agent-app-task-1",
+            source: "agent_app_host_bridge",
+          }),
         }),
-        action_scope: expect.objectContaining({
-          session_id: "agent-app-session-1",
-          turn_id: "agent-app-turn-1",
+        eventName:
+          "agent_app_runtime:content-factory-app:agent-app-task-1:host_response",
+        actionScope: expect.objectContaining({
+          sessionId: "agent-app-session-1",
+          turnId: "agent-app-turn-1",
         }),
       }),
-    });
+    );
     expect(
       container.querySelector(
         '[data-action-id="review-content-batch"][data-action-resolved="true"]',
@@ -324,7 +334,14 @@ describe("AgentAppRuntimePage Host AI run surface", () => {
     expect(container.textContent).toContain("300");
     expect(container.textContent).toContain("正在规划内容结构");
     expect(container.textContent).toContain("内容批次已写回");
-    expect(container.textContent).toContain("运行过程已折叠，点击查看完整现场");
+    expect(
+      container
+        .querySelector('[data-testid="agent-run-projection-panel"]')
+        ?.getAttribute("data-agent-run-projection-terminal"),
+    ).toBe("true");
+    expect(
+      container.querySelector('[data-testid="agent-run-markdown-output"]'),
+    ).toBeNull();
 
     await dispatchBridgeMessage(
       frame,

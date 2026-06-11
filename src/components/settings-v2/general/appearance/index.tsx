@@ -20,17 +20,12 @@ import {
   Sparkles,
   Sun,
   Volume2,
-  Bot,
   Shuffle,
   type LucideIcon,
 } from "lucide-react";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { cn } from "@/lib/utils";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
-import {
-  CURRENT_SIDEBAR_NAV_SCHEMA_VERSION,
-  type NavigationEnabledItemId,
-} from "@/lib/api/appConfigTypes";
 import { useI18nPatch } from "@/i18n/legacy-patch/I18nPatchProvider";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
@@ -43,10 +38,6 @@ import {
 import { useSoundContext } from "@/contexts/useSoundContext";
 import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "react-i18next";
-import {
-  CONFIGURABLE_FOOTER_SIDEBAR_NAV_ITEMS,
-  resolveEnabledSidebarNavItems,
-} from "@/lib/navigation/sidebarNav";
 import {
   LIME_COLOR_SCHEME_CHANGED_EVENT,
   LIME_COLOR_SCHEMES,
@@ -98,28 +89,11 @@ interface SurfacePanelProps {
   children: ReactNode;
 }
 
-interface HiddenSystemEntryOption {
-  id: NavigationEnabledItemId;
-  label: string;
-  description: string;
-  icon: LucideIcon;
-}
-
 const THEME_OPTION_ICONS: Record<LimeThemeMode, LucideIcon> = {
   dark: Moon,
   light: Sun,
   system: Monitor,
 };
-
-const HIDDEN_SYSTEM_ENTRY_BASE_OPTIONS: Pick<
-  HiddenSystemEntryOption,
-  "id" | "icon"
->[] = [
-  {
-    id: "companion",
-    icon: Bot,
-  },
-];
 
 const ACTIVE_OPTION_CARD_CLASS =
   "border-[color:var(--lime-surface-border-strong)] bg-[image:var(--lime-home-card-surface-strong)] text-[color:var(--lime-text-strong)] shadow-sm shadow-slate-950/10";
@@ -334,22 +308,6 @@ export function AppearanceSettings() {
     [t],
   );
 
-  const hiddenSystemEntryOptions = useMemo<HiddenSystemEntryOption[]>(
-    () =>
-      HIDDEN_SYSTEM_ENTRY_BASE_OPTIONS.map((option) => ({
-        ...option,
-        label: t(
-          `settings.appearance.systemEntries.options.${option.id}.label`,
-          option.id,
-        ),
-        description: t(
-          `settings.appearance.systemEntries.options.${option.id}.description`,
-          "",
-        ),
-      })),
-    [t],
-  );
-
   const currentThemeLabel =
     themeOptions.find((option) => option.id === theme)?.label ??
     t("settings.appearance.theme.options.system.label", "跟随系统");
@@ -379,17 +337,6 @@ export function AppearanceSettings() {
       t,
     ],
   );
-
-  const enabledNavigationItems = useMemo(
-    () =>
-      resolveEnabledSidebarNavItems(
-        config?.navigation?.enabled_items,
-        config?.navigation?.schema_version,
-      ),
-    [config],
-  );
-
-  const hiddenSystemEntryCount = enabledNavigationItems.length;
 
   const languageOptions = useMemo<LanguageOption[]>(
     () =>
@@ -567,49 +514,6 @@ export function AppearanceSettings() {
     [appendSelectedTextToRecommendation, config, t],
   );
 
-  const handleHiddenSystemEntryToggle = useCallback(
-    async (itemId: NavigationEnabledItemId, checked: boolean) => {
-      if (!config) {
-        return;
-      }
-
-      const previousConfig = config;
-      const nextEnabledItems = resolveEnabledSidebarNavItems(
-        checked
-          ? [...enabledNavigationItems, itemId]
-          : enabledNavigationItems.filter(
-              (currentItemId) => currentItemId !== itemId,
-            ),
-      ) as NavigationEnabledItemId[];
-
-      const nextConfig: Config = {
-        ...config,
-        navigation: {
-          ...(config.navigation || {}),
-          schema_version: CURRENT_SIDEBAR_NAV_SCHEMA_VERSION,
-          enabled_items: nextEnabledItems,
-        },
-      };
-
-      setError(null);
-      setConfig(nextConfig);
-
-      try {
-        await saveConfig(nextConfig);
-      } catch (err) {
-        console.error("保存系统入口设置失败:", err);
-        setConfig(previousConfig);
-        setError(
-          t(
-            "settings.appearance.error.saveSystemEntries",
-            "保存系统入口设置失败，请重试。",
-          ),
-        );
-      }
-    },
-    [config, enabledNavigationItems, t],
-  );
-
   if (loading) {
     return <LoadingSkeleton />;
   }
@@ -643,7 +547,7 @@ export function AppearanceSettings() {
                 )}
                 content={t(
                   "settings.appearance.hero.tip",
-                  "管理主题、语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。",
+                  "管理主题、界面语言、回复语言、提示音效，以及推荐问题的上下文带入方式。",
                 )}
                 tone="mint"
               />
@@ -651,7 +555,7 @@ export function AppearanceSettings() {
             <p className="text-[13px] text-slate-500">
               {t(
                 "settings.appearance.hero.description",
-                "管理主题、语言、提示音效、推荐行为和底部入口。",
+                "管理主题、界面语言、回复语言、提示音效和推荐行为。",
               )}
             </p>
           </div>
@@ -1056,106 +960,6 @@ export function AppearanceSettings() {
           </div>
         </SurfacePanel>
       </section>
-
-      <SurfacePanel
-        icon={Bot}
-        iconClassName="text-cyan-600"
-        title={t("settings.appearance.systemEntries.title", "可选系统入口")}
-        description={t(
-          "settings.appearance.systemEntries.description",
-          "把扩展或低频入口按需挂到底部系统区，不影响当前主导航。",
-        )}
-        tipAriaLabel={t(
-          "settings.appearance.systemEntries.tipAria",
-          "可选系统入口说明",
-        )}
-        aside={
-          <span className={CURRENT_INFO_PILL_CLASS}>
-            {t("settings.appearance.systemEntries.summary", {
-              count: hiddenSystemEntryCount,
-              total: CONFIGURABLE_FOOTER_SIDEBAR_NAV_ITEMS.length,
-              defaultValue: "已开启 {{count}} / {{total}}",
-            })}
-          </span>
-        }
-      >
-        <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
-          <div className="space-y-3">
-            {hiddenSystemEntryOptions.map((option) => {
-              const checked = enabledNavigationItems.includes(option.id);
-              return (
-                <div
-                  key={option.id}
-                  className="flex flex-col gap-3 rounded-[20px] border border-slate-200 bg-white/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
-                      <option.icon className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-slate-900">
-                          {option.label}
-                        </h3>
-                        <WorkbenchInfoTip
-                          ariaLabel={t(
-                            "settings.appearance.systemEntries.optionTipAria",
-                            {
-                              label: option.label,
-                              defaultValue: "{{label}}入口说明",
-                            },
-                          )}
-                          content={option.description}
-                          tone="slate"
-                        />
-                      </div>
-                      <p className="text-xs leading-5 text-slate-500">
-                        {option.description}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={
-                        checked
-                          ? CURRENT_SUCCESS_PILL_CLASS
-                          : CONTEXT_STATUS_PILL_CLASS
-                      }
-                    >
-                      {checked
-                        ? t(
-                            "settings.appearance.systemEntries.status.visible",
-                            "已显示",
-                          )
-                        : t(
-                            "settings.appearance.systemEntries.status.hidden",
-                            "已隐藏",
-                          )}
-                    </span>
-                    <Switch
-                      checked={checked}
-                      onCheckedChange={(nextChecked) => {
-                        void handleHiddenSystemEntryToggle(
-                          option.id,
-                          nextChecked,
-                        );
-                      }}
-                      aria-label={t(
-                        "settings.appearance.systemEntries.toggleAria",
-                        {
-                          label: option.label,
-                          defaultValue: "切换显示{{label}}入口",
-                        },
-                      )}
-                      disabled={!config}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </article>
-      </SurfacePanel>
 
       <SurfacePanel
         icon={Sparkles}

@@ -25,6 +25,7 @@ import {
   type AgentAppHostBridgeCapabilities,
   type AgentAppHostBridgeNotifyPayload,
 } from "../runtime/hostBridge";
+import { createDefaultAgentAppRuntimeHostOptions } from "../runtime/agentRuntimeAppServerClient";
 import { AgentRuntimeCapabilityHost } from "../runtime/agentRuntimeCapabilityHost";
 import type {
   AgentAppRunProjectionAction,
@@ -594,6 +595,7 @@ export function AgentAppRuntimePage({
       appVersion: selected.identity.appVersion,
       packageHash: selected.identity.packageHash,
       manifestHash: selected.identity.manifestHash,
+      ...createDefaultAgentAppRuntimeHostOptions(),
     });
   }, [selected]);
   const hostBridgeCapabilities = useMemo(
@@ -1106,7 +1108,9 @@ export function AgentAppRuntimePage({
                         : "font-medium text-foreground"
                     }
                   >
-                    v{selectedCloudApp.version}
+                    {t("agentApp.apps.runtime.appInfo.versionValue", {
+                      version: selectedCloudApp.version,
+                    })}
                   </dd>
                 </div>
               ) : null}

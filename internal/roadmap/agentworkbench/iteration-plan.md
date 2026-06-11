@@ -1,0 +1,217 @@
+# Agent Workbench v0.3.0 迭代计划
+
+> 状态：active
+> 创建时间：2026-06-10
+> 目标仓库：`/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench`
+> Lime 规则归档：`internal/roadmap/agentworkbench/`
+
+## 主目标
+
+把 Agent Workbench 做成 Lime AgentUI / AgentRuntime 标准指引，能指导 Content Studio、Agent Apps 和后续 Lime 主仓 SDK 收敛实现，而不是只提供概念介绍。
+
+本次迭代完成后，应能回答：
+
+1. Lime AgentUI 标准表面有哪些，哪些是 current owner。
+2. `@limecloud/agent-ui-contracts`、`@limecloud/agent-runtime-projection`、`@limecloud/agent-runtime-ui` 与 `@limecloud/agent-runtime-client` 如何拆包，为什么不合成一个大包。
+3. App Server / RuntimeCore / ExecutionBackend 需要输出哪些 facts，AgentUI 如何消费。
+4. Subagents 在 Lime 中怎么建模、投影、验收。
+5. 现有 Lime 包和产品应用如何迁移，哪些路径是 compat / deprecated / dead。
+
+## 当前事实
+
+| 事实 | 状态 |
+| --- | --- |
+| `lime-agent-workbench` 已有 VitePress 文档站和 GitHub Pages workflow | done |
+| `package.json` 版本为 `0.2.0` | done |
+| 文档已有 architecture、runtime-event、ui-projection、quickstart、SDK overview | done |
+| 文档已经去除非标准树形过程术语作为标准方向 | done |
+| `/subagents` 顶层页缺失 | done |
+| SDK 四包已从文档规划推进到 package-level API / fixture / conformance seed | done |
+| runtime-client 与 App Server Host 配合仍偏概念 | done |
+| Workbench 与 Lime 主仓现有包的迁移关系需要更明确 | partial |
+| Content Studio UI 主路径已统一到标准 AgentUI surface | partial |
+
+## 写集边界
+
+本轮推荐写集：
+
+```text
+/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench/docs/**
+/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench/docs/.vitepress/config.mts
+/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench/README.md
+/Users/coso/Documents/dev/ai/aiclientproxy/lime/internal/roadmap/agentworkbench/**
+```
+
+谨慎写集：
+
+```text
+/Users/coso/Documents/dev/ai/aiclientproxy/lime/packages/agent-runtime-client/**
+/Users/coso/Documents/dev/ai/aiclientproxy/lime/packages/agent-ui-contracts/**
+/Users/coso/Documents/dev/ai/aiclientproxy/lime/packages/agent-runtime-projection/**
+/Users/coso/Documents/dev/ai/aiclientproxy/lime/packages/agent-runtime-ui/**
+```
+
+谨慎写集需要先盘点当前 dirty diff，避免覆盖其他进程工作。
+
+本轮禁止顺手写集：
+
+```text
+/Users/coso/Documents/dev/ai/aiclientproxy/lime/src/features/agent-app/**
+/Users/coso/Documents/dev/ai/aiclientproxy/lime/src/lib/dev-bridge/**
+/Users/coso/Documents/dev/ai/aiclientproxy/lime/lime-rs/**
+```
+
+除非另起实现分支并明确认领，否则不要在本次文档标准化任务里夹写这些生产代码。
+
+## P0 任务
+
+### P0.1 Subagents 标准页
+
+目标：新增 `/subagents` 顶层页，固定 Lime 对 subagent、worker、task、job、channel、handoff、team review 的标准表达。
+
+必须覆盖：
+
+- Runtime owner：`task.created / subagent.started / channel.message / handoff.requested / review.verdict` 等事件家族。
+- UI projection：ExecutionGraph、Subagents threads、delegation calls、activity summary、Artifact / Evidence refs。
+- 控制面：spawn、cancel、pause、resume、handoff、respond_action。
+- 降级：solo run、missing lineage、unavailable remote channel。
+- 禁止：assistant prose 代表子代理完成、本地 UI state 自建 worker truth。
+
+验收：
+
+- `docs/subagents.md` 存在，并在 nav/sidebar 中可访问。
+- 页面明确 `current / compat / deprecated / dead`。
+- 页面链接到 Runtime 事件、读模型、UI 投影、Agents 概念页。
+
+### P0.2 SDK 四包标准页补强
+
+目标：让 TypeScript SDK 文档能直接指导 Lime 主仓包实现。
+
+必须覆盖：
+
+- `@limecloud/agent-ui-contracts`：types、schemas、fixtures、versioning。
+- `@limecloud/agent-runtime-projection`：projector、selectors、hydration、reconciliation、replay、Subagents model。
+- `@limecloud/agent-runtime-ui`：React primitives、surfaces、callbacks、i18n label contract、CSS / DOM contract。
+- `@limecloud/agent-runtime-client`：JSON-RPC、Host bridge、event subscription、read APIs、errors。
+- `@limecloud/agent-ui`：future optional facade，只 re-export UI 侧，不带 transport。
+
+验收：
+
+- SDK 章节至少新增 React surfaces / conformance / package boundaries 页面，或等价补全现有页面。
+- 文档明确禁止依赖方向。
+- 文档给出最小 API 草案和 fixture replay 示例。
+
+### P0.3 Runtime 配合页补强
+
+目标：把 AgentRuntime 与 AgentUI 的配合写成实现合同，而不是概念图。
+
+必须覆盖：
+
+- RuntimeEvent envelope 与 scope id。
+- ThreadReadModel / TaskSnapshot 的 hydration 责任。
+- App Server Host JSON-RPC 方法分组。
+- Event stream repair、snapshot reconciliation、large output refs。
+- Provider Store、Tool inventory、Policy / Permission / Sandbox owner。
+
+验收：
+
+- `contracts/app-server-host.md`、`contracts/runtime-read-model.md`、`quickstart/runtime-provider.md` 至少有一处明确端到端实现路径。
+- Runtime provider 文档强调不依赖 React、不生成 UI props。
+
+### P0.4 构建和发布前验证
+
+目标：保证 GitHub Pages 可发布。
+
+必须运行：
+
+```bash
+npm run docs:build
+```
+
+可选运行：
+
+```bash
+npm run docs:dev
+```
+
+验收：
+
+- VitePress build 通过。
+- 新增页面无断链或导航缺页。
+- 若版本号变化，必须同步 `package.json`、`package-lock.json` 和 release 文档。
+
+## P1 任务
+
+| 任务 | 目标 |
+| --- | --- |
+| Workbench vs Lime 主仓迁移表 | 把现有 packages 与目标四包逐项映射，给出退出条件。 |
+| Conformance fixture 设计 | done：定义纯文本、工具成功、工具失败、HITL、artifact/evidence、断流恢复、subagent handoff fixture，并落到 `@limecloud/agent-ui-contracts`。 |
+| Content Studio 接入蓝图 | 把 Content Studio 从产品页面角度接入 runtime-client + projection + react surfaces。 |
+| Governance guard 设计 | 后续在 Lime 主仓加扫描，防止非标准树形过程术语 / 本地 process component / provider direct API 回流。 |
+| 多进程任务板 | done：把 runtime-client、App Server facts runner、governance guard、product adoption、React surfaces、release integration 拆成可认领 workstream。 |
+
+## P2 任务
+
+| 任务 | 目标 |
+| --- | --- |
+| SDK seed 实现 | 在 Lime 主仓 packages 中把 contracts/projection/react/runtime-client seed 变成可消费包。 |
+| Runtime provider fixture runner | done：`@limecloud/agent-runtime-projection` 已能 replay 标准 contracts fixtures，并能消费 App Server current read / event / evidence export facts。 |
+| AgentUI React smoke | done：`@limecloud/agent-runtime-ui` 已用标准 fixture replay state 渲染 MessageParts、ProcessTimeline、ExecutionGraph、ActionRequired、Subagents。 |
+| GitHub Pages 版本发布 | 按版本标签发布 `v0.3.0` 或后续版本。 |
+
+## 进度日志
+
+| 时间 | 进度 | 证据 |
+| --- | --- | --- |
+| 2026-06-10 | 建立 `internal/roadmap/agentworkbench` 迭代入口，固定主目标、写集、P0/P1/P2。 | 本文件、`README.md`、`parallel-workstreams.md`、`acceptance.md`。 |
+| 2026-06-10 | 完成 Workbench P0 文档标准化：新增 Subagents、TypeScript package boundaries、React surfaces、Conformance，补强 App Server Host、Runtime read model、Runtime provider，并接入导航。 | `docs/subagents.md`、`docs/sdk/typescript/package-boundaries.md`、`docs/sdk/typescript/react-surfaces.md`、`docs/sdk/typescript/conformance.md`、`docs/.vitepress/config.mts`。 |
+| 2026-06-10 | 完成发布前构建验证。 | `npm run docs:build` 通过；仅有 VitePress chunk size warning，非阻塞。 |
+| 2026-06-10 | 完成 Lime 主仓 SDK contracts seed：`@limecloud/agent-ui-contracts` 新增标准 conformance fixtures、runtime/read model/projection/fixture validation helpers，并扩展 subagent/handoff/review scope ids。 | `packages/agent-ui-contracts/src/fixtures.ts`、`packages/agent-ui-contracts/src/validation.ts`、`npm --prefix packages/agent-ui-contracts run test` 通过。 |
+| 2026-06-10 | 完成 projection fixture replay seed：`@limecloud/agent-runtime-projection` 新增 `replayAgentUiFixture`，标准 fixtures 可投影到 ProjectionState，并补 subagent graph node 识别。 | `packages/agent-runtime-projection/src/fixtureReplay.ts`、`packages/agent-runtime-projection/tests/fixtureReplay.test.mjs`、`npm --prefix packages/agent-runtime-projection run test` 通过。 |
+| 2026-06-10 | 完成 React fixture smoke：`@limecloud/agent-runtime-ui` 使用标准 fixture replay state 做 server render，覆盖 MessageParts、ProcessTimeline、ExecutionGraph、ActionRequired 与 subagent handoff graph。 | `packages/agent-runtime-ui/tests/ui.test.mjs`、`npm --prefix packages/agent-runtime-ui run test` 通过。 |
+| 2026-06-10 | 建立多进程任务板，明确剩余 workstream、窄写集、current owner、禁止方向、验证命令和推荐下一刀。 | `internal/roadmap/agentworkbench/task-board.md`。 |
+| 2026-06-10 | 完成 Runtime Client Conformance：`@limecloud/agent-runtime-client/sessionGateway` 适配已有 App Server session gateway 为完整 `AgentRuntimeClient`，覆盖 lifecycle、readThread、exportEvidence、runtime event dispatch / nextEvent、transport error propagation 与 browser-safe 子路径。 | `packages/agent-runtime-client/src/sessionGateway.ts`、`packages/agent-runtime-client/tests/client.test.mjs`、`npm --prefix packages/agent-runtime-client run test` 通过。 |
+| 2026-06-10 | 完成 Workstream 2：App Server Facts Runner。`@limecloud/agent-runtime-projection` 新增纯 App Server facts adapter，把 `agentSession/event`、`agentSession/read`、`evidence/export` 投影为标准 execution events 和 `AgentUiProjectionState`。 | `packages/agent-runtime-projection/src/appServerFacts.ts`、`packages/agent-runtime-projection/tests/appServerFacts.test.mjs`、`npm --prefix packages/agent-runtime-projection run test` 通过。 |
+| 2026-06-10 | 完成 Subagents 标准模型 seed：contracts 增加并校验完整 `AgentUiSubagentsModel`，projection 输出 `state.subagents`，React `SubagentsView` 只消费该模型。 | `packages/agent-ui-contracts/src/projection.ts`、`packages/agent-ui-contracts/src/validation.ts`、`packages/agent-runtime-projection/src/subagents.ts`、`packages/agent-runtime-ui/src/subagents.tsx`。 |
+| 2026-06-10 | 补齐四包 README SDK 使用说明：current 包名、事件分类、lifecycle、transport、state/hydration、React surfaces、conformance、package metadata 与禁止方向。 | `packages/agent-ui-contracts/README.md`、`packages/agent-runtime-client/README.md`、`packages/agent-runtime-projection/README.md`、`packages/agent-runtime-ui/README.md`。 |
+| 2026-06-10 | 完成 AgentUI 防回流治理 guard 验证：非标准树术语、本地 process owner、直连 Provider runtime 已进入 legacy surface catalog 机械守卫。 | `src/lib/governance/legacySurfaceCatalog.json`、`src/lib/governance/legacySurfaceCatalog.test.ts`；`npm test -- src/lib/governance/legacySurfaceCatalog.test.ts`、`npm run governance:legacy-report`、`npm run test:contracts` 通过。 |
+| 2026-06-10 | 完成 Agent App seed adoption 验证：运行页默认宿主使用标准 `AgentRuntimeClient`，Host Agent Run 面板使用共享 `AgentUiProjectionView`，action callback 回到宿主。 | `src/features/agent-app/runtime/agentRuntimeClientApi.ts`、`src/features/agent-app/runtime/agentRuntimeAppServerClient.ts`、`src/features/agent-app/runtime/agentRunProjectionState.ts`、`src/features/agent-app/ui/AgentRunProjectionPanel.tsx`；相关定向测试通过。 |
+| 2026-06-10 | 补强 Workbench SDK 文档站：contracts validation、types/events/fixtures、projection projector/selectors/replay、runtime-client events、runtime-ui Subagents 与 conformance 均对齐四包 current owner。 | `/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench/docs/sdk/typescript/**`；`npm run docs:build` 通过。 |
+| 2026-06-10 | 补齐 Runtime UI Artifact / Evidence refs 标准 surface：React 包新增 `AgentUiRefList`、`ArtifactRefList`、`EvidenceRefList`，组合视图接入 artifact/evidence callbacks 和 labels。 | `packages/agent-runtime-ui/src/refs.tsx`、`packages/agent-runtime-ui/src/projectionView.tsx`、`packages/agent-runtime-ui/tests/ui.test.mjs`；`npm --prefix packages/agent-runtime-ui run test` 通过。 |
+| 2026-06-10 | 按 AG-UI / AI SDK 的页面颗粒度补强 Lime 自有 SDK reference，但事实源仍是 Lime 四包：新增 event families、projection state、transport contract、provider boundary、callbacks、refs、conformance runner、AgentUI 最小面板页面。 | `/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench/docs/sdk/typescript/**`、`docs/quickstart/agentui-minimal-panel.md`、`docs/.vitepress/config.mts`。 |
+| 2026-06-10 | 完成 Content Studio adoption blueprint：把 Host Provider Runtime PRD 转成 Workbench 接入指南，明确产品 owns / does not own、标准 surface 映射、compat 迁移表和 blocked 行为。 | `/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench/docs/tutorials/content-studio.md`。 |
+| 2026-06-10 | 完成本轮验证：四包定向测试、Workbench 文档构建、Agent Runtime current fixture smoke、术语扫描和 diff whitespace 检查均通过。 | `npm --prefix packages/agent-ui-contracts run test`、`npm --prefix packages/agent-runtime-client run test`、`npm --prefix packages/agent-runtime-projection run test`、`npm --prefix packages/agent-runtime-ui run test`、`npm run smoke:agent-runtime-current-fixture`、`npm run docs:build`、非标准树形过程术语扫描无 current docs 命中。 |
+| 2026-06-10 | 完成 Agent App 真实主路径 smoke：正式 `Agent Apps` 聚合入口启动 runtime iframe，SDK 经 Host Bridge 调用 `startTask/getTask/submitHostResponse/cancelTask`，App Server current `agentSession/*` 与 external backend 贯通，Host Agent Run 使用共享 `AgentUiProjectionView` 渲染标准 projection DOM。 | `scripts/agent-app/runtime-electron-sdk-fixture-smoke.mjs` 连续通过；summary 证据位于 `.lime/qc/gui-evidence/agent-app-runtime-electron-sdk-fixture/agent-app-runtime-electron-sdk-fixture-summary.json`，包含 `agentSession/start`、`agentSession/turn/start`、`agentSession/action/respond`、`agentSession/read`、`agentSession/turn/cancel`、`agent-app-sdk-artifact-1`、`evidence:.lime/artifacts/agent-app-sdk-artifact-1.json`。 |
+| 2026-06-10 | 修正 App Server artifact evidence replay 进入标准 AgentUI projection 的映射：`evidence:recorded` 现在可从 runtime replay `refs` / `payload.artifactRef` 得到 `EvidenceRefList` DOM；Host projection smoke 不再把已处理 action 误判为必须存在 pending `ActionRequiredList`。 | `src/features/agent-app/runtime/agentUiProjectionBridge.ts`、`src/features/agent-app/runtime/agentUiProjectionBridge.test.ts`、`src/features/agent-app/ui/AgentRunProjectionPanel.test.tsx`、`scripts/agent-app/runtime-electron-sdk-fixture-smoke.test.mjs`；`node --check`、`npx eslint --max-warnings 0 ...`、`npm test -- scripts/agent-app/runtime-electron-sdk-fixture-smoke.test.mjs src/features/agent-app/runtime/agentUiProjectionBridge.test.ts src/features/agent-app/ui/AgentRunProjectionPanel.test.tsx` 通过。 |
+| 2026-06-11 | 完成 Content Studio 标准 UI surface 接入：`AI agents` 工作台和通用 `AgentSessionPanel` 统一通过 `AgentUiProjectionSurface` 消费共享 projection read model，产品页面不再直接拼共享 timeline / runtime facts primitives，并补边界审计阻止 primitives 回流。 | `/Users/coso/Documents/dev/ai/limecloud/content-studio/src/renderer/src/components/agent/AgentUiProjectionSurface.tsx`、`src/renderer/src/components/agent/AgentSessionPanel.tsx`、`src/renderer/src/components/agents/AgentsWorkbench.tsx`、`scripts/lime-agent-boundary-audit.mjs`；`npm run verify:lime-agent`、`npm run test:functional -- --test-name-pattern "Lime Agent 边界审计会阻断 runtime/key/UI 协议回流"`、相关 `git diff --check` 通过。 |
+| 2026-06-11 | 完成 Content Studio session gateway 标准包接入：standalone/dev App Server turn 主链已通过 `@limecloud/agent-runtime-client/sessionGateway` 的 `createAgentRuntimeClientFromSessionGateway(...)` 包装为标准 `AgentRuntimeClient`，`nextEvent()` 保持标准 `agentSession/event` notification 形状，内部轮询通过标准 client 消费 notification 后再提取 runtime event。 | `/Users/coso/Documents/dev/ai/limecloud/content-studio/package.json`、`package-lock.json`、`src/main/services/appServerAgentRuntimeGateway.ts`、`scripts/lime-agent-boundary-audit.mjs`、`tests/functional/content-flow.test.mjs`、Content Studio LimeAgent 路线图工件；`npm run verify:lime-agent`、定向 functional、`npx tsc --noEmit --pretty false` 通过。 |
+| 2026-06-11 | 补齐标准包发布前门槛：修复 `app-server-client` method catalog / schema fixture 漂移，补齐 `WorkspaceEnsureProject*` checked-in schema，两个标准包包级测试和 package dry-run 均通过。 | `packages/app-server-client/tests/client.test.mjs`、`lime-rs/crates/app-server-protocol/schema/json/**`、`lime-rs/crates/app-server-protocol/src/protocol/v0/tests/catalog.rs`；`npm --prefix packages/app-server-client run test`、`npm --prefix packages/agent-runtime-client run test`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol schema_fixtures_match_generated_output`、`npm pack --dry-run --json --ignore-scripts` 通过；该行是发布前 checkpoint，当前 registry 状态以后续 scoped 发布记录为准。 |
+| 2026-06-11 | 固化标准包发布与 Content Studio 产品接入 runbook：明确 scoped 发布顺序、失败处理、禁止 `file:` / 绝对路径依赖、Content Studio runtime-client 接入步骤和 GUI smoke 完成判定。 | runbook 已更新为当前状态：`@limecloud/app-server-client@1.66.0` 与 `@limecloud/agent-runtime-client@0.1.1` 已发布并接入；早期 npm 认证失败和误发只作为历史记录。 |
+| 2026-06-11 | 收掉 Agent App runtime bridge 巨型文件红线：把字段读取 / payload helper 抽到 `agentUiProjectionFieldReaders.ts`，把 `AgentUiProjectionEvent -> AgentRuntimeExecutionEvent` 适配抽到 `agentUiRuntimeEventAdapter.ts`，`agentUiProjectionBridge.ts` 从 `1253` 行降到 `895` 行。 | `src/features/agent-app/runtime/agentUiProjectionBridge.ts`、`src/features/agent-app/runtime/agentUiProjectionFieldReaders.ts`、`src/features/agent-app/runtime/agentUiRuntimeEventAdapter.ts`；`npm test -- src/features/agent-app/runtime/agentUiProjectionBridge.test.ts src/features/agent-app/runtime/agentUiProjectionViewModel.test.ts src/features/agent-app/ui/AgentRunProjectionPanel.test.tsx`、`npx eslint ... --max-warnings 0`、`git diff --check` 通过。 |
+| 2026-06-11 | 收缩 Agent App Host run 本地过程面：Host action 测试迁到 current `respondAction -> agentSession/action/respond`，`AgentRunHostDrawer` 拆成宿主壳、projection input enrichment 和本地 fallback，主抽屉降到 `382` 行；标准 projection 有内容时不再混入本地 process view。 | `src/features/agent-app/ui/AgentAppRuntimePage.agentRun.test.tsx`、`src/features/agent-app/ui/AgentRunHostDrawer.tsx`、`src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx`、`src/features/agent-app/ui/AgentRunHostDrawerProjectionInput.ts`；`npx eslint ... --max-warnings 0`、`npm test -- src/features/agent-app/ui/AgentAppRuntimePage.agentRun.test.tsx src/features/agent-app/ui/AgentRunProjectionPanel.test.tsx src/features/agent-app/runtime/agentUiProjectionViewModel.test.ts src/features/agent-app/runtime/agentUiProjectionBridge.test.ts src/features/agent-app/runtime/agentRunProjectionState.test.ts`、`git diff --check` 通过。 |
+| 2026-06-11 | 完成 Agent App projection builders 二次拆分：`agentUiProjectionBridge.ts` 只保留 task event normalization、sequence 和 runtime event facade，projection builders 进入 `agentUiProjectionBuilders.ts`，owner / scope / status / control mapping 进入 `agentUiProjectionMapping.ts`，所有拆分文件均低于 `800` 行预警线。 | `src/features/agent-app/runtime/agentUiProjectionBridge.ts`、`src/features/agent-app/runtime/agentUiProjectionBuilders.ts`、`src/features/agent-app/runtime/agentUiProjectionMapping.ts`；`npx eslint ... --max-warnings 0`、`npm test -- src/features/agent-app/ui/AgentAppRuntimePage.agentRun.test.tsx src/features/agent-app/ui/AgentRunProjectionPanel.test.tsx src/features/agent-app/runtime/agentUiProjectionViewModel.test.ts src/features/agent-app/runtime/agentUiProjectionBridge.test.ts src/features/agent-app/runtime/agentRunProjectionState.test.ts`、`git diff --check` 通过。 |
+| 2026-06-11 | 补 Agent App projection 边界结构守卫：新增测试防止 `agentUiProjectionBridge.ts` 重新承接 builders / mapping 职责，并机械检查 bridge、builders、mapping、field readers、runtime adapter 均低于 `800` 行预警线。 | `src/features/agent-app/runtime/agentUiProjectionBoundary.test.ts`；`npx eslint src/features/agent-app/runtime/agentUiProjectionBoundary.test.ts ... --max-warnings 0`、`npm test -- src/features/agent-app/runtime/agentUiProjectionBoundary.test.ts src/features/agent-app/runtime/agentUiProjectionBridge.test.ts`、`git diff --check` 通过。 |
+| 2026-06-11 | 补 Agent App HostDrawer 边界结构守卫：新增测试防止主抽屉直接 import `InlineToolProcessStep` / `MarkdownRenderer` / `ThinkingBlock` 等本地 process 组件，并要求本地 fallback 只能作为退场 residual 存在。 | `src/features/agent-app/ui/AgentRunHostDrawerBoundary.test.ts`；`npx eslint src/features/agent-app/ui/AgentRunHostDrawerBoundary.test.ts ... --max-warnings 0`、`npm test -- src/features/agent-app/ui/AgentRunHostDrawerBoundary.test.ts src/features/agent-app/ui/AgentAppRuntimePage.agentRun.test.tsx src/features/agent-app/ui/AgentRunProjectionPanel.test.tsx`、`git diff --check` 通过。 |
+| 2026-06-11 | 完成 Agent App HostDrawer 主路径标准化收口：`AgentRunHostDrawer` 始终渲染标准 `AgentRunProjectionPanel`，不再 import 或调用本地 process fallback，空态也交给标准 projection；`AgentRunHostDrawerFallback.tsx` 仅作为待删除的 `deprecated` residual 保留。 | `src/features/agent-app/ui/AgentRunHostDrawer.tsx`、`src/features/agent-app/ui/AgentRunHostDrawerBoundary.test.ts`；`npx eslint src/features/agent-app/ui/AgentRunHostDrawer.tsx src/features/agent-app/ui/AgentRunHostDrawerBoundary.test.ts src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx src/features/agent-app/ui/AgentRunHostDrawerProjectionInput.ts --max-warnings 0`、`npm test -- src/features/agent-app/ui/AgentRunHostDrawerBoundary.test.ts src/features/agent-app/ui/AgentAppRuntimePage.agentRun.test.tsx src/features/agent-app/ui/AgentRunProjectionPanel.test.tsx`、`git diff --check` 通过。 |
+| 2026-06-11 | 完成 Agent App HostDrawer fallback 防回流治理升级：`legacySurfaceCatalog` 新增 `agent-app-host-drawer-local-process-fallback`，将主抽屉重新调用本地 fallback 归类为 `dead`；contract guard 更新为 current `sharedProjectionInput -> buildAgentRunStandardProjectionStateFromState(sharedProjectionInput)` 形状。 | `src/lib/governance/legacySurfaceCatalog.json`、`src/lib/governance/legacySurfaceCatalog.test.ts`、`scripts/check-app-server-client-contract.mjs`；`npm test -- src/lib/governance/legacySurfaceCatalog.test.ts`、`npm run governance:legacy-report`、`npm run test:contracts`、`git diff --check` 通过。 |
+| 2026-06-11 | 历史 checkpoint：首次复核标准包发布门槛时 npm 认证未就绪，因此停在未发布状态。 | 该行只解释早期阻塞来源；当前 scoped registry 发布状态以后续 `@limecloud/app-server-client@1.66.0`、`@limecloud/agent-runtime-client@0.1.1` 发布记录为准。 |
+| 2026-06-11 | 修正标准包发布口径：无 scope `app-server-client@1.66.0` 已误发到个人包列表，`@limecloud/agent-runtime-client@0.1.0` 已误依赖旧名；最终标准链路改为 `@limecloud/app-server-client@1.66.0` 与 `@limecloud/agent-runtime-client@0.1.1`，开发态通过 scoped alias 指向本地源码。 | `packages/app-server-client/package.json`、`packages/agent-runtime-client/package.json`、`packages/agent-runtime-client/src/**`、`electron/**`、`vite.config.ts`、`scripts/electron/build-host.mjs`、`packages/agent-app-runtime/build.mjs`、`package-lock.json`、`internal/roadmap/agentworkbench/standard-package-release-runbook.md`。 |
+| 2026-06-11 | 完成 scoped 标准包 registry 发布与 Content Studio 接入复核：`@limecloud/app-server-client@1.66.0`、`@limecloud/agent-runtime-client@0.1.1` 均可从 npm registry 查询，Content Studio 固定依赖 `@limecloud/agent-runtime-client: 0.1.1`，lockfile 解析到 `@limecloud` organization tarball，并禁止无 scope `app-server-client` 回流。 | `npm view "@limecloud/app-server-client@1.66.0"`、`npm view "@limecloud/agent-runtime-client@0.1.1"`、`/Users/coso/Documents/dev/ai/limecloud/content-studio/package.json`、`package-lock.json`、`scripts/lime-agent-boundary-audit.mjs`。 |
+
+## 完成判定
+
+本次迭代完成需要同时满足：
+
+1. `lime-agent-workbench` 文档站覆盖 P0.1-P0.3。
+2. 导航可访问新增页面。
+3. `npm run docs:build` 通过。
+4. 本路线图进度日志记录已完成项和剩余缺口。
+5. 未覆盖其他进程的 Lime 主仓 dirty diff。
+
+## 当前完成度
+
+路线图工件完成度：`100%`。
+
+Workbench / Lime AgentUI 标准整体完成度：`98.5%`。当前已完成 P0 文档标准页、导航接入、构建验证、contracts seed、projection fixture replay、App Server facts runner、Subagents 标准模型、Artifact/Evidence refs React surface、React fixture smoke、runtime-client conformance、四包 README SDK 化、治理 guard 验证、Agent App 真实主路径 smoke、Content Studio adoption blueprint、Content Studio 标准 UI surface 接入、Content Studio session gateway 形状收敛、scoped 标准包 registry 发布、Content Studio 固定安装并接入 `@limecloud/agent-runtime-client/sessionGateway`、标准包发布前测试 / pack dry-run 门槛、标准包发布 / Content Studio 接入 runbook、Agent App runtime bridge 巨型文件拆分、Agent App Host run 本地过程面收缩、Agent App projection builders / mapping 二次拆分、Agent App projection 边界结构守卫、Agent App HostDrawer 边界结构守卫、Agent App HostDrawer 始终渲染标准 projection 的主路径收口，以及 HostDrawer fallback 防回流治理 catalog / contract guard；剩余缺口是 Content Studio GUI smoke / 产品回归、Agent App 本地 process fallback 文件物理删除、正式版本发布，以及需要真实 Provider 授权时的 live evidence。完成度暂不升到 `100%`，因为真实页面 smoke 仍未闭环。
+
+后续拆分风险：`src/features/agent-app/runtime/agentUiProjectionBridge.ts` 已降到 `82` 行，`agentUiProjectionBuilders.ts` 为 `482` 行，`agentUiProjectionMapping.ts` 为 `373` 行，`src/features/agent-app/ui/AgentRunHostDrawer.tsx` 已降到 `382` 行，当前不再触碰 `800` 行预警和 `1000` 行硬红线；新增 Agent App 协议映射必须进入 builders / mapping / field readers 对应边界，不得塞回 bridge。`AgentRunHostDrawerFallback.tsx` 已退出主路径，仅作为待删除的 `deprecated` residual，不能继续承接标准过程展示或 projection 空态。

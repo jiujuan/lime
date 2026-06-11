@@ -118,7 +118,7 @@ AgentUI 可以消费 raw stream event、profile event、snapshot 和 read model�
 RuntimeEvent / AgentRuntimeProfileEvent
   -> ThreadReadModel / TaskSnapshot / EvidenceSummary
   -> Agent UI envelope projection
-  -> Workspace / Harness / Timeline / Task Capsule / Team Workbench
+  -> Workspace / Harness / Timeline / Task Capsule / Subagents
 ```
 
 P1 允许 AgentUI 对 `schemaVersion = lime-profile-0.4.0` 的 dotted profile event 静默保持 stream 活跃；P2 开始必须把这些 facts 归入 `ThreadReadModel`，再由 AgentUI 只读展示。

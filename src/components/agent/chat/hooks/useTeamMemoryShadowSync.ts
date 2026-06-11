@@ -48,7 +48,7 @@ function buildTeamSelectionMemoryContent(params: {
   const lines = [
     params.activeTheme ? `主题：${params.activeTheme}` : null,
     params.sessionId ? `会话：${params.sessionId}` : null,
-    `Team：${team.label}`,
+    `Subagents profile：${team.label}`,
     `来源：${team.source}`,
     team.presetId ? `预设：${team.presetId}` : null,
     normalizeLine(team.description)
@@ -266,7 +266,9 @@ export function resolveSelectedTeamFromShadowSnapshot(
 
   const source = readMemoryField(lines, "来源");
   const presetId = readMemoryField(lines, "预设");
-  const label = readMemoryField(lines, "Team");
+  const label =
+    readMemoryField(lines, "Subagents profile") ??
+    readMemoryField(lines, "Team");
   const description = readMemoryField(lines, "说明");
   const roles = parseRoleLines(lines);
 

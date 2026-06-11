@@ -25,7 +25,6 @@ const mounted: RenderResult[] = [];
 function renderPage(
   onTabChange = vi.fn(),
   onTabPrefetch?: (tab: SettingsTabs) => void,
-  onOpenCompanion?: () => void,
   onNavigate?: (page: string, params?: unknown) => void,
 ): RenderResult {
   const container = document.createElement("div");
@@ -37,7 +36,6 @@ function renderPage(
       <SettingsHomePage
         onTabChange={onTabChange}
         onTabPrefetch={onTabPrefetch}
-        onOpenCompanion={onOpenCompanion}
         onNavigate={onNavigate as any}
       />,
     );
@@ -206,26 +204,11 @@ describe("SettingsHomePage", () => {
     expect(onTabPrefetch).toHaveBeenCalledWith(SettingsTabs.Appearance);
   });
 
-  it("点击桌宠入口时应打开桌宠管理页", () => {
-    const onOpenCompanion = vi.fn();
-    const { container } = renderPage(vi.fn(), undefined, onOpenCompanion);
-    const button = Array.from(container.querySelectorAll("button")).find(
-      (item) => item.textContent?.includes("Companion"),
-    );
-
-    act(() => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onOpenCompanion).toHaveBeenCalledTimes(1);
-  });
-
   it("应展示当前入口卡并支持跳到当前落点", () => {
     const onTabChange = vi.fn();
     const onNavigate = vi.fn();
     const { container } = renderPage(
       onTabChange,
-      undefined,
       undefined,
       onNavigate,
     );

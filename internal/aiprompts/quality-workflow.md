@@ -186,7 +186,7 @@ npm run smoke:claw-chat-current-fixture
 
 如果本轮是在清退插件中心模块，插件安装 / 管理 / UI / RPC 命令族也必须同步从 `src/lib/api` 网关、页面入口、设置入口、Rust 注册、DevBridge 与默认 mock 中撤掉；当前 GUI 不再保留插件中心或动态插件侧栏入口。最低校验至少包含 `npm run test:contracts`、`npm run governance:legacy-report` 与受影响前端回归。
 
-如果本轮涉及 `companion_*` 桌宠命令族，还要同步检查本地 companion `WebSocket` 入口、前端 `src/lib/api/companion.ts` 网关、Rust 注册、治理目录册以及浏览器模式 mock 返回形态；浏览器模式下这组命令默认也要保持可 mock，不要让桌宠接入把默认页面渲染链路卡死。
+`companion_*` 桌宠命令族已下线并归类为 `dead`。如果本轮发现 `companion_get_pet_status`、`companion_launch_pet`、`companion_send_pet_command`、`src/lib/api/companion.ts`、桌宠设置页、桌宠偏好或 `companion-pet-status` 事件重新出现在生产入口、Desktop Host、DevBridge、默认 mock 或 App Server 主链，应先按旧路回流处理并删除；不得把它们恢复成浏览器模式 mock fallback。
 
 如果本轮涉及 team runtime 工具面或主线程用户消息工具，还要同步检查 Rust catalog / inventory、runtime 注册、浏览器 fallback mock 与前端 tool display；`Agent / TeamCreate / TeamDelete / SendMessage / ListPeers` 必须保持同一组 current surface，`SendUserMessage` 也必须继续停留在 current 主线程工具面，不要把已删除的 `SubAgentTask` compat 工具重新接回 Rust catalog、runtime 注册、mock 或前端 tool display。
 
@@ -489,7 +489,7 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 修改 `execution_runtime.recent_access_mode / recent_theme / recent_session_mode / recent_gate_key / recent_run_title / recent_content_id` 恢复语义，或前端 `harness.access_mode / harness.theme / harness.session_mode / harness.gate_key / harness.run_title / harness.content_id` steady-state 去重逻辑
 - 修改首页 / 工作区进入 `Claw` 时的首条自动发送上下文，例如 `initialUserPrompt`、`initialAutoSendRequestMetadata`、`harness.service_skill_launch`
 - 修改 `site_*` 站点适配器命令族，例如 `site_recommend_adapters`、`site_get_adapter_launch_readiness`、`site_import_adapter_yaml_bundle`、`site_run_adapter`
-- 修改 `companion_get_pet_status`、`companion_launch_pet`、`companion_send_pet_command`，或调整 Lime 与独立桌宠之间的本地 companion 协议（例如 `pet.provider_overview`、`pet.open_provider_settings`、`pet.request_provider_overview_sync`、`pet.request_pet_cheer`、`pet.request_pet_next_step`、`pet.request_chat_reply`）
+- 发现已下线的 `companion_get_pet_status`、`companion_launch_pet`、`companion_send_pet_command`、`companion-pet-status` 或旧桌宠本地 companion 协议回流
 - 修改自动化设置 App Server method 族，例如 `automationJob/list`、`automationJob/create`、`automationJob/update`、`automationJob/health` 或 `automationJob/runHistory`；旧 `get_automation_*` / `*_automation_job` 命令已退役，只能作为负向回归扫描对象
 - 修改浏览器资料 / 环境预设命令族，或调整它们在 `mockPriorityCommands` 里的优先级
 - 修改浏览器连接器命令族，例如安装目录、启用状态、系统连接器、浏览器动作配置、扩展安装状态、打开 Chrome 扩展 / 远程调试页，或主动断开扩展连接

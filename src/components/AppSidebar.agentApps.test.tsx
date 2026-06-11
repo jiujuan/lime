@@ -6,14 +6,43 @@ import {
   mockListInstalledAgentApps,
   mountSidebarContainer,
   openAccountMenu,
-  resetAppSidebarTest
+  resetAppSidebarTest,
 } from "./AppSidebar.testFixtures";
 
 describe("AppSidebar Agent Apps", () => {
   beforeEach(resetAppSidebarTest);
   afterEach(cleanupAppSidebarTest);
 
-  it("已安装 Agent App 应作为动态导航项显示并直达默认入口", async () => {
+  it("Agent Apps 聚合入口应常驻主导航并进入管理页", async () => {
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({ onNavigate });
+    await flushEffects(2);
+
+    expect(
+      Array.from(
+        container.querySelectorAll(
+          '[data-testid="app-sidebar-main-nav"] button',
+        ),
+      ).map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps", "项目资料"]);
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Agent Apps"]')
+        ?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith("agent-apps", undefined);
+    expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
+
+    await openAccountMenu(container);
+    const accountMenu = container.querySelector(
+      '[data-testid="app-sidebar-account-menu"]',
+    );
+    expect(accountMenu?.textContent).not.toContain("Agent Apps");
+  });
+
+  it("已安装 Agent App 不应作为左侧独立导航项显示", async () => {
     mockListInstalledAgentApps.mockResolvedValue({
       states: [
         {
@@ -36,53 +65,6 @@ describe("AppSidebar Agent Apps", () => {
             ],
           },
         },
-      ],
-      issues: [],
-    });
-    const onNavigate = vi.fn();
-    const container = mountSidebarContainer({ onNavigate });
-    await flushEffects(2);
-
-    expect(container.textContent).toContain("内容工厂");
-    expect(
-      Array.from(
-        container.querySelectorAll('[data-testid="app-sidebar-main-nav"] button'),
-      ).map((button) => button.getAttribute("aria-label")),
-    ).toEqual([
-      "新建任务",
-      "专家",
-      "Skills",
-      "内容工厂",
-      "项目资料",
-    ]);
-
-    const appButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("内容工厂"),
-    ) as HTMLButtonElement | undefined;
-    act(() => {
-      appButton?.click();
-    });
-
-    expect(onNavigate).toHaveBeenCalledWith(
-      "agent-app",
-      expect.objectContaining({
-        appId: "content-factory-app",
-        entryKey: "dashboard",
-        launchRequestKey: expect.any(Number),
-      }),
-    );
-
-    await openAccountMenu(container);
-    const accountMenu = container.querySelector(
-      '[data-testid="app-sidebar-account-menu"]',
-    );
-    expect(accountMenu?.textContent).toContain("Agent Apps");
-    expect(accountMenu?.textContent).not.toContain("内容工厂");
-  });
-
-  it("Agent App Studio 动态导航应使用安装态展示名", async () => {
-    mockListInstalledAgentApps.mockResolvedValue({
-      states: [
         {
           appId: "lime-agent-app-studio",
           disabled: false,
@@ -106,70 +88,28 @@ describe("AppSidebar Agent Apps", () => {
       ],
       issues: [],
     });
-    const onNavigate = vi.fn();
-    const container = mountSidebarContainer({ onNavigate });
+    const container = mountSidebarContainer();
     await flushEffects(2);
 
     const mainNav = container.querySelector(
       '[data-testid="app-sidebar-main-nav"]',
     );
-    expect(mainNav?.textContent).toContain("发布应用");
-    expect(mainNav?.textContent).not.toContain("Lime Agent App Studio");
-
-    const appButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("发布应用"),
-    ) as HTMLButtonElement | undefined;
-    expect(appButton).toBeDefined();
-
-    act(() => {
-      appButton?.click();
-    });
-
-    expect(onNavigate).toHaveBeenCalledWith(
-      "agent-app",
-      expect.objectContaining({
-        appId: "lime-agent-app-studio",
-        entryKey: "dashboard",
-        launchRequestKey: expect.any(Number),
-      }),
-    );
+    expect(mainNav?.textContent).toContain("Agent Apps");
+    expect(mainNav?.textContent).not.toContain("内容工厂");
+    expect(mainNav?.textContent).not.toContain("发布应用");
+    expect(
+      Array.from(
+        container.querySelectorAll(
+          '[data-testid="app-sidebar-main-nav"] button',
+        ),
+      ).map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps", "项目资料"]);
+    expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
   });
 
-  it("Agent App 卸载后应通过变更事件刷新并移除动态导航引用", async () => {
-    mockListInstalledAgentApps
-      .mockResolvedValueOnce({
-        states: [
-          {
-            appId: "content-factory-app",
-            disabled: false,
-            manifest: {
-              displayName: "内容工厂",
-            },
-            projection: {
-              app: {
-                appId: "content-factory-app",
-                displayName: "内容工厂",
-              },
-              entries: [
-                {
-                  key: "dashboard",
-                  kind: "page",
-                  title: "项目首页",
-                },
-              ],
-            },
-          },
-        ],
-        issues: [],
-      })
-      .mockResolvedValueOnce({
-        states: [],
-        issues: [],
-      });
+  it("Agent App 变更事件不应影响侧栏聚合入口", async () => {
     const container = mountSidebarContainer();
     await flushEffects(2);
-
-    expect(container.textContent).toContain("内容工厂");
 
     await act(async () => {
       window.dispatchEvent(new Event("lime:agent-apps-changed"));
@@ -177,18 +117,17 @@ describe("AppSidebar Agent Apps", () => {
     });
     await flushEffects(2);
 
-    expect(mockListInstalledAgentApps).toHaveBeenCalledTimes(2);
-    expect(container.textContent).not.toContain("内容工厂");
+    expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
     expect(
       Array.from(
-        container.querySelectorAll('[data-testid="app-sidebar-main-nav"] button'),
+        container.querySelectorAll(
+          '[data-testid="app-sidebar-main-nav"] button',
+        ),
       ).map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["新建任务", "专家", "Skills", "项目资料"]);
+    ).toEqual(["新建任务", "专家", "Skills", "Agent Apps", "项目资料"]);
   });
 
-  it("Agent App 动态导航加载失败时应降级为静态导航而不输出控制台错误", async () => {
-    const navError = new Error("timeout after 5000ms");
-    mockListInstalledAgentApps.mockRejectedValueOnce(navError);
+  it("安装态读取失败不应影响静态 Agent Apps 聚合入口", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -196,7 +135,13 @@ describe("AppSidebar Agent Apps", () => {
       const container = mountSidebarContainer();
       await flushEffects(2);
 
+      expect(
+        container.querySelector<HTMLButtonElement>(
+          'button[aria-label="Agent Apps"]',
+        ),
+      ).not.toBeNull();
       expect(container.textContent).not.toContain("内容工厂");
+      expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
       expect(
         errorSpy.mock.calls.map(([message]) => String(message)),
       ).not.toEqual(
@@ -204,9 +149,12 @@ describe("AppSidebar Agent Apps", () => {
           expect.stringContaining("加载 Agent App 导航失败"),
         ]),
       );
-      expect(warnSpy).toHaveBeenCalledWith(
-        "加载 Agent App 导航失败，将保持静态导航:",
-        navError,
+      expect(
+        warnSpy.mock.calls.map(([message]) => String(message)),
+      ).not.toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("加载 Agent App 导航失败"),
+        ]),
       );
     } finally {
       errorSpy.mockRestore();

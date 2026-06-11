@@ -107,6 +107,10 @@ function readRepoFileIfExists(path: string): string {
   return repoFileExists(path) ? readRepoFile(path) : "";
 }
 
+function expectLegacyRustFileDeleted(path: string): void {
+  expect(repoFileExists(path), `${path} should stay deleted`).toBe(false);
+}
+
 function listProductionTsFiles(rootPath: string): string[] {
   const absoluteRoot = resolve(cwd(), rootPath);
   if (!existsSync(absoluteRoot)) {
@@ -232,8 +236,8 @@ function readDevBridgeAndMockSources(): string {
 
 function readLegacyVoiceSources(): string {
   const paths = [
-    readRepoFile("lime-rs/src/app/runner.rs"),
-    readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+    readRepoFileIfExists("lime-rs/src/app/runner.rs"),
+    readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher.rs"),
     readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher/voice.rs"),
   ];
   return paths.join("\n");
@@ -320,8 +324,8 @@ describe("ASR / Voice current boundary", () => {
       "src/lib/dev-bridge/mockPriorityCommands.ts",
     );
     const voiceMocksSource = readRepoFile("src/lib/desktop-host/voiceMocks.ts");
-    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
-    const dispatcherSource = readRepoFile(
+    const runnerSource = readRepoFileIfExists("lime-rs/src/app/runner.rs");
+    const dispatcherSource = readRepoFileIfExists(
       "lime-rs/src/dev_bridge/dispatcher.rs",
     );
 
@@ -359,6 +363,8 @@ describe("ASR / Voice current boundary", () => {
     );
     expect(dispatcherSource).not.toContain("mod voice;");
     expect(dispatcherSource).not.toContain("voice::try_handle");
+    expectLegacyRustFileDeleted("lime-rs/src/app/runner.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/dev_bridge/dispatcher.rs");
     expect(repoFileExists("lime-rs/src/dev_bridge/dispatcher/voice.rs")).toBe(
       false,
     );
@@ -377,8 +383,8 @@ describe("ASR / Voice current boundary", () => {
       "src/lib/dev-bridge/mockPriorityCommands.ts",
     );
     const voiceMocksSource = readRepoFile("src/lib/desktop-host/voiceMocks.ts");
-    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
-    const dispatcherSource = readRepoFile(
+    const runnerSource = readRepoFileIfExists("lime-rs/src/app/runner.rs");
+    const dispatcherSource = readRepoFileIfExists(
       "lime-rs/src/dev_bridge/dispatcher.rs",
     );
 
@@ -416,6 +422,8 @@ describe("ASR / Voice current boundary", () => {
     );
     expect(dispatcherSource).not.toContain("mod voice;");
     expect(dispatcherSource).not.toContain("voice::try_handle");
+    expectLegacyRustFileDeleted("lime-rs/src/app/runner.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/dev_bridge/dispatcher.rs");
     expect(repoFileExists("lime-rs/src/dev_bridge/dispatcher/voice.rs")).toBe(
       false,
     );
@@ -430,8 +438,8 @@ describe("ASR / Voice current boundary", () => {
     const restrictedSources = [
       readElectronSources(),
       readDevBridgeAndMockSources(),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readRepoFileIfExists("lime-rs/src/app/runner.rs"),
+      readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher.rs"),
       readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher/voice.rs"),
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
     ].join("\n");
@@ -453,6 +461,8 @@ describe("ASR / Voice current boundary", () => {
     expectStringLiteralsAbsent(restrictedSources, [
       RETIRED_VOICE_MODEL_DEFAULT_FACADE_COMMAND,
     ]);
+    expectLegacyRustFileDeleted("lime-rs/src/app/runner.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/dev_bridge/dispatcher.rs");
     expect(repoFileExists("lime-rs/src/commands/voice_model_cmd.rs")).toBe(
       false,
     );
@@ -463,10 +473,10 @@ describe("ASR / Voice current boundary", () => {
     const appServerSources = readAppServerAsrCredentialSources();
     const restrictedSources = [
       readDevBridgeAndMockSources(),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readRepoFileIfExists("lime-rs/src/app/runner.rs"),
+      readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher.rs"),
       readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher/voice.rs"),
-      readRepoFile("lime-rs/src/commands/mod.rs"),
+      readRepoFileIfExists("lime-rs/src/commands/mod.rs"),
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
     ].join("\n");
 
@@ -493,6 +503,9 @@ describe("ASR / Voice current boundary", () => {
     expect(readElectronSources()).not.toContain(
       `'${RETIRED_VOICE_MODEL_TEST_TRANSCRIBE_FACADE_COMMAND}'`,
     );
+    expectLegacyRustFileDeleted("lime-rs/src/app/runner.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/dev_bridge/dispatcher.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/commands/mod.rs");
     expect(repoFileExists("lime-rs/src/commands/voice_model_cmd.rs")).toBe(
       false,
     );
@@ -553,10 +566,10 @@ describe("ASR / Voice current boundary", () => {
     const restrictedSources = [
       readElectronSources(),
       readDevBridgeAndMockSources(),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readRepoFileIfExists("lime-rs/src/app/runner.rs"),
+      readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher.rs"),
       readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher/voice.rs"),
-      readRepoFile("lime-rs/src/commands/mod.rs"),
+      readRepoFileIfExists("lime-rs/src/commands/mod.rs"),
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
     ].join("\n");
 
@@ -564,18 +577,21 @@ describe("ASR / Voice current boundary", () => {
       restrictedSources,
       RETIRED_ASR_CREDENTIAL_FACADE_COMMANDS,
     );
-    expect(() => readRepoFile("lime-rs/src/commands/asr_cmd.rs")).toThrow();
-    expect(() => readRepoFile("lime-rs/src/voice/commands.rs")).toThrow();
+    expectLegacyRustFileDeleted("lime-rs/src/app/runner.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/dev_bridge/dispatcher.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/commands/mod.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/commands/asr_cmd.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/voice/commands.rs");
   });
 
   it("旧 Voice instruction facade 不应回到 Electron、DevBridge、mock、catalog 或 legacy Rust", () => {
     const restrictedSources = [
       readElectronSources(),
       readDevBridgeAndMockSources(),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readRepoFileIfExists("lime-rs/src/app/runner.rs"),
+      readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher.rs"),
       readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher/voice.rs"),
-      readRepoFile("lime-rs/src/commands/mod.rs"),
+      readRepoFileIfExists("lime-rs/src/commands/mod.rs"),
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
     ].join("\n");
 
@@ -583,7 +599,10 @@ describe("ASR / Voice current boundary", () => {
       restrictedSources,
       RETIRED_VOICE_INSTRUCTION_FACADE_COMMANDS,
     );
-    expect(() => readRepoFile("lime-rs/src/voice/commands.rs")).toThrow();
+    expectLegacyRustFileDeleted("lime-rs/src/app/runner.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/dev_bridge/dispatcher.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/commands/mod.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/voice/commands.rs");
   });
 
   it("旧实时语音转写 / 录音 facade 不应回到前端、Electron、DevBridge、mock、catalog 或 legacy Rust", () => {
@@ -592,8 +611,8 @@ describe("ASR / Voice current boundary", () => {
       asrProviderSource,
       readElectronSources(),
       readDevBridgeAndMockSources(),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readRepoFileIfExists("lime-rs/src/app/runner.rs"),
+      readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher.rs"),
       readRepoFileIfExists("lime-rs/src/dev_bridge/dispatcher/voice.rs"),
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
     ].join("\n");
@@ -606,7 +625,9 @@ describe("ASR / Voice current boundary", () => {
       restrictedSources,
       RETIRED_VOICE_REALTIME_FACADE_COMMANDS,
     );
-    expect(() => readRepoFile("lime-rs/src/voice/commands.rs")).toThrow();
+    expectLegacyRustFileDeleted("lime-rs/src/app/runner.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/dev_bridge/dispatcher.rs");
+    expectLegacyRustFileDeleted("lime-rs/src/voice/commands.rs");
   });
 
   it("生产 GUI 不应重新 import 实时语音 fail-closed wrapper", () => {

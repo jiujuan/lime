@@ -23,7 +23,7 @@ import {
   resetAppSidebarTest,
   seedCloudSessionWithReferral,
   setOemCloudBootstrapSnapshot,
-  setStoredOemCloudSessionState
+  setStoredOemCloudSessionState,
 } from "./AppSidebar.testFixtures";
 import type { AgentPageParams } from "./AppSidebar.testFixtures";
 
@@ -557,7 +557,7 @@ describe("AppSidebar account menu", () => {
       container.querySelector('button[aria-label="New Task"]'),
     ).not.toBeNull();
     expect(container.textContent).toContain("Project Knowledge");
-    expect(container.textContent).toContain("Recent Conversations");
+    expect(container.textContent).toContain("Conversations");
 
     await act(async () => {
       container
@@ -663,8 +663,12 @@ describe("AppSidebar account menu", () => {
       tab: SettingsTabs.Home,
     });
 
-    await clickAccountMenuItem(container, "Agent Apps");
-    expect(onNavigate).toHaveBeenLastCalledWith("agent-apps", undefined);
+    await openAccountMenu(container);
+    expect(
+      container.querySelector('[data-testid="app-sidebar-account-menu"]')
+        ?.textContent,
+    ).not.toContain("Agent Apps");
+    await openAccountMenu(container);
 
     await clickAccountMenuItem(container, "灵感");
     expect(onNavigate).toHaveBeenLastCalledWith("memory", undefined);

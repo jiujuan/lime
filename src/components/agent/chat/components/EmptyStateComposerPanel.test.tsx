@@ -23,7 +23,7 @@ describe("EmptyStateComposerPanel", () => {
     expect(container.textContent).not.toContain("当前 runtime tool surface");
     expect(container.textContent).not.toContain("联网搜索偏好本轮可能不会生效");
     expect(container.textContent).not.toContain(
-      "任务拆分偏好本轮可能不会完全生效",
+      "Subagents 本轮可能不会完全生效",
     );
   });
 

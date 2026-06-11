@@ -13,6 +13,7 @@ interface CreateAgentChatSendMessageOptions {
   appendAssistantMessage: (content: string) => void;
   notifyInfo: (message: string) => void;
   notifySuccess: (message: string) => void;
+  onOpenSubagents?: () => void;
 }
 
 export function createAgentChatSendMessage(
@@ -27,6 +28,7 @@ export function createAgentChatSendMessage(
     appendAssistantMessage,
     notifyInfo,
     notifySuccess,
+    onOpenSubagents,
   } = options;
 
   return async (
@@ -74,6 +76,7 @@ export function createAgentChatSendMessage(
           appendAssistantMessage,
           notifyInfo,
           notifySuccess,
+          onOpenSubagents,
           onExecutedCommand: (command) => {
             if (command.definition.support !== "supported") {
               return;

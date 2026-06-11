@@ -23,15 +23,9 @@ import {
 import type { Artifact } from "@/lib/artifact/types";
 import type { ArtifactDisplayState } from "../hooks/useArtifactDisplayState";
 import { ImageTaskViewer } from "../components/ImageTaskViewer";
-import { TeamWorkbenchSummaryPanel } from "../components/TeamWorkbenchSummaryPanel";
-import { TeamWorkspaceBoard } from "../components/TeamWorkspaceBoard";
-import type { AgentUiTeamWorkbenchViewItem } from "../projection/agentUiTeamWorkbenchViewModel";
 import type {
-  CanvasWorkbenchHeaderBadge,
   CanvasWorkbenchDefaultPreview,
   CanvasWorkbenchPreviewTarget,
-  CanvasWorkbenchSummaryStat,
-  CanvasWorkbenchTeamView,
 } from "../components/CanvasWorkbenchLayout";
 import type { TaskFile } from "../components/TaskFiles";
 import {
@@ -43,21 +37,9 @@ import { buildCanvasWorkbenchDefaultPreview } from "./canvasWorkbenchDefaultPrev
 import { resolveAbsoluteWorkspacePath } from "./workspacePath";
 import { buildGeneralCanvasStateFromWorkspaceFile } from "./workspaceFilePreview";
 import type { SessionImageWorkbenchState } from "./imageWorkbenchHelpers";
-import type {
-  AgentUiTeamWorkbenchPromptMetadata,
-  TeamWorkbenchSurfaceProps,
-} from "./chatSurfaceProps";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceImageWorkbenchActionRuntime } from "./useWorkspaceImageWorkbenchActionRuntime";
 import type { AgentThreadItem } from "../types";
-import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
-import { summarizeTeamWorkspaceExecution } from "../teamWorkspaceRuntime";
-import type {
-  TeamWorkspaceActivityEntry,
-  TeamWorkspaceControlSummary,
-  TeamWorkspaceRuntimeFormationState,
-  TeamWorkspaceWaitSummary,
-} from "../teamWorkspaceRuntime";
 
 type ArtifactPreviewBaseProps = Omit<
   ComponentProps<typeof ArtifactWorkbenchPreview>,
@@ -68,31 +50,6 @@ type GeneralCanvasPanelProps = Omit<
   ComponentProps<typeof GeneralCanvasPanel>,
   "toolbarActions"
 >;
-export type AgentUiTeamWorkbenchActionRouteResult =
-  | "closed"
-  | "continued"
-  | "handoff_source_located"
-  | "located_only"
-  | "opened"
-  | "remote_task_source_located"
-  | "seeded_reassignment"
-  | "seeded_work_item"
-  | "submitted_work_item"
-  | "work_item_source_located"
-  | "unsupported"
-  | "unsupported_handoff"
-  | "unsupported_remote"
-  | "unsupported_review"
-  | "unsupported_work_item"
-  | "waited";
-interface AgentUiTeamWorkbenchActionRouteOptions {
-  reassignmentAssignee?: string | null;
-  onSeedWorkbenchPrompt?: (prompt: string) => void;
-  onSubmitWorkbenchPrompt?: (
-    prompt: string,
-    metadata: AgentUiTeamWorkbenchPromptMetadata,
-  ) => boolean | Promise<boolean>;
-}
 type RenderArtifactWorkbenchPreviewOptions = {
   stackedWorkbenchTrigger?: ReactNode;
   onArtifactDocumentControllerChange?: ComponentProps<
@@ -230,22 +187,6 @@ interface WorkspaceCanvasPreviewFactoryParams {
   preferContentReviewInRightRail: boolean;
 }
 
-interface WorkspaceCanvasPreviewTeamWorkbenchParams {
-  enabled: boolean;
-  surfaceProps: TeamWorkbenchSurfaceProps;
-  autoFocusToken?: string | number | null;
-  onSeedWorkbenchPrompt?: (prompt: string) => void;
-  onSubmitWorkbenchPrompt?: (
-    prompt: string,
-    metadata: AgentUiTeamWorkbenchPromptMetadata,
-  ) => boolean | Promise<boolean>;
-  teamDispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null;
-  liveActivityBySessionId?: Record<string, TeamWorkspaceActivityEntry[]>;
-  teamWaitSummary?: TeamWorkspaceWaitSummary | null;
-  teamControlSummary?: TeamWorkspaceControlSummary | null;
-  teamMemorySnapshot?: TeamMemorySnapshot | null;
-}
-
 interface UseWorkspaceCanvasPreviewRuntimeParams {
   defaultPreview: WorkspaceCanvasDefaultPreviewParams;
   artifactPreview: WorkspaceCanvasPreviewArtifactParams;
@@ -253,7 +194,6 @@ interface UseWorkspaceCanvasPreviewRuntimeParams {
   generalCanvas: WorkspaceCanvasPreviewGeneralCanvasParams;
   loading: WorkspaceCanvasPreviewLoadingParams;
   canvasFactory: WorkspaceCanvasPreviewFactoryParams;
-  teamWorkbench: WorkspaceCanvasPreviewTeamWorkbenchParams;
 }
 
 interface WorkspaceCanvasPreviewRuntimeResult {
@@ -263,7 +203,6 @@ interface WorkspaceCanvasPreviewRuntimeResult {
   handleCloseCanvasWorkbench: () => void;
   liveCanvasPreview: ReactNode;
   hasLiveCanvasPreviewContent: boolean;
-  teamWorkbenchView: CanvasWorkbenchTeamView | null;
   renderCanvasWorkbenchPreview: (
     target: CanvasWorkbenchPreviewTarget,
     options?: { stackedWorkbenchTrigger?: ReactNode },
@@ -301,7 +240,6 @@ interface UseWorkspaceCanvasScenePresentationRuntimeParams {
       UseWorkspaceCanvasPreviewRuntimeParams["canvasFactory"],
       "canvasRenderTheme" | "resolvedCanvasState"
     >;
-    teamWorkbench: UseWorkspaceCanvasPreviewRuntimeParams["teamWorkbench"];
   };
 }
 interface WorkspaceCanvasScenePresentationRuntimeResult extends WorkspaceCanvasPreviewRuntimeResult {
@@ -315,639 +253,14 @@ type CanvasPreviewPresentationParams =
 type ArtifactPreviewParams = CanvasPreviewPresentationParams["artifactPreview"];
 type ImageWorkbenchParams = CanvasPreviewPresentationParams["imageWorkbench"];
 type CanvasFactoryParams = CanvasPreviewPresentationParams["canvasFactory"];
-type TeamWorkbenchParams = CanvasPreviewPresentationParams["teamWorkbench"];
 type InputbarScene = Pick<
   ReturnType<typeof useWorkspaceInputbarSceneRuntime>,
-  | "activeCanvasTaskFile"
-  | "seedAgentUiWorkbenchPrompt"
-  | "submitAgentUiWorkbenchPrompt"
-  | "teamWorkbenchSurfaceProps"
+  "activeCanvasTaskFile"
 >;
 type ImageWorkbenchGenerationRuntime = ReturnType<typeof useImageGen>;
 type ImageWorkbenchActionRuntime = ReturnType<
   typeof useWorkspaceImageWorkbenchActionRuntime
 >;
-
-interface ResolveTeamWorkbenchTriggerStateParams {
-  enabled: boolean;
-  teamDispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null;
-  liveActivityBySessionId?: Record<string, TeamWorkspaceActivityEntry[]>;
-  teamWaitSummary?: TeamWorkspaceWaitSummary | null;
-  teamControlSummary?: TeamWorkspaceControlSummary | null;
-  executionSummary: ReturnType<typeof summarizeTeamWorkspaceExecution>;
-}
-
-interface BuildCanvasTeamWorkbenchViewParams {
-  enabled: boolean;
-  surfaceProps: TeamWorkbenchSurfaceProps;
-  autoFocusToken?: string | number | null;
-  teamDispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null;
-  liveActivityBySessionId?: Record<string, TeamWorkspaceActivityEntry[]>;
-  teamWaitSummary?: TeamWorkspaceWaitSummary | null;
-  teamControlSummary?: TeamWorkspaceControlSummary | null;
-  renderTeamWorkbenchPreview: (
-    stackedWorkbenchTrigger?: ReactNode,
-  ) => ReactNode;
-  renderTeamWorkbenchPanel: () => ReactNode;
-}
-
-function hasTeamWorkbenchActivity({
-  dispatchPreviewState,
-  liveActivityBySessionId,
-  teamWaitSummary,
-  teamControlSummary,
-  executionSummary,
-}: {
-  dispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null;
-  liveActivityBySessionId?: Record<string, TeamWorkspaceActivityEntry[]>;
-  teamWaitSummary?: TeamWorkspaceWaitSummary | null;
-  teamControlSummary?: TeamWorkspaceControlSummary | null;
-  executionSummary: ReturnType<typeof summarizeTeamWorkspaceExecution>;
-}): boolean {
-  if (
-    dispatchPreviewState?.status === "forming" ||
-    dispatchPreviewState?.status === "failed"
-  ) {
-    return true;
-  }
-
-  if (
-    dispatchPreviewState?.status === "formed" &&
-    dispatchPreviewState.members.length > 0
-  ) {
-    return true;
-  }
-
-  return (
-    executionSummary.totalSessionCount > 0 ||
-    Object.values(liveActivityBySessionId ?? {}).some(
-      (entries) => (entries?.length ?? 0) > 0,
-    ) ||
-    Boolean(teamWaitSummary) ||
-    Boolean(teamControlSummary)
-  );
-}
-
-function resolveTeamWorkbenchTriggerState({
-  enabled,
-  teamDispatchPreviewState,
-  liveActivityBySessionId = {},
-  teamWaitSummary = null,
-  teamControlSummary = null,
-  executionSummary,
-}: ResolveTeamWorkbenchTriggerStateParams): CanvasWorkbenchTeamView["triggerState"] {
-  if (!enabled) {
-    return null;
-  }
-
-  if (teamDispatchPreviewState?.status === "failed") {
-    return { tone: "error", label: "失败" };
-  }
-
-  if (teamDispatchPreviewState?.status === "forming") {
-    return { tone: "active", label: "组建中" };
-  }
-
-  if (executionSummary.runningSessionCount > 0) {
-    return {
-      tone: "active",
-      label:
-        executionSummary.runningSessionCount > 1
-          ? `${executionSummary.runningSessionCount} 处理中`
-          : "处理中",
-    };
-  }
-
-  if (executionSummary.queuedSessionCount > 0) {
-    return {
-      tone: "active",
-      label:
-        executionSummary.queuedSessionCount > 1
-          ? `${executionSummary.queuedSessionCount} 稍后开始`
-          : "稍后开始",
-    };
-  }
-
-  if (
-    teamDispatchPreviewState?.status === "formed" &&
-    executionSummary.totalSessionCount === 0
-  ) {
-    return { tone: "active", label: "已就绪" };
-  }
-
-  if (
-    Object.values(liveActivityBySessionId).some(
-      (entries) => (entries?.length ?? 0) > 0,
-    ) ||
-    Boolean(teamWaitSummary) ||
-    Boolean(teamControlSummary)
-  ) {
-    return { tone: "active", label: "有更新" };
-  }
-
-  return { tone: "idle", label: null };
-}
-
-export function buildCanvasTeamWorkbenchView({
-  enabled,
-  surfaceProps,
-  autoFocusToken,
-  teamDispatchPreviewState = null,
-  liveActivityBySessionId = {},
-  teamWaitSummary = null,
-  teamControlSummary = null,
-  renderTeamWorkbenchPreview,
-  renderTeamWorkbenchPanel,
-}: BuildCanvasTeamWorkbenchViewParams): CanvasWorkbenchTeamView | null {
-  if (!enabled) {
-    return null;
-  }
-
-  const dispatchPreviewState =
-    teamDispatchPreviewState ?? surfaceProps.teamDispatchPreviewState ?? null;
-  const executionSummary = summarizeTeamWorkspaceExecution({
-    currentSessionId: surfaceProps.currentSessionId,
-    currentSessionRuntimeStatus: surfaceProps.currentSessionRuntimeStatus,
-    currentSessionLatestTurnStatus: surfaceProps.currentSessionLatestTurnStatus,
-    currentSessionQueuedTurnCount: surfaceProps.currentSessionQueuedTurnCount,
-    childSubagentSessions: surfaceProps.childSubagentSessions,
-    subagentParentContext: surfaceProps.subagentParentContext,
-    liveRuntimeBySessionId: surfaceProps.liveRuntimeBySessionId,
-  });
-  const triggerState = resolveTeamWorkbenchTriggerState({
-    enabled,
-    teamDispatchPreviewState: dispatchPreviewState,
-    liveActivityBySessionId,
-    teamWaitSummary,
-    teamControlSummary,
-    executionSummary,
-  });
-  const preferActiveOnMount =
-    autoFocusToken != null ||
-    hasTeamWorkbenchActivity({
-      dispatchPreviewState,
-      liveActivityBySessionId,
-      teamWaitSummary,
-      teamControlSummary,
-      executionSummary,
-    });
-
-  if (!preferActiveOnMount) {
-    return null;
-  }
-
-  const headerBadges: CanvasWorkbenchHeaderBadge[] = [
-    {
-      key: "team-runtime",
-      label: "生成",
-      tone: "accent",
-    },
-  ];
-
-  if (triggerState?.label?.trim()) {
-    headerBadges.push({
-      key: "team-trigger-state",
-      label: triggerState.label.trim(),
-      tone: triggerState.tone === "active" ? "accent" : "default",
-    });
-  }
-
-  if (teamWaitSummary?.awaitedSessionIds?.length) {
-    headerBadges.push({
-      key: "team-awaiting",
-      label: `等待 ${teamWaitSummary.awaitedSessionIds.length}`,
-      tone: "default",
-    });
-  }
-
-  const leadStatus =
-    triggerState?.label?.trim() || executionSummary.statusTitle || "待机";
-  const leadDetail = executionSummary.statusTitle || "当前没有活跃的任务执行。";
-  const summaryStats: CanvasWorkbenchSummaryStat[] = [
-    {
-      key: "team-status",
-      label: "任务状态",
-      value: leadStatus,
-      detail: leadDetail,
-      tone: triggerState?.tone === "active" ? "accent" : "default",
-    },
-    {
-      key: "team-members",
-      label: "活跃任务",
-      value:
-        executionSummary.totalSessionCount > 0
-          ? `${executionSummary.activeSessionCount}/${executionSummary.totalSessionCount}`
-          : "0",
-      detail:
-        executionSummary.totalSessionCount > 0
-          ? `${executionSummary.runningSessionCount} 项处理中，${executionSummary.queuedSessionCount} 项排队中。`
-          : "当前还没有可展示的任务。",
-      tone: executionSummary.activeSessionCount > 0 ? "accent" : "default",
-    },
-  ];
-
-  if (teamWaitSummary?.awaitedSessionIds?.length) {
-    summaryStats.push({
-      key: "team-awaiting",
-      label: "等待确认",
-      value: `${teamWaitSummary.awaitedSessionIds.length} 项`,
-      detail: teamWaitSummary.timedOut
-        ? "等待结果超时，建议重新检查任务状态。"
-        : "正在等待任务完成或返回结果。",
-      tone: "default",
-    });
-  } else if (teamControlSummary?.affectedSessionIds?.length) {
-    summaryStats.push({
-      key: "team-control",
-      label: "最近控制",
-      value:
-        teamControlSummary.action === "resume"
-          ? "继续处理"
-          : teamControlSummary.action === "close_completed"
-            ? "收起已完成"
-            : "暂停处理",
-      detail: `影响 ${teamControlSummary.affectedSessionIds.length} 个会话。`,
-      tone: "default",
-    });
-  }
-
-  return {
-    enabled: true,
-    title:
-      dispatchPreviewState?.label?.trim() ||
-      dispatchPreviewState?.blueprint?.label?.trim() ||
-      surfaceProps.selectedTeamLabel ||
-      "生成",
-    tabLabel: surfaceProps.selectedTeamLabel?.trim() || undefined,
-    tabBadge: triggerState?.label?.trim() || undefined,
-    tabBadgeTone:
-      triggerState?.tone === "error"
-        ? "rose"
-        : triggerState?.tone === "active"
-          ? "sky"
-          : "slate",
-    subtitle: "主对话保留调度记录，画布按任务分别展示执行过程与结果。",
-    autoFocusToken,
-    preferActiveOnMount,
-    preferFixedPanel: true,
-    triggerState,
-    badges: headerBadges,
-    summaryStats,
-    panelCopy: {
-      emptyText: "当前没有可展示的生成结果。",
-    },
-    renderPreview: (options?: { stackedWorkbenchTrigger?: ReactNode }) =>
-      renderTeamWorkbenchPreview(options?.stackedWorkbenchTrigger),
-    renderPanel: renderTeamWorkbenchPanel,
-  };
-}
-
-function appendCandidate(values: string[], value?: string | null) {
-  const normalized = value?.trim();
-  if (normalized) {
-    values.push(normalized);
-  }
-}
-
-function appendTranscriptCandidates(values: string[], value?: string | null) {
-  const normalized = value?.trim();
-  if (!normalized) {
-    return;
-  }
-
-  appendCandidate(values, normalized);
-  normalized
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .reverse()
-    .forEach((segment) => appendCandidate(values, segment));
-  normalized
-    .split(":")
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .reverse()
-    .forEach((segment) => appendCandidate(values, segment));
-}
-
-export function resolveAgentUiTeamWorkbenchLocalSessionTarget(
-  item: AgentUiTeamWorkbenchViewItem,
-  surfaceProps: TeamWorkbenchSurfaceProps,
-): string | null {
-  const childSessionIds = new Set(
-    (surfaceProps.childSubagentSessions ?? [])
-      .map((session) => session.id.trim())
-      .filter(Boolean),
-  );
-  if (childSessionIds.size === 0) {
-    return null;
-  }
-
-  const candidates: string[] = [];
-  appendCandidate(candidates, item.target.agentId);
-  appendCandidate(candidates, item.event.agentId);
-  appendCandidate(candidates, item.target.taskId);
-  appendCandidate(candidates, item.event.taskId);
-  appendCandidate(candidates, item.target.workItemId);
-  appendCandidate(candidates, item.event.workItemId);
-  appendCandidate(candidates, item.action?.targetId);
-  appendTranscriptCandidates(candidates, item.target.transcriptRef);
-  appendTranscriptCandidates(candidates, item.event.transcriptRef);
-  appendCandidate(candidates, item.target.sessionId);
-  appendCandidate(candidates, item.event.sessionId);
-
-  return candidates.find((candidate) => childSessionIds.has(candidate)) ?? null;
-}
-
-function hasRouteTargetValue(value?: string | null): boolean {
-  return Boolean(value?.trim());
-}
-
-function hasRouteTargetList(values?: string[] | null): boolean {
-  return Boolean(values?.some((value) => value.trim()));
-}
-
-function readWorkbenchRoutePayloadText(
-  item: AgentUiTeamWorkbenchViewItem,
-  key: string,
-): string | undefined {
-  const value = item.event.payload?.[key];
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    const normalized = `${value}`.trim();
-    return normalized || undefined;
-  }
-  return undefined;
-}
-
-function readWorkbenchRoutePayloadList(
-  item: AgentUiTeamWorkbenchViewItem,
-  key: string,
-): string[] {
-  const value = item.event.payload?.[key];
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((entry) =>
-      typeof entry === "string" ||
-      typeof entry === "number" ||
-      typeof entry === "boolean"
-        ? `${entry}`.trim()
-        : "",
-    )
-    .filter(Boolean);
-}
-
-function buildRequestedFixWorkbenchPrompt(
-  item: AgentUiTeamWorkbenchViewItem,
-): string | null {
-  if (
-    item.event.surface !== "work_board" ||
-    item.action?.control !== "assign" ||
-    readWorkbenchRoutePayloadText(item, "taskEvent") !== "review_requested_fix"
-  ) {
-    return null;
-  }
-
-  const requestedFix =
-    readWorkbenchRoutePayloadText(item, "requestedFix") || item.title.trim();
-  if (!requestedFix) {
-    return null;
-  }
-
-  const reviewId = item.target.reviewId || item.event.reviewId;
-  const workItemId = item.target.workItemId || item.event.workItemId;
-  const regressionRequirements = readWorkbenchRoutePayloadList(
-    item,
-    "regressionRequirements",
-  );
-  const lines = [
-    `请执行 Review requested fix：${requestedFix}`,
-    reviewId ? `Review：${reviewId}` : null,
-    workItemId ? `工作项：${workItemId}` : null,
-    regressionRequirements.length > 0
-      ? `回归要求：${regressionRequirements.join("；")}`
-      : null,
-    "完成后请把执行结果写入 evidence/artifact metadata.requestedFixExecutionResults，至少包含 requestedFix、executionStatus、regressionOutcome、resultRef 与 artifactIds/artifactPaths。",
-    "完成后请输出变更摘要、验证结果，并保留 evidence / artifact 引用。",
-  ];
-  return lines.filter(Boolean).join("\n");
-}
-
-function buildRequestedFixWorkbenchPromptMetadata(
-  item: AgentUiTeamWorkbenchViewItem,
-): AgentUiTeamWorkbenchPromptMetadata | null {
-  if (
-    item.event.surface !== "work_board" ||
-    item.action?.control !== "assign" ||
-    readWorkbenchRoutePayloadText(item, "taskEvent") !== "review_requested_fix"
-  ) {
-    return null;
-  }
-
-  const requestedFix =
-    readWorkbenchRoutePayloadText(item, "requestedFix") || item.title.trim();
-  if (!requestedFix) {
-    return null;
-  }
-
-  const requestedFixIndex = readWorkbenchRoutePayloadText(
-    item,
-    "requestedFixIndex",
-  );
-  const regressionRequirements = readWorkbenchRoutePayloadList(
-    item,
-    "regressionRequirements",
-  );
-  return {
-    kind: "review_requested_fix",
-    source: "agent_ui_team_workbench",
-    reviewId: item.target.reviewId || item.event.reviewId || undefined,
-    workItemId: item.target.workItemId || item.event.workItemId || undefined,
-    requestedFix,
-    requestedFixIndex,
-    regressionRequirements:
-      regressionRequirements.length > 0 ? regressionRequirements : undefined,
-  };
-}
-
-function buildReassignmentWorkbenchPrompt(
-  item: AgentUiTeamWorkbenchViewItem,
-  nextAssignee: string | null | undefined,
-): string | null {
-  if (item.event.surface !== "work_board") {
-    return null;
-  }
-
-  const normalizedAssignee = nextAssignee?.trim();
-  if (!normalizedAssignee) {
-    return null;
-  }
-
-  const workItemId =
-    item.target.workItemId ||
-    item.event.workItemId ||
-    item.target.taskId ||
-    item.event.taskId ||
-    item.action?.targetId;
-  if (!workItemId?.trim()) {
-    return null;
-  }
-
-  const previousAssignee =
-    readWorkbenchRoutePayloadText(item, "nextAssigneeId") ||
-    readWorkbenchRoutePayloadText(item, "currentAssigneeId") ||
-    readWorkbenchRoutePayloadText(item, "assigneeId") ||
-    readWorkbenchRoutePayloadText(item, "owner");
-  const taskListId = readWorkbenchRoutePayloadText(item, "sourceTaskListId");
-  const lines = [
-    `请使用 TaskUpdate 将工作项「${workItemId}」重新指派给「${normalizedAssignee}」。`,
-    taskListId ? `Task list：${taskListId}` : null,
-    previousAssignee ? `当前负责人：${previousAssignee}` : null,
-    `目标负责人：${normalizedAssignee}`,
-    "只更新该工作项的 owner；不要从 teammate 文本、assistant prose 或 peer message 反推指派状态。",
-    "完成后请确认 TaskUpdate 返回 ownerChange / owner_change metadata，让 Agent UI work_board 通过结构化 source 显示 owner 变更。",
-  ];
-  return lines.filter(Boolean).join("\n");
-}
-
-function resolveAgentUiTeamWorkbenchNonLocalRouteResult(
-  item: AgentUiTeamWorkbenchViewItem,
-): AgentUiTeamWorkbenchActionRouteResult {
-  if (
-    item.event.surface === "remote_teammate" ||
-    item.event.runtimeEntity === "external_task" ||
-    hasRouteTargetValue(item.target.remoteTaskId) ||
-    hasRouteTargetValue(item.event.remoteTaskId)
-  ) {
-    return "remote_task_source_located";
-  }
-
-  if (
-    item.event.surface === "review_lane" ||
-    item.action?.control === "request_review" ||
-    hasRouteTargetValue(item.target.reviewId) ||
-    hasRouteTargetValue(item.event.reviewId)
-  ) {
-    return "unsupported_review";
-  }
-
-  if (
-    item.event.surface === "handoff_lane" ||
-    hasRouteTargetValue(item.target.handoffId) ||
-    hasRouteTargetValue(item.event.handoffId)
-  ) {
-    return "handoff_source_located";
-  }
-
-  if (
-    item.event.surface === "work_board" ||
-    item.event.runtimeEntity === "work_item" ||
-    hasRouteTargetValue(item.target.workItemId) ||
-    hasRouteTargetValue(item.event.workItemId)
-  ) {
-    if (
-      readWorkbenchRoutePayloadText(item, "taskEvent") === "team_reassignment"
-    ) {
-      return "work_item_source_located";
-    }
-    return "unsupported_work_item";
-  }
-
-  if (
-    hasRouteTargetValue(item.action?.targetId) ||
-    hasRouteTargetValue(item.target.agentId) ||
-    hasRouteTargetValue(item.target.taskId) ||
-    hasRouteTargetValue(item.target.workItemId) ||
-    hasRouteTargetValue(item.target.workerNotificationId) ||
-    hasRouteTargetValue(item.target.transcriptRef) ||
-    hasRouteTargetValue(item.target.evidenceId) ||
-    hasRouteTargetValue(item.target.artifactId) ||
-    hasRouteTargetValue(item.target.resultRef) ||
-    hasRouteTargetValue(item.target.rawEventRef) ||
-    hasRouteTargetList(item.target.artifactIds) ||
-    hasRouteTargetList(item.target.artifactPaths)
-  ) {
-    return "located_only";
-  }
-
-  return "unsupported";
-}
-
-export async function routeAgentUiTeamWorkbenchAction(
-  item: AgentUiTeamWorkbenchViewItem,
-  surfaceProps: TeamWorkbenchSurfaceProps,
-  options: AgentUiTeamWorkbenchActionRouteOptions = {},
-): Promise<AgentUiTeamWorkbenchActionRouteResult> {
-  const reassignmentPrompt = buildReassignmentWorkbenchPrompt(
-    item,
-    options.reassignmentAssignee,
-  );
-  if (reassignmentPrompt && options.onSeedWorkbenchPrompt) {
-    options.onSeedWorkbenchPrompt(reassignmentPrompt);
-    return "seeded_reassignment";
-  }
-
-  const targetSessionId = resolveAgentUiTeamWorkbenchLocalSessionTarget(
-    item,
-    surfaceProps,
-  );
-  if (!targetSessionId) {
-    const requestedFixPrompt = buildRequestedFixWorkbenchPrompt(item);
-    const requestedFixMetadata =
-      requestedFixPrompt && options.onSubmitWorkbenchPrompt
-        ? buildRequestedFixWorkbenchPromptMetadata(item)
-        : null;
-    if (requestedFixPrompt && requestedFixMetadata) {
-      const submitted = await options.onSubmitWorkbenchPrompt?.(
-        requestedFixPrompt,
-        requestedFixMetadata,
-      );
-      if (submitted) {
-        return "submitted_work_item";
-      }
-    }
-    if (requestedFixPrompt && options.onSeedWorkbenchPrompt) {
-      options.onSeedWorkbenchPrompt(requestedFixPrompt);
-      return "seeded_work_item";
-    }
-    return resolveAgentUiTeamWorkbenchNonLocalRouteResult(item);
-  }
-
-  switch (item.action?.control) {
-    case "close":
-    case "stop":
-      if (surfaceProps.onCloseSubagentSession) {
-        await surfaceProps.onCloseSubagentSession(targetSessionId);
-        return "closed";
-      }
-      break;
-    case "continue_agent":
-      if (surfaceProps.onResumeSubagentSession) {
-        await surfaceProps.onResumeSubagentSession(targetSessionId);
-        return "continued";
-      }
-      break;
-    case "wait":
-      if (surfaceProps.onWaitSubagentSession) {
-        await surfaceProps.onWaitSubagentSession(targetSessionId);
-        return "waited";
-      }
-      break;
-    default:
-      break;
-  }
-
-  if (surfaceProps.onOpenSubagentSession) {
-    await surfaceProps.onOpenSubagentSession(targetSessionId);
-    return "opened";
-  }
-  return "located_only";
-}
 
 function useWorkspaceCanvasPreviewRuntime({
   defaultPreview,
@@ -956,7 +269,6 @@ function useWorkspaceCanvasPreviewRuntime({
   generalCanvas,
   loading,
   canvasFactory,
-  teamWorkbench,
 }: UseWorkspaceCanvasPreviewRuntimeParams): WorkspaceCanvasPreviewRuntimeResult {
   const canvasWorkbenchDefaultPreview = useMemo(
     () =>
@@ -1321,129 +633,6 @@ function useWorkspaceCanvasPreviewRuntime({
     ],
   );
 
-  const teamWorkbenchBoardProps = useMemo<
-    ComponentProps<typeof TeamWorkspaceBoard>
-  >(
-    () => ({
-      ...teamWorkbench.surfaceProps,
-      embedded: true,
-      defaultShellExpanded: true,
-    }),
-    [teamWorkbench.surfaceProps],
-  );
-
-  const renderTeamWorkbenchPreview = useCallback(
-    (stackedWorkbenchTrigger?: ReactNode) =>
-      wrapPreviewWithWorkbenchTrigger(
-        <div className="flex h-full min-h-0 flex-col overflow-hidden pt-4">
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <TeamWorkspaceBoard {...teamWorkbenchBoardProps} />
-          </div>
-        </div>,
-        stackedWorkbenchTrigger,
-      ),
-    [teamWorkbenchBoardProps],
-  );
-
-  const teamWorkbenchSummaryPanelProps = useMemo<
-    ComponentProps<typeof TeamWorkbenchSummaryPanel>
-  >(
-    () => ({
-      currentSessionId: teamWorkbench.surfaceProps.currentSessionId,
-      currentSessionRuntimeStatus:
-        teamWorkbench.surfaceProps.currentSessionRuntimeStatus,
-      currentSessionLatestTurnStatus:
-        teamWorkbench.surfaceProps.currentSessionLatestTurnStatus,
-      currentSessionQueuedTurnCount:
-        teamWorkbench.surfaceProps.currentSessionQueuedTurnCount,
-      childSubagentSessions: teamWorkbench.surfaceProps.childSubagentSessions,
-      subagentParentContext: teamWorkbench.surfaceProps.subagentParentContext,
-      liveRuntimeBySessionId: teamWorkbench.surfaceProps.liveRuntimeBySessionId,
-      liveActivityBySessionId: teamWorkbench.liveActivityBySessionId,
-      teamWaitSummary: teamWorkbench.teamWaitSummary,
-      teamControlSummary: teamWorkbench.teamControlSummary,
-      selectedTeamLabel: teamWorkbench.surfaceProps.selectedTeamLabel,
-      selectedTeamSummary: teamWorkbench.surfaceProps.selectedTeamSummary,
-      selectedTeamRoles: teamWorkbench.surfaceProps.selectedTeamRoles,
-      teamDispatchPreviewState:
-        teamWorkbench.teamDispatchPreviewState ??
-        teamWorkbench.surfaceProps.teamDispatchPreviewState,
-      teamMemorySnapshot: teamWorkbench.teamMemorySnapshot,
-      onWorkbenchAction: (item) => {
-        return routeAgentUiTeamWorkbenchAction(
-          item,
-          teamWorkbench.surfaceProps,
-          {
-            onSeedWorkbenchPrompt: teamWorkbench.onSeedWorkbenchPrompt,
-            onSubmitWorkbenchPrompt: teamWorkbench.onSubmitWorkbenchPrompt,
-          },
-        ).catch((error) => {
-          toast.error(
-            error instanceof Error ? error.message : "工作台操作执行失败",
-          );
-          return "unsupported";
-        });
-      },
-      onWorkbenchReassign: (item, nextAssignee) => {
-        return routeAgentUiTeamWorkbenchAction(
-          item,
-          teamWorkbench.surfaceProps,
-          {
-            onSeedWorkbenchPrompt: teamWorkbench.onSeedWorkbenchPrompt,
-            onSubmitWorkbenchPrompt: teamWorkbench.onSubmitWorkbenchPrompt,
-            reassignmentAssignee: nextAssignee,
-          },
-        ).catch((error) => {
-          toast.error(
-            error instanceof Error ? error.message : "工作台重指派回填失败",
-          );
-          return "unsupported";
-        });
-      },
-    }),
-    [
-      teamWorkbench.liveActivityBySessionId,
-      teamWorkbench.teamControlSummary,
-      teamWorkbench.teamDispatchPreviewState,
-      teamWorkbench.teamMemorySnapshot,
-      teamWorkbench.teamWaitSummary,
-      teamWorkbench.onSeedWorkbenchPrompt,
-      teamWorkbench.onSubmitWorkbenchPrompt,
-      teamWorkbench.surfaceProps,
-    ],
-  );
-
-  const teamWorkbenchSummaryPanel = useMemo(
-    () => <TeamWorkbenchSummaryPanel {...teamWorkbenchSummaryPanelProps} />,
-    [teamWorkbenchSummaryPanelProps],
-  );
-
-  const teamWorkbenchView = useMemo(
-    () =>
-      buildCanvasTeamWorkbenchView({
-        enabled: teamWorkbench.enabled,
-        surfaceProps: teamWorkbench.surfaceProps,
-        autoFocusToken: teamWorkbench.autoFocusToken,
-        teamDispatchPreviewState: teamWorkbench.teamDispatchPreviewState,
-        liveActivityBySessionId: teamWorkbench.liveActivityBySessionId,
-        teamWaitSummary: teamWorkbench.teamWaitSummary,
-        teamControlSummary: teamWorkbench.teamControlSummary,
-        renderTeamWorkbenchPreview,
-        renderTeamWorkbenchPanel: () => teamWorkbenchSummaryPanel,
-      }),
-    [
-      renderTeamWorkbenchPreview,
-      teamWorkbench.autoFocusToken,
-      teamWorkbench.enabled,
-      teamWorkbench.liveActivityBySessionId,
-      teamWorkbench.surfaceProps,
-      teamWorkbench.teamControlSummary,
-      teamWorkbench.teamDispatchPreviewState,
-      teamWorkbench.teamWaitSummary,
-      teamWorkbenchSummaryPanel,
-    ],
-  );
-
   const renderCanvasWorkbenchPreview = useCallback(
     (
       target: CanvasWorkbenchPreviewTarget,
@@ -1483,17 +672,11 @@ function useWorkspaceCanvasPreviewRuntime({
           return renderWorkbenchStatePreview("unsupported", target.reason);
         case "empty":
           return renderWorkbenchStatePreview("empty", "暂无可预览内容");
-        case "team-workbench":
-          return renderTeamWorkbenchPreview(stackedWorkbenchTrigger);
         default:
           return null;
       }
     },
-    [
-      renderArtifactWorkbenchPreview,
-      renderGeneralCanvasPreviewTarget,
-      renderTeamWorkbenchPreview,
-    ],
+    [renderArtifactWorkbenchPreview, renderGeneralCanvasPreviewTarget],
   );
 
   return {
@@ -1503,7 +686,6 @@ function useWorkspaceCanvasPreviewRuntime({
     handleCloseCanvasWorkbench: artifactPreview.onCloseCanvas,
     liveCanvasPreview: renderLiveCanvasPreview(),
     hasLiveCanvasPreviewContent,
-    teamWorkbenchView,
     renderCanvasWorkbenchPreview,
   };
 }
@@ -1577,7 +759,6 @@ function useWorkspaceCanvasScenePresentationRuntime({
       canvasRenderTheme,
       resolvedCanvasState,
     },
-    teamWorkbench: canvasPreviewPresentation.teamWorkbench,
   });
 
   return {
@@ -1645,15 +826,6 @@ interface UseWorkspaceCanvasSceneRuntimeParams {
   handleDocumentContentReviewRun: CanvasFactoryParams["onContentReviewRun"];
   handleDocumentTextStylizeRun: CanvasFactoryParams["onTextStylizeRun"];
   preferContentReviewInRightRail: CanvasFactoryParams["preferContentReviewInRightRail"];
-  teamWorkspaceEnabled: TeamWorkbenchParams["enabled"];
-  liveActivityBySessionId: NonNullable<
-    TeamWorkbenchParams["liveActivityBySessionId"]
-  >;
-  teamWaitSummary: TeamWorkbenchParams["teamWaitSummary"];
-  teamControlSummary: TeamWorkbenchParams["teamControlSummary"];
-  teamWorkbenchAutoFocusToken: TeamWorkbenchParams["autoFocusToken"];
-  teamDispatchPreviewState: TeamWorkbenchParams["teamDispatchPreviewState"];
-  teamMemorySnapshot: TeamWorkbenchParams["teamMemorySnapshot"];
 }
 
 export function useWorkspaceCanvasSceneRuntime({
@@ -1707,13 +879,6 @@ export function useWorkspaceCanvasSceneRuntime({
   handleDocumentContentReviewRun,
   handleDocumentTextStylizeRun,
   preferContentReviewInRightRail,
-  teamWorkspaceEnabled,
-  liveActivityBySessionId,
-  teamWaitSummary,
-  teamControlSummary,
-  teamWorkbenchAutoFocusToken,
-  teamDispatchPreviewState,
-  teamMemorySnapshot,
 }: UseWorkspaceCanvasSceneRuntimeParams) {
   const imageWorkbenchHasPendingTasks = currentImageWorkbenchState.tasks.some(
     (task) =>
@@ -1831,18 +996,6 @@ export function useWorkspaceCanvasSceneRuntime({
         onContentReviewRun: handleDocumentContentReviewRun,
         onTextStylizeRun: handleDocumentTextStylizeRun,
         preferContentReviewInRightRail,
-      },
-      teamWorkbench: {
-        enabled: teamWorkspaceEnabled,
-        surfaceProps: inputbarScene.teamWorkbenchSurfaceProps,
-        autoFocusToken: teamWorkbenchAutoFocusToken,
-        onSeedWorkbenchPrompt: inputbarScene.seedAgentUiWorkbenchPrompt,
-        onSubmitWorkbenchPrompt: inputbarScene.submitAgentUiWorkbenchPrompt,
-        teamDispatchPreviewState,
-        liveActivityBySessionId,
-        teamWaitSummary,
-        teamControlSummary,
-        teamMemorySnapshot,
       },
     },
   });

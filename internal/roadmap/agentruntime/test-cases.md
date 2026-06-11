@@ -173,7 +173,7 @@ Owner 侧对应测试文档：
 | AR-EVID-LINK-003 | completeness 按分类声明 | evidence export | 至少按 `runtime/telemetry/sources/claims/artifacts/verification/privacy/replay` 中适用分类输出状态 |
 | AR-UI-LINK-001 | AgentUI 静默兼容 P1 profile event | `schemaVersion=lime-profile-0.4.0` 且 `type=turn.submitted` | unknown event controller 不告警，保持 stream 活跃 |
 | AR-UI-LINK-002 | AgentUI 不把 profile event 写成 UI truth | dotted profile event stream | 只进入 runtime/read-model 投影或忽略；不得创建 `agentui_profile_store` / UI-only runtime status |
-| AR-UI-LINK-003 | AgentUI projection presentation 使用 i18n key | Team Workbench / Harness / Reliability / Artifact timeline 的 projection event、phase、control、source、surface | `buildAgentUiTeamWorkbenchViewModel(..., { t })` 与 current projection 组件能输出 locale 文案；`type/status/phase/control/sourceType` stable facts 不被翻译回写 |
+| AR-UI-LINK-003 | AgentUI projection presentation 使用 i18n key | Subagents / Harness / Reliability / Artifact timeline 的 projection event、phase、control、source、surface | `buildAgentUiSubagentsViewModel(..., { t })`、`AgentUiProjectionState.subagents` 与 `SubagentsView` 能输出 locale 文案；`type/status/phase/control/sourceType` stable facts 不被翻译回写 |
 
 ## 12. Contract / command mapping 用例
 
@@ -245,7 +245,7 @@ npm run governance:legacy-report
 | 改 evidence/replay/review | Evidence Consistency 用例 + `npm run test:contracts` |
 | 改 Workspace/Harness runtime 展示 | GUI smoke + ReadModel 用例 |
 | 改 AgentContext / AgentPolicy / AgentEvidence linkage | 对应 AR-CTX / AR-POL / AR-EVID-LINK 用例 + 定向 owner ref 测试 |
-| 改 AgentUI profile event 兼容 / presentation mapper | `agentStreamUnknownEventController` / `agentStreamListenerReadinessController` / `agentUiTeamWorkbenchViewModel` / `AgentUiTeamWorkbenchSurfaceView` / `TeamWorkbenchSummaryPanel` / `HarnessStatusPanel` / `AgentThreadReliabilityPanel` / `AgentThreadTimelineArtifactCard` 定向单测 |
+| 改 AgentUI profile event 兼容 / presentation mapper | `agentStreamUnknownEventController` / `agentStreamListenerReadinessController` / `agentUiSubagentsViewModel` / `SubagentsView` / `HarnessStatusPanel` / `AgentThreadReliabilityPanel` / `AgentThreadTimelineArtifactCard` 定向单测 |
 | 改 deprecated/compat 路径 | Governance guard + 相关 contract 用例 |
 | 改 Rust runtime 主链 | App Server / RuntimeCore 定向 Rust 测试 + Runtime identity / Event 用例 + 必要时 `npm run verify:local` |
 

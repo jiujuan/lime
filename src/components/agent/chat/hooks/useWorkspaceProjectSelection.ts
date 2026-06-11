@@ -5,6 +5,7 @@ import {
 } from "../utils/topicProjectResolution";
 import {
   LAST_PROJECT_ID_KEY,
+  clearPersistedProjectId,
   loadPersistedSessionWorkspaceId,
   loadPersistedProjectId,
   savePersistedProjectId,
@@ -146,6 +147,7 @@ export function useWorkspaceProjectSelection(
     (nextProjectId?: string | null) => {
       const normalizedProjectId = normalizeProjectId(nextProjectId);
       if (!normalizedProjectId) {
+        clearPersistedProjectId(storageKey);
         return;
       }
 

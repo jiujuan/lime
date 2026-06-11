@@ -138,6 +138,7 @@ import { useThemeScopedChatToolPreferences } from "./hooks/useThemeScopedChatToo
 import { useLimeSkills } from "./hooks/useLimeSkills";
 import { useServiceSkills } from "./service-skills/useServiceSkills";
 import { useWorkspaceProjectSelection } from "./hooks/useWorkspaceProjectSelection";
+import { useOpenedProjectSummaries } from "./hooks/useOpenedProjectSummaries";
 import type { HandleSendOptions } from "./hooks/handleSendTypes";
 import type { InputbarSendHandler } from "./components/Inputbar/inputbarSendPayload";
 import { useRuntimeTeamFormation } from "./hooks/useRuntimeTeamFormation";
@@ -520,6 +521,11 @@ export function AgentChatWorkspace({
   } = useThemeScopedChatToolPreferences(activeTheme, {
     sessionSync: chatToolPreferenceSessionSync,
   });
+  const handleOpenSubagents = useCallback(() => {
+    setChatToolPreferences((previous) =>
+      previous.subagent ? previous : { ...previous, subagent: true },
+    );
+  }, [setChatToolPreferences]);
   const [inputbarObjectiveModeEnabled, setInputbarObjectiveModeEnabled] =
     useState(false);
   const {
@@ -987,6 +993,15 @@ export function AgentChatWorkspace({
   const [project, setProject] = useState<Project | null>(null);
   const [projectMemory, setProjectMemory] = useState<ProjectMemory | null>(
     null,
+  );
+  const openedProjects = useOpenedProjectSummaries(
+    project ??
+      (projectId
+        ? {
+            id: projectId,
+            name: projectId,
+          }
+        : null),
   );
   const runtimeWorkspaceId =
     projectSelectionSource === "remembered" &&
@@ -1926,6 +1941,7 @@ export function AgentChatWorkspace({
       ? deferredInitialRuntimeWarmupMs
       : undefined,
     getSyncedSessionRecentPreferences,
+    onOpenSubagents: handleOpenSubagents,
   });
   useEffect(() => {
     const normalizedSessionId = sessionId?.trim();
@@ -2043,8 +2059,6 @@ export function AgentChatWorkspace({
 
   const {
     selectedTeam,
-    setSelectedTeam: handleSelectTeam,
-    enableSuggestedTeam: handleEnableSuggestedTeam,
     preferredTeamPresetId,
     selectedTeamLabel,
     selectedTeamSummary,
@@ -2367,13 +2381,6 @@ export function AgentChatWorkspace({
     liveRuntimeBySessionId: teamSessionRuntime.liveRuntimeBySessionId,
     stopSending,
   });
-  const [teamWorkbenchAutoFocusToken, setTeamWorkbenchAutoFocusToken] =
-    useState(0);
-  const dismissActiveTeamWorkbenchAutoOpen = useCallback(() => {}, []);
-  const handleActivateTeamWorkbench = useCallback(() => {
-    setTeamWorkbenchAutoFocusToken((current) => current + 1);
-    setLayoutMode((current) => (current === "chat" ? "chat-canvas" : current));
-  }, [setLayoutMode]);
   useEffect(() => {
     logAgentDebug(
       "AgentChatPage",
@@ -4138,13 +4145,11 @@ export function AgentChatWorkspace({
     shouldBootstrapCanvasOnEntry,
     canvasState,
     generalCanvasState,
-    teamWorkspaceEnabled: teamSessionRuntime.teamWorkspaceEnabled,
     hasCurrentCanvasArtifact: Boolean(currentCanvasArtifact),
     currentCanvasArtifactType: currentCanvasArtifact?.type,
     hasBrowserAssistArtifact,
     currentImageWorkbenchActive: currentImageWorkbenchState.active,
     onHasMessagesChange,
-    dismissActiveTeamWorkbenchAutoOpen,
     suppressGeneralCanvasArtifactAutoOpen,
     suppressBrowserAssistCanvasAutoOpen,
     clearBrowserAssistCanvasArtifact,
@@ -5933,9 +5938,9 @@ export function AgentChatWorkspace({
       (!shouldRenderBrandedEmptyState || shouldUseBrowserWorkspaceHomeChrome);
     const shouldRenderInlineA2UI = true;
 
-    const shouldUseTeamPrimaryChatPanelWidth =
+    const shouldUseSubagentsPrimaryChatPanelWidth =
       layoutMode === "chat-canvas" &&
-      teamSessionRuntime.teamWorkspaceEnabled &&
+      teamSessionRuntime.subagentsRuntimeVisible &&
       (teamSessionRuntime.hasRuntimeSessions ||
         Boolean(teamDispatchPreviewState));
     return {
@@ -5951,10 +5956,10 @@ export function AgentChatWorkspace({
       }),
       shouldHideGeneralWorkbenchInputForTheme,
       shouldRenderTopBar,
-      layoutTransitionChatPanelWidth: shouldUseTeamPrimaryChatPanelWidth
+      layoutTransitionChatPanelWidth: shouldUseSubagentsPrimaryChatPanelWidth
         ? TEAM_PRIMARY_CHAT_PANEL_WIDTH
         : undefined,
-      layoutTransitionChatPanelMinWidth: shouldUseTeamPrimaryChatPanelWidth
+      layoutTransitionChatPanelMinWidth: shouldUseSubagentsPrimaryChatPanelWidth
         ? TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH
         : undefined,
       shouldShowGeneralWorkbenchFloatingInputOverlay,
@@ -5984,7 +5989,7 @@ export function AgentChatWorkspace({
     shouldUseCompactGeneralWorkbench,
     teamDispatchPreviewState,
     teamSessionRuntime.hasRuntimeSessions,
-    teamSessionRuntime.teamWorkspaceEnabled,
+    teamSessionRuntime.subagentsRuntimeVisible,
     themeWorkbenchRunState,
     topBarChrome,
   ]);
@@ -6362,33 +6367,10 @@ export function AgentChatWorkspace({
     subagentParentContext,
     selectedTeamLabel,
     selectedTeamSummary,
-    teamDispatchPreviewState,
     teamMemorySnapshot: resolvedTeamMemoryShadowSnapshot,
     currentSessionTitle: teamSessionRuntime.currentSessionTitle,
-    currentSessionRuntimeStatus: teamSessionRuntime.currentSessionRuntimeStatus,
-    currentSessionLatestTurnStatus:
-      teamSessionRuntime.currentSessionLatestTurnStatus,
-    liveRuntimeBySessionId: teamSessionRuntime.liveRuntimeBySessionId,
-    liveActivityBySessionId: teamSessionRuntime.liveActivityBySessionId,
-    activityRefreshVersionBySessionId:
-      teamSessionRuntime.activityRefreshVersionBySessionId,
-    handleSendSubagentInput: teamSessionControlRuntime.handleSendSubagentInput,
-    handleWaitSubagentSession:
-      teamSessionControlRuntime.handleWaitSubagentSession,
-    handleWaitActiveTeamSessions:
-      teamSessionControlRuntime.handleWaitActiveTeamSessions,
-    handleCloseCompletedTeamSessions:
-      teamSessionControlRuntime.handleCloseCompletedTeamSessions,
-    handleCloseSubagentSession:
-      teamSessionControlRuntime.handleCloseSubagentSession,
-    handleResumeSubagentSession:
-      teamSessionControlRuntime.handleResumeSubagentSession,
-    teamWaitSummary: teamSessionControlRuntime.teamWaitSummary,
-    teamControlSummary: teamSessionControlRuntime.teamControlSummary,
     handleStopSending: teamSessionControlRuntime.handleStopSending,
-    teamWorkspaceEnabled: teamSessionRuntime.teamWorkspaceEnabled,
     handleOpenSubagentSession,
-    handleReturnToParentSession,
     input,
     setInput,
     currentGate,
@@ -6407,15 +6389,13 @@ export function AgentChatWorkspace({
     setReasoningEffort,
     sessionExecutionRuntime: executionRuntime,
     projectId: projectId ?? null,
+    openedProjects,
     projectRootPath: project?.rootPath || null,
     accessMode,
     setAccessMode,
     activeTheme,
     navigationActions,
     selectedTeam,
-    handleSelectTeam,
-    handleEnableSuggestedTeam,
-    layoutMode,
     handleTaskFileClick,
     characters: projectMemory?.characters || [],
     skills,
@@ -6472,9 +6452,6 @@ export function AgentChatWorkspace({
     activeRuntimeStatusTitle: contextHarnessRuntime.activeRuntimeStatusTitle,
     handleHarnessLoadFilePreview,
     handleFileClick: handleWorkspaceFileClick,
-    showGeneralWorkbenchFloatingInputOverlay:
-      shellChromeRuntime.shouldShowGeneralWorkbenchFloatingInputOverlay,
-    handleActivateTeamWorkbench,
     chatToolPreferences: effectiveChatToolPreferences,
     defaultCuratedTaskReferenceMemoryIds: defaultCuratedTaskReferenceMemoryIds,
     defaultCuratedTaskReferenceEntries: defaultCuratedTaskReferenceEntries,
@@ -6594,13 +6571,6 @@ export function AgentChatWorkspace({
     handleDocumentContentReviewRun,
     handleDocumentTextStylizeRun,
     preferContentReviewInRightRail,
-    teamWorkspaceEnabled: teamSessionRuntime.teamWorkspaceEnabled,
-    liveActivityBySessionId: teamSessionRuntime.liveActivityBySessionId,
-    teamWaitSummary: teamSessionControlRuntime.teamWaitSummary,
-    teamControlSummary: teamSessionControlRuntime.teamControlSummary,
-    teamWorkbenchAutoFocusToken,
-    teamDispatchPreviewState,
-    teamMemorySnapshot: resolvedTeamMemoryShadowSnapshot,
   });
 
   const handleSendFromEmptyState = useCallback<InputbarSendHandler>(
@@ -6795,9 +6765,9 @@ export function AgentChatWorkspace({
     handleSendFromEmptyState,
     shellChromeRuntime,
     generalWorkbenchHarnessDialog,
-    teamWorkspaceEnabled: teamSessionRuntime.teamWorkspaceEnabled,
     currentImageWorkbenchActive: currentImageWorkbenchState.active,
     projectId: projectId ?? null,
+    openedProjects,
     deferWorkspaceListLoad: shouldUseBrowserWorkspaceHomeChrome,
     workspaceHintMessage: shouldUseBrowserWorkspaceHomeChrome
       ? BROWSER_WORKSPACE_HOME_HINT_MESSAGE
@@ -6844,8 +6814,6 @@ export function AgentChatWorkspace({
     objectiveEnabled: inputbarObjectiveModeEnabled,
     onObjectiveEnabledChange: setInputbarObjectiveModeEnabled,
     selectedTeam,
-    handleSelectTeam,
-    handleEnableSuggestedTeam,
     creationMode,
     setCreationMode,
     activeTheme,
@@ -6946,7 +6914,6 @@ export function AgentChatWorkspace({
     shouldCollapseCodeBlockInChat,
     handleCodeBlockClick,
     layoutMode: sceneLayoutMode,
-    handleActivateTeamWorkbench,
     isThemeWorkbench,
     settledWorkbenchArtifacts,
     taskFiles,

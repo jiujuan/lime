@@ -91,6 +91,17 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("agent_runtime_export_evidence_pack")).toBe(
       true,
     );
+    expect(isBridgeTruthCommand("workspace_ensure")).toBe(true);
+    expect(shouldDisallowMockFallbackCommand("workspace_ensure")).toBe(true);
+    for (const command of [
+      "agent_app_runtime_start_task",
+      "agent_app_runtime_cancel_task",
+      "agent_app_runtime_get_task",
+      "agent_app_runtime_submit_host_response",
+    ]) {
+      expect(isBridgeTruthCommand(command)).toBe(false);
+      expect(shouldDisallowMockFallbackCommand(command)).toBe(true);
+    }
     expect(isBridgeTruthCommand("create_image_generation_task_artifact")).toBe(
       false,
     );
@@ -506,6 +517,6 @@ describe("commandPolicy", () => {
   it("集中声明运行时真相事件前缀", () => {
     expect(isBridgeTruthEvent("aster_stream_session-1")).toBe(true);
     expect(isBridgeTruthEvent("agent_subagent_status:session-1")).toBe(true);
-    expect(isBridgeTruthEvent("companion-pet-status")).toBe(false);
+    expect(isBridgeTruthEvent("retired-runtime-event")).toBe(false);
   });
 });

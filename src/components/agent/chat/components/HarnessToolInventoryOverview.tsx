@@ -261,8 +261,8 @@ function RuntimeToolCapabilitySummary({
           data-testid="harness-runtime-tool-capability-team"
         >
           {runtimeToolAvailability.subagentTeamTools
-            ? "Team current tools 已接通"
-            : `Team current tools 缺 ${runtimeToolAvailability.missingSubagentTeamTools.length} 项`}
+            ? "Subagents 协作 tools 已接通"
+            : `Subagents 协作 tools 缺 ${runtimeToolAvailability.missingSubagentTeamTools.length} 项`}
         </Badge>
         <Badge
           variant={
@@ -300,7 +300,7 @@ function RuntimeToolCapabilitySummary({
           <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/60 p-3 text-sm text-emerald-900">
             {agentText(
               "agentChat.harness.generated.ff5e6ffa0a",
-              "当前 runtime current surface 已覆盖 WebSearch、子任务、Team 与 Task 主链。",
+              "当前 runtime current surface 已覆盖 WebSearch、子任务、Subagents 协作与 Task 主链。",
             )}
           </div>
         )

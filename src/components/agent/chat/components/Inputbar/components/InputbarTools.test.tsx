@@ -62,13 +62,13 @@ describe("InputbarTools", () => {
       },
     });
 
-    expect(container.textContent).toContain("Task split");
+    expect(container.textContent).toContain("Subagents");
     expect(container.textContent).not.toContain("思考");
-    expect(container.textContent).not.toContain("任务拆分");
+    expect(container.textContent).not.toContain("Team");
 
     const buttons = Array.from(container.querySelectorAll("button"));
     expect(buttons.map((button) => button.getAttribute("title"))).toEqual([
-      "Task splitting preference is off",
+      "Subagents are off",
     ]);
 
     act(() => {

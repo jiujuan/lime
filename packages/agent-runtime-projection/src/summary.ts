@@ -15,7 +15,7 @@ export interface AgentUiProjectionSummary {
   latestNotableEvents: AgentUiProjectionEvent[];
 }
 
-export interface AgentUiTeamWorkbenchProjectionSummary {
+export interface AgentUiSubagentsProjectionSummary {
   total: number;
   rosterCount: number;
   workBoardCount: number;
@@ -30,27 +30,25 @@ export interface AgentUiTeamWorkbenchProjectionSummary {
   latestEvents: AgentUiProjectionEvent[];
 }
 
-export interface AgentUiTeamWorkbenchSurfaceLaneDefinition {
+export interface AgentUiSubagentsSurfaceLaneDefinition {
   id: string;
   label: string;
   description: string;
   surfaces: AgentUiSurface[];
 }
 
-export interface AgentUiTeamWorkbenchSurfaceLaneSummary
-  extends AgentUiTeamWorkbenchSurfaceLaneDefinition {
+export interface AgentUiSubagentsSurfaceLaneSummary extends AgentUiSubagentsSurfaceLaneDefinition {
   total: number;
   latestEvents: AgentUiProjectionEvent[];
 }
 
-export interface AgentUiTeamWorkbenchSurfaceDefinition {
+export interface AgentUiSubagentsSurfaceDefinition {
   surface: AgentUiSurface;
   label: string;
   description: string;
 }
 
-export interface AgentUiTeamWorkbenchSurfaceSummary
-  extends AgentUiTeamWorkbenchSurfaceDefinition {
+export interface AgentUiSubagentsSurfaceSummary extends AgentUiSubagentsSurfaceDefinition {
   total: number;
   latestEvents: AgentUiProjectionEvent[];
 }
@@ -66,7 +64,7 @@ export const EMPTY_AGENT_UI_PROJECTION_SUMMARY: AgentUiProjectionSummary = {
   latestNotableEvents: [],
 };
 
-export const EMPTY_AGENT_UI_TEAM_WORKBENCH_PROJECTION_SUMMARY: AgentUiTeamWorkbenchProjectionSummary =
+export const EMPTY_AGENT_UI_SUBAGENTS_PROJECTION_SUMMARY: AgentUiSubagentsProjectionSummary =
   {
     total: 0,
     rosterCount: 0,
@@ -127,7 +125,7 @@ export const AGENT_UI_EVIDENCE_EVENT_TYPES = new Set<AgentUiEventClass>([
   "review.completed",
 ]);
 
-export const AGENT_UI_TEAM_WORKBENCH_SURFACES = new Set<AgentUiSurface>([
+export const AGENT_UI_SUBAGENTS_SURFACES = new Set<AgentUiSurface>([
   "team_roster",
   "work_board",
   "delegation_graph",
@@ -140,7 +138,7 @@ export const AGENT_UI_TEAM_WORKBENCH_SURFACES = new Set<AgentUiSurface>([
   "team_policy",
 ]);
 
-export const AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS: AgentUiTeamWorkbenchSurfaceDefinition[] =
+export const AGENT_UI_SUBAGENTS_SURFACE_DEFINITIONS: AgentUiSubagentsSurfaceDefinition[] =
   [
     {
       surface: "team_roster",
@@ -175,7 +173,7 @@ export const AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS: AgentUiTeamWorkbenchSu
     {
       surface: "teammate_transcript",
       label: "Transcript",
-      description: "队友 transcript ref 与局部会话线索",
+      description: "子代理 transcript ref 与局部会话线索",
     },
     {
       surface: "background_teammate",
@@ -185,7 +183,7 @@ export const AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS: AgentUiTeamWorkbenchSu
     {
       surface: "remote_teammate",
       label: "Remote",
-      description: "远端 teammate / external task 状态",
+      description: "远端子代理 / external task 状态",
     },
     {
       surface: "team_policy",
@@ -194,12 +192,12 @@ export const AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS: AgentUiTeamWorkbenchSu
     },
   ];
 
-export const AGENT_UI_TEAM_WORKBENCH_SURFACE_LANES: AgentUiTeamWorkbenchSurfaceLaneDefinition[] =
+export const AGENT_UI_SUBAGENTS_SURFACE_LANES: AgentUiSubagentsSurfaceLaneDefinition[] =
   [
     {
       id: "team-topology",
-      label: "Team 拓扑",
-      description: "成员、分派、任务板与策略事实",
+      label: "Subagents 拓扑",
+      description: "子代理、分派、任务板与策略事实",
       surfaces: [
         "team_roster",
         "delegation_graph",
@@ -210,7 +208,7 @@ export const AGENT_UI_TEAM_WORKBENCH_SURFACE_LANES: AgentUiTeamWorkbenchSurfaceL
     {
       id: "worker-flow",
       label: "Worker 流",
-      description: "执行通知、队友 transcript 与后台/远端伙伴",
+      description: "执行通知、子代理 transcript 与后台/远端子代理",
       surfaces: [
         "worker_notifications",
         "teammate_transcript",
@@ -226,7 +224,7 @@ export const AGENT_UI_TEAM_WORKBENCH_SURFACE_LANES: AgentUiTeamWorkbenchSurfaceL
     },
   ];
 
-export const AGENT_UI_TEAM_WORKBENCH_EVENT_TYPES = new Set<AgentUiEventClass>([
+export const AGENT_UI_SUBAGENTS_EVENT_TYPES = new Set<AgentUiEventClass>([
   "agent.changed",
   "agent.spawned",
   "agent.completed",
@@ -293,56 +291,59 @@ export function summarizeAgentUiProjectionEvents(
   };
 }
 
-export function summarizeAgentUiTeamWorkbenchProjectionEvents(
+export function summarizeAgentUiSubagentsProjectionEvents(
   events: AgentUiProjectionEvent[],
-): AgentUiTeamWorkbenchProjectionSummary {
-  const teamEvents = events.filter(
+): AgentUiSubagentsProjectionSummary {
+  const subagentEvents = events.filter(
     (event) =>
-      AGENT_UI_TEAM_WORKBENCH_EVENT_TYPES.has(event.type) ||
-      Boolean(
-        event.surface && AGENT_UI_TEAM_WORKBENCH_SURFACES.has(event.surface),
-      ),
+      AGENT_UI_SUBAGENTS_EVENT_TYPES.has(event.type) ||
+      Boolean(event.surface && AGENT_UI_SUBAGENTS_SURFACES.has(event.surface)),
   );
 
-  if (teamEvents.length === 0) {
-    return EMPTY_AGENT_UI_TEAM_WORKBENCH_PROJECTION_SUMMARY;
+  if (subagentEvents.length === 0) {
+    return EMPTY_AGENT_UI_SUBAGENTS_PROJECTION_SUMMARY;
   }
 
   return {
-    total: teamEvents.length,
-    rosterCount: teamEvents.filter((event) => event.surface === "team_roster")
-      .length,
-    workBoardCount: teamEvents.filter((event) => event.surface === "work_board")
-      .length,
-    delegationCount: teamEvents.filter(
+    total: subagentEvents.length,
+    rosterCount: subagentEvents.filter(
+      (event) => event.surface === "team_roster",
+    ).length,
+    workBoardCount: subagentEvents.filter(
+      (event) => event.surface === "work_board",
+    ).length,
+    delegationCount: subagentEvents.filter(
       (event) => event.surface === "delegation_graph",
     ).length,
-    handoffCount: teamEvents.filter((event) => event.surface === "handoff_lane")
-      .length,
-    workerNotificationCount: teamEvents.filter(
+    handoffCount: subagentEvents.filter(
+      (event) => event.surface === "handoff_lane",
+    ).length,
+    workerNotificationCount: subagentEvents.filter(
       (event) => event.surface === "worker_notifications",
     ).length,
-    reviewCount: teamEvents.filter((event) => event.surface === "review_lane")
-      .length,
-    transcriptCount: teamEvents.filter(
+    reviewCount: subagentEvents.filter(
+      (event) => event.surface === "review_lane",
+    ).length,
+    transcriptCount: subagentEvents.filter(
       (event) => event.surface === "teammate_transcript",
     ).length,
-    backgroundCount: teamEvents.filter(
+    backgroundCount: subagentEvents.filter(
       (event) => event.surface === "background_teammate",
     ).length,
-    remoteCount: teamEvents.filter(
+    remoteCount: subagentEvents.filter(
       (event) => event.surface === "remote_teammate",
     ).length,
-    policyCount: teamEvents.filter((event) => event.surface === "team_policy")
-      .length,
-    latestEvents: teamEvents.slice().reverse().slice(0, 5),
+    policyCount: subagentEvents.filter(
+      (event) => event.surface === "team_policy",
+    ).length,
+    latestEvents: subagentEvents.slice().reverse().slice(0, 5),
   };
 }
 
-export function summarizeAgentUiTeamWorkbenchSurfaceLanes(
+export function summarizeAgentUiSubagentsSurfaceLanes(
   events: AgentUiProjectionEvent[],
-): AgentUiTeamWorkbenchSurfaceLaneSummary[] {
-  return AGENT_UI_TEAM_WORKBENCH_SURFACE_LANES.map((lane) => {
+): AgentUiSubagentsSurfaceLaneSummary[] {
+  return AGENT_UI_SUBAGENTS_SURFACE_LANES.map((lane) => {
     const surfaceSet = new Set(lane.surfaces);
     const laneEvents = events.filter(
       (event) => event.surface && surfaceSet.has(event.surface),
@@ -356,12 +357,12 @@ export function summarizeAgentUiTeamWorkbenchSurfaceLanes(
   }).filter((lane) => lane.total > 0);
 }
 
-export function summarizeAgentUiTeamWorkbenchSurfaces(
+export function summarizeAgentUiSubagentsSurfaces(
   events: AgentUiProjectionEvent[],
   options: { latestLimit?: number } = {},
-): AgentUiTeamWorkbenchSurfaceSummary[] {
+): AgentUiSubagentsSurfaceSummary[] {
   const latestLimit = Math.max(1, options.latestLimit ?? 3);
-  return AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS.map((definition) => {
+  return AGENT_UI_SUBAGENTS_SURFACE_DEFINITIONS.map((definition) => {
     const surfaceEvents = events.filter(
       (event) => event.surface === definition.surface,
     );

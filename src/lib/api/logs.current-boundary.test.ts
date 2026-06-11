@@ -166,12 +166,12 @@ describe("logs diagnostics current App Server boundary", () => {
       readRepoFile("src/lib/dev-bridge/mockPriorityCommands.ts"),
       readOptionalRepoFile("src/lib/desktop-host/configSystemMocks.ts"),
       readRepoFile("src/lib/desktop-host/core.ts"),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readOptionalRepoFile("lime-rs/src/app/runner.rs"),
+      readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
       readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher/app_runtime.rs"),
       readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher/logs.rs"),
     ].join("\n");
-    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
+    const runnerSource = readOptionalRepoFile("lime-rs/src/app/runner.rs");
 
     expectStringLiteralsAbsent(
       productionSources,
@@ -180,6 +180,12 @@ describe("logs diagnostics current App Server boundary", () => {
     for (const registration of LEGACY_LOG_TAURI_REGISTRATIONS) {
       expect(runnerSource).not.toContain(registration);
     }
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(resolve(cwd(), "lime-rs/src/dev_bridge/dispatcher.rs")),
+    ).toBe(false);
     for (const retiredPath of RETIRED_LOG_WRAPPER_FILES) {
       expect(existsSync(resolve(cwd(), retiredPath))).toBe(false);
     }

@@ -39,6 +39,7 @@ interface ChatNavbarProps {
   isCanvasOpen?: boolean;
   onToggleCanvas?: () => void;
   projectId?: string | null;
+  openedProjects?: ChatNavbarOpenedProject[];
   onProjectChange?: (projectId: string) => void;
   workspaceType?: string;
   deferWorkspaceListLoad?: boolean;
@@ -54,6 +55,12 @@ interface ChatNavbarProps {
   showContextCompactionAction?: boolean;
   contextCompactionRunning?: boolean;
   onCompactContext?: () => void;
+}
+
+interface ChatNavbarOpenedProject {
+  id: string;
+  name: string;
+  rootPath?: string | null;
 }
 
 const toolbarGroupClassName =
@@ -77,6 +84,9 @@ const taskCenterTopRailClassName =
 const taskCenterWorkspaceTabClassName =
   "relative z-20 flex h-9 min-w-[148px] max-w-[224px] items-center rounded-t-[18px] rounded-b-none border border-b-0 border-[color:var(--lime-chrome-border)] bg-[color:var(--lime-chrome-tab-active-surface)] px-2 text-sm font-medium text-[color:var(--lime-chrome-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] dark:border-white/10 dark:bg-slate-900 dark:text-slate-300";
 
+const taskCenterWorkspaceInactiveTabClassName =
+  "relative z-10 ml-1 flex h-8 min-w-[108px] max-w-[184px] items-center gap-1.5 rounded-t-[15px] border border-b-0 border-transparent bg-transparent px-3 pb-0.5 text-xs font-medium text-[color:var(--lime-chrome-muted)] transition hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)]";
+
 const taskCenterWorkspaceTabCurveClassName =
   "pointer-events-none absolute bottom-0 h-[18px] w-[18px] bg-transparent";
 
@@ -85,6 +95,39 @@ const taskCenterIconButtonClassName =
 
 const taskCenterPillButtonClassName =
   "h-7 rounded-[12px] border border-transparent bg-transparent px-2 text-[11px] font-medium text-[color:var(--lime-chrome-text)] shadow-none transition-[background-color,color] hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-text-strong)]";
+
+function normalizeProjectId(value?: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function resolveProjectDisplayName(project: ChatNavbarOpenedProject): string {
+  return project.name.trim() || project.id;
+}
+
+function resolveProjectNameFromId(projectId: string): string {
+  return (
+    projectId
+      .split(/[\\/]/)
+      .filter(Boolean)
+      .pop()
+      ?.trim() || projectId
+  );
+}
+
+function buildOpenedProjectTabs(
+  openedProjects: ChatNavbarOpenedProject[],
+): ChatNavbarOpenedProject[] {
+  const seen = new Set<string>();
+  return openedProjects.filter((project) => {
+    const projectId = normalizeProjectId(project.id);
+    if (!projectId || seen.has(projectId)) {
+      return false;
+    }
+    seen.add(projectId);
+    return true;
+  });
+}
 
 export const ChatNavbar: React.FC<ChatNavbarProps> = ({
   isRunning: _isRunning,
@@ -105,6 +148,7 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
   isCanvasOpen = false,
   onToggleCanvas,
   projectId = null,
+  openedProjects = [],
   onProjectChange,
   workspaceType,
   deferWorkspaceListLoad,
@@ -179,6 +223,22 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
   const showEntryContext = Boolean(entryContextLabel);
   const shouldDeferWorkspaceListLoad =
     deferWorkspaceListLoad ?? isTaskCenterChrome;
+  const normalizedProjectId = normalizeProjectId(projectId);
+  const openedProjectTabs = React.useMemo(
+    () => buildOpenedProjectTabs(openedProjects),
+    [openedProjects],
+  );
+  const activeOpenedProject = normalizedProjectId
+    ? (openedProjectTabs.find(
+        (project) => normalizeProjectId(project.id) === normalizedProjectId,
+      ) ?? {
+        id: normalizedProjectId,
+        name: resolveProjectNameFromId(normalizedProjectId),
+      })
+    : null;
+  const inactiveOpenedProjectTabs = openedProjectTabs.filter(
+    (project) => normalizeProjectId(project.id) !== normalizedProjectId,
+  );
 
   if (isTaskCenterChrome) {
     return (
@@ -199,10 +259,11 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
           className={taskCenterTopRailClassName}
           style={{ background: TASK_CENTER_CHROME_RAIL_SURFACE }}
         >
-          <div className="flex items-center">
+          <div className="flex min-w-0 items-center">
             <div
               className={taskCenterWorkspaceTabClassName}
               data-testid="task-center-workspace-shell"
+              data-project-id={activeOpenedProject?.id ?? ""}
             >
               <span
                 aria-hidden="true"
@@ -243,6 +304,23 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 className="w-auto max-w-[224px]"
               />
             </div>
+            {inactiveOpenedProjectTabs.map((project) => {
+              const projectName = resolveProjectDisplayName(project);
+              return (
+                <button
+                  key={project.id}
+                  type="button"
+                  className={taskCenterWorkspaceInactiveTabClassName}
+                  title={projectName}
+                  data-testid="task-center-opened-project-tab"
+                  data-project-id={project.id}
+                  onClick={() => onProjectChange?.(project.id)}
+                >
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 truncate">{projectName}</span>
+                </button>
+              );
+            })}
             <div className="relative ml-2 flex h-9 items-center pb-1">
               {workspaceHintVisible && workspaceHintMessage ? (
                 <div

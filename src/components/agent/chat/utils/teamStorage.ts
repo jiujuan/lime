@@ -11,7 +11,6 @@ import {
   type TeamSelectionReference,
 } from "./teamDefinitions";
 
-const CUSTOM_TEAM_STORAGE_KEY = "lime.chat.custom_teams.v1";
 const TEAM_SELECTION_STORAGE_KEY_PREFIX = "lime.chat.team_selection.v1";
 
 type TeamSelectionLike = Pick<TeamSelectionReference, "id" | "source">;
@@ -87,11 +86,7 @@ function resolveTeamFromSelection(
     return createTeamDefinitionFromPreset(selection.id);
   }
 
-  return (
-    (customTeams || loadCustomTeams()).find(
-      (team) => team.id === selection.id,
-    ) || null
-  );
+  return customTeams?.find((team) => team.id === selection.id) || null;
 }
 
 function normalizeWorkspaceCustomTeamList(
@@ -115,30 +110,6 @@ function normalizeWorkspaceCustomTeamList(
   );
 }
 
-export function loadCustomTeams(): TeamDefinition[] {
-  try {
-    const raw = localStorage.getItem(CUSTOM_TEAM_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw) as Array<Partial<TeamDefinition>>;
-    return normalizeCustomTeamList(parsed);
-  } catch {
-    return [];
-  }
-}
-
-export function saveCustomTeams(teams: TeamDefinition[]): void {
-  try {
-    localStorage.setItem(
-      CUSTOM_TEAM_STORAGE_KEY,
-      JSON.stringify(normalizeCustomTeamList(teams)),
-    );
-  } catch {
-    // ignore persistence errors
-  }
-}
-
 export function persistSelectedTeam(
   team: TeamDefinition | null,
   theme?: string | null,
@@ -146,7 +117,7 @@ export function persistSelectedTeam(
   try {
     const key = getTeamSelectionStorageKey(theme);
     const selection = buildTeamSelectionReference(team);
-    if (!team || !selection) {
+    if (!team || !selection || selection.source !== "builtin") {
       localStorage.removeItem(key);
       return;
     }
@@ -168,7 +139,7 @@ export function loadSelectedTeamReference(
     if (
       typeof parsed?.id !== "string" ||
       !parsed.id.trim() ||
-      (parsed.source !== "builtin" && parsed.source !== "custom")
+      parsed.source !== "builtin"
     ) {
       return null;
     }
@@ -203,14 +174,6 @@ export function loadCustomTeamsFromWorkspaceSettings(
   settings?: WorkspaceSettings | null,
 ): TeamDefinition[] | null {
   return normalizeWorkspaceCustomTeamList(settings?.agentTeam?.customTeams);
-}
-
-export function resolveCustomTeams(
-  workspaceSettings?: WorkspaceSettings | null,
-): TeamDefinition[] {
-  return (
-    loadCustomTeamsFromWorkspaceSettings(workspaceSettings) || loadCustomTeams()
-  );
 }
 
 export function loadSelectedTeamReferenceFromWorkspaceSettings(
@@ -248,35 +211,6 @@ export function buildWorkspaceSettingsWithSelectedTeam(
           ...(currentSettings?.agentTeam || {}),
           disabled: true,
         },
-  };
-}
-
-export function buildWorkspaceSettingsWithCustomTeams(
-  currentSettings: WorkspaceSettings | null | undefined,
-  teams: TeamDefinition[],
-): WorkspaceSettings {
-  return {
-    ...(currentSettings || {}),
-    agentTeam: {
-      ...(currentSettings?.agentTeam || {}),
-      customTeams: normalizeCustomTeamList(teams).map((team) => ({
-        id: team.id,
-        label: team.label,
-        description: team.description,
-        theme: team.theme,
-        presetId: team.presetId,
-        roles: team.roles.map((role) => ({
-          id: role.id,
-          label: role.label,
-          summary: role.summary,
-          profileId: role.profileId,
-          roleKey: role.roleKey,
-          skillIds: role.skillIds ? [...role.skillIds] : [],
-        })),
-        createdAt: team.createdAt,
-        updatedAt: team.updatedAt,
-      })),
-    },
   };
 }
 

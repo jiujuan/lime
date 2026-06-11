@@ -3,12 +3,12 @@ import type { AgentUiProjectionEvent } from "./agentUiEventProjection";
 import {
   formatAgentUiProjectionEventAuxiliaryDetail,
   formatAgentUiProjectionEventDetail,
-  summarizeAgentUiTeamWorkbenchSurfaceLanes,
-  summarizeAgentUiTeamWorkbenchSurfaces,
+  summarizeAgentUiSubagentsSurfaceLanes,
+  summarizeAgentUiSubagentsSurfaces,
 } from "./agentUiProjectionSummary";
 
 describe("agentUiProjectionSummary", () => {
-  it("应按 Agent UI v0.6 Team Workbench surface 聚合专用 lane", () => {
+  it("应按 Agent UI v0.6 Subagents surface 聚合专用 lane", () => {
     const events: AgentUiProjectionEvent[] = [
       {
         type: "team.changed",
@@ -86,7 +86,7 @@ describe("agentUiProjectionSummary", () => {
       },
     ];
 
-    const lanes = summarizeAgentUiTeamWorkbenchSurfaceLanes(events);
+    const lanes = summarizeAgentUiSubagentsSurfaceLanes(events);
 
     expect(lanes.map((lane) => lane.id)).toEqual([
       "team-topology",
@@ -102,7 +102,7 @@ describe("agentUiProjectionSummary", () => {
     ).toBe(4);
   });
 
-  it("应按单个 Team Workbench surface 产出可交互详情 selector", () => {
+  it("应按单个 Subagents surface 产出可交互详情 selector", () => {
     const events: AgentUiProjectionEvent[] = [
       {
         type: "review.requested",
@@ -144,7 +144,7 @@ describe("agentUiProjectionSummary", () => {
       },
     ];
 
-    const surfaces = summarizeAgentUiTeamWorkbenchSurfaces(events, {
+    const surfaces = summarizeAgentUiSubagentsSurfaces(events, {
       latestLimit: 1,
     });
 

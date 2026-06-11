@@ -45,5 +45,6 @@ export interface ExecuteCodexSlashCommandParams {
   appendAssistantMessage: (content: string) => void;
   notifyInfo: (message: string) => void;
   notifySuccess: (message: string) => void;
+  onOpenSubagents?: () => void;
   onExecutedCommand?: (command: ParsedCodexSlashCommand) => void;
 }

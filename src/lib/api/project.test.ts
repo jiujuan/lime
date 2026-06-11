@@ -11,6 +11,7 @@ import {
   createProject,
   deleteContent,
   deleteProject,
+  ensureProjectWorkspace,
   ensureWorkspaceReady,
   ensureDefaultWorkspaceReady,
   getContent,
@@ -190,6 +191,52 @@ describe("项目管理 API", () => {
       expectAppServerRequest(1, "workspace/byPath/read", {
         rootPath: "/Users/test/.lime/projects/demo",
       });
+      expect(safeInvoke).not.toHaveBeenCalled();
+    });
+
+    it("应该通过 App Server ensure 本地项目工作区", async () => {
+      resolveAppServerRequest({
+        workspace: {
+          id: "project-ensure",
+          name: "新项目",
+          workspace_type: "general",
+          root_path: "/Users/test/.lime/projects/new-project",
+        },
+        created: true,
+        rootCreated: true,
+      });
+
+      const project = await ensureProjectWorkspace({
+        name: " 新项目 ",
+        rootPath: " /Users/test/.lime/projects/new-project ",
+        workspaceType: "general",
+      });
+
+      expect(project).toEqual(
+        expect.objectContaining({
+          id: "project-ensure",
+          name: "新项目",
+          workspaceType: "general",
+          rootPath: "/Users/test/.lime/projects/new-project",
+        }),
+      );
+      expectAppServerRequest(1, "workspace/ensure", {
+        name: "新项目",
+        rootPath: "/Users/test/.lime/projects/new-project",
+        workspaceType: "general",
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
+    });
+
+    it("ensureProjectWorkspace 缺少项目目录时应 fail closed", async () => {
+      await expect(
+        ensureProjectWorkspace({
+          name: "空目录项目",
+          rootPath: "   ",
+          workspaceType: "general",
+        }),
+      ).rejects.toThrow("workspace rootPath is required to ensure project");
+      expect(appServerRequestMock).not.toHaveBeenCalled();
       expect(safeInvoke).not.toHaveBeenCalled();
     });
 

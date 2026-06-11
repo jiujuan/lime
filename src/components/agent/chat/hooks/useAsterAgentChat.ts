@@ -61,6 +61,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     initialRuntimeWarmupLoadMode = initialTopicsLoadMode,
     initialRuntimeWarmupDeferredDelayMs = initialTopicsDeferredDelayMs,
     getSyncedSessionRecentPreferences,
+    onOpenSubagents,
     runtimeAdapter,
     preserveRestoredMessages = false,
   } = options;
@@ -419,6 +420,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         appendAssistantMessage: appendLocalAssistantMessage,
         notifyInfo: (message) => toast.info(message),
         notifySuccess: (message) => toast.success(message),
+        onOpenSubagents,
       });
       await send(...args);
     },
@@ -433,6 +435,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       createFreshSession,
       currentTurnId,
       isStreamSending,
+      onOpenSubagents,
       queuedTurnsCount,
       rawSendMessage,
       warmupRuntime,

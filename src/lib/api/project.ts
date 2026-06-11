@@ -11,6 +11,7 @@ import {
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
+  METHOD_WORKSPACE_ENSURE,
   METHOD_WORKSPACE_ENSURE_READY,
   METHOD_WORKSPACE_LIST,
   METHOD_WORKSPACE_PROJECTS_ROOT_READ,
@@ -26,6 +27,12 @@ type WorkspaceListAppServerResponse = {
 
 type WorkspaceReadAppServerResponse = {
   workspace?: RawProject | null;
+};
+
+type WorkspaceEnsureProjectAppServerResponse = {
+  workspace?: RawProject | null;
+  created?: boolean;
+  rootCreated?: boolean;
 };
 
 type WorkspaceProjectsRootAppServerResponse = {
@@ -253,6 +260,8 @@ export interface CreateProjectRequest {
   workspaceType?: ProjectType;
 }
 
+export type EnsureProjectWorkspaceRequest = CreateProjectRequest;
+
 /** 更新项目请求 */
 export interface UpdateProjectRequest {
   name?: string;
@@ -316,6 +325,32 @@ export async function createProject(
 ): Promise<Project> {
   void request;
   return rejectRetiredWorkspaceContentCommand("workspace_create");
+}
+
+/** 确保本地项目工作区存在 */
+export async function ensureProjectWorkspace(
+  request: EnsureProjectWorkspaceRequest,
+): Promise<Project> {
+  const name = request.name.trim();
+  const rootPath = request.rootPath.trim();
+  if (!rootPath) {
+    throw new Error("workspace rootPath is required to ensure project");
+  }
+
+  const response =
+    await requestProjectAppServer<WorkspaceEnsureProjectAppServerResponse>(
+      METHOD_WORKSPACE_ENSURE,
+      {
+        name: name || "未命名项目",
+        rootPath,
+        ...(request.workspaceType ? { workspaceType: request.workspaceType } : {}),
+      },
+    );
+  const project = response.workspace;
+  if (!project) {
+    throw new Error("App Server workspace/ensure did not return workspace");
+  }
+  return normalizeProject(project);
 }
 
 /** 获取统一 workspace 项目根目录 */

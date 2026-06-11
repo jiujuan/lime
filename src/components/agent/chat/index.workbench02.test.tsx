@@ -24,7 +24,7 @@ const {
 } = getIndexTestMocks();
 
 describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
-  it("用户手动关闭真实 Team 画布后，同一轮后续成员更新不应再次抢焦点", async () => {
+  it("用户手动关闭通用画布后，同一轮后续 Subagents 更新不应再次抢焦点", async () => {
     const runtimeState = {
       childSubagentSessions: [] as Array<{
         id: string;
@@ -119,7 +119,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       void latestInputbarProps?.onSend?.({
         images: [],
         textOverride:
-          "请组织一个协作团队推进这项修复，先分析根因、复现路径、边界风险，再分别落实修复与回归验证。",
+          "请用 Subagents 推进这项修复，先分析根因、复现路径、边界风险，再分别落实修复与回归验证。",
       });
     });
     await flushEffects(8);
@@ -198,7 +198,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ).toBe("chat");
   });
 
-  it("同一会话首次出现真实 Team 成员时，仍应保持聊天态，等待用户手动打开画布", async () => {
+  it("同一会话首次出现真实 Subagents 线程时，仍应保持聊天态", async () => {
     const runtimeState = {
       childSubagentSessions: [] as Array<{
         id: string;
@@ -298,7 +298,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ).toBe("chat");
   });
 
-  it("仅有已选 Team 偏好时，顶部展开仍可手动打开画布，且不会凭空展示协作 dock", async () => {
+  it("仅有已选 Subagents profile 兼容偏好时，顶部展开仍只打开通用画布", async () => {
     localStorage.setItem(
       "lime.chat.team_selection.v1.general",
       JSON.stringify({
@@ -332,7 +332,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     act(() => {
       void latestInputbarProps?.onSend?.({
         images: [],
-        textOverride: "请组织一个协作团队推进这项修复",
+        textOverride: "请用 Subagents 推进这项修复",
       });
     });
     await flushEffects(8);
@@ -365,11 +365,6 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
         .querySelector('[data-testid="layout-transition"]')
         ?.getAttribute("data-mode"),
     ).toBe("chat");
-    expect(
-      mounted.container.querySelector(
-        '[data-testid="team-workspace-dock-activate"]',
-      ),
-    ).toBeNull();
   });
 
   it("已安装 skills 但未显式激活时，通用工作台不应展示技能区块", async () => {

@@ -29,8 +29,6 @@ import { useSiteAdapterCatalogBootstrap } from "./hooks/useSiteAdapterCatalogBoo
 import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellLayout } from "./hooks/useAppShellLayout";
 import { useAppStartupEffects } from "./hooks/useAppStartupEffects";
-import { useCompanionProviderBridge } from "./hooks/useCompanionProviderBridge";
-import { useCompanionEntryEnabled } from "./hooks/useCompanionEntryEnabled";
 import { useGlobalTrayModelSync } from "./hooks/useGlobalTrayModelSync";
 import { useOemLimeHubProviderSync } from "./hooks/useOemLimeHubProviderSync";
 import { useSkillPackageOpenRequests } from "./hooks/useSkillPackageOpenRequests";
@@ -142,7 +140,6 @@ function AppContent() {
   const { t } = useTranslation("common");
   const hasDesktopHostRuntime = hasDesktopHostInvokeCapability();
   const nativeStartupScreenAvailable = hasNativeStartupScreen();
-  const companionEntryEnabled = useCompanionEntryEnabled();
   const reserveMacWindowControls = shouldReserveMacWindowControls();
   const [showSplash, setShowSplash] = useState(!nativeStartupScreenAvailable);
   const {
@@ -193,10 +190,6 @@ function AppContent() {
   useGlobalTrayModelSync({
     currentPage,
     pageParams,
-  });
-  useCompanionProviderBridge({
-    enabled: companionEntryEnabled,
-    onNavigate: handleNavigate,
   });
   useSkillPackageOpenRequests({
     onNavigate: handleNavigate,

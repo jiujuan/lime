@@ -4,7 +4,6 @@ import { isAssistantRuntimeErrorDisplayText } from "@/components/agent/chat/util
 
 export interface SidebarSessionMetaOptions {
   locale?: string | null;
-  formatArchived?: (time: string) => string;
 }
 
 const SECOND_MS = 1000;
@@ -75,14 +74,6 @@ export function formatSidebarSessionMeta(
   session: AsterSessionInfo,
   options: SidebarSessionMetaOptions = {},
 ): string {
-  if (typeof session.archived_at === "number" && session.archived_at > 0) {
-    const archivedTime = formatSidebarSessionTime(
-      session.archived_at,
-      options.locale,
-    );
-    return options.formatArchived?.(archivedTime) ?? archivedTime;
-  }
-
   return formatSidebarSessionTime(session.updated_at, options.locale);
 }
 

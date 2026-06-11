@@ -6,16 +6,13 @@ import type { TeamDefinition } from "../utils/teamDefinitions";
 import {
   buildTeamDefinitionLabel,
   buildTeamDefinitionSummary,
-  createTeamDefinitionFromPreset,
 } from "../utils/teamDefinitions";
 import { createTeamDefinitionFromExecutionRuntimeRecentTeamSelection } from "../utils/sessionExecutionRuntime";
 import { resolveSelectedTeamFromShadowSnapshot } from "./useTeamMemoryShadowSync";
 import {
-  loadCustomTeams,
   persistSelectedTeam,
   resolveSelectedTeamPreference,
   resolveWorkspaceTeamPreferenceState,
-  saveCustomTeams,
 } from "../utils/teamStorage";
 
 function normalizeThemeScope(theme?: string | null): string {
@@ -79,16 +76,6 @@ function persistSelectedTeamShadowCache(
     allowPersistedThemeFallback?: boolean;
   },
 ) {
-  if (team?.source === "custom") {
-    const nextCustomTeams = [
-      team,
-      ...loadCustomTeams().filter(
-        (existingTeam) => existingTeam.id !== team.id,
-      ),
-    ];
-    saveCustomTeams(nextCustomTeams);
-  }
-
   if (options?.allowPersistedThemeFallback ?? true) {
     persistSelectedTeam(team, options?.theme);
   }
@@ -235,7 +222,10 @@ export function useSelectedTeamPreference(
               theme,
             );
         void syncPromise.catch((error) => {
-          console.warn("[Team] 回写会话 recent_team_selection 失败:", error);
+          console.warn(
+            "[Subagents] 回写会话 recent_team_selection 失败:",
+            error,
+          );
         });
       });
     },
@@ -333,7 +323,7 @@ export function useSelectedTeamPreference(
             scheduleSessionRecentTeamSelectionSync(team);
           })
           .catch((error) => {
-            console.warn("[Team] 持久化项目级 Team 偏好失败:", error);
+            console.warn("[Subagents] 持久化项目级子代理偏好失败:", error);
             setSelectedTeamState((current) =>
               areSameSelectedTeam(current, fallbackTeam)
                 ? current
@@ -365,21 +355,6 @@ export function useSelectedTeamPreference(
     ],
   );
 
-  const enableSuggestedTeam = useCallback(
-    (suggestedPresetId?: string) => {
-      const resolvedPresetId = suggestedPresetId?.trim();
-      if (!resolvedPresetId) {
-        return;
-      }
-
-      const suggestedTeam = createTeamDefinitionFromPreset(resolvedPresetId);
-      if (suggestedTeam) {
-        setSelectedTeam(suggestedTeam);
-      }
-    },
-    [setSelectedTeam],
-  );
-
   const preferredTeamPresetId = useMemo(
     () =>
       selectedTeam?.presetId?.trim() ||
@@ -398,7 +373,6 @@ export function useSelectedTeamPreference(
   return {
     selectedTeam,
     setSelectedTeam,
-    enableSuggestedTeam,
     preferredTeamPresetId,
     selectedTeamLabel,
     selectedTeamSummary,

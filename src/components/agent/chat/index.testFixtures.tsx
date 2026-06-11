@@ -618,51 +618,6 @@ vi.mock("./components/MarkdownRenderer", () => ({
   ),
 }));
 
-vi.mock("./components/TeamWorkspaceDock", () => ({
-  TeamWorkspaceDock: ({
-    placement,
-    withBottomOverlay,
-    shellVisible,
-    childSubagentSessions,
-    teamDispatchPreviewState,
-    onActivateWorkbench,
-  }: {
-    placement?: "floating" | "inline";
-    withBottomOverlay?: boolean;
-    shellVisible?: boolean;
-    childSubagentSessions?: Array<{ id: string }>;
-    teamDispatchPreviewState?: {
-      status?: string;
-      members?: Array<{ id: string }>;
-    } | null;
-    onActivateWorkbench?: () => void;
-  }) => (
-    <div
-      data-testid="team-workspace-dock"
-      data-placement={placement || "floating"}
-      data-with-bottom-overlay={withBottomOverlay ? "true" : "false"}
-      data-shell-visible={shellVisible ? "true" : "false"}
-      data-child-count={String(childSubagentSessions?.length ?? 0)}
-      data-runtime-status={teamDispatchPreviewState?.status || ""}
-      data-runtime-member-count={String(
-        teamDispatchPreviewState?.members?.length ?? 0,
-      )}
-    >
-      {onActivateWorkbench ? (
-        <button
-          type="button"
-          data-testid="team-workspace-dock-activate"
-          onClick={() => {
-            onActivateWorkbench();
-          }}
-        >
-          打开生成
-        </button>
-      ) : null}
-    </div>
-  ),
-}));
-
 vi.mock("./components/Inputbar", () => ({
   Inputbar: (props: Record<string, unknown>) => mockInputbar(props),
 }));

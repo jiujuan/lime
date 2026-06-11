@@ -38,13 +38,11 @@ function renderHook(props?: Partial<HookProps>) {
       content: "",
       isEditing: false,
     },
-    teamWorkspaceEnabled: false,
     hasCurrentCanvasArtifact: false,
     currentCanvasArtifactType: null,
     hasBrowserAssistArtifact: false,
     currentImageWorkbenchActive: false,
     onHasMessagesChange: vi.fn(),
-    dismissActiveTeamWorkbenchAutoOpen: vi.fn(),
     suppressGeneralCanvasArtifactAutoOpen: vi.fn(),
     suppressBrowserAssistCanvasAutoOpen: vi.fn(),
     clearBrowserAssistCanvasArtifact: vi.fn(),
@@ -233,7 +231,6 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
   it("待处理 A2UI 存在时应主动收起主题工作台侧栏并回到聊天态", async () => {
     const setLayoutMode = vi.fn();
     const setShowSidebar = vi.fn();
-    const dismissActiveTeamWorkbenchAutoOpen = vi.fn();
     const suppressGeneralCanvasArtifactAutoOpen = vi.fn();
     const suppressBrowserAssistCanvasAutoOpen = vi.fn();
     const { render } = renderHook({
@@ -244,7 +241,6 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
       showSidebar: true,
       setLayoutMode,
       setShowSidebar,
-      dismissActiveTeamWorkbenchAutoOpen,
       suppressGeneralCanvasArtifactAutoOpen,
       suppressBrowserAssistCanvasAutoOpen,
     });
@@ -253,7 +249,6 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
 
     expect(setLayoutMode).toHaveBeenCalledWith("chat");
     expect(setShowSidebar).toHaveBeenCalledWith(false);
-    expect(dismissActiveTeamWorkbenchAutoOpen).toHaveBeenCalledTimes(1);
     expect(suppressGeneralCanvasArtifactAutoOpen).toHaveBeenCalledTimes(1);
     expect(suppressBrowserAssistCanvasAutoOpen).toHaveBeenCalledTimes(1);
   });
@@ -284,7 +279,6 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
   });
 
   it("关闭通用画布时应一并移除残留的浏览器协助 artifact", async () => {
-    const dismissActiveTeamWorkbenchAutoOpen = vi.fn();
     const suppressGeneralCanvasArtifactAutoOpen = vi.fn();
     const suppressBrowserAssistCanvasAutoOpen = vi.fn();
     const clearBrowserAssistCanvasArtifact = vi.fn();
@@ -293,7 +287,6 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
     const { render, getValue } = renderHook({
       activeTheme: "general",
       hasBrowserAssistArtifact: true,
-      dismissActiveTeamWorkbenchAutoOpen,
       suppressGeneralCanvasArtifactAutoOpen,
       suppressBrowserAssistCanvasAutoOpen,
       clearBrowserAssistCanvasArtifact,
@@ -307,7 +300,6 @@ describe("useWorkspaceCanvasLayoutRuntime", () => {
       getValue().handleCloseCanvas();
     });
 
-    expect(dismissActiveTeamWorkbenchAutoOpen).toHaveBeenCalledTimes(1);
     expect(suppressGeneralCanvasArtifactAutoOpen).toHaveBeenCalledTimes(1);
     expect(suppressBrowserAssistCanvasAutoOpen).toHaveBeenCalledTimes(1);
     expect(clearBrowserAssistCanvasArtifact).toHaveBeenCalledTimes(1);

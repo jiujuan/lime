@@ -60,6 +60,7 @@ export const METHOD_SESSION_FILE_DELETE = "sessionFile/delete";
 export const METHOD_SESSION_FILE_LIST = "sessionFile/list";
 export const METHOD_WORKSPACE_LIST = "workspace/list";
 export const METHOD_WORKSPACE_READ = "workspace/read";
+export const METHOD_WORKSPACE_ENSURE = "workspace/ensure";
 export const METHOD_WORKSPACE_BY_PATH_READ = "workspace/byPath/read";
 export const METHOD_WORKSPACE_DEFAULT_READ = "workspace/default/read";
 export const METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
@@ -359,6 +360,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_SESSION_FILE_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_READ, kind: "request" },
+  { method: METHOD_WORKSPACE_ENSURE, kind: "request" },
   { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
   { method: METHOD_WORKSPACE_DEFAULT_READ, kind: "request" },
   { method: METHOD_WORKSPACE_DEFAULT_ENSURE, kind: "request" },
@@ -1446,6 +1448,12 @@ export type WorkspacePathReadParams = {
   rootPath: string;
 };
 
+export type WorkspaceEnsureProjectParams = {
+  name: string;
+  rootPath: string;
+  workspaceType?: string;
+};
+
 export type WorkspaceProjectPathResolveParams = {
   name: string;
   parentRootPath?: string;
@@ -1461,6 +1469,12 @@ export type WorkspaceListResponse = {
 
 export type WorkspaceReadResponse = {
   workspace?: unknown;
+};
+
+export type WorkspaceEnsureProjectResponse = {
+  workspace: unknown;
+  created: boolean;
+  rootCreated: boolean;
 };
 
 export type WorkspaceProjectsRootReadResponse = {

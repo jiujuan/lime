@@ -520,8 +520,12 @@ describe("EmptyState", () => {
 
     expect(container.textContent).toContain("创作");
     expect(container.textContent).toContain("青柠一下，灵感即来");
+    expect(
+      container.querySelector('[data-testid="empty-state-hero-eyebrow-badge"]')
+        ?.textContent,
+    ).toBe("创作");
     expect(container.textContent).toContain("说一句目标，Lime 就接着帮你做。");
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       "文案、图片、视频、搜索和网页任务围绕同一目标持续推进，并沉淀上下文、偏好和做法。",
     );
     expect(container.textContent).not.toContain("通用对话");
@@ -533,6 +537,14 @@ describe("EmptyState", () => {
       activeTheme: "general",
       onLaunchBrowserAssist: vi.fn(),
       onSelectServiceSkill: vi.fn(),
+      projectId: "lime",
+      openedProjects: [
+        {
+          id: "lime",
+          name: "lime",
+          rootPath: "/workspace/lime",
+        },
+      ],
     });
 
     await act(async () => {
@@ -545,6 +557,47 @@ describe("EmptyState", () => {
     expect(
       container.querySelector('[data-testid="home-starter-chips"]'),
     ).toBeTruthy();
+    const primaryStack = container.querySelector(
+      '[data-testid="empty-state-primary-stack"]',
+    );
+    const inputbarCore = primaryStack?.querySelector(
+      '[data-testid="inputbar-core-container"]',
+    );
+    const homeStartSurface = primaryStack?.querySelector(
+      '[data-testid="home-start-surface"]',
+    );
+    const projectContextSlot = primaryStack?.querySelector(
+      '[data-testid="inputbar-context-bar-slot"]',
+    );
+    const projectContextBar = primaryStack?.querySelector(
+      '[data-testid="inputbar-project-context-bar"]',
+    );
+    expect(primaryStack).toBeTruthy();
+    expect(inputbarCore).toBeTruthy();
+    expect(projectContextSlot).toBeTruthy();
+    expect(projectContextBar).toBeTruthy();
+    expect(homeStartSurface).toBeTruthy();
+    expect(
+      Boolean(
+        inputbarCore &&
+          projectContextSlot &&
+          (inputbarCore.compareDocumentPosition(projectContextSlot) &
+            Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        projectContextSlot &&
+          homeStartSurface &&
+          (projectContextSlot.compareDocumentPosition(homeStartSurface) &
+            Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0,
+      ),
+    ).toBe(true);
+    expect(projectContextBar?.textContent).toContain("lime");
+    expect(projectContextBar?.textContent).toContain("本地模式");
+    expect(projectContextBar?.textContent).toContain("main");
     expect(container.textContent).toContain("引导帮助");
     expect(container.textContent).toContain("写作");
     expect(container.textContent).toContain("添加资料");
@@ -1111,7 +1164,7 @@ describe("EmptyState", () => {
     expect(container.textContent).not.toContain("当前 runtime tool surface");
     expect(container.textContent).not.toContain("联网搜索偏好本轮可能不会生效");
     expect(container.textContent).not.toContain(
-      "任务拆分偏好本轮可能不会完全生效",
+      "Subagents 本轮可能不会完全生效",
     );
   });
 
@@ -1958,11 +2011,31 @@ describe("EmptyState", () => {
       },
     });
 
-    act(() => {
-      sendButton?.click();
+    await act(async () => {
+      await Promise.resolve();
     });
-    expectEmptyStateSend(onSend, {
+    act(() => {
+      updateFieldValue(
+        container.querySelector("textarea"),
+        "帮我设计封面",
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const sendButtonAfterCapabilityCleared = container.querySelector(
+      'button[aria-label="发送"]',
+    ) as HTMLButtonElement | null;
+    expect(sendButtonAfterCapabilityCleared).toBeTruthy();
+
+    act(() => {
+      sendButtonAfterCapabilityCleared?.click();
+    });
+    expect(onSend).toHaveBeenNthCalledWith(2, {
+      images: undefined,
       textOverride: "帮我设计封面",
+      sendOptions: undefined,
     });
   });
 
@@ -2873,7 +2946,7 @@ describe("EmptyState", () => {
       container.querySelector('[data-testid="inputbar-plan-toggle"]'),
     ).toBeNull();
     expect(
-      container.querySelector('button[title="任务拆分偏好已关闭"]'),
+      container.querySelector('button[title="Subagents 已关闭"]'),
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="inputbar-access-mode-select"]'),

@@ -130,7 +130,7 @@ export interface ExpertAgentLaunchParams {
 /**
  * 设置页面参数
  */
-export type SettingsProviderView = "settings" | "cloud" | "companion";
+export type SettingsProviderView = "settings" | "cloud";
 
 export interface SettingsPageParams {
   tab?: SettingsTabs;

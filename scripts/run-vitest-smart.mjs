@@ -30,7 +30,6 @@ const serialTestFileOrder = [
   "src/components/workspace/WorkbenchPage.test.tsx",
   "src/components/agent/chat/components/HarnessStatusPanel.test.tsx",
   "src/components/agent/chat/components/ThemeWorkbenchSidebar.test.tsx",
-  "src/components/agent/chat/components/TeamWorkspaceBoard.test.tsx",
   "src/components/settings-v2/system/automation/index.test.tsx",
 ];
 const serialTestFiles = new Set(serialTestFileOrder);

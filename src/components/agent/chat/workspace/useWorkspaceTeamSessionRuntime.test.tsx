@@ -93,7 +93,7 @@ describe("useWorkspaceTeamSessionRuntime", () => {
     }
   });
 
-  it("存在运行态任务时应暴露 runtime sessions 语义并打开 team workspace", async () => {
+  it("存在运行态任务时应暴露 runtime sessions 语义并显示 Subagents runtime", async () => {
     const harness = renderHook({
       childSubagentSessions: [
         {
@@ -113,11 +113,11 @@ describe("useWorkspaceTeamSessionRuntime", () => {
     expect(harness.getValue()).toMatchObject({
       currentSessionTitle: "主助手",
       hasRuntimeSessions: true,
-      teamWorkspaceEnabled: true,
+      subagentsRuntimeVisible: true,
     });
   });
 
-  it("只有 subagent 开关开启时也应展示 workspace，但不应伪造 runtime sessions", async () => {
+  it("只有 subagent 开关开启时也应展示 Subagents runtime，但不应伪造 runtime sessions", async () => {
     const harness = renderHook({
       subagentEnabled: true,
     });
@@ -126,7 +126,7 @@ describe("useWorkspaceTeamSessionRuntime", () => {
 
     expect(harness.getValue()).toMatchObject({
       hasRuntimeSessions: false,
-      teamWorkspaceEnabled: true,
+      subagentsRuntimeVisible: true,
     });
   });
 });

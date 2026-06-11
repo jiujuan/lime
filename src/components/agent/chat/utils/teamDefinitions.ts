@@ -94,40 +94,6 @@ export function listBuiltinTeamDefinitions(): TeamDefinition[] {
   ).filter((team): team is TeamDefinition => Boolean(team));
 }
 
-export function cloneTeamDefinitionAsCustom(
-  team: TeamDefinition,
-  overrides?: Partial<Pick<TeamDefinition, "label" | "description" | "theme">>,
-): TeamDefinition {
-  const now = Date.now();
-  const label =
-    normalizeText(overrides?.label) ||
-    (team.source === "builtin" ? `${team.label} · 自定义` : team.label);
-
-  return {
-    id: createTeamDefinitionId("custom-team"),
-    source: "custom",
-    label,
-    description:
-      normalizeText(overrides?.description) || normalizeText(team.description),
-    theme:
-      normalizeText(overrides?.theme) || normalizeText(team.theme) || undefined,
-    presetId: team.presetId,
-    roles: team.roles.map((role, index) => ({
-      id: normalizeText(role.id) || `role-${index + 1}`,
-      label: normalizeRoleLabel(role.label, `角色 ${index + 1}`),
-      summary: normalizeRoleSummary(role.summary, role.label),
-      profileId: normalizeText(role.profileId) || undefined,
-      roleKey: normalizeText(role.roleKey) || undefined,
-      skillIds:
-        role.skillIds
-          ?.map((skillId) => normalizeText(skillId))
-          .filter(Boolean) || [],
-    })),
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 export function normalizeTeamDefinition(
   value: Partial<TeamDefinition>,
 ): TeamDefinition | null {
@@ -188,7 +154,7 @@ export function buildTeamDefinitionSummary(
   const description = normalizeText(team.description);
 
   if (description && roleSummary) {
-    return `${description} 角色分工：${roleSummary}`;
+    return `${description} 子代理：${roleSummary}`;
   }
   return description || roleSummary;
 }

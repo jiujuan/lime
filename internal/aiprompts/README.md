@@ -23,6 +23,7 @@
 - `overview.md` - 项目架构总览与模块分层
 - `agent-protocol-standards-map.md` - Agent 公共标准、Lime 开发协议、友链与未来拆分候选地图
 - `agent-ui-runtime-standard.md` - Agent UI / Runtime 四包职责、宿主接入、主聊天 projection 迁移分类与守卫要求
+- Agent UI / Runtime 当前宿主链路固定为 `AgentRuntimeClient -> projectAgentUiState -> AgentUiProjectionView`；任何第二宿主复用都必须回到 `agent-ui-runtime-standard.md`。
 - `query-loop.md` - 运行时 Query Loop current 主链、提交入口与执行边界
 - `prompt-foundation.md` - 基础 Prompt current 主链、system prompt 组装顺序与 current/compat 分类
 - `task-agent-taxonomy.md` - Task / Agent / Coordinator current taxonomy、current/compat 分类与协调边界

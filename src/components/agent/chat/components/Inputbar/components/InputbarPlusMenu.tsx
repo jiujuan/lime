@@ -2,11 +2,11 @@ import React, { useEffect, useState } from "react";
 import {
   BookOpen,
   Blocks,
+  Bot,
   ChevronRight,
   Paperclip,
   ListChecks,
   Target,
-  Workflow,
 } from "lucide-react";
 
 import {
@@ -265,7 +265,7 @@ export function InputbarPlusMenu({
           />
           {config.onToggleSubagent ? (
             <InputbarPlusRow
-              icon={<Workflow className="h-4 w-4" />}
+              icon={<Bot className="h-4 w-4" />}
               label={config.labels.subagent}
               testId="inputbar-plus-subagent-mode"
               trailing={

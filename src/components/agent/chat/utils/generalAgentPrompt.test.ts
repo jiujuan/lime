@@ -34,7 +34,7 @@ describe("generalAgentPrompt", () => {
     expect(prompt).toContain("当前能力开关");
     expect(prompt).toContain("执行车道");
     expect(prompt).toContain("计划执行：已开启");
-    expect(prompt).toContain("任务拆分：已开启");
+    expect(prompt).toContain("Subagents：已开启");
     expect(prompt).toContain("统一使用 WebSearch");
     expect(prompt).toContain("不要混用 search/search_query/ToolSearch");
     expect(prompt).toContain("1 个当前最关键的问题");
@@ -65,9 +65,9 @@ describe("generalAgentPrompt", () => {
     const prompt = buildGeneralAgentSystemPrompt("general");
 
     expect(prompt).toContain("计划执行");
-    expect(prompt).toContain("任务拆分");
-    expect(prompt).toContain("如果进入计划执行或任务分工");
-    expect(prompt).toContain("任务分工模式下");
+    expect(prompt).toContain("Subagents");
+    expect(prompt).toContain("如果进入计划执行或 Subagents");
+    expect(prompt).toContain("Subagents 模式下");
     expect(prompt).not.toContain("Team 协作");
   });
 

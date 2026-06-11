@@ -34,6 +34,7 @@ export async function executeCodexSlashCommand(
     createFreshSession,
     appendAssistantMessage,
     notifyInfo,
+    onOpenSubagents,
     onExecutedCommand,
   } = params;
 
@@ -86,6 +87,10 @@ export async function executeCodexSlashCommand(
         return true;
       }
       appendAssistantMessage(buildCodexSlashModelMessage(statusSnapshot));
+      onExecutedCommand?.(command);
+      return true;
+    case "subagents":
+      onOpenSubagents?.();
       onExecutedCommand?.(command);
       return true;
     case "review":

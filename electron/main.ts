@@ -35,7 +35,7 @@ import {
   PROTOCOL_VERSION,
   SERVER_NAME,
   type InitializeResponse,
-} from "app-server-client";
+} from "@limecloud/app-server-client";
 import {
   app,
   BrowserWindow,

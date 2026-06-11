@@ -1246,6 +1246,8 @@ export interface AgentAppTurnConfigSnapshot {
 export interface AgentAppTaskRequest {
   title: string;
   prompt?: string;
+  sessionId?: string;
+  workspaceId?: string;
   taskId?: string;
   turnId?: string;
   eventName?: string;

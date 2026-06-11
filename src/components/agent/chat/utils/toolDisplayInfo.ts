@@ -1011,10 +1011,10 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     "teamcreate",
     {
       family: "subagent",
-      label: "创建团队",
+      label: "创建子代理组",
       verb: "创建",
       icon: Globe,
-      groupTitle: "创建团队",
+      groupTitle: "创建子代理组",
       actionKey: "subagent",
       actions: {
         failed: "创建失败",
@@ -1027,10 +1027,10 @@ const EXACT_TOOL_CONFIGS = new Map<string, ToolDisplayConfig>([
     "teamdelete",
     {
       family: "subagent",
-      label: "删除团队",
+      label: "删除子代理组",
       verb: "删除",
       icon: Globe,
-      groupTitle: "删除团队",
+      groupTitle: "删除子代理组",
       actionKey: "subagent",
       actions: {
         failed: "删除失败",
@@ -2045,8 +2045,8 @@ const USER_FACING_TOOL_LABELS: Record<string, string> = {
   退出计划模式: "退出计划",
   进入工作树: "进入工作树",
   退出工作树: "退出工作树",
-  创建团队: "创建团队",
-  删除团队: "删除团队",
+  创建子代理组: "创建子代理组",
+  删除子代理组: "删除子代理组",
   任务输出: "查看任务结果",
   工作区同步: "同步内容",
   图像分析: "分析图片",
@@ -2173,13 +2173,15 @@ export const resolveToolPrimarySubject = (
 
   if (normalizedName === "teamcreate" || normalizedName === "teamdelete") {
     return (
-      resolveToolArgumentPreview(args, ["team_name", "teamName"]) || "当前团队"
+      resolveToolArgumentPreview(args, ["team_name", "teamName"]) ||
+      "当前子代理组"
     );
   }
 
   if (normalizedName === "listpeers") {
     return (
-      resolveToolArgumentPreview(args, ["team_name", "teamName"]) || "当前团队"
+      resolveToolArgumentPreview(args, ["team_name", "teamName"]) ||
+      "当前子代理组"
     );
   }
 

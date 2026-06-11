@@ -211,14 +211,14 @@ Agent App 不只复用 UI runtime start/status/stop，而是复用 Agent turn ru
 8. 前端 `src/lib/api/agentRuntime/threadClient.ts` 的 turn lifecycle 已可消费标准 `AgentRuntimeClient` facade：`submit / cancel / respond / read` 先从旧 UI 请求 shape 投影为 App Server current 参数，再委托 `startTurn / cancelTurn / respondAction / readThread`。该文件仍是迁移期 compat gateway，负责旧 DTO、事件路由、read model 投影、file checkpoint / queue / compact / replay 等尚未进入标准 client 的业务面，不允许继续扩展成第二套 runtime SDK。
 9. 根依赖、TypeScript paths 与 Vite alias 已接入 `@limecloud/agent-runtime-client`，避免标准包只停留在 package 目录而无法被前端 current 网关消费。
 10. `@limecloud/agent-runtime-projection` 已承接 host-neutral 的 Agent UI projection event index / scope selector / latest selector。主聊天 `conversationProjectionStore` 只保留本地 external store、stream diagnostics 和兼容导出名，事件筛选与索引不再在主聊天目录内作为公共事实解释继续扩展。
-11. `@limecloud/agent-runtime-projection` 已承接 host-neutral 的 Agent UI summary selectors：事件类型分组、action / task / artifact / evidence / diagnostics 计数、notable latest events、Team Workbench surface / lane 聚合和 artifact latest lookup。主聊天 `agentUiProjectionSummary.ts` 只保留本地化 label、展示文案 formatter 和兼容导出名，不再作为这些 selector 的事实源。
+11. `@limecloud/agent-runtime-projection` 已承接 host-neutral 的 Agent UI summary selectors：事件类型分组、action / task / artifact / evidence / diagnostics 计数、notable latest events、Subagents surface / lane 聚合和 artifact latest lookup。主聊天 `agentUiProjectionSummary.ts` 只保留本地化 label、展示文案 formatter 和兼容导出名，不再作为这些 selector 的事实源。
 12. `internal/aiprompts/agent-ui-runtime-standard.md` 已成为四包职责、宿主接入、App Server runtime 配合、主聊天 projection 迁移分类和守卫要求的集中事实源；后续改标准包或主聊天 projection 前应先读该文档。
 13. `scripts/check-app-server-client-contract.mjs` 已守住标准包名入口，扫描根依赖、lockfile、TypeScript paths、Vite alias 和 `packages/*/package.json`，防止早期讨论包名回流成新的物理包或 alias。
 14. Agent App Runtime 已作为第二个真实宿主基线消费标准 projection：`agentRunProjectionState.ts` 从 host run state 生成标准 `AgentUiProjectionState`，`AgentRunProjectionPanel.tsx` 直接渲染 `AgentUiProjectionView`，宿主 summary / action callback / artifact presentation 保留在 Agent App adapter 层。
 
 退出条件补充：
 
-1. 新 Agent UI 页面默认走 `AgentRuntimeClient -> execution events -> projectAgentUiState -> AgentUiProjectionView`。
+1. 新 Agent UI 页面默认走 `AgentRuntimeClient -> projectAgentUiState -> AgentUiProjectionView`，中间的 execution events 适配由宿主边界负责。
 2. 不允许把组件本地树或 UI 本地状态定义成 runtime fact source。
 3. `readThread` 当前映射 `agentSession/read`；独立 `readTask` 只能等 App Server current method 出现后再接入。
 4. 至少两个真实宿主复用 `@limecloud/agent-ui-contracts`、`@limecloud/agent-runtime-projection` 与 `@limecloud/agent-runtime-ui` 后，才能继续收缩旧主聊天专用 projection / UI 壳。

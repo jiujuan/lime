@@ -105,7 +105,7 @@ describe("AgentThreadReliabilityPanel", () => {
     expect(container.textContent).toContain("规则 2");
     expect(container.textContent).toContain("会话 已命中");
     expect(container.textContent).toContain("持久 1");
-    expect(container.textContent).toContain("Team Memory 1");
+    expect(container.textContent).toContain("子代理记忆 1");
     expect(container.textContent).toContain("压缩 已命中");
     expect(container.textContent).toContain("会话记忆摘录");
     expect(container.textContent).toContain("继续整理风险点与来源摘要");
@@ -114,7 +114,7 @@ describe("AgentThreadReliabilityPanel", () => {
     expect(container.textContent).toContain("持久记忆命中");
     expect(container.textContent).toContain("研究简报输出偏好");
     expect(container.textContent).toContain("优先给风险与证据链");
-    expect(container.textContent).toContain("Team Memory 明细");
+    expect(container.textContent).toContain("子代理记忆明细");
     expect(container.textContent).toContain("team.selection");
     expect(container.textContent).toContain("研究协作队");
     expect(container.textContent).toContain("会话压缩摘要");
@@ -538,7 +538,7 @@ describe("AgentThreadReliabilityPanel", () => {
       expect.stringContaining("规则层：1 个来源"),
     );
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Team Memory 层：1 条"),
+      expect.stringContaining("子代理记忆层：1 条"),
     );
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("规则来源：/workspace/AGENTS.md"),
@@ -549,7 +549,7 @@ describe("AgentThreadReliabilityPanel", () => {
       ),
     );
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining("Team Memory 详情：team.selection｜研究协作队"),
+      expect.stringContaining("子代理记忆详情：team.selection｜研究协作队"),
     );
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("会话压缩摘要：保留研究目标与最近来源摘要。"),
@@ -748,4 +748,4 @@ describe("AgentThreadReliabilityPanel", () => {
     );
     expect(mockToast.success).toHaveBeenCalledWith("原始 JSON 已复制");
   });
- });
+});

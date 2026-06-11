@@ -597,7 +597,7 @@ function summarizeCollaborationItem(item: AgentThreadItem): string | null {
 
   if (normalized === "teamcreate") {
     return prefixAction(
-      readString(args, ["team_name", "teamName"]) || "当前团队",
+      readString(args, ["team_name", "teamName"]) || "当前子代理组",
       "已创建 ",
       ["已创建 ", "创建了 "],
     );
@@ -605,7 +605,7 @@ function summarizeCollaborationItem(item: AgentThreadItem): string | null {
 
   if (normalized === "teamdelete") {
     return prefixAction(
-      readString(args, ["team_name", "teamName"]) || "当前团队",
+      readString(args, ["team_name", "teamName"]) || "当前子代理组",
       "已删除 ",
       ["已删除 ", "删除了 "],
     );
@@ -613,7 +613,7 @@ function summarizeCollaborationItem(item: AgentThreadItem): string | null {
 
   if (normalized === "listpeers") {
     return prefixAction(
-      readString(args, ["team_name", "teamName"]) || "当前团队",
+      readString(args, ["team_name", "teamName"]) || "当前子代理组",
       "已查看 ",
       ["已查看 ", "查看了 ", "已列出 ", "列出了 "],
     );

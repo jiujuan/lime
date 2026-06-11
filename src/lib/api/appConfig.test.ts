@@ -149,12 +149,6 @@ describe("appConfig API", () => {
             preferredProviderId: "fal",
           },
         },
-        companion_defaults: {
-          general: {
-            preferredProviderId: "deepseek",
-            preferredModelId: "deepseek-chat",
-          },
-        },
         service_models: {
           topic: {
             preferredProviderId: "openai",
@@ -176,12 +170,6 @@ describe("appConfig API", () => {
               preferredProviderId: "fal",
             }),
           }),
-          companion_defaults: expect.objectContaining({
-            general: expect.objectContaining({
-              preferredProviderId: "deepseek",
-              preferredModelId: "deepseek-chat",
-            }),
-          }),
           service_models: expect.objectContaining({
             topic: expect.objectContaining({
               preferredProviderId: "openai",
@@ -200,12 +188,6 @@ describe("appConfig API", () => {
         media_defaults: expect.objectContaining({
           image: expect.objectContaining({
             preferredProviderId: "fal",
-          }),
-        }),
-        companion_defaults: expect.objectContaining({
-          general: expect.objectContaining({
-            preferredProviderId: "deepseek",
-            preferredModelId: "deepseek-chat",
           }),
         }),
         service_models: expect.objectContaining({
@@ -229,9 +211,6 @@ describe("appConfig API", () => {
       workspace_preferences: {
         media_defaults: {
           voice: { preferredProviderId: "openai" },
-        },
-        companion_defaults: {
-          general: { preferredProviderId: "deepseek" },
         },
         service_models: {
           topic: {
@@ -280,7 +259,7 @@ describe("appConfig API", () => {
     );
   });
 
-  it("getConfig 应保留 current schema 下显式开启的桌宠入口", async () => {
+  it("getConfig 应清理 current schema 下残留的 companion 入口", async () => {
     vi.mocked(safeInvoke).mockResolvedValueOnce({
       default_provider: "claude",
       navigation: { schema_version: 3, enabled_items: ["companion"] },
@@ -288,7 +267,7 @@ describe("appConfig API", () => {
 
     await expect(getConfig()).resolves.toEqual(
       expect.objectContaining({
-        navigation: { schema_version: 3, enabled_items: ["companion"] },
+        navigation: { schema_version: 3, enabled_items: [] },
       }),
     );
   });
@@ -305,7 +284,7 @@ describe("appConfig API", () => {
     await expect(getConfig()).resolves.toEqual(
       expect.objectContaining({
         default_provider: "openai",
-        navigation: { schema_version: 3, enabled_items: ["companion"] },
+        navigation: { schema_version: 3, enabled_items: [] },
       }),
     );
 

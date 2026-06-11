@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -34,6 +34,11 @@ function readRepoFile(path: string): string {
   return readFileSync(resolve(cwd(), path), "utf8");
 }
 
+function readOptionalRepoFile(path: string): string {
+  const absolutePath = resolve(cwd(), path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
+}
+
 function expectStringLiteralsAbsent(source: string, literals: string[]): void {
   for (const literal of literals) {
     expect(source).not.toContain(`"${literal}"`);
@@ -64,12 +69,15 @@ describe("usageStats current App Server boundary", () => {
       readRepoFile("src/lib/desktop-host/mediaTaskMocks.ts"),
       readRepoFile("src/lib/desktop-host/core.ts"),
     ].join("\n");
-    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
+    const runnerSource = readOptionalRepoFile("lime-rs/src/app/runner.rs");
 
     expectStringLiteralsAbsent(sources, LEGACY_USAGE_STATS_FACADE_COMMANDS);
 
     for (const registration of LEGACY_USAGE_STATS_TAURI_REGISTRATIONS) {
       expect(runnerSource).not.toContain(registration);
     }
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
+      false,
+    );
   });
 });

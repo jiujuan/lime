@@ -85,7 +85,7 @@ export function buildHarnessPanelSectionNavItems({
   const sections: HarnessSectionNavItem[] = [];
 
   if (hasSelectedTeamConfig) {
-    sections.push({ key: "team_config", label: "任务分工" });
+    sections.push({ key: "team_config", label: "Subagents" });
   }
 
   if (runtimeTaskPresentation) {
@@ -248,14 +248,14 @@ export function buildHarnessSummaryCards({
   if (hasSelectedTeamConfig) {
     cards.push({
       sectionKey: "team_config",
-      title: "任务分工",
-      value: selectedTeamLabel?.trim() || `${selectedTeamRolesCount} 个角色`,
+      title: "Subagents",
+      value: selectedTeamLabel?.trim() || `${selectedTeamRolesCount} 个子代理`,
       hint:
         selectedTeamSummary?.trim() ||
         (selectedTeamRolesCount > 0
-          ? `已配置 ${selectedTeamRolesCount} 个角色`
-          : "本次已启用任务分工"),
-      icon: Workflow,
+          ? `已配置 ${selectedTeamRolesCount} 个子代理`
+          : "本次已启用 Subagents"),
+      icon: Bot,
     });
   }
 

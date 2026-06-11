@@ -66,12 +66,18 @@ describe("document export current Electron Host boundary", () => {
     const productionSources = FORBIDDEN_DOCUMENT_EXPORT_SOURCES.map(
       readOptionalRepoFile,
     ).join("\n");
-    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
+    const runnerSource = readOptionalRepoFile("lime-rs/src/app/runner.rs");
 
     expectStringLiteralAbsent(productionSources, DOCUMENT_EXPORT_COMMAND);
     expect(runnerSource).not.toContain(
       "commands::document_import_cmd::save_exported_document",
     );
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(resolve(cwd(), "lime-rs/src/dev_bridge/dispatcher.rs")),
+    ).toBe(false);
     for (const retiredPath of RETIRED_DOCUMENT_EXPORT_WRAPPER_FILES) {
       expect(existsSync(resolve(cwd(), retiredPath))).toBe(false);
     }

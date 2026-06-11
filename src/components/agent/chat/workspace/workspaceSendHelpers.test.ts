@@ -608,7 +608,7 @@ describe("workspaceSendHelpers runtime team preview", () => {
           },
         ],
         blueprint: {
-          label: "代码排障团队",
+          label: "代码排障 profile",
           summary: "分析、执行、验证三段式推进。",
           roles: [],
         },
@@ -617,13 +617,13 @@ describe("workspaceSendHelpers runtime team preview", () => {
     });
 
     expect(messages).toHaveLength(2);
-    expect(messages[1]?.content).toContain("分工如下");
+    expect(messages[1]?.content).toContain("Subagents 如下");
     expect(messages[1]?.content).toContain("这些任务会分别展开处理");
     expect(messages[1]?.runtimeStatus).toMatchObject({
-      title: "任务分工已准备好",
+      title: "Subagents 已准备好",
       detail: "分析、执行、验证三段式推进。",
       checkpoints: [
-        "当前方案：修复分工方案",
+        "当前 Subagents profile：修复 Subagents profile",
         "已安排 2 项任务",
         "主对话会持续同步关键进展",
       ],
@@ -650,10 +650,10 @@ describe("workspaceSendHelpers runtime team preview", () => {
 
     expect(messages[1]?.isThinking).toBe(true);
     expect(messages[1]?.runtimeStatus).toMatchObject({
-      title: "正在准备任务分工",
+      title: "正在准备 Subagents",
       detail:
-        "系统正在根据当前任务安排分工，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
-      checkpoints: ["确认当前任务目标", "安排任务分工", "等待任务接手处理"],
+        "系统正在根据当前任务准备 Subagents，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
+      checkpoints: ["确认当前任务目标", "准备 Subagents", "等待任务接手处理"],
     });
   });
 

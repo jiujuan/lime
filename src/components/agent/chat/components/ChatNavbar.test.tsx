@@ -257,6 +257,44 @@ describe("ChatNavbar", () => {
     );
   });
 
+  it("任务中心顶栏应按已打开项目渲染多个项目 tab 并联动切换", () => {
+    const onProjectChange = vi.fn();
+    const container = renderChatNavbar({
+      contextVariant: "task-center",
+      projectId: "project-1",
+      openedProjects: [
+        { id: "project-1", name: "默认项目" },
+        { id: "project-2", name: "lime" },
+        { id: "project-3", name: "content-factory-app" },
+        { id: "project-2", name: "lime duplicate" },
+      ],
+      workspaceType: "general",
+      onProjectChange,
+    });
+
+    const activeProjectShell = container.querySelector(
+      '[data-testid="task-center-workspace-shell"]',
+    ) as HTMLElement | null;
+    const openedProjectTabs = Array.from(
+      container.querySelectorAll('[data-testid="task-center-opened-project-tab"]'),
+    ) as HTMLButtonElement[];
+
+    expect(activeProjectShell?.getAttribute("data-project-id")).toBe(
+      "project-1",
+    );
+    expect(openedProjectTabs).toHaveLength(2);
+    expect(openedProjectTabs.map((tab) => tab.textContent)).toEqual([
+      "lime",
+      "content-factory-app",
+    ]);
+
+    act(() => {
+      openedProjectTabs[0]?.click();
+    });
+
+    expect(onProjectChange).toHaveBeenCalledWith("project-2");
+  });
+
   it("任务中心第一层应保持紧凑比例并让第二层内容覆盖连接弧面", () => {
     const container = renderChatNavbar({
       contextVariant: "task-center",

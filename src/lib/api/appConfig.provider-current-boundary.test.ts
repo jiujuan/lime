@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
@@ -31,6 +31,14 @@ const LEGACY_PROVIDER_CONFIG_TAURI_SNIPPETS = [
 
 function readRepoFile(path: string): string {
   return readFileSync(resolve(cwd(), path), "utf8");
+}
+
+function repoFileExists(path: string): boolean {
+  return existsSync(resolve(cwd(), path));
+}
+
+function readOptionalRepoFile(path: string): string {
+  return repoFileExists(path) ? readRepoFile(path) : "";
 }
 
 function readDirectoryProductionSources(path: string): string {
@@ -67,8 +75,8 @@ describe("appConfig Provider current boundary", () => {
       readRepoFile("electron/hostCommands.ts"),
     ].join("\n");
     const rustLegacySources = [
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/app/commands/config.rs"),
+      readOptionalRepoFile("lime-rs/src/app/runner.rs"),
+      readOptionalRepoFile("lime-rs/src/app/commands/config.rs"),
     ].join("\n");
 
     expect(appConfigSource).toContain("getDefaultProvider");
@@ -101,13 +109,15 @@ describe("appConfig Provider current boundary", () => {
   it("Provider/config 旧 Tauri 命令只能作为 contract retired guard 存在", () => {
     const contractGuard = readRepoFile("scripts/check-command-contracts.mjs");
     const rustLegacySources = [
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/app/commands/config.rs"),
+      readOptionalRepoFile("lime-rs/src/app/runner.rs"),
+      readOptionalRepoFile("lime-rs/src/app/commands/config.rs"),
     ].join("\n");
 
     for (const command of LEGACY_PROVIDER_CONFIG_TAURI_COMMANDS) {
       expect(contractGuard).toContain(`"${command}"`);
     }
+    expect(repoFileExists("lime-rs/src/app/runner.rs")).toBe(false);
+    expect(repoFileExists("lime-rs/src/app/commands/config.rs")).toBe(false);
     expectSnippetsAbsent(
       rustLegacySources,
       LEGACY_PROVIDER_CONFIG_TAURI_SNIPPETS,

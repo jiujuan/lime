@@ -28,7 +28,7 @@ export type TeamWorkspaceDisplayMemberStatus =
 export const TEAM_WORKSPACE_SURFACE_TITLE = "生成";
 export const TEAM_WORKSPACE_REALTIME_BADGE_LABEL = "任务进行时";
 export const TEAM_WORKSPACE_MEMBER_NOUN = "子任务";
-export const TEAM_WORKSPACE_PLAN_LABEL = "分工方案";
+export const TEAM_WORKSPACE_PLAN_LABEL = "Subagents profile";
 export const TEAM_WORKSPACE_MAIN_ASSISTANT_LABEL = "主助手";
 export const TEAM_WORKSPACE_STABLE_PROCESSING_LABEL = STABLE_PROCESSING_LABEL;
 export const TEAM_WORKSPACE_WAITING_HEADLINE = "等待任务接手";
@@ -48,15 +48,15 @@ const RUNTIME_STATUS_LABELS = {
 const FORMATION_STATUS_META = {
   forming: {
     label: "准备中",
-    title: "正在准备任务分工",
+    title: "正在准备 Subagents",
   },
   formed: {
     label: "已就绪",
-    title: "任务分工已准备好",
+    title: "Subagents 已准备好",
   },
   failed: {
     label: "准备失败",
-    title: "任务分工准备失败",
+    title: "Subagents 准备失败",
   },
 } as const;
 

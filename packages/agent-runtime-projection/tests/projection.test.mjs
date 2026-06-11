@@ -46,6 +46,7 @@ import {
   normalizeRuntimeStatusFromRuntimePhase,
   normalizeSubagentRuntimeStatus,
   projectAgentUiState,
+  projectAgentUiStateFromSessionSnapshot,
   projectAgentRuntimeReadModel,
   readNumberField,
   readRecord,
@@ -72,9 +73,9 @@ import {
   buildRoutingDecisionPayload,
   extractArtifactRefs,
   summarizeAgentUiProjectionEvents,
-  summarizeAgentUiTeamWorkbenchProjectionEvents,
-  summarizeAgentUiTeamWorkbenchSurfaceLanes,
-  summarizeAgentUiTeamWorkbenchSurfaces,
+  summarizeAgentUiSubagentsProjectionEvents,
+  summarizeAgentUiSubagentsSurfaceLanes,
+  summarizeAgentUiSubagentsSurfaces,
   truncateText,
 } from "../dist/index.js";
 
@@ -247,9 +248,110 @@ test("projectAgentUiState exposes standard message, timeline and graph projectio
   );
   assert.equal(state.actions.length, 1);
   assert.deepEqual(state.artifacts, [
-    { id: "artifact-1", sourceEventId: "artifact-1" },
+    {
+      id: "artifact-1",
+      sourceEventId: "evt-tool",
+      title: "读取资料",
+      status: "completed",
+    },
   ]);
   assert.equal(state.hydration.status, "live");
+});
+
+test("projectAgentUiState builds structured artifact and evidence refs", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-artifact",
+        kind: "draft",
+        status: "completed",
+        owner: "artifact",
+        eventClass: "artifact.changed",
+        title: "草稿已保存",
+        artifactRefs: ["prompt-draft:1"],
+        payload: {
+          sourceEventId: "provider-artifact-1",
+          relativePath: "drafts/prompt-1.md",
+          contentRef: "content://prompt-draft/1",
+          mimeType: "text/markdown",
+          preview: "可编辑 Prompt 草稿",
+          metadata: { draftId: "1" },
+        },
+        sequence: 1,
+        createdAt: "2026-06-07T00:00:00.000Z",
+      },
+      {
+        id: "evt-evidence",
+        kind: "evidence",
+        status: "completed",
+        owner: "evidence",
+        eventClass: "evidence.changed",
+        title: "输入资料已引用",
+        evidenceRefs: ["input-source:1"],
+        payload: {
+          sourceEventId: "provider-evidence-1",
+          packRelativeRoot: "evidence/input-source-1",
+          summary: "资料来源摘要",
+          mime: "application/json",
+          metadata: { sourceId: "1" },
+        },
+        sequence: 2,
+        createdAt: "2026-06-07T00:00:01.000Z",
+      },
+    ],
+  });
+
+  assert.deepEqual(state.artifacts, [
+    {
+      id: "prompt-draft:1",
+      sourceEventId: "provider-artifact-1",
+      title: "草稿已保存",
+      status: "completed",
+      owner: "artifact",
+      path: "drafts/prompt-1.md",
+      contentRef: "content://prompt-draft/1",
+      mimeType: "text/markdown",
+      preview: "可编辑 Prompt 草稿",
+      metadata: { draftId: "1" },
+    },
+  ]);
+  assert.deepEqual(state.evidence, [
+    {
+      id: "input-source:1",
+      sourceEventId: "provider-evidence-1",
+      title: "输入资料已引用",
+      status: "completed",
+      owner: "evidence",
+      path: "evidence/input-source-1",
+      mimeType: "application/json",
+      preview: "资料来源摘要",
+      metadata: { sourceId: "1" },
+    },
+  ]);
+});
+
+test("projectAgentUiState keeps unsafe ref paths out of the UI contract", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-artifact",
+        kind: "draft",
+        status: "completed",
+        eventClass: "artifact.changed",
+        title: "草稿已保存",
+        artifactRefs: ["prompt-draft:1"],
+        payload: {
+          path: "/Users/private/workspace/draft.md",
+          preview: "x".repeat(320),
+        },
+        sequence: 1,
+        createdAt: "2026-06-07T00:00:00.000Z",
+      },
+    ],
+  });
+
+  assert.equal(state.artifacts[0].path, undefined);
+  assert.equal(state.artifacts[0].preview.length, 280);
 });
 
 test("projectAgentUiState merges streaming text and reasoning parts by scope", () => {
@@ -381,6 +483,81 @@ test("projectAgentUiState keeps unresolved actions in waiting status", () => {
   });
 
   assert.equal(state.runtime.status, "waiting");
+});
+
+test("projectAgentUiStateFromSessionSnapshot upgrades legacy transcript plus read model to full UI state", () => {
+  const readModel = projectAgentRuntimeReadModel({
+    sourceCount: 2,
+    executionEvents: [
+      {
+        id: "evt-artifact",
+        kind: "draft",
+        status: "completed",
+        eventClass: "artifact.changed",
+        title: "草稿已保存",
+        artifactRefs: ["artifact-1"],
+        payload: {
+          relativePath: "drafts/outline.md",
+          preview: "文章大纲",
+        },
+        sequence: 1,
+        createdAt: "2026-06-10T00:00:00.000Z",
+      },
+      {
+        id: "evt-evidence",
+        kind: "evidence",
+        status: "completed",
+        eventClass: "evidence.changed",
+        title: "证据已导出",
+        evidenceRefs: ["evidence-1"],
+        payload: {
+          packRelativeRoot: "evidence/input-source",
+          summary: "输入源摘要",
+        },
+        sequence: 2,
+        createdAt: "2026-06-10T00:00:01.000Z",
+      },
+    ],
+  });
+
+  const state = projectAgentUiStateFromSessionSnapshot({
+    readModel,
+    messages: [
+      {
+        id: "message-user",
+        role: "user",
+        content: "请生成小红书标题",
+        createdAt: "2026-06-10T00:00:02.000Z",
+      },
+      {
+        id: "message-assistant",
+        role: "assistant",
+        text: "已生成 5 个标题候选",
+        refs: ["artifact-1", "evidence-1"],
+        createdAt: "2026-06-10T00:00:03.000Z",
+      },
+    ],
+  });
+
+  assert.equal(state.hydration.status, "live");
+  assert.equal(state.hydration.eventCount, 2);
+  assert.equal(state.readModel.sourceCount, 2);
+  assert.deepEqual(
+    state.messages.map((message) => [message.messageId, message.role, message.text]),
+    [
+      ["message-user", "user", "请生成小红书标题"],
+      ["message-assistant", "assistant", "已生成 5 个标题候选"],
+    ],
+  );
+  assert.deepEqual(state.messages[1].refs, ["artifact-1", "evidence-1"]);
+  assert.deepEqual(
+    state.artifacts.map((artifact) => [artifact.id, artifact.path, artifact.preview]),
+    [["artifact-1", "drafts/outline.md", "文章大纲"]],
+  );
+  assert.deepEqual(
+    state.evidence.map((evidence) => [evidence.id, evidence.path, evidence.preview]),
+    [["evidence-1", "evidence/input-source", "输入源摘要"]],
+  );
 });
 
 test("createAgentUiProjector applies events idempotently", () => {
@@ -564,7 +741,7 @@ test("Agent UI projection summaries classify host-neutral event groups", () => {
   );
 });
 
-test("Agent UI team workbench summaries group surfaces and lanes", () => {
+test("Agent UI subagents summaries group surfaces and lanes", () => {
   const events = [
     {
       type: "team.changed",
@@ -624,9 +801,9 @@ test("Agent UI team workbench summaries group surfaces and lanes", () => {
     },
   ];
 
-  const summary = summarizeAgentUiTeamWorkbenchProjectionEvents(events);
-  const lanes = summarizeAgentUiTeamWorkbenchSurfaceLanes(events);
-  const surfaces = summarizeAgentUiTeamWorkbenchSurfaces(events, {
+  const summary = summarizeAgentUiSubagentsProjectionEvents(events);
+  const lanes = summarizeAgentUiSubagentsSurfaceLanes(events);
+  const surfaces = summarizeAgentUiSubagentsSurfaces(events, {
     latestLimit: 1,
   });
 

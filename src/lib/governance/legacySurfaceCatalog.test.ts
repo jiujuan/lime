@@ -1,7 +1,36 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import process from "node:process";
 import { describe, expect, it } from "vitest";
 
 import agentCommandCatalog from "./agentCommandCatalog.json";
 import legacySurfaceCatalogJson from "./legacySurfaceCatalog.json";
+
+const REPO_ROOT = process.cwd();
+const AGENT_UI_PACKAGE_SOURCE_ROOTS = [
+  "packages/agent-ui-contracts/src",
+  "packages/agent-runtime-projection/src",
+  "packages/agent-runtime-ui/src",
+  "packages/agent-runtime-client/src",
+];
+const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
+
+function collectSourceFiles(root: string): string[] {
+  const absoluteRoot = join(REPO_ROOT, root);
+  const entries = readdirSync(absoluteRoot);
+  return entries.flatMap((entry) => {
+    const absolutePath = join(absoluteRoot, entry);
+    const stats = statSync(absolutePath);
+    if (stats.isDirectory()) {
+      return collectSourceFiles(relative(REPO_ROOT, absolutePath));
+    }
+    const dotIndex = entry.lastIndexOf(".");
+    const extension = dotIndex >= 0 ? entry.slice(dotIndex) : "";
+    return SOURCE_EXTENSIONS.has(extension)
+      ? [relative(REPO_ROOT, absolutePath)]
+      : [];
+  });
+}
 
 describe("legacySurfaceCatalog", () => {
   it("应提供完整且无重复的治理扫描目录册", () => {
@@ -43,6 +72,128 @@ describe("legacySurfaceCatalog", () => {
       "patch_flare.js",
       "patch_navbar.js",
     ]);
+  });
+
+  it("应为 AgentUI 标准防回流提供机械守卫", () => {
+    const treeMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "agent-ui-nonstandard-tree-terminology",
+    );
+    const retiredTeamWorkbenchMonitor =
+      legacySurfaceCatalogJson.frontendText.find(
+        (entry) =>
+          entry.id === "agent-ui-retired-team-workbench-standard-surface",
+      );
+    const localProcessMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "agent-ui-local-process-owner-terminology",
+    );
+    const hostDrawerFallbackMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "agent-app-host-drawer-local-process-fallback",
+    );
+    const providerMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "agent-ui-direct-provider-runtime-surface",
+    );
+
+    expect(treeMonitor).toBeTruthy();
+    expect(treeMonitor?.classification).toBe("dead");
+    expect(treeMonitor?.patterns).toEqual(["ViewTree", "ProcessTree"]);
+    expect(treeMonitor?.includePathPrefixes).toEqual([
+      "src/components/agent",
+      "src/features/agent-app",
+      "src/lib/api/agentRuntime",
+    ]);
+    expect(treeMonitor?.allowedPaths).toEqual([]);
+
+    expect(retiredTeamWorkbenchMonitor).toBeTruthy();
+    expect(retiredTeamWorkbenchMonitor?.classification).toBe("dead");
+    expect(retiredTeamWorkbenchMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "TeamWorkbench",
+        "teamWorkbench",
+        "Team Workbench",
+        "agent-team-workbench",
+      ]),
+    );
+    expect(retiredTeamWorkbenchMonitor?.includePathPrefixes).toEqual([
+      "packages/agent-ui-contracts",
+      "packages/agent-runtime-projection",
+      "packages/agent-runtime-ui",
+      "packages/agent-runtime-client",
+      "internal/aiprompts/agent-ui-runtime-standard.md",
+      "internal/aiprompts/playwright-e2e.md",
+      "internal/prd/next/implementation-roadmap.md",
+      "internal/roadmap/agentworkbench",
+      "src/components/agent/chat/projection",
+      "src/components/agent/chat/workspace",
+      "src/i18n/resources",
+    ]);
+    expect(retiredTeamWorkbenchMonitor?.allowedPaths).toEqual([]);
+
+    expect(localProcessMonitor).toBeTruthy();
+    expect(localProcessMonitor?.classification).toBe("dead");
+    expect(localProcessMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "LocalProcessPanel",
+        "LocalProcessTimeline",
+        "AgentProcessTree",
+        "ProcessComponent",
+        "processComponent",
+      ]),
+    );
+    expect(localProcessMonitor?.allowedPaths).toEqual([]);
+
+    expect(hostDrawerFallbackMonitor).toBeTruthy();
+    expect(hostDrawerFallbackMonitor?.classification).toBe("dead");
+    expect(hostDrawerFallbackMonitor?.patterns).toEqual([
+      "AgentRunHostDrawerFallback",
+      "AgentRunLocalProcessFallback",
+      "shouldRenderLocalProcessFallback",
+      "shouldRenderProjection ? (",
+    ]);
+    expect(hostDrawerFallbackMonitor?.includePathPrefixes).toEqual([
+      "src/features/agent-app/ui/AgentRunHostDrawer.tsx",
+    ]);
+    expect(hostDrawerFallbackMonitor?.allowedPaths).toEqual([]);
+
+    expect(providerMonitor).toBeTruthy();
+    expect(providerMonitor?.classification).toBe("dead");
+    expect(providerMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "new OpenAI(",
+        "providerApiKey",
+        "provider_api_key",
+        "directProviderRuntime",
+        "directProviderClient",
+      ]),
+    );
+    expect(providerMonitor?.allowedPaths).toEqual([]);
+  });
+
+  it("AgentUI SDK seed 包不应恢复 ViewTree / ProcessTree 非标准术语", () => {
+    const sourceFiles =
+      AGENT_UI_PACKAGE_SOURCE_ROOTS.flatMap(collectSourceFiles);
+    const offenders = sourceFiles.filter((file) => {
+      const source = readFileSync(join(REPO_ROOT, file), "utf8");
+      return source.includes("ViewTree") || source.includes("ProcessTree");
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("AgentUI SDK seed 包不应恢复旧协作标准术语", () => {
+    const sourceFiles =
+      AGENT_UI_PACKAGE_SOURCE_ROOTS.flatMap(collectSourceFiles);
+    const retiredTerms = [
+      "TeamWorkbench",
+      "teamWorkbench",
+      "Team Workbench",
+      "agent-team-workbench",
+    ];
+    const offenders = sourceFiles.filter((file) => {
+      const source = readFileSync(join(REPO_ROOT, file), "utf8");
+      return retiredTerms.some((term) => source.includes(term));
+    });
+
+    expect(offenders).toEqual([]);
   });
 
   it("应记录已删除的旧桥接与 New API 手动调试脚本", () => {
@@ -87,6 +238,106 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.targets).toEqual([
       "src/lib/sceneapp/types-runtime-context.ts",
     ]);
+  });
+
+  it("应记录已删除的 Team selector/panel 与 TeamWorkspace 产品 UI 面", () => {
+    const selectorImportMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "agent-chat-retired-team-selector-ui-surface",
+    );
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "agent-chat-team-workspace-board-ui-surface",
+    );
+    const textMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "agent-chat-retired-team-workspace-board-terminology",
+    );
+
+    expect(selectorImportMonitor).toBeTruthy();
+    expect(selectorImportMonitor?.classification).toBe("dead");
+    expect(selectorImportMonitor?.allowedPaths).toEqual([]);
+    expect(selectorImportMonitor?.targets).toEqual(
+      expect.arrayContaining([
+        "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx",
+        "src/components/agent/chat/components/Inputbar/components/TeamSelectorPanel.tsx",
+        "src/components/agent/chat/components/Inputbar/components/inputbarTeamSelectorCopy.ts",
+        "src/components/agent/chat/components/TeamSuggestionBar.tsx",
+        "src/components/agent/chat/utils/teamSuggestion.ts",
+      ]),
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual(
+      expect.arrayContaining([
+        "src/components/agent/chat/components/AgentUiTeamWorkbenchSurfaceView.tsx",
+        "src/components/agent/chat/components/TeamMemoryShadowCard.tsx",
+        "src/components/agent/chat/components/TeamWorkbenchSummaryPanel.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceBoard.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceDock.tsx",
+        "src/components/agent/chat/projection/agentUiTeamWorkbenchViewModel.ts",
+        "src/components/agent/chat/components/team-workspace-board/TeamWorkspaceBoardShell.tsx",
+        "src/components/agent/chat/components/team-workspace-board/useTeamWorkspaceBoardComposer.ts",
+      ]),
+    );
+
+    expect(textMonitor).toBeTruthy();
+    expect(textMonitor?.classification).toBe("dead");
+    expect(textMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "TeamSelector",
+        "TeamSelectorPanel",
+        "inputbarTeamSelectorCopy",
+        "TeamSuggestionBar",
+        "teamSuggestion",
+        "team-suggestion-bar",
+        "agentChat.inputbar.teamSuggestion",
+        "onEnableSuggestedTeam",
+        "handleEnableSuggestedTeam",
+        "enableSuggestedTeam",
+        "cloneTeamDefinitionAsCustom",
+        "saveCustomTeams",
+        "loadCustomTeams(",
+        "buildWorkspaceSettingsWithCustomTeams",
+        "lime.chat.custom_teams.v1",
+        "team-workspace-board/",
+        "TeamWorkspaceBoard",
+        "TeamWorkspaceDock",
+        "TeamMemoryShadowCard",
+        "TeamWorkbenchSummaryPanel",
+        "AgentUiTeamWorkbenchSurfaceView",
+        "teamWorkbenchView",
+        "teamWorkbenchSurfaceProps",
+        "teamWorkspaceDockProps",
+        "teamWorkspaceEnabled",
+        "dismissActiveTeamWorkbenchAutoOpen",
+        "handleActivateTeamWorkbench",
+        "team-workbench",
+        "empty-state-team-selector",
+        "team-selector-stub",
+        "Team current tools",
+        "Team Memory",
+        "Team member",
+        "Team policy",
+        "Background teammate",
+        "Remote teammate",
+        "Team 状态",
+        "团队控制",
+        "团队编队",
+        "创建团队",
+        "删除团队",
+        "当前团队",
+      ]),
+    );
+    expect(textMonitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat/components/README.md",
+      "src/components/agent/chat/components",
+      "src/components/agent/chat/projection",
+      "src/components/agent/chat/utils",
+      "src/components/agent/chat/workspace",
+      "src/i18n/resources",
+    ]);
+    expect(textMonitor?.allowedPaths).toEqual([]);
   });
 
   it("应记录已删除的 SceneApps 独立工作流 rail", () => {
@@ -332,10 +583,7 @@ describe("legacySurfaceCatalog", () => {
     expect(rustMonitor).toBeTruthy();
     expect(rustMonitor?.classification).toBe("dead");
     expect(rustMonitor?.patterns).toEqual(
-      expect.arrayContaining([
-        "commands::sceneapp_cmd::",
-        "crate::sceneapp::",
-      ]),
+      expect.arrayContaining(["commands::sceneapp_cmd::", "crate::sceneapp::"]),
     );
   });
 
@@ -1252,9 +1500,7 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.targets).toContain(
       "src/components/openclaw/OpenClawPage.tsx",
     );
-    expect(monitor?.targets).toContain(
-      "lime-rs/src/commands/openclaw_cmd.rs",
-    );
+    expect(monitor?.targets).toContain("lime-rs/src/commands/openclaw_cmd.rs");
   });
 
   it("应记录已删除的 OpenClaw 命令族", () => {
@@ -2103,7 +2349,6 @@ describe("legacySurfaceCatalog", () => {
       "src/components/agent/chat/components/Inputbar/hooks/useInputbarSend.ts",
       "src/components/agent/chat/components/Inputbar/components/InputbarComposerSection.tsx",
       "src/components/agent/chat/components/Inputbar/components/BuiltinCommandBadge.tsx",
-      "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx",
     ]);
     expect(monitor?.patterns).toEqual(
       expect.arrayContaining([
@@ -2427,7 +2672,7 @@ describe("legacySurfaceCatalog", () => {
     );
 
     expect(monitor).toBeTruthy();
-    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.classification).toBe("dead");
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.patterns).toEqual(["workspaceId={workspaceId}"]);
     expect(monitor?.includePathPrefixes).toEqual([
@@ -2443,7 +2688,7 @@ describe("legacySurfaceCatalog", () => {
     );
 
     expect(monitor).toBeTruthy();
-    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.classification).toBe("dead");
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.patterns).toEqual([
       "providerType={providerType}",
@@ -2466,7 +2711,7 @@ describe("legacySurfaceCatalog", () => {
     );
 
     expect(monitor).toBeTruthy();
-    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.classification).toBe("dead");
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.includePathPrefixes).toEqual([
       "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx",

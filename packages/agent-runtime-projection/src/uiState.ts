@@ -1,8 +1,12 @@
 import type {
   AgentRuntimeExecutionEvent,
   AgentRuntimeProjectionInput,
+  AgentRuntimeReadModel,
+  AgentUiArtifactRefView,
+  AgentUiEvidenceRefView,
   AgentUiProjectionState,
   AgentUiProjector,
+  AgentUiRefView,
   AgentUiRuntimeStatusView,
   ExecutionGraphNode,
   ExecutionGraphNodeType,
@@ -11,6 +15,7 @@ import type {
   UIMessagePart,
 } from "@limecloud/agent-ui-contracts";
 import { agentEventSurface, projectAgentRuntimeReadModel } from "./readModel.js";
+import { buildAgentUiSubagentsModel } from "./subagents.js";
 
 function eventRefs(event: AgentRuntimeExecutionEvent): string[] {
   return [
@@ -18,6 +23,122 @@ function eventRefs(event: AgentRuntimeExecutionEvent): string[] {
     ...(event.artifactRefs ?? []),
     ...(event.evidenceRefs ?? []),
   ];
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input);
+}
+
+export interface AgentUiSessionSnapshotMessage {
+  id: string;
+  role?: "user" | "assistant" | "system" | string;
+  content?: string;
+  text?: string;
+  createdAt?: string;
+  refs?: string[];
+}
+
+export interface AgentUiSessionSnapshotInput<
+  TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent,
+> extends AgentRuntimeProjectionInput<TEvent> {
+  messages?: readonly AgentUiSessionSnapshotMessage[];
+  readModel?: AgentRuntimeReadModel<TEvent>;
+}
+
+function payloadString(
+  event: AgentRuntimeExecutionEvent,
+  ...keys: string[]
+): string | undefined {
+  const payload = event.payload;
+  if (!isRecord(payload)) return undefined;
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function payloadRecord(
+  event: AgentRuntimeExecutionEvent,
+  key: string,
+): Record<string, unknown> | undefined {
+  const payload = event.payload;
+  if (!isRecord(payload)) return undefined;
+  const value = payload[key];
+  return isRecord(value) ? value : undefined;
+}
+
+function safeRefPath(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (/^(?:[A-Za-z]:[\\/]|\/|file:)/.test(value)) return undefined;
+  if (/(?:api[-_]?key|authorization|password|secret|token)=/i.test(value)) {
+    return undefined;
+  }
+  return value;
+}
+
+function safePreview(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return value.length > 280 ? `${value.slice(0, 277)}...` : value;
+}
+
+function compactRefView(ref: AgentUiRefView): AgentUiRefView {
+  return Object.fromEntries(
+    Object.entries(ref).filter(([, value]) => value !== undefined),
+  ) as AgentUiRefView;
+}
+
+function refViewForEvent(
+  event: AgentRuntimeExecutionEvent,
+  refId: string,
+): AgentUiRefView {
+  const payloadSourceEventId = payloadString(event, "sourceEventId", "eventId");
+  const path = safeRefPath(
+    payloadString(
+      event,
+      "path",
+      "relativePath",
+      "packRelativeRoot",
+      "artifactPath",
+      "evidencePath",
+    ),
+  );
+  return compactRefView({
+    id: refId,
+    sourceEventId: payloadSourceEventId ?? event.id,
+    title: payloadString(event, "title", "name") ?? event.title,
+    status: event.status,
+    owner: event.owner,
+    path,
+    contentRef: payloadString(event, "contentRef", "uri", "url"),
+    mimeType: payloadString(event, "mimeType", "mime"),
+    preview: safePreview(payloadString(event, "preview", "summary", "text")),
+    metadata: payloadRecord(event, "metadata"),
+  });
+}
+
+function collectRefViews(
+  events: AgentRuntimeExecutionEvent[],
+  readModelRefs: string[],
+  kind: "artifact" | "evidence",
+): AgentUiRefView[] {
+  const refs = new Map<string, AgentUiRefView>();
+  events.forEach((event) => {
+    const eventRefs = kind === "artifact"
+      ? event.artifactRefs ?? []
+      : event.evidenceRefs ?? [];
+    eventRefs.forEach((id) => {
+      if (!refs.has(id)) refs.set(id, refViewForEvent(event, id));
+    });
+  });
+  readModelRefs.forEach((id) => {
+    if (!refs.has(id)) {
+      refs.set(id, { id, sourceEventId: id });
+    }
+  });
+  return Array.from(refs.values());
 }
 
 function uiPartForEvent(
@@ -191,6 +312,38 @@ function collectMessageParts(
   return parts;
 }
 
+function normalizeSnapshotMessageRole(
+  role: AgentUiSessionSnapshotMessage["role"],
+): string {
+  return role && role.trim() ? role : "assistant";
+}
+
+function snapshotMessageText(message: AgentUiSessionSnapshotMessage): string {
+  return message.content ?? message.text ?? "";
+}
+
+function messagePartForSnapshotMessage(
+  message: AgentUiSessionSnapshotMessage,
+): UIMessagePart {
+  return {
+    type: "text",
+    partId: `message:${message.id}`,
+    messageId: message.id,
+    role: normalizeSnapshotMessageRole(message.role),
+    text: snapshotMessageText(message),
+    state: "final",
+    sourceEventId: `message:${message.id}`,
+    createdAt: message.createdAt,
+    refs: message.refs,
+  };
+}
+
+function collectExecutionEventsFromReadModel<TEvent extends AgentRuntimeExecutionEvent>(
+  readModel?: AgentRuntimeReadModel<TEvent>,
+): TEvent[] {
+  return readModel?.events.map((event) => event.source) ?? [];
+}
+
 function timelineKindForEvent(
   event: AgentRuntimeExecutionEvent,
 ): ProcessTimelineEntryKind {
@@ -230,6 +383,7 @@ function graphNodeIdForEvent(
   event: AgentRuntimeExecutionEvent,
 ): string | undefined {
   return (
+    event.subagentId ??
     event.toolCallId ??
     event.actionId ??
     event.stepId ??
@@ -243,6 +397,7 @@ function graphNodeIdForEvent(
 function graphNodeTypeForEvent(
   event: AgentRuntimeExecutionEvent,
 ): ExecutionGraphNodeType {
+  if (event.subagentId) return "subagent";
   if (event.toolCallId) return "tool";
   if (event.actionId) return "action";
   if (event.stepId) return "step";
@@ -268,7 +423,9 @@ function upsertGraphNode(
   nodes.set(nodeId, {
     nodeId,
     parentId:
-      event.stepId && event.toolCallId
+      event.subagentId && event.taskId
+        ? event.taskId
+        : event.stepId && event.toolCallId
         ? event.stepId
         : event.taskId && event.runId
           ? event.taskId
@@ -357,6 +514,7 @@ export function projectAgentUiState<
   const timeline = executionEvents.map(timelineEntryForEvent);
   const graphNodes = new Map<string, ExecutionGraphNode>();
   executionEvents.forEach((event) => upsertGraphNode(graphNodes, event));
+  const graph = Array.from(graphNodes.values());
   const actions = readModel.events.filter(
     (event) => event.surface === "human-action",
   );
@@ -379,24 +537,48 @@ export function projectAgentUiState<
     runtime: runtimeStatusForEvents(executionEvents),
     messages,
     timeline,
-    graph: Array.from(graphNodes.values()),
+    graph,
     tools,
     actions,
-    artifacts: readModel.artifactRefs.map((id) => ({
-      id,
-      sourceEventId: id,
-    })),
-    evidence: readModel.evidenceRefs.map((id) => ({
-      id,
-      sourceEventId: id,
-    })),
+    artifacts: collectRefViews(
+      executionEvents,
+      readModel.artifactRefs,
+      "artifact",
+    ) as AgentUiArtifactRefView[],
+    evidence: collectRefViews(
+      executionEvents,
+      readModel.evidenceRefs,
+      "evidence",
+    ) as AgentUiEvidenceRefView[],
     diagnostics,
+    subagents: buildAgentUiSubagentsModel(executionEvents),
     readModel,
     hydration: {
       status: executionEvents.length ? "live" : "idle",
       eventCount: executionEvents.length,
     },
     ephemeralUi: {},
+  };
+}
+
+export function projectAgentUiStateFromSessionSnapshot<
+  TEvent extends AgentRuntimeExecutionEvent,
+>(
+  input: AgentUiSessionSnapshotInput<TEvent> = {},
+): AgentUiProjectionState<TEvent> {
+  const executionEvents =
+    input.executionEvents ?? collectExecutionEventsFromReadModel(input.readModel);
+  const state = projectAgentUiState<TEvent>({
+    executionEvents,
+    sourceCount: input.sourceCount ?? input.readModel?.sourceCount,
+  });
+  const messages = input.messages?.map(messagePartForSnapshotMessage) ?? [];
+  if (!messages.length) {
+    return state;
+  }
+  return {
+    ...state,
+    messages,
   };
 }
 

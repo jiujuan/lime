@@ -108,7 +108,7 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
             data-testid="toggle-subagent-mode"
             onClick={() => props.onToolClick?.("subagent_mode")}
           >
-            切换任务拆分
+            打开 Subagents
           </button>
           <span data-testid="subagent-state">
             {props.activeTools?.subagent_mode ? "on" : "off"}
@@ -522,15 +522,6 @@ vi.mock("../CuratedTaskLauncherDialog", () => ({
 
 vi.mock("./components/RuntimeSceneBadge", () => ({
   RuntimeSceneBadge: () => <div data-testid="runtime-scene-badge" />,
-}));
-
-vi.mock("./components/TeamSelector", () => ({
-  TeamSelector: (props: { autoOpenToken?: number | null }) => (
-    <div
-      data-testid="team-selector-stub"
-      data-auto-open-token={String(props.autoOpenToken ?? "")}
-    />
-  ),
 }));
 
 vi.mock("../ChatModelSelector", () => ({
@@ -3047,7 +3038,7 @@ describe("Inputbar", () => {
     expectInputbarSend(onSend);
   });
 
-  it("通用聊天态复杂任务应显示任务分工建议并支持开启多代理", async () => {
+  it("通用聊天态复杂任务不再主动显示 Subagents 建议", async () => {
     const onToolStatesChange = vi.fn();
     const { container } = renderInputbar({
       input:
@@ -3061,27 +3052,12 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
+    const retiredSuggestionTestId = ["team", "suggestion", "bar"].join("-");
     const suggestionBar = container.querySelector(
-      '[data-testid="team-suggestion-bar"]',
+      `[data-testid="${retiredSuggestionTestId}"]`,
     );
-    expect(suggestionBar).toBeTruthy();
-    expect(suggestionBar?.textContent).toContain("分工建议");
-
-    const enableTeamButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("启用任务分工"));
-
-    expect(enableTeamButton).toBeTruthy();
-
-    act(() => {
-      enableTeamButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
-
-    expect(onToolStatesChange).toHaveBeenCalledWith({
-      subagent: true,
-    });
+    expect(suggestionBar).toBeNull();
+    expect(onToolStatesChange).not.toHaveBeenCalled();
   });
 
   it("启用项目资料后发送应携带 knowledge_pack metadata", async () => {
@@ -3677,7 +3653,7 @@ describe("Inputbar", () => {
     expect(onManageKnowledgePacks).toHaveBeenCalledTimes(1);
   });
 
-  it("仅在 Team mode 开启时显示 TeamSelector", async () => {
+  it("Subagents 开关只反映偏好状态", async () => {
     const { container } = renderInputbar({
       activeTheme: "general",
       toolStates: { subagent: false },
@@ -3687,9 +3663,12 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
+    expandAdvancedControls(container);
+
     expect(
-      container.querySelector('[data-testid="team-selector-stub"]'),
-    ).toBeNull();
+      container.querySelector('[data-testid="inputbar-plus-subagent-mode"]')
+        ?.textContent,
+    ).toContain("off");
 
     const { container: enabledContainer } = renderInputbar({
       activeTheme: "general",
@@ -3700,12 +3679,17 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
+    expandAdvancedControls(enabledContainer);
+
     expect(
-      enabledContainer.querySelector('[data-testid="team-selector-stub"]'),
-    ).toBeTruthy();
+      enabledContainer.querySelector(
+        '[data-testid="inputbar-plus-subagent-mode"]',
+      )
+        ?.textContent,
+    ).toContain("on");
   });
 
-  it("未开启 Team mode 时默认不暴露多代理开关，展开高级设置后可启用", async () => {
+  it("未开启 Subagents 时默认不暴露多代理开关，展开高级设置后可启用", async () => {
     const onToolStatesChange = vi.fn();
     const { container } = renderInputbar({
       activeTheme: "general",
@@ -3741,9 +3725,11 @@ describe("Inputbar", () => {
     });
   });
 
-  it("点击多代理图标后应自动透传 Team 配置面板打开令牌", async () => {
+  it("点击多代理图标后只切换 Subagents 偏好", async () => {
+    const onToolStatesChange = vi.fn();
     const { container } = renderInputbar({
       activeTheme: "general",
+      onToolStatesChange,
     });
 
     await act(async () => {
@@ -3768,15 +3754,15 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    const teamSelector = container.querySelector(
-      '[data-testid="team-selector-stub"]',
-    ) as HTMLDivElement | null;
-
-    expect(teamSelector).toBeTruthy();
-    expect(teamSelector?.getAttribute("data-auto-open-token")).toBe("1");
+    expect(onToolStatesChange).toHaveBeenCalledWith({
+      subagent: true,
+    });
+    expect(
+      container.querySelector('[data-testid="inputbar-plus-subagent-mode"]'),
+    ).toBeTruthy();
   });
 
-  it("复杂任务但未开启 Team 时，保留推荐提示但不再渲染重复入口", async () => {
+  it("复杂任务但未开启 Subagents 时，不再渲染主动推荐入口", async () => {
     const { container } = renderInputbar({
       activeTheme: "general",
       input: "请把这个跨模块问题拆分成分析、实现、验证三个并行子任务再汇总",
@@ -3789,7 +3775,7 @@ describe("Inputbar", () => {
 
     const recommendationButton = Array.from(
       container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("启用任务分工"));
+    ).find((button) => button.textContent?.includes("打开 Subagents"));
 
     expect(
       container.querySelector('[data-testid="team-mode-enable-button"]'),
@@ -3797,12 +3783,12 @@ describe("Inputbar", () => {
     expect(
       container.querySelector('[data-testid="toggle-subagent-mode"]'),
     ).toBeNull();
-    expect(recommendationButton).toBeTruthy();
+    expect(recommendationButton).toBeUndefined();
+    const retiredSuggestionTestId = ["team", "suggestion", "bar"].join("-");
     const suggestionBar = container.querySelector(
-      '[data-testid="team-suggestion-bar"]',
+      `[data-testid="${retiredSuggestionTestId}"]`,
     );
-    expect(suggestionBar).toBeTruthy();
-    expect(suggestionBar?.textContent).toContain("分工建议");
+    expect(suggestionBar).toBeNull();
   });
 
   it("内容主题默认发送时不应再注入旧 skill 前缀", async () => {
@@ -4238,5 +4224,35 @@ describe("Inputbar", () => {
     expect(container.textContent).toContain("当前进展");
     expect(container.textContent).toContain("等待用户确认选题");
     expect(container.textContent).not.toContain("正在生成中");
+  });
+
+  it("对话页输入框底部不应再显示项目上下文条", async () => {
+    const { container } = renderInputbar({
+      projectId: "project-default",
+      openedProjects: [
+        {
+          id: "project-default",
+          name: "默认项目",
+          rootPath: "/workspace/default",
+        },
+      ],
+      projectContextModeLabel: "本地模式",
+      projectContextBranchLabel: "main",
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-context-bar-slot"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-project-context-bar"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("默认项目");
+    expect(container.textContent).not.toContain("本地模式");
+    expect(container.textContent).not.toContain("main");
   });
 });

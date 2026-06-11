@@ -119,60 +119,62 @@ describe("AppSidebar conversations", () => {
     }
   });
 
-  it("一级导航下方应继续展示最近对话与归档，记忆项目不应作为 App Server 过滤参数", async () => {
+  it("一级导航下方只展示已打开项目和非项目对话，归档不再作为左侧分区加载", async () => {
     localStorage.setItem(
       "agent_last_project_id",
       JSON.stringify("stale-project"),
     );
-    mockListAgentRuntimeSessions.mockImplementation(
-      async (options?: {
-        archivedOnly?: boolean;
-        includeArchived?: boolean;
-        limit?: number;
-        workspaceId?: string;
-      }) =>
-        options?.archivedOnly
-          ? [
-              {
-                id: "session-archived",
-                name: "归档会话",
-                created_at: 1713000000,
-                updated_at: 1713000600,
-                archived_at: 1713003600,
-                workspace_id: "project-1",
-              },
-            ]
-          : [
-              {
-                id: "session-recent",
-                name: "最近会话",
-                created_at: 1714000000,
-                updated_at: 1714000600,
-                archived_at: null,
-                workspace_id: "project-1",
-              },
-            ],
-    );
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-standalone",
+        name: "非项目会话",
+        created_at: 1714000000,
+        updated_at: 1714000600,
+        archived_at: null,
+        workspace_id: null,
+      },
+      {
+        id: "session-hidden-project",
+        name: "未打开项目会话",
+        created_at: 1713900000,
+        updated_at: 1713900600,
+        archived_at: null,
+        workspace_id: "project-hidden",
+      },
+      {
+        id: "session-archived",
+        name: "归档会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: 1713003600,
+        workspace_id: null,
+      },
+    ]);
 
     const container = mountSidebarContainer({
       currentPage: "settings",
     });
     await flushEffects(2);
 
-    expect(container.textContent).toContain("最近对话");
-    expect(container.textContent).toContain("归档");
-    expect(container.textContent).toContain("最近会话");
+    expect(container.textContent).toContain("项目");
+    expect(container.textContent).toContain("对话");
+    expect(container.textContent).toContain("非项目会话");
+    expect(container.textContent).not.toContain("未打开项目会话");
     expect(container.textContent).not.toContain("归档会话");
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
     });
+    expect(mockListAgentRuntimeSessions).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        archivedOnly: true,
+      }),
+    );
     expect(mockRecordAgentUiPerformanceMetric).toHaveBeenCalledWith(
       "appSidebar.recentConversations.loadBreakdown",
       expect.objectContaining({
         limit: 11,
-        sessionsCount: 1,
-        workspaceId: null,
+        workspaceIds: [],
       }),
     );
 
@@ -185,9 +187,6 @@ describe("AppSidebar conversations", () => {
     const recentConversationList = container.querySelector(
       '[data-testid="app-sidebar-recent-conversations"]',
     );
-    const archivedToggle = conversationShelf?.querySelector(
-      'button[aria-expanded="false"]',
-    ) as HTMLButtonElement | null;
 
     expect(mainNav).not.toBeNull();
     expect(conversationShelf).not.toBeNull();
@@ -195,7 +194,14 @@ describe("AppSidebar conversations", () => {
     expect(getComputedStyle(recentConversationList as Element).overflowY).toBe(
       "auto",
     );
-    expect(archivedToggle).not.toBeNull();
+    expect(
+      conversationShelf?.querySelector(
+        '[data-testid="app-sidebar-archived-conversations"]',
+      ),
+    ).toBeNull();
+    expect(
+      conversationShelf?.querySelector('button[aria-expanded="false"]'),
+    ).toBeNull();
     expect(
       Boolean(
         mainNav &&
@@ -205,24 +211,68 @@ describe("AppSidebar conversations", () => {
           0,
       ),
     ).toBe(true);
+  });
 
-    await act(async () => {
-      archivedToggle?.click();
-      await Promise.resolve();
+  it("点击项目标题行应折叠并重新展开项目下的对话列表", async () => {
+    mockListAgentRuntimeSessions.mockImplementation(
+      async (options?: { limit?: number; workspaceId?: string }) =>
+        options?.workspaceId === "project-1"
+          ? [
+              {
+                id: "session-project",
+                name: "项目内会话",
+                created_at: 1714000000,
+                updated_at: 1714000600,
+                archived_at: null,
+                workspace_id: "project-1",
+              },
+            ]
+          : [],
+    );
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
     });
     await flushEffects(2);
 
-    const archivedConversationList = container.querySelector(
-      '[data-testid="app-sidebar-archived-conversations"]',
+    const projectGroup = container.querySelector<HTMLElement>(
+      '[data-testid="app-sidebar-project-conversation-group"]',
     );
-    expect(archivedConversationList).not.toBeNull();
-    expect(container.textContent).toContain("归档会话");
-    expect(
-      getComputedStyle(archivedConversationList as Element).overflowY,
-    ).toBe("auto");
+    const projectButton = projectGroup?.querySelector<HTMLButtonElement>(
+      'button[title="project-1"]',
+    );
+
+    expect(projectGroup).not.toBeNull();
+    expect(projectButton).not.toBeNull();
+    expect(projectButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(projectGroup?.textContent).toContain("项目内会话");
+
+    await act(async () => {
+      projectButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(projectButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(projectGroup?.textContent).toContain("project-1");
+    expect(projectGroup?.textContent).not.toContain("项目内会话");
+
+    await act(async () => {
+      projectButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(projectButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(projectGroup?.textContent).toContain("项目内会话");
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
-      archivedOnly: true,
-      limit: 9,
+      limit: 11,
+    });
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+      workspaceId: "project-1",
     });
   });
 
@@ -235,7 +285,7 @@ describe("AppSidebar conversations", () => {
         created_at: 1714000000,
         updated_at: 1714000600,
         archived_at: null,
-        workspace_id: "project-1",
+        workspace_id: null,
       },
     ]);
 
@@ -252,24 +302,18 @@ describe("AppSidebar conversations", () => {
     expect(recentConversationList?.textContent).not.toContain("Ran into");
   });
 
-  it("最近对话和归档加载失败时不应让记忆项目污染 App Server 查询参数", async () => {
+  it("对话加载失败时不应让记忆项目污染 App Server 查询参数", async () => {
     localStorage.setItem("agent_last_project_id", JSON.stringify("project-1"));
     const warnSpy = vi
       .spyOn(console, "warn")
       .mockImplementation(() => undefined);
-    const errorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
     mockListAgentRuntimeSessions.mockImplementation(
-      async (options?: {
-        archivedOnly?: boolean;
+      async (_options?: {
         includeArchived?: boolean;
         limit?: number;
         workspaceId?: string;
       }) => {
-        throw new Error(
-          options?.archivedOnly ? "archived failed" : "recent failed",
-        );
+        throw new Error("recent failed");
       },
     );
 
@@ -283,37 +327,32 @@ describe("AppSidebar conversations", () => {
         '[data-testid="app-sidebar-recent-conversations"]',
       );
       expect(recentConversationList?.textContent).not.toContain("正在加载对话");
-      expect(recentConversationList?.textContent).toContain("还没有开始对话");
+      expect(recentConversationList?.textContent).toContain("暂无聊天");
       expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
         limit: 11,
       });
-
-      await act(async () => {
-        container
-          .querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
-          ?.click();
-        await Promise.resolve();
-      });
-      await flushEffects(3);
-
-      const archivedConversationList = container.querySelector(
-        '[data-testid="app-sidebar-archived-conversations"]',
+      expect(mockListAgentRuntimeSessions).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          archivedOnly: true,
+        }),
       );
-      expect(archivedConversationList?.textContent).not.toContain(
-        "正在加载归档",
-      );
-      expect(archivedConversationList?.textContent).toContain("暂无归档内容");
-      expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
-        archivedOnly: true,
-        limit: 9,
-      });
     } finally {
       warnSpy.mockRestore();
-      errorSpy.mockRestore();
     }
   });
 
-  it("没有当前工作区时不应加载全局最近对话", async () => {
+  it("没有当前工作区时应加载全局非项目对话", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-standalone",
+        name: "全局对话",
+        created_at: 1714000000,
+        updated_at: 1714000600,
+        archived_at: null,
+        workspace_id: null,
+      },
+    ]);
+
     const container = mountSidebarContainer({
       currentPage: "agent",
       currentPageParams: {
@@ -322,9 +361,11 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(2);
 
-    expect(container.textContent).toContain("最近对话");
-    expect(container.textContent).toContain("还没有开始对话");
-    expect(mockListAgentRuntimeSessions).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("对话");
+    expect(container.textContent).toContain("全局对话");
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
   });
 
   it("窗口重新聚焦时应低优先级刷新会话列表", async () => {
@@ -392,6 +433,9 @@ describe("AppSidebar conversations", () => {
     expect(container.textContent).toContain("查看更多对话");
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
+    });
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
       workspaceId: "project-1",
     });
 
@@ -433,7 +477,10 @@ describe("AppSidebar conversations", () => {
 
     expect(mounted.container.textContent).toContain("最近会话");
     expect(mounted.container.textContent).not.toContain("正在加载对话");
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(2);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
       workspaceId: "project-1",
@@ -458,7 +505,10 @@ describe("AppSidebar conversations", () => {
 
     expect(mounted.container.textContent).toContain("最近会话");
     expect(mounted.container.textContent).not.toContain("正在加载对话");
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(2);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(5);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
       workspaceId: "project-2",
@@ -488,7 +538,7 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(2);
 
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(2);
 
     mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
       scheduledTasks.push(task);
@@ -512,7 +562,7 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(2);
 
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(1);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(2);
     expect(scheduledTasks).toHaveLength(1);
 
     await act(async () => {
@@ -520,8 +570,11 @@ describe("AppSidebar conversations", () => {
       await Promise.resolve();
     });
 
-    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(2);
-    expect(mockListAgentRuntimeSessions).toHaveBeenLastCalledWith({
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(4);
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
       workspaceId: "project-1",
     });
@@ -563,6 +616,9 @@ describe("AppSidebar conversations", () => {
     expect(getComputedStyle(archiveMenuItem as Element).minHeight).toBe("36px");
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
+    });
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
       workspaceId: "project-1",
     });
 
@@ -574,27 +630,17 @@ describe("AppSidebar conversations", () => {
     });
   });
 
-  it("归档会话菜单应展示恢复动作并走统一 session update 命令", async () => {
-    mockListAgentRuntimeSessions.mockImplementation(
-      async (options?: {
-        archivedOnly?: boolean;
-        includeArchived?: boolean;
-        limit?: number;
-        workspaceId?: string;
-      }) =>
-        options?.archivedOnly
-          ? [
-              {
-                id: "session-archived",
-                name: "归档会话",
-                created_at: 1713000000,
-                updated_at: 1713000600,
-                archived_at: 1713003600,
-                workspace_id: "project-1",
-              },
-            ]
-          : [],
-    );
+  it("归档会话不应出现在左侧导航恢复菜单中", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-archived",
+        name: "归档会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: 1713003600,
+        workspace_id: "project-1",
+      },
+    ]);
 
     const container = mountSidebarContainer({
       currentPage: "agent",
@@ -605,29 +651,16 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(2);
 
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('button[aria-expanded="false"]')
-        ?.click();
-      await Promise.resolve();
-    });
-    await flushEffects(2);
-
-    const menu = await openConversationMenu("归档会话");
-    expect(menu).not.toBeNull();
-    expect(menu?.textContent).toContain("重命名");
-    expect(menu?.textContent).toContain("收藏");
-    expect(menu?.textContent).toContain("恢复");
-    expect(menu?.textContent).toContain("多选");
-    expect(menu?.textContent).toContain("删除");
-    expect(menu?.textContent).not.toContain("归档");
-
-    await clickConversationMenuItem("app-sidebar-conversation-menu-archive");
-
-    expect(mockUpdateAgentRuntimeSession).toHaveBeenCalledWith({
-      session_id: "session-archived",
-      archived: false,
-    });
+    expect(container.textContent).not.toContain("归档会话");
+    expect(
+      container.querySelector('[data-testid="app-sidebar-archived-conversations"]'),
+    ).toBeNull();
+    expect(mockListAgentRuntimeSessions).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        archivedOnly: true,
+      }),
+    );
+    expect(await openConversationMenu("归档会话")).toBeNull();
   });
 
   it("会话菜单应支持重命名并同步更新 session 名称", async () => {

@@ -534,7 +534,7 @@ describe("submitOpRuntimeCompaction", () => {
           preferred_team_preset_id: "code-triage-team",
           selected_team_id: "team-code-1",
           selected_team_source: "builtin",
-          selected_team_label: "代码排障团队",
+          selected_team_label: "代码排障 profile",
           selected_team_summary: "分析、实现、验证三段推进。",
           selected_team_roles: [
             {
@@ -548,7 +548,7 @@ describe("submitOpRuntimeCompaction", () => {
             entries: [
               {
                 key: "team.selection",
-                content: "Team：代码排障团队",
+                content: "Team：代码排障 profile",
                 updated_at: 1,
               },
             ],
@@ -570,7 +570,7 @@ describe("submitOpRuntimeCompaction", () => {
           preferredTeamPresetId: "code-triage-team",
           selectedTeamId: "team-code-1",
           selectedTeamSource: "builtin",
-          selectedTeamLabel: "代码排障团队",
+          selectedTeamLabel: "代码排障 profile",
           selectedTeamSummary: "分析、实现、验证三段推进。",
           selectedTeamRoles: [
             {
@@ -602,7 +602,7 @@ describe("submitOpRuntimeCompaction", () => {
           entries: [
             {
               key: "team.selection",
-              content: "Team：代码排障团队",
+              content: "Team：代码排障 profile",
               updated_at: 1,
             },
           ],

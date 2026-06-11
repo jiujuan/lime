@@ -6,8 +6,6 @@ import React, {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { CreationMode } from "./types";
-import { toast } from "sonner";
 import {
   buildRecommendationPrompt,
   getContextualRecommendations,
@@ -20,7 +18,6 @@ import {
   listCuratedTaskTemplates,
   recordCuratedTaskTemplateUsage,
   replaceCuratedTaskLaunchPromptInInput,
-  resolveCuratedTaskTemplateLaunchPrefill,
   subscribeCuratedTaskTemplateUsageChanged,
   type CuratedTaskInputValues,
   type CuratedTaskTemplateItem,
@@ -35,169 +32,43 @@ import { EmptyStateComposerPanel } from "./EmptyStateComposerPanel";
 import { EmptyStateQuickActions } from "./EmptyStateQuickActions";
 import {
   EmptyStateComposerFrame,
+  EmptyStatePrimaryStack,
   EmptyStateLayout,
 } from "./EmptyStateLayout";
 import {
   buildSkillSelectionProps,
-  type SkillSelectionSourceProps,
 } from "../skill-selection/skillSelectionBindings";
-import type { Character } from "@/lib/api/memory";
-import type { WorkspaceSettings } from "@/types/workspace";
-import type { MessagePathReference } from "../types";
-import type { TeamDefinition } from "../utils/teamDefinitions";
 import { isGeneralResearchTheme } from "../utils/generalAgentPrompt";
-import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import { buildPathReferenceRequestMetadata } from "../utils/pathReferences";
 import { buildKnowledgeRequestMetadata } from "@/features/knowledge/agent/knowledgeMetadata";
-import type { InputbarSendHandler } from "./Inputbar/inputbarSendPayload";
 import {
   resolveInputCapabilityDispatch,
   resolveInputCapabilitySelectionFromRoute,
   type InputCapabilitySelection,
 } from "../skill-selection/inputCapabilitySelection";
-import type { AgentInitialInputCapabilityParams } from "@/types/page";
-import type { AgentI18nResource } from "@/i18n/agentResources";
-import type {
-  InputbarKnowledgePackOption,
-  InputbarKnowledgePackSelection,
-} from "./Inputbar/types";
 import {
   getSiteSkillAutoLaunchExample,
   hasAutoLaunchableSiteSkill,
 } from "../service-skills/siteSkillExamplePrompts";
 import { buildServiceSkillHomeCopy } from "../service-skills/homeCopy";
-import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";
-import type { AgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
-import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
-import {
-  HomeStartSurface,
-  type HomeSupplementalAction,
-} from "../home/HomeStartSurface";
+import { HomeStartSurface } from "../home/HomeStartSurface";
 import { buildHomeSurfaceCopy } from "../home/homeSurfaceCopy";
 import { buildInputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import {
   buildInputbarModeRequestMetadata,
   buildInputbarToolPreferencesOverride,
 } from "./Inputbar/utils/inputbarModeRequestMetadata";
-import type {
-  HomeGuideCard,
-  HomeSkillSurfaceItem,
-  HomeStarterChip,
-} from "../home/homeSurfaceTypes";
 import {
   buildEmptyStateQuickActionItems,
-  buildRecentSessionSupplementalAction,
   resolveEffectiveCuratedTaskReferences,
-  resolveGuideHelpLabel,
-  resolveRecentSessionLinkModel,
   shouldExposeHomeInputSuggestions,
 } from "./EmptyStateViewModel";
 import { useEmptyStateAttachments } from "./useEmptyStateAttachments";
 import { useEmptyStateRecommendationPreferences } from "./useEmptyStateRecommendationPreferences";
 import { useHomeSkillSurface } from "./useHomeSkillSurface";
 import { useCuratedTaskLauncherState } from "./useCuratedTaskLauncherState";
-import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
-
-type AgentI18nKey = keyof AgentI18nResource;
-
-interface EmptyStateProps extends SkillSelectionSourceProps {
-  input: string;
-  setInput: (value: string) => void;
-  onSend: InputbarSendHandler;
-  isLoading?: boolean;
-  disabled?: boolean;
-  /** 创作模式 */
-  creationMode?: CreationMode;
-  /** 创作模式变更回调 */
-  onCreationModeChange?: (mode: CreationMode) => void;
-  /** 当前激活的主题 */
-  activeTheme?: string;
-  /** 主题变更回调 */
-  onThemeChange?: (theme: string) => void;
-  /** 推荐标签点击回调 */
-  onRecommendationClick?: (shortLabel: string, fullPrompt: string) => void;
-  providerType: string;
-  setProviderType: (type: string) => void;
-  model: string;
-  setModel: (model: string) => void;
-  reasoningEffort?: ModelReasoningEffortLevel | "";
-  setReasoningEffort?: (value: ModelReasoningEffortLevel | "") => void;
-  accessMode?: AgentAccessMode;
-  setAccessMode?: (mode: AgentAccessMode) => void;
-  onManageProviders?: () => void;
-  taskEnabled?: boolean;
-  onTaskEnabledChange?: (enabled: boolean) => void;
-  objectiveEnabled?: boolean;
-  onObjectiveEnabledChange?: (enabled: boolean) => void;
-  subagentEnabled?: boolean;
-  onSubagentEnabledChange?: (enabled: boolean) => void;
-  selectedTeam?: TeamDefinition | null;
-  onSelectTeam?: (team: TeamDefinition | null) => void;
-  onEnableSuggestedTeam?: (suggestedPresetId?: string) => void;
-  teamWorkspaceSettings?: WorkspaceSettings | null;
-  onPersistCustomTeams?: (teams: TeamDefinition[]) => void | Promise<void>;
-  hasCanvasContent?: boolean;
-  hasContentId?: boolean;
-  selectedText?: string;
-  /** 角色列表（用于 @ 引用） */
-  characters?: Character[];
-  /** 启动浏览器协助 */
-  onLaunchBrowserAssist?: () => void | Promise<void>;
-  /** 浏览器协助启动中 */
-  browserAssistLoading?: boolean;
-  /** 最近会话标题 */
-  recentSessionTitle?: string | null;
-  /** 最近会话摘要 */
-  recentSessionSummary?: string | null;
-  /** 最近会话恢复动作文案 */
-  recentSessionActionLabel?: string;
-  /** 恢复最近一次会话上下文 */
-  onResumeRecentSession?: () => void;
-  /** 当前项目 ID */
-  projectId?: string | null;
-  /** 当前会话 ID */
-  sessionId?: string | null;
-  /** 当前 runtime tool surface */
-  runtimeToolAvailability?: RuntimeToolAvailability | null;
-  /** 当前执行态摘要 */
-  runtimeTaskCard?: AgentTaskRuntimeCardModel | null;
-  /** 进入首页时预选的输入框能力 */
-  initialInputCapability?: AgentInitialInputCapabilityParams;
-  /** 打开记忆工作台 */
-  onOpenMemoryWorkbench?: () => void;
-  /** 打开消息渠道 */
-  onOpenChannels?: () => void;
-  /** 打开浏览器连接器 */
-  onOpenChromeRelay?: () => void;
-  /** 当前带入的 creation replay 前台投影 */
-  creationReplaySurface?: CreationReplaySurfaceModel | null;
-  /** 当前结果模板默认带入的 memory 引用 id */
-  defaultCuratedTaskReferenceMemoryIds?: string[];
-  /** 当前结果模板默认带入的参考对象 */
-  defaultCuratedTaskReferenceEntries?: CuratedTaskReferenceEntry[];
-  /** 当前项目资料选择态 */
-  knowledgePackSelection?: InputbarKnowledgePackSelection | null;
-  /** 当前项目可选资料 */
-  knowledgePackOptions?: InputbarKnowledgePackOption[];
-  /** 启用 / 关闭当前项目资料 */
-  onToggleKnowledgePack?: (enabled: boolean) => void;
-  /** 切换当前项目资料 */
-  onSelectKnowledgePack?: (packName: string) => void;
-  /** 显式选择 / 取消一份协同资料 */
-  onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
-  /** 从当前输入或会话沉淀项目资料 */
-  onStartKnowledgeOrganize?: () => void;
-  /** 打开项目资料管理 */
-  onManageKnowledgePacks?: () => void;
-  /** 输入框已添加的本地文件/文件夹引用 */
-  pathReferences?: MessagePathReference[];
-  onAddPathReferences?: (references: MessagePathReference[]) => void;
-  onImportPathReferenceAsKnowledge?: (reference: MessagePathReference) => void;
-  onRemovePathReference?: (id: string) => void;
-  onClearPathReferences?: () => void;
-  fileManagerOpen?: boolean;
-  onToggleFileManager?: () => void;
-}
+import { useEmptyStateHomeActions } from "./useEmptyStateHomeActions";
+import type { AgentI18nKey, EmptyStateProps } from "./EmptyState.types";
 
 const CREATION_THEMES: string[] = [];
 
@@ -225,11 +96,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onObjectiveEnabledChange: onObjectiveEnabledChangeProp,
   subagentEnabled = false,
   onSubagentEnabledChange,
-  selectedTeam = null,
-  onSelectTeam,
-  onEnableSuggestedTeam,
-  teamWorkspaceSettings,
-  onPersistCustomTeams,
   hasCanvasContent = false,
   hasContentId = false,
   selectedText = "",
@@ -248,6 +114,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   recentSessionActionLabel,
   onResumeRecentSession,
   projectId = null,
+  openedProjects = [],
+  onProjectContextChange,
   sessionId = null,
   isLoading = false,
   disabled = false,
@@ -809,14 +677,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   const quickStartPresets = homeSurfaceCopy.quickActions.presets;
 
-  const [guideHelpActive, setGuideHelpActive] = useState(false);
-
-  useEffect(() => {
-    if (!isGeneralTheme) {
-      setGuideHelpActive(false);
-    }
-  }, [isGeneralTheme]);
-
   const {
     galleryItems: homeGalleryItems,
     guideCards: homeGuideCards,
@@ -832,224 +692,46 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     serviceSkillHomeCopy,
     serviceSkills: serviceSkills ?? [],
   });
-  const guideHelpLabel = useMemo(
-    () =>
-      resolveGuideHelpLabel({
-        starterChips: homeStarterChips,
-        contextLabel: homeSurfaceCopy.guideHelpContextLabel,
-        contextLabelWithStarter:
-          homeSurfaceCopy.guideHelpContextLabelWithStarter,
-      }),
-    [homeStarterChips, homeSurfaceCopy],
+  const handleOpenKnowledgeHub = useCallback(
+    () => setKnowledgeHubOpenRequestKey((current) => current + 1),
+    [],
   );
-
-  const handleSelectHomeSkillItem = useCallback(
-    (item: HomeSkillSurfaceItem) => {
-      if (item.launchKind === "curated_task_launcher") {
-        const template = findCuratedTaskTemplateById(
-          item.id,
-          curatedTaskTemplateCopy,
-        );
-        if (!template) {
-          return;
-        }
-        const prefill = resolveCuratedTaskTemplateLaunchPrefill(template);
-        handleCuratedTaskLauncherRequest(
-          template,
-          prefill?.inputValues ?? null,
-          prefill?.referenceMemoryIds ??
-            effectiveDefaultCuratedTaskReferenceMemoryIds,
-          prefill?.referenceEntries ??
-            effectiveDefaultCuratedTaskReferenceEntries,
-          prefill?.hint,
-        );
-        return;
-      }
-
-      if (item.launchKind === "service_skill") {
-        const skill = homeServiceSkillItems.find(
-          (candidate) => candidate.id === item.id,
-        );
-        if (skill) {
-          handleSelectInputCapability({ kind: "service_skill", skill });
-        }
-        return;
-      }
-
-      if (item.launchKind === "installed_skill") {
-        const skill = (skillSelection.skills ?? []).find(
-          (candidate) => candidate.key === item.id,
-        );
-        if (skill) {
-          handleSelectInputCapability({ kind: "installed_skill", skill });
-          if (item.isRecent && item.summary.trim()) {
-            setInput(item.summary);
-          }
-        }
-        return;
-      }
-
-      if (item.launchKind === "skill_catalog_scene") {
-        const launchPrompt =
-          item.launchPrompt?.trim() ||
-          item.placeholder?.trim() ||
-          item.summary.trim();
-        if (launchPrompt) {
-          setInput(launchPrompt);
-        }
-        if (item.linkedSkillId) {
-          const skill = (serviceSkills ?? []).find(
-            (candidate) => candidate.id === item.linkedSkillId,
-          );
-          if (skill) {
-            handleSelectInputCapability({ kind: "service_skill", skill });
-          }
-        }
-      }
-    },
-    [
-      curatedTaskTemplateCopy,
-      effectiveDefaultCuratedTaskReferenceEntries,
-      effectiveDefaultCuratedTaskReferenceMemoryIds,
-      handleCuratedTaskLauncherRequest,
-      handleSelectInputCapability,
-      homeServiceSkillItems,
-      serviceSkills,
-      setInput,
-      skillSelection.skills,
-    ],
-  );
-
-  const handleSelectHomeStarterChip = useCallback(
-    (chip: HomeStarterChip) => {
-      if (chip.launchKind === "prefill_prompt") {
-        setGuideHelpActive(false);
-        const prompt = chip.prompt?.trim();
-        if (prompt) {
-          setInput(prompt);
-        }
-        return;
-      }
-      if (chip.launchKind === "open_knowledge_hub") {
-        setGuideHelpActive(false);
-        if (!knowledgePackSelection && !onStartKnowledgeOrganize) {
-          onManageKnowledgePacks?.();
-        } else {
-          setKnowledgeHubOpenRequestKey((current) => current + 1);
-        }
-        return;
-      }
-
-      const targetItem = chip.targetItemId
-        ? homeSkillItems.find((item) => item.id === chip.targetItemId)
-        : null;
-      if (targetItem) {
-        if (targetItem.launchKind === "curated_task_launcher") {
-          const template = findCuratedTaskTemplateById(
-            targetItem.id,
-            curatedTaskTemplateCopy,
-          );
-          if (!template) {
-            return;
-          }
-          const prefill = resolveCuratedTaskTemplateLaunchPrefill(template);
-          setGuideHelpActive(false);
-          setActiveCapability({
-            kind: "curated_task",
-            task: template,
-            launchInputValues: prefill?.inputValues,
-            referenceMemoryIds:
-              prefill?.referenceMemoryIds ??
-              effectiveDefaultCuratedTaskReferenceMemoryIds,
-            referenceEntries:
-              prefill?.referenceEntries ??
-              effectiveDefaultCuratedTaskReferenceEntries,
-          });
-          if (prefill?.hint) {
-            toast.info(prefill.hint);
-          }
-          return;
-        }
-        setGuideHelpActive(false);
-        handleSelectHomeSkillItem(targetItem);
-      }
-    },
-    [
-      curatedTaskTemplateCopy,
-      effectiveDefaultCuratedTaskReferenceEntries,
-      effectiveDefaultCuratedTaskReferenceMemoryIds,
-      handleSelectHomeSkillItem,
-      homeSkillItems,
-      knowledgePackSelection,
-      onManageKnowledgePacks,
-      onStartKnowledgeOrganize,
-      setInput,
-    ],
-  );
-
-  const handleSelectHomeGuideCard = useCallback(
-    (card: HomeGuideCard) => {
-      setGuideHelpActive(true);
-      const prompt = card.prompt.trim();
-      if (prompt) {
-        setInput(prompt);
-      }
-    },
-    [setInput],
-  );
-
-  const recentSessionLinkLabel = useMemo(() => {
-    return resolveRecentSessionLinkModel({
-      recentSessionTitle,
-      recentSessionSummary,
-      recentSessionActionLabel,
-      defaultActionLabel: homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
-    }).recentSessionLinkLabel;
-  }, [
-    homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
+  const {
+    guideHelpActive,
+    guideHelpLabel,
+    handleSelectHomeGuideCard,
+    handleSelectHomeSkillItem,
+    handleSelectHomeStarterChip,
+    homeSupplementalActions,
+    setGuideHelpActive,
+  } = useEmptyStateHomeActions({
+    curatedTaskTemplateCopy,
+    effectiveDefaultCuratedTaskReferenceEntries,
+    effectiveDefaultCuratedTaskReferenceMemoryIds,
+    guideHelpContextLabel: homeSurfaceCopy.guideHelpContextLabel,
+    guideHelpContextLabelWithStarter:
+      homeSurfaceCopy.guideHelpContextLabelWithStarter,
+    handleCuratedTaskLauncherRequest,
+    handleSelectInputCapability,
+    homeServiceSkillItems,
+    homeSkillItems,
+    homeStarterChips,
+    isGeneralTheme,
+    knowledgePackSelection,
+    onManageKnowledgePacks,
+    onOpenKnowledgeHub: handleOpenKnowledgeHub,
+    onResumeRecentSession,
+    onStartKnowledgeOrganize,
     recentSessionActionLabel,
+    recentSessionDefaultActionLabel:
+      homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
     recentSessionSummary,
     recentSessionTitle,
-  ]);
-  const recentSessionLinkTitle = useMemo(
-    () =>
-      resolveRecentSessionLinkModel({
-        recentSessionTitle,
-        recentSessionSummary,
-        recentSessionActionLabel,
-        defaultActionLabel:
-          homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
-      }).recentSessionLinkTitle,
-    [
-      homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
-      recentSessionActionLabel,
-      recentSessionSummary,
-      recentSessionTitle,
-    ],
-  );
-
-  const homeSupplementalActions = useMemo<HomeSupplementalAction[]>(() => {
-    const recentSessionAction = buildRecentSessionSupplementalAction({
-      recentSessionTitle,
-      recentSessionLinkLabel,
-      recentSessionLinkTitle,
-      hasResumeHandler: Boolean(onResumeRecentSession),
-    });
-
-    return recentSessionAction && onResumeRecentSession
-      ? [
-          {
-            ...recentSessionAction,
-            onSelect: onResumeRecentSession,
-          },
-        ]
-      : [];
-  }, [
-    onResumeRecentSession,
-    recentSessionLinkLabel,
-    recentSessionLinkTitle,
-    recentSessionTitle,
-  ]);
+    serviceSkills,
+    setActiveCapability,
+    setInput,
+    skillSelectionSkills: skillSelection.skills,
+  });
 
   const composerPanel = (
     <EmptyStateComposerFrame>
@@ -1108,6 +790,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         }
         creationReplaySurface={creationReplaySurface}
         projectId={projectId}
+        openedProjects={openedProjects}
+        onProjectContextChange={onProjectContextChange}
         sessionId={sessionId}
         defaultCuratedTaskReferenceMemoryIds={
           effectiveDefaultCuratedTaskReferenceMemoryIds
@@ -1134,11 +818,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onObjectiveEnabledChange={handleObjectiveEnabledChange}
         subagentEnabled={subagentEnabled}
         onSubagentEnabledChange={onSubagentEnabledChange}
-        selectedTeam={selectedTeam}
-        onSelectTeam={onSelectTeam}
-        teamWorkspaceSettings={teamWorkspaceSettings}
-        onPersistCustomTeams={onPersistCustomTeams}
-        onEnableSuggestedTeam={onEnableSuggestedTeam}
         pendingImages={pendingImages}
         onFileSelect={handleFileSelect}
         onPaste={handlePaste}
@@ -1195,14 +874,21 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     />
   );
 
+  const priorityPanel = isGeneralTheme ? (
+    <EmptyStatePrimaryStack>
+      {composerPanel}
+      {homeStartSurfacePanel}
+    </EmptyStatePrimaryStack>
+  ) : (
+    composerPanel
+  );
+
   return (
     <EmptyStateLayout
       heroCopy={homeSurfaceCopy.hero}
       chromeCopy={homeSurfaceCopy.chrome}
-      prioritySlot={composerPanel}
-      supportingSlot={
-        isGeneralTheme ? homeStartSurfacePanel : defaultQuickActionsPanel
-      }
+      prioritySlot={priorityPanel}
+      supportingSlot={isGeneralTheme ? null : defaultQuickActionsPanel}
       isGeneralTheme={isGeneralTheme}
       galleryItems={homeGalleryItems}
       onSelectGalleryItem={handleSelectHomeSkillItem}

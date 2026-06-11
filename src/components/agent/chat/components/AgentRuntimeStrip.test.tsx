@@ -143,7 +143,7 @@ describe("AgentRuntimeStrip", () => {
       container.querySelector(
         '[data-testid="agent-runtime-strip-status-subagent_runtime_gap"]',
       )?.textContent,
-    ).toContain("任务拆分缺 5 个 current tools");
+    ).toContain("Subagents 缺 5 个 current tools");
     expect(
       container.querySelector(
         '[data-testid="agent-runtime-strip-status-web_search_gap"]',

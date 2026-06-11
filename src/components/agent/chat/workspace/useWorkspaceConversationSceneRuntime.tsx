@@ -14,7 +14,6 @@ import { useWorkspaceCanvasSceneRuntime } from "./useWorkspaceCanvasSceneRuntime
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
 import { MessageList } from "../components/MessageList";
-import { TeamWorkspaceDock } from "../components/TeamWorkspaceDock";
 import type {
   CanvasWorkbenchSessionView,
   CanvasWorkbenchUtilityView,
@@ -28,16 +27,13 @@ import type { Artifact } from "@/lib/artifact/types";
 import type { Character } from "@/lib/api/memory";
 import type { TaskFile } from "../components/TaskFiles";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
+import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { WorkspacePathMissingState } from "../hooks/agentChatShared";
 import type { SyncStatus } from "../hooks/useContentSync";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import { buildAgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
-import {
-  buildStepProgressProps,
-  buildTeamWorkspaceDockProps,
-  type TeamWorkbenchSurfaceProps,
-} from "./chatSurfaceProps";
+import { buildStepProgressProps } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 import {
   buildCanvasWorkbenchChangeView,
@@ -59,7 +55,6 @@ type InputbarScene = Pick<
   ReturnType<typeof useWorkspaceInputbarSceneRuntime>,
   | "inputbarNode"
   | "generalWorkbenchDialog"
-  | "teamWorkbenchSurfaceProps"
   | "runtimeToolAvailability"
   | "knowledgePackSelection"
   | "knowledgePackOptions"
@@ -74,7 +69,6 @@ type CanvasScene = Pick<
   | "hasLiveCanvasPreviewContent"
   | "liveCanvasPreview"
   | "shouldShowCanvasLoadingState"
-  | "teamWorkbenchView"
   | "canvasWorkbenchDefaultPreview"
   | "handleOpenCanvasWorkbenchPath"
   | "handleRevealCanvasWorkbenchPath"
@@ -94,7 +88,6 @@ interface ConversationScenePresentationParams {
     | "projectId"
     | "canvasWorkbenchLayoutProps"
     | "stepProgressProps"
-    | "teamWorkspaceDockProps"
     | "messageListProps"
   > & {
     projectId: string | null | undefined;
@@ -110,16 +103,6 @@ interface ConversationScenePresentationParams {
     >;
   };
   messageList: ComponentProps<typeof MessageList>;
-  teamWorkspaceDock: {
-    enabled: boolean;
-    shouldShowFloatingInputOverlay: boolean;
-    layoutMode: "chat" | "chat-canvas";
-    onActivateWorkbench: NonNullable<
-      ComponentProps<typeof TeamWorkspaceDock>["onActivateWorkbench"]
-    >;
-    withBottomOverlay: boolean;
-    surfaceProps: TeamWorkbenchSurfaceProps;
-  };
   workspaceAlert: {
     workspacePathMissing: boolean;
     workspaceHealthError: boolean;
@@ -166,12 +149,10 @@ function renderWorkspaceConversationScene({
   scene,
   stepProgress,
   messageList,
-  teamWorkspaceDock,
   workspaceAlert,
   canvasWorkbenchLayout,
 }: ConversationScenePresentationParams): WorkspaceConversationScenePresentationResult {
   const stepProgressProps = buildStepProgressProps(stepProgress);
-  const teamWorkspaceDockProps = buildTeamWorkspaceDockProps(teamWorkspaceDock);
   const workspaceAlertVisible = Boolean(
     workspaceAlert.workspacePathMissing || workspaceAlert.workspaceHealthError,
   );
@@ -188,7 +169,6 @@ function renderWorkspaceConversationScene({
         {...scene}
         stepProgressProps={stepProgressProps}
         messageListProps={messageList}
-        teamWorkspaceDockProps={teamWorkspaceDockProps}
         workspaceAlertVisible={workspaceAlertVisible}
         projectId={scene.projectId ?? null}
         canvasWorkbenchLayoutProps={canvasWorkbenchLayoutProps}
@@ -259,9 +239,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   setChatToolPreferences: Dispatch<SetStateAction<ChatToolPreferences>>;
   objectiveEnabled?: ConversationScenePresentationParams["scene"]["objectiveEnabled"];
   onObjectiveEnabledChange?: ConversationScenePresentationParams["scene"]["onObjectiveEnabledChange"];
-  selectedTeam: ConversationScenePresentationParams["scene"]["selectedTeam"];
-  handleSelectTeam: ConversationScenePresentationParams["scene"]["onSelectTeam"];
-  handleEnableSuggestedTeam: ConversationScenePresentationParams["scene"]["onEnableSuggestedTeam"];
+  selectedTeam?: TeamDefinition | null;
   creationMode: CreationMode;
   setCreationMode: Dispatch<SetStateAction<CreationMode>>;
   activeTheme: string;
@@ -289,6 +267,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   recentSessionActionLabel?: ConversationScenePresentationParams["scene"]["recentSessionActionLabel"];
   handleResumeRecentSession?: ConversationScenePresentationParams["scene"]["onResumeRecentSession"];
   projectId: string | null;
+  openedProjects?: ConversationScenePresentationParams["scene"]["openedProjects"];
   deferWorkspaceListLoad?: ConversationScenePresentationParams["scene"]["deferWorkspaceListLoad"];
   workspaceHintMessage?: ConversationScenePresentationParams["scene"]["workspaceHintMessage"];
   workspaceHintVisible?: ConversationScenePresentationParams["scene"]["workspaceHintVisible"];
@@ -365,9 +344,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   shouldCollapseCodeBlocks: ConversationScenePresentationParams["messageList"]["collapseCodeBlocks"];
   shouldCollapseCodeBlockInChat: ConversationScenePresentationParams["messageList"]["shouldCollapseCodeBlock"];
   handleCodeBlockClick: ConversationScenePresentationParams["messageList"]["onCodeBlockClick"];
-  teamWorkspaceEnabled: ConversationScenePresentationParams["teamWorkspaceDock"]["enabled"];
   layoutMode: LayoutMode;
-  handleActivateTeamWorkbench: ConversationScenePresentationParams["teamWorkspaceDock"]["onActivateWorkbench"];
   isThemeWorkbench: boolean;
   settledWorkbenchArtifacts: ConversationScenePresentationParams["canvasWorkbenchLayout"]["artifacts"];
   taskFiles: TaskFile[];
@@ -419,9 +396,6 @@ export function useWorkspaceConversationSceneRuntime({
   setChatToolPreferences,
   objectiveEnabled,
   onObjectiveEnabledChange,
-  selectedTeam,
-  handleSelectTeam,
-  handleEnableSuggestedTeam,
   creationMode,
   setCreationMode,
   activeTheme,
@@ -449,6 +423,7 @@ export function useWorkspaceConversationSceneRuntime({
   recentSessionActionLabel,
   handleResumeRecentSession,
   projectId,
+  openedProjects,
   deferWorkspaceListLoad,
   workspaceHintMessage,
   workspaceHintVisible,
@@ -519,9 +494,7 @@ export function useWorkspaceConversationSceneRuntime({
   shouldCollapseCodeBlocks,
   shouldCollapseCodeBlockInChat,
   handleCodeBlockClick,
-  teamWorkspaceEnabled,
   layoutMode,
-  handleActivateTeamWorkbench,
   isThemeWorkbench,
   settledWorkbenchArtifacts,
   taskFiles,
@@ -664,8 +637,6 @@ export function useWorkspaceConversationSceneRuntime({
     setInput(quotedText);
   };
 
-  const teamWorkspaceDockLayoutMode =
-    layoutMode === "chat" ? "chat" : "chat-canvas";
   const navbarUtilityActionsVisible = !suppressNavbarUtilityActions;
   const shouldSyncCanvasWorkbenchLayoutMode =
     !isThemeWorkbench &&
@@ -841,12 +812,9 @@ export function useWorkspaceConversationSceneRuntime({
         setChatToolPreferences((previous) => ({
           ...previous,
           [key]: enabled,
-        })),
+      })),
       objectiveEnabled,
       onObjectiveEnabledChange,
-      selectedTeam,
-      onSelectTeam: handleSelectTeam,
-      onEnableSuggestedTeam: handleEnableSuggestedTeam,
       creationMode,
       onCreationModeChange: setCreationMode,
       activeTheme: activeTheme as ThemeType,
@@ -885,6 +853,7 @@ export function useWorkspaceConversationSceneRuntime({
           ? undefined
           : handleResumeRecentSession,
       projectId,
+      openedProjects,
       deferWorkspaceListLoad,
       workspaceHintMessage,
       workspaceHintVisible,
@@ -958,7 +927,6 @@ export function useWorkspaceConversationSceneRuntime({
       liveCanvasPreview: canvasScene.liveCanvasPreview,
       currentImageWorkbenchActive,
       shouldShowCanvasLoadingState: canvasScene.shouldShowCanvasLoadingState,
-      teamWorkbenchView: canvasScene.teamWorkbenchView,
       shellBottomInset:
         shellChromeRuntime.workflowLayoutBottomSpacing.shellBottomInset,
       chatPanelWidth: shellChromeRuntime.layoutTransitionChatPanelWidth,
@@ -1021,18 +989,6 @@ export function useWorkspaceConversationSceneRuntime({
       onCodeBlockClick: handleCodeBlockClick,
       focusedTimelineItemId,
       timelineFocusRequestKey,
-    },
-    teamWorkspaceDock: {
-      enabled: teamWorkspaceEnabled,
-      shouldShowFloatingInputOverlay:
-        shellChromeRuntime.shouldShowGeneralWorkbenchFloatingInputOverlay,
-      layoutMode: teamWorkspaceDockLayoutMode,
-      onActivateWorkbench: handleActivateTeamWorkbench,
-      withBottomOverlay:
-        isThemeWorkbench &&
-        shellChromeRuntime.showChatLayout &&
-        !shellChromeRuntime.shouldHideGeneralWorkbenchInputForTheme,
-      surfaceProps: inputbarScene.teamWorkbenchSurfaceProps,
     },
     workspaceAlert: {
       workspacePathMissing: Boolean(workspacePathMissing),

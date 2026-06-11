@@ -3,7 +3,6 @@ import {
   APP_SIDEBAR_ENABLED_ITEMS_STORAGE_KEY,
   LIME_COLOR_SCHEME_STORAGE_KEY,
   LIME_THEME_STORAGE_KEY,
-  SettingsTabs,
   act,
   changeLimeLocale,
   cleanupAppSidebarTest,
@@ -86,7 +85,7 @@ describe("AppSidebar preferences", () => {
     ).not.toBeNull();
   });
 
-  it("显式开启后应显示可选系统扩展入口", async () => {
+  it("旧 companion 配置不应复活可选系统入口", async () => {
     mockGetConfig.mockResolvedValue({
       navigation: {
         schema_version: 3,
@@ -118,10 +117,10 @@ describe("AppSidebar preferences", () => {
     expect(accountMenu?.textContent).toContain("设置");
     expect(accountMenu?.textContent).toContain("持续流程");
     expect(accountMenu?.textContent).toContain("消息渠道");
-    expect(accountMenu?.textContent).toContain("桌宠");
+    expect(accountMenu?.textContent).not.toContain("桌宠");
   });
 
-  it("配置变更后应重新读取可选入口并刷新侧栏", async () => {
+  it("配置变更后仍不应恢复旧 companion 入口", async () => {
     mockGetConfig
       .mockResolvedValueOnce({
         navigation: {
@@ -175,7 +174,7 @@ describe("AppSidebar preferences", () => {
     accountMenu = container.querySelector(
       '[data-testid="app-sidebar-account-menu"]',
     );
-    expect(accountMenu?.textContent).toContain("桌宠");
+    expect(accountMenu?.textContent).not.toContain("桌宠");
   });
 
   it("旧 schema 中的桌宠入口不应默认显示", async () => {
@@ -417,37 +416,4 @@ describe("AppSidebar preferences", () => {
     }
   });
 
-  it("桌宠入口开启后，进入 companion 视图应高亮桌宠", async () => {
-    mockGetConfig.mockResolvedValue({
-      navigation: {
-        schema_version: 3,
-        enabled_items: ["companion"],
-      },
-    });
-
-    const container = mountSidebarContainer({
-      currentPage: "settings",
-      currentPageParams: {
-        tab: SettingsTabs.Providers,
-        providerView: "companion",
-      },
-    });
-    await flushEffects(2);
-
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="app-sidebar-account-button"]',
-        )
-        ?.click();
-      await Promise.resolve();
-    });
-
-    expect(
-      container.querySelector('button[aria-label="桌宠"][aria-current="page"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector('button[aria-label="设置"][aria-current="page"]'),
-    ).toBeNull();
-  });
 });

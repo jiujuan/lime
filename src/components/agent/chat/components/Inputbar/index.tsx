@@ -9,6 +9,7 @@ import type {
 } from "@/lib/api/agentRuntime";
 import type { TaskFile } from "../TaskFiles";
 import { InputbarComposerSection } from "./components/InputbarComposerSection";
+import type { InputbarOpenedProject } from "./components/InputbarProjectContextBar";
 import { HintRoutePopup } from "./components/HintRoutePopup";
 import { TaskFilesPanel } from "./components/TaskFilesPanel";
 import { InputbarSurface } from "./components/InputbarSurface";
@@ -19,8 +20,6 @@ import type {
 } from "../../utils/workflowInputState";
 import { type InputbarToolStates } from "./hooks/useInputbarToolState";
 import { useInputbarController } from "./hooks/useInputbarController";
-import type { TeamDefinition } from "../../utils/teamDefinitions";
-import type { WorkspaceSettings } from "@/types/workspace";
 import type { AgentAccessMode } from "../../hooks/agentChatStorage";
 import type { AgentInitialInputCapabilityParams } from "@/types/page";
 import type { CuratedTaskReferenceEntry } from "../../utils/curatedTaskReferenceSelection";
@@ -107,13 +106,12 @@ interface InputbarProps extends SkillSelectionSourceProps {
   queuedTurns?: QueuedTurnSnapshot[];
   onPromoteQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
   onRemoveQueuedTurn?: (queuedTurnId: string) => void | Promise<boolean>;
-  selectedTeam?: TeamDefinition | null;
-  onSelectTeam?: (team: TeamDefinition | null) => void;
-  onEnableSuggestedTeam?: (suggestedPresetId?: string) => void;
-  teamWorkspaceSettings?: WorkspaceSettings | null;
-  onPersistCustomTeams?: (teams: TeamDefinition[]) => void | Promise<void>;
   contextVariant?: "default" | "task-center";
   projectId?: string | null;
+  openedProjects?: InputbarOpenedProject[];
+  onProjectContextChange?: (projectId: string | null) => void;
+  projectContextModeLabel?: string;
+  projectContextBranchLabel?: string;
   sessionId?: string | null;
   pathReferences?: MessagePathReference[];
   onAddPathReferences?: (references: MessagePathReference[]) => void;
@@ -178,11 +176,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
   queuedTurns = [],
   onPromoteQueuedTurn,
   onRemoveQueuedTurn,
-  selectedTeam,
-  onSelectTeam,
-  onEnableSuggestedTeam,
-  teamWorkspaceSettings,
-  onPersistCustomTeams,
   contextVariant = "default",
   projectId = null,
   sessionId = null,
@@ -274,7 +267,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
     setReasoningEffort,
     toolStates,
     onToolStatesChange,
-    activeTheme,
     initialInputCapability,
     variant,
     workflowGate,
@@ -283,7 +275,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
     knowledgePackSelection,
     onStartKnowledgeOrganize,
     onManageKnowledgePacks,
-    onEnableSuggestedTeam,
     projectId,
     sessionId,
     pathReferences,
@@ -358,7 +349,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
           defaultCuratedTaskReferenceMemoryIds
         }
         defaultCuratedTaskReferenceEntries={defaultCuratedTaskReferenceEntries}
-        selectedTeam={selectedTeam}
         knowledgePackSelection={knowledgePackSelection}
         knowledgePackOptions={knowledgePackOptions}
         knowledgeHubOpenRequestKey={knowledgeHubOpenRequestKey}
@@ -367,9 +357,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
         onToggleKnowledgeCompanionPack={onToggleKnowledgeCompanionPack}
         onStartKnowledgeOrganize={onStartKnowledgeOrganize}
         onManageKnowledgePacks={onManageKnowledgePacks}
-        onSelectTeam={onSelectTeam}
-        teamWorkspaceSettings={teamWorkspaceSettings}
-        onPersistCustomTeams={onPersistCustomTeams}
         onSend={handleSend}
         onToolClick={handleToolClick}
         activeTools={activeTools}

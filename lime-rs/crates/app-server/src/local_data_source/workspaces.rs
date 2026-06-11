@@ -1,6 +1,8 @@
 use super::data_error;
 use crate::RuntimeCoreError;
 use app_server_protocol::WorkspaceEnsureParams;
+use app_server_protocol::WorkspaceEnsureProjectParams;
+use app_server_protocol::WorkspaceEnsureProjectResponse;
 use app_server_protocol::WorkspaceEnsureReadyResponse;
 use app_server_protocol::WorkspaceListResponse;
 use app_server_protocol::WorkspacePathReadParams;
@@ -73,6 +75,61 @@ pub(crate) fn read_workspace_by_path(
     let workspace =
         read_workspace_by_root_path(&conn, Path::new(&params.root_path)).map_err(data_error)?;
     Ok(WorkspaceReadResponse { workspace })
+}
+
+pub(crate) fn ensure_project_workspace(
+    db: &DbConnection,
+    params: WorkspaceEnsureProjectParams,
+) -> Result<WorkspaceEnsureProjectResponse, RuntimeCoreError> {
+    let conn = database::lock_db(db).map_err(data_error)?;
+    let root = PathBuf::from(params.root_path.trim());
+    if params.root_path.trim().is_empty() {
+        return Err(data_error("workspace root_path is required"));
+    }
+
+    let root_path = root
+        .to_str()
+        .ok_or_else(|| data_error("invalid workspace root_path"))?
+        .to_string();
+    if let Some(existing) =
+        read_workspace_by_root_path(&conn, Path::new(&root_path)).map_err(data_error)?
+    {
+        let existed = root.is_dir();
+        fs::create_dir_all(&root).map_err(data_error)?;
+        return Ok(WorkspaceEnsureProjectResponse {
+            workspace: existing,
+            created: false,
+            root_created: !existed,
+        });
+    }
+
+    let workspace_type = normalize_workspace_type(params.workspace_type.as_deref())?;
+    let name = normalize_workspace_name(&params.name, &root_path);
+    let existed = root.is_dir();
+    fs::create_dir_all(&root).map_err(data_error)?;
+
+    let now = Utc::now().timestamp_millis();
+    let id = Uuid::new_v4().to_string();
+    let icon = default_workspace_icon(workspace_type);
+    conn.execute(
+        "INSERT INTO workspaces (
+            id, name, workspace_type, root_path, is_default, settings_json,
+            icon, color, is_favorite, is_archived, tags_json, default_persona_id,
+            created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, 0, '{}', ?, NULL, 0, 0, '[]', NULL, ?, ?)",
+        params![id, name, workspace_type, root_path, icon, now, now],
+    )
+    .map_err(|error| data_error(format!("ensure workspace failed: {error}")))?;
+
+    let workspace = read_workspace_by_id(&conn, &id)
+        .map_err(data_error)?
+        .ok_or_else(|| data_error("failed to reload ensured workspace"))?;
+    Ok(WorkspaceEnsureProjectResponse {
+        workspace,
+        created: true,
+        root_created: !existed,
+    })
 }
 
 pub(crate) fn read_default_workspace(
@@ -312,6 +369,41 @@ fn set_default_workspace(conn: &rusqlite::Connection, id: &str) -> Result<(), St
 
 fn workspace_id(value: &Value) -> Option<&str> {
     value.get("id").and_then(Value::as_str)
+}
+
+fn normalize_workspace_type(value: Option<&str>) -> Result<&'static str, RuntimeCoreError> {
+    match value.map(str::trim).filter(|value| !value.is_empty()) {
+        None => Ok("general"),
+        Some("persistent") => Ok("persistent"),
+        Some("temporary") => Ok("temporary"),
+        Some("general") => Ok("general"),
+        Some(value) => Err(data_error(format!(
+            "unsupported workspace_type '{value}', only persistent / temporary / general are supported"
+        ))),
+    }
+}
+
+fn normalize_workspace_name(name: &str, root_path: &str) -> String {
+    let trimmed = name.trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+
+    Path::new(root_path)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("未命名项目")
+        .to_string()
+}
+
+fn default_workspace_icon(workspace_type: &str) -> Option<&'static str> {
+    match workspace_type {
+        "general" => Some("💬"),
+        "persistent" | "temporary" => Some("📁"),
+        _ => None,
+    }
 }
 
 fn sanitize_project_dir_name(name: &str) -> String {

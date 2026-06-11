@@ -15,9 +15,7 @@ import type {
 import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import type { RuntimeToolCapabilityGap } from "./HarnessToolInventoryTypes";
 
-export type ToolInventoryFilterValue =
-  | "all"
-  | AgentToolExecutionPolicySource;
+export type ToolInventoryFilterValue = "all" | AgentToolExecutionPolicySource;
 
 export type ToolInventorySourceStats = Record<
   AgentToolExecutionPolicySource,
@@ -173,7 +171,9 @@ export function formatRuntimeToolSourceKindLabel(
   }
 }
 
-export function formatRuntimeToolAvailabilitySourceLabel(value: string): string {
+export function formatRuntimeToolAvailabilitySourceLabel(
+  value: string,
+): string {
   switch (value) {
     case "runtime_tools":
       return "runtime_tools";
@@ -245,7 +245,7 @@ export function buildRuntimeToolCapabilityGaps(
   if (!runtimeToolAvailability.subagentTeamTools) {
     gaps.push({
       key: "subagent_team",
-      title: "Team current tools",
+      title: "Subagents coordination tools",
       missing: runtimeToolAvailability.missingSubagentTeamTools,
     });
   }

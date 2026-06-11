@@ -768,7 +768,7 @@ export function buildAgentUiRemoteTaskProjectionEvents(
   const agentName =
     normalizeText(input.agentCard?.name) ??
     normalizeText(input.title) ??
-    "Remote teammate";
+    "Remote subagent";
   const artifacts = normalizeArtifactRefs(input.artifacts);
   const primaryArtifact =
     artifacts.find(

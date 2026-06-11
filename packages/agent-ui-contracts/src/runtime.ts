@@ -82,10 +82,15 @@ export interface AgentRuntimeExecutionEvent {
   threadId?: string;
   turnId?: string;
   taskId?: string;
+  subagentId?: string;
   runId?: string;
   stepId?: string;
   toolCallId?: string;
   actionId?: string;
+  workerId?: string;
+  channelId?: string;
+  handoffId?: string;
+  reviewId?: string;
   traceId?: string;
   spanId?: string;
   attemptId?: string;

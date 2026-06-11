@@ -14,33 +14,13 @@ import {
   type ReactElement,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import styled from "styled-components";
 import {
-  ChevronDown,
-  ChevronRight,
-  Check,
-  Cloud,
-  Boxes,
-  Copy,
-  ExternalLink,
   Gift,
-  Info,
-  KeyRound,
-  Languages,
-  LogIn,
-  LogOut,
-  MessageSquare,
-  MessageSquarePlus,
-  Monitor,
   Moon,
-  Palette,
-  RefreshCw,
-  Shuffle,
   Sun,
   Search,
   PanelLeftClose,
   PanelLeftOpen,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -61,17 +41,9 @@ import {
 } from "@/components/agent/chat/taskCenterDraftTaskEvents";
 import {
   deleteAgentRuntimeSession,
-  listAgentRuntimeSessions,
   updateAgentRuntimeSession,
   type AsterSessionInfo,
 } from "@/lib/api/agentRuntime";
-import {
-  AGENT_APPS_CHANGED_EVENT,
-  listInstalledAgentApps,
-} from "@/lib/api/agentApps";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
-import { resolveInstalledAgentAppDisplayName } from "@/features/agent-app/ui/agentAppDisplay";
-import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
 import {
   DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
   FOOTER_SIDEBAR_NAV_ITEMS,
@@ -85,17 +57,60 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Modal } from "@/components/Modal";
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
-import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
-import { logAgentDebug } from "@/lib/agentDebug";
+import { AppSidebarAccountMenu } from "@/components/app-sidebar/AppSidebarAccountMenu";
+import { AppSidebarAppearancePopover } from "@/components/app-sidebar/AppSidebarAppearancePopover";
 import { AppSidebarConversationShelf } from "@/components/app-sidebar/AppSidebarConversationShelf";
+import { AppSidebarInviteDialog } from "@/components/app-sidebar/AppSidebarInviteDialog";
+import { AppSidebarSearchDialog } from "@/components/app-sidebar/AppSidebarSearchDialog";
 import { AppUpdateEntry } from "@/components/app-sidebar/AppUpdateEntry";
+import { useOpenedProjectSummaries } from "@/components/agent/chat/hooks/useOpenedProjectSummaries";
+import { useAppSidebarAppearance } from "@/components/app-sidebar/useAppSidebarAppearance";
+import { useAppSidebarSessions } from "@/components/app-sidebar/useAppSidebarSessions";
+import {
+  AGENT_APP_RUNTIME_SIDEBAR_COLLAPSE_SOURCE,
+  APP_SIDEBAR_COLLAPSED_STORAGE_KEY,
+  APP_SIDEBAR_COLLAPSE_EVENT,
+  SIDEBAR_NAV_LABEL_KEYS,
+} from "@/components/app-sidebar/AppSidebar.constants";
+import {
+  Container,
+  HeaderArea,
+  HeaderTopRow,
+  UserButton,
+  Avatar,
+  UserName,
+  SearchButton,
+  MenuScroll,
+  MainNavList,
+  NavButton,
+  NavLabel,
+  FooterArea,
+  ActionRow,
+  AppearanceActionSlot,
+  IconActionButton,
+  HeaderInviteButton,
+  AccountActionSlot,
+} from "@/components/app-sidebar/AppSidebar.styles";
 import {
   formatSidebarSessionMeta,
   resolveSidebarSessionTitle,
 } from "@/components/app-sidebar/sidebarSessionFormatting";
+import {
+  isSameSidebarNavigationTarget,
+  resolveSidebarNavigationTarget,
+  serializeNavigationParams,
+  type SidebarNavigationTarget,
+} from "@/components/app-sidebar/sidebarNavigationTarget";
+import {
+  resolveAccountDisplayName,
+  resolveAccountEmail,
+  resolveAccountInitial,
+  resolveAccountPlanSummary,
+  resolveAccountTenantLabel,
+  resolveCloudBrandLabel,
+} from "@/components/app-sidebar/sidebarAccount";
 import { shouldReserveMacWindowControls } from "@/lib/windowControls";
 import {
   clearStoredOemCloudSessionState,
@@ -132,33 +147,9 @@ import {
   loadPersistedProjectId,
   PERSISTED_PROJECT_ID_CHANGED_EVENT,
 } from "@/components/agent/chat/hooks/agentProjectStorage";
-import {
-  LIME_COLOR_SCHEME_CHANGED_EVENT,
-  LIME_COLOR_SCHEMES,
-  LIME_COLOR_SCHEME_STORAGE_KEY,
-  applyLimeColorScheme,
-  getLimeColorScheme,
-  loadLimeColorSchemeId,
-  persistLimeColorScheme,
-  type LimeColorSchemeChangedEventDetail,
-  type LimeColorSchemeId,
-} from "@/lib/appearance/colorSchemes";
-import {
-  LIME_THEME_CHANGED_EVENT,
-  LIME_THEME_MODE_OPTIONS,
-  LIME_THEME_STORAGE_KEY,
-  applyLimeThemeMode,
-  getEffectiveLimeThemeMode,
-  loadLimeThemeMode,
-  persistLimeThemeMode,
-  type LimeEffectiveThemeMode,
-  type LimeThemeChangedEventDetail,
-  type LimeThemeMode,
-} from "@/lib/appearance/themeMode";
 import { useI18nPatch } from "@/i18n/legacy-patch/I18nPatchProvider";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
-  UI_LOCALE_OPTIONS,
   normalizeLocalePreference,
   resolveLocaleOptionLabel,
   toLegacyPatchLanguage,
@@ -175,2131 +166,6 @@ interface AppSidebarProps {
 }
 
 type SidebarNavItem = SidebarNavItemDefinition;
-
-const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
-const APP_SIDEBAR_COLLAPSE_EVENT = "lime:app-sidebar-collapse";
-const AGENT_APP_RUNTIME_SIDEBAR_COLLAPSE_SOURCE = "agent-app-runtime";
-const SIDEBAR_RECENT_SESSION_PAGE_SIZE = 10;
-const SIDEBAR_ARCHIVED_SESSION_PAGE_SIZE = 8;
-const SIDEBAR_SEARCH_RESULT_LIMIT = 8;
-const SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS = 30_000;
-const SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS = 160;
-const SIDEBAR_NEW_TASK_HOME_SESSION_LOAD_DEFER_MS = 0;
-const SIDEBAR_CONVERSATION_NAVIGATION_DEFER_MS =
-  SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS;
-const SIDEBAR_NAV_LABEL_KEYS: Record<string, string> = {
-  "agent-apps": "navigation.sidebar.items.agentApps",
-  "agent-app-lab": "navigation.sidebar.items.agentAppLab",
-  automation: "navigation.sidebar.items.automation",
-  channels: "navigation.sidebar.items.channels",
-  companion: "navigation.sidebar.items.companion",
-  experts: "navigation.sidebar.items.experts",
-  "home-general": "navigation.sidebar.items.homeGeneral",
-  knowledge: "navigation.sidebar.items.knowledge",
-  memory: "navigation.sidebar.items.memory",
-  settings: "navigation.sidebar.items.settings",
-  skills: "navigation.sidebar.items.skills",
-};
-
-const APP_SIDEBAR_LANGUAGE_OPTIONS = UI_LOCALE_OPTIONS.map((option) => ({
-  id: option.id,
-  label: option.label,
-  hint: option.fallbackHint,
-}));
-
-function buildSidebarSessionRequestLimit(
-  visibleCount: number,
-  pageSize: number,
-): number {
-  const normalizedVisibleCount = Math.max(visibleCount, pageSize);
-  return normalizedVisibleCount + 1;
-}
-
-function splitSidebarSessionResult(params: {
-  sessions: AsterSessionInfo[];
-  visibleCount: number;
-  pageSize: number;
-}): {
-  sessions: AsterSessionInfo[];
-  hasMore: boolean;
-} {
-  const { sessions, visibleCount, pageSize } = params;
-  const targetCount = Math.max(visibleCount, pageSize);
-  return {
-    sessions: sessions.slice(0, targetCount),
-    hasMore: sessions.length > targetCount,
-  };
-}
-
-function hasCachedSidebarSessionEntry(
-  sessions: AsterSessionInfo[],
-  sessionId?: string | null,
-): boolean {
-  const normalizedSessionId = sessionId?.trim();
-  if (!normalizedSessionId) {
-    return false;
-  }
-
-  return sessions.some((session) => session.id === normalizedSessionId);
-}
-
-interface SidebarNavigationTarget {
-  page: Page;
-  rawParams?: PageParams;
-  paramsKey: string;
-}
-
-function normalizeNavigationParams(params?: PageParams): PageParams {
-  return params ? { ...params } : {};
-}
-
-function serializeNavigationParams(params?: PageParams): string {
-  return JSON.stringify(normalizeNavigationParams(params));
-}
-
-function resolveSidebarNavigationTarget(
-  item: SidebarNavItem,
-): SidebarNavigationTarget | null {
-  if (!item.page) {
-    return null;
-  }
-
-  const rawParams = item.resolveParams
-    ? item.resolveParams(item.params)
-    : item.params;
-
-  return {
-    page: item.page,
-    rawParams,
-    paramsKey: serializeNavigationParams(rawParams),
-  };
-}
-
-function isSameSidebarNavigationTarget(
-  target: SidebarNavigationTarget | null,
-  page: Page,
-  params?: PageParams,
-): boolean {
-  if (!target) {
-    return false;
-  }
-
-  return (
-    target.page === page &&
-    target.paramsKey === serializeNavigationParams(params)
-  );
-}
-
-function resolveAgentAppSidebarEntryKey(
-  state: InstalledAgentAppState,
-): string | undefined {
-  return (
-    state.projection.entries.find((entry) =>
-      ["page", "panel", "settings"].includes(entry.kind),
-    )?.key ?? state.projection.entries[0]?.key
-  );
-}
-
-const Container = styled.aside<{
-  $collapsed?: boolean;
-  $themeMode: "light" | "dark";
-  $reserveWindowControls?: boolean;
-}>`
-  --sidebar-window-control-safe-top: ${({ $reserveWindowControls }) =>
-    $reserveWindowControls ? "34px" : "0px"};
-  --sidebar-surface-top: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "#15202b"
-      : "var(--lime-sidebar-surface-top, #f6fbf4)"};
-  --sidebar-surface-middle: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "#17232d"
-      : "var(--lime-sidebar-surface-middle, #f9fcf6)"};
-  --sidebar-surface-bottom: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "#1a2530"
-      : "var(--lime-sidebar-surface-bottom, #fbfff5)"};
-  --sidebar-surface: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "linear-gradient(180deg, #15202b 0%, #17232d 48%, #1a2530 100%)"
-      : "var(--lime-sidebar-surface, linear-gradient(180deg, var(--sidebar-surface-top) 0%, var(--sidebar-surface-middle) 46%, var(--sidebar-surface-bottom) 100%))"};
-  --sidebar-foreground: ${({ $themeMode }) =>
-    $themeMode === "dark" ? "#eef4f7" : "var(--lime-text, #1a3b2b)"};
-  --sidebar-muted: ${({ $themeMode }) =>
-    $themeMode === "dark" ? "#a1afbd" : "var(--lime-text-muted, #6b826b)"};
-  --sidebar-border: ${({ $themeMode }) =>
-    $themeMode === "dark" ? "#2d3a46" : "var(--lime-sidebar-border, #e2f0e2)"};
-  --sidebar-card-border: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "rgba(55, 68, 81, 0.76)"
-      : "var(--lime-sidebar-card-border, var(--lime-sidebar-border, #e2f0e2))"};
-  --sidebar-divider: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "rgba(148, 163, 184, 0.14)"
-      : "var(--lime-sidebar-divider, rgba(132, 204, 22, 0.15))"};
-  --sidebar-hover: ${({ $themeMode }) =>
-    $themeMode === "dark" ? "#22303c" : "var(--lime-sidebar-hover, #eef7ee)"};
-  --sidebar-active: ${({ $themeMode }) =>
-    $themeMode === "dark" ? "#2a3e3b" : "var(--lime-sidebar-active, #e6f8ea)"};
-  --sidebar-active-foreground: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "#dff4ea"
-      : "var(--lime-sidebar-active-text, #166534)"};
-  --sidebar-search-bg: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "#1f2b36"
-      : "var(--lime-sidebar-search-bg, #fcfff9)"};
-  --sidebar-search-hover: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "#24313d"
-      : "var(--lime-sidebar-search-hover, #f4fdf4)"};
-  --sidebar-search-border-hover: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "#3a4a57"
-      : "var(--lime-sidebar-search-border-hover, #bbf7d0)"};
-  --sidebar-card-surface: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "linear-gradient(180deg, rgba(24, 34, 44, 0.96) 0%, rgba(19, 29, 38, 0.98) 100%)"
-      : "var(--lime-sidebar-card-surface, linear-gradient(180deg, rgba(255, 255, 255, 0.76) 0%, rgba(249, 252, 246, 0.94) 100%))"};
-  --sidebar-card-shadow: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "0 18px 34px -28px rgba(2, 8, 23, 0.7)"
-      : "var(--lime-sidebar-card-shadow, 0 14px 28px -26px rgba(15, 23, 42, 0.32))"};
-  --sidebar-card-highlight: ${({ $themeMode }) =>
-    $themeMode === "dark"
-      ? "rgba(255, 255, 255, 0.08)"
-      : "var(--lime-sidebar-card-highlight, rgba(255, 255, 255, 0.72))"};
-  display: flex;
-  flex-direction: column;
-  width: ${({ $collapsed }) => ($collapsed ? "72px" : "272px")};
-  min-width: ${({ $collapsed }) => ($collapsed ? "72px" : "272px")};
-  height: 100vh;
-  padding: ${({ $collapsed }) =>
-    $collapsed
-      ? "calc(12px + var(--sidebar-window-control-safe-top)) 6px 12px"
-      : "calc(14px + var(--sidebar-window-control-safe-top)) 14px 12px"};
-  position: relative;
-  isolation: isolate;
-  z-index: 30;
-  background: var(--sidebar-surface);
-  border-right: 1px solid var(--sidebar-border);
-  box-shadow: 10px 0 26px -28px rgba(15, 23, 42, 0.38);
-  transition:
-    width 180ms ease,
-    min-width 180ms ease,
-    padding 180ms ease;
-
-  &::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(
-        circle at top left,
-        var(--lime-sidebar-glow-primary, rgba(132, 204, 22, 0.14)) 0%,
-        transparent 54%
-      ),
-      radial-gradient(
-        circle at 18% 18%,
-        var(--lime-sidebar-glow-secondary, rgba(16, 185, 129, 0.12)) 0%,
-        transparent 42%
-      ),
-      radial-gradient(
-        circle at bottom left,
-        var(--lime-sidebar-glow-tertiary, rgba(186, 230, 253, 0.12)) 0%,
-        transparent 46%
-      );
-    opacity: 0.82;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  > * {
-    position: relative;
-    z-index: 1;
-  }
-`;
-
-const HeaderArea = styled.div<{ $collapsed?: boolean }>`
-  display: flex;
-  flex-direction: column;
-  gap: ${({ $collapsed }) => ($collapsed ? "8px" : "14px")};
-  margin-bottom: 16px;
-`;
-
-const HeaderTopRow = styled.div<{ $collapsed?: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  ${({ $collapsed }) =>
-    $collapsed
-      ? `
-        flex-direction: column;
-      `
-      : ""}
-`;
-
-const UserButton = styled.button<{ $collapsed?: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: ${({ $collapsed }) => ($collapsed ? "38px" : "100%")};
-  min-width: 0;
-  flex: ${({ $collapsed }) => ($collapsed ? "0 0 auto" : "1 1 auto")};
-  border: none;
-  background: transparent;
-  border-radius: 14px;
-  padding: ${({ $collapsed }) => ($collapsed ? "8px" : "10px 12px")};
-  cursor: pointer;
-  color: var(--sidebar-foreground);
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    background: var(--sidebar-hover);
-  }
-`;
-
-const Avatar = styled.div`
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  overflow: visible;
-  flex-shrink: 0;
-
-  img {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: contain;
-  }
-`;
-
-const UserName = styled.div<{ $collapsed?: boolean }>`
-  flex: 1;
-  font-size: 15px;
-  font-weight: 700;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: ${({ $collapsed }) => ($collapsed ? "none" : "block")};
-`;
-
-const SearchButton = styled.button<{ $collapsed?: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 44px;
-  border-radius: 16px;
-  border: 1px solid var(--sidebar-card-border);
-  background: var(--sidebar-search-bg);
-  color: var(--sidebar-muted);
-  padding: ${({ $collapsed }) => ($collapsed ? "0" : "0 14px")};
-  cursor: pointer;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
-
-  &:hover {
-    border-color: var(--sidebar-search-border-hover);
-    background: var(--sidebar-search-hover);
-    color: var(--sidebar-foreground);
-  }
-
-  span {
-    font-size: 14px;
-    font-weight: 600;
-    display: ${({ $collapsed }) => ($collapsed ? "none" : "inline")};
-  }
-`;
-
-const SidebarSearchSurface = styled.div`
-  display: flex;
-  min-height: min(620px, calc(100vh - 96px));
-  max-height: calc(100vh - 96px);
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: 28px;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.9));
-  background: var(--lime-surface, #ffffff);
-  color: var(--lime-text, #1a3b2b);
-  box-shadow:
-    0 32px 80px rgba(15, 23, 42, 0.18),
-    0 1px 0 rgba(255, 255, 255, 0.78) inset;
-`;
-
-const SidebarSearchHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 22px 26px 18px;
-  color: var(--lime-text-muted, #6b826b);
-
-  svg {
-    width: 22px;
-    height: 22px;
-    flex-shrink: 0;
-  }
-`;
-
-const SidebarSearchInput = styled.input`
-  min-width: 0;
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--lime-text-strong, #0f172a);
-  font-size: 19px;
-  font-weight: 650;
-  outline: none;
-
-  &::placeholder {
-    color: var(--lime-text-soft, #9aa89a);
-    font-weight: 600;
-  }
-`;
-
-const SidebarSearchShortcut = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-`;
-
-const SidebarSearchKey = styled.kbd`
-  min-width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.86));
-  background: var(--lime-muted-surface, #f5f8f3);
-  color: var(--lime-text-muted, #6b826b);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 7px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
-`;
-
-const SidebarSearchCloseButton = styled.button`
-  width: 34px;
-  height: 34px;
-  border: none;
-  border-radius: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--lime-text-muted, #6b826b);
-  cursor: pointer;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease;
-
-  &:hover {
-    background: var(--lime-surface-hover, #f4fdf4);
-    color: var(--lime-text-strong, #0f172a);
-  }
-
-  svg {
-    width: 22px;
-    height: 22px;
-  }
-`;
-
-const SidebarSearchDivider = styled.div`
-  height: 1px;
-  margin: 0 26px;
-  background: var(--lime-divider-subtle, rgba(226, 240, 226, 0.86));
-`;
-
-const SidebarSearchBody = styled.div`
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
-  padding: 20px 26px 28px;
-
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: var(--lime-divider-strong, rgba(180, 196, 180, 0.7));
-  }
-`;
-
-const SidebarSearchCreateButton = styled.button`
-  min-height: 58px;
-  width: 100%;
-  border: 1px solid transparent;
-  border-radius: 18px;
-  background: var(--lime-surface-hover, #f4f7f2);
-  color: var(--lime-text-strong, #0f172a);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 18px;
-  cursor: pointer;
-  text-align: left;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    transform 0.16s ease;
-
-  &:hover {
-    border-color: var(--lime-card-subtle-border, #bbf7d0);
-    background: var(--lime-surface, #ffffff);
-    transform: translateY(-1px);
-  }
-
-  svg {
-    width: 22px;
-    height: 22px;
-    flex-shrink: 0;
-    color: var(--lime-text-muted, #6b826b);
-  }
-`;
-
-const SidebarSearchCreateText = styled.span`
-  flex: 1;
-  min-width: 0;
-  font-size: 16px;
-  font-weight: 760;
-`;
-
-const SidebarSearchEnterHint = styled.span`
-  flex-shrink: 0;
-  color: var(--lime-text-soft, #9aa89a);
-  font-size: 20px;
-  font-weight: 800;
-`;
-
-const SidebarSearchSectionLabel = styled.div`
-  padding: 0 16px;
-  color: var(--lime-text-soft, #9aa89a);
-  font-size: 13px;
-  font-weight: 760;
-`;
-
-const SidebarSearchResultList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
-
-const SidebarSearchResultButton = styled.button<{ $active?: boolean }>`
-  width: 100%;
-  min-height: 54px;
-  border: 1px solid
-    ${({ $active }) =>
-      $active ? "var(--lime-card-subtle-border, #bbf7d0)" : "transparent"};
-  border-radius: 16px;
-  background: ${({ $active }) =>
-    $active ? "var(--lime-surface-hover, #f4fdf4)" : "transparent"};
-  color: var(--lime-text, #1a3b2b);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 16px;
-  cursor: pointer;
-  text-align: left;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    color 0.16s ease;
-
-  &:hover {
-    border-color: var(--lime-card-subtle-border, rgba(187, 247, 208, 0.92));
-    background: var(--lime-surface-hover, #f4fdf4);
-    color: var(--lime-text-strong, #0f172a);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.58;
-  }
-
-  &:disabled:hover {
-    border-color: transparent;
-    background: transparent;
-    color: var(--lime-text, #1a3b2b);
-  }
-
-  svg {
-    width: 20px;
-    height: 20px;
-    flex-shrink: 0;
-    color: var(--lime-text-muted, #6b826b);
-  }
-`;
-
-const SidebarSearchResultTitle = styled.span`
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-  font-weight: 700;
-`;
-
-const SidebarSearchResultMeta = styled.span`
-  flex-shrink: 0;
-  color: var(--lime-text-soft, #9aa89a);
-  font-size: 14px;
-  font-weight: 650;
-`;
-
-const SidebarSearchEmptyState = styled.div`
-  display: flex;
-  min-height: 180px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 18px;
-  border: 1px dashed var(--lime-card-subtle-border, rgba(226, 240, 226, 0.9));
-  color: var(--lime-text-muted, #6b826b);
-  background: var(--lime-muted-surface, #f8faf7);
-  font-size: 14px;
-  font-weight: 680;
-`;
-
-const SidebarSearchMoreButton = styled.button`
-  min-height: 42px;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.86));
-  border-radius: 14px;
-  background: var(--lime-surface, #ffffff);
-  color: var(--lime-text-muted, #6b826b);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 760;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    color 0.16s ease;
-
-  &:hover:not(:disabled) {
-    border-color: var(--lime-card-subtle-border, #bbf7d0);
-    background: var(--lime-surface-hover, #f4fdf4);
-    color: var(--lime-text-strong, #0f172a);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.62;
-  }
-
-  svg {
-    width: 15px;
-    height: 15px;
-  }
-`;
-
-const MenuScroll = styled.div`
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 2px;
-
-  &::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: var(--sidebar-border);
-    border-radius: 9999px;
-  }
-`;
-
-const MainNavList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
-`;
-
-const NavButton = styled.button<{ $active?: boolean; $collapsed?: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: ${({ $collapsed }) => ($collapsed ? "0" : "10px")};
-  width: 100%;
-  height: ${({ $collapsed }) => ($collapsed ? "40px" : "46px")};
-  border: none;
-  border-radius: 14px;
-  padding: ${({ $collapsed }) => ($collapsed ? "0" : "0 12px")};
-  position: relative;
-  background: ${({ $active }) =>
-    $active ? "var(--sidebar-active)" : "transparent"};
-  color: ${({ $active }) =>
-    $active ? "var(--sidebar-active-foreground)" : "var(--sidebar-muted)"};
-  cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "flex-start"};
-  box-shadow: ${({ $active }) =>
-    $active ? "inset 0 1px 0 rgba(255, 255, 255, 0.48)" : "none"};
-
-  &::before {
-    content: "";
-    position: absolute;
-    left: ${({ $collapsed }) => ($collapsed ? "8px" : "7px")};
-    top: 50%;
-    width: 3px;
-    height: ${({ $active }) => ($active ? "18px" : "0")};
-    border-radius: 999px;
-    background: var(--sidebar-active-foreground);
-    opacity: ${({ $active }) => ($active ? 0.72 : 0)};
-    transform: translateY(-50%);
-    transition:
-      height 0.18s ease,
-      opacity 0.18s ease;
-  }
-
-  &:hover {
-    background: ${({ $active }) =>
-      $active ? "var(--sidebar-active)" : "var(--sidebar-hover)"};
-    color: ${({ $active }) =>
-      $active
-        ? "var(--sidebar-active-foreground)"
-        : "var(--sidebar-foreground)"};
-  }
-
-  svg {
-    width: 17px;
-    height: 17px;
-    flex-shrink: 0;
-    opacity: ${({ $active }) => ($active ? 1 : 0.92)};
-  }
-`;
-
-const NavLabel = styled.span<{ $collapsed?: boolean }>`
-  flex: 1;
-  text-align: left;
-  font-size: 14px;
-  line-height: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: ${({ $collapsed }) => ($collapsed ? "none" : "inline")};
-`;
-
-const FooterArea = styled.div<{ $collapsed?: boolean }>`
-  padding-top: 10px;
-  padding-bottom: 16px;
-  border-top: 1px solid var(--sidebar-divider);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-`;
-
-const ActionRow = styled.div<{ $collapsed?: boolean }>`
-  display: flex;
-  align-items: center;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "space-between"};
-  padding: 0 2px;
-`;
-
-const AppearanceActionSlot = styled.div<{ $collapsed?: boolean }>`
-  position: relative;
-  display: inline-flex;
-  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "flex-end")};
-`;
-
-const IconActionButton = styled.button<{ $active?: boolean }>`
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: ${({ $active }) =>
-    $active ? "var(--sidebar-active)" : "transparent"};
-  color: ${({ $active }) =>
-    $active ? "var(--sidebar-active-foreground)" : "var(--sidebar-muted)"};
-  cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    background: ${({ $active }) =>
-      $active ? "var(--sidebar-active)" : "var(--sidebar-hover)"};
-    color: ${({ $active }) =>
-      $active
-        ? "var(--sidebar-active-foreground)"
-        : "var(--sidebar-foreground)"};
-  }
-
-  svg {
-    width: 16px;
-    height: 16px;
-  }
-`;
-
-const HeaderInviteButton = styled.button<{
-  $collapsed?: boolean;
-  $active?: boolean;
-}>`
-  height: 30px;
-  min-width: ${({ $collapsed }) => ($collapsed ? "30px" : "88px")};
-  border: none;
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: ${({ $collapsed }) => ($collapsed ? "0" : "6px")};
-  padding: ${({ $collapsed }) => ($collapsed ? "0" : "0 9px")};
-  background: ${({ $active }) =>
-    $active ? "var(--sidebar-hover)" : "transparent"};
-  color: ${({ $active }) =>
-    $active ? "var(--sidebar-foreground)" : "var(--sidebar-muted)"};
-  opacity: ${({ $active }) => ($active ? 0.86 : 0.68)};
-  cursor: pointer;
-  flex: 0 0 auto;
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease,
-    opacity 0.18s ease;
-
-  &:hover {
-    background: var(--sidebar-hover);
-    color: var(--sidebar-foreground);
-    opacity: 0.86;
-  }
-
-  svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-  }
-
-  span {
-    display: ${({ $collapsed }) => ($collapsed ? "none" : "inline")};
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-`;
-
-const InviteDialogSurface = styled.div`
-  --invite-surface: var(--lime-surface, #ffffff);
-  --invite-surface-soft: var(--lime-surface-soft, #f8fcf9);
-  --invite-surface-muted: var(--lime-surface-muted, #f2f7f3);
-  --invite-surface-hover: var(--lime-surface-hover, #f4fdf4);
-  --invite-border: var(--lime-surface-border, #e2f0e2);
-  --invite-border-strong: var(--lime-surface-border-strong, #c7e7d1);
-  --invite-text: var(--lime-text, #1a3b2b);
-  --invite-text-strong: var(--lime-text-strong, #0f172a);
-  --invite-text-muted: var(--lime-text-muted, #6b826b);
-  --invite-brand: var(--lime-brand, #10b981);
-  --invite-brand-strong: var(--lime-brand-strong, #166534);
-  --invite-brand-soft: var(--lime-brand-soft, #ecfdf5);
-  position: relative;
-  background: var(--invite-surface);
-  color: var(--invite-text);
-`;
-
-const InviteDialogCloseButton = styled.button`
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 2;
-  width: 30px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--invite-surface) 84%, transparent);
-  color: var(--invite-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    border-color: var(--invite-border);
-    background: var(--invite-surface-hover);
-    color: var(--invite-text-strong);
-  }
-
-  svg {
-    width: 15px;
-    height: 15px;
-  }
-`;
-
-const InviteDialogHeader = styled.div`
-  display: grid;
-  gap: 8px;
-  padding: 24px 24px 18px;
-  border-bottom: 1px solid var(--invite-border);
-  background:
-    radial-gradient(
-      circle at 18% 0%,
-      color-mix(in srgb, var(--invite-brand) 12%, transparent),
-      transparent 34%
-    ),
-    linear-gradient(
-      135deg,
-      var(--invite-surface-soft) 0%,
-      var(--invite-surface) 58%,
-      var(--invite-surface-muted) 100%
-    );
-`;
-
-const InviteDialogEyebrow = styled.span`
-  width: fit-content;
-  border-radius: 999px;
-  border: 1px solid var(--invite-border-strong);
-  background: var(--invite-brand-soft);
-  color: var(--invite-brand-strong);
-  padding: 4px 9px;
-  font-size: 12px;
-  font-weight: 700;
-`;
-
-const InviteDialogTitle = styled.h2`
-  margin: 0;
-  color: var(--invite-text-strong);
-  font-size: 22px;
-  line-height: 1.25;
-  font-weight: 800;
-`;
-
-const InviteDialogDescription = styled.p`
-  margin: 0;
-  color: var(--invite-text-muted);
-  font-size: 13px;
-  line-height: 1.7;
-`;
-
-const InviteDialogBody = styled.div`
-  display: grid;
-  gap: 14px;
-  padding: 18px 24px 22px;
-`;
-
-const InviteStatusCard = styled.div<{ $tone?: "error" | "muted" }>`
-  border-radius: 16px;
-  border: 1px solid
-    ${({ $tone }) =>
-      $tone === "error"
-        ? "var(--lime-danger-border, #fecdd3)"
-        : "var(--invite-border)"};
-  background: ${({ $tone }) =>
-    $tone === "error"
-      ? "var(--lime-danger-soft, #fff1f2)"
-      : "var(--invite-surface-soft)"};
-  color: ${({ $tone }) =>
-    $tone === "error" ? "var(--lime-danger, #be123c)" : "var(--invite-text)"};
-  padding: 14px 15px;
-  font-size: 13px;
-  line-height: 1.6;
-`;
-
-const InviteShareCard = styled.div`
-  display: grid;
-  gap: 14px;
-  border-radius: 18px;
-  border: 1px solid var(--lime-card-subtle-border, var(--invite-border));
-  background: var(--invite-surface);
-  padding: 16px;
-  box-shadow: var(
-    --lime-sidebar-card-shadow,
-    0 18px 36px -32px rgba(15, 23, 42, 0.32)
-  );
-`;
-
-const InviteCodeBlock = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-radius: 16px;
-  border: 1px dashed
-    color-mix(in srgb, var(--invite-brand) 42%, var(--invite-border));
-  background: color-mix(
-    in srgb,
-    var(--invite-brand-soft) 64%,
-    var(--invite-surface) 36%
-  );
-  padding: 14px;
-`;
-
-const InviteCodeMeta = styled.span`
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-`;
-
-const InviteCodeLabel = styled.span`
-  color: var(--invite-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-`;
-
-const InviteCodeValue = styled.strong`
-  color: var(--invite-text-strong);
-  font-size: 24px;
-  letter-spacing: 0.02em;
-  line-height: 1.1;
-  word-break: break-all;
-`;
-
-const InviteMetaGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-
-  @media (max-width: 560px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const InviteMetaItem = styled.div`
-  display: grid;
-  gap: 5px;
-  border-radius: 14px;
-  background: var(--invite-surface-soft);
-  padding: 12px;
-  min-width: 0;
-
-  span {
-    color: var(--invite-text-muted);
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  strong {
-    color: var(--invite-text-strong);
-    font-size: 14px;
-    font-weight: 800;
-    word-break: break-word;
-  }
-`;
-
-const InviteActionBar = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-`;
-
-const InviteDialogActionButton = styled.button<{ $primary?: boolean }>`
-  min-height: 38px;
-  border-radius: 12px;
-  border: 1px solid
-    ${({ $primary }) =>
-      $primary ? "var(--invite-brand-strong)" : "var(--invite-border-strong)"};
-  background: ${({ $primary }) =>
-    $primary ? "var(--invite-brand-strong)" : "var(--invite-surface)"};
-  color: ${({ $primary }) =>
-    $primary ? "var(--lime-surface, #ffffff)" : "var(--invite-text)"};
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 13px;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
-
-  &:hover {
-    transform: translateY(-1px);
-    background: ${({ $primary }) =>
-      $primary
-        ? "var(--invite-brand)"
-        : "var(--invite-surface-hover, var(--lime-surface-hover, #f4fdf4))"};
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.58;
-    transform: none;
-  }
-
-  svg {
-    width: 15px;
-    height: 15px;
-  }
-`;
-
-const AppearancePopover = styled.div`
-  position: absolute;
-  left: calc(100% + 12px);
-  bottom: -2px;
-  z-index: 70;
-  width: 252px;
-  max-width: min(252px, calc(100vw - 24px));
-  max-height: min(560px, calc(100vh - 24px));
-  overflow-y: auto;
-  border-radius: 18px;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.92));
-  background: var(--lime-card-subtle, var(--lime-surface, #ffffff));
-  box-shadow:
-    0 20px 40px -32px rgba(15, 23, 42, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  color: var(--lime-text, #1a3b2b);
-  padding: 9px;
-  transform-origin: left bottom;
-  animation: appearancePopoverIn 150ms ease-out both;
-
-  &::after {
-    content: "";
-    position: absolute;
-    left: -5px;
-    bottom: 15px;
-    border-left: 1px solid var(--lime-surface-border, rgba(226, 240, 226, 0.92));
-    border-bottom: 1px solid
-      var(--lime-surface-border, rgba(226, 240, 226, 0.92));
-    width: 10px;
-    height: 10px;
-    transform: rotate(45deg);
-    background: var(--lime-card-subtle, var(--lime-surface, #ffffff));
-  }
-
-  @keyframes appearancePopoverIn {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  @media (max-width: 760px) {
-    left: auto;
-    right: 0;
-    bottom: calc(100% + 10px);
-    transform-origin: right bottom;
-
-    &::after {
-      left: auto;
-      right: 13px;
-      bottom: -5px;
-      border-left: none;
-      border-right: 1px solid
-        var(--lime-surface-border, rgba(226, 240, 226, 0.92));
-    }
-  }
-`;
-
-const AppearancePopoverHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 2px 2px 8px;
-`;
-
-const AppearancePopoverTitle = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--lime-text-strong, #0f172a);
-
-  svg {
-    width: 15px;
-    height: 15px;
-    color: var(--lime-brand-strong, #166534);
-  }
-`;
-
-const AppearancePopoverSummary = styled.div`
-  max-width: 132px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--lime-text-muted, #6b826b);
-`;
-
-const AppearanceGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 7px 0;
-  border-top: 1px solid var(--lime-divider-subtle, rgba(226, 240, 226, 0.82));
-`;
-
-const AppearanceGroupLabel = styled.div`
-  padding: 0 2px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--lime-text-muted, #6b826b);
-`;
-
-const ThemeModeGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-`;
-
-const ThemeModeButton = styled.button<{ $active?: boolean }>`
-  min-width: 0;
-  border-radius: 13px;
-  border: 1px solid
-    ${({ $active }) =>
-      $active
-        ? "var(--lime-card-subtle-border, #bbf7d0)"
-        : "var(--lime-card-subtle-border, rgba(226, 240, 226, 0.82))"};
-  background: ${({ $active }) =>
-    $active
-      ? "var(--lime-chrome-tab-active-surface, var(--lime-surface, #ffffff))"
-      : "var(--lime-surface, #ffffff)"};
-  color: ${({ $active }) =>
-    $active
-      ? "var(--lime-text-strong, #0f172a)"
-      : "var(--lime-text-muted, #6b826b)"};
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 7px 6px;
-  font-size: 11px;
-  font-weight: 700;
-  box-shadow: ${({ $active }) =>
-    $active ? "0 10px 22px -20px var(--lime-shadow-color)" : "none"};
-  transition:
-    border-color 0.16s ease,
-    background 0.16s ease,
-    color 0.16s ease,
-    transform 0.16s ease;
-
-  &:hover {
-    border-color: var(--lime-card-subtle-border, #bbf7d0);
-    background: var(
-      --lime-chrome-tab-hover,
-      var(--lime-surface-hover, #f4fdf4)
-    );
-    color: var(--lime-text-strong, #0f172a);
-  }
-
-  svg {
-    width: 13px;
-    height: 13px;
-    flex-shrink: 0;
-  }
-`;
-
-const ColorSchemeList = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-`;
-
-const RandomColorSchemeButton = styled.button`
-  grid-column: 1 / -1;
-  min-height: 40px;
-  border-radius: 13px;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.82));
-  background: var(--lime-surface, #ffffff);
-  color: var(--lime-text, #1a3b2b);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 750;
-  transition:
-    border-color 0.16s ease,
-    background 0.16s ease,
-    color 0.16s ease;
-
-  &:hover {
-    border-color: var(--lime-card-subtle-border, #bbf7d0);
-    background: var(
-      --lime-chrome-tab-hover,
-      var(--lime-surface-hover, #f4fdf4)
-    );
-    color: var(--lime-text-strong, #0f172a);
-  }
-
-  svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    color: var(--lime-brand-strong, #166534);
-  }
-`;
-
-const ColorSchemeButton = styled.button<{ $active?: boolean }>`
-  display: flex;
-  position: relative;
-  min-height: 58px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 5px;
-  width: 100%;
-  min-width: 0;
-  border-radius: 13px;
-  border: 1px solid
-    ${({ $active }) =>
-      $active
-        ? "var(--lime-card-subtle-border, #bbf7d0)"
-        : "var(--lime-card-subtle-border, rgba(226, 240, 226, 0.82))"};
-  background: ${({ $active }) =>
-    $active
-      ? "var(--lime-chrome-tab-active-surface, var(--lime-surface, #ffffff))"
-      : "var(--lime-surface, #ffffff)"};
-  color: var(--lime-text, #1a3b2b);
-  cursor: pointer;
-  padding: 7px;
-  text-align: left;
-  transition:
-    border-color 0.16s ease,
-    background 0.16s ease,
-    color 0.16s ease,
-    transform 0.16s ease;
-
-  &:hover {
-    border-color: var(--lime-card-subtle-border, #bbf7d0);
-    background: var(
-      --lime-chrome-tab-hover,
-      var(--lime-surface-hover, #f4fdf4)
-    );
-  }
-`;
-
-const ColorSchemeSwatches = styled.span`
-  display: inline-flex;
-  flex-shrink: 0;
-  overflow: hidden;
-  width: 42px;
-  height: 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  box-shadow: 0 0 0 1px var(--lime-surface-border, rgba(226, 240, 226, 0.82));
-
-  span {
-    flex: 1;
-  }
-`;
-
-const ColorSchemeText = styled.span`
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-`;
-
-const ColorSchemeLabel = styled.span`
-  min-width: 0;
-  max-width: calc(100% - 22px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--lime-text-strong, #0f172a);
-`;
-
-const ColorSchemeCheck = styled.span<{ $active?: boolean }>`
-  display: inline-flex;
-  position: absolute;
-  right: 7px;
-  bottom: 7px;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  color: var(--lime-brand-strong, #166534);
-  opacity: ${({ $active }) => ($active ? 1 : 0)};
-
-  svg {
-    width: 13px;
-    height: 13px;
-  }
-`;
-
-const AccountActionSlot = styled.div<{ $collapsed?: boolean }>`
-  position: relative;
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: ${({ $collapsed }) => ($collapsed ? "center" : "stretch")};
-  justify-content: ${({ $collapsed }) => ($collapsed ? "center" : "stretch")};
-`;
-
-const AccountButton = styled.button<{
-  $collapsed?: boolean;
-  $active?: boolean;
-}>`
-  width: 100%;
-  min-height: ${({ $collapsed }) => ($collapsed ? "38px" : "42px")};
-  border: none;
-  border-radius: 15px;
-  background: ${({ $active }) =>
-    $active ? "var(--sidebar-active)" : "transparent"};
-  color: var(--sidebar-foreground);
-  display: flex;
-  align-items: center;
-  justify-content: ${({ $collapsed }) =>
-    $collapsed ? "center" : "space-between"};
-  gap: 8px;
-  padding: ${({ $collapsed }) => ($collapsed ? "0" : "5px 8px")};
-  cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    background: var(--sidebar-hover);
-  }
-`;
-
-const AccountIdentity = styled.span<{ $collapsed?: boolean }>`
-  min-width: 0;
-  display: ${({ $collapsed }) => ($collapsed ? "none" : "inline-flex")};
-  align-items: center;
-  gap: 9px;
-`;
-
-const AccountAvatar = styled.span`
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lime-brand, #10b981);
-  color: white;
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  overflow: hidden;
-
-  img {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: cover;
-  }
-`;
-
-const AccountName = styled.span`
-  min-width: 0;
-  max-width: 116px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: left;
-`;
-
-const AccountTrailing = styled.span<{ $collapsed?: boolean }>`
-  display: ${({ $collapsed }) => ($collapsed ? "none" : "inline-flex")};
-  align-items: center;
-  gap: 7px;
-  color: var(--sidebar-muted);
-
-  svg {
-    width: 15px;
-    height: 15px;
-  }
-`;
-
-const AccountStateBadge = styled.span<{ $connected?: boolean }>`
-  border-radius: 999px;
-  padding: 4px 9px;
-  border: 1px solid
-    ${({ $connected }) =>
-      $connected
-        ? "var(--lime-brand-soft-border, #bbf7d0)"
-        : "var(--lime-card-subtle-border, #d9eadf)"};
-  background: ${({ $connected }) =>
-    $connected
-      ? "var(--lime-brand-soft, #ecfdf5)"
-      : "var(--lime-surface-soft, #f8fcf9)"};
-  color: ${({ $connected }) =>
-    $connected
-      ? "var(--lime-brand-strong, #166534)"
-      : "var(--lime-text-muted, #6b826b)"};
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-`;
-
-const AccountMenuPopover = styled.div<{ $collapsed?: boolean }>`
-  position: absolute;
-  left: ${({ $collapsed }) => ($collapsed ? "calc(100% + 12px)" : "0")};
-  bottom: ${({ $collapsed }) => ($collapsed ? "0" : "calc(100% + 12px)")};
-  z-index: 80;
-  width: ${({ $collapsed }) => ($collapsed ? "284px" : "304px")};
-  max-width: min(304px, calc(100vw - 24px));
-  max-height: min(760px, calc(100vh - 24px));
-  overflow: visible;
-  overscroll-behavior: contain;
-  border-radius: 18px;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.92));
-  background: var(--lime-card-subtle, var(--lime-surface, #ffffff));
-  box-shadow:
-    0 24px 52px -32px rgba(15, 23, 42, 0.36),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  color: var(--lime-text, #1a3b2b);
-  padding: 10px;
-  transform-origin: ${({ $collapsed }) =>
-    $collapsed ? "left bottom" : "left bottom"};
-  animation: accountMenuPopoverIn 150ms ease-out both;
-
-  @keyframes accountMenuPopoverIn {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-`;
-
-const AccountPlanCard = styled.div`
-  width: 100%;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.92));
-  border-radius: 14px;
-  background: var(--lime-surface, #ffffff);
-  color: var(--lime-text, #1a3b2b);
-  padding: 10px 11px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
-const AccountPlanButton = styled.button`
-  width: 100%;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.92));
-  border-radius: 14px;
-  background: var(--lime-surface, #ffffff);
-  color: var(--lime-text, #1a3b2b);
-  padding: 10px 11px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  cursor: pointer;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    transform 0.16s ease;
-
-  &:hover {
-    border-color: var(--lime-brand-soft-border, #bbf7d0);
-    background: var(--lime-surface-soft, #f8fcf9);
-    transform: translateY(-1px);
-  }
-`;
-
-const AccountPlanActions = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 8px;
-`;
-
-const AccountPlanActionButton = styled.button<{ $primary?: boolean }>`
-  min-height: 36px;
-  border-radius: 12px;
-  border: 1px solid
-    ${({ $primary }) =>
-      $primary
-        ? "var(--lime-brand-strong, #166534)"
-        : "var(--lime-card-subtle-border, #d9eadf)"};
-  background: ${({ $primary }) =>
-    $primary ? "var(--lime-brand-strong, #166534)" : "var(--lime-surface)"};
-  color: ${({ $primary }) =>
-    $primary ? "#ffffff" : "var(--lime-text, #1a3b2b)"};
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 800;
-  transition:
-    background-color 0.16s ease,
-    border-color 0.16s ease,
-    transform 0.16s ease;
-
-  &:hover {
-    transform: translateY(-1px);
-    background: ${({ $primary }) =>
-      $primary
-        ? "var(--lime-brand, #10b981)"
-        : "var(--lime-surface-hover, #f4fdf4)"};
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.66;
-    transform: none;
-  }
-
-  svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-  }
-`;
-
-const AccountMenuNotice = styled.div<{ $tone?: "error" | "info" }>`
-  border-radius: 12px;
-  border: 1px solid
-    ${({ $tone }) =>
-      $tone === "error"
-        ? "var(--lime-danger-border, #fecdd3)"
-        : "var(--lime-card-subtle-border, #d9eadf)"};
-  background: ${({ $tone }) =>
-    $tone === "error" ? "var(--lime-danger-soft, #fff1f2)" : "#f8fcf9"};
-  color: ${({ $tone }) =>
-    $tone === "error" ? "var(--lime-danger, #be123c)" : "#526455"};
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.45;
-`;
-
-const AccountPlanHeader = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--lime-text-strong, #0f172a);
-`;
-
-const AccountPlanTitle = styled.span`
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
-
-const AccountPlanDetailsPill = styled.span`
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: var(--lime-surface-soft, #f8fcf9);
-  color: var(--lime-text-muted, #6b826b);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 7px;
-  font-size: 10px;
-  font-weight: 800;
-
-  svg {
-    width: 11px;
-    height: 11px;
-  }
-`;
-
-const AccountInfoIconButton = styled.button`
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  border: 1px solid var(--lime-card-subtle-border, #d9eadf);
-  background: var(--lime-surface, #ffffff);
-  color: var(--lime-text-muted, #6b826b);
-  cursor: help;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background-color 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease;
-
-  &:hover {
-    border-color: var(--lime-brand-soft-border, #bbf7d0);
-    background: var(--lime-brand-soft, #ecfdf5);
-    color: var(--lime-brand-strong, #166534);
-  }
-
-  svg {
-    width: 13px;
-    height: 13px;
-  }
-`;
-
-const AccountPlanBadge = styled.span<{ $connected?: boolean }>`
-  flex-shrink: 0;
-  border-radius: 999px;
-  border: 1px solid
-    ${({ $connected }) =>
-      $connected
-        ? "var(--lime-brand-soft-border, #bbf7d0)"
-        : "var(--lime-card-subtle-border, #d9eadf)"};
-  background: ${({ $connected }) =>
-    $connected ? "var(--lime-brand-soft, #ecfdf5)" : "var(--lime-surface)"};
-  color: ${({ $connected }) =>
-    $connected
-      ? "var(--lime-brand-strong, #166534)"
-      : "var(--lime-text-muted, #6b826b)"};
-  padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 800;
-`;
-
-const AccountPlanUsage = styled.span`
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 750;
-  color: var(--lime-text-muted, #6b826b);
-`;
-
-const AccountPlanProgressTrack = styled.span`
-  display: block;
-  width: 100%;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--lime-card-subtle-border, #e5e7eb);
-  overflow: hidden;
-`;
-
-const AccountPlanProgressFill = styled.span<{ $percent: number | null }>`
-  display: block;
-  width: ${({ $percent }) => ($percent === null ? "0%" : `${$percent}%`)};
-  height: 100%;
-  border-radius: inherit;
-  background: var(--lime-brand-strong, #166534);
-`;
-
-const AccountPlanMeta = styled.span`
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--lime-text-muted, #6b826b);
-`;
-
-const AccountPlanDetail = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--lime-text-muted, #6b826b);
-`;
-
-const AccountMenuList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 9px;
-`;
-
-const AccountMenuItemGroup = styled.div`
-  position: relative;
-`;
-
-const AccountMenuItem = styled.button<{ $danger?: boolean; $active?: boolean }>`
-  width: 100%;
-  min-height: 40px;
-  border: none;
-  border-radius: 13px;
-  background: ${({ $active }) =>
-    $active ? "var(--sidebar-active)" : "transparent"};
-  color: ${({ $danger }) =>
-    $danger ? "var(--lime-danger, #ef4444)" : "var(--lime-text, #1a3b2b)"};
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 10px;
-  font-size: 14px;
-  font-weight: 700;
-  text-align: left;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease;
-
-  &:hover {
-    background: ${({ $danger }) =>
-      $danger
-        ? "var(--lime-danger-soft, #fff1f2)"
-        : "var(--lime-surface-hover, #f4fdf4)"};
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.62;
-  }
-
-  svg {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-  }
-`;
-
-const AccountMenuItemLeading = styled.span`
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-`;
-
-const AccountMenuItemTrailing = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--lime-text-muted, #6b826b);
-  font-size: 12px;
-  font-weight: 700;
-`;
-
-const AccountSubmenuPopover = styled.div`
-  position: absolute;
-  left: calc(100% + 8px);
-  bottom: 0;
-  z-index: 90;
-  width: 188px;
-  max-height: min(300px, calc(100vh - 24px));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border-radius: 16px;
-  border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.92));
-  background: var(--lime-card-subtle, var(--lime-surface, #ffffff));
-  box-shadow:
-    0 20px 44px -30px rgba(15, 23, 42, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  color: var(--lime-text, #1a3b2b);
-  padding: 7px;
-  animation: accountSubmenuPopoverIn 140ms ease-out both;
-
-  @keyframes accountSubmenuPopoverIn {
-    from {
-      opacity: 0;
-      transform: translateX(-4px) scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0) scale(1);
-    }
-  }
-
-  @media (max-width: 760px) {
-    left: 0;
-    top: calc(100% + 6px);
-    bottom: auto;
-  }
-`;
-
-const AccountSubmenuTitle = styled.div`
-  padding: 5px 8px 7px;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--lime-text-muted, #6b826b);
-`;
-
-const AccountSubmenuItem = styled.button<{ $active?: boolean }>`
-  width: 100%;
-  min-height: 38px;
-  border: none;
-  border-radius: 12px;
-  background: ${({ $active }) =>
-    $active ? "var(--sidebar-active)" : "transparent"};
-  color: ${({ $active }) =>
-    $active ? "var(--sidebar-active-foreground)" : "var(--lime-text, #1a3b2b)"};
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 9px;
-  font-size: 13px;
-  font-weight: 750;
-  text-align: left;
-  transition:
-    background-color 0.16s ease,
-    color 0.16s ease;
-
-  &:hover {
-    background: var(--lime-surface-hover, #f4fdf4);
-    color: var(--lime-text-strong, #0f172a);
-  }
-
-  svg {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-  }
-`;
-
-const AccountSubmenuItemText = styled.span`
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-`;
-
-const AccountSubmenuItemLabel = styled.span`
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
-
-const AccountSubmenuItemHint = styled.span`
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--lime-text-muted, #6b826b);
-`;
-
-const AccountMenuDivider = styled.div`
-  height: 1px;
-  margin: 5px 0;
-  background: var(--lime-divider-subtle, rgba(226, 240, 226, 0.82));
-`;
-
-function sortSidebarSessions(sessions: AsterSessionInfo[]): AsterSessionInfo[] {
-  return sessions
-    .filter((session) => !isAuxiliaryAgentSessionId(session.id))
-    .sort((left, right) => {
-      if (left.updated_at !== right.updated_at) {
-        return right.updated_at - left.updated_at;
-      }
-
-      if (left.created_at !== right.created_at) {
-        return right.created_at - left.created_at;
-      }
-
-      return left.id.localeCompare(right.id);
-    });
-}
-
-function buildVisibleSidebarSessions(params: {
-  sessions: AsterSessionInfo[];
-  currentSessionId?: string | null;
-  limit: number;
-}): AsterSessionInfo[] {
-  const { sessions, currentSessionId, limit } = params;
-  if (limit <= 0) {
-    return [];
-  }
-
-  if (sessions.length <= limit) {
-    return sessions;
-  }
-
-  const visibleSessions = sessions.slice(0, limit);
-  const normalizedCurrentSessionId = currentSessionId?.trim();
-  if (
-    !normalizedCurrentSessionId ||
-    visibleSessions.some((session) => session.id === normalizedCurrentSessionId)
-  ) {
-    return visibleSessions;
-  }
-
-  const currentSession = sessions.find(
-    (session) => session.id === normalizedCurrentSessionId,
-  );
-  if (!currentSession) {
-    return visibleSessions;
-  }
-
-  return [...visibleSessions.slice(0, Math.max(limit - 1, 0)), currentSession];
-}
-
-function normalizeSidebarSearchText(value: string): string {
-  return value.trim().toLocaleLowerCase();
-}
-
-function matchesSidebarSessionTitle(
-  session: AsterSessionInfo,
-  normalizedQuery: string,
-  fallbackTitle: string,
-): boolean {
-  if (!normalizedQuery) {
-    return true;
-  }
-
-  return normalizeSidebarSearchText(
-    resolveSidebarSessionTitle(session, fallbackTitle),
-  ).includes(normalizedQuery);
-}
-
-function resolveAccountDisplayName(
-  sessionState: OemCloudStoredSessionState | null,
-  fallbackDisplayName: string,
-): string {
-  const user = sessionState?.session.user;
-  const fallbackEmailName = user?.email?.split("@")[0]?.trim();
-  return (
-    user?.displayName?.trim() ||
-    user?.username?.trim() ||
-    fallbackEmailName ||
-    fallbackDisplayName
-  );
-}
-
-function resolveAccountEmail(
-  sessionState: OemCloudStoredSessionState | null,
-): string | null {
-  return sessionState?.session.user.email?.trim() || null;
-}
-
-function resolveAccountTenantLabel(
-  sessionState: OemCloudStoredSessionState | null,
-): string | null {
-  const tenant = sessionState?.session.tenant;
-  return (
-    tenant?.name?.trim() || tenant?.slug?.trim() || tenant?.id?.trim() || null
-  );
-}
-
-function parseAccountUsagePercent(value: string | undefined): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const percentMatch = value.match(/(?:已用\s*)?(\d+(?:\.\d+)?)\s*%/);
-  if (percentMatch) {
-    return Math.min(100, Math.max(0, Number(percentMatch[1])));
-  }
-
-  const ratioMatch = value.match(
-    /([\d,]+(?:\.\d+)?)\s*\/\s*([\d,]+(?:\.\d+)?)/,
-  );
-  if (!ratioMatch) {
-    return null;
-  }
-
-  const used = Number(ratioMatch[1].replace(/,/g, ""));
-  const total = Number(ratioMatch[2].replace(/,/g, ""));
-  if (!Number.isFinite(used) || !Number.isFinite(total) || total <= 0) {
-    return null;
-  }
-
-  return Math.min(100, Math.max(0, (used / total) * 100));
-}
-
-function resolveAccountPlanSummary(
-  bootstrap: OemCloudBootstrapResponse | null,
-  fallbackPlanLabel: string,
-): {
-  planLabel: string;
-  usageLabel: string | null;
-  usagePercent: number | null;
-} {
-  const preference = bootstrap?.providerPreference;
-  if (!preference) {
-    return {
-      planLabel: fallbackPlanLabel,
-      usageLabel: null,
-      usagePercent: null,
-    };
-  }
-
-  const providerOffers = Array.isArray(bootstrap.providerOffersSummary)
-    ? bootstrap.providerOffersSummary
-    : [];
-  const matchedOffer = providerOffers.find(
-    (offer) => offer.providerKey === preference.providerKey,
-  );
-  const usageLabel = matchedOffer?.creditsSummary?.trim() || null;
-
-  return {
-    planLabel: matchedOffer?.currentPlan?.trim() || fallbackPlanLabel,
-    usageLabel,
-    usagePercent: parseAccountUsagePercent(usageLabel ?? undefined),
-  };
-}
-
-function resolveAccountInitial(name: string): string {
-  const normalized = name.trim();
-  if (!normalized) {
-    return "L";
-  }
-
-  return normalized.slice(0, 1).toUpperCase();
-}
-
-function resolveCloudBrandLabel(
-  bootstrap: OemCloudBootstrapResponse | null,
-  fallbackBrandLabel: string,
-  cloudSuffixLabel: string,
-): string {
-  const appName = bootstrap?.app?.name?.trim();
-  if (!appName) {
-    return fallbackBrandLabel;
-  }
-
-  return /云|Cloud|Hub/i.test(appName)
-    ? appName
-    : `${appName} ${cloudSuffixLabel}`;
-}
 
 export function AppSidebar({
   currentPage,
@@ -2319,21 +185,12 @@ export function AppSidebar({
       resolveSidebarSessionTitle(session, conversationUntitledLabel),
     [conversationUntitledLabel],
   );
-  const formatArchivedConversationMeta = useCallback(
-    (time: string) =>
-      t("navigation.sidebar.conversations.meta.archived", {
-        time,
-        defaultValue: "归档 {{time}}",
-      }),
-    [t],
-  );
   const formatLocalizedSessionMeta = useCallback(
     (session: AsterSessionInfo) =>
       formatSidebarSessionMeta(session, {
-        formatArchived: formatArchivedConversationMeta,
         locale: i18n.language,
       }),
-    [formatArchivedConversationMeta, i18n.language],
+    [i18n.language],
   );
   const renameConversationPromptLabel = t(
     "navigation.sidebar.conversations.rename.prompt",
@@ -2410,7 +267,18 @@ export function AppSidebar({
     ? activeAgentPageParams?.projectId?.trim() || null
     : null;
   const currentProjectId = activeAgentProjectId || rememberedProjectId;
-  const sidebarSessionQueryWorkspaceId = activeAgentProjectId;
+  const openedProjects = useOpenedProjectSummaries(
+    activeAgentProjectId
+      ? {
+          id: activeAgentProjectId,
+          name: "",
+        }
+      : null,
+  );
+  const openedProjectIds = useMemo(
+    () => openedProjects.map((project) => project.id),
+    [openedProjects],
+  );
   const currentSessionId =
     activeAgentPageParams?.initialSessionId?.trim() || null;
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -2466,21 +334,19 @@ export function AppSidebar({
       );
     };
   }, []);
-  const [themeState, setThemeState] = useState<{
-    themeMode: LimeThemeMode;
-    effectiveThemeMode: LimeEffectiveThemeMode;
-  }>(() => {
-    const themeMode =
-      typeof window === "undefined" ? "system" : loadLimeThemeMode();
-    return {
-      themeMode,
-      effectiveThemeMode: getEffectiveLimeThemeMode(themeMode),
-    };
-  });
-  const [colorSchemeId, setColorSchemeId] = useState<LimeColorSchemeId>(() =>
-    typeof window === "undefined" ? "lime-classic" : loadLimeColorSchemeId(),
-  );
-  const [appearancePopoverOpen, setAppearancePopoverOpen] = useState(false);
+  const {
+    appearanceColorSchemes,
+    appearanceControlRef,
+    appearancePopoverOpen,
+    appearanceThemeOptions,
+    colorSchemeId,
+    handleColorSchemeChange,
+    handleRandomColorScheme,
+    handleThemeModeChange,
+    setAppearancePopoverOpen,
+    themeState,
+    copy: appearanceCopy,
+  } = useAppSidebarAppearance();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [language, setLanguageState] = useState<LocalePreference>("zh-CN");
@@ -2516,76 +382,16 @@ export function AppSidebar({
   const [enabledNavItems, setEnabledNavItems] = useState<string[]>(
     DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
   );
-  const [installedAgentAppNavStates, setInstalledAgentAppNavStates] = useState<
-    InstalledAgentAppState[]
-  >([]);
-  const sidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
-  const archivedSidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
-  const [sidebarSessions, setSidebarSessions] = useState<AsterSessionInfo[]>(
-    [],
-  );
-  const [sidebarSessionsHasMore, setSidebarSessionsHasMore] = useState(false);
-  const [sidebarSessionsLoading, setSidebarSessionsLoading] = useState(false);
-  const [archivedSessionEntries, setArchivedSessionEntries] = useState<
-    AsterSessionInfo[]
-  >([]);
-  const [archivedSessionEntriesHasMore, setArchivedSessionEntriesHasMore] =
-    useState(false);
-  const [archivedSidebarSessionsLoading, setArchivedSidebarSessionsLoading] =
-    useState(false);
-  const [sidebarSessionActionId, setSidebarSessionActionId] = useState<
-    string | null
-  >(null);
-  const [recentSessionsVisibleCount, setRecentSessionsVisibleCount] = useState(
-    SIDEBAR_RECENT_SESSION_PAGE_SIZE,
-  );
-  const [archivedSessionsVisibleCount, setArchivedSessionsVisibleCount] =
-    useState(SIDEBAR_ARCHIVED_SESSION_PAGE_SIZE);
-  const [archivedSessionsCollapsed, setArchivedSessionsCollapsed] =
-    useState(true);
-  const conversationNavigationDeferUntilRef = useRef(0);
-  const recentSidebarLoadInFlightRef = useRef(false);
-  const recentSidebarReloadPendingRef = useRef(false);
-  const recentSidebarReloadCancelRef = useRef<(() => void) | null>(null);
-  const archivedSidebarLoadInFlightRef = useRef(false);
-  const archivedSidebarReloadPendingRef = useRef(false);
-  const archivedSidebarReloadCancelRef = useRef<(() => void) | null>(null);
-  const loadRecentSidebarSessionsRef = useRef<() => Promise<void>>(
-    async () => undefined,
-  );
-  const loadArchivedSidebarSessionsRef = useRef<() => Promise<void>>(
-    async () => undefined,
-  );
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null);
-  const appearanceControlRef = useRef<HTMLDivElement | null>(null);
   const accountControlRef = useRef<HTMLDivElement | null>(null);
   const reserveWindowControls = shouldReserveMacWindowControls();
-
-  useEffect(() => {
-    return () => {
-      recentSidebarReloadCancelRef.current?.();
-      recentSidebarReloadCancelRef.current = null;
-      archivedSidebarReloadCancelRef.current?.();
-      archivedSidebarReloadCancelRef.current = null;
-    };
-  }, []);
-
-  const hasCachedCurrentSessionSidebarEntry =
-    hasCachedSidebarSessionEntry(
-      sidebarSessionsRef.current,
-      currentSessionId,
-    ) ||
-    hasCachedSidebarSessionEntry(
-      archivedSidebarSessionsRef.current,
-      currentSessionId,
-    );
 
   const openSidebarSearchDialog = useCallback(() => {
     setAccountMenuOpen(false);
     setLanguageMenuOpen(false);
     setAppearancePopoverOpen(false);
     setSidebarSearchOpen(true);
-  }, []);
+  }, [setAppearancePopoverOpen]);
 
   const closeSidebarSearchDialog = useCallback(() => {
     setSidebarSearchOpen(false);
@@ -2652,33 +458,6 @@ export function AppSidebar({
     });
   }, []);
 
-  const loadInstalledAgentAppNavStates = useCallback(async () => {
-    try {
-      const result = await listInstalledAgentApps();
-      setInstalledAgentAppNavStates(result.states);
-    } catch (error) {
-      console.warn("加载 Agent App 导航失败，将保持静态导航:", error);
-      setInstalledAgentAppNavStates([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadInstalledAgentAppNavStates();
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const reload = () => {
-      void loadInstalledAgentAppNavStates();
-    };
-    window.addEventListener(AGENT_APPS_CHANGED_EVENT, reload);
-    window.addEventListener("focus", reload);
-    return () => {
-      window.removeEventListener(AGENT_APPS_CHANGED_EVENT, reload);
-      window.removeEventListener("focus", reload);
-    };
-  }, [loadInstalledAgentAppNavStates]);
-
   const localizeSidebarNavItem = useCallback(
     (item: SidebarNavItem): SidebarNavItem => {
       const key = SIDEBAR_NAV_LABEL_KEYS[item.id];
@@ -2694,54 +473,12 @@ export function AppSidebar({
     [t],
   );
 
-  const agentAppNavItems = useMemo<SidebarNavItem[]>(() => {
-    return installedAgentAppNavStates
-      .filter(
-        (state) => !state.disabled && resolveAgentAppSidebarEntryKey(state),
-      )
-      .map<SidebarNavItem>((state) => {
-        const entryKey = resolveAgentAppSidebarEntryKey(state);
-        return {
-          id: `agent-app:${state.appId}`,
-          label: resolveInstalledAgentAppDisplayName(state),
-          icon: Boxes,
-          page: "agent-app",
-          params: {
-            appId: state.appId,
-            entryKey,
-          },
-          resolveParams: (params) => ({
-            ...(params ?? {}),
-            launchRequestKey: Date.now(),
-          }),
-          isActive: (currentPage, currentParams) =>
-            currentPage === "agent-app" &&
-            (currentParams as { appId?: string } | undefined)?.appId ===
-              state.appId,
-          configurable: false,
-        };
-      });
-  }, [installedAgentAppNavStates]);
-
   const filteredMainNavItems = useMemo<SidebarNavItem[]>(() => {
-    const baseItems = MAIN_SIDEBAR_NAV_ITEMS.filter(
+    return MAIN_SIDEBAR_NAV_ITEMS.filter(
       (item) =>
         item.configurable === false || enabledNavItems.includes(item.id),
     ).map(localizeSidebarNavItem);
-
-    if (agentAppNavItems.length === 0) {
-      return baseItems;
-    }
-    const skillsIndex = baseItems.findIndex((item) => item.id === "skills");
-    if (skillsIndex < 0) {
-      return [...baseItems, ...agentAppNavItems];
-    }
-    return [
-      ...baseItems.slice(0, skillsIndex + 1),
-      ...agentAppNavItems,
-      ...baseItems.slice(skillsIndex + 1),
-    ];
-  }, [agentAppNavItems, enabledNavItems, localizeSidebarNavItem]);
+  }, [enabledNavItems, localizeSidebarNavItem]);
 
   const filteredFooterNavItems = useMemo<SidebarNavItem[]>(() => {
     return FOOTER_SIDEBAR_NAV_ITEMS.filter(
@@ -2903,117 +640,6 @@ export function AppSidebar({
       return;
     }
 
-    const syncThemeFromStorage = () => {
-      const themeMode = loadLimeThemeMode();
-      const effectiveThemeMode = applyLimeThemeMode(themeMode);
-      setThemeState({ themeMode, effectiveThemeMode });
-    };
-
-    const syncColorSchemeFromStorage = () => {
-      const nextColorSchemeId = loadLimeColorSchemeId();
-      applyLimeColorScheme(nextColorSchemeId);
-      setColorSchemeId(nextColorSchemeId);
-    };
-
-    const handleThemeChanged = (event: Event) => {
-      const detail = (event as CustomEvent<LimeThemeChangedEventDetail>).detail;
-      const themeMode = detail?.themeMode ?? loadLimeThemeMode();
-      const effectiveThemeMode =
-        detail?.effectiveThemeMode ?? getEffectiveLimeThemeMode(themeMode);
-      setThemeState({ themeMode, effectiveThemeMode });
-    };
-
-    const handleColorSchemeChanged = (event: Event) => {
-      const detail = (event as CustomEvent<LimeColorSchemeChangedEventDetail>)
-        .detail;
-      setColorSchemeId(detail?.colorSchemeId ?? loadLimeColorSchemeId());
-    };
-
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === null || event.key === LIME_THEME_STORAGE_KEY) {
-        syncThemeFromStorage();
-      }
-      if (event.key === null || event.key === LIME_COLOR_SCHEME_STORAGE_KEY) {
-        syncColorSchemeFromStorage();
-      }
-    };
-
-    const systemThemeQuery = window.matchMedia?.(
-      "(prefers-color-scheme: dark)",
-    );
-    const handleSystemThemeChange = () => {
-      setThemeState((current) => {
-        if (current.themeMode !== "system") {
-          return current;
-        }
-
-        const effectiveThemeMode = applyLimeThemeMode("system");
-        return {
-          themeMode: "system",
-          effectiveThemeMode,
-        };
-      });
-    };
-
-    syncThemeFromStorage();
-    syncColorSchemeFromStorage();
-
-    window.addEventListener(LIME_THEME_CHANGED_EVENT, handleThemeChanged);
-    window.addEventListener(
-      LIME_COLOR_SCHEME_CHANGED_EVENT,
-      handleColorSchemeChanged,
-    );
-    window.addEventListener("storage", handleStorageChange);
-    systemThemeQuery?.addEventListener("change", handleSystemThemeChange);
-
-    return () => {
-      window.removeEventListener(LIME_THEME_CHANGED_EVENT, handleThemeChanged);
-      window.removeEventListener(
-        LIME_COLOR_SCHEME_CHANGED_EVENT,
-        handleColorSchemeChanged,
-      );
-      window.removeEventListener("storage", handleStorageChange);
-      systemThemeQuery?.removeEventListener("change", handleSystemThemeChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!appearancePopoverOpen || typeof window === "undefined") {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (
-        target instanceof Node &&
-        appearanceControlRef.current?.contains(target)
-      ) {
-        return;
-      }
-
-      setAppearancePopoverOpen(false);
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setAppearancePopoverOpen(false);
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [appearancePopoverOpen]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
     const refreshRememberedProjectId = () => {
       setRememberedProjectId(loadPersistedProjectId(LAST_PROJECT_ID_KEY));
     };
@@ -3110,498 +736,34 @@ export function AppSidebar({
   const shouldShowConversationList =
     !collapsed &&
     !(activePage === "agent" && activeAgentPageParams?.immersiveHome);
-  const shouldLoadWorkspaceScopedConversations =
-    (shouldShowConversationList || sidebarSearchOpen) &&
-    Boolean(currentProjectId);
-  const shouldShowSessionLoadingState =
-    sidebarSessionsLoading && sidebarSessions.length === 0;
-  const shouldShowArchivedSessionLoadingState =
-    archivedSidebarSessionsLoading && archivedSessionEntries.length === 0;
-
-  useEffect(() => {
-    sidebarSessionsRef.current = sidebarSessions;
-  }, [sidebarSessions]);
-  useEffect(() => {
-    archivedSidebarSessionsRef.current = archivedSessionEntries;
-  }, [archivedSessionEntries]);
-
-  useEffect(() => {
-    setRecentSessionsVisibleCount(SIDEBAR_RECENT_SESSION_PAGE_SIZE);
-  }, [currentProjectId]);
-
-  useEffect(() => {
-    setArchivedSessionsVisibleCount(SIDEBAR_ARCHIVED_SESSION_PAGE_SIZE);
-    setArchivedSessionsCollapsed(true);
-  }, [currentProjectId]);
-
-  const recentSessionRequestLimit = useMemo(() => {
-    return buildSidebarSessionRequestLimit(
-      recentSessionsVisibleCount,
-      SIDEBAR_RECENT_SESSION_PAGE_SIZE,
-    );
-  }, [recentSessionsVisibleCount]);
-  const archivedSessionRequestLimit = useMemo(
-    () =>
-      buildSidebarSessionRequestLimit(
-        archivedSessionsVisibleCount,
-        SIDEBAR_ARCHIVED_SESSION_PAGE_SIZE,
-      ),
-    [archivedSessionsVisibleCount],
-  );
-
-  const scheduleRecentSidebarReload = useCallback((minimumDelayMs: number) => {
-    recentSidebarReloadCancelRef.current?.();
-    recentSidebarReloadCancelRef.current = scheduleMinimumDelayIdleTask(
-      () => {
-        recentSidebarReloadCancelRef.current = null;
-        void loadRecentSidebarSessionsRef.current();
-      },
-      {
-        minimumDelayMs,
-        idleTimeoutMs: Math.max(
-          minimumDelayMs,
-          SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS,
-        ),
-      },
-    );
-  }, []);
-
-  const scheduleArchivedSidebarReload = useCallback(
-    (minimumDelayMs: number) => {
-      archivedSidebarReloadCancelRef.current?.();
-      archivedSidebarReloadCancelRef.current = scheduleMinimumDelayIdleTask(
-        () => {
-          archivedSidebarReloadCancelRef.current = null;
-          void loadArchivedSidebarSessionsRef.current();
-        },
-        {
-          minimumDelayMs,
-          idleTimeoutMs: Math.max(
-            minimumDelayMs,
-            SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS,
-          ),
-        },
-      );
-    },
-    [],
-  );
-
-  const loadRecentSidebarSessions = useCallback(async () => {
-    if (!shouldLoadWorkspaceScopedConversations) {
-      setSidebarSessions([]);
-      setSidebarSessionsHasMore(false);
-      setSidebarSessionsLoading(false);
-      return;
-    }
-
-    if (recentSidebarLoadInFlightRef.current) {
-      recentSidebarReloadPendingRef.current = true;
-      return;
-    }
-
-    const deferRemainingMs =
-      conversationNavigationDeferUntilRef.current - Date.now();
-    if (deferRemainingMs > 0 && sidebarSessionsRef.current.length > 0) {
-      scheduleRecentSidebarReload(deferRemainingMs);
-      return;
-    }
-
-    recentSidebarLoadInFlightRef.current = true;
-    setSidebarSessionsLoading(
-      (current) => current || sidebarSessionsRef.current.length === 0,
-    );
-    const startedAt = Date.now();
-    logAgentDebug("AppSidebar", "recentConversations.load.start", {
-      limit: recentSessionRequestLimit,
-      workspaceId: sidebarSessionQueryWorkspaceId,
-    });
-    try {
-      const sessions = await listAgentRuntimeSessions({
-        limit: recentSessionRequestLimit,
-        ...(sidebarSessionQueryWorkspaceId
-          ? { workspaceId: sidebarSessionQueryWorkspaceId }
-          : {}),
-      });
-      const listDurationMs = Date.now() - startedAt;
-      const sortStartedAt = Date.now();
-      const sortedSessions = sortSidebarSessions(sessions);
-      const sortDurationMs = Date.now() - sortStartedAt;
-      const { hasMore } = splitSidebarSessionResult({
-        sessions: sortedSessions,
-        visibleCount: recentSessionsVisibleCount,
-        pageSize: SIDEBAR_RECENT_SESSION_PAGE_SIZE,
-      });
-      const metricContext = {
-        hasMore,
-        limit: recentSessionRequestLimit,
-        listDurationMs,
-        sessionsCount: sessions.length,
-        sortDurationMs,
-        totalDurationMs: Date.now() - startedAt,
-        visibleCount: recentSessionsVisibleCount,
-        workspaceId: sidebarSessionQueryWorkspaceId,
-      };
-      recordAgentUiPerformanceMetric(
-        "appSidebar.recentConversations.loadBreakdown",
-        metricContext,
-      );
-      logAgentDebug(
-        "AppSidebar",
-        "recentConversations.load.success",
-        metricContext,
-        {
-          dedupeKey: `appSidebar.recentConversations.load.success:${currentProjectId ?? ""}:${recentSessionRequestLimit}`,
-          throttleMs: 1000,
-        },
-      );
-      setSidebarSessions(sortedSessions);
-      setSidebarSessionsHasMore(hasMore);
-    } catch (error) {
-      console.warn("加载导航任务列表失败:", error);
-      logAgentDebug(
-        "AppSidebar",
-        "recentConversations.load.error",
-        {
-          durationMs: Date.now() - startedAt,
-          error,
-          limit: recentSessionRequestLimit,
-          workspaceId: sidebarSessionQueryWorkspaceId,
-        },
-        { level: "warn" },
-      );
-      setSidebarSessions([]);
-      setSidebarSessionsHasMore(false);
-    } finally {
-      recentSidebarLoadInFlightRef.current = false;
-      setSidebarSessionsLoading(false);
-      if (recentSidebarReloadPendingRef.current) {
-        recentSidebarReloadPendingRef.current = false;
-        scheduleRecentSidebarReload(SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS);
-      }
-    }
-  }, [
-    currentProjectId,
-    recentSessionRequestLimit,
-    recentSessionsVisibleCount,
-    scheduleRecentSidebarReload,
-    sidebarSessionQueryWorkspaceId,
-    shouldLoadWorkspaceScopedConversations,
-  ]);
-  useEffect(() => {
-    loadRecentSidebarSessionsRef.current = loadRecentSidebarSessions;
-  }, [loadRecentSidebarSessions]);
-
-  const loadArchivedSidebarSessions = useCallback(async () => {
-    if (!shouldLoadWorkspaceScopedConversations || archivedSessionsCollapsed) {
-      setArchivedSessionEntries([]);
-      setArchivedSessionEntriesHasMore(false);
-      setArchivedSidebarSessionsLoading(false);
-      return;
-    }
-
-    if (archivedSidebarLoadInFlightRef.current) {
-      archivedSidebarReloadPendingRef.current = true;
-      return;
-    }
-
-    const deferRemainingMs =
-      conversationNavigationDeferUntilRef.current - Date.now();
-    if (deferRemainingMs > 0 && archivedSidebarSessionsRef.current.length > 0) {
-      scheduleArchivedSidebarReload(deferRemainingMs);
-      return;
-    }
-
-    archivedSidebarLoadInFlightRef.current = true;
-    setArchivedSidebarSessionsLoading(
-      (current) => current || archivedSidebarSessionsRef.current.length === 0,
-    );
-    try {
-      const sessions = await listAgentRuntimeSessions({
-        archivedOnly: true,
-        limit: archivedSessionRequestLimit,
-        ...(sidebarSessionQueryWorkspaceId
-          ? { workspaceId: sidebarSessionQueryWorkspaceId }
-          : {}),
-      });
-      const sortedSessions = sortSidebarSessions(
-        sessions.filter((session) => Boolean(session.archived_at)),
-      );
-      const { hasMore } = splitSidebarSessionResult({
-        sessions: sortedSessions,
-        visibleCount: archivedSessionsVisibleCount,
-        pageSize: SIDEBAR_ARCHIVED_SESSION_PAGE_SIZE,
-      });
-      setArchivedSessionEntries(sortedSessions);
-      setArchivedSessionEntriesHasMore(hasMore);
-    } catch (error) {
-      console.error("加载归档任务列表失败:", error);
-      setArchivedSessionEntries([]);
-      setArchivedSessionEntriesHasMore(false);
-    } finally {
-      archivedSidebarLoadInFlightRef.current = false;
-      setArchivedSidebarSessionsLoading(false);
-      if (archivedSidebarReloadPendingRef.current) {
-        archivedSidebarReloadPendingRef.current = false;
-        scheduleArchivedSidebarReload(SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS);
-      }
-    }
-  }, [
-    archivedSessionRequestLimit,
-    archivedSessionsCollapsed,
-    archivedSessionsVisibleCount,
-    scheduleArchivedSidebarReload,
-    sidebarSessionQueryWorkspaceId,
-    shouldLoadWorkspaceScopedConversations,
-  ]);
-  useEffect(() => {
-    loadArchivedSidebarSessionsRef.current = loadArchivedSidebarSessions;
-  }, [loadArchivedSidebarSessions]);
-
-  const refreshSidebarSessions = useCallback(async () => {
-    await loadRecentSidebarSessions();
-    if (!archivedSessionsCollapsed) {
-      await loadArchivedSidebarSessions();
-    }
-  }, [
-    archivedSessionsCollapsed,
-    loadArchivedSidebarSessions,
-    loadRecentSidebarSessions,
-  ]);
-  const sidebarFocusRefreshCancelRef = useRef<(() => void) | null>(null);
-  const newTaskHomeSessionLoadCancelRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    if (!shouldLoadWorkspaceScopedConversations) {
-      newTaskHomeSessionLoadCancelRef.current?.();
-      newTaskHomeSessionLoadCancelRef.current = null;
-      return;
-    }
-
-    if (isNewTaskHome && sidebarSessionsRef.current.length === 0) {
-      newTaskHomeSessionLoadCancelRef.current?.();
-      newTaskHomeSessionLoadCancelRef.current = scheduleMinimumDelayIdleTask(
-        () => {
-          newTaskHomeSessionLoadCancelRef.current = null;
-          void loadRecentSidebarSessionsRef.current();
-        },
-        {
-          minimumDelayMs: SIDEBAR_NEW_TASK_HOME_SESSION_LOAD_DEFER_MS,
-          idleTimeoutMs: SIDEBAR_NEW_TASK_HOME_SESSION_LOAD_DEFER_MS,
-        },
-      );
-      return () => {
-        newTaskHomeSessionLoadCancelRef.current?.();
-        newTaskHomeSessionLoadCancelRef.current = null;
-      };
-    }
-
-    if (isClawTaskCenter && hasCachedCurrentSessionSidebarEntry) {
-      return scheduleMinimumDelayIdleTask(
-        () => {
-          void loadRecentSidebarSessionsRef.current();
-        },
-        {
-          minimumDelayMs: SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
-          idleTimeoutMs: SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
-        },
-      );
-    }
-
-    void loadRecentSidebarSessionsRef.current();
-  }, [
-    currentProjectId,
-    hasCachedCurrentSessionSidebarEntry,
-    isClawTaskCenter,
-    isNewTaskHome,
-    shouldLoadWorkspaceScopedConversations,
-  ]);
-
-  useEffect(() => {
-    if (!shouldLoadWorkspaceScopedConversations) {
-      return;
-    }
-
-    const handleFocus = () => {
-      sidebarFocusRefreshCancelRef.current?.();
-      sidebarFocusRefreshCancelRef.current = scheduleMinimumDelayIdleTask(
-        () => {
-          sidebarFocusRefreshCancelRef.current = null;
-          void refreshSidebarSessions();
-        },
-        {
-          minimumDelayMs: SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
-          idleTimeoutMs: SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
-        },
-      );
-    };
-
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      sidebarFocusRefreshCancelRef.current?.();
-      sidebarFocusRefreshCancelRef.current = null;
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [refreshSidebarSessions, shouldLoadWorkspaceScopedConversations]);
-
-  useEffect(() => {
-    if (!shouldLoadWorkspaceScopedConversations || archivedSessionsCollapsed) {
-      return;
-    }
-
-    void loadArchivedSidebarSessionsRef.current();
-  }, [
-    archivedSessionsCollapsed,
-    currentProjectId,
-    shouldLoadWorkspaceScopedConversations,
-  ]);
-
-  useEffect(() => {
-    if (!shouldLoadWorkspaceScopedConversations || !sidebarSessionsHasMore) {
-      return;
-    }
-
-    if (recentSessionsVisibleCount < sidebarSessions.length) {
-      return;
-    }
-
-    void loadRecentSidebarSessions();
-  }, [
-    loadRecentSidebarSessions,
-    recentSessionsVisibleCount,
-    shouldLoadWorkspaceScopedConversations,
-    sidebarSessions.length,
-    sidebarSessionsHasMore,
-  ]);
-
-  useEffect(() => {
-    if (
-      !shouldLoadWorkspaceScopedConversations ||
-      archivedSessionsCollapsed ||
-      !archivedSessionEntriesHasMore
-    ) {
-      return;
-    }
-
-    if (archivedSessionsVisibleCount < archivedSessionEntries.length) {
-      return;
-    }
-
-    void loadArchivedSidebarSessions();
-  }, [
-    archivedSessionEntries.length,
-    archivedSessionEntriesHasMore,
-    archivedSessionsCollapsed,
-    archivedSessionsVisibleCount,
-    loadArchivedSidebarSessions,
-    shouldLoadWorkspaceScopedConversations,
-  ]);
-
-  const recentSidebarSessions = useMemo(() => {
-    if (!currentProjectId) {
-      return [];
-    }
-
-    const filteredSessions = sidebarSessionQueryWorkspaceId
-      ? sidebarSessions.filter(
-          (session) =>
-            !session.workspace_id ||
-            session.workspace_id === sidebarSessionQueryWorkspaceId,
-        )
-      : sidebarSessions;
-
-    return filteredSessions.filter((session) => !session.archived_at);
-  }, [currentProjectId, sidebarSessionQueryWorkspaceId, sidebarSessions]);
-  const archivedSidebarSessions = useMemo(() => {
-    if (!currentProjectId) {
-      return [];
-    }
-
-    const filteredSessions = sidebarSessionQueryWorkspaceId
-      ? archivedSessionEntries.filter(
-          (session) =>
-            !session.workspace_id ||
-            session.workspace_id === sidebarSessionQueryWorkspaceId,
-        )
-      : archivedSessionEntries;
-
-    return filteredSessions.filter((session) => Boolean(session.archived_at));
-  }, [
-    archivedSessionEntries,
-    currentProjectId,
-    sidebarSessionQueryWorkspaceId,
-  ]);
-  const visibleRecentSidebarSessions = useMemo(
-    () =>
-      buildVisibleSidebarSessions({
-        sessions: recentSidebarSessions,
-        currentSessionId,
-        limit: recentSessionsVisibleCount,
-      }),
-    [currentSessionId, recentSessionsVisibleCount, recentSidebarSessions],
-  );
-  const visibleArchivedSidebarSessions = useMemo(
-    () =>
-      buildVisibleSidebarSessions({
-        sessions: archivedSidebarSessions,
-        currentSessionId,
-        limit: archivedSessionsVisibleCount,
-      }),
-    [archivedSessionsVisibleCount, archivedSidebarSessions, currentSessionId],
-  );
-  const hasMoreRecentSidebarSessions =
-    sidebarSessionsHasMore ||
-    recentSessionsVisibleCount < recentSidebarSessions.length;
-  const hasMoreArchivedSidebarSessions =
-    archivedSessionEntriesHasMore ||
-    archivedSessionsVisibleCount < archivedSidebarSessions.length;
-  const normalizedSidebarSearchQuery = useMemo(
-    () => normalizeSidebarSearchText(sidebarSearchQuery),
-    [sidebarSearchQuery],
-  );
-  const sidebarSearchResultLimit = Math.max(
-    recentSessionsVisibleCount,
-    SIDEBAR_SEARCH_RESULT_LIMIT,
-  );
-  const sidebarSearchMatchedSessions = useMemo(() => {
-    if (!normalizedSidebarSearchQuery) {
-      return recentSidebarSessions;
-    }
-
-    return recentSidebarSessions.filter((session) =>
-      matchesSidebarSessionTitle(
-        session,
-        normalizedSidebarSearchQuery,
-        conversationUntitledLabel,
-      ),
-    );
-  }, [
-    conversationUntitledLabel,
-    normalizedSidebarSearchQuery,
-    recentSidebarSessions,
-  ]);
-  const sidebarSearchResultSessions = useMemo(() => {
-    if (!normalizedSidebarSearchQuery) {
-      return buildVisibleSidebarSessions({
-        sessions: recentSidebarSessions,
-        currentSessionId,
-        limit: sidebarSearchResultLimit,
-      });
-    }
-
-    return sidebarSearchMatchedSessions.slice(0, sidebarSearchResultLimit);
-  }, [
+  const {
+    beginSidebarSessionAction,
+    clearSidebarSessionAction,
+    deferConversationNavigation,
+    fallbackSessionId,
+    hasMoreRecentSidebarSessions,
+    moveSidebarSessionArchiveStateOptimistically,
+    recentSessionsLoading,
+    refreshSidebarSessions,
+    removeSidebarSessionOptimistically,
+    renameSidebarSessionOptimistically,
+    shouldShowSessionLoadingState,
+    showMoreRecentSessions,
+    sidebarSearchHasMoreResults,
+    sidebarSearchHasQuery,
+    sidebarSearchResultSessions,
+    sidebarSessionActionId,
+    visibleRecentSidebarSessions,
+  } = useAppSidebarSessions({
     currentSessionId,
-    normalizedSidebarSearchQuery,
-    recentSidebarSessions,
-    sidebarSearchMatchedSessions,
-    sidebarSearchResultLimit,
-  ]);
-  const sidebarSearchHasQuery = normalizedSidebarSearchQuery.length > 0;
-  const sidebarSearchHasMoreResults = sidebarSearchHasQuery
-    ? sidebarSessionsHasMore ||
-      sidebarSearchResultLimit < sidebarSearchMatchedSessions.length
-    : hasMoreRecentSidebarSessions;
+    openedProjectIds,
+    shouldShowConversationList,
+    sidebarSearchOpen,
+    sidebarSearchQuery,
+    isNewTaskHome,
+    isClawTaskCenter,
+    conversationUntitledLabel,
+  });
 
   const isActive = (item: SidebarNavItem): boolean => {
     if (!item.page) {
@@ -3652,14 +814,10 @@ export function AppSidebar({
     }
 
     if (item.id === "workbench") {
-      const fallbackSessionId =
-        currentSessionId ??
-        recentSidebarSessions[0]?.id ??
-        sidebarSessions[0]?.id ??
-        undefined;
+      const targetSessionId = currentSessionId ?? fallbackSessionId ?? undefined;
       const targetParams = buildClawAgentParams({
         projectId: currentProjectId ?? undefined,
-        initialSessionId: fallbackSessionId,
+        initialSessionId: targetSessionId,
       });
       const target = {
         page: "agent" as Page,
@@ -3762,8 +920,7 @@ export function AppSidebar({
 
   const handleNavigateToConversation = useCallback(
     (session: AsterSessionInfo) => {
-      conversationNavigationDeferUntilRef.current =
-        Date.now() + SIDEBAR_CONVERSATION_NAVIGATION_DEFER_MS;
+      deferConversationNavigation();
 
       if (isClawTaskCenter) {
         notifyTaskCenterTaskOpen({
@@ -3797,7 +954,7 @@ export function AppSidebar({
       requestedNavigationTargetRef.current = target;
       onNavigate(target.page, target.rawParams);
     },
-    [currentProjectId, isClawTaskCenter, onNavigate],
+    [currentProjectId, deferConversationNavigation, isClawTaskCenter, onNavigate],
   );
 
   const handleNavigateToNewTask = useCallback(() => {
@@ -3869,17 +1026,8 @@ export function AppSidebar({
         name: nextTitle,
         updated_at: nextUpdatedAt,
       } satisfies AsterSessionInfo;
-      setSidebarSessionActionId(session.id);
-      setSidebarSessions((current) =>
-        sortSidebarSessions(
-          current.map((item) => (item.id === session.id ? nextSession : item)),
-        ),
-      );
-      setArchivedSessionEntries((current) =>
-        sortSidebarSessions(
-          current.map((item) => (item.id === session.id ? nextSession : item)),
-        ),
-      );
+      beginSidebarSessionAction(session.id);
+      renameSidebarSessionOptimistically(nextSession);
 
       try {
         await updateAgentRuntimeSession({
@@ -3893,16 +1041,17 @@ export function AppSidebar({
         toast.error(renameConversationErrorLabel);
         await refreshSidebarSessions();
       } finally {
-        setSidebarSessionActionId((current) =>
-          current === session.id ? null : current,
-        );
+        clearSidebarSessionAction(session.id);
       }
     },
     [
+      beginSidebarSessionAction,
+      clearSidebarSessionAction,
       refreshSidebarSessions,
       renameConversationErrorLabel,
       renameConversationPromptLabel,
       renameConversationSuccessLabel,
+      renameSidebarSessionOptimistically,
       resolveLocalizedSessionTitle,
     ],
   );
@@ -3915,23 +1064,8 @@ export function AppSidebar({
         updated_at: nextUpdatedAt,
         archived_at: archived ? nextUpdatedAt : null,
       } satisfies AsterSessionInfo;
-      setSidebarSessionActionId(session.id);
-      setSidebarSessions((current) =>
-        sortSidebarSessions(
-          current
-            .map((item) => (item.id === session.id ? nextSession : item))
-            .filter((item) => !item.archived_at),
-        ),
-      );
-      setArchivedSessionEntries((current) =>
-        sortSidebarSessions(
-          archived
-            ? [nextSession, ...current.filter((item) => item.id !== session.id)]
-            : current
-                .map((item) => (item.id === session.id ? nextSession : item))
-                .filter((item) => Boolean(item.archived_at)),
-        ),
-      );
+      beginSidebarSessionAction(session.id);
+      moveSidebarSessionArchiveStateOptimistically(nextSession);
 
       try {
         await updateAgentRuntimeSession({
@@ -3943,12 +1077,15 @@ export function AppSidebar({
         console.error(archived ? "归档会话失败:" : "恢复会话失败:", error);
         await refreshSidebarSessions();
       } finally {
-        setSidebarSessionActionId((current) =>
-          current === session.id ? null : current,
-        );
+        clearSidebarSessionAction(session.id);
       }
     },
-    [refreshSidebarSessions],
+    [
+      beginSidebarSessionAction,
+      clearSidebarSessionAction,
+      moveSidebarSessionArchiveStateOptimistically,
+      refreshSidebarSessions,
+    ],
   );
 
   const handleDeleteConversation = useCallback(
@@ -3959,13 +1096,8 @@ export function AppSidebar({
         return;
       }
 
-      setSidebarSessionActionId(session.id);
-      setSidebarSessions((current) =>
-        current.filter((item) => item.id !== session.id),
-      );
-      setArchivedSessionEntries((current) =>
-        current.filter((item) => item.id !== session.id),
-      );
+      beginSidebarSessionAction(session.id);
+      removeSidebarSessionOptimistically(session.id);
 
       try {
         await deleteAgentRuntimeSession(session.id);
@@ -3980,208 +1112,23 @@ export function AppSidebar({
         toast.error(deleteConversationErrorLabel);
         await refreshSidebarSessions();
       } finally {
-        setSidebarSessionActionId((current) =>
-          current === session.id ? null : current,
-        );
+        clearSidebarSessionAction(session.id);
       }
     },
     [
+      beginSidebarSessionAction,
+      clearSidebarSessionAction,
       currentSessionId,
       deleteConversationErrorLabel,
       deleteConversationSuccessLabel,
       formatDeleteConversationConfirm,
       handleNavigateToNewTask,
+      removeSidebarSessionOptimistically,
       refreshSidebarSessions,
       resolveLocalizedSessionTitle,
     ],
   );
 
-  const currentColorScheme = getLimeColorScheme(colorSchemeId);
-  const appearanceEntryLabel = t(
-    "navigation.sidebar.appearance.entry.label",
-    "快速切换外观",
-  );
-  const appearanceTitleLabel = t(
-    "navigation.sidebar.appearance.dialog.title",
-    "外观",
-  );
-  const appearanceThemeGroupLabel = t(
-    "navigation.sidebar.appearance.theme.group",
-    "主题",
-  );
-  const appearanceColorSchemeGroupLabel = t(
-    "navigation.sidebar.appearance.colorScheme.group",
-    "配色",
-  );
-  const appearanceRandomColorSchemeLabel = t(
-    "navigation.sidebar.appearance.colorScheme.random.label",
-    "随机",
-  );
-  const appearanceRandomColorSchemeAriaLabel = t(
-    "navigation.sidebar.appearance.colorScheme.random.ariaLabel",
-    "随机切换配色",
-  );
-  const appearanceRandomColorSchemeTitle = t(
-    "navigation.sidebar.appearance.colorScheme.random.title",
-    "随机切换一个颜色主题",
-  );
-  const appearanceThemeCopy = {
-    light: {
-      label: t("navigation.sidebar.appearance.theme.light.label", "浅色"),
-      description: t(
-        "navigation.sidebar.appearance.theme.light.description",
-        "适合白天和高亮环境。",
-      ),
-    },
-    dark: {
-      label: t("navigation.sidebar.appearance.theme.dark.label", "深色"),
-      description: t(
-        "navigation.sidebar.appearance.theme.dark.description",
-        "降低夜间使用时的眩光。",
-      ),
-    },
-    system: {
-      label: t("navigation.sidebar.appearance.theme.system.label", "跟随系统"),
-      description: t(
-        "navigation.sidebar.appearance.theme.system.description",
-        "自动同步系统外观。",
-      ),
-    },
-  } satisfies Record<LimeThemeMode, { label: string; description: string }>;
-  const appearanceColorSchemeCopy = {
-    "lime-classic": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeClassic.label",
-        "墨绿",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeClassic.description",
-        "经典深绿，温暖米色背景。",
-      ),
-    },
-    "lime-forest": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeForest.label",
-        "自然",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeForest.description",
-        "舒适放松的清新自然风。",
-      ),
-    },
-    "lime-ocean": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeOcean.label",
-        "海洋",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeOcean.description",
-        "沉静专业的蓝色调。",
-      ),
-    },
-    "lime-sand": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeSand.label",
-        "复古",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeSand.description",
-        "温暖怀旧的琥珀色调。",
-      ),
-    },
-    "lime-neon": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeNeon.label",
-        "霓虹",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeNeon.description",
-        "赛博明亮的粉紫色调。",
-      ),
-    },
-    "lime-citron": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeCitron.label",
-        "青柠",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeCitron.description",
-        "活力清新的黄绿配紫。",
-      ),
-    },
-    "lime-dusk": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeDusk.label",
-        "黄昏",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeDusk.description",
-        "柔和温暖的暮色调。",
-      ),
-    },
-    "lime-minimal": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeMinimal.label",
-        "极简",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeMinimal.description",
-        "清晰专业的深蓝商务风。",
-      ),
-    },
-    "lime-vivid": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeVivid.label",
-        "活力",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeVivid.description",
-        "时尚有冲击力的现代科技风。",
-      ),
-    },
-    "lime-literary": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeLiterary.label",
-        "文艺",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeLiterary.description",
-        "宁静高雅的灰蓝文艺风。",
-      ),
-    },
-    "lime-luxury": {
-      label: t(
-        "navigation.sidebar.appearance.colorScheme.limeLuxury.label",
-        "奢华",
-      ),
-      description: t(
-        "navigation.sidebar.appearance.colorScheme.limeLuxury.description",
-        "尊贵权威的黑金商务风。",
-      ),
-    },
-  } satisfies Record<LimeColorSchemeId, { label: string; description: string }>;
-  const appearanceThemeOptions = LIME_THEME_MODE_OPTIONS.map((option) => ({
-    ...option,
-    ...appearanceThemeCopy[option.id],
-  }));
-  const appearanceColorSchemes = LIME_COLOR_SCHEMES.map((scheme) => ({
-    ...scheme,
-    ...appearanceColorSchemeCopy[scheme.id],
-  }));
-  const currentThemeLabel =
-    appearanceThemeCopy[themeState.themeMode]?.label ??
-    appearanceThemeCopy.system.label;
-  const currentColorSchemeLabel =
-    appearanceColorSchemeCopy[currentColorScheme.id]?.label ??
-    currentColorScheme.label;
-  const appearanceSummaryLabel = t(
-    "navigation.sidebar.appearance.dialog.summary",
-    {
-      theme: currentThemeLabel,
-      colorScheme: currentColorSchemeLabel,
-      defaultValue: "{{theme}} · {{colorScheme}}",
-    },
-  );
   const currentLanguageLabel = resolveLocaleOptionLabel(language);
   const accountDisplayName = resolveAccountDisplayName(
     cloudSessionState,
@@ -4375,7 +1322,6 @@ export function AppSidebar({
     ? `${accountDisplayName}${accountEmail ? ` · ${accountEmail}` : ""}`
     : accountLocalTooltipLabel;
   const inviteShare = inviteDashboard?.share;
-  const invitePolicy = inviteDashboard?.policy;
   const inviteEntryLabel = t(
     "navigation.sidebar.invite.entry.label",
     "邀请好友",
@@ -4491,32 +1437,6 @@ export function AppSidebar({
     },
     [i18n.language, inviteRewardCurrentPolicyLabel, t],
   );
-
-  const handleThemeModeChange = useCallback((nextThemeMode: LimeThemeMode) => {
-    const themeMode = persistLimeThemeMode(nextThemeMode);
-    setThemeState({
-      themeMode,
-      effectiveThemeMode: getEffectiveLimeThemeMode(themeMode),
-    });
-  }, []);
-
-  const handleColorSchemeChange = useCallback(
-    (nextColorSchemeId: LimeColorSchemeId) => {
-      const resolvedColorSchemeId = persistLimeColorScheme(nextColorSchemeId);
-      setColorSchemeId(resolvedColorSchemeId);
-    },
-    [],
-  );
-
-  const handleRandomColorScheme = useCallback(() => {
-    const candidates = LIME_COLOR_SCHEMES.filter(
-      (scheme) => scheme.id !== colorSchemeId,
-    );
-    const nextScheme =
-      candidates[Math.floor(Math.random() * candidates.length)] ??
-      LIME_COLOR_SCHEMES[0];
-    handleColorSchemeChange(nextScheme.id);
-  }, [colorSchemeId, handleColorSchemeChange]);
 
   const handleAccountMenuNavigate = useCallback(
     (params: PageParams) => {
@@ -4648,18 +1568,6 @@ export function AppSidebar({
     [language, setI18nLanguage],
   );
 
-  const renderThemeModeIcon = (themeMode: LimeThemeMode) => {
-    if (themeMode === "dark") {
-      return <Moon />;
-    }
-
-    if (themeMode === "system") {
-      return <Monitor />;
-    }
-
-    return <Sun />;
-  };
-
   return (
     <TooltipProvider>
       <Container
@@ -4752,14 +1660,11 @@ export function AppSidebar({
 
           {shouldShowConversationList ? (
             <AppSidebarConversationShelf
+              openedProjects={openedProjects}
               recentSessions={visibleRecentSidebarSessions}
-              archivedSessions={visibleArchivedSidebarSessions}
               currentSessionId={currentSessionId}
               recentLoading={shouldShowSessionLoadingState}
-              archivedLoading={shouldShowArchivedSessionLoadingState}
-              archivedCollapsed={archivedSessionsCollapsed}
               hasMoreRecent={hasMoreRecentSidebarSessions}
-              hasMoreArchived={hasMoreArchivedSidebarSessions}
               actionSessionId={sidebarSessionActionId}
               onCreateConversation={handleNavigateToNewTask}
               onNavigateToConversation={handleNavigateToConversation}
@@ -4768,19 +1673,7 @@ export function AppSidebar({
               onToggleArchive={(session, archived) => {
                 void handleToggleSessionArchive(session, archived);
               }}
-              onShowMoreRecent={() =>
-                setRecentSessionsVisibleCount(
-                  (current) => current + SIDEBAR_RECENT_SESSION_PAGE_SIZE,
-                )
-              }
-              onShowMoreArchived={() =>
-                setArchivedSessionsVisibleCount(
-                  (current) => current + SIDEBAR_ARCHIVED_SESSION_PAGE_SIZE,
-                )
-              }
-              onToggleArchivedCollapsed={() =>
-                setArchivedSessionsCollapsed((current) => !current)
-              }
+              onShowMoreRecent={showMoreRecentSessions}
             />
           ) : null}
         </MenuScroll>
@@ -4805,8 +1698,8 @@ export function AppSidebar({
                         setLanguageMenuOpen(false);
                         setAppearancePopoverOpen((current) => !current);
                       }}
-                      title={appearanceEntryLabel}
-                      aria-label={appearanceEntryLabel}
+                      title={appearanceCopy.entryLabel}
+                      aria-label={appearanceCopy.entryLabel}
                       aria-expanded={appearancePopoverOpen}
                       aria-haspopup="dialog"
                     >
@@ -4818,7 +1711,7 @@ export function AppSidebar({
                     </IconActionButton>
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    {appearanceEntryLabel}
+                    {appearanceCopy.entryLabel}
                   </TooltipContent>
                 </Tooltip>
               ) : (
@@ -4829,8 +1722,8 @@ export function AppSidebar({
                     setLanguageMenuOpen(false);
                     setAppearancePopoverOpen((current) => !current);
                   }}
-                  title={appearanceEntryLabel}
-                  aria-label={appearanceEntryLabel}
+                  title={appearanceCopy.entryLabel}
+                  aria-label={appearanceCopy.entryLabel}
                   aria-expanded={appearancePopoverOpen}
                   aria-haspopup="dialog"
                 >
@@ -4843,106 +1736,16 @@ export function AppSidebar({
               )}
 
               {appearancePopoverOpen ? (
-                <AppearancePopover
-                  data-testid="app-sidebar-appearance-popover"
-                  role="dialog"
-                  aria-label={appearanceEntryLabel}
-                >
-                  <AppearancePopoverHeader>
-                    <AppearancePopoverTitle>
-                      <Palette />
-                      {appearanceTitleLabel}
-                    </AppearancePopoverTitle>
-                    <AppearancePopoverSummary>
-                      {appearanceSummaryLabel}
-                    </AppearancePopoverSummary>
-                  </AppearancePopoverHeader>
-
-                  <AppearanceGroup>
-                    <AppearanceGroupLabel>
-                      {appearanceThemeGroupLabel}
-                    </AppearanceGroupLabel>
-                    <ThemeModeGrid>
-                      {appearanceThemeOptions.map((option) => {
-                        const active = option.id === themeState.themeMode;
-                        return (
-                          <ThemeModeButton
-                            key={option.id}
-                            $active={active}
-                            type="button"
-                            aria-pressed={active}
-                            aria-label={t(
-                              "navigation.sidebar.appearance.theme.switchAria",
-                              {
-                                theme: option.label,
-                                defaultValue: "切换主题为{{theme}}",
-                              },
-                            )}
-                            title={option.description}
-                            onClick={() => handleThemeModeChange(option.id)}
-                          >
-                            {renderThemeModeIcon(option.id)}
-                            <span>{option.label}</span>
-                          </ThemeModeButton>
-                        );
-                      })}
-                    </ThemeModeGrid>
-                  </AppearanceGroup>
-
-                  <AppearanceGroup>
-                    <AppearanceGroupLabel>
-                      {appearanceColorSchemeGroupLabel}
-                    </AppearanceGroupLabel>
-                    <ColorSchemeList>
-                      <RandomColorSchemeButton
-                        type="button"
-                        aria-label={appearanceRandomColorSchemeAriaLabel}
-                        title={appearanceRandomColorSchemeTitle}
-                        onClick={handleRandomColorScheme}
-                      >
-                        <Shuffle />
-                        <span>{appearanceRandomColorSchemeLabel}</span>
-                      </RandomColorSchemeButton>
-                      {appearanceColorSchemes.map((scheme) => {
-                        const active = scheme.id === colorSchemeId;
-                        return (
-                          <ColorSchemeButton
-                            key={scheme.id}
-                            $active={active}
-                            type="button"
-                            aria-pressed={active}
-                            aria-label={t(
-                              "navigation.sidebar.appearance.colorScheme.switchAria",
-                              {
-                                colorScheme: scheme.label,
-                                defaultValue: "切换配色为{{colorScheme}}",
-                              },
-                            )}
-                            title={scheme.description}
-                            onClick={() => handleColorSchemeChange(scheme.id)}
-                          >
-                            <ColorSchemeSwatches aria-hidden="true">
-                              {scheme.swatches.map((swatch) => (
-                                <span
-                                  key={swatch}
-                                  style={{ backgroundColor: swatch }}
-                                />
-                              ))}
-                            </ColorSchemeSwatches>
-                            <ColorSchemeText>
-                              <ColorSchemeLabel>
-                                {scheme.label}
-                              </ColorSchemeLabel>
-                            </ColorSchemeText>
-                            <ColorSchemeCheck $active={active}>
-                              <Check />
-                            </ColorSchemeCheck>
-                          </ColorSchemeButton>
-                        );
-                      })}
-                    </ColorSchemeList>
-                  </AppearanceGroup>
-                </AppearancePopover>
+                <AppSidebarAppearancePopover
+                  themeMode={themeState.themeMode}
+                  colorSchemeId={colorSchemeId}
+                  themeOptions={appearanceThemeOptions}
+                  colorSchemes={appearanceColorSchemes}
+                  copy={appearanceCopy}
+                  onThemeModeChange={handleThemeModeChange}
+                  onColorSchemeChange={handleColorSchemeChange}
+                  onRandomColorScheme={handleRandomColorScheme}
+                />
               ) : null}
             </AppearanceActionSlot>
           </ActionRow>
@@ -4961,584 +1764,161 @@ export function AppSidebar({
               }}
             />
 
-            {maybeWrapWithTooltip(
-              <AccountButton
-                type="button"
-                $collapsed={collapsed}
-                $active={accountMenuOpen}
-                onClick={() => {
-                  setAppearancePopoverOpen(false);
-                  setLanguageMenuOpen(false);
-                  setAccountMenuOpen((current) => !current);
-                }}
-                aria-label={accountOpenUserMenuLabel}
-                aria-expanded={accountMenuOpen}
-                aria-haspopup="dialog"
-                data-testid="app-sidebar-account-button"
-              >
-                <AccountIdentity $collapsed={collapsed}>
-                  <AccountAvatar>
-                    {accountAvatarUrl ? (
-                      <img src={accountAvatarUrl} alt={accountDisplayName} />
-                    ) : (
-                      accountInitial
-                    )}
-                  </AccountAvatar>
-                  <AccountName>{accountDisplayName}</AccountName>
-                </AccountIdentity>
-                {collapsed ? (
-                  <AccountAvatar>
-                    {accountAvatarUrl ? (
-                      <img src={accountAvatarUrl} alt={accountDisplayName} />
-                    ) : (
-                      accountInitial
-                    )}
-                  </AccountAvatar>
-                ) : null}
-                <AccountTrailing $collapsed={collapsed}>
-                  <AccountStateBadge $connected={hasCloudAccount}>
-                    {hasCloudAccount
-                      ? accountCloudStateLabel
-                      : accountLocalStateLabel}
-                  </AccountStateBadge>
-                  <ChevronDown />
-                </AccountTrailing>
-              </AccountButton>,
-              accountButtonTooltip,
-            )}
-
-            {accountMenuOpen ? (
-              <AccountMenuPopover
-                $collapsed={collapsed}
-                role="dialog"
-                aria-label={accountMenuLabel}
-                data-testid="app-sidebar-account-menu"
-              >
-                {hasCloudAccount ? (
-                  <AccountPlanButton
-                    type="button"
-                    aria-label={accountViewPlanDetailsLabel}
-                    data-testid="app-sidebar-cloud-account-card"
-                    onClick={() =>
-                      void handleOpenAccountUserCenter("/billing?tab=usage")
-                    }
-                  >
-                    <AccountPlanHeader>
-                      <AccountPlanTitle>
-                        {accountPlanSummary.planLabel}
-                      </AccountPlanTitle>
-                      <AccountPlanDetailsPill>
-                        {accountViewDetailsLabel}
-                        <ChevronRight />
-                      </AccountPlanDetailsPill>
-                    </AccountPlanHeader>
-                    {accountPlanSummary.usageLabel ? (
-                      <>
-                        <AccountPlanUsage>
-                          {accountPlanSummary.usageLabel}
-                        </AccountPlanUsage>
-                        <AccountPlanProgressTrack aria-hidden="true">
-                          <AccountPlanProgressFill
-                            $percent={accountPlanSummary.usagePercent}
-                          />
-                        </AccountPlanProgressTrack>
-                      </>
-                    ) : null}
-                    <AccountPlanMeta>{accountMetaLine}</AccountPlanMeta>
-                  </AccountPlanButton>
-                ) : (
-                  <AccountPlanCard data-testid="app-sidebar-open-source-card">
-                    <AccountPlanHeader>
-                      <AccountPlanTitle>
-                        <span>{accountOpenSourceTitleLabel}</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <AccountInfoIconButton
-                              type="button"
-                              aria-label={accountOpenSourceInfoLabel}
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <Info />
-                            </AccountInfoIconButton>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">
-                            {accountOpenSourceDescriptionLabel}
-                          </TooltipContent>
-                        </Tooltip>
-                      </AccountPlanTitle>
-                      <AccountPlanBadge>
-                        {accountFreePlanLabel}
-                      </AccountPlanBadge>
-                    </AccountPlanHeader>
-                    <AccountPlanDetail>
-                      <span>{accountNoLoginAvailableLabel}</span>
-                      <span>{accountLocalModelConfigurableLabel}</span>
-                    </AccountPlanDetail>
-                    <AccountPlanActions>
-                      <AccountPlanActionButton
-                        type="button"
-                        $primary
-                        disabled={accountLoginPending}
-                        aria-label={connectCloudLabel}
-                        onClick={() => void handleAccountLogin()}
-                      >
-                        <LogIn />
-                        {accountLoginPending
-                          ? accountLoginPendingLabel
-                          : connectCloudLabel}
-                      </AccountPlanActionButton>
-                      <AccountPlanActionButton
-                        type="button"
-                        aria-label={accountModelSettingsLabel}
-                        onClick={() =>
-                          handleAccountMenuNavigate({
-                            tab: SettingsTabs.Providers,
-                            providerView: "settings",
-                          })
-                        }
-                      >
-                        <KeyRound />
-                        {accountModelSettingsLabel}
-                      </AccountPlanActionButton>
-                    </AccountPlanActions>
-                    {accountLoginError ? (
-                      <AccountMenuNotice $tone="error">
-                        {accountLoginError}
-                      </AccountMenuNotice>
-                    ) : null}
-                  </AccountPlanCard>
-                )}
-
-                <AccountMenuList>
-                  {filteredFooterNavItems.map((item) => {
-                    const AccountNavIcon = item.icon;
-                    const active = isActive(item);
-
-                    return (
-                      <AccountMenuItem
-                        key={item.id}
-                        type="button"
-                        $active={active}
-                        aria-label={item.label}
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => {
-                          setAccountMenuOpen(false);
-                          handleNavigate(item);
-                        }}
-                      >
-                        <AccountMenuItemLeading>
-                          <AccountNavIcon />
-                          {item.label}
-                        </AccountMenuItemLeading>
-                        <ChevronRight />
-                      </AccountMenuItem>
-                    );
-                  })}
-                  <AccountMenuItemGroup>
-                    <AccountMenuItem
-                      type="button"
-                      $active={languageMenuOpen}
-                      aria-label={languageMenuLabel}
-                      aria-expanded={languageMenuOpen}
-                      aria-haspopup="menu"
-                      onClick={() => setLanguageMenuOpen((current) => !current)}
-                    >
-                      <AccountMenuItemLeading>
-                        <Languages />
-                        {languageMenuLabel}
-                      </AccountMenuItemLeading>
-                      <AccountMenuItemTrailing>
-                        {currentLanguageLabel}
-                        <ChevronRight />
-                      </AccountMenuItemTrailing>
-                    </AccountMenuItem>
-                    {languageMenuOpen ? (
-                      <AccountSubmenuPopover
-                        role="menu"
-                        aria-label={selectLanguageLabel}
-                        data-testid="app-sidebar-language-menu"
-                      >
-                        <AccountSubmenuTitle>
-                          {interfaceLanguageLabel}
-                        </AccountSubmenuTitle>
-                        {APP_SIDEBAR_LANGUAGE_OPTIONS.map((option) => {
-                          const active = option.id === language;
-
-                          return (
-                            <AccountSubmenuItem
-                              key={option.id}
-                              type="button"
-                              $active={active}
-                              role="menuitemradio"
-                              aria-checked={active}
-                              aria-label={t(
-                                "navigation.sidebar.account.switchLanguage",
-                                {
-                                  language: option.label,
-                                  defaultValue: "切换界面语言为{{language}}",
-                                },
-                              )}
-                              onClick={() =>
-                                void handleLanguageChange(option.id)
-                              }
-                            >
-                              <AccountSubmenuItemText>
-                                <AccountSubmenuItemLabel>
-                                  {option.label}
-                                </AccountSubmenuItemLabel>
-                                <AccountSubmenuItemHint>
-                                  {option.hint}
-                                </AccountSubmenuItemHint>
-                              </AccountSubmenuItemText>
-                              {active ? <Check /> : null}
-                            </AccountSubmenuItem>
-                          );
-                        })}
-                      </AccountSubmenuPopover>
-                    ) : null}
-                  </AccountMenuItemGroup>
-                  {hasCloudAccount ? (
-                    <AccountMenuItem
-                      type="button"
-                      aria-label={accountUserCenterLabel}
-                      onClick={() =>
-                        void handleOpenAccountUserCenter("/welcome")
-                      }
-                    >
-                      <AccountMenuItemLeading>
-                        <ExternalLink />
-                        {accountUserCenterLabel}
-                      </AccountMenuItemLeading>
-                      <ChevronRight />
-                    </AccountMenuItem>
-                  ) : null}
-                  <AccountMenuItem
-                    type="button"
-                    aria-label={accountModelSettingsLabel}
-                    onClick={() =>
-                      handleAccountMenuNavigate({
-                        tab: SettingsTabs.Providers,
-                        providerView: "settings",
-                      })
-                    }
-                  >
-                    <AccountMenuItemLeading>
-                      <KeyRound />
-                      {accountModelSettingsLabel}
-                    </AccountMenuItemLeading>
-                    <ChevronRight />
-                  </AccountMenuItem>
-                  {hasCloudAccount ? (
-                    <AccountMenuItem
-                      type="button"
-                      aria-label={cloudBrandLabel}
-                      onClick={() =>
-                        void handleOpenAccountUserCenter("/welcome")
-                      }
-                    >
-                      <AccountMenuItemLeading>
-                        <Cloud />
-                        {cloudBrandLabel}
-                      </AccountMenuItemLeading>
-                      <ChevronRight />
-                    </AccountMenuItem>
-                  ) : null}
-                  <AccountMenuItem
-                    type="button"
-                    aria-label={accountAboutLabel}
-                    onClick={() =>
-                      handleAccountMenuNavigate({ tab: SettingsTabs.About })
-                    }
-                  >
-                    <AccountMenuItemLeading>
-                      <Info />
-                      {accountAboutLabel}
-                    </AccountMenuItemLeading>
-                    <ChevronRight />
-                  </AccountMenuItem>
-                  {hasCloudAccount ? (
-                    <>
-                      <AccountMenuDivider />
-                      <AccountMenuItem
-                        type="button"
-                        $danger
-                        disabled={accountLogoutPending}
-                        aria-label={accountLogoutLabel}
-                        onClick={() => void handleAccountLogout()}
-                      >
-                        <AccountMenuItemLeading>
-                          <LogOut />
-                          {accountLogoutPending
-                            ? accountLogoutPendingLabel
-                            : accountLogoutLabel}
-                        </AccountMenuItemLeading>
-                      </AccountMenuItem>
-                    </>
-                  ) : null}
-                </AccountMenuList>
-              </AccountMenuPopover>
-            ) : null}
+            <AppSidebarAccountMenu
+              collapsed={collapsed}
+              accountMenuOpen={accountMenuOpen}
+              languageMenuOpen={languageMenuOpen}
+              accountDisplayName={accountDisplayName}
+              accountAvatarUrl={accountAvatarUrl}
+              accountInitial={accountInitial}
+              accountMetaLine={accountMetaLine}
+              hasCloudAccount={hasCloudAccount}
+              accountPlanSummary={accountPlanSummary}
+              accountLoginPending={accountLoginPending}
+              accountLoginError={accountLoginError}
+              accountLogoutPending={accountLogoutPending}
+              language={language}
+              navItems={filteredFooterNavItems}
+              copy={{
+                openUserMenuLabel: accountOpenUserMenuLabel,
+                buttonTooltip: accountButtonTooltip,
+                menuLabel: accountMenuLabel,
+                cloudStateLabel: accountCloudStateLabel,
+                localStateLabel: accountLocalStateLabel,
+                viewPlanDetailsLabel: accountViewPlanDetailsLabel,
+                viewDetailsLabel: accountViewDetailsLabel,
+                openSourceTitleLabel: accountOpenSourceTitleLabel,
+                openSourceInfoLabel: accountOpenSourceInfoLabel,
+                openSourceDescriptionLabel: accountOpenSourceDescriptionLabel,
+                freePlanLabel: accountFreePlanLabel,
+                noLoginAvailableLabel: accountNoLoginAvailableLabel,
+                localModelConfigurableLabel: accountLocalModelConfigurableLabel,
+                connectCloudLabel,
+                loginPendingLabel: accountLoginPendingLabel,
+                modelSettingsLabel: accountModelSettingsLabel,
+                interfaceLanguageLabel,
+                selectLanguageLabel,
+                languageMenuLabel,
+                currentLanguageLabel,
+                userCenterLabel: accountUserCenterLabel,
+                cloudBrandLabel,
+                aboutLabel: accountAboutLabel,
+                logoutLabel: accountLogoutLabel,
+                logoutPendingLabel: accountLogoutPendingLabel,
+                formatSwitchLanguageAria: (languageLabel) =>
+                  t("navigation.sidebar.account.switchLanguage", {
+                    language: languageLabel,
+                    defaultValue: "切换界面语言为{{language}}",
+                  }),
+              }}
+              isNavItemActive={isActive}
+              onToggleAccountMenu={() => {
+                setAppearancePopoverOpen(false);
+                setLanguageMenuOpen(false);
+                setAccountMenuOpen((current) => !current);
+              }}
+              onNavigateItem={(item) => {
+                setAccountMenuOpen(false);
+                handleNavigate(item);
+              }}
+              onToggleLanguageMenu={() =>
+                setLanguageMenuOpen((current) => !current)
+              }
+              onLanguageChange={(nextLanguage) => {
+                void handleLanguageChange(nextLanguage);
+              }}
+              onOpenBilling={() =>
+                void handleOpenAccountUserCenter("/billing?tab=usage")
+              }
+              onLogin={() => void handleAccountLogin()}
+              onOpenModelSettings={() =>
+                handleAccountMenuNavigate({
+                  tab: SettingsTabs.Providers,
+                  providerView: "settings",
+                })
+              }
+              onOpenUserCenter={() =>
+                void handleOpenAccountUserCenter("/welcome")
+              }
+              onOpenAbout={() =>
+                handleAccountMenuNavigate({ tab: SettingsTabs.About })
+              }
+              onLogout={() => void handleAccountLogout()}
+            />
           </AccountActionSlot>
         </FooterArea>
       </Container>
-      <Modal
+      <AppSidebarSearchDialog
         isOpen={sidebarSearchOpen}
+        query={sidebarSearchQuery}
+        inputRef={sidebarSearchInputRef}
+        copy={{
+          inputLabel: searchConversationTitleLabel,
+          closeLabel: closeSearchDialogLabel,
+          createConversationLabel,
+          matchesLabel: searchMatchesLabel,
+          recentLabel: searchRecentLabel,
+          loadingLabel: searchLoadingLabel,
+          selectProjectFirstLabel: searchSelectProjectFirstLabel,
+          emptyMatchesLabel: searchEmptyMatchesLabel,
+          emptyRecentLabel: searchEmptyRecentLabel,
+          loadingMoreLabel: searchLoadingMoreLabel,
+          moreMatchesLabel: searchMoreMatchesLabel,
+          moreRecentLabel: searchMoreRecentLabel,
+        }}
+        sessions={sidebarSearchResultSessions}
+        currentProjectId={currentProjectId}
+        currentSessionId={currentSessionId}
+        hasQuery={sidebarSearchHasQuery}
+        hasMoreResults={sidebarSearchHasMoreResults}
+        loading={shouldShowSessionLoadingState}
+        loadingMore={recentSessionsLoading}
+        resolveSessionTitle={resolveLocalizedSessionTitle}
+        formatSessionMeta={formatLocalizedSessionMeta}
         onClose={closeSidebarSearchDialog}
-        className="border-none bg-transparent p-0 shadow-none"
-        maxWidth="max-w-[832px]"
-        showCloseButton={false}
-      >
-        <SidebarSearchSurface data-testid="app-sidebar-search-dialog">
-          <SidebarSearchHeader>
-            <Search aria-hidden="true" />
-            <SidebarSearchInput
-              ref={sidebarSearchInputRef}
-              value={sidebarSearchQuery}
-              onChange={(event) => setSidebarSearchQuery(event.target.value)}
-              placeholder={searchConversationTitleLabel}
-              aria-label={searchConversationTitleLabel}
-              data-testid="app-sidebar-search-input"
-            />
-            <SidebarSearchShortcut aria-hidden="true">
-              <SidebarSearchKey>⌘</SidebarSearchKey>
-              <SidebarSearchKey>K</SidebarSearchKey>
-            </SidebarSearchShortcut>
-            <SidebarSearchCloseButton
-              type="button"
-              aria-label={closeSearchDialogLabel}
-              onClick={closeSidebarSearchDialog}
-            >
-              <X />
-            </SidebarSearchCloseButton>
-          </SidebarSearchHeader>
-          <SidebarSearchDivider />
-          <SidebarSearchBody>
-            <SidebarSearchCreateButton
-              type="button"
-              onClick={handleSidebarSearchCreateConversation}
-              data-testid="app-sidebar-search-new-conversation"
-            >
-              <MessageSquarePlus />
-              <SidebarSearchCreateText>
-                {createConversationLabel}
-              </SidebarSearchCreateText>
-              <SidebarSearchEnterHint aria-hidden="true">
-                ↵
-              </SidebarSearchEnterHint>
-            </SidebarSearchCreateButton>
-
-            <SidebarSearchSectionLabel>
-              {sidebarSearchHasQuery ? searchMatchesLabel : searchRecentLabel}
-            </SidebarSearchSectionLabel>
-
-            {shouldShowSessionLoadingState ? (
-              <SidebarSearchEmptyState role="status">
-                {searchLoadingLabel}
-              </SidebarSearchEmptyState>
-            ) : sidebarSearchResultSessions.length > 0 ? (
-              <SidebarSearchResultList>
-                {sidebarSearchResultSessions.map((session) => {
-                  const title = resolveLocalizedSessionTitle(session);
-                  const isCurrentConversation = currentSessionId === session.id;
-                  return (
-                    <SidebarSearchResultButton
-                      key={session.id}
-                      type="button"
-                      $active={isCurrentConversation}
-                      disabled={shouldShowSessionLoadingState}
-                      aria-current={isCurrentConversation ? "page" : undefined}
-                      title={title}
-                      data-testid="app-sidebar-search-result"
-                      onClick={() => handleSidebarSearchResultClick(session)}
-                    >
-                      <MessageSquare />
-                      <SidebarSearchResultTitle>
-                        {title}
-                      </SidebarSearchResultTitle>
-                      <SidebarSearchResultMeta>
-                        {formatLocalizedSessionMeta(session)}
-                      </SidebarSearchResultMeta>
-                    </SidebarSearchResultButton>
-                  );
-                })}
-              </SidebarSearchResultList>
-            ) : (
-              <SidebarSearchEmptyState role="status">
-                {!currentProjectId
-                  ? searchSelectProjectFirstLabel
-                  : sidebarSearchHasQuery
-                    ? searchEmptyMatchesLabel
-                    : searchEmptyRecentLabel}
-              </SidebarSearchEmptyState>
-            )}
-
-            {sidebarSearchHasMoreResults ? (
-              <SidebarSearchMoreButton
-                type="button"
-                disabled={sidebarSessionsLoading}
-                onClick={() =>
-                  setRecentSessionsVisibleCount(
-                    (current) => current + SIDEBAR_RECENT_SESSION_PAGE_SIZE,
-                  )
-                }
-                data-testid="app-sidebar-search-more"
-              >
-                {sidebarSessionsLoading
-                  ? searchLoadingMoreLabel
-                  : sidebarSearchHasQuery
-                    ? searchMoreMatchesLabel
-                    : searchMoreRecentLabel}
-                <ChevronDown />
-              </SidebarSearchMoreButton>
-            ) : null}
-          </SidebarSearchBody>
-        </SidebarSearchSurface>
-      </Modal>
-      <Modal
+        onQueryChange={setSidebarSearchQuery}
+        onCreateConversation={handleSidebarSearchCreateConversation}
+        onResultClick={handleSidebarSearchResultClick}
+        onShowMore={showMoreRecentSessions}
+      />
+      <AppSidebarInviteDialog
         isOpen={inviteDialogOpen}
+        hasCloudAccount={hasCloudAccount}
+        loading={inviteLoading}
+        error={inviteError}
+        dashboard={inviteDashboard}
+        copy={{
+          closeLabel: inviteCloseDialogLabel,
+          eyebrowLabel: inviteEyebrowLabel,
+          titleLabel: inviteDialogTitleLabel,
+          descriptionLabel: inviteDescriptionLabel,
+          disconnectedLabel: inviteDisconnectedLabel,
+          connectAccountLabel: inviteConnectAccountLabel,
+          loadingLabel: inviteLoadingLabel,
+          retryLabel: inviteRetryLabel,
+          codeLabel: inviteCodeLabel,
+          copyLabel: inviteCopyLabel,
+          downloadUrlLabel: inviteDownloadUrlLabel,
+          landingUrlLabel: inviteLandingUrlLabel,
+          referrerRewardLabel: inviteReferrerRewardLabel,
+          inviteeRewardLabel: inviteInviteeRewardLabel,
+          copyShareTextLabel: inviteCopyShareTextLabel,
+          copyLandingUrlLabel: inviteCopyLandingUrlLabel,
+          copyCodeSuccessLabel: inviteCopyCodeSuccessLabel,
+          copyShareTextSuccessLabel: inviteCopyShareTextSuccessLabel,
+          copyLandingUrlSuccessLabel: inviteCopyLandingUrlSuccessLabel,
+        }}
+        formatReferralCredits={formatInviteReferralCredits}
         onClose={() => setInviteDialogOpen(false)}
-        className="p-0"
-        maxWidth="max-w-xl"
-        showCloseButton={false}
-      >
-        <InviteDialogSurface data-testid="app-sidebar-invite-dialog">
-          <InviteDialogCloseButton
-            type="button"
-            aria-label={inviteCloseDialogLabel}
-            onClick={() => setInviteDialogOpen(false)}
-          >
-            <X />
-          </InviteDialogCloseButton>
-          <InviteDialogHeader>
-            <InviteDialogEyebrow>{inviteEyebrowLabel}</InviteDialogEyebrow>
-            <InviteDialogTitle>{inviteDialogTitleLabel}</InviteDialogTitle>
-            <InviteDialogDescription>
-              {inviteDescriptionLabel}
-            </InviteDialogDescription>
-          </InviteDialogHeader>
-
-          <InviteDialogBody>
-            {!hasCloudAccount ? (
-              <InviteStatusCard>
-                {inviteDisconnectedLabel}
-                <InviteActionBar style={{ marginTop: 10 }}>
-                  <InviteDialogActionButton
-                    type="button"
-                    $primary
-                    onClick={() => {
-                      setInviteDialogOpen(false);
-                      void handleAccountLogin();
-                    }}
-                  >
-                    <Cloud />
-                    {inviteConnectAccountLabel}
-                  </InviteDialogActionButton>
-                </InviteActionBar>
-              </InviteStatusCard>
-            ) : null}
-
-            {hasCloudAccount && inviteLoading ? (
-              <InviteStatusCard>{inviteLoadingLabel}</InviteStatusCard>
-            ) : null}
-
-            {hasCloudAccount && inviteError ? (
-              <InviteStatusCard $tone="error">
-                {inviteError}
-                <InviteActionBar style={{ marginTop: 10 }}>
-                  <InviteDialogActionButton
-                    type="button"
-                    onClick={() => setInviteReloadKey((value) => value + 1)}
-                  >
-                    <RefreshCw />
-                    {inviteRetryLabel}
-                  </InviteDialogActionButton>
-                </InviteActionBar>
-              </InviteStatusCard>
-            ) : null}
-
-            {hasCloudAccount &&
-            !inviteLoading &&
-            !inviteError &&
-            inviteDashboard ? (
-              <InviteShareCard>
-                <InviteCodeBlock>
-                  <InviteCodeMeta>
-                    <InviteCodeLabel>{inviteCodeLabel}</InviteCodeLabel>
-                    <InviteCodeValue>{inviteShare?.code}</InviteCodeValue>
-                  </InviteCodeMeta>
-                  <InviteDialogActionButton
-                    type="button"
-                    onClick={() =>
-                      void handleCopyInviteText(
-                        inviteShare?.code,
-                        inviteCopyCodeSuccessLabel,
-                      )
-                    }
-                  >
-                    <Copy />
-                    {inviteCopyLabel}
-                  </InviteDialogActionButton>
-                </InviteCodeBlock>
-
-                <InviteMetaGrid>
-                  <InviteMetaItem>
-                    <span>{inviteDownloadUrlLabel}</span>
-                    <strong>{inviteShare?.downloadUrl}</strong>
-                  </InviteMetaItem>
-                  <InviteMetaItem>
-                    <span>{inviteLandingUrlLabel}</span>
-                    <strong>{inviteShare?.landingUrl}</strong>
-                  </InviteMetaItem>
-                  <InviteMetaItem>
-                    <span>{inviteReferrerRewardLabel}</span>
-                    <strong>
-                      {formatInviteReferralCredits(
-                        invitePolicy?.referrerRewardCredits,
-                      )}
-                    </strong>
-                  </InviteMetaItem>
-                  <InviteMetaItem>
-                    <span>{inviteInviteeRewardLabel}</span>
-                    <strong>
-                      {formatInviteReferralCredits(
-                        invitePolicy?.inviteeRewardCredits,
-                      )}
-                    </strong>
-                  </InviteMetaItem>
-                </InviteMetaGrid>
-
-                <InviteActionBar>
-                  <InviteDialogActionButton
-                    type="button"
-                    $primary
-                    onClick={() =>
-                      void handleCopyInviteText(
-                        inviteShare?.shareText,
-                        inviteCopyShareTextSuccessLabel,
-                      )
-                    }
-                  >
-                    <Copy />
-                    {inviteCopyShareTextLabel}
-                  </InviteDialogActionButton>
-                  <InviteDialogActionButton
-                    type="button"
-                    onClick={() =>
-                      void handleCopyInviteText(
-                        inviteShare?.landingUrl,
-                        inviteCopyLandingUrlSuccessLabel,
-                      )
-                    }
-                  >
-                    <ExternalLink />
-                    {inviteCopyLandingUrlLabel}
-                  </InviteDialogActionButton>
-                </InviteActionBar>
-              </InviteShareCard>
-            ) : null}
-          </InviteDialogBody>
-        </InviteDialogSurface>
-      </Modal>
+        onConnectAccount={() => {
+          setInviteDialogOpen(false);
+          void handleAccountLogin();
+        }}
+        onRetry={() => setInviteReloadKey((value) => value + 1)}
+        onCopyText={(value, successMessage) =>
+          void handleCopyInviteText(value, successMessage)
+        }
+      />
     </TooltipProvider>
   );
 }

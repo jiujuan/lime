@@ -123,6 +123,12 @@ internal/roadmap/i18n/**
 !internal/roadmap/agentapp/
 internal/roadmap/agentapp/**
 !internal/roadmap/agentapp/*.md
+!internal/roadmap/agentworkbench/
+internal/roadmap/agentworkbench/**
+!internal/roadmap/agentworkbench/*.md
+!internal/roadmap/subagents/
+internal/roadmap/subagents/**
+!internal/roadmap/subagents/*.md
 !internal/roadmap/zuanjia/
 internal/roadmap/zuanjia/**
 !internal/roadmap/zuanjia/*.md

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { AgentRuntimeClient } from "@limecloud/agent-runtime-client";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { AgentRuntimeCapabilityHost } from "./agentRuntimeCapabilityHost";
@@ -22,6 +23,189 @@ function buildDelegateHost() {
 }
 
 describe("AgentRuntimeCapabilityHost", () => {
+  it("没有标准 runtime client 或显式 compat api 时不再隐式回退旧 facade", async () => {
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      workspaceIdResolver: async () => "workspace-1",
+      now: () => "2026-05-15T00:00:03.000Z",
+    });
+    const sdk = host.createSdkContext("dashboard");
+
+    await expect(
+      sdk.agent.startTask({
+        title: "缺少标准 runtime client",
+        taskKind: "content.copy.generate",
+        sessionId: "session-standard",
+        taskId: "task-standard",
+        input: { projectId: "project-1" },
+      }),
+    ).rejects.toThrow(
+      "AgentRuntimeCapabilityHost requires a standard AgentRuntimeClient or explicit compat api",
+    );
+  });
+
+  it("可以直接注入标准 AgentRuntimeClient 驱动 lime.agent task", async () => {
+    const runtimeClient: Pick<
+      AgentRuntimeClient,
+      "startTurn" | "readThread" | "cancelTurn" | "respondAction"
+    > = {
+      startTurn: vi.fn(async () => ({
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-standard",
+            sessionId: "session-standard",
+            threadId: "thread-standard",
+            status: "accepted" as const,
+            startedAt: "2026-05-15T00:00:00.000Z",
+          },
+        },
+        response: { jsonrpc: "2.0", id: 1, result: {} },
+        notifications: [],
+        messages: [],
+      })),
+      readThread: vi.fn(async () => ({
+        id: 2,
+        result: {
+          session: {
+            sessionId: "session-standard",
+            threadId: "thread-standard",
+            appId: "content-factory-app",
+            workspaceId: "workspace-1",
+            status: "completed" as const,
+            createdAt: "2026-05-15T00:00:00.000Z",
+            updatedAt: "2026-05-15T00:00:02.000Z",
+          },
+          turns: [
+            {
+              turnId: "turn-standard",
+              sessionId: "session-standard",
+              threadId: "thread-standard",
+              status: "completed" as const,
+            },
+          ],
+          detail: {
+            thread_read: {
+              session_id: "session-standard",
+              profile_status: "completed",
+              artifacts: [
+                {
+                  item_id: "artifact-standard",
+                  path: ".lime/artifacts/standard.json",
+                  title: "标准任务产物",
+                  status: "completed",
+                },
+              ],
+            },
+          },
+        },
+        response: { jsonrpc: "2.0", id: 2, result: {} },
+        notifications: [],
+        messages: [],
+      })),
+      cancelTurn: vi.fn(async () => ({
+        id: 3,
+        result: {},
+        response: { jsonrpc: "2.0", id: 3, result: {} },
+        notifications: [],
+        messages: [],
+      })),
+      respondAction: vi.fn(async () => ({
+        id: 4,
+        result: {},
+        response: { jsonrpc: "2.0", id: 4, result: {} },
+        notifications: [],
+        messages: [],
+      })),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      runtimeClient,
+      workspaceIdResolver: async () => "workspace-1",
+      now: () => "2026-05-15T00:00:03.000Z",
+    });
+    const sdk = host.createSdkContext("dashboard");
+
+    const started = await sdk.agent.startTask({
+      title: "标准 runtime client 任务",
+      taskKind: "content.copy.generate",
+      sessionId: "session-standard",
+      taskId: "task-standard",
+      turnId: "turn-standard",
+      input: { projectId: "project-1" },
+      expectedOutput: { artifactKind: "content_batch" },
+      turnConfig: {
+        provider_config: {
+          provider_name: "anthropic",
+          model_name: "claude-sonnet-4",
+        },
+        sandbox_policy: "workspace-write",
+      },
+    });
+    const snapshot = await sdk.agent.getTask(started.taskId);
+    await sdk.agent.cancelTask(started.taskId);
+    await sdk.agent.submitHostResponse({
+      taskId: started.taskId,
+      requestId: "request-standard",
+      actionType: "ask_user",
+      response: "继续",
+    });
+
+    expect(runtimeClient.startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-standard",
+        turnId: "turn-standard",
+        runtimeOptions: expect.objectContaining({
+          hostOptions: {
+            asterChatRequest: expect.objectContaining({
+              turn_config: expect.objectContaining({
+                provider_config: {
+                  provider_name: "anthropic",
+                  model_name: "claude-sonnet-4",
+                },
+              }),
+            }),
+          },
+        }),
+      }),
+    );
+    expect(runtimeClient.readThread).toHaveBeenCalledWith({
+      sessionId: "session-standard",
+    });
+    expect(runtimeClient.cancelTurn).toHaveBeenCalledWith({
+      sessionId: "session-standard",
+      turnId: "turn-standard",
+    });
+    expect(runtimeClient.respondAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-standard",
+        requestId: "request-standard",
+      }),
+    );
+    expect(started).toMatchObject({
+      taskId: "task-standard",
+      sessionId: "session-standard",
+      turnId: "turn-standard",
+    });
+    expect(snapshot).toMatchObject({
+      status: "succeeded",
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          type: "artifact:created",
+          refs: [".lime/artifacts/standard.json"],
+        }),
+      ]),
+    });
+  });
+
   it("把 lime.agent start/get/cancel/retry 适配到 Agent App Runtime facade", async () => {
     let startCounter = 0;
     const api = {

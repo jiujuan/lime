@@ -63,6 +63,7 @@ export interface UseAsterAgentChatOptions {
   getSyncedSessionRecentPreferences?: (
     sessionId: string,
   ) => ChatToolPreferences | null;
+  onOpenSubagents?: () => void;
 }
 
 export interface SendMessageObserver {

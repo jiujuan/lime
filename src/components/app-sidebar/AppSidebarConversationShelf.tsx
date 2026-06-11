@@ -1,35 +1,41 @@
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import styled from "styled-components";
 import { useTranslation } from "react-i18next";
 import {
   Archive,
   Check,
-  ChevronDown,
+  ChevronRight,
   Clock3,
+  FolderOpen,
   MessageSquarePlus,
-  MoreHorizontal,
   Pencil,
   Pin,
   Trash2,
-  Undo2,
 } from "lucide-react";
 import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
-import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import {
   formatSidebarSessionMeta,
   resolveSidebarSessionTitle,
 } from "@/components/app-sidebar/sidebarSessionFormatting";
+import { AppSidebarConversationRow } from "@/components/app-sidebar/AppSidebarConversationRow";
+import {
+  buildSidebarConversationGroups,
+  type SidebarOpenedProjectSummary,
+} from "@/components/app-sidebar/sidebarConversationGroups";
 
 interface AppSidebarConversationShelfProps {
+  openedProjects?: SidebarOpenedProjectSummary[];
   recentSessions: AsterSessionInfo[];
-  archivedSessions: AsterSessionInfo[];
   currentSessionId?: string | null;
   recentLoading: boolean;
-  archivedLoading: boolean;
-  archivedCollapsed: boolean;
   hasMoreRecent: boolean;
-  hasMoreArchived: boolean;
   actionSessionId: string | null;
   onCreateConversation: () => void;
   onNavigateToConversation: (session: AsterSessionInfo) => void;
@@ -37,8 +43,6 @@ interface AppSidebarConversationShelfProps {
   onDeleteConversation?: (session: AsterSessionInfo) => void;
   onToggleArchive: (session: AsterSessionInfo, archived: boolean) => void;
   onShowMoreRecent: () => void;
-  onShowMoreArchived: () => void;
-  onToggleArchivedCollapsed: () => void;
 }
 
 const FAVORITE_SESSION_IDS_STORAGE_KEY =
@@ -49,7 +53,6 @@ const CONVERSATION_MENU_VIEWPORT_MARGIN = 12;
 
 type ConversationMenuState = {
   session: AsterSessionInfo;
-  archived: boolean;
   top: number;
   left: number;
 } | null;
@@ -82,6 +85,10 @@ function persistFavoriteSessionIds(sessionIds: string[]) {
   );
 }
 
+function resolveProjectDisplayName(project: SidebarOpenedProjectSummary) {
+  return project.name.trim() || project.id;
+}
+
 const ConversationShelf = styled.div`
   display: flex;
   flex-direction: column;
@@ -91,7 +98,7 @@ const ConversationShelf = styled.div`
 
 const ConversationMultiSelectToolbar = styled.div`
   min-height: 38px;
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px solid var(--sidebar-card-border, var(--sidebar-border));
   background: var(--lime-surface, #ffffff);
   color: var(--lime-text, #1a3b2b);
@@ -108,7 +115,7 @@ const ConversationMultiSelectToolbar = styled.div`
 const ConversationMultiSelectDoneButton = styled.button`
   min-height: 28px;
   border: 1px solid var(--lime-card-subtle-border, #d9eadf);
-  border-radius: 11px;
+  border-radius: 10px;
   background: var(--lime-surface-soft, #f8fcf9);
   color: var(--lime-brand-strong, #166534);
   cursor: pointer;
@@ -125,19 +132,21 @@ const ConversationMultiSelectDoneButton = styled.button`
   }
 `;
 
-const ConversationSection = styled.div<{ $compact?: boolean }>`
+const ConversationSection = styled.section`
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: ${({ $compact }) => ($compact ? "auto" : "140px")};
-  max-height: ${({ $compact }) => ($compact ? "none" : "208px")};
-  padding: 10px;
-  border-radius: 20px;
+  gap: 7px;
+  min-height: 116px;
+  max-height: 248px;
+  padding: 8px;
+  border-radius: 14px;
   border: 1px solid var(--sidebar-card-border, var(--sidebar-border));
-  background: var(--sidebar-card-surface), var(--sidebar-search-bg);
-  box-shadow:
-    inset 0 1px 0 var(--sidebar-card-highlight),
-    var(--sidebar-card-shadow);
+  background: color-mix(
+    in srgb,
+    var(--sidebar-search-bg, #ffffff) 88%,
+    transparent
+  );
+  box-shadow: inset 0 1px 0 var(--sidebar-card-highlight);
   overflow: hidden;
 `;
 
@@ -146,7 +155,7 @@ const ConversationSectionHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 4px;
+  padding: 0 3px;
   color: var(--sidebar-muted);
 `;
 
@@ -156,29 +165,8 @@ const ConversationSectionTitle = styled.h2`
   padding: 0;
   margin: 0;
   color: inherit;
-  font-size: 13px;
-  font-weight: 600;
-`;
-
-const ConversationSectionTitleButton = styled.button<{ $open?: boolean }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  margin: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-
-  svg {
-    width: 14px;
-    height: 14px;
-    transform: rotate(${({ $open }) => ($open ? "0deg" : "-90deg")});
-    transition: transform 0.16s ease;
-  }
+  font-size: 12px;
+  font-weight: 760;
 `;
 
 const ConversationActionButton = styled.button`
@@ -213,7 +201,6 @@ const ConversationList = styled.div`
   gap: 4px;
   flex: 1;
   min-height: 0;
-  max-height: 132px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
@@ -232,11 +219,76 @@ const ConversationList = styled.div`
   }
 `;
 
+const ProjectGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+`;
+
+const ProjectButton = styled.button`
+  min-height: 34px;
+  width: 100%;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--sidebar-foreground);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+
+  &:hover {
+    background: var(--sidebar-hover);
+  }
+
+  svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    color: var(--sidebar-muted);
+  }
+`;
+
+const ProjectChevron = styled.span<{ $collapsed: boolean }>`
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--sidebar-muted);
+  transform: rotate(${({ $collapsed }) => ($collapsed ? "0deg" : "90deg")});
+  transition:
+    transform 0.16s ease,
+    color 0.16s ease;
+`;
+
+const ProjectName = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+`;
+
+const ProjectConversationList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 14px;
+`;
+
 const ConversationListMoreButton = styled.button`
   width: 100%;
-  min-height: 34px;
+  min-height: 32px;
   border: 1px solid var(--sidebar-card-border, var(--sidebar-border));
-  border-radius: 12px;
+  border-radius: 11px;
   background: var(--sidebar-search-bg);
   color: var(--sidebar-muted);
   font-size: 12px;
@@ -251,148 +303,6 @@ const ConversationListMoreButton = styled.button`
     background: var(--sidebar-hover);
     border-color: var(--sidebar-search-border-hover);
     color: var(--sidebar-foreground);
-  }
-`;
-
-const ConversationItemRow = styled.div<{
-  $active?: boolean;
-}>`
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  border-radius: 12px;
-  background: ${({ $active }) =>
-    $active ? "var(--lime-sidebar-active, #e6f8ea)" : "transparent"};
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    background: ${({ $active }) =>
-      $active ? "var(--sidebar-active)" : "var(--sidebar-hover)"};
-  }
-`;
-
-const ConversationItemButton = styled.button<{
-  $active?: boolean;
-}>`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-  min-height: 38px;
-  border: none;
-  border-radius: 12px;
-  padding: 0 10px;
-  background: transparent;
-  color: ${({ $active }) =>
-    $active ? "var(--sidebar-active-foreground)" : "var(--sidebar-foreground)"};
-  cursor: pointer;
-  transition: color 0.18s ease;
-`;
-
-const ConversationItemDot = styled.span<{ $active?: boolean }>`
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: ${({ $active }) =>
-    $active ? "var(--sidebar-active-foreground)" : "rgba(148, 163, 184, 0.72)"};
-`;
-
-const ConversationSelectionMark = styled.span<{ $selected?: boolean }>`
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  border: 1px solid
-    ${({ $selected }) =>
-      $selected ? "var(--sidebar-active-foreground)" : "var(--sidebar-border)"};
-  background: ${({ $selected }) =>
-    $selected ? "var(--sidebar-active-foreground)" : "transparent"};
-  color: var(--sidebar-active);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  svg {
-    width: 11px;
-    height: 11px;
-  }
-`;
-
-const ConversationItemLabel = styled.span`
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 500;
-`;
-
-const ConversationFavoriteBadge = styled.span`
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--sidebar-muted);
-
-  svg {
-    width: 13px;
-    height: 13px;
-  }
-`;
-
-const ConversationItemMeta = styled.span`
-  flex-shrink: 0;
-  font-size: 11px;
-  color: var(--sidebar-muted);
-`;
-
-const ConversationItemActionButton = styled.button`
-  width: 30px;
-  min-width: 30px;
-  height: 38px;
-  border: none;
-  border-radius: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--sidebar-muted);
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    background: var(--sidebar-hover);
-    color: var(--sidebar-foreground);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.6;
-  }
-
-  ${ConversationItemRow}:hover &,
-  ${ConversationItemRow}[data-active="true"] & {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  svg {
-    width: 15px;
-    height: 15px;
   }
 `;
 
@@ -454,11 +364,11 @@ const ConversationEmptyState = styled.div`
   justify-content: center;
   gap: 8px;
   flex: 1;
-  min-height: 0;
-  border-radius: 16px;
-  padding: 12px;
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 10px;
   color: var(--sidebar-muted);
-  font-size: 13px;
+  font-size: 12px;
   background: color-mix(
     in srgb,
     var(--sidebar-search-bg, #ffffff) 78%,
@@ -477,14 +387,11 @@ function renderEmptyState(text: string) {
 }
 
 export function AppSidebarConversationShelf({
+  openedProjects = [],
   recentSessions,
-  archivedSessions,
   currentSessionId,
   recentLoading,
-  archivedLoading,
-  archivedCollapsed,
   hasMoreRecent,
-  hasMoreArchived,
   actionSessionId,
   onCreateConversation,
   onNavigateToConversation,
@@ -492,8 +399,6 @@ export function AppSidebarConversationShelf({
   onDeleteConversation,
   onToggleArchive,
   onShowMoreRecent,
-  onShowMoreArchived,
-  onToggleArchivedCollapsed,
 }: AppSidebarConversationShelfProps) {
   const { t, i18n } = useTranslation("navigation");
   const conversationUntitledLabel = t(
@@ -505,21 +410,20 @@ export function AppSidebarConversationShelf({
       resolveSidebarSessionTitle(session, conversationUntitledLabel),
     [conversationUntitledLabel],
   );
-  const formatArchivedConversationMeta = useCallback(
-    (time: string) =>
-      t("navigation.sidebar.conversations.meta.archived", {
-        time,
-        defaultValue: "归档 {{time}}",
-      }),
-    [t],
-  );
   const formatLocalizedSessionMeta = useCallback(
     (session: AsterSessionInfo) =>
       formatSidebarSessionMeta(session, {
-        formatArchived: formatArchivedConversationMeta,
         locale: i18n.language,
       }),
-    [formatArchivedConversationMeta, i18n.language],
+    [i18n.language],
+  );
+  const activeConversationGroups = useMemo(
+    () =>
+      buildSidebarConversationGroups({
+        sessions: recentSessions,
+        openedProjects,
+      }),
+    [openedProjects, recentSessions],
   );
   const [menuState, setMenuState] = useState<ConversationMenuState>(null);
   const [favoriteSessionIds, setFavoriteSessionIds] = useState<string[]>(
@@ -529,6 +433,24 @@ export function AppSidebarConversationShelf({
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    const activeProjectIds = new Set(
+      activeConversationGroups.projectSections.map(
+        (section) => section.project.id,
+      ),
+    );
+
+    setCollapsedProjectIds((current) => {
+      const next = new Set(
+        [...current].filter((projectId) => activeProjectIds.has(projectId)),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [activeConversationGroups.projectSections]);
 
   useEffect(() => {
     if (!menuState) {
@@ -551,13 +473,11 @@ export function AppSidebarConversationShelf({
     (
       event: MouseEvent<HTMLButtonElement>,
       session: AsterSessionInfo,
-      archived: boolean,
     ) => {
       event.stopPropagation();
       const rect = event.currentTarget.getBoundingClientRect();
       setMenuState({
         session,
-        archived,
         top: Math.max(
           CONVERSATION_MENU_VIEWPORT_MARGIN,
           Math.min(
@@ -614,14 +534,30 @@ export function AppSidebarConversationShelf({
     });
   }, []);
 
+  const toggleProjectCollapsed = useCallback((projectId: string) => {
+    setCollapsedProjectIds((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+      return next;
+    });
+  }, []);
+
   const runMenuAction = useCallback((action: () => void) => {
     setMenuState(null);
     action();
   }, []);
 
-  const recentTitleLabel = t(
-    "navigation.sidebar.conversations.recentTitle",
-    "最近对话",
+  const projectsTitleLabel = t(
+    "navigation.sidebar.conversations.projectsTitle",
+    "项目",
+  );
+  const standaloneTitleLabel = t(
+    "navigation.sidebar.conversations.standaloneTitle",
+    "对话",
   );
   const newConversationLabel = t(
     "navigation.sidebar.conversations.newConversation",
@@ -631,29 +567,13 @@ export function AppSidebarConversationShelf({
     "navigation.sidebar.conversations.loadingRecent",
     "正在加载对话",
   );
-  const emptyRecentLabel = t(
-    "navigation.sidebar.conversations.emptyRecent",
-    "还没有开始对话",
+  const emptyStandaloneLabel = t(
+    "navigation.sidebar.conversations.emptyStandalone",
+    "暂无聊天",
   );
   const moreRecentLabel = t(
     "navigation.sidebar.conversations.moreRecent",
     "查看更多对话",
-  );
-  const archivedTitleLabel = t(
-    "navigation.sidebar.conversations.archivedTitle",
-    "归档",
-  );
-  const loadingArchivedLabel = t(
-    "navigation.sidebar.conversations.loadingArchived",
-    "正在加载归档",
-  );
-  const emptyArchivedLabel = t(
-    "navigation.sidebar.conversations.emptyArchived",
-    "暂无归档内容",
-  );
-  const moreArchivedLabel = t(
-    "navigation.sidebar.conversations.moreArchived",
-    "查看更多归档",
   );
   const favoriteBadgeLabel = t(
     "navigation.sidebar.conversations.favoriteBadge",
@@ -678,10 +598,6 @@ export function AppSidebarConversationShelf({
   const archiveActionLabel = t(
     "navigation.sidebar.conversations.menu.archive",
     "归档",
-  );
-  const restoreActionLabel = t(
-    "navigation.sidebar.conversations.menu.restore",
-    "恢复",
   );
   const multiselectActionLabel = t(
     "navigation.sidebar.conversations.menu.multiselect",
@@ -715,11 +631,9 @@ export function AppSidebarConversationShelf({
       return null;
     }
 
-    const { session, archived, top, left } = menuState;
+    const { session, top, left } = menuState;
     const title = resolveLocalizedSessionTitle(session);
     const favorite = favoriteSessionIds.includes(session.id);
-    const archiveLabel = archived ? restoreActionLabel : archiveActionLabel;
-    const ArchiveIcon = archived ? Undo2 : Archive;
 
     return createPortal(
       <ConversationMenuSurface
@@ -757,12 +671,10 @@ export function AppSidebarConversationShelf({
           type="button"
           role="menuitem"
           data-testid="app-sidebar-conversation-menu-archive"
-          onClick={() =>
-            runMenuAction(() => onToggleArchive(session, !archived))
-          }
+          onClick={() => runMenuAction(() => onToggleArchive(session, true))}
         >
-          <ArchiveIcon />
-          {archiveLabel}
+          <Archive />
+          {archiveActionLabel}
         </ConversationMenuItem>
         <ConversationMenuItem
           type="button"
@@ -790,6 +702,67 @@ export function AppSidebarConversationShelf({
     );
   };
 
+  const renderConversationRow = (session: AsterSessionInfo) => {
+    const active = currentSessionId === session.id;
+    const title = resolveLocalizedSessionTitle(session);
+    return (
+      <AppSidebarConversationRow
+        key={session.id}
+        session={session}
+        title={title}
+        meta={formatLocalizedSessionMeta(session)}
+        active={active}
+        favorite={favoriteSessionIds.includes(session.id)}
+        selected={selectedSessionIds.has(session.id)}
+        multiSelectMode={multiSelectMode}
+        actionDisabled={actionSessionId === session.id}
+        favoriteBadgeLabel={favoriteBadgeLabel}
+        moreActionsLabel={moreActionsLabel}
+        openActionMenuLabel={t(
+          "navigation.sidebar.conversations.openActionMenu",
+          {
+            title,
+            defaultValue: "打开 {{title}} 操作菜单",
+          },
+        )}
+        onNavigate={onNavigateToConversation}
+        onToggleSelected={toggleSelectedSession}
+        onOpenMenu={openConversationMenu}
+      />
+    );
+  };
+
+  const renderProjectGroups = () => {
+    return activeConversationGroups.projectSections.map((section) => {
+      const projectName = resolveProjectDisplayName(section.project);
+      const collapsed = collapsedProjectIds.has(section.project.id);
+      return (
+        <ProjectGroup
+          key={section.project.id}
+          data-testid="app-sidebar-project-conversation-group"
+        >
+          <ProjectButton
+            type="button"
+            title={projectName}
+            aria-expanded={!collapsed}
+            onClick={() => toggleProjectCollapsed(section.project.id)}
+          >
+            <ProjectChevron $collapsed={collapsed}>
+              <ChevronRight />
+            </ProjectChevron>
+            <FolderOpen />
+            <ProjectName>{projectName}</ProjectName>
+          </ProjectButton>
+          {!collapsed && section.sessions.length > 0 ? (
+            <ProjectConversationList>
+              {section.sessions.map((session) => renderConversationRow(session))}
+            </ProjectConversationList>
+          ) : null}
+        </ProjectGroup>
+      );
+    });
+  };
+
   return (
     <ConversationShelf data-testid="app-sidebar-conversation-shelf">
       {multiSelectMode ? (
@@ -806,10 +779,22 @@ export function AppSidebarConversationShelf({
           </ConversationMultiSelectDoneButton>
         </ConversationMultiSelectToolbar>
       ) : null}
+
+      <ConversationSection>
+        <ConversationSectionHeader>
+          <ConversationSectionTitle>{projectsTitleLabel}</ConversationSectionTitle>
+        </ConversationSectionHeader>
+        <ConversationList data-testid="app-sidebar-project-conversations">
+          {recentLoading
+            ? renderEmptyState(loadingRecentLabel)
+            : renderProjectGroups()}
+        </ConversationList>
+      </ConversationSection>
+
       <ConversationSection>
         <ConversationSectionHeader>
           <ConversationSectionTitle>
-            {recentTitleLabel}
+            {standaloneTitleLabel}
           </ConversationSectionTitle>
           <ConversationActionButton
             type="button"
@@ -823,84 +808,11 @@ export function AppSidebarConversationShelf({
         <ConversationList data-testid="app-sidebar-recent-conversations">
           {recentLoading
             ? renderEmptyState(loadingRecentLabel)
-            : recentSessions.length > 0
-              ? recentSessions.map((session) => {
-                  const isCurrentConversation = currentSessionId === session.id;
-                  const title = resolveLocalizedSessionTitle(session);
-                  const favorite = favoriteSessionIds.includes(session.id);
-                  const selected = selectedSessionIds.has(session.id);
-                  return (
-                    <ConversationItemRow
-                      key={session.id}
-                      $active={isCurrentConversation}
-                      data-active={isCurrentConversation ? "true" : "false"}
-                    >
-                      <ConversationItemButton
-                        type="button"
-                        $active={isCurrentConversation}
-                        aria-current={
-                          isCurrentConversation ? "page" : undefined
-                        }
-                        onClick={() => {
-                          recordAgentUiPerformanceMetric(
-                            "sidebar.conversation.click",
-                            {
-                              sessionId: session.id,
-                              source: "conversation_shelf",
-                              workspaceId: session.workspace_id ?? null,
-                            },
-                          );
-                          if (multiSelectMode) {
-                            toggleSelectedSession(session);
-                            return;
-                          }
-                          onNavigateToConversation(session);
-                        }}
-                        title={title}
-                      >
-                        {multiSelectMode ? (
-                          <ConversationSelectionMark $selected={selected}>
-                            {selected ? <Check /> : null}
-                          </ConversationSelectionMark>
-                        ) : (
-                          <ConversationItemDot
-                            $active={isCurrentConversation}
-                          />
-                        )}
-                        <ConversationItemLabel>{title}</ConversationItemLabel>
-                        {favorite ? (
-                          <ConversationFavoriteBadge
-                            title={favoriteBadgeLabel}
-                            data-testid="app-sidebar-conversation-favorite-badge"
-                          >
-                            <Pin />
-                          </ConversationFavoriteBadge>
-                        ) : null}
-                        <ConversationItemMeta>
-                          {formatLocalizedSessionMeta(session)}
-                        </ConversationItemMeta>
-                      </ConversationItemButton>
-                      <ConversationItemActionButton
-                        type="button"
-                        aria-label={t(
-                          "navigation.sidebar.conversations.openActionMenu",
-                          {
-                            title,
-                            defaultValue: "打开 {{title}} 操作菜单",
-                          },
-                        )}
-                        title={moreActionsLabel}
-                        disabled={actionSessionId === session.id}
-                        onClick={(event) =>
-                          openConversationMenu(event, session, false)
-                        }
-                      >
-                        <MoreHorizontal />
-                      </ConversationItemActionButton>
-                    </ConversationItemRow>
-                  );
-                })
-              : renderEmptyState(emptyRecentLabel)}
+            : activeConversationGroups.standaloneSessions.length > 0
+              ? activeConversationGroups.standaloneSessions.map((session) =>
+                  renderConversationRow(session),
+                )
+              : renderEmptyState(emptyStandaloneLabel)}
           {hasMoreRecent ? (
             <ConversationListMoreButton
               type="button"
@@ -912,112 +824,6 @@ export function AppSidebarConversationShelf({
         </ConversationList>
       </ConversationSection>
 
-      <ConversationSection $compact={archivedCollapsed}>
-        <ConversationSectionHeader>
-          <ConversationSectionTitleButton
-            type="button"
-            aria-expanded={!archivedCollapsed}
-            $open={!archivedCollapsed}
-            onClick={onToggleArchivedCollapsed}
-          >
-            <ChevronDown />
-            {archivedTitleLabel}
-          </ConversationSectionTitleButton>
-        </ConversationSectionHeader>
-        {!archivedCollapsed ? (
-          <ConversationList data-testid="app-sidebar-archived-conversations">
-            {archivedLoading
-              ? renderEmptyState(loadingArchivedLabel)
-              : archivedSessions.length > 0
-                ? archivedSessions.map((session) => {
-                    const isCurrentConversation =
-                      currentSessionId === session.id;
-                    const title = resolveLocalizedSessionTitle(session);
-                    const favorite = favoriteSessionIds.includes(session.id);
-                    const selected = selectedSessionIds.has(session.id);
-                    return (
-                      <ConversationItemRow
-                        key={session.id}
-                        $active={isCurrentConversation}
-                        data-active={isCurrentConversation ? "true" : "false"}
-                      >
-                        <ConversationItemButton
-                          type="button"
-                          $active={isCurrentConversation}
-                          aria-current={
-                            isCurrentConversation ? "page" : undefined
-                          }
-                          onClick={() => {
-                            recordAgentUiPerformanceMetric(
-                              "sidebar.conversation.click",
-                              {
-                                sessionId: session.id,
-                                source: "conversation_shelf",
-                                workspaceId: session.workspace_id ?? null,
-                              },
-                            );
-                            if (multiSelectMode) {
-                              toggleSelectedSession(session);
-                              return;
-                            }
-                            onNavigateToConversation(session);
-                          }}
-                          title={title}
-                        >
-                          {multiSelectMode ? (
-                            <ConversationSelectionMark $selected={selected}>
-                              {selected ? <Check /> : null}
-                            </ConversationSelectionMark>
-                          ) : (
-                            <ConversationItemDot
-                              $active={isCurrentConversation}
-                            />
-                          )}
-                          <ConversationItemLabel>{title}</ConversationItemLabel>
-                          {favorite ? (
-                            <ConversationFavoriteBadge
-                              title={favoriteBadgeLabel}
-                              data-testid="app-sidebar-conversation-favorite-badge"
-                            >
-                              <Pin />
-                            </ConversationFavoriteBadge>
-                          ) : null}
-                          <ConversationItemMeta>
-                            {formatLocalizedSessionMeta(session)}
-                          </ConversationItemMeta>
-                        </ConversationItemButton>
-                        <ConversationItemActionButton
-                          type="button"
-                          aria-label={t(
-                            "navigation.sidebar.conversations.openActionMenu",
-                            {
-                              title,
-                              defaultValue: "打开 {{title}} 操作菜单",
-                            },
-                          )}
-                          title={moreActionsLabel}
-                          disabled={actionSessionId === session.id}
-                          onClick={(event) =>
-                            openConversationMenu(event, session, true)
-                          }
-                        >
-                          <MoreHorizontal />
-                        </ConversationItemActionButton>
-                      </ConversationItemRow>
-                    );
-                  })
-                : renderEmptyState(emptyArchivedLabel)}
-            {hasMoreArchived ? (
-              <ConversationListMoreButton
-                type="button"
-                onClick={onShowMoreArchived}
-              >
-                {moreArchivedLabel}
-              </ConversationListMoreButton>
-            ) : null}
-          </ConversationList>
-        ) : null}
-      </ConversationSection>
       {renderConversationMenu()}
     </ConversationShelf>
   );

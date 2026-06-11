@@ -4,74 +4,56 @@
       "id": "general-chat-root-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧 general-chat 根导出入口",
-      "targets": [
-        "src/components/general-chat/index.ts"
-      ],
+      "targets": ["src/components/general-chat/index.ts"],
       "allowedPaths": []
     },
     {
       "id": "general-chat-page-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧 general-chat 页面实现入口",
-      "targets": [
-        "src/components/general-chat/GeneralChatPage.tsx"
-      ],
+      "targets": ["src/components/general-chat/GeneralChatPage.tsx"],
       "allowedPaths": []
     },
     {
       "id": "general-chat-legacy-session-hook",
       "classification": "dead-candidate",
       "description": "旧 general-chat 会话兼容 Hook",
-      "targets": [
-        "src/components/general-chat/hooks/useSession.ts"
-      ],
+      "targets": ["src/components/general-chat/hooks/useSession.ts"],
       "allowedPaths": []
     },
     {
       "id": "general-chat-legacy-streaming-hook",
       "classification": "dead-candidate",
       "description": "已删除的旧 general-chat 流式兼容 Hook",
-      "targets": [
-        "src/components/general-chat/hooks/useStreaming.ts"
-      ],
+      "targets": ["src/components/general-chat/hooks/useStreaming.ts"],
       "allowedPaths": []
     },
     {
       "id": "general-chat-compat-gateway",
       "classification": "dead-candidate",
       "description": "general-chat compat API 网关",
-      "targets": [
-        "src/lib/api/generalChatCompat.ts"
-      ],
+      "targets": ["src/lib/api/generalChatCompat.ts"],
       "allowedPaths": []
     },
     {
       "id": "agent-compat-gateway",
       "classification": "dead-candidate",
       "description": "已删除的 Agent / Aster compat API 网关",
-      "targets": [
-        "src/lib/api/agentCompat.ts"
-      ],
+      "targets": ["src/lib/api/agentCompat.ts"],
       "allowedPaths": []
     },
     {
       "id": "agent-api-facade-entry",
       "classification": "dead-candidate",
       "description": "已删除 Agent API 门面入口",
-      "targets": [
-        "src/lib/api/agent.ts"
-      ],
+      "targets": ["src/lib/api/agent.ts"],
       "allowedPaths": []
     },
     {
       "id": "root-task-center-patch-scripts",
       "classification": "dead-candidate",
       "description": "已删除的根目录一次性 Task Center 补丁脚本；任务中心 Chrome 样式当前收敛到 ChatNavbar/TaskCenter token 主链，不允许恢复脚本式字符串替换",
-      "targets": [
-        "patch_dark.js",
-        "patch_flare.js",
-        "patch_navbar.js"
-      ],
+      "targets": ["patch_dark.js", "patch_flare.js", "patch_navbar.js"],
       "allowedPaths": []
     },
     {
@@ -100,8 +82,52 @@
       "id": "sceneapp-runtime-context-compat-barrel",
       "classification": "dead",
       "description": "已删除的 SceneApp runtime context 历史转发壳；历史 sceneapp_execution_summary 只读类型收敛到 src/lib/agent/legacySceneAppExecutionSummary.ts",
+      "targets": ["src/lib/sceneapp/types-runtime-context.ts"],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-retired-team-selector-ui-surface",
+      "classification": "dead",
+      "description": "已删除的 TeamSelector / TeamSelectorPanel 产品 UI 面；/subagents 必须保持本地 Subagents/thread 状态入口，不得恢复 Team picker、profile editor 或 Popover",
       "targets": [
-        "src/lib/sceneapp/types-runtime-context.ts"
+        "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx",
+        "src/components/agent/chat/components/Inputbar/components/TeamSelector.test.tsx",
+        "src/components/agent/chat/components/Inputbar/components/TeamSelectorPanel.tsx",
+        "src/components/agent/chat/components/Inputbar/components/TeamSelectorPanel.test.tsx",
+        "src/components/agent/chat/components/Inputbar/components/inputbarTeamSelectorCopy.ts",
+        "src/components/agent/chat/components/TeamSuggestionBar.tsx",
+        "src/components/agent/chat/utils/teamSuggestion.ts",
+        "src/components/agent/chat/utils/teamSuggestion.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-team-workspace-board-ui-surface",
+      "classification": "dead",
+      "description": "已删除的 TeamWorkspace Board / Dock / SummaryPanel / MemoryShadowCard 产品 UI 面；Subagents 标准展示继续收敛到 AgentUiProjectionState.subagents 与共享 SubagentsView，不得恢复旧画布板、Dock、SummaryPanel 或 workbench current 入口",
+      "targets": [
+        "src/components/agent/chat/components/AgentUiTeamWorkbenchSurfaceView.tsx",
+        "src/components/agent/chat/components/AgentUiTeamWorkbenchSurfaceView.test.tsx",
+        "src/components/agent/chat/components/TeamMemoryShadowCard.tsx",
+        "src/components/agent/chat/components/TeamMemoryShadowCard.test.tsx",
+        "src/components/agent/chat/components/TeamWorkbenchSummaryPanel.tsx",
+        "src/components/agent/chat/components/TeamWorkbenchSummaryPanel.test.tsx",
+        "src/components/agent/chat/components/TeamWorkbenchSummaryPanel.testFixtures.tsx",
+        "src/components/agent/chat/components/TeamWorkbenchSummaryPanel.projection.test.tsx",
+        "src/components/agent/chat/components/TeamWorkbenchSummaryPanel.workBoard.test.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceBoard.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceBoard.test.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceBoard.canvas.test.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceBoard.controls.test.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceBoard.runtime.test.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceBoard.testFixtures.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceDock.tsx",
+        "src/components/agent/chat/components/TeamWorkspaceDock.test.tsx",
+        "src/components/agent/chat/projection/agentUiTeamWorkbenchViewModel.ts",
+        "src/components/agent/chat/projection/agentUiTeamWorkbenchViewModel.test.ts",
+        "src/components/agent/chat/components/team-workspace-board/TeamWorkspaceBoardShell.tsx",
+        "src/components/agent/chat/components/team-workspace-board/TeamWorkspaceCanvasStage.tsx",
+        "src/components/agent/chat/components/team-workspace-board/useTeamWorkspaceBoardComposer.ts"
       ],
       "allowedPaths": []
     },
@@ -109,9 +135,7 @@
       "id": "sceneapps-workflow-rail-entry",
       "classification": "dead-candidate",
       "description": "已删除的 SceneApps 独立工作流 rail；现役页面流程统一收敛到 SceneAppsPage 顶部状态条、view tabs 与 workflowShortcut",
-      "targets": [
-        "src/components/sceneapps/SceneAppsWorkflowRail.tsx"
-      ],
+      "targets": ["src/components/sceneapps/SceneAppsWorkflowRail.tsx"],
       "allowedPaths": []
     },
     {
@@ -132,9 +156,7 @@
       "id": "sceneapp-catalog-projection-surface",
       "classification": "dead",
       "description": "已删除的 SceneApp catalog 编译 / 存储投影；应用目录事实源已切到 Agent App，不允许恢复独立 SceneApp catalog 入口",
-      "targets": [
-        "src/lib/sceneapp/catalog.ts"
-      ],
+      "targets": ["src/lib/sceneapp/catalog.ts"],
       "allowedPaths": []
     },
     {
@@ -153,9 +175,7 @@
       "id": "sceneapp-api-runtime-polling-surface",
       "classification": "dead",
       "description": "已删除的 SceneApp 前端 API 网关与执行摘要旧运行轮询侧链；历史 sceneapp_execution_summary 只保留 payload 内只读摘要，不得再拉取 SceneApp runs/scorecard 或动态准备治理 artifact",
-      "targets": [
-        "src/lib/api/sceneapp.ts"
-      ],
+      "targets": ["src/lib/api/sceneapp.ts"],
       "allowedPaths": []
     },
     {
@@ -282,9 +302,7 @@
       "id": "rust-provider-pool-dead-model-file",
       "classification": "dead-candidate",
       "description": "已删除的旧 provider_pool_model 运行时 / 展示 DTO；历史配置清理不得恢复凭证池模型模块",
-      "targets": [
-        "lime-rs/crates/core/src/models/provider_pool_model.rs"
-      ],
+      "targets": ["lime-rs/crates/core/src/models/provider_pool_model.rs"],
       "allowedPaths": []
     },
     {
@@ -300,18 +318,14 @@
       "id": "agent-legacy-hook-entry",
       "classification": "dead-candidate",
       "description": "旧 Agent Chat Hook 入口",
-      "targets": [
-        "src/components/agent/chat/hooks/useAgentChat.ts"
-      ],
+      "targets": ["src/components/agent/chat/hooks/useAgentChat.ts"],
       "allowedPaths": []
     },
     {
       "id": "claw-home-shell-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧 Claw 首页壳入口",
-      "targets": [
-        "src/components/agent/chat/AgentChatHomeShell.tsx"
-      ],
+      "targets": ["src/components/agent/chat/AgentChatHomeShell.tsx"],
       "allowedPaths": []
     },
     {
@@ -336,9 +350,7 @@
       "id": "video-page-shell-entry",
       "classification": "dead-candidate",
       "description": "已下线的独立视频模块页面壳入口，视频能力应统一收口到 Claw 工作台与复用画布",
-      "targets": [
-        "src/components/workspace/video/VideoPage.tsx"
-      ],
+      "targets": ["src/components/workspace/video/VideoPage.tsx"],
       "allowedPaths": []
     },
     {
@@ -360,9 +372,7 @@
       "id": "image-generation-runtime-barrel-entry",
       "classification": "dead-candidate",
       "description": "已删除的 image-gen 目录级 barrel 入口，当前图片生成 runtime 只允许通过子路径直连，不再暴露统一模块导出",
-      "targets": [
-        "src/components/image-gen/index.ts"
-      ],
+      "targets": ["src/components/image-gen/index.ts"],
       "allowedPaths": []
     },
     {
@@ -434,9 +444,7 @@
       "id": "claw-home-shell-skills-hook",
       "classification": "dead-candidate",
       "description": "已删除的旧 Claw 首页技能加载 Hook",
-      "targets": [
-        "src/components/agent/chat/hooks/useHomeShellSkills.ts"
-      ],
+      "targets": ["src/components/agent/chat/hooks/useHomeShellSkills.ts"],
       "allowedPaths": []
     },
     {
@@ -456,9 +464,7 @@
       "id": "claw-solution-legacy-api-gateway",
       "classification": "dead-candidate",
       "description": "已删除的旧 Claw 推荐方案前端 API 网关",
-      "targets": [
-        "src/lib/api/clawSolutions.ts"
-      ],
+      "targets": ["src/lib/api/clawSolutions.ts"],
       "allowedPaths": []
     },
     {
@@ -528,9 +534,7 @@
       "id": "workspace-create-confirmation-policy-entry",
       "classification": "dead-candidate",
       "description": "已删除的工作区创建确认策略 helper，当前 A2UI 任务卡测试需内联 fixture，不再保留独立 createConfirmationPolicy 运行时模块",
-      "targets": [
-        "src/components/workspace/utils/createConfirmationPolicy.ts"
-      ],
+      "targets": ["src/components/workspace/utils/createConfirmationPolicy.ts"],
       "allowedPaths": []
     },
     {
@@ -689,27 +693,21 @@
       "id": "heartbeat-api-gateway",
       "classification": "dead-candidate",
       "description": "已删除的旧 heartbeat 前端 API 入口",
-      "targets": [
-        "src/lib/api/heartbeat.ts"
-      ],
+      "targets": ["src/lib/api/heartbeat.ts"],
       "allowedPaths": []
     },
     {
       "id": "heartbeat-settings-page-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧 heartbeat 设置页入口",
-      "targets": [
-        "src/components/settings-v2/system/heartbeat/index.tsx"
-      ],
+      "targets": ["src/components/settings-v2/system/heartbeat/index.tsx"],
       "allowedPaths": []
     },
     {
       "id": "assistant-settings-page-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧助理服务设置页入口",
-      "targets": [
-        "src/components/settings-v2/agent/assistant/index.tsx"
-      ],
+      "targets": ["src/components/settings-v2/agent/assistant/index.tsx"],
       "allowedPaths": []
     },
     {
@@ -818,18 +816,14 @@
       "id": "settings-proxy-page-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧设置代理配置页入口",
-      "targets": [
-        "src/components/settings-v2/system/proxy/index.tsx"
-      ],
+      "targets": ["src/components/settings-v2/system/proxy/index.tsx"],
       "allowedPaths": []
     },
     {
       "id": "settings-header-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧 settings-v2 通用页头组件入口",
-      "targets": [
-        "src/components/settings-v2/features/SettingHeader.tsx"
-      ],
+      "targets": ["src/components/settings-v2/features/SettingHeader.tsx"],
       "allowedPaths": []
     },
     {
@@ -845,90 +839,70 @@
       "id": "experimental-banner-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧 ExperimentalBanner 独立提示组件入口，当前前端主链不再暴露该实验提示壳",
-      "targets": [
-        "src/components/ui/ExperimentalBanner.tsx"
-      ],
+      "targets": ["src/components/ui/ExperimentalBanner.tsx"],
       "allowedPaths": []
     },
     {
       "id": "panel-layout-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧分屏 PanelLayout 布局组件入口，当前工作区主链不再暴露该独立布局壳",
-      "targets": [
-        "src/components/layout/PanelLayout.tsx"
-      ],
+      "targets": ["src/components/layout/PanelLayout.tsx"],
       "allowedPaths": []
     },
     {
       "id": "stores-root-barrel-entry",
       "classification": "dead-candidate",
       "description": "旧 stores 根 barrel 入口",
-      "targets": [
-        "src/stores/index.ts"
-      ],
+      "targets": ["src/stores/index.ts"],
       "allowedPaths": []
     },
     {
       "id": "agent-legacy-store-entry",
       "classification": "dead-candidate",
       "description": "旧 Agent Zustand store 入口",
-      "targets": [
-        "src/stores/agentStore.ts"
-      ],
+      "targets": ["src/stores/agentStore.ts"],
       "allowedPaths": []
     },
     {
       "id": "use-unified-chat-compat-hook",
       "classification": "dead-candidate",
       "description": "useUnifiedChat compat Hook 入口",
-      "targets": [
-        "src/hooks/useUnifiedChat.ts"
-      ],
+      "targets": ["src/hooks/useUnifiedChat.ts"],
       "allowedPaths": []
     },
     {
       "id": "unified-chat-compat-gateway",
       "classification": "dead-candidate",
       "description": "unified-chat compat API 网关",
-      "targets": [
-        "src/lib/api/unified-chat.ts"
-      ],
+      "targets": ["src/lib/api/unified-chat.ts"],
       "allowedPaths": []
     },
     {
       "id": "three-stage-workflow-hook-entry",
       "classification": "dead-candidate",
       "description": "旧 three-stage workflow React Hook 入口",
-      "targets": [
-        "src/hooks/useThreeStageWorkflow.ts"
-      ],
+      "targets": ["src/hooks/useThreeStageWorkflow.ts"],
       "allowedPaths": []
     },
     {
       "id": "poster-workflow-root-hook-entry",
       "classification": "dead-candidate",
       "description": "已删除的根级海报工作流 Hook 入口，现役主链已收口到 workspace 工作台实现",
-      "targets": [
-        "src/hooks/usePosterWorkflow.ts"
-      ],
+      "targets": ["src/hooks/usePosterWorkflow.ts"],
       "allowedPaths": []
     },
     {
       "id": "poster-export-root-hook-entry",
       "classification": "dead-candidate",
       "description": "已删除的根级多平台海报导出 Hook 入口",
-      "targets": [
-        "src/hooks/useMultiPlatformExport.ts"
-      ],
+      "targets": ["src/hooks/useMultiPlatformExport.ts"],
       "allowedPaths": []
     },
     {
       "id": "content-creator-poster-workflow-hook-entry",
       "classification": "dead-candidate",
       "description": "已删除的 content-creator 海报工作流 Hook 入口",
-      "targets": [
-        "src/components/content-creator/hooks/usePosterWorkflow.ts"
-      ],
+      "targets": ["src/components/content-creator/hooks/usePosterWorkflow.ts"],
       "allowedPaths": []
     },
     {
@@ -948,18 +922,14 @@
       "id": "workbench-poster-gateway-entry",
       "classification": "dead-candidate",
       "description": "已删除的海报 workflow/agent 共享网关入口",
-      "targets": [
-        "src/lib/workspace/workbenchPoster.ts"
-      ],
+      "targets": ["src/lib/workspace/workbenchPoster.ts"],
       "allowedPaths": []
     },
     {
       "id": "workspace-selector-entry",
       "classification": "dead-candidate",
       "description": "已删除的独立 WorkspaceSelector 组件入口，当前 workspace 主链不再暴露旧下拉选择器",
-      "targets": [
-        "src/components/workspace/WorkspaceSelector.tsx"
-      ],
+      "targets": ["src/components/workspace/WorkspaceSelector.tsx"],
       "allowedPaths": []
     },
     {
@@ -1060,9 +1030,7 @@
       "id": "agent-chat-fixed-backend-config-entry",
       "classification": "dead-candidate",
       "description": "已删除的 Agent Chat 固定后端 compat 配置壳，当前聊天运行时不再暴露旧后端切换心智",
-      "targets": [
-        "src/components/agent/chat/config.ts"
-      ],
+      "targets": ["src/components/agent/chat/config.ts"],
       "allowedPaths": []
     },
     {
@@ -1098,18 +1066,14 @@
       "id": "ui-radio-group-entry",
       "classification": "dead-candidate",
       "description": "已删除的零入口 RadioGroup UI primitive，当前前端主链不再暴露该独立单选组壳",
-      "targets": [
-        "src/components/ui/radio-group.tsx"
-      ],
+      "targets": ["src/components/ui/radio-group.tsx"],
       "allowedPaths": []
     },
     {
       "id": "ui-separator-entry",
       "classification": "dead-candidate",
       "description": "已删除的零入口 Separator UI primitive，当前前端主链不再暴露该独立分隔线壳",
-      "targets": [
-        "src/components/ui/separator.tsx"
-      ],
+      "targets": ["src/components/ui/separator.tsx"],
       "allowedPaths": []
     },
     {
@@ -1141,9 +1105,7 @@
       "id": "ui-alert-entry",
       "classification": "dead-candidate",
       "description": "已删除的零入口 Alert UI primitive，当前前端主链不再暴露该独立警示框壳",
-      "targets": [
-        "src/components/ui/alert.tsx"
-      ],
+      "targets": ["src/components/ui/alert.tsx"],
       "allowedPaths": []
     },
     {
@@ -1213,9 +1175,7 @@
       "id": "notification-settings-legacy-desktop-host-api",
       "classification": "dead-candidate",
       "description": "已删除的旧通知设置 旧桌面宿主 API 壳，当前前端主链不再暴露这条通知设置旧链路",
-      "targets": [
-        "src/lib/legacy-desktop-host/notificationApi.ts"
-      ],
+      "targets": ["src/lib/legacy-desktop-host/notificationApi.ts"],
       "allowedPaths": []
     },
     {
@@ -1309,6 +1269,30 @@
       "allowedPaths": []
     },
     {
+      "id": "companion-pet-main-surface",
+      "classification": "dead",
+      "description": "已删除的桌宠主实现面，Lime 主仓不再提供 Lime Pet 启动、状态监听、Provider 摘要同步或桌宠能力偏好入口",
+      "targets": [
+        "src/lib/api/companion.ts",
+        "src/lib/api/companion.d.ts",
+        "src/lib/api/companion.test.ts",
+        "src/hooks/useCompanionEntryEnabled.ts",
+        "src/hooks/useCompanionEntryEnabled.test.tsx",
+        "src/hooks/useCompanionProviderBridge.ts",
+        "src/hooks/useCompanionProviderBridge.test.tsx",
+        "src/lib/desktop-host/companionMocks.ts",
+        "src/lib/desktop-host/companionMocks.d.ts",
+        "src/lib/desktop-host/companionMocks.test.ts",
+        "src/lib/companion/preferences.ts",
+        "src/lib/provider/companionProviderOverview.ts",
+        "src/lib/provider/companionProviderOverview.test.ts",
+        "src/components/settings-v2/agent/providers/CompanionCapabilityPreferencesCard.tsx",
+        "src/components/settings-v2/agent/providers/CompanionCapabilityPreferencesCard.test.tsx",
+        "src/components/settings-v2/agent/providers/cloudProviderSettingsTestFixtures.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "isolated-workspace-helper-notice-surfaces",
       "classification": "dead-candidate",
       "description": "已删除的零入口工作区输入骨架 helper、风格重写 helper 与输入栏 prompt cache 提示壳，当前前端主链不再暴露这些孤立辅助面",
@@ -1326,18 +1310,14 @@
       "id": "document-image-insert-wrapper-entry",
       "classification": "dead-candidate",
       "description": "已删除的文档专用图片插入适配壳，当前文档与画布统一直接依赖 canvasImageInsertBus",
-      "targets": [
-        "src/lib/documentImageInsertBus.ts"
-      ],
+      "targets": ["src/lib/documentImageInsertBus.ts"],
       "allowedPaths": []
     },
     {
       "id": "websocket-status-widget-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧 WebSocket 状态独立组件入口，当前前端主链不再暴露该独立状态面板",
-      "targets": [
-        "src/components/websocket/WebSocketStatus.tsx"
-      ],
+      "targets": ["src/components/websocket/WebSocketStatus.tsx"],
       "allowedPaths": []
     },
     {
@@ -1354,9 +1334,7 @@
       "id": "openclaw-dashboard-frame-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧 OpenClaw Dashboard 内嵌 frame 壳，当前主链已收口到独立 Dashboard 页面与外部打开模式",
-      "targets": [
-        "src/components/openclaw/OpenClawDashboardFrame.tsx"
-      ],
+      "targets": ["src/components/openclaw/OpenClawDashboardFrame.tsx"],
       "allowedPaths": []
     },
     {
@@ -1414,18 +1392,14 @@
       "id": "style-library-storage-module",
       "classification": "dead-candidate",
       "description": "已删除的全局风格库本地存储与应用历史模块",
-      "targets": [
-        "src/lib/style-library.ts"
-      ],
+      "targets": ["src/lib/style-library.ts"],
       "allowedPaths": []
     },
     {
       "id": "style-library-react-hook-entry",
       "classification": "dead-candidate",
       "description": "已删除的风格库 React Hook 入口",
-      "targets": [
-        "src/hooks/useStyleLibrary.ts"
-      ],
+      "targets": ["src/hooks/useStyleLibrary.ts"],
       "allowedPaths": []
     },
     {
@@ -1462,27 +1436,21 @@
       "id": "project-style-guide-panel-module",
       "classification": "dead-candidate",
       "description": "已删除的项目默认风格面板入口",
-      "targets": [
-        "src/components/projects/memory/StyleGuidePanel.tsx"
-      ],
+      "targets": ["src/components/projects/memory/StyleGuidePanel.tsx"],
       "allowedPaths": []
     },
     {
       "id": "project-style-guide-helper-module",
       "classification": "dead-candidate",
       "description": "已删除的项目默认风格归一化与提示词工具模块",
-      "targets": [
-        "src/lib/style-guide.ts"
-      ],
+      "targets": ["src/lib/style-guide.ts"],
       "allowedPaths": []
     },
     {
       "id": "legacy-layout-stylesheet-surface",
       "classification": "dead-candidate",
       "description": "已删除的零入口布局样式表壳，当前 layout 主链不再通过独立 layout.css 挂接旧 terminal/workbench 面板样式",
-      "targets": [
-        "src/components/layout/layout.css"
-      ],
+      "targets": ["src/components/layout/layout.css"],
       "allowedPaths": []
     },
     {
@@ -1538,10 +1506,7 @@
       "id": "project-workspace-legacy-hooks",
       "classification": "dead-candidate",
       "description": "已删除的旧项目与工作区通用 Hook 壳，前端主链统一收口到 useProjects、api/project 与工作区 runtime",
-      "targets": [
-        "src/hooks/useProject.ts",
-        "src/hooks/useWorkspace.ts"
-      ],
+      "targets": ["src/hooks/useProject.ts", "src/hooks/useWorkspace.ts"],
       "allowedPaths": []
     },
     {
@@ -1582,45 +1547,35 @@
       "id": "unused-toast-hook-wrapper",
       "classification": "dead-candidate",
       "description": "已删除的零入口 sonner Hook 包装壳，前端统一直接消费 sonner toast，不再保留 useToast 过渡层",
-      "targets": [
-        "src/hooks/use-toast.ts"
-      ],
+      "targets": ["src/hooks/use-toast.ts"],
       "allowedPaths": []
     },
     {
       "id": "legacy-chat-shared-type-surface",
       "classification": "dead-candidate",
       "description": "已删除的零入口统一 chat 类型壳，现役对话类型分别收口到 agent/general 等各自运行时边界",
-      "targets": [
-        "src/types/chat.ts"
-      ],
+      "targets": ["src/types/chat.ts"],
       "allowedPaths": []
     },
     {
       "id": "legacy-platform-shared-type-surface",
       "classification": "dead-candidate",
       "description": "已删除的零入口 platform 类型壳，现役文档平台类型统一收口到各自业务边界，不再保留孤立 src/types/platform.ts",
-      "targets": [
-        "src/types/platform.ts"
-      ],
+      "targets": ["src/types/platform.ts"],
       "allowedPaths": []
     },
     {
       "id": "legacy-persona-shared-type-surface",
       "classification": "dead-candidate",
       "description": "已删除的零入口 persona 类型壳，品牌人设与一次性 persona 命令面已迁回各自边界，不再保留前端共享 persona.ts",
-      "targets": [
-        "src/types/persona.ts"
-      ],
+      "targets": ["src/types/persona.ts"],
       "allowedPaths": []
     },
     {
       "id": "connection-management-legacy-frontend-gateway",
       "classification": "dead-candidate",
       "description": "已删除的零入口连接管理前端 API 网关壳，连接能力底层命令仍保留，但前端主链不再暴露这组 connection_* 包装接口",
-      "targets": [
-        "src/lib/connection-api.ts"
-      ],
+      "targets": ["src/lib/connection-api.ts"],
       "allowedPaths": []
     },
     {
@@ -1919,45 +1874,35 @@
       "id": "three-stage-workflow-manager-entry",
       "classification": "dead-candidate",
       "description": "旧 three-stage workflow 管理器入口",
-      "targets": [
-        "src/lib/workflow/threeStageWorkflow.ts"
-      ],
+      "targets": ["src/lib/workflow/threeStageWorkflow.ts"],
       "allowedPaths": []
     },
     {
       "id": "tool-hooks-api-gateway",
       "classification": "dead-candidate",
       "description": "旧 tool hooks 前端 API 网关",
-      "targets": [
-        "src/lib/api/toolHooks.ts"
-      ],
+      "targets": ["src/lib/api/toolHooks.ts"],
       "allowedPaths": []
     },
     {
       "id": "context-memory-legacy-api-gateway",
       "classification": "dead-candidate",
       "description": "旧 context memory 前端 API 网关",
-      "targets": [
-        "src/lib/api/contextMemory.ts"
-      ],
+      "targets": ["src/lib/api/contextMemory.ts"],
       "allowedPaths": []
     },
     {
       "id": "content-workflow-legacy-api-gateway",
       "classification": "dead-candidate",
       "description": "已退出现役工作区主链的旧 content workflow API 网关",
-      "targets": [
-        "src/lib/api/content-workflow.ts"
-      ],
+      "targets": ["src/lib/api/content-workflow.ts"],
       "allowedPaths": []
     },
     {
       "id": "content-workflow-rust-command-module",
       "classification": "dead-candidate",
       "description": "已退出 旧桌面宿主命令注册的旧 content workflow 命令模块",
-      "targets": [
-        "lime-rs/src/commands/content_workflow_cmd.rs"
-      ],
+      "targets": ["lime-rs/src/commands/content_workflow_cmd.rs"],
       "allowedPaths": []
     },
     {
@@ -2005,27 +1950,21 @@
       "id": "content-theme-defaults-helper",
       "classification": "dead-candidate",
       "description": "已零引用的旧内容主题默认值 helper",
-      "targets": [
-        "src/lib/contentCreator/themeDefaults.ts"
-      ],
+      "targets": ["src/lib/contentCreator/themeDefaults.ts"],
       "allowedPaths": []
     },
     {
       "id": "agent-chat-timeline-flow-demo",
       "classification": "dead-candidate",
       "description": "已删除的聊天时间线演示组件",
-      "targets": [
-        "src/components/agent/chat/components/TimelineFlowDemo.tsx"
-      ],
+      "targets": ["src/components/agent/chat/components/TimelineFlowDemo.tsx"],
       "allowedPaths": []
     },
     {
       "id": "agent-chat-legacy-project-selector",
       "classification": "dead-candidate",
       "description": "已删除的聊天目录旧项目选择器",
-      "targets": [
-        "src/components/agent/chat/components/ProjectSelector.tsx"
-      ],
+      "targets": ["src/components/agent/chat/components/ProjectSelector.tsx"],
       "allowedPaths": []
     },
     {
@@ -2053,27 +1992,21 @@
       "id": "settings-api-server-page-entry",
       "classification": "dead-candidate",
       "description": "已删除的共享网关设置页入口",
-      "targets": [
-        "src/components/api-server/ApiServerPage.tsx"
-      ],
+      "targets": ["src/components/api-server/ApiServerPage.tsx"],
       "allowedPaths": []
     },
     {
       "id": "team-subagent-scheduler-hook",
       "classification": "dead-candidate",
       "description": "已删除的旧 SubAgent scheduler Hook 路径",
-      "targets": [
-        "src/hooks/useSubAgentScheduler.ts"
-      ],
+      "targets": ["src/hooks/useSubAgentScheduler.ts"],
       "allowedPaths": []
     },
     {
       "id": "team-subagent-scheduler-api",
       "classification": "dead-candidate",
       "description": "已删除的旧 SubAgent scheduler 前端 API 路径",
-      "targets": [
-        "src/lib/api/subAgentScheduler.ts"
-      ],
+      "targets": ["src/lib/api/subAgentScheduler.ts"],
       "allowedPaths": []
     },
     {
@@ -2100,9 +2033,7 @@
       "id": "legacy-questionnaire-a2ui-compat-bridge",
       "classification": "dead-candidate",
       "description": "已删除的旧问卷转 A2UI 兼容桥路径",
-      "targets": [
-        "src/components/agent/chat/utils/compatQuestionnaireA2UI.ts"
-      ],
+      "targets": ["src/components/agent/chat/utils/compatQuestionnaireA2UI.ts"],
       "allowedPaths": []
     },
     {
@@ -2174,6 +2105,17 @@
   ],
   "commands": [
     {
+      "id": "companion-pet-retired-commands",
+      "classification": "dead",
+      "description": "桌宠命令面已下线，不得重新接回前端网关、Desktop Host、DevBridge 或默认 mock",
+      "commands": [
+        "companion_get_pet_status",
+        "companion_launch_pet",
+        "companion_send_pet_command"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "shared-gateway-control-commands",
       "classification": "dead-candidate",
       "description": "已下线的共享网关桌面命令边界",
@@ -2218,9 +2160,7 @@
       "id": "agent-create-session-compat-command",
       "classification": "dead-candidate",
       "description": "已零引用的旧 agent_create_session 命令边界",
-      "commands": [
-        "agent_create_session"
-      ],
+      "commands": ["agent_create_session"],
       "allowedPaths": []
     },
     {
@@ -2274,9 +2214,7 @@
       "id": "agent-session-message-legacy-command",
       "classification": "dead-candidate",
       "description": "已零引用的旧 agent session message 命令边界",
-      "commands": [
-        "agent_get_session_messages"
-      ],
+      "commands": ["agent_get_session_messages"],
       "allowedPaths": []
     },
     {
@@ -2364,9 +2302,7 @@
       "id": "prompt-switch-legacy-command",
       "classification": "dead-candidate",
       "description": "已零引用的旧 prompt 切换命令前端边界",
-      "commands": [
-        "switch_prompt"
-      ],
+      "commands": ["switch_prompt"],
       "allowedPaths": []
     },
     {
@@ -2670,8 +2606,150 @@
         "components/provider-pool/api-key",
         "provider-pool/api-key"
       ],
+      "includePathPrefixes": ["src"],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-ui-nonstandard-tree-terminology",
+      "classification": "dead",
+      "description": "AgentUI 标准不得恢复 ViewTree / ProcessTree 作为协议或组件标准；过程结构统一收敛到 UIMessageParts、ProcessTimeline 与 ExecutionGraph",
+      "patterns": ["ViewTree", "ProcessTree"],
       "includePathPrefixes": [
-        "src"
+        "src/components/agent",
+        "src/features/agent-app",
+        "src/lib/api/agentRuntime"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-ui-retired-team-workbench-standard-surface",
+      "classification": "dead",
+      "description": "AgentUI current 标准不得恢复 TeamWorkbench / teamWorkbench / Team Workbench 作为 SDK 类型、组件、state 字段或标准文档入口；标准协作面收敛到 AgentUiSubagentsModel、state.subagents 与 SubagentsView",
+      "patterns": [
+        "TeamWorkbench",
+        "teamWorkbench",
+        "Team Workbench",
+        "agent-team-workbench"
+      ],
+      "includePathPrefixes": [
+        "packages/agent-ui-contracts",
+        "packages/agent-runtime-projection",
+        "packages/agent-runtime-ui",
+        "packages/agent-runtime-client",
+        "internal/aiprompts/agent-ui-runtime-standard.md",
+        "internal/aiprompts/playwright-e2e.md",
+        "internal/prd/next/implementation-roadmap.md",
+        "internal/roadmap/agentworkbench",
+        "src/components/agent/chat/projection",
+        "src/components/agent/chat/workspace",
+        "src/i18n/resources"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-ui-local-process-owner-terminology",
+      "classification": "dead",
+      "description": "产品应用不得新增本地 process owner / process component 作为 AgentUI 标准事实源；过程 UI 应消费共享 ProcessTimeline、ExecutionGraph 与 ActionRequired surfaces",
+      "patterns": [
+        "LocalProcessPanel",
+        "LocalProcessTimeline",
+        "AgentProcessTree",
+        "ProcessComponent",
+        "processComponent"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent",
+        "src/features/agent-app",
+        "src/lib/api/agentRuntime"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-app-host-drawer-local-process-fallback",
+      "classification": "dead",
+      "description": "Agent App HostDrawer 主路径不得重新调用本地 process fallback；主抽屉必须始终渲染标准 AgentRunProjectionPanel，空态也交给标准 projection",
+      "patterns": [
+        "AgentRunHostDrawerFallback",
+        "AgentRunLocalProcessFallback",
+        "shouldRenderLocalProcessFallback",
+        "shouldRenderProjection ? ("
+      ],
+      "includePathPrefixes": ["src/features/agent-app/ui/AgentRunHostDrawer.tsx"],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-ui-direct-provider-runtime-surface",
+      "classification": "dead",
+      "description": "AgentUI / AgentRuntime UI 主链不得直连 Provider SDK、Provider API 或持有 Provider key；运行时事实必须经 App Server / RuntimeCore / ExecutionBackend 输出",
+      "patterns": [
+        "new OpenAI(",
+        "providerApiKey",
+        "provider_api_key",
+        "directProviderRuntime",
+        "directProviderClient"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent",
+        "src/features/agent-app",
+        "src/lib/api/agentRuntime"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-retired-team-workspace-board-terminology",
+      "classification": "dead",
+      "description": "Agent Chat current 组件索引和 UI 组件目录不得恢复已删除的 Team selector / board / dock / workbench 术语、路径、props 或 test id；Subagents 展示必须走共享 projection / Subagents surface",
+      "patterns": [
+        "TeamSelector",
+        "TeamSelectorPanel",
+        "inputbarTeamSelectorCopy",
+        "TeamSuggestionBar",
+        "teamSuggestion",
+        "team-suggestion-bar",
+        "agentChat.inputbar.teamSuggestion",
+        "onEnableSuggestedTeam",
+        "handleEnableSuggestedTeam",
+        "enableSuggestedTeam",
+        "cloneTeamDefinitionAsCustom",
+        "saveCustomTeams",
+        "loadCustomTeams(",
+        "buildWorkspaceSettingsWithCustomTeams",
+        "lime.chat.custom_teams.v1",
+        "team-workspace-board/",
+        "TeamWorkspaceBoard",
+        "TeamWorkspaceDock",
+        "TeamMemoryShadowCard",
+        "TeamWorkbenchSummaryPanel",
+        "AgentUiTeamWorkbenchSurfaceView",
+        "teamWorkbenchView",
+        "teamWorkbenchSurfaceProps",
+        "teamWorkspaceDockProps",
+        "teamWorkspaceEnabled",
+        "dismissActiveTeamWorkbenchAutoOpen",
+        "handleActivateTeamWorkbench",
+        "team-workbench",
+        "empty-state-team-selector",
+        "team-selector-stub",
+        "Team current tools",
+        "Team Memory",
+        "Team member",
+        "Team policy",
+        "Background teammate",
+        "Remote teammate",
+        "Team 状态",
+        "团队控制",
+        "团队编队",
+        "创建团队",
+        "删除团队",
+        "当前团队"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat/components/README.md",
+        "src/components/agent/chat/components",
+        "src/components/agent/chat/projection",
+        "src/components/agent/chat/utils",
+        "src/components/agent/chat/workspace",
+        "src/i18n/resources"
       ],
       "allowedPaths": []
     },
@@ -2700,9 +2778,7 @@
         "OnboardingWizard",
         "useOnboardingState"
       ],
-      "includePathPrefixes": [
-        "src"
-      ],
+      "includePathPrefixes": ["src"],
       "allowedPaths": [
         "src/components/agent/chat/protocol-fact-source-guard.test.ts",
         "src/lib/governance/legacySurfaceCatalog.test.ts"
@@ -2784,9 +2860,7 @@
         "\\bpage\\s*:\\s*[\"']video[\"']",
         "\\brenderContent\\([\"']video[\"']"
       ],
-      "includePathPrefixes": [
-        "src"
-      ]
+      "includePathPrefixes": ["src"]
     },
     {
       "id": "frontend-image-page-surface",
@@ -2799,17 +2873,13 @@
         "\\bpage\\s*:\\s*[\"']image-gen[\"']",
         "\\brenderContent\\([\"']image-gen[\"']"
       ],
-      "includePathPrefixes": [
-        "src"
-      ]
+      "includePathPrefixes": ["src"]
     },
     {
       "id": "frontend-subagent-scheduler-event-bus",
       "classification": "dead-candidate",
       "description": "已删除的旧 subagent scheduler 事件名",
-      "patterns": [
-        "subagent-scheduler-event"
-      ],
+      "patterns": ["subagent-scheduler-event"],
       "allowedPaths": []
     },
     {
@@ -2932,10 +3002,7 @@
       "id": "stores-root-barrel-imports",
       "classification": "dead-candidate",
       "description": "已零引用的 @/stores 根 barrel 回流",
-      "patterns": [
-        "from \"@/stores\"",
-        "from '@/stores'"
-      ],
+      "patterns": ["from \"@/stores\"", "from '@/stores'"],
       "allowedPaths": []
     },
     {
@@ -3251,8 +3318,7 @@
         "src/components/agent/chat/components/Inputbar/hooks/useInputbarController.ts",
         "src/components/agent/chat/components/Inputbar/hooks/useInputbarSend.ts",
         "src/components/agent/chat/components/Inputbar/components/InputbarComposerSection.tsx",
-        "src/components/agent/chat/components/Inputbar/components/BuiltinCommandBadge.tsx",
-        "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx"
+        "src/components/agent/chat/components/Inputbar/components/BuiltinCommandBadge.tsx"
       ],
       "allowedPaths": []
     },
@@ -3260,15 +3326,9 @@
       "id": "image-generation-runtime-entry-usage",
       "classification": "dead-candidate",
       "description": "AI 图片生成 runtime 不允许继续扩散新的 useImageGen 主入口，当前只允许 Claw 工作台复用",
-      "patterns": [
-        "useImageGen({"
-      ],
-      "includePathPrefixes": [
-        "src/components"
-      ],
-      "allowedPaths": [
-        "src/components/agent/chat/AgentChatWorkspace.tsx"
-      ]
+      "patterns": ["useImageGen({"],
+      "includePathPrefixes": ["src/components"],
+      "allowedPaths": ["src/components/agent/chat/AgentChatWorkspace.tsx"]
     },
     {
       "id": "image-generation-runtime-barrel-imports",
@@ -3299,9 +3359,7 @@
         "\\bonNavigate\\(\\s*[\"']tools[\"']",
         "\\bonNavigate\\(\\s*[\"']image-analysis[\"']"
       ],
-      "includePathPrefixes": [
-        "src"
-      ],
+      "includePathPrefixes": ["src"],
       "allowedPaths": []
     },
     {
@@ -3319,18 +3377,14 @@
         "\\bpage\\s*:\\s*[\"']files[\"']",
         "\\bpage\\s*:\\s*[\"']web[\"']"
       ],
-      "includePathPrefixes": [
-        "src"
-      ],
+      "includePathPrefixes": ["src"],
       "allowedPaths": []
     },
     {
       "id": "skill-selection-direct-construction-runtime-usage",
       "classification": "dead-candidate",
       "description": "运行时代码不允许绕过共享绑定边界直接构造 createSkillSelectionProps，必须收敛到 skillSelectionBindings",
-      "patterns": [
-        "createSkillSelectionProps("
-      ],
+      "patterns": ["createSkillSelectionProps("],
       "includePathPrefixes": [
         "src/components/agent/chat/components",
         "src/components/agent/chat/skill-selection"
@@ -3400,18 +3454,14 @@
         "export interface EntryTaskTemplate",
         "export type EntryTaskSlotValues"
       ],
-      "includePathPrefixes": [
-        "src/components/agent/chat/components/types.ts"
-      ],
+      "includePathPrefixes": ["src/components/agent/chat/components/types.ts"],
       "allowedPaths": []
     },
     {
       "id": "inputbar-legacy-execution-strategy-prop-bridge",
       "classification": "dead-candidate",
       "description": "Inputbar 输入主链不允许恢复已失活的 showExecutionStrategy 兼容 props 与适配契约，Plan 切换必须继续走独立选择器主链",
-      "patterns": [
-        "showExecutionStrategy"
-      ],
+      "patterns": ["showExecutionStrategy"],
       "includePathPrefixes": [
         "src/components/agent/chat/components/EmptyStateComposerPanel.tsx",
         "src/components/agent/chat/components/Inputbar/components/InputbarComposerSection.tsx",
@@ -3427,10 +3477,7 @@
       "id": "inputbar-legacy-dead-prop-bridge",
       "classification": "dead-candidate",
       "description": "Inputbar 家族不允许恢复已失活的 isCanvasOpen / isExecutionRuntimeActive 空透传，画布与运行时状态必须留在各自主边界",
-      "patterns": [
-        "isCanvasOpen",
-        "isExecutionRuntimeActive"
-      ],
+      "patterns": ["isCanvasOpen", "isExecutionRuntimeActive"],
       "includePathPrefixes": [
         "src/components/agent/chat/AgentChatWorkspace.tsx",
         "src/components/agent/chat/components/Inputbar/index.tsx",
@@ -3462,11 +3509,9 @@
     },
     {
       "id": "team-selector-legacy-context-prop-callsite",
-      "classification": "dead-candidate",
-      "description": "Inputbar 与 EmptyState 不允许继续向 TeamSelector 透传已失活的 workspaceId 上下文 props",
-      "patterns": [
-        "workspaceId={workspaceId}"
-      ],
+      "classification": "dead",
+      "description": "Inputbar 与 EmptyState 不允许恢复旧 TeamSelector 调用端，也不得继续向 TeamSelector 透传已失活的 workspaceId 上下文 props",
+      "patterns": ["workspaceId={workspaceId}"],
       "includePathPrefixes": [
         "src/components/agent/chat/components/EmptyStateComposerPanel.tsx",
         "src/components/agent/chat/components/Inputbar/components/InputbarComposerSection.tsx"
@@ -3475,8 +3520,8 @@
     },
     {
       "id": "team-selector-panel-legacy-runtime-context-props",
-      "classification": "dead-candidate",
-      "description": "TeamSelector 与 TeamSelectorPanel 不允许恢复未消费的 providerType/model/executionStrategy/workspaceId 旧运行时上下文透传",
+      "classification": "dead",
+      "description": "TeamSelector 与 TeamSelectorPanel 已删除，不允许恢复未消费的 providerType/model/executionStrategy/workspaceId 旧运行时上下文透传",
       "patterns": [
         "providerType={providerType}",
         "model={model}",
@@ -3494,13 +3539,10 @@
     },
     {
       "id": "team-selector-legacy-trigger-surface",
-      "classification": "dead-candidate",
-      "description": "TeamSelector 不允许恢复旧 triggerLabel/className 自定义触发表面，当前按钮文案与样式必须继续留在组件事实源内部",
+      "classification": "dead",
+      "description": "TeamSelector 已删除，不允许恢复旧 triggerLabel/className 自定义触发表面；Subagents 状态入口必须留在 current 输入栏事实源内部",
       "patterns": [],
-      "regexPatterns": [
-        "\\btriggerLabel\\s*\\?:",
-        "\\bclassName\\s*\\?:"
-      ],
+      "regexPatterns": ["\\btriggerLabel\\s*\\?:", "\\bclassName\\s*\\?:"],
       "includePathPrefixes": [
         "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx"
       ],
@@ -3698,10 +3740,7 @@
       "id": "empty-state-legacy-theme-tabs-surface",
       "classification": "dead-candidate",
       "description": "首页空态不允许恢复旧主题 tabs 壳与 showThemeTabs 透传，当前首页主链不再暴露这层旧导航",
-      "patterns": [
-        "showThemeTabs",
-        "themeTabs={"
-      ],
+      "patterns": ["showThemeTabs", "themeTabs={"],
       "includePathPrefixes": [
         "src/components/agent/chat/components/EmptyState.tsx",
         "src/components/agent/chat/components/EmptyStateHero.tsx",
@@ -3728,9 +3767,7 @@
       "id": "empty-state-supporting-slot-override-surface",
       "classification": "dead-candidate",
       "description": "首页空态不允许恢复 supportingSlotOverride 测试注入口，支持面板应继续由当前首页主链统一决定",
-      "patterns": [
-        "supportingSlotOverride"
-      ],
+      "patterns": ["supportingSlotOverride"],
       "includePathPrefixes": [
         "src/components/agent/chat/components/EmptyState.tsx",
         "src/components/agent/chat/components/EmptyState.test.tsx"
@@ -3788,10 +3825,7 @@
         "buildCodeFixSignalFromThreadItems",
         "canvas-workbench-output"
       ],
-      "includePathPrefixes": [
-        "src/components/agent/chat",
-        "scripts"
-      ],
+      "includePathPrefixes": ["src/components/agent/chat", "scripts"],
       "allowedPaths": []
     },
     {
@@ -3825,10 +3859,7 @@
       "id": "empty-state-legacy-config-load-strategy-prop",
       "classification": "dead-candidate",
       "description": "首页空态不允许恢复无调用方的 configLoadStrategy 时序开关，配置读取应继续停留在当前默认加载路径",
-      "patterns": [
-        "configLoadStrategy",
-        "scheduleDeferredConfigLoad"
-      ],
+      "patterns": ["configLoadStrategy", "scheduleDeferredConfigLoad"],
       "includePathPrefixes": [
         "src/components/agent/chat/components/EmptyState.tsx"
       ],
@@ -3838,13 +3869,8 @@
       "id": "empty-state-legacy-sceneapps-panel-surface",
       "classification": "dead-candidate",
       "description": "不允许恢复首页空态 SceneApp 旧面板组件名或 data-testid；首页入口当前统一由 EmptyStateComposerPanel 与 curatedTaskTemplates 呈现",
-      "patterns": [
-        "EmptyStateSceneAppsPanel",
-        "sceneapps-home-directory"
-      ],
-      "includePathPrefixes": [
-        "src/components/agent/chat"
-      ],
+      "patterns": ["EmptyStateSceneAppsPanel", "sceneapps-home-directory"],
+      "includePathPrefixes": ["src/components/agent/chat"],
       "allowedPaths": []
     },
     {
@@ -3866,10 +3892,7 @@
         "entry-sceneapp-",
         "sceneapps-home-directory"
       ],
-      "includePathPrefixes": [
-        "src/components/agent/chat",
-        "src/lib/sceneapp"
-      ],
+      "includePathPrefixes": ["src/components/agent/chat", "src/lib/sceneapp"],
       "allowedPaths": []
     },
     {
@@ -3889,10 +3912,7 @@
         "buildSceneAppCatalogCardViewModel",
         "SceneAppCatalogCardViewModel"
       ],
-      "includePathPrefixes": [
-        "src/lib/api",
-        "src/lib/sceneapp"
-      ],
+      "includePathPrefixes": ["src/lib/api", "src/lib/sceneapp"],
       "allowedPaths": []
     },
     {
@@ -3945,10 +3965,7 @@
         "SCENEAPP_RUNTIME_POLL_INTERVAL_MS",
         "loadSceneAppExecutionRuntimeSnapshot"
       ],
-      "includePathPrefixes": [
-        "src/components/agent/chat",
-        "src/lib/api"
-      ],
+      "includePathPrefixes": ["src/components/agent/chat", "src/lib/api"],
       "allowedPaths": []
     },
     {
@@ -3967,10 +3984,7 @@
         "sceneAppExecutionFollowupDestinations",
         "sceneAppExecutionPromptContinuation"
       ],
-      "includePathPrefixes": [
-        "src/components/agent/chat",
-        "src/lib/sceneapp"
-      ],
+      "includePathPrefixes": ["src/components/agent/chat", "src/lib/sceneapp"],
       "allowedPaths": []
     },
     {
@@ -3983,21 +3997,15 @@
         "listEntryRecommendedSolutions(",
         "recordEntryRecommendedSolutionUsage("
       ],
-      "includePathPrefixes": [
-        "src/components/agent/chat"
-      ],
+      "includePathPrefixes": ["src/components/agent/chat"],
       "allowedPaths": []
     },
     {
       "id": "agent-chat-wechat-runtime-model-sync-hook-usage",
       "classification": "dead-candidate",
       "description": "Agent Chat 主链不允许恢复零引用的 useWechatRuntimeModelSync Hook；微信模型绑定应继续由 Provider / 渠道命令网关持有",
-      "patterns": [
-        "useWechatRuntimeModelSync"
-      ],
-      "includePathPrefixes": [
-        "src/components/agent/chat"
-      ],
+      "patterns": ["useWechatRuntimeModelSync"],
+      "includePathPrefixes": ["src/components/agent/chat"],
       "allowedPaths": []
     },
     {
@@ -4010,9 +4018,7 @@
         "openFileDialog",
         "openShell"
       ],
-      "includePathPrefixes": [
-        "src/lib/desktop-host/index.ts"
-      ],
+      "includePathPrefixes": ["src/lib/desktop-host/index.ts"],
       "allowedPaths": []
     },
     {
@@ -4059,9 +4065,7 @@
         "serializeSceneAppsPageParams",
         "SceneAppsPage"
       ],
-      "includePathPrefixes": [
-        "src"
-      ],
+      "includePathPrefixes": ["src"],
       "allowedPaths": []
     }
   ],
@@ -4070,9 +4074,7 @@
       "id": "rust-subagent-scheduler-event-bus",
       "classification": "dead-candidate",
       "description": "已删除的旧 subagent scheduler Rust 事件名",
-      "patterns": [
-        "subagent-scheduler-event"
-      ],
+      "patterns": ["subagent-scheduler-event"],
       "allowedPaths": []
     },
     {
@@ -4090,10 +4092,7 @@
         "open_floating_window",
         "read_image_as_base64"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
@@ -4105,30 +4104,21 @@
         "commands::theme_context_cmd::",
         "aster_agent_theme_context_search"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
       "id": "rust-general-chat-dao",
       "classification": "dead-candidate",
       "description": "已零引用的 Rust 业务层 direct GeneralChatDao 依赖",
-      "patterns": [
-        "GeneralChatDao",
-        "database::dao::general_chat"
-      ],
+      "patterns": ["GeneralChatDao", "database::dao::general_chat"],
       "allowedPaths": []
     },
     {
       "id": "rust-legacy-general-tables",
       "classification": "compat",
       "description": "Rust runtime direct legacy general 表访问",
-      "patterns": [
-        "general_chat_sessions",
-        "general_chat_messages"
-      ],
+      "patterns": ["general_chat_sessions", "general_chat_messages"],
       "allowedPaths": [
         "lime-rs/crates/core/src/app_paths.rs",
         "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
@@ -4166,10 +4156,7 @@
         "sum_pending_general_message_chars(",
         "summarize_pending_general("
       ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
@@ -4205,27 +4192,21 @@
         "use crate::general_chat::{",
         "crate::general_chat::SessionService"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/services/src"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/services/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-cross-crate-general-chat-compat",
       "classification": "dead-candidate",
       "description": "已零引用的跨 crate lime_services::general_chat 兼容壳回流",
-      "patterns": [
-        "lime_services::general_chat::"
-      ],
+      "patterns": ["lime_services::general_chat::"],
       "allowedPaths": []
     },
     {
       "id": "rust-provider-pool-legacy-selector",
       "classification": "dead-candidate",
       "description": "已零引用的 provider pool legacy 凭证选择兼容方法",
-      "patterns": [
-        "select_credential_with_fallback_legacy"
-      ],
+      "patterns": ["select_credential_with_fallback_legacy"],
       "allowedPaths": []
     },
     {
@@ -4240,9 +4221,7 @@
         "KiroProvider",
         "ClaudeOAuthProvider"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/providers/src/providers"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/providers/src/providers"],
       "allowedPaths": []
     },
     {
@@ -4257,9 +4236,7 @@
         "start_gemini_oauth_server_and_get_url",
         "GEMINI_OAUTH_"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/providers/src/providers"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/providers/src/providers"],
       "allowedPaths": []
     },
     {
@@ -4305,9 +4282,7 @@
         "TokenExpired",
         "create_token_refresh_error"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/providers/src/providers"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/providers/src/providers"],
       "allowedPaths": []
     },
     {
@@ -4320,9 +4295,7 @@
         "get_usage_limits(",
         "get_usage_limits_safe("
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/services/src"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/services/src"],
       "allowedPaths": []
     },
     {
@@ -4335,9 +4308,7 @@
         "KiroFingerprintStore",
         "kiro_fingerprints.json"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/models"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/core/src/models"],
       "allowedPaths": []
     },
     {
@@ -4350,9 +4321,7 @@
         "get_grouped(conn:",
         "provider_pool_credentials"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/database/dao"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/core/src/database/dao"],
       "allowedPaths": []
     },
     {
@@ -4365,9 +4334,7 @@
         "models::provider_pool_model::",
         "provider_pool_model::"
       ],
-      "includePathPrefixes": [
-        "lime-rs"
-      ],
+      "includePathPrefixes": ["lime-rs"],
       "allowedPaths": []
     },
     {
@@ -4379,19 +4346,14 @@
         "CredentialMonitorPlugin",
         "凭证监控"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/plugin"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/core/src/plugin"],
       "allowedPaths": []
     },
     {
       "id": "rust-provider-pool-runtime-model-direct-import",
       "classification": "dead-candidate",
       "description": "运行时 crate 不允许 direct 引用已删除的 provider_pool_model；API Key Provider 主链应通过 Runtime* DTO 进入",
-      "patterns": [
-        "models::provider_pool_model::",
-        "provider_pool_model::"
-      ],
+      "patterns": ["models::provider_pool_model::", "provider_pool_model::"],
       "includePathPrefixes": [
         "lime-rs/crates/agent/src",
         "lime-rs/crates/server/src",
@@ -4466,11 +4428,7 @@
       "id": "rust-ai-summary-provider-pool-runtime-leak",
       "classification": "dead-candidate",
       "description": "AI 摘要真实模型调用不得接入旧 ProviderPoolService；只能走 current API Key Provider / model registry runtime",
-      "patterns": [
-        "ProviderPoolService",
-        "provider pool",
-        "call_llm_mock"
-      ],
+      "patterns": ["ProviderPoolService", "provider pool", "call_llm_mock"],
       "includePathPrefixes": [
         "lime-rs/crates/services/src/ai_summary_service.rs"
       ],
@@ -4493,9 +4451,7 @@
         "SelectCredentialRequest",
         "CredentialResponse"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/server/src"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/server/src"],
       "allowedPaths": []
     },
     {
@@ -4526,13 +4482,8 @@
       "id": "rust-provider-pool-dead-token-refresh-error",
       "classification": "dead-candidate",
       "description": "CredentialBridge 已收口到 API Key Provider，不允许恢复旧 OAuth Token 刷新错误分支",
-      "patterns": [
-        "TokenRefreshFailed",
-        "Token 刷新失败"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/credential_bridge.rs"
-      ],
+      "patterns": ["TokenRefreshFailed", "Token 刷新失败"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/credential_bridge.rs"],
       "allowedPaths": []
     },
     {
@@ -4623,9 +4574,7 @@
         "kiro::anthropic",
         "kiro::openai"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/providers/src/translator"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/providers/src/translator"],
       "allowedPaths": []
     },
     {
@@ -4679,35 +4628,23 @@
         "request_conversation_memory_analysis",
         "cleanup_conversation_memory"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
+      "includePathPrefixes": ["lime-rs/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-memory-profile-prompt-helper-leak",
       "classification": "deprecated",
       "description": "低层 build_memory_profile_prompt helper 泄漏到统一装配边界之外",
-      "patterns": [
-        "build_memory_profile_prompt("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
-      "allowedPaths": [
-        "lime-rs/src/services/memory_profile_prompt_service.rs"
-      ]
+      "patterns": ["build_memory_profile_prompt("],
+      "includePathPrefixes": ["lime-rs/src"],
+      "allowedPaths": ["lime-rs/src/services/memory_profile_prompt_service.rs"]
     },
     {
       "id": "rust-memory-sources-prompt-helper-leak",
       "classification": "deprecated",
       "description": "低层 build_memory_sources_prompt helper 泄漏到统一装配边界之外",
-      "patterns": [
-        "build_memory_sources_prompt("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
+      "patterns": ["build_memory_sources_prompt("],
+      "includePathPrefixes": ["lime-rs/src"],
       "allowedPaths": [
         "lime-rs/src/services/memory_profile_prompt_service.rs",
         "lime-rs/src/services/memory_source_resolver_service.rs"
@@ -4717,70 +4654,47 @@
       "id": "rust-project-session-config-helper-leak",
       "classification": "dead-candidate",
       "description": "旧 create_session_config_with_project helper 回流",
-      "patterns": [
-        "create_session_config_with_project("
-      ],
+      "patterns": ["create_session_config_with_project("],
       "allowedPaths": []
     },
     {
       "id": "rust-unified-chat-command-module-leak",
       "classification": "dead-candidate",
       "description": "Rust unified_chat compat 命令模块重新回到 commands 编译图",
-      "patterns": [
-        "pub mod unified_chat_cmd;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src/commands"
-      ],
+      "patterns": ["pub mod unified_chat_cmd;"],
+      "includePathPrefixes": ["lime-rs/src/commands"],
       "allowedPaths": []
     },
     {
       "id": "rust-tool-hooks-command-module-leak",
       "classification": "dead-candidate",
       "description": "Rust tool_hooks 旧命令模块重新回到 commands 编译图",
-      "patterns": [
-        "pub mod tool_hooks;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src/commands"
-      ],
+      "patterns": ["pub mod tool_hooks;"],
+      "includePathPrefixes": ["lime-rs/src/commands"],
       "allowedPaths": []
     },
     {
       "id": "rust-content-creator-legacy-command-module-leak",
       "classification": "dead-candidate",
       "description": "旧 music/novel 命令模块重新回到 commands 编译图",
-      "patterns": [
-        "pub mod music_cmd;",
-        "pub mod novel_cmd;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src/commands"
-      ],
+      "patterns": ["pub mod music_cmd;", "pub mod novel_cmd;"],
+      "includePathPrefixes": ["lime-rs/src/commands"],
       "allowedPaths": []
     },
     {
       "id": "rust-content-creator-legacy-service-module-leak",
       "classification": "dead-candidate",
       "description": "旧 novel_service 模块重新回到 services 编译图",
-      "patterns": [
-        "pub mod novel_service;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src/services"
-      ],
+      "patterns": ["pub mod novel_service;"],
+      "includePathPrefixes": ["lime-rs/src/services"],
       "allowedPaths": []
     },
     {
       "id": "rust-content-creator-legacy-theme-module-leak",
       "classification": "dead-candidate",
       "description": "旧 novel 主题模块重新回到 theme 编译图",
-      "patterns": [
-        "pub mod novel;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src/theme"
-      ],
+      "patterns": ["pub mod novel;"],
+      "includePathPrefixes": ["lime-rs/src/theme"],
       "allowedPaths": []
     },
     {
@@ -4796,9 +4710,7 @@
         "CREATE TABLE IF NOT EXISTS novel_generation_runs (",
         "CREATE TABLE IF NOT EXISTS novel_consistency_checks ("
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/database"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/core/src/database"],
       "allowedPaths": []
     },
     {
@@ -4810,9 +4722,7 @@
         "WorkspaceType::Music",
         "WorkspaceType::Novel"
       ],
-      "includePathPrefixes": [
-        "lime-rs"
-      ],
+      "includePathPrefixes": ["lime-rs"],
       "allowedPaths": []
     },
     {
@@ -4829,34 +4739,22 @@
         "poster_material_metadata",
         "idx_poster_material_metadata_"
       ],
-      "allowedPaths": [
-        "lime-rs/crates/core/src/database/schema.rs"
-      ]
+      "allowedPaths": ["lime-rs/crates/core/src/database/schema.rs"]
     },
     {
       "id": "rust-tool-hooks-service-module-leak",
       "classification": "dead-candidate",
       "description": "services crate 旧 tool_hooks_service 模块重新回到编译图",
-      "patterns": [
-        "pub mod tool_hooks_service;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/services/src"
-      ],
+      "patterns": ["pub mod tool_hooks_service;"],
+      "includePathPrefixes": ["lime-rs/crates/services/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-three-stage-workflow-tool-leak",
       "classification": "dead-candidate",
       "description": "legacy three_stage_workflow 工具名重新回到 Lime Rust 编译图",
-      "patterns": [
-        "\"three_stage_workflow\"",
-        "three_stage_workflow"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["\"three_stage_workflow\"", "three_stage_workflow"],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
@@ -4869,9 +4767,7 @@
         "WriteArtifactEventEmitter::new(",
         ".reply("
       ],
-      "includePathPrefixes": [
-        "lime-rs/src/skills"
-      ],
+      "includePathPrefixes": ["lime-rs/src/skills"],
       "allowedPaths": []
     },
     {
@@ -4884,9 +4780,7 @@
         "WriteArtifactEventEmitter::new(",
         ".reply("
       ],
-      "includePathPrefixes": [
-        "lime-rs/src/commands/skill_exec_cmd.rs"
-      ],
+      "includePathPrefixes": ["lime-rs/src/commands/skill_exec_cmd.rs"],
       "allowedPaths": []
     },
     {
@@ -4901,9 +4795,7 @@
         ".configure_provider_from_pool(",
         "LegacyDesktopHostExecutionCallback::new("
       ],
-      "includePathPrefixes": [
-        "lime-rs/src/commands/skill_exec_cmd.rs"
-      ],
+      "includePathPrefixes": ["lime-rs/src/commands/skill_exec_cmd.rs"],
       "allowedPaths": []
     },
     {
@@ -4920,9 +4812,7 @@
         "parse_allowed_tools(",
         "parse_boolean("
       ],
-      "includePathPrefixes": [
-        "lime-rs/src/commands/skill_exec_cmd.rs"
-      ],
+      "includePathPrefixes": ["lime-rs/src/commands/skill_exec_cmd.rs"],
       "allowedPaths": []
     },
     {
@@ -4935,9 +4825,7 @@
         "execute_skill_workflow(",
         "execute_skill_prompt("
       ],
-      "includePathPrefixes": [
-        "lime-rs/src/commands/skill_exec_cmd.rs"
-      ],
+      "includePathPrefixes": ["lime-rs/src/commands/skill_exec_cmd.rs"],
       "allowedPaths": []
     },
     {
@@ -4960,9 +4848,7 @@
         "FROM agent_messages m",
         "JOIN agent_sessions s ON s.id = m.session_id"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src/services"
-      ],
+      "includePathPrefixes": ["lime-rs/src/services"],
       "allowedPaths": []
     },
     {
@@ -4973,9 +4859,7 @@
         "FROM model_usage_stats",
         "SELECT COUNT(*) FROM model_usage_stats"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src/services"
-      ],
+      "includePathPrefixes": ["lime-rs/src/services"],
       "allowedPaths": []
     },
     {
@@ -4988,22 +4872,15 @@
         "UPDATE unified_memory",
         "DELETE FROM unified_memory"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src/dev_bridge/dispatcher/memory.rs"
-      ],
+      "includePathPrefixes": ["lime-rs/src/dev_bridge/dispatcher/memory.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-runtime-legacy-queue-table-leak",
       "classification": "deprecated",
       "description": "legacy runtime queue 表名从数据库迁移边界向外扩散",
-      "patterns": [
-        "agent_runtime_queued_turns"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["agent_runtime_queued_turns"],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/core/src/database/agent_runtime_queue_repository.rs"
       ]
@@ -5012,29 +4889,16 @@
       "id": "rust-agent-runtime-legacy-queue-migration-leak",
       "classification": "deprecated",
       "description": "legacy runtime queue 启动迁移 helper 只允许停留在 aster runtime support 边界",
-      "patterns": [
-        "migrate_legacy_runtime_queue_to_aster_store("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/aster_runtime_support.rs"
-      ]
+      "patterns": ["migrate_legacy_runtime_queue_to_aster_store("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
+      "allowedPaths": ["lime-rs/crates/agent/src/aster_runtime_support.rs"]
     },
     {
       "id": "rust-agent-session-legacy-todo-state-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 Lime 业务层 direct legacy TodoState 读取回流",
-      "patterns": [
-        "TodoState::from_extension_data(",
-        "TodoState::new("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["TodoState::from_extension_data(", "TodoState::new("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/aster-rust/crates/aster/src/session/extension_data.rs"
       ]
@@ -5047,10 +4911,7 @@
         "TodoListState::from_extension_data(",
         "TodoListState::from_markdown("
       ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/aster-rust/crates/aster/src/session/extension_data.rs"
       ]
@@ -5062,9 +4923,7 @@
       "patterns": [
         "SELECT root_path FROM workspaces WHERE is_default = 1 LIMIT 1"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/services/src"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/services/src"],
       "allowedPaths": []
     },
     {
@@ -5094,18 +4953,14 @@
       "id": "rust-agent-session-direct-delete",
       "classification": "dead-candidate",
       "description": "已零引用的 Rust 业务层 direct AgentDao::delete_session 回流",
-      "patterns": [
-        "AgentDao::delete_session("
-      ],
+      "patterns": ["AgentDao::delete_session("],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-session-direct-create",
       "classification": "deprecated",
       "description": "Rust 业务层 direct AgentDao::create_session 回流",
-      "patterns": [
-        "AgentDao::create_session("
-      ],
+      "patterns": ["AgentDao::create_session("],
       "allowedPaths": [
         "lime-rs/crates/core/src/database/agent_session_repository.rs"
       ]
@@ -5114,36 +4969,24 @@
       "id": "rust-agent-dao-row-type-leak",
       "classification": "dead-candidate",
       "description": "agent crate 重新泄漏 core DAO row 类型",
-      "patterns": [
-        "AgentSessionOverviewRow"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src"
-      ],
+      "patterns": ["AgentSessionOverviewRow"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-workspace-query-leak",
       "classification": "dead-candidate",
       "description": "agent runtime direct workspaces 绑定查询回流",
-      "patterns": [
-        "SELECT id FROM workspaces WHERE root_path = ? LIMIT 1"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src"
-      ],
+      "patterns": ["SELECT id FROM workspaces WHERE root_path = ? LIMIT 1"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-session-record-repository-module-leak",
       "classification": "dead-candidate",
       "description": "lime-agent 本地 session_record_repository 壳重新回到编译图",
-      "patterns": [
-        "mod session_record_repository;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["mod session_record_repository;"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
@@ -5155,46 +4998,31 @@
         "list_compat_sessions_sync(",
         "get_compat_session_sync("
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-session-store-public-module-leak",
       "classification": "dead-candidate",
       "description": "lime-agent 重新对 crate 外暴露 session_store 模块",
-      "patterns": [
-        "pub mod session_store;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["pub mod session_store;"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-session-store-direct-module-usage",
       "classification": "dead-candidate",
       "description": "上层模块重新 direct 依赖 lime_agent::session_store 模块路径",
-      "patterns": [
-        "lime_agent::session_store::"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
+      "patterns": ["lime_agent::session_store::"],
+      "includePathPrefixes": ["lime-rs/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-session-get-direct-read",
       "classification": "deprecated",
       "description": "session get_session 直读只允许统一 session_query helper 持有",
-      "patterns": [
-        "SessionManager::get_session("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["SessionManager::get_session("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/agent/src/session_query.rs",
         "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
@@ -5205,13 +5033,8 @@
       "id": "rust-agent-subagent-child-session-direct-read",
       "classification": "deprecated",
       "description": "subagent child session 列表直读只允许统一 session_query helper 持有",
-      "patterns": [
-        "list_subagent_child_sessions("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["list_subagent_child_sessions("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/agent/src/session_query.rs",
         "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
@@ -5222,13 +5045,8 @@
       "id": "rust-agent-subagent-session-list-direct-read",
       "classification": "deprecated",
       "description": "subagent 全量 session 列表直读只允许统一 session_query helper 持有",
-      "patterns": [
-        "list_subagent_sessions_with_metadata("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["list_subagent_sessions_with_metadata("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/agent/src/session_query.rs",
         "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
@@ -5239,13 +5057,8 @@
       "id": "rust-agent-subagent-metadata-direct-read",
       "classification": "deprecated",
       "description": "subagent metadata 直读只允许 query 与 session_store 投影边界持有",
-      "patterns": [
-        "resolve_subagent_session_metadata("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["resolve_subagent_session_metadata("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/agent/src/session_query.rs",
         "lime-rs/crates/agent/src/session_store.rs",
@@ -5262,23 +5075,15 @@
       "regexPatterns": [
         "SessionManager::update_session\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.extension_data\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.apply\\(\\)"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-session-update-direct-call",
       "classification": "deprecated",
       "description": "session update_session 直写只允许统一 session_update helper 持有",
-      "patterns": [
-        "SessionManager::update_session("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["SessionManager::update_session("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/agent/src/session_update.rs",
         "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
@@ -5292,23 +5097,15 @@
       "regexPatterns": [
         "SessionManager::update_session\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.schedule_id\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.total_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.input_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.output_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.accumulated_total_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.accumulated_input_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.accumulated_output_tokens\\([\\s\\S]*?\\)\\s*[\\s\\S]*?\\.apply\\(\\)"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-session-replace-conversation-direct-update",
       "classification": "deprecated",
       "description": "session conversation 直写 replace_conversation 只允许统一 session_update helper 持有",
-      "patterns": [
-        "SessionManager::replace_conversation("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["SessionManager::replace_conversation("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/agent/src/session_update.rs",
         "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
@@ -5318,13 +5115,8 @@
       "id": "rust-agent-session-create-direct-update",
       "classification": "deprecated",
       "description": "session create_session 直写只允许统一 session_update helper 持有",
-      "patterns": [
-        "SessionManager::create_session("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["SessionManager::create_session("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/agent/src/session_update.rs",
         "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
@@ -5334,13 +5126,8 @@
       "id": "rust-agent-session-delete-direct-update",
       "classification": "dead-candidate",
       "description": "已零引用的 session delete_session 直写回流",
-      "patterns": [
-        "SessionManager::delete_session("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["SessionManager::delete_session("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
       ]
@@ -5349,123 +5136,80 @@
       "id": "rust-agent-session-record-create-api-leak",
       "classification": "dead-candidate",
       "description": "lime-agent crate 根重新暴露内部 session record 创建 API",
-      "patterns": [
-        "create_session_record_sync,",
-        "CreateSessionRecordInput,"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["create_session_record_sync,", "CreateSessionRecordInput,"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-command-subagent-metadata-direct-read",
       "classification": "dead-candidate",
       "description": "命令层不再 direct 解析 subagent metadata，统一向 lime_agent 读取边界收敛",
-      "patterns": [
-        "resolve_subagent_session_metadata("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src/commands/aster_agent_cmd"
-      ],
+      "patterns": ["resolve_subagent_session_metadata("],
+      "includePathPrefixes": ["lime-rs/src/commands/aster_agent_cmd"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-tool-permission-public-module-leak",
       "classification": "dead-candidate",
       "description": "lime-agent 重新对 crate 外暴露旧 tool_permissions 模块",
-      "patterns": [
-        "pub mod tool_permissions;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["pub mod tool_permissions;"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-shell-security-public-module-leak",
       "classification": "dead-candidate",
       "description": "lime-agent 重新对 crate 外暴露旧 shell_security 模块",
-      "patterns": [
-        "pub mod shell_security;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["pub mod shell_security;"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-tool-permission-module-compiled-leak",
       "classification": "dead-candidate",
       "description": "旧 tool_permissions 模块重新回到 lime-agent lib.rs 编译图",
-      "patterns": [
-        "mod tool_permissions;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["mod tool_permissions;"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-shell-security-module-compiled-leak",
       "classification": "dead-candidate",
       "description": "旧 shell_security 模块重新回到 lime-agent lib.rs 编译图",
-      "patterns": [
-        "mod shell_security;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["mod shell_security;"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-tool-permission-root-export-leak",
       "classification": "dead-candidate",
       "description": "lime-agent crate 根重新暴露旧 tool_permissions 类型出口",
-      "patterns": [
-        "pub use tool_permissions::"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["pub use tool_permissions::"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-shell-security-root-export-leak",
       "classification": "dead-candidate",
       "description": "lime-agent crate 根重新暴露旧 shell_security 类型出口",
-      "patterns": [
-        "pub use shell_security::"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["pub use shell_security::"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-tool-permission-direct-module-usage",
       "classification": "dead-candidate",
       "description": "上层模块重新 direct 依赖 lime_agent::tool_permissions 模块路径",
-      "patterns": [
-        "lime_agent::tool_permissions::"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["lime_agent::tool_permissions::"],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-shell-security-direct-module-usage",
       "classification": "dead-candidate",
       "description": "上层模块重新 direct 依赖 lime_agent::shell_security 模块路径",
-      "patterns": [
-        "lime_agent::shell_security::"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["lime_agent::shell_security::"],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
@@ -5477,85 +5221,55 @@
         "lime_agent::PermissionBehavior",
         "lime_agent::ShellSecurityChecker"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-tool-permission-internal-module-usage",
       "classification": "dead-candidate",
       "description": "lime-agent 内部除兼容壳外重新扩散 crate::tool_permissions 模块依赖",
-      "patterns": [
-        "crate::tool_permissions::"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src"
-      ],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/shell_security.rs"
-      ]
+      "patterns": ["crate::tool_permissions::"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src"],
+      "allowedPaths": ["lime-rs/crates/agent/src/shell_security.rs"]
     },
     {
       "id": "rust-agent-integration-public-module-leak",
       "classification": "dead-candidate",
       "description": "agent 集成模块重新对外暴露 integration 模块路径",
-      "patterns": [
-        "pub mod integration;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src/agent/mod.rs"
-      ],
+      "patterns": ["pub mod integration;"],
+      "includePathPrefixes": ["lime-rs/src/agent/mod.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-integration-module-compiled-leak",
       "classification": "dead-candidate",
       "description": "已退出编译图的 agent integration 模块重新回到 agent 根模块",
-      "patterns": [
-        "mod integration;"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src/agent/mod.rs"
-      ],
+      "patterns": ["mod integration;"],
+      "includePathPrefixes": ["lime-rs/src/agent/mod.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-integration-direct-module-usage",
       "classification": "dead-candidate",
       "description": "应用层重新 direct 依赖 crate::agent::integration 模块路径",
-      "patterns": [
-        "crate::agent::integration::"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
+      "patterns": ["crate::agent::integration::"],
+      "includePathPrefixes": ["lime-rs/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-agent-subagent-direct-module-usage",
       "classification": "dead-candidate",
       "description": "应用层重新 direct 依赖 crate::agent::subagent_scheduler 模块路径",
-      "patterns": [
-        "crate::agent::subagent_scheduler::"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
+      "patterns": ["crate::agent::subagent_scheduler::"],
+      "includePathPrefixes": ["lime-rs/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-aster-runtime-snapshot-helper-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 Lime 业务层 direct Aster runtime snapshot helper 回流",
-      "patterns": [
-        "load_session_runtime_snapshot("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["load_session_runtime_snapshot("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
@@ -5567,19 +5281,14 @@
         "initialize_shared_thread_runtime_store(",
         "initialize_shared_sqlite_thread_runtime_store("
       ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
       "id": "rust-aster-runtime-store-public-require-api-leak",
       "classification": "dead-candidate",
       "description": "Aster runtime support 重新对 crate 外暴露 require_aster_thread_runtime_store",
-      "patterns": [
-        "pub fn require_aster_thread_runtime_store("
-      ],
+      "patterns": ["pub fn require_aster_thread_runtime_store("],
       "includePathPrefixes": [
         "lime-rs/crates/agent/src/aster_runtime_support.rs"
       ],
@@ -5601,9 +5310,7 @@
       "id": "rust-aster-runtime-public-legacy-init-helper-leak",
       "classification": "dead-candidate",
       "description": "Aster runtime support 重新对 crate 外暴露旧 initialize_aster_thread_runtime_store helper",
-      "patterns": [
-        "pub fn initialize_aster_thread_runtime_store("
-      ],
+      "patterns": ["pub fn initialize_aster_thread_runtime_store("],
       "includePathPrefixes": [
         "lime-rs/crates/agent/src/aster_runtime_support.rs"
       ],
@@ -5613,12 +5320,8 @@
       "id": "rust-aster-runtime-snapshot-root-export-leak",
       "classification": "dead-candidate",
       "description": "lime-agent crate 根重新暴露 load_aster_runtime_snapshot helper",
-      "patterns": [
-        "load_aster_runtime_snapshot"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/lib.rs"
-      ],
+      "patterns": ["load_aster_runtime_snapshot"],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/lib.rs"],
       "allowedPaths": []
     },
     {
@@ -5626,26 +5329,16 @@
       "classification": "dead-candidate",
       "description": "已零引用的 Lime 业务层 direct Aster shared runtime queue service 回流",
       "patterns": [],
-      "regexPatterns": [
-        "(?<!require_)shared_session_runtime_queue_service\\("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "regexPatterns": ["(?<!require_)shared_session_runtime_queue_service\\("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
       "id": "rust-aster-path-root-env-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 Lime 业务层 direct ASTER_PATH_ROOT 环境变量处理回流",
-      "patterns": [
-        "\"ASTER_PATH_ROOT\""
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["\"ASTER_PATH_ROOT\""],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/aster-rust/crates/aster/src/config/paths.rs",
         "lime-rs/crates/aster-rust/crates/aster/tests/acp_integration_test.rs"
@@ -5655,27 +5348,16 @@
       "id": "rust-aster-global-session-store-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 Aster 全局 session store 注册回流到统一 runtime support 边界之外",
-      "patterns": [
-        "set_global_session_store("
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["set_global_session_store("],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
       "id": "rust-hardcoded-aster-runtime-path-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 Lime 业务层硬编码 legacy aster runtime 路径回流",
-      "patterns": [
-        "join(\".lime\").join(\"aster\")",
-        "~/.lime/aster"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src",
-        "lime-rs/crates"
-      ],
+      "patterns": ["join(\".lime\").join(\"aster\")", "~/.lime/aster"],
+      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
       "allowedPaths": []
     },
     {
@@ -5750,9 +5432,7 @@
         "migration_v3::migrate_playwright_mcp_server(",
         "migration_v4::migrate_fix_promise_paths("
       ],
-      "allowedPaths": [
-        "lime-rs/crates/core/src/database/startup_migrations.rs"
-      ]
+      "allowedPaths": ["lime-rs/crates/core/src/database/startup_migrations.rs"]
     },
     {
       "id": "rust-startup-migration-manual-match-leak",
@@ -5779,9 +5459,7 @@
         "fn is_migration_completed(conn:",
         "fn mark_migration_completed(conn:"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/database/migration_v"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/core/src/database/migration_v"],
       "allowedPaths": []
     },
     {
@@ -5793,35 +5471,23 @@
         "conn.execute(\"COMMIT\"",
         "conn.execute(\"ROLLBACK\""
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/database/migration_v"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/core/src/database/migration_v"],
       "allowedPaths": []
     },
     {
       "id": "rust-hardcoded-projects-path-leak",
       "classification": "dead-candidate",
       "description": "已零引用的数据库迁移硬编码 legacy projects 路径",
-      "patterns": [
-        "\".lime/projects\"",
-        "join(\".lime\").join(\"projects\")"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/database"
-      ],
+      "patterns": ["\".lime/projects\"", "join(\".lime\").join(\"projects\")"],
+      "includePathPrefixes": ["lime-rs/crates/core/src/database"],
       "allowedPaths": []
     },
     {
       "id": "rust-hardcoded-session-files-path-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 session files 硬编码 legacy sessions 路径",
-      "patterns": [
-        "~/.lime/sessions",
-        "join(\".lime\").join(\"sessions\")"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/session_files"
-      ],
+      "patterns": ["~/.lime/sessions", "join(\".lime\").join(\"sessions\")"],
+      "includePathPrefixes": ["lime-rs/crates/core/src/session_files"],
       "allowedPaths": []
     },
     {
@@ -5832,61 +5498,39 @@
         "~/.lime/config.json",
         "join(\".lime\").join(\"config.json\")"
       ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/database"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/core/src/database"],
       "allowedPaths": []
     },
     {
       "id": "rust-hardcoded-workspace-projects-path-leak",
       "classification": "dead-candidate",
       "description": "已零引用的上层命令或桥接层硬编码 workspace projects 路径",
-      "patterns": [
-        "~/.lime/projects",
-        "join(\".lime\").join(\"projects\")"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
+      "patterns": ["~/.lime/projects", "join(\".lime\").join(\"projects\")"],
+      "includePathPrefixes": ["lime-rs/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-services-hardcoded-projects-path-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 services crate 硬编码 legacy projects 路径",
-      "patterns": [
-        "~/.lime/projects",
-        "join(\".lime\").join(\"projects\")"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/services/src"
-      ],
+      "patterns": ["~/.lime/projects", "join(\".lime\").join(\"projects\")"],
+      "includePathPrefixes": ["lime-rs/crates/services/src"],
       "allowedPaths": []
     },
     {
       "id": "rust-hardcoded-logger-path-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 logger fallback 硬编码 legacy logs 路径",
-      "patterns": [
-        "~/.lime/logs",
-        "join(\".lime\").join(\"logs\")"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/logger.rs"
-      ],
+      "patterns": ["~/.lime/logs", "join(\".lime\").join(\"logs\")"],
+      "includePathPrefixes": ["lime-rs/crates/core/src/logger.rs"],
       "allowedPaths": []
     },
     {
       "id": "rust-hardcoded-skills-path-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 skills 相关模块硬编码 legacy skills 路径",
-      "patterns": [
-        "~/.lime/skills",
-        "join(\".lime\").join(\"skills\")"
-      ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
+      "patterns": ["~/.lime/skills", "join(\".lime\").join(\"skills\")"],
+      "includePathPrefixes": ["lime-rs/src"],
       "allowedPaths": []
     },
     {
@@ -5910,13 +5554,8 @@
       "id": "rust-agent-legacy-global-instruction-path-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 agent prompt 层 legacy 全局指令文件名回流",
-      "patterns": [
-        "\".lime/AGENT.md\"",
-        "\".lime/instructions.md\""
-      ],
-      "includePathPrefixes": [
-        "lime-rs/crates/agent/src/prompt"
-      ],
+      "patterns": ["\".lime/AGENT.md\"", "\".lime/instructions.md\""],
+      "includePathPrefixes": ["lime-rs/crates/agent/src/prompt"],
       "allowedPaths": []
     },
     {
@@ -5935,10 +5574,7 @@
       "id": "rust-channels-cmd-legacy-surfaces",
       "classification": "dead-candidate",
       "description": "Rust 不允许恢复旧 channels_cmd CRUD stub 命令模块与注册面",
-      "patterns": [
-        "commands::channels_cmd::",
-        "pub mod channels_cmd;"
-      ],
+      "patterns": ["commands::channels_cmd::", "pub mod channels_cmd;"],
       "allowedPaths": []
     },
     {
@@ -5952,9 +5588,7 @@
         "dispatcher/sceneapp.rs",
         "crate::sceneapp::"
       ],
-      "includePathPrefixes": [
-        "lime-rs/src"
-      ],
+      "includePathPrefixes": ["lime-rs/src"],
       "allowedPaths": []
     }
   ],
@@ -5963,9 +5597,7 @@
       "id": "rust-app-paths-root-fetch-duplication",
       "classification": "deprecated",
       "description": "app_paths 重复获取 preferred/legacy root 样板回流",
-      "includePathPrefixes": [
-        "lime-rs/crates/core/src/app_paths.rs"
-      ],
+      "includePathPrefixes": ["lime-rs/crates/core/src/app_paths.rs"],
       "occurrences": [
         {
           "pattern": "let preferred_root = preferred_data_dir()?;",

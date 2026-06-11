@@ -25,11 +25,6 @@
     "agent_runtime_update_session"
   ],
   "capabilityDraftCommands": [],
-  "desktopCompanionCommands": [
-    "companion_get_pet_status",
-    "companion_launch_pet",
-    "companion_send_pet_command"
-  ],
   "browserConnectorCommands": [
     "disconnect_browser_connector_session",
     "get_browser_connector_settings_cmd",

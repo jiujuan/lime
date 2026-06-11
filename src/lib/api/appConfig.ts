@@ -14,7 +14,6 @@ let configLoadingPromise: Promise<Config> | null = null;
 let configCacheStamp: string | null = null;
 
 export type {
-  CompanionDefaultsConfig,
   Config,
   CrashReportingConfig,
   ChatAppearanceConfig,
@@ -54,10 +53,7 @@ function normalizeConfig(config: Config): Config {
   const nextConfig = cloneConfig(config);
   const navigation = nextConfig.navigation;
 
-  if (
-    navigation &&
-    (navigation.schema_version ?? 0) < CURRENT_SIDEBAR_NAV_SCHEMA_VERSION
-  ) {
+  if (navigation) {
     nextConfig.navigation = {
       ...navigation,
       schema_version: CURRENT_SIDEBAR_NAV_SCHEMA_VERSION,
@@ -195,10 +191,11 @@ export async function getConfig(
 }
 
 export async function saveConfig(config: Config): Promise<void> {
-  const result = await safeInvoke("save_config", { config });
+  const normalizedConfig = normalizeConfig(config);
+  const result = await safeInvoke("save_config", { config: normalizedConfig });
   assertNotDiagnosticFacade("save_config", result, "真实配置 current 通道");
   assertVoidResult("save_config", result);
-  configCache = cloneConfig(config);
+  configCache = cloneConfig(normalizedConfig);
   configCacheStamp = markAppConfigChanged();
 }
 

@@ -30,6 +30,14 @@ const hoisted = vi.hoisted(() => ({
     cancelAgentAppRuntimeTask: vi.fn(),
     submitAgentAppRuntimeHostResponse: vi.fn(),
   },
+  appServerClientMocks: {
+    createAppServerClient: vi.fn(),
+    startSession: vi.fn(),
+    startTurn: vi.fn(),
+    readSession: vi.fn(),
+    cancelTurn: vi.fn(),
+    respondAction: vi.fn(),
+  },
   projectApiMocks: {
     getOrCreateDefaultProject: vi.fn(),
   },
@@ -54,6 +62,7 @@ const hoisted = vi.hoisted(() => ({
       "agentApp.apps.runtime.appInfo.source.cloud": "云端",
       "agentApp.apps.runtime.appInfo.source.local": "本地",
       "agentApp.apps.runtime.appInfo.latestVersion": "最新版本",
+      "agentApp.apps.runtime.appInfo.versionValue": `v${String(params?.version)}`,
       "agentApp.apps.runtime.appInfo.entry": "入口",
       "agentApp.apps.runtime.agentRun.aria": "Host AI 运行面板",
       "agentApp.apps.runtime.agentRun.badge": `${String(params?.app)} 的 AI 同事`,
@@ -108,6 +117,7 @@ const hoisted = vi.hoisted(() => ({
 
 export const apiMocks = hoisted.apiMocks;
 export const runtimeApiMocks = hoisted.runtimeApiMocks;
+export const appServerClientMocks = hoisted.appServerClientMocks;
 
 vi.mock("@/lib/api/agentApps", () => ({
   AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
@@ -124,6 +134,10 @@ vi.mock("@/lib/api/agentAppRuntime", () => ({
     hoisted.runtimeApiMocks.cancelAgentAppRuntimeTask,
   submitAgentAppRuntimeHostResponse:
     hoisted.runtimeApiMocks.submitAgentAppRuntimeHostResponse,
+}));
+
+vi.mock("@/lib/api/appServer", () => ({
+  createAppServerClient: hoisted.appServerClientMocks.createAppServerClient,
 }));
 
 vi.mock("@/lib/api/project", () => ({
@@ -308,6 +322,94 @@ export function useAgentAppRuntimePageTestLifecycle() {
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     let runtimeTaskCounter = 0;
+    appServerClientMocks.createAppServerClient.mockReturnValue({
+      startSession: appServerClientMocks.startSession,
+      startTurn: appServerClientMocks.startTurn,
+      readSession: appServerClientMocks.readSession,
+      cancelTurn: appServerClientMocks.cancelTurn,
+      respondAction: appServerClientMocks.respondAction,
+    });
+    appServerClientMocks.startSession.mockImplementation(async (request) => ({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "agent-app-session-1",
+          threadId: "agent-app-thread-1",
+          appId: request.appId,
+          workspaceId: request.workspaceId,
+          status: "idle",
+          createdAt: "2026-05-15T00:00:00.000Z",
+          updatedAt: "2026-05-15T00:00:00.000Z",
+          businessObjectRef: request.businessObjectRef,
+        },
+      },
+      response: { jsonrpc: "2.0", id: 1, result: {} },
+      notifications: [],
+      messages: [],
+    }));
+    appServerClientMocks.startTurn.mockImplementation(async (request) => {
+      runtimeTaskCounter += 1;
+      return {
+        id: 2,
+        result: {
+          turn: {
+            turnId: request.turnId ?? `agent-app-turn-${runtimeTaskCounter}`,
+            sessionId: request.sessionId,
+            threadId: "agent-app-thread-1",
+            status: "accepted",
+            startedAt: "2026-05-15T00:00:00.000Z",
+          },
+        },
+        response: { jsonrpc: "2.0", id: 2, result: {} },
+        notifications: [],
+        messages: [],
+      };
+    });
+    appServerClientMocks.readSession.mockImplementation(async (request) => ({
+      id: 3,
+      result: {
+        session: {
+          sessionId: request.sessionId,
+          threadId: "agent-app-thread-1",
+          appId: "content-factory-app",
+          workspaceId: "workspace-1",
+          status: "running",
+          createdAt: "2026-05-15T00:00:00.000Z",
+          updatedAt: "2026-05-15T00:00:01.000Z",
+        },
+        turns: [
+          {
+            turnId: "agent-app-turn-1",
+            sessionId: request.sessionId,
+            threadId: "agent-app-thread-1",
+            status: "running",
+          },
+        ],
+        detail: {
+          thread_read: {
+            session_id: request.sessionId,
+            source: "app_server_agent_runtime_client",
+          },
+        },
+      },
+      response: { jsonrpc: "2.0", id: 3, result: {} },
+      notifications: [],
+      messages: [],
+    }));
+    appServerClientMocks.cancelTurn.mockResolvedValue({
+      id: 4,
+      result: {},
+      response: { jsonrpc: "2.0", id: 4, result: {} },
+      notifications: [],
+      messages: [],
+    });
+    appServerClientMocks.respondAction.mockResolvedValue({
+      id: 5,
+      result: {},
+      response: { jsonrpc: "2.0", id: 5, result: {} },
+      notifications: [],
+      messages: [],
+    });
     apiMocks.getAgentAppCloudCatalog.mockResolvedValue({
       source: "seeded",
       payload: {

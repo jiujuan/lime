@@ -3,24 +3,8 @@ import { StepProgress } from "@/lib/workspace/workbenchUi";
 import { ChatNavbar } from "../components/ChatNavbar";
 import { ChatSidebar } from "../components/ChatSidebar";
 import { EmptyState } from "../components/EmptyState";
-import { TeamWorkspaceBoard } from "../components/TeamWorkspaceBoard";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
-
-export type TeamWorkbenchSurfaceProps = Omit<
-  ComponentProps<typeof TeamWorkspaceBoard>,
-  "className" | "embedded" | "defaultShellExpanded"
->;
-
-export interface AgentUiTeamWorkbenchPromptMetadata {
-  kind: "review_requested_fix";
-  source: "agent_ui_team_workbench";
-  reviewId?: string;
-  workItemId?: string;
-  requestedFix: string;
-  requestedFixIndex?: string;
-  regressionRequirements?: string[];
-}
 
 type ChatToolPreferences = {
   task: boolean;
@@ -57,21 +41,6 @@ export function buildStepProgressProps({
   };
 }
 
-interface BuildTeamWorkspaceDockPropsParams {
-  enabled: boolean;
-  shouldShowFloatingInputOverlay: boolean;
-  layoutMode: "chat" | "chat-canvas";
-  onActivateWorkbench: () => void;
-  withBottomOverlay: boolean;
-  surfaceProps: TeamWorkbenchSurfaceProps;
-}
-
-export function buildTeamWorkspaceDockProps(
-  _params: BuildTeamWorkspaceDockPropsParams,
-): null {
-  return null;
-}
-
 interface BuildWorkspaceEmptyStatePropsParams {
   input: ComponentProps<typeof EmptyState>["input"];
   setInput: ComponentProps<typeof EmptyState>["setInput"];
@@ -98,11 +67,6 @@ interface BuildWorkspaceEmptyStatePropsParams {
   onObjectiveEnabledChange?: ComponentProps<
     typeof EmptyState
   >["onObjectiveEnabledChange"];
-  selectedTeam: ComponentProps<typeof EmptyState>["selectedTeam"];
-  onSelectTeam?: ComponentProps<typeof EmptyState>["onSelectTeam"];
-  onEnableSuggestedTeam?: ComponentProps<
-    typeof EmptyState
-  >["onEnableSuggestedTeam"];
   creationMode: ComponentProps<typeof EmptyState>["creationMode"];
   onCreationModeChange?: ComponentProps<
     typeof EmptyState
@@ -149,7 +113,9 @@ interface BuildWorkspaceEmptyStatePropsParams {
     typeof EmptyState
   >["onResumeRecentSession"];
   projectId: string | null;
+  openedProjects?: ComponentProps<typeof EmptyState>["openedProjects"];
   sessionId?: string | null;
+  onProjectChange?: ComponentProps<typeof EmptyState>["onProjectContextChange"];
   runtimeToolAvailability?: ComponentProps<
     typeof EmptyState
   >["runtimeToolAvailability"];
@@ -228,9 +194,6 @@ export function buildWorkspaceEmptyStateProps({
   onToolPreferenceChange,
   objectiveEnabled,
   onObjectiveEnabledChange,
-  selectedTeam,
-  onSelectTeam,
-  onEnableSuggestedTeam,
   creationMode,
   onCreationModeChange,
   activeTheme,
@@ -255,6 +218,8 @@ export function buildWorkspaceEmptyStateProps({
   recentSessionActionLabel,
   onResumeRecentSession,
   projectId,
+  openedProjects,
+  onProjectChange,
   sessionId,
   runtimeToolAvailability,
   initialInputCapability,
@@ -309,9 +274,6 @@ export function buildWorkspaceEmptyStateProps({
     subagentEnabled: toolPreferences.subagent,
     onSubagentEnabledChange: (enabled) =>
       onToolPreferenceChange("subagent", enabled),
-    selectedTeam,
-    onSelectTeam,
-    onEnableSuggestedTeam,
     creationMode,
     onCreationModeChange,
     activeTheme,
@@ -339,6 +301,8 @@ export function buildWorkspaceEmptyStateProps({
     recentSessionActionLabel,
     onResumeRecentSession,
     projectId,
+    openedProjects,
+    onProjectContextChange: onProjectChange,
     sessionId,
     runtimeToolAvailability,
     initialInputCapability,
@@ -386,6 +350,7 @@ interface BuildWorkspaceNavbarPropsParams {
   isCanvasOpen: boolean;
   onToggleCanvas?: ComponentProps<typeof ChatNavbar>["onToggleCanvas"];
   projectId: string | null;
+  openedProjects?: ComponentProps<typeof ChatNavbar>["openedProjects"];
   onProjectChange?: ComponentProps<typeof ChatNavbar>["onProjectChange"];
   workspaceType?: ComponentProps<typeof ChatNavbar>["workspaceType"];
   deferWorkspaceListLoad?: ComponentProps<
@@ -437,6 +402,7 @@ export function buildWorkspaceNavbarProps({
   isCanvasOpen,
   onToggleCanvas,
   projectId,
+  openedProjects,
   onProjectChange,
   workspaceType,
   deferWorkspaceListLoad,
@@ -477,6 +443,7 @@ export function buildWorkspaceNavbarProps({
     isCanvasOpen,
     onToggleCanvas,
     projectId,
+    openedProjects,
     onProjectChange,
     workspaceType,
     deferWorkspaceListLoad,

@@ -245,8 +245,11 @@ describe("buildAgentAppAgentUiProjectionEvents", () => {
           id: "evidence:recorded:evidence-1",
           eventType: "evidence:recorded",
           status: "recorded",
-          evidenceRef: "evidence://task-artifact/runtime",
+          refs: ["evidence:.lime/artifacts/content-batch.json"],
           message: "运行证据已记录",
+          payload: {
+            artifactRef: ".lime/artifacts/content-batch.json",
+          },
         },
       ],
     });
@@ -267,7 +270,7 @@ describe("buildAgentAppAgentUiProjectionEvents", () => {
         owner: "evidence",
         scope: "evidence",
         surface: "timeline_evidence",
-        evidenceId: "evidence://task-artifact/runtime",
+        evidenceId: "evidence:.lime/artifacts/content-batch.json",
       }),
     ]);
   });

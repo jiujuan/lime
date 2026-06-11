@@ -12,7 +12,6 @@ import {
   HarnessStatusPanel,
   type HarnessFileChangeReviewSummary,
 } from "../components/HarnessStatusPanel";
-import { TeamMemoryShadowCard } from "../components/TeamMemoryShadowCard";
 import { countFailedHarnessOutputSignals } from "../utils/harnessOutputSignals";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 
@@ -222,7 +221,7 @@ export function GeneralWorkbenchHarnessDialogSection({
     ? () => setFileCheckpointDialogOpen(true)
     : undefined;
   const leadContent =
-    codeWorkbenchGuide || shouldShowRuntimeWorkbench || teamMemorySnapshot
+    codeWorkbenchGuide || shouldShowRuntimeWorkbench
       ? ({ fileChangeReviewSummary }: {
           fileChangeReviewSummary: HarnessFileChangeReviewSummary;
         }) => (
@@ -236,9 +235,6 @@ export function GeneralWorkbenchHarnessDialogSection({
               onOpenFileCheckpoints: openFileCheckpoints,
               onSubmitCodeFixPrompt,
             })}
-            {teamMemorySnapshot ? (
-              <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />
-            ) : null}
           </div>
         )
       : undefined;
@@ -394,9 +390,6 @@ export function GeneralWorkbenchDialogSection({
                   fileCheckpointSummary={fileCheckpointSummary}
                   onOpenFileCheckpoints={openFileCheckpoints}
                 />
-                {teamMemorySnapshot ? (
-                  <TeamMemoryShadowCard snapshot={teamMemorySnapshot} />
-                ) : null}
               </div>
             )}
           />

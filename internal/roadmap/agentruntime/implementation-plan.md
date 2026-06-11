@@ -77,7 +77,7 @@
 - 本地结构测试能用真实 runtime 输出构造 `submit-turn-event.json` 等价 fixture。
 - 无 `session/thread/turn` 的 runtime 主路径事件不能进入 current read model。
 - 前端未知事件控制器能识别 Lime Profile 事件为已知旁路事实，不污染用户可见 projection。
-- AgentUI projection presentation mapper 支持用 key-based i18n 渲染 event type、phase/status、control、surface；Team Workbench、Harness、可靠性诊断和 Artifact timeline 这类 current projection 入口不得退回中文 fallback，不把 stable facts 翻译回写到 runtime/read model。
+- AgentUI projection presentation mapper 支持用 key-based i18n 渲染 event type、phase/status、control、surface；Subagents、Harness、可靠性诊断和 Artifact timeline 这类 current projection 入口不得退回中文 fallback，不把 stable facts 翻译回写到 runtime/read model。
 - `turn.submitted / model.failed / task.failed` 等 profile fixtures 的 `type/status/failureCategory` 在不同 locale 下保持不变。
 
 ## 5. P2：ThreadReadModel 与 Context 收口

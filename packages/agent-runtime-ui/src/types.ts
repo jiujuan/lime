@@ -2,6 +2,12 @@ import type { ReactNode } from "react";
 
 import type {
   AgentUiProjectionState,
+  AgentUiArtifactRefView,
+  AgentUiEvidenceRefView,
+  AgentUiRefView,
+  AgentUiSubagentActivityView,
+  AgentUiSubagentDelegationView,
+  AgentUiSubagentThreadView,
   AgentRuntimeActionProjection,
   AgentRuntimeEventProjection,
   AgentRuntimeExecutionEvent,
@@ -116,10 +122,33 @@ export interface ExecutionGraphViewProps {
   nodeMeta?: (node: ExecutionGraphNode) => ReactNode;
 }
 
+export interface AgentUiRefListProps<TRef extends AgentUiRefView = AgentUiRefView> {
+  refs?: readonly TRef[];
+  empty?: ReactNode;
+  ariaLabel?: string;
+  className?: string;
+  refKind?: string;
+  refTitle?: (ref: TRef) => ReactNode;
+  refMeta?: (ref: TRef) => ReactNode;
+  refPreview?: (ref: TRef) => ReactNode;
+  refActionLabel?: (ref: TRef) => ReactNode;
+  onSelectRef?: (ref: TRef) => void;
+}
+
+export type ArtifactRefListProps = AgentUiRefListProps<AgentUiArtifactRefView>;
+
+export type EvidenceRefListProps = AgentUiRefListProps<AgentUiEvidenceRefView>;
+
 export interface AgentUiProjectionViewLabels<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent> {
   messagePartsAriaLabel?: string;
   processTimelineAriaLabel?: string;
   executionGraphAriaLabel?: string;
+  artifactRefsAriaLabel?: string;
+  evidenceRefsAriaLabel?: string;
+  subagentsAriaLabel?: string;
+  subagentThreadsAriaLabel?: string;
+  subagentDelegationsAriaLabel?: string;
+  subagentActivitiesAriaLabel?: string;
   runtimeSummaryAriaLabel?: string;
   executionEventsAriaLabel?: string;
   toolGroupAriaLabel?: string;
@@ -133,6 +162,20 @@ export interface AgentUiProjectionViewLabels<TEvent extends AgentRuntimeExecutio
   timelineEntryMeta?: ProcessTimelineViewProps["entryMeta"];
   graphNodeTitle?: ExecutionGraphViewProps["nodeTitle"];
   graphNodeMeta?: ExecutionGraphViewProps["nodeMeta"];
+  artifactRefTitle?: ArtifactRefListProps["refTitle"];
+  artifactRefMeta?: ArtifactRefListProps["refMeta"];
+  artifactRefPreview?: ArtifactRefListProps["refPreview"];
+  artifactRefActionLabel?: ArtifactRefListProps["refActionLabel"];
+  evidenceRefTitle?: EvidenceRefListProps["refTitle"];
+  evidenceRefMeta?: EvidenceRefListProps["refMeta"];
+  evidenceRefPreview?: EvidenceRefListProps["refPreview"];
+  evidenceRefActionLabel?: EvidenceRefListProps["refActionLabel"];
+  subagentThreadTitle?: SubagentThreadListProps["threadTitle"];
+  subagentThreadMeta?: SubagentThreadListProps["threadMeta"];
+  subagentThreadSummary?: SubagentThreadListProps["threadSummary"];
+  subagentDelegationTitle?: SubagentDelegationListProps["delegationTitle"];
+  subagentActivityTitle?: SubagentActivityListProps["activityTitle"];
+  subagentActivityMeta?: SubagentActivityListProps["activityMeta"];
   actionButtonLabel?: RuntimeFactCardProps<TEvent>["actionButtonLabel"];
   eventStatusLabel?: RuntimeFactCardProps<TEvent>["eventStatusLabel"];
 }
@@ -143,4 +186,54 @@ export interface AgentUiProjectionViewProps<TEvent extends AgentRuntimeExecution
   emptyMessages?: ReactNode;
   labels?: AgentUiProjectionViewLabels<TEvent>;
   onResolveAction?: AgentRuntimeActionResolver<TEvent>;
+  onSelectArtifactRef?: ArtifactRefListProps["onSelectRef"];
+  onSelectEvidenceRef?: EvidenceRefListProps["onSelectRef"];
+  onOpenSubagentThread?: SubagentsViewProps["onOpenThread"];
+}
+
+export interface SubagentThreadListProps {
+  threads?: readonly AgentUiSubagentThreadView[];
+  empty?: ReactNode;
+  ariaLabel?: string;
+  threadTitle?: (thread: AgentUiSubagentThreadView) => ReactNode;
+  threadMeta?: (thread: AgentUiSubagentThreadView) => ReactNode;
+  threadSummary?: (thread: AgentUiSubagentThreadView) => ReactNode;
+  threadActionLabel?: (thread: AgentUiSubagentThreadView) => ReactNode;
+  onOpenThread?: (thread: AgentUiSubagentThreadView) => void;
+}
+
+export interface SubagentDelegationListProps {
+  delegations?: readonly AgentUiSubagentDelegationView[];
+  empty?: ReactNode;
+  ariaLabel?: string;
+  delegationTitle?: (delegation: AgentUiSubagentDelegationView) => ReactNode;
+}
+
+export interface SubagentActivityListProps {
+  activities?: readonly AgentUiSubagentActivityView[];
+  empty?: ReactNode;
+  ariaLabel?: string;
+  activityTitle?: (activity: AgentUiSubagentActivityView) => ReactNode;
+  activityMeta?: (activity: AgentUiSubagentActivityView) => ReactNode;
+}
+
+export interface SubagentsViewProps<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent> {
+  state: AgentUiProjectionState<TEvent>;
+  emptyThreads?: ReactNode;
+  emptyDelegations?: ReactNode;
+  emptyActivities?: ReactNode;
+  onOpenThread?: (thread: AgentUiSubagentThreadView) => void;
+  labels?: Pick<
+    AgentUiProjectionViewLabels<TEvent>,
+    | "subagentsAriaLabel"
+    | "subagentThreadsAriaLabel"
+    | "subagentDelegationsAriaLabel"
+    | "subagentActivitiesAriaLabel"
+    | "subagentThreadTitle"
+    | "subagentThreadMeta"
+    | "subagentThreadSummary"
+    | "subagentDelegationTitle"
+    | "subagentActivityTitle"
+    | "subagentActivityMeta"
+  >;
 }

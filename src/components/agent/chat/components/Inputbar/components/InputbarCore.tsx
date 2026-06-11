@@ -99,6 +99,8 @@ interface InputbarCoreProps {
   showDragHandle?: boolean;
   /** 视觉风格 */
   visualVariant?: "default" | "floating";
+  /** 下方是否连接外部上下文托盘 */
+  connectedContextBar?: boolean;
   /** Enter 发送延后一帧，优先释放首页首帧渲染。 */
   deferSendOnEnter?: boolean;
   activeTheme?: string;
@@ -146,6 +148,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   toolMode = "default",
   showDragHandle = true,
   visualVariant = "default",
+  connectedContextBar = false,
   deferSendOnEnter = false,
   activeTheme,
   queuedTurns = [],
@@ -175,6 +178,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   const containerClassName = [
     isFullscreen ? "flex-1 flex flex-col" : "",
     isFloatingVariant ? "floating-composer" : "",
+    connectedContextBar ? "context-connected" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -182,6 +186,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
     isFullscreen ? "flex-1 flex flex-col" : "",
     isFloatingVariant ? "floating-composer" : "",
     shouldUseCompactFloatingComposer ? "floating-collapsed" : "",
+    connectedContextBar ? "context-connected" : "",
   ]
     .filter(Boolean)
     .join(" ");

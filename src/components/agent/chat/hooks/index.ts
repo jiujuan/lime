@@ -26,6 +26,7 @@ interface UseAgentChatUnifiedOptions {
   getSyncedSessionRecentPreferences?: (
     sessionId: string,
   ) => import("../utils/chatToolPreferences").ChatToolPreferences | null;
+  onOpenSubagents?: () => void;
 }
 
 /**

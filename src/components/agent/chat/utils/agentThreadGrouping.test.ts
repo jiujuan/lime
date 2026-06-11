@@ -353,7 +353,7 @@ describe("agentThreadGrouping", () => {
         ...createBaseItem("list-peers-1", 3),
         type: "tool_call",
         tool_name: "ListPeers",
-        arguments: { team_name: "当前团队" },
+        arguments: { team_name: "当前子代理组" },
       },
     ];
 
@@ -362,7 +362,7 @@ describe("agentThreadGrouping", () => {
     expect(model.groups[0]?.previewLines).toEqual([
       "等你确认：需要继续吗？",
       "已查看结果 video-task-1",
-      "已查看 当前团队",
+      "已查看 当前子代理组",
     ]);
   });
 

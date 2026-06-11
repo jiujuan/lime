@@ -17,7 +17,7 @@ async function buildMain() {
     resolve: {
       alias: [
         {
-          find: "app-server-client",
+          find: "@limecloud/app-server-client",
           replacement: appServerClientSource,
         },
       ],

@@ -52,6 +52,11 @@ function readRepoFile(path: string): string {
   return readFileSync(resolve(cwd(), path), "utf8");
 }
 
+function readOptionalRepoFile(path: string): string {
+  const absolutePath = resolve(cwd(), path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
+}
+
 function expectStringLiteralAbsent(source: string, literal: string): void {
   expect(source).not.toContain(`"${literal}"`);
   expect(source).not.toContain(`'${literal}'`);
@@ -144,13 +149,22 @@ describe("Session files frontend boundary", () => {
       existsSync(resolve(cwd(), "lime-rs/src/commands/session_files_cmd.rs")),
     ).toBe(false);
 
-    const commandsModSource = readRepoFile("lime-rs/src/commands/mod.rs");
+    const commandsModSource = readOptionalRepoFile("lime-rs/src/commands/mod.rs");
     expect(commandsModSource).not.toContain("session_files_cmd");
+    expect(existsSync(resolve(cwd(), "lime-rs/src/commands/mod.rs"))).toBe(
+      false,
+    );
 
-    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
-    const dispatcherSource = readRepoFile(
+    const runnerSource = readOptionalRepoFile("lime-rs/src/app/runner.rs");
+    const dispatcherSource = readOptionalRepoFile(
       "lime-rs/src/dev_bridge/dispatcher/files.rs",
     );
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(resolve(cwd(), "lime-rs/src/dev_bridge/dispatcher/files.rs")),
+    ).toBe(false);
 
     for (const command of RETIRED_SESSION_FILE_SURFACE_COMMANDS) {
       expect(runnerSource).not.toContain(

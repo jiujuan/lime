@@ -541,7 +541,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       preferred_team_preset_id: "code-triage-team",
       selected_team_id: "code-triage-team",
       selected_team_source: "builtin",
-      selected_team_label: "代码排障团队",
+      selected_team_label: "代码排障 profile",
       selected_team_roles: expect.arrayContaining([
         expect.objectContaining({
           id: "explorer",

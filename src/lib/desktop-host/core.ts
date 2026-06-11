@@ -45,7 +45,6 @@ function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
   defaultMocksPromise ??= (async () => {
     const [
       browser,
-      companion,
       agentRuntime,
       agentRuntimeObjective,
       agentApp,
@@ -67,7 +66,6 @@ function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
       voice,
     ] = await Promise.all([
       import("./browserMocks"),
-      import("./companionMocks"),
       import("./agentRuntimeMocks"),
       import("./agentRuntimeObjectiveMocks"),
       import("./agentAppMocks"),
@@ -90,7 +88,6 @@ function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
     ]);
 
     loadedMockResetters = [
-      companion.clearCompanionMocks,
       knowledge.clearKnowledgeMocks,
       agentRuntimeObjective.resetAgentRuntimeObjectiveMocks,
       skillForge.clearSkillForgeMocks,
@@ -98,7 +95,6 @@ function loadDefaultMocks(): Promise<Record<string, MockHandler>> {
     ];
 
     return {
-      ...companion.companionMocks,
       ...knowledge.knowledgeMocks,
       ...skillForge.skillForgeMocks,
       ...browser.browserMocks,

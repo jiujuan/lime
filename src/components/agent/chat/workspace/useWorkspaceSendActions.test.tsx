@@ -1341,7 +1341,7 @@ Extract it into the Agent Skills directory.`,
       expect(harness.getValue().displayMessages[4]).toMatchObject({
         role: "assistant",
         runtimeStatus: expect.objectContaining({
-          title: "任务分工已准备好",
+          title: "Subagents 已准备好",
         }),
       });
       expect(
@@ -6929,7 +6929,8 @@ Extract it into the Agent Skills directory.`,
       },
     ]);
     const harness = mountHook({
-      input: "/engineering-mode 收口 workspace 发送链的硬编码分支，并补治理 guard",
+      input:
+        "/engineering-mode 收口 workspace 发送链的硬编码分支，并补治理 guard",
       serviceSkills: [createCloudSceneSkill()],
     });
 
@@ -6960,8 +6961,7 @@ Extract it into the Agent Skills directory.`,
               service_scene_run: expect.objectContaining({
                 scene_key: "engineering-mode",
                 skill_id: "cloud-video-dubbing",
-                user_input:
-                  "收口 workspace 发送链的硬编码分支，并补治理 guard",
+                user_input: "收口 workspace 发送链的硬编码分支，并补治理 guard",
               }),
             },
           },
@@ -7341,13 +7341,13 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("当前 selectedTeam 还未 hydrate 时应保留 base request metadata 里的 Team 字段", async () => {
+  it("当前 selectedTeam 还未 hydrate 时应保留 base request metadata 里的兼容字段", async () => {
     const harness = mountHook({
       workspaceRequestMetadataBase: {
         harness: {
           selected_team_id: "home-shell-custom-team",
           selected_team_source: "custom",
-          selected_team_label: "首页协作团队",
+          selected_team_label: "首页子代理组",
           selected_team_description: "负责首页入口阶段的调研、执行与验证。",
           selected_team_summary: "研究负责调研与线索整理。",
           selected_team_roles: [
@@ -7379,7 +7379,7 @@ Extract it into the Agent Skills directory.`,
           harness: expect.objectContaining({
             selected_team_id: "home-shell-custom-team",
             selected_team_source: "custom",
-            selected_team_label: "首页协作团队",
+            selected_team_label: "首页子代理组",
             selected_team_summary: "研究负责调研与线索整理。",
           }),
         },

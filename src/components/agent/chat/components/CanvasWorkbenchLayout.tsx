@@ -82,7 +82,6 @@ export type CanvasWorkbenchTab =
   | "changes"
   | "outputs"
   | "logs"
-  | "team"
   | `document:${string}`;
 type CanvasWorkbenchDocumentViewMode = "preview" | "changes";
 export type CanvasWorkbenchLayoutMode = "split" | "stacked";
@@ -134,23 +133,6 @@ export interface CanvasWorkbenchHeaderView {
 }
 
 export type { CanvasWorkbenchPreviewTarget };
-
-export interface CanvasWorkbenchTeamView extends CanvasWorkbenchHeaderView {
-  enabled: boolean;
-  autoFocusToken?: string | number | null;
-  preferActiveOnMount?: boolean;
-  preferFullscreenPreview?: boolean;
-  preferFixedPanel?: boolean;
-  triggerState?: {
-    tone: "idle" | "active" | "error";
-    label?: string | null;
-  } | null;
-  renderPreview: (options?: {
-    stackedWorkbenchTrigger?: ReactNode;
-  }) => ReactNode;
-  renderPanel?: () => ReactNode;
-  renderFooter?: () => ReactNode;
-}
 
 export interface CanvasWorkbenchSessionView extends CanvasWorkbenchHeaderView {
   renderPanel: () => ReactNode;
@@ -207,7 +189,6 @@ export interface CanvasWorkbenchLayoutProps {
   onLayoutModeChange?: (mode: CanvasWorkbenchLayoutMode) => void;
   workbenchMode?: CanvasWorkbenchMode;
   workspaceView?: CanvasWorkbenchHeaderView | null;
-  teamView?: CanvasWorkbenchTeamView | null;
   sessionView?: CanvasWorkbenchSessionView | null;
   outputView?: CanvasWorkbenchUtilityView | null;
   logView?: CanvasWorkbenchUtilityView | null;
@@ -324,7 +305,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   onLayoutModeChange,
   workbenchMode = "default",
   workspaceView = null,
-  teamView = null,
   sessionView = null,
   outputView = null,
   logView = null,
@@ -388,12 +368,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     [translateWorkbench],
   );
   const isCodingWorkbench = workbenchMode === "coding";
-  const shouldShowTeamTab = Boolean(
-    teamView?.enabled &&
-      (teamView.preferActiveOnMount || teamView.autoFocusToken != null),
-  );
-  const shouldPreferTeamTabByDefault =
-    !isCodingWorkbench && shouldShowTeamTab && !defaultPreview;
   const hasDefaultPreviewContent = Boolean(defaultPreview?.content.trim());
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [isStackedLayout, setIsStackedLayout] = useState(false);
@@ -481,7 +455,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (initialDocumentSelectionKey) {
       return buildDocumentTabKey(initialDocumentSelectionKey);
     }
-    return shouldPreferTeamTabByDefault ? "team" : "workspace";
+    return "workspace";
   });
   const hasAutoFocusedInitialDocumentTabRef = useRef(
     isCodingWorkbench || Boolean(initialDocumentSelectionKey),
@@ -541,28 +515,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       return next.length === previous.length ? previous : next;
     });
   }, [isKnownSelectionKey]);
-
-  useEffect(() => {
-    if (isCodingWorkbench) {
-      return;
-    }
-    if (activeTab !== "team" || shouldShowTeamTab) {
-      return;
-    }
-    setActiveTab(
-      openDocumentTabs[0] ||
-        (sessionView?.renderPanel || hasDefaultPreviewContent
-          ? "session"
-          : "workspace"),
-    );
-  }, [
-    activeTab,
-    hasDefaultPreviewContent,
-    isCodingWorkbench,
-    openDocumentTabs,
-    sessionView?.renderPanel,
-    shouldShowTeamTab,
-  ]);
 
   useEffect(() => {
     if (isCodingWorkbench) {
@@ -687,33 +639,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     [translateWorkbench, workspaceRoot],
   );
 
-  const teamAutoFocusTokenRef = useRef<string | number | null | undefined>(
-    teamView?.autoFocusToken,
-  );
-
-  useEffect(() => {
-    if (
-      isCodingWorkbench ||
-      !shouldShowTeamTab ||
-      !teamView ||
-      teamView.autoFocusToken == null
-    ) {
-      return;
-    }
-
-    if (teamAutoFocusTokenRef.current === teamView.autoFocusToken) {
-      return;
-    }
-
-    teamAutoFocusTokenRef.current = teamView.autoFocusToken;
-    setActiveTab("team");
-  }, [
-    isCodingWorkbench,
-    shouldShowTeamTab,
-    teamView,
-    teamView?.autoFocusToken,
-  ]);
-
   const handleOpenDocumentSelection = useCallback(
     (selectionKey: string) => {
       setSelectedKey(selectionKey);
@@ -739,20 +664,11 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
       if (activeTab === tabKey) {
         const fallbackTab =
           openDocumentTabs.find((currentTabKey) => currentTabKey !== tabKey) ||
-          (shouldShowTeamTab && shouldPreferTeamTabByDefault
-            ? "team"
-            : "session");
+          "session";
         setActiveTab(fallbackTab as CanvasWorkbenchTab);
       }
     },
-    [
-      activeTab,
-      fallbackSelectionKey,
-      openDocumentTabs,
-      selectedKey,
-      shouldShowTeamTab,
-      shouldPreferTeamTabByDefault,
-    ],
+    [activeTab, fallbackSelectionKey, openDocumentTabs, selectedKey],
   );
 
   const handleToggleDirectory = useCallback(
@@ -925,16 +841,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     workspaceUnavailable,
   ]);
 
-  const teamTarget = useMemo<CanvasWorkbenchPreviewTarget | null>(() => {
-    if (!shouldShowTeamTab || !teamView) {
-      return null;
-    }
-    return {
-      kind: "team-workbench",
-      title: teamView.title || workbenchCopy.tab.generated,
-    };
-  }, [shouldShowTeamTab, teamView, workbenchCopy.tab.generated]);
-
   const hasCustomSessionView = Boolean(sessionView?.renderPanel);
   const shouldShowSessionTab = Boolean(sessionContext || hasCustomSessionView);
 
@@ -953,16 +859,8 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     if (isCodingWorkbench || activeTab !== "session" || shouldShowSessionTab) {
       return;
     }
-    setActiveTab(
-      openDocumentTabs[0] || (shouldShowTeamTab ? "team" : "workspace"),
-    );
-  }, [
-    activeTab,
-    isCodingWorkbench,
-    openDocumentTabs,
-    shouldShowSessionTab,
-    shouldShowTeamTab,
-  ]);
+    setActiveTab(openDocumentTabs[0] || "workspace");
+  }, [activeTab, isCodingWorkbench, openDocumentTabs, shouldShowSessionTab]);
 
   const activeSelectionPath = activePreviewContext?.selectionPath;
   const activeContent = activePreviewContext?.content || "";
@@ -971,9 +869,7 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     "agentChat.canvasWorkbench.close",
   );
   const headerActionsVisible = Boolean(
-    activeTab !== "team" &&
-    activePreviewContext &&
-    (activeSelectionPath || activeContent.trim()),
+    activePreviewContext && (activeSelectionPath || activeContent.trim()),
   );
 
   const documentDiffLines = useMemo(
@@ -1203,29 +1099,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         badge: workspaceBadge,
         badgeTone: workspaceView?.tabBadgeTone,
       },
-      ...(shouldShowTeamTab && teamView
-        ? [
-            {
-              key: "team" as const,
-              label:
-                teamView.tabLabel?.trim() ||
-                workbenchCopy.tab.tasks ||
-                teamView.title?.trim() ||
-                workbenchCopy.tab.generated,
-              badge:
-                teamView.tabBadge?.trim() ||
-                teamView.triggerState?.label?.trim() ||
-                undefined,
-              badgeTone:
-                teamView.tabBadgeTone ||
-                (teamView.triggerState?.tone === "error"
-                  ? ("rose" as const)
-                  : teamView.triggerState?.tone === "active"
-                    ? ("sky" as const)
-                    : ("slate" as const)),
-            },
-          ]
-        : []),
     ];
   }, [
     changeItemCount,
@@ -1242,14 +1115,10 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     sessionView?.tabBadgeTone,
     sessionView?.tabLabel,
     sessionContext,
-    shouldShowTeamTab,
     shouldShowSessionTab,
-    teamView,
     canvasT,
     workbenchCopy.tab.files,
-    workbenchCopy.tab.generated,
     workbenchCopy.tab.sessionMain,
-    workbenchCopy.tab.tasks,
     workspacePanelRootPath,
     workspaceView?.tabBadge,
     workspaceView?.tabBadgeTone,
@@ -1598,8 +1467,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         <span className="h-2 w-2 rounded-full bg-slate-400" />
       ) : key === "workspace" ? (
         <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-      ) : key === "team" ? (
-        <span className="h-2 w-2 rounded-full bg-sky-400" />
       ) : label.match(/\.(ts|tsx|js|jsx|rs|json|yml|yaml|toml)$/i) ? (
         <FileCode2 className="h-3.5 w-3.5 shrink-0" />
       ) : (
@@ -1816,48 +1683,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
           )}
         </div>
       </div>
-    );
-  };
-
-  const renderTeamPanel = () => {
-    if (!shouldShowTeamTab || !teamView || !teamTarget) {
-      return (
-        <div data-testid="canvas-workbench-panel-team" className="p-5">
-          <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-            {teamView?.panelCopy?.emptyText ||
-              translateWorkbench("agentChat.canvasWorkbench.team.empty")}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <section
-        data-testid="canvas-workbench-panel-team"
-        className="flex h-full min-h-0 flex-col gap-3 bg-white p-3"
-      >
-        <div
-          data-testid="canvas-workbench-preview-region"
-          className="min-h-0 flex-1 overflow-hidden bg-white"
-        >
-          {renderPreview(teamTarget)}
-        </div>
-        {teamView.renderPanel ? (
-          <div
-            className={cn(
-              WORKBENCH_PANEL_CLASSNAME,
-              "min-h-0 overflow-auto p-4",
-            )}
-          >
-            {teamView.renderPanel()}
-          </div>
-        ) : null}
-        {teamView.renderFooter ? (
-          <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3">
-            {teamView.renderFooter()}
-          </div>
-        ) : null}
-      </section>
     );
   };
 
@@ -2548,11 +2373,9 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
                       testId: "canvas-workbench-panel-logs",
                       textKey: "agentChat.canvasWorkbench.coding.logs.empty",
                     })
-                  : activeTab === "team"
-                    ? renderTeamPanel()
-                    : activeTab === "session"
-                      ? renderSessionPanel()
-                      : renderDocumentPanel()}
+                  : activeTab === "session"
+                    ? renderSessionPanel()
+                    : renderDocumentPanel()}
       </div>
     </section>
   );

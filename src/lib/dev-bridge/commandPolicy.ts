@@ -32,6 +32,7 @@ const bridgeTruthCommands = new Set<string>([
   "workspace_list",
   "workspace_get_default",
   "workspace_get",
+  "workspace_ensure",
   "workspace_ensure_ready",
   "agent_runtime_submit_turn",
   "agent_runtime_interrupt_turn",
@@ -41,10 +42,6 @@ const bridgeTruthCommands = new Set<string>([
   "agent_app_start_ui_runtime",
   "agent_app_get_ui_runtime_status",
   "agent_app_stop_ui_runtime",
-  "agent_app_runtime_start_task",
-  "agent_app_runtime_cancel_task",
-  "agent_app_runtime_get_task",
-  "agent_app_runtime_submit_host_response",
   "agent_runtime_create_session",
   "agent_runtime_list_sessions",
   "agent_runtime_get_session",
@@ -58,7 +55,12 @@ const bridgeTruthCommands = new Set<string>([
   "get_file_name",
 ]);
 
-const noMockFallbackCompatCommands = new Set<string>([]);
+const noMockFallbackCompatCommands = new Set<string>([
+  "agent_app_runtime_start_task",
+  "agent_app_runtime_cancel_task",
+  "agent_app_runtime_get_task",
+  "agent_app_runtime_submit_host_response",
+]);
 
 const electronHostNoMockFallbackCommands = new Set([
   "open_system_settings_url",
@@ -94,6 +96,7 @@ const devBridgeCooldownBypassCommands = new Set([
   "workspace_get",
   "workspace_get_default",
   "workspace_list",
+  "workspace_ensure",
   "workspace_ensure_ready",
   "workspace_ensure_default_ready",
 ]);
@@ -194,6 +197,7 @@ const APP_SERVER_STARTUP_TRUTH_METHODS = new Set([
   "workspace/list",
   "workspace/read",
   "workspace/byPath/read",
+  "workspace/ensure",
   "workspace/projectsRoot/read",
   "workspace/projectPath/resolve",
   "workspace/ensureReady",

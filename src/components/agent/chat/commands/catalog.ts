@@ -86,6 +86,16 @@ export const CODEX_SLASH_COMMANDS: CodexSlashCommandDefinition[] = [
     support: "supported",
   },
   {
+    key: "subagents",
+    commandName: "subagents",
+    commandPrefix: "/subagents",
+    label: "Subagents",
+    description: "切换或查看子代理线程",
+    aliases: ["agent"],
+    kind: "local_action",
+    support: "supported",
+  },
+  {
     key: "help",
     commandName: "help",
     commandPrefix: "/help",

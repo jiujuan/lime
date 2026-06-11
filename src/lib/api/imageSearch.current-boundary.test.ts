@@ -12,6 +12,11 @@ function readRepoFile(path: string): string {
   return readFileSync(resolve(cwd(), path), "utf8");
 }
 
+function readOptionalRepoFile(path: string): string {
+  const absolutePath = resolve(cwd(), path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
+}
+
 function expectStringLiteralsAbsent(source: string, literals: string[]): void {
   for (const literal of literals) {
     expect(source).not.toContain(`"${literal}"`);
@@ -40,9 +45,9 @@ describe("image search current boundary", () => {
       readRepoFile("src/lib/dev-bridge/mockPriorityCommands.ts"),
       readRepoFile("src/lib/governance/agentCommandCatalog.json"),
       readRepoFile("src/lib/desktop-host/core.ts"),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/commands/mod.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readOptionalRepoFile("lime-rs/src/app/runner.rs"),
+      readOptionalRepoFile("lime-rs/src/commands/mod.rs"),
+      readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
     ].join("\n");
 
     expectStringLiteralsAbsent(
@@ -51,6 +56,15 @@ describe("image search current boundary", () => {
     );
     expect(restrictedSources).not.toContain("commands::image_search_cmd::");
     expect(restrictedSources).not.toContain("pub mod image_search_cmd;");
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
+      false,
+    );
+    expect(existsSync(resolve(cwd(), "lime-rs/src/commands/mod.rs"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(resolve(cwd(), "lime-rs/src/dev_bridge/dispatcher.rs")),
+    ).toBe(false);
     expect(
       existsSync(resolve(cwd(), "lime-rs/src/commands/image_search_cmd.rs")),
     ).toBe(false);

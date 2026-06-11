@@ -31,7 +31,9 @@ describe("AppSidebar current App Server session boundary", () => {
     expect(archiveHandler).toContain("await updateAgentRuntimeSession({");
     expect(archiveHandler).toContain("session_id: session.id");
     expect(archiveHandler).toContain("archived,");
-    expect(archiveHandler).toContain("setArchivedSessionEntries");
+    expect(archiveHandler).toContain(
+      "moveSidebarSessionArchiveStateOptimistically(nextSession)",
+    );
     expect(archiveHandler).toContain("refreshSidebarSessions");
     expect(archiveHandler).not.toContain("deleteAgentRuntimeSession");
     expect(archiveHandler).not.toContain("safeInvoke");

@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  Bot,
   Brain,
   Image as ImageIcon,
   Palette,
@@ -23,7 +22,6 @@ import { useTranslation } from "react-i18next";
 interface SettingsHomePageProps {
   onTabChange: (tab: SettingsTabs) => void;
   onTabPrefetch?: (tab: SettingsTabs) => void;
-  onOpenCompanion?: () => void;
   onNavigate?: (page: Page, params?: PageParams) => void;
 }
 
@@ -106,7 +104,6 @@ function hasQuickAccessMeta(item: CategoryItem): item is QuickAccessItem {
 export function SettingsHomePage({
   onTabChange,
   onTabPrefetch,
-  onOpenCompanion,
   onNavigate,
 }: SettingsHomePageProps) {
   const groups = useSettingsCategory();
@@ -180,15 +177,14 @@ export function SettingsHomePage({
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
               {t("settings.home.summary.quickAccess", {
-                count:
-                  overview.quickAccessItems.length + (onOpenCompanion ? 1 : 0),
+                count: overview.quickAccessItems.length,
               })}
             </span>
           </div>
         </div>
       </section>
 
-      {overview.quickAccessItems.length > 0 || onOpenCompanion ? (
+      {overview.quickAccessItems.length > 0 ? (
         <section className="rounded-[26px] border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-950/5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -208,8 +204,7 @@ export function SettingsHomePage({
 
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
               {t("settings.home.quickAccess.count", {
-                count:
-                  overview.quickAccessItems.length + (onOpenCompanion ? 1 : 0),
+                count: overview.quickAccessItems.length,
               })}
             </span>
           </div>
@@ -259,36 +254,6 @@ export function SettingsHomePage({
                 </article>
               );
             })}
-            {onOpenCompanion ? (
-              <article className="group rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
-                <button
-                  type="button"
-                  onMouseEnter={() => onTabPrefetch?.(SettingsTabs.Providers)}
-                  onMouseDown={() => onTabPrefetch?.(SettingsTabs.Providers)}
-                  onFocus={() => onTabPrefetch?.(SettingsTabs.Providers)}
-                  onClick={() => onOpenCompanion()}
-                  className="w-full text-left"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-slate-700">
-                      <Bot className="h-5 w-5" />
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-600" />
-                  </div>
-                  <p className="mt-4 text-base font-semibold text-slate-900">
-                    {t("settings.home.companion.title")}
-                  </p>
-                </button>
-
-                <div className="mt-3 flex justify-end">
-                  <WorkbenchInfoTip
-                    ariaLabel={t("settings.home.companion.tipAria")}
-                    content={t("settings.home.companion.description")}
-                    tone="slate"
-                  />
-                </div>
-              </article>
-            ) : null}
           </div>
         </section>
       ) : null}

@@ -48,6 +48,11 @@ function readRepoFile(path: string): string {
   return readFileSync(resolve(cwd(), path), "utf8");
 }
 
+function readOptionalRepoFile(path: string): string {
+  const absolutePath = resolve(cwd(), path);
+  return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
+}
+
 function readDesktopHostMockSources(): string {
   const desktopHostDir = resolve(cwd(), "src/lib/desktop-host");
   return readdirSync(desktopHostDir)
@@ -108,9 +113,9 @@ describe("gateway tunnel current boundary", () => {
   it("gateway tunnel 旧 facade 不应回到前端生产网关或旧 Rust 注册面", () => {
     const productionSources = [
       readRepoFile("src/lib/api/channelsRuntime.ts"),
-      readRepoFile("lime-rs/src/app/runner.rs"),
-      readRepoFile("lime-rs/src/commands/mod.rs"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
+      readOptionalRepoFile("lime-rs/src/app/runner.rs"),
+      readOptionalRepoFile("lime-rs/src/commands/mod.rs"),
+      readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher.rs"),
     ].join("\n");
 
     for (const command of GATEWAY_TUNNEL_FACADE_COMMANDS) {
@@ -121,6 +126,15 @@ describe("gateway tunnel current boundary", () => {
     expect(productionSources).not.toContain("pub mod gateway_tunnel_cmd;");
     expect(productionSources).not.toContain("GatewayTunnelState");
     expect(productionSources).not.toContain("lime_gateway::tunnel::");
+    expect(existsSync(resolve(cwd(), "lime-rs/src/app/runner.rs"))).toBe(
+      false,
+    );
+    expect(existsSync(resolve(cwd(), "lime-rs/src/commands/mod.rs"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(resolve(cwd(), "lime-rs/src/dev_bridge/dispatcher.rs")),
+    ).toBe(false);
     expect(
       existsSync(resolve(cwd(), "lime-rs/src/commands/gateway_tunnel_cmd.rs")),
     ).toBe(false);

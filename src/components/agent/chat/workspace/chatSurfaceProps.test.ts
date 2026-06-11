@@ -44,4 +44,19 @@ describe("buildWorkspaceNavbarProps", () => {
     expect(props?.entryContextLabel).toBeUndefined();
     expect(props?.entryContextHint).toBeUndefined();
   });
+
+  it("任务中心顶栏应透传已打开项目列表", () => {
+    const openedProjects = [
+      { id: "project-1", name: "默认项目" },
+      { id: "project-2", name: "lime" },
+    ];
+    const props = buildWorkspaceNavbarProps(
+      createNavbarParams({
+        projectId: "project-1",
+        openedProjects,
+      }),
+    );
+
+    expect(props?.openedProjects).toBe(openedProjects);
+  });
 });

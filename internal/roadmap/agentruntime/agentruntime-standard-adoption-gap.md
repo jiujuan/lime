@@ -77,7 +77,7 @@ AgentRuntime 标准正好把这些能力定义成 execution facts：
 | Permission / sandbox / hook / process | Claw/ToolRuntime 有相关事实，但 Agent App Host 可见度不足 | 将 permission、sandbox、hook、process 事件进入 projection diagnostics / evidence，不让 App 自建权限判断 | P1 |
 | Tool inventory snapshot | 标准要求当前 scope 下可用 tools / policy / capabilities 可解释 | `lime.skills / lime.tools / lime.models` 能力目录需要从 Host 投影给 App，App 只显示可用/不可用 | P1 |
 | History / recovery / snapshot repair | 单会话全流程仍红，说明状态递进和 task snapshot 稳定性还不够 | 打开历史 App task 时先用 snapshot 恢复，再按 sequence 补事件 | P2 |
-| Subagents / jobs / remote channels | 标准覆盖完整委派和远程工作，但内容工厂当前 P0 不是多 agent workbench | 先保持 solo task + required Skills；等 runtime 暴露 parent-child graph 后再进入 Team Workbench | P2 |
+| Subagents / jobs / remote channels | 标准覆盖完整委派和远程工作，但内容工厂当前 P0 不是多 agent workbench | 先保持 solo task + required Skills；等 runtime 暴露 parent-child graph 后再进入 Subagents | P2 |
 
 ## 6. 暂缓或禁止
 
@@ -88,7 +88,7 @@ AgentRuntime 标准正好把这些能力定义成 execution facts：
 | 内容工厂直连 OpenAI-compatible API 或 `LIME_GATEWAY_*` 完成主流程 | dead | 只能得到模型补全，拿不到 Skills、Tools、routing、cost、evidence、HITL。 |
 | 每个 App 复制 Claw `*_skill_launch.rs` | dead | 破坏 Claw capability catalog 复用，制造权限和证据旁路。 |
 | App 内完整实现 AgentUI runtime store | dead | UI projection 只能在 Host 层统一，App 只能消费标准视图。 |
-| Team Workbench / remote teammate 全量默认进入每个 App | deferred | 需要 subagent/job/channel runtime facts 先稳定。 |
+| Subagents / remote teammate 全量默认进入每个 App | deferred | 需要 subagent/job/channel runtime facts 先稳定。 |
 | 用最终正文反推 artifact、Skill 成功或 evidence pass | deprecated | 标准明确要求 missing facts 标为 `unknown/unavailable/stale/blocked`，不能猜。 |
 
 ## 7. current / compat / deprecated / dead 分类

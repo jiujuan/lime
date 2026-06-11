@@ -33,7 +33,7 @@ AgentUI v0.6.1 定义的是 runtime-first projection 标准，核心能力包括
 
 - Runtime event projection：`run.* / text.* / reasoning.* / tool.* / action.* / queue.* / artifact.* / evidence.* / session.* / team.*` 等 event class。
 - 标准表面：Composer、Message Parts、Runtime Status、Tool UI、Human-in-the-loop、Task Capsule、Artifact Workspace、Timeline / Evidence、Session / Tabs。
-- Team Workbench：Team Roster、Work Board、Delegation Graph、Handoff Lane、Worker Notifications、Review Lane、Teammate Transcript、Background / Remote Teammate、Team Policy。
+- Subagents：Subagent Threads、Delegation Calls、Handoff / Review Activity、Worker Notifications、Teammate Transcript、Background / Remote Teammate、Team Policy。
 - Client implementation：projection store、progressive rendering、session hydration、queue vs steer、controlled writes、performance metrics。
 - Agent Runtime profile tests：验证 `RuntimeEvent / ThreadReadModel / TaskSnapshot / EvidencePack` 能投影到 UI，同时 UI 不变成 runtime truth。
 
@@ -79,7 +79,7 @@ Agent App MVP 必须先满足：真实 runtime facts -> Host Run UI -> 业务 ar
 | Evidence / Review / Replay lane | Evidence refs 已可投影，完整 Evidence panel、review verdict、replay lane 未统一 | 使用 `agent_runtime_export_evidence_pack` 作为单一事实源，Review / Replay 不再各自重算状态 | P1 |
 | Session hydration | AgentRuntime 有 ThreadReadModel，Agent App Host Run UI 还没有完整旧 session 渐进恢复体验 | 打开历史任务时先 shell / snapshot / recent process，再懒加载 timeline、tool output、artifact、evidence | P2 |
 | Performance metrics | completion gates 记录结果，但 Host UI 尚未系统展示 submit-to-status / first-text / paint latency | 在 projection 或 evidence 中保留 `metric.changed`，普通 UI 低噪声，诊断视图可检查 | P2 |
-| Team Workbench | Lime AgentRuntime / Claw 有 subagent、team prompt、spawn/wait/close 能力，但 Agent App Host UI 未投影 team surfaces | 只有当 runtime 暴露 parent/child lineage、worker notification、team phase 后，才进入 roster / delegation / review lane | P2 |
+| Subagents | Lime AgentRuntime / Claw 有 subagent、team prompt、spawn/wait/close 能力，但 Agent App Host UI 未投影 subagent surfaces | 只有当 runtime 暴露 parent/child lineage、worker notification、team phase 后，才进入 threads / delegation / review activity | P2 |
 
 ## 5. 暂缓或不应直接采用的部分
 
@@ -91,7 +91,7 @@ Agent App MVP 必须先满足：真实 runtime facts -> Host Run UI -> 业务 ar
 | AgentUI event schema 直接替代 AgentRuntime | 禁止 | AgentUI 是 projection schema，不拥有 execution、policy、artifact、evidence truth。 |
 | App 内实现完整 AgentUI runtime | 禁止 | 会让业务 App 变成第二套 Agent Runtime，回到“每个 App 自建 AI 同事”的问题。 |
 | 业务 App 直连模型 / provider API | 禁止 | 绕过 Lime model routing、Skills、ToolRuntime、usage、cost、policy、Evidence。 |
-| Team Workbench 全量表面一次性落地 | 暂缓 | 需要 runtime 先稳定暴露 `agent.spawned / worker.notification / team.changed / handoff / review` facts。 |
+| Subagents 全量表面一次性落地 | 暂缓 | 需要 runtime 先稳定暴露 `agent.spawned / worker.notification / team.changed / handoff / review` facts。 |
 | Remote teammate / background teammate UI | 暂缓 | 需要 remote task / background scheduler 的 durable facts；不能用普通 running 文案伪造。 |
 | Work Board 作为所有 Agent App 默认壳 | 暂缓 | 不是所有业务 App 都是看板心智；只能在 runtime 有 work item truth 时投影。 |
 
@@ -108,7 +108,7 @@ Agent App MVP 必须先满足：真实 runtime facts -> Host Run UI -> 业务 ar
 | Artifact Workspace | 内容工厂 workspace patch、artifact refs 已接入 | 通用 preview / edit / version / diff / export 还未抽象 | 内容工厂可先写回业务对象，通用 artifact workspace 需要补。 |
 | Timeline / Evidence | facts rail、timeline、Evidence refs 已可见 | Evidence detail / replay / review lane 仍分散 | 可作为 MVP，但完整 evidence 审计仍要回到 EvidencePack。 |
 | Session / Tabs | AgentRuntime 有 thread read snapshot | Agent App Host UI 未实现旧任务渐进恢复和 tab resource policy | 暂不作为内容工厂阻塞项，列入 Host 层后续。 |
-| Team Workbench | Claw / AgentRuntime 有 subagent 和 team runtime 基础 | Agent App 无 roster / delegation / worker notification / handoff lane | 暂缓全量；先保证 solo_run 与 required Skills。 |
+| Subagents | Claw / AgentRuntime 有 subagent 和 team runtime 基础 | Agent App 无 threads / delegation / worker notification / handoff activity | 暂缓全量；先保证 solo_run 与 required Skills。 |
 | Diagnostics / Metrics | Smoke evidence、completion audit、cost/usage facts 已有 | 用户可见 latency metrics、safe diagnostics surface 不完整 | 先用于测试和 evidence，后续进入 Host 诊断视图。 |
 
 ## 6.1 继续审计：Lime 已有 AgentUI 投影资产
@@ -120,7 +120,7 @@ Agent App MVP 必须先满足：真实 runtime facts -> Host Run UI -> 业务 ar
 | 标准 event / owner / scope / surface 类型 | `src/components/agent/chat/projection/agentUiEventProjection.ts` 定义 `AgentUiProjectionEvent`、`AgentUiEventClass`、`AgentUiSurface`、`AgentUiRuntimeEntity`、`AgentUiTopology` | 不应在 Agent App 里再定义一套 AgentUI 类型。 |
 | Claw runtime event -> AgentUI projection adapter | `buildAgentUiProjectionEvents(event, context)` 已覆盖 `run.* / text.delta / reasoning.delta / tool.* / action.* / queue.changed / artifact.* / evidence.changed / team.*` | Agent App 下一刀应接入或复用该 adapter，而不是从 `task:*` 直接渲染到底。 |
 | Projection store | `conversationProjectionStore.ts` 提供 record / select by type / surface / scope / tool / action / artifact / evidence | Host Run UI 可使用同一个 projection store 或同构 reducer，避免第二套 UI state owner。 |
-| Team Workbench 投影与视图模型 | `agentUiTeamWorkbenchViewModel.ts`、`AgentUiTeamWorkbenchSurfaceView.tsx` 已存在 | Team Workbench 不是零实现；缺口是 Agent App runtime facts 尚未投影和挂到 Host Run UI。 |
+| Subagents 投影与视图模型 | `agentUiSubagentsViewModel.ts`、`AgentUiProjectionState.subagents`、`SubagentsView` 已存在 | Subagents 不是零实现；缺口是 Agent App runtime facts 尚未投影和挂到 Host Run UI。 |
 | Claw stream 运行时接入 | `agentStreamRuntimeHandler.ts` 调用 `buildAgentUiProjectionEvents` 并记录 projection events | Claw 已经证明 stream -> AgentUI projection 的路径可行；Agent App 应复用这条路径。 |
 | Team runtime 接入 | `team-workspace-runtime/runtimeEventSubscriptions.ts` 已把 subagent/team stream 记录为 AgentUI projection events | Agent App 的 team / subagent 后续应收敛到同一 projection，而不是另写 roster / worker notification。 |
 | 后端 Agent App task projection first-cut | 当前脏工作树中 `runtime_turn.rs` 已把 profile/runtime events 投影为 `task:runtimeEvent` payload，含 `taskEvents`、`runtimeEvent`、`streamKind`、artifact/evidence/action/tool 映射 | 后端已有 first-cut，但仍是 Agent App task event 形态；前端还需要桥接到 AgentUI event class。 |
@@ -141,7 +141,7 @@ Agent App MVP 必须先满足：真实 runtime facts -> Host Run UI -> 业务 ar
 2. 后端 task projection first-cut 仍输出 `task:*` 事件；前端 bridge 已可标准化为 `run.* / tool.* / action.* / artifact.* / evidence.*`，但尚未挂入 Host UI。
 3. Ordered parts 的 state adapter、view model 和独立 panel 已可按 projection `sequence / partId / toolCallId / actionId` 排序，但现有 Host Run 抽屉尚未用它替换 `timeline + thinking + execution + output` 分区。
 4. HITL 只有 request facts 和 submit host response 命令，Host Run UI 还缺 `action.required -> action.resolved` 的受控卡片闭环。
-5. 现有 Claw AgentUI projection 的 Team / Remote / Background 能力不能直接宣称 Agent App 已支持；需要 Agent App runtime facts 接入后才算。
+5. 现有 Claw AgentUI projection 的 Subagents / Remote / Background 能力不能直接宣称 Agent App 已支持；需要 Agent App runtime facts 接入后才算。
 
 ## 6.2 Schema parity 与 Agent App 可用子集
 
@@ -181,7 +181,7 @@ P1/P2 才进入的子集：
 2. **Artifact Workspace**：preview、edit、version、diff、export 必须先由 Host artifact service 持有。
 3. **Evidence Review / Replay Lane**：必须消费 EvidencePack / review / replay 事实，不能 UI 推断。
 4. **Session Hydration**：历史任务先恢复 snapshot，再懒加载 full timeline / tool output / evidence。
-5. **Team Workbench**：等 Agent App runtime 暴露 parent/child lineage、worker notification、handoff、review facts 后再启用。
+5. **Subagents**：等 Agent App runtime 暴露 parent/child lineage、worker notification、handoff、review facts 后再启用。
 
 ## 7. 对内容工厂和后续 Agent App 的落地规则
 
@@ -219,7 +219,7 @@ P0: Agent App Host -> existing AgentUI projection bridge
 | AgentUI 标准要和 Lime 对比，找出哪些可用于 Agent App | 本文档第 3-6.2 节已经按能力、surface 与 schema parity 分类 | done | 保持文档随实现更新。 |
 | Lime 不是所有 AgentUI 都支持 | 第 4、5、6、6.1、6.2 节列出缺口和暂缓项 | done | 缺口进入 P0/P1/P2。 |
 | Agent App 不应每个 App 自己实现 AI 同事 | 第 1、7 节明确 Host Run UI 是 current，App 内 fallback 是 compat | done | 后续用守卫/测试封住 App 私有运行 UI 回流。 |
-| 需要复用 Lime / Claw 已有 UI 封装 | 第 6.1 节确认 Claw 已有 AgentUI projection adapter/store/Team view model；新增 `agentUiProjectionBridge.ts` 复用同一 `AgentUiProjectionEvent` 类型；新增 `agentUiProjectionViewModel.ts` 生成 Host Run ordered parts；新增 `AgentRunProjectionPanel.tsx` 独立渲染 projection view；新增 `agentRunProjectionState.ts` 适配现有 Host Run state | partial | 现有 `AgentRunHostDrawer.tsx` 还没接入 projection panel。 |
+| 需要复用 Lime / Claw 已有 UI 封装 | 第 6.1 节确认 Claw 已有 AgentUI projection adapter/store/Subagents view model；新增 `agentUiProjectionBridge.ts` 复用同一 `AgentUiProjectionEvent` 类型；新增 `agentUiProjectionViewModel.ts` 生成 Host Run ordered parts；新增 `AgentRunProjectionPanel.tsx` 独立渲染 projection view；新增 `agentRunProjectionState.ts` 适配现有 Host Run state | partial | 现有 `AgentRunHostDrawer.tsx` 还没接入 projection panel。 |
 | 内容工厂需要真实 AI Agent 能力，不是直调 API | 现有 roadmap / completion audit 记录 required Skills、model、usage、cost、artifact、evidence gates；本轮未重跑全流程 | partial | 继续由 runtime/GUI 持有写集进程跑 completion E2E。 |
 | 运行过程要有思考、执行、工具、Skill、流式输出且不消失 | Host first-cut 已有 `ThinkingBlock`、`InlineToolProcessStep`、Markdown renderer；`agentRunProjectionState.ts -> agentUiProjectionBridge.ts -> agentUiProjectionViewModel.ts -> AgentRunProjectionPanel.tsx` 已形成独立 projection renderer 链路；projection view model 已保证 running tool/process 默认展开、终态工具/status 折叠、最终成稿保持展开；projection panel 已把 Artifact / Evidence refs 渲染为独立卡片 | partial | 让现有 Host drawer 使用 projection panel，并补 Claw renderer 深复用。 |
 | 模型、Token、费用等要支持 | `runtimeProcess.model / usage / cost` 和 Host metric cards 已有；Agent App projection bridge 已支持 `metric.changed` diagnostics，view model / panel 可把模型、Token、费用指标渲染为 diagnostics 卡片 | done/first-cut | Host Drawer 接入后继续补 cost/limit diagnostics 视觉验收。 |
@@ -277,7 +277,7 @@ P0: Agent App Host -> existing AgentUI projection bridge
 
 AgentUI 中 **核心 runtime projection、message parts、Tool UI、HITL、Artifact、Evidence、Task Capsule、Runtime Profile tests** 都适合进入 Agent App；但进入方式必须是 Lime Host 统一封装，而不是每个 App 直接引入一套 AgentUI 实现。
 
-Lime 现在已经具备 `solo_run + required Skills + Host Run UI first-cut` 的基础，足够支撑内容工厂继续验证真实业务流程；但还不能宣称完整支持 AgentUI v0.6.1，因为 ordered parts、HITL 控件、Artifact Workspace、Evidence Review/Replay、Session Hydration、Team Workbench 仍未完整落地。
+Lime 现在已经具备 `solo_run + required Skills + Host Run UI first-cut` 的基础，足够支撑内容工厂继续验证真实业务流程；但还不能宣称完整支持 AgentUI v0.6.1，因为 ordered parts、HITL 控件、Artifact Workspace、Evidence Review/Replay、Session Hydration、Subagents 仍未完整落地。
 
 最终产品边界保持不变：
 

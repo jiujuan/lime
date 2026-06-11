@@ -62,14 +62,12 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
     inputbarScene: {
       inputbarNode: null,
       generalWorkbenchDialog: undefined,
-      teamWorkbenchSurfaceProps: {},
       runtimeToolAvailability: null,
     },
     canvasScene: {
       hasLiveCanvasPreviewContent: false,
       liveCanvasPreview: null,
       shouldShowCanvasLoadingState: false,
-      teamWorkbenchView: null,
       canvasWorkbenchDefaultPreview: null,
       handleOpenCanvasWorkbenchPath: noop,
       handleRevealCanvasWorkbenchPath: noop,
@@ -113,8 +111,6 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
     },
     setChatToolPreferences: noop,
     selectedTeam: null,
-    handleSelectTeam: noop,
-    handleEnableSuggestedTeam: noop,
     creationMode: "guided",
     setCreationMode: noop,
     activeTheme: "general",
@@ -192,9 +188,7 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
     shouldCollapseCodeBlocks: false,
     shouldCollapseCodeBlockInChat: noop,
     handleCodeBlockClick: noop,
-    teamWorkspaceEnabled: false,
     layoutMode: "chat-canvas",
-    handleActivateTeamWorkbench: noop,
     isThemeWorkbench: false,
     settledWorkbenchArtifacts: [],
     taskFiles: [],
@@ -377,33 +371,6 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     const sceneProps = getRenderedSceneProps(params);
     expect(sceneProps.serviceSkills).toBe(serviceSkills);
     expect(sceneProps.onSelectServiceSkill).toBe(onSelectServiceSkill);
-  });
-
-  it("聊天区不应再透传当前进展 Dock 入口", () => {
-    const params = createBaseParams({
-      teamWorkspaceEnabled: true,
-      layoutMode: "chat",
-      inputbarScene: {
-        ...createBaseParams().inputbarScene,
-        teamWorkbenchSurfaceProps: {
-          shellVisible: true,
-          childSubagentSessions: [
-            {
-              id: "child-1",
-              name: "执行",
-              created_at: 1,
-              updated_at: 2,
-              session_type: "sub_agent",
-              runtime_status: "running",
-            },
-          ],
-        },
-      },
-    });
-
-    const sceneProps = getRenderedSceneProps(params);
-
-    expect(sceneProps.teamWorkspaceDockProps).toBeNull();
   });
 
   it("需要用户关注时才向画布壳透传会话进展面板", () => {

@@ -43,6 +43,7 @@ pub const METHOD_SESSION_FILE_DELETE: &str = "sessionFile/delete";
 pub const METHOD_SESSION_FILE_LIST: &str = "sessionFile/list";
 pub const METHOD_WORKSPACE_LIST: &str = "workspace/list";
 pub const METHOD_WORKSPACE_READ: &str = "workspace/read";
+pub const METHOD_WORKSPACE_ENSURE: &str = "workspace/ensure";
 pub const METHOD_WORKSPACE_BY_PATH_READ: &str = "workspace/byPath/read";
 pub const METHOD_WORKSPACE_DEFAULT_READ: &str = "workspace/default/read";
 pub const METHOD_WORKSPACE_DEFAULT_ENSURE: &str = "workspace/default/ensure";

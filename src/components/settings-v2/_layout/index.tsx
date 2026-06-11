@@ -25,7 +25,6 @@ import { shouldReserveMacWindowControls } from "@/lib/windowControls";
 import { SettingsHomePage } from "../home";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import { Home } from "lucide-react";
-import { useCompanionEntryEnabled } from "@/hooks/useCompanionEntryEnabled";
 
 const SETTINGS_SIDEBAR_WIDTH_PX = 240;
 
@@ -37,6 +36,11 @@ const AppearanceSettings = lazy(() =>
 const MemorySettings = lazy(() =>
   import("../general/memory").then((module) => ({
     default: module.MemorySettings,
+  })),
+);
+const ArchivedConversationsSettings = lazy(() =>
+  import("../general/archived-conversations").then((module) => ({
+    default: module.ArchivedConversationsSettings,
   })),
 );
 const AutomationSettings = lazy(() =>
@@ -315,6 +319,7 @@ const ACTIVE_SETTINGS_TABS = new Set<SettingsTabs>([
   SettingsTabs.Appearance,
   SettingsTabs.Hotkeys,
   SettingsTabs.Memory,
+  SettingsTabs.ArchivedConversations,
   SettingsTabs.Providers,
   SettingsTabs.MediaServices,
   SettingsTabs.McpServer,
@@ -353,6 +358,8 @@ function preloadSettingsTab(tab: SettingsTabs): Promise<unknown> | null {
       return import("../general/hotkeys");
     case SettingsTabs.Memory:
       return import("../general/memory");
+    case SettingsTabs.ArchivedConversations:
+      return import("../general/archived-conversations");
     case SettingsTabs.Providers:
       return import("../agent/providers");
     case SettingsTabs.MediaServices:
@@ -392,7 +399,6 @@ function renderSettingsContent(
   onTabPrefetch?: (tab: SettingsTabs) => void,
   onNavigate?: (page: Page, params?: PageParams) => void,
   initialProviderView?: SettingsProviderView,
-  onOpenCompanion?: () => void,
   activeDeveloperLabTab: "developer" | "experimental" = "developer",
 ): ReactNode {
   const hasManagedAccountProfile = Boolean(resolveOemCloudRuntimeContext());
@@ -403,7 +409,6 @@ function renderSettingsContent(
         <SettingsHomePage
           onTabChange={onTabChange}
           onTabPrefetch={onTabPrefetch}
-          onOpenCompanion={onOpenCompanion}
           onNavigate={onNavigate}
         />
       );
@@ -441,6 +446,12 @@ function renderSettingsContent(
       return withSettingsContentFallback(
         <MemorySettings />,
         t("settings.layout.loading.memory"),
+      );
+
+    case SettingsTabs.ArchivedConversations:
+      return withSettingsContentFallback(
+        <ArchivedConversationsSettings />,
+        t("settings.layout.loading.archivedConversations"),
       );
 
     // 智能体组
@@ -535,7 +546,6 @@ export function SettingsLayoutV2({
   initialProviderView,
 }: SettingsLayoutV2Props) {
   const { t } = useTranslation("settings");
-  const companionEntryEnabled = useCompanionEntryEnabled();
   const [activeTab, setActiveTab] = useState<SettingsTabs>(
     resolveActiveSettingsTab(initialTab),
   );
@@ -557,11 +567,6 @@ export function SettingsLayoutV2({
     if (nextTab !== SettingsTabs.Providers) {
       setActiveProviderView(undefined);
     }
-  }, []);
-
-  const handleOpenCompanion = useCallback(() => {
-    setActiveTab(SettingsTabs.Providers);
-    setActiveProviderView("companion");
   }, []);
 
   const handleTabPrefetch = useCallback((tab: SettingsTabs) => {
@@ -641,7 +646,6 @@ export function SettingsLayoutV2({
               handleTabPrefetch,
               onNavigate,
               activeProviderView,
-              companionEntryEnabled ? handleOpenCompanion : undefined,
               activeDeveloperLabTab,
             )}
           </ContentWrapper>

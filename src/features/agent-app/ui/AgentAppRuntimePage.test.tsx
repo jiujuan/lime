@@ -7,6 +7,7 @@ import {
 } from "../runtime/hostBridge";
 import type { AppManifest } from "../types";
 import {
+  appServerClientMocks,
   apiMocks,
   buildReadyState,
   contentFactoryManifest,
@@ -391,8 +392,8 @@ describe("AgentAppRuntimePage", () => {
         payload: expect.objectContaining({
           ok: true,
           result: expect.objectContaining({
-            taskId: "agent-app-task-1",
-            traceId: "agent-app-trace-1",
+            taskId: expect.stringMatching(/^agent-app-task-/),
+            traceId: expect.stringMatching(/^agent-app-trace-/),
             status: "running",
             taskKind: "content.scenario_planning",
             humanReview: true,
@@ -401,19 +402,41 @@ describe("AgentAppRuntimePage", () => {
       }),
       "http://127.0.0.1:4199",
     );
-    expect(runtimeApiMocks.startAgentAppRuntimeTask).toHaveBeenCalledWith(
+    expect(appServerClientMocks.startSession).toHaveBeenCalledWith(
       expect.objectContaining({
         appId: "content-factory-app",
-        entryKey: "dashboard",
         workspaceId: "workspace-1",
-        taskKind: "content.scenario_planning",
-        title: "生成内容场景",
-        prompt: "基于项目知识生成内容场景",
-        input: { projectId: "project-1" },
-        expectedOutput: { artifactKind: "content_table" },
-        humanReview: true,
+        businessObjectRef: expect.objectContaining({
+          kind: "agent_app.task",
+          title: "生成内容场景",
+          metadata: expect.objectContaining({
+            source: "agent_app_runtime_page",
+            appId: "content-factory-app",
+            entryKey: "dashboard",
+            taskKind: "content.scenario_planning",
+            prompt: "基于项目知识生成内容场景",
+          }),
+        }),
       }),
     );
+    expect(appServerClientMocks.startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "agent-app-session-1",
+        input: expect.objectContaining({
+          text: expect.stringContaining("基于项目知识生成内容场景"),
+        }),
+        runtimeOptions: expect.objectContaining({
+          stream: true,
+          eventName: expect.stringMatching(
+            /^agent_app_runtime:content-factory-app:agent-app-task-/,
+          ),
+          queuedTurnId: expect.stringMatching(
+            /^agent-app-queued-agent-app-task-/,
+          ),
+        }),
+      }),
+    );
+    expect(runtimeApiMocks.startAgentAppRuntimeTask).not.toHaveBeenCalled();
     expect(postMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: "host:error",

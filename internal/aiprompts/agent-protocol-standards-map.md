@@ -65,6 +65,8 @@
 | Persistence Map | `persistence-map.md` | FileArtifact、sidecar、version、checkpoint、snapshot refs | Artifact 标准全文 |
 | Quality Workflow | `quality-workflow.md` | 本地校验、GUI smoke、contracts、风险分类 | 产品标准定义 |
 
+当前 Agent UI / Runtime 的宿主复用验收链路固定为 `AgentRuntimeClient -> projectAgentUiState -> AgentUiProjectionView`；公共标准只定义可移植语义，Lime 实现必须在 `agent-ui-runtime-standard.md` 中继续收敛到这条链路。
+
 ## 未来可拆标准候选
 
 这些方向已经在 Lime 中出现稳定压力，但是否独立成公共标准，取决于是否能脱离 Lime 私有实现并服务其他 Agent 产品。

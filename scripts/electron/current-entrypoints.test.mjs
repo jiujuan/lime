@@ -271,7 +271,7 @@ describe("Electron current package entrypoints", () => {
     expect(rendererBuildEnv).toContain("still running after");
     expect(viteConfig).toContain("base:");
     expect(viteConfig).toContain('isElectronRenderer ? "./" : undefined');
-    expect(viteConfig).toContain('find: "app-server-client"');
+    expect(viteConfig).toContain('find: "@limecloud/app-server-client"');
     expect(viteConfig).toContain("./packages/app-server-client/src/index.ts");
   });
 

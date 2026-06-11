@@ -10,14 +10,14 @@ const {
   mockCloudProviderSettings,
   mockSettingsHomePage,
   mockDeveloperLabSettings,
-  mockUseCompanionEntryEnabled,
+  mockArchivedConversationsSettings,
 } = vi.hoisted(() => ({
   mockSettingsSidebar: vi.fn(),
   mockPreloadDeveloperDefaultSections: vi.fn(),
   mockCloudProviderSettings: vi.fn(),
   mockSettingsHomePage: vi.fn(),
   mockDeveloperLabSettings: vi.fn(),
-  mockUseCompanionEntryEnabled: vi.fn(),
+  mockArchivedConversationsSettings: vi.fn(),
 }));
 
 const { mockResolveOemCloudRuntimeContext } = vi.hoisted(() => ({
@@ -40,6 +40,12 @@ vi.mock("../general/appearance", () => ({
 }));
 vi.mock("../general/memory", () => ({
   MemorySettings: () => <div>memory</div>,
+}));
+vi.mock("../general/archived-conversations", () => ({
+  ArchivedConversationsSettings: () => {
+    mockArchivedConversationsSettings();
+    return <div>archived-conversations</div>;
+  },
 }));
 vi.mock("../system/automation", () => ({
   AutomationSettings: () => <div>automation</div>,
@@ -101,10 +107,6 @@ vi.mock("../home", () => ({
 vi.mock("@/lib/api/oemCloudRuntime", () => ({
   resolveOemCloudRuntimeContext: () => mockResolveOemCloudRuntimeContext(),
 }));
-vi.mock("@/hooks/useCompanionEntryEnabled", () => ({
-  useCompanionEntryEnabled: () => mockUseCompanionEntryEnabled(),
-}));
-
 import { SettingsLayoutV2 } from ".";
 
 interface Mounted {
@@ -117,7 +119,7 @@ const mounted: Mounted[] = [];
 function renderComponent(
   initialTab: SettingsTabs,
   onNavigate?: (page: string) => void,
-  initialProviderView?: "settings" | "cloud" | "companion",
+  initialProviderView?: "settings" | "cloud",
 ) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -153,7 +155,6 @@ beforeEach(async () => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   await changeLimeLocale("en-US");
-  mockUseCompanionEntryEnabled.mockReturnValue(false);
   mockResolveOemCloudRuntimeContext.mockReturnValue({
     baseUrl: "https://user.example.com",
   });
@@ -167,7 +168,7 @@ afterEach(async () => {
   mockCloudProviderSettings.mockReset();
   mockSettingsHomePage.mockReset();
   mockDeveloperLabSettings.mockReset();
-  mockUseCompanionEntryEnabled.mockReset();
+  mockArchivedConversationsSettings.mockReset();
 
   while (mounted.length > 0) {
     const current = mounted.pop();
@@ -321,35 +322,30 @@ describe("SettingsLayoutV2 Developer Tab", () => {
     expect(mockPreloadDeveloperDefaultSections).toHaveBeenCalledTimes(1);
   });
 
-  it("桌宠入口默认关闭时，设置首页不应收到打开桌宠的快捷入口", async () => {
+  it("设置首页不应收到打开桌宠的快捷入口", async () => {
     renderComponent(SettingsTabs.Home);
     await flushEffects();
 
-    expect(mockSettingsHomePage.mock.calls.at(-1)?.[0]).toMatchObject({
-      onOpenCompanion: undefined,
-    });
+    expect(mockSettingsHomePage.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+      "onOpenCompanion",
+    );
   });
 
-  it("桌宠入口显式开启时，设置首页应收到打开桌宠的快捷入口", async () => {
-    mockUseCompanionEntryEnabled.mockReturnValue(true);
-
-    renderComponent(SettingsTabs.Home);
+  it("直达已归档对话页时应渲染设置内归档入口", async () => {
+    const container = renderComponent(SettingsTabs.ArchivedConversations);
     await flushEffects();
 
-    const homeProps = mockSettingsHomePage.mock.calls.at(-1)?.[0] as
-      | { onOpenCompanion?: () => void }
-      | undefined;
-
-    expect(homeProps?.onOpenCompanion).toBeTypeOf("function");
+    expect(container.textContent ?? "").toContain("archived-conversations");
+    expect(mockArchivedConversationsSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("直达服务商页的桌宠子视图时，应把初始视图透传给服务商设置页", async () => {
-    renderComponent(SettingsTabs.Providers, undefined, "companion");
+  it("直达服务商页时应只透传 current Provider 子视图", async () => {
+    renderComponent(SettingsTabs.Providers, undefined, "settings");
     await flushEffects();
 
     expect(mockCloudProviderSettings).toHaveBeenCalled();
     expect(mockCloudProviderSettings.mock.calls.at(-1)?.[0]).toMatchObject({
-      initialView: "companion",
+      initialView: "settings",
     });
   });
 });

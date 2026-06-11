@@ -1,17 +1,9 @@
-import {
-  cancelAgentAppRuntimeTask,
-  getAgentAppRuntimeTask,
-  startAgentAppRuntimeTask,
-  submitAgentAppRuntimeHostResponse,
-  type AgentAppRuntimeCancelTaskRequest,
-  type AgentAppRuntimeCancelTaskResult,
-  type AgentAppRuntimeGetTaskRequest,
-  type AgentAppRuntimeStartTaskRequest,
-  type AgentAppRuntimeStartTaskResult,
-  type AgentAppRuntimeSubmitHostResponseRequest,
-  type AgentAppRuntimeSubmitHostResponseResult,
-  type AgentAppRuntimeTaskEvent,
-  type AgentAppRuntimeTaskSnapshot,
+import type { AgentRuntimeClient } from "@limecloud/agent-runtime-client";
+
+import type {
+  AgentAppRuntimeStartTaskRequest,
+  AgentAppRuntimeTaskEvent,
+  AgentAppRuntimeTaskSnapshot,
 } from "@/lib/api/agentAppRuntime";
 import type { AgentRuntimeRespondActionRequest } from "@/lib/api/agentRuntime/types";
 import { getOrCreateDefaultProject } from "@/lib/api/project";
@@ -37,22 +29,16 @@ import type {
   AgentAppUninstallResult,
   AppCleanupPlan,
 } from "../types";
+import {
+  createAgentAppRuntimeCapabilityApiFromClient,
+} from "./agentRuntimeClientApi";
+import {
+  createFailClosedAgentAppRuntimeCapabilityApi,
+  type AgentAppRuntimeCapabilityApi,
+} from "./agentRuntimeCapabilityApi";
 import { buildAgentRuntimeProcessView } from "./agentRuntimeProcess";
 
-export interface AgentAppRuntimeCapabilityApi {
-  startTask(
-    request: AgentAppRuntimeStartTaskRequest,
-  ): Promise<AgentAppRuntimeStartTaskResult>;
-  getTask(
-    request: AgentAppRuntimeGetTaskRequest,
-  ): Promise<AgentAppRuntimeTaskSnapshot>;
-  cancelTask(
-    request: AgentAppRuntimeCancelTaskRequest,
-  ): Promise<AgentAppRuntimeCancelTaskResult>;
-  submitHostResponse(
-    request: AgentAppRuntimeSubmitHostResponseRequest,
-  ): Promise<AgentAppRuntimeSubmitHostResponseResult>;
-}
+export type { AgentAppRuntimeCapabilityApi } from "./agentRuntimeCapabilityApi";
 
 export interface AgentRuntimeCapabilityHostOptions {
   delegate: CapabilityHost;
@@ -63,6 +49,11 @@ export interface AgentRuntimeCapabilityHostOptions {
   workspaceId?: string;
   workspaceIdResolver?: () => Promise<string>;
   api?: AgentAppRuntimeCapabilityApi;
+  runtimeClient?: Pick<
+    AgentRuntimeClient,
+    "startTurn" | "readThread" | "cancelTurn" | "respondAction"
+  >;
+  ensureSession?: AgentRuntimeSessionResolver;
   now?: () => string;
 }
 
@@ -104,12 +95,22 @@ type RuntimeAgentTaskRequest = AgentAppTaskRequest & {
   runStartHooks?: boolean;
 };
 
-const defaultRuntimeApi: AgentAppRuntimeCapabilityApi = {
-  startTask: startAgentAppRuntimeTask,
-  getTask: getAgentAppRuntimeTask,
-  cancelTask: cancelAgentAppRuntimeTask,
-  submitHostResponse: submitAgentAppRuntimeHostResponse,
-};
+export interface AgentRuntimeSessionRequest {
+  appId: string;
+  entryKey?: string;
+  workspaceId: string;
+  taskId?: string;
+  taskKind: string;
+  title?: string;
+  prompt?: string;
+  input?: unknown;
+  expectedOutput?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export type AgentRuntimeSessionResolver = (
+  request: AgentRuntimeSessionRequest,
+) => Promise<string>;
 
 function normalizeString(value: string | undefined): string | undefined {
   const normalized = value?.trim();
@@ -122,6 +123,10 @@ function normalizeList(values: string[] | undefined): string[] {
 
 function runtimeTaskStorageKey(taskId: string): string {
   return `${RUNTIME_TASK_STORAGE_PREFIX}${taskId}`;
+}
+
+function createRuntimeTaskId(): string {
+  return `agent-app-task-${Date.now()}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -825,6 +830,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   private readonly workspaceId?: string;
   private readonly workspaceIdResolver: () => Promise<string>;
   private readonly api: AgentAppRuntimeCapabilityApi;
+  private readonly ensureSession?: AgentRuntimeSessionResolver;
   private readonly now: () => string;
   private readonly tasks = new Map<string, RuntimeTaskState>();
 
@@ -838,8 +844,15 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     this.workspaceIdResolver =
       options.workspaceIdResolver ??
       (async () => (await getOrCreateDefaultProject()).id);
-    this.api = options.api ?? defaultRuntimeApi;
     this.now = options.now ?? (() => new Date().toISOString());
+    this.ensureSession = options.ensureSession;
+    this.api =
+      options.api ??
+      (options.runtimeClient
+        ? createAgentAppRuntimeCapabilityApiFromClient(options.runtimeClient, {
+            now: this.now,
+          })
+        : createFailClosedAgentAppRuntimeCapabilityApi());
   }
 
   createSdkContext(entryKey: string, runId?: string): LimeAppSdk {
@@ -928,12 +941,41 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       ...(runtimeRequest.capabilityHints ?? []),
       ...(runtimeRequest.tools ?? []),
     ]);
+    const requestedSessionId =
+      normalizeString(runtimeRequest.sessionId) ?? retry?.sessionId;
+    const metadata = {
+      ...(runtimeRequest.metadata ?? {}),
+      agent_app_host_bridge: {
+        source: "agent_app_runtime_page",
+        retryOfTaskId: retry?.retryOfTaskId,
+        retryAttempt: retry?.retryAttempt,
+      },
+    };
+    const taskId =
+      normalizeString(runtimeRequest.taskId) ??
+      (this.ensureSession ? createRuntimeTaskId() : undefined);
+    const sessionId =
+      requestedSessionId ??
+      (this.ensureSession
+        ? await this.ensureSession({
+            appId: this.appId,
+            entryKey,
+            workspaceId,
+            taskId,
+            taskKind,
+            title: runtimeRequest.title,
+            prompt: runtimeRequest.prompt,
+            input: runtimeRequest.input,
+            expectedOutput: runtimeRequest.expectedOutput,
+            metadata,
+          })
+        : undefined);
     const result = await this.api.startTask({
       appId: this.appId,
       entryKey,
       workspaceId,
-      sessionId: normalizeString(runtimeRequest.sessionId) ?? retry?.sessionId,
-      taskId: normalizeString(runtimeRequest.taskId),
+      sessionId,
+      taskId,
       taskKind,
       idempotencyKey: runtimeRequest.idempotencyKey,
       title: runtimeRequest.title,
@@ -952,14 +994,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       queueIfBusy: runtimeRequest.queueIfBusy,
       skipPreSubmitResume: runtimeRequest.skipPreSubmitResume,
       runStartHooks: runtimeRequest.runStartHooks,
-      metadata: {
-        ...(runtimeRequest.metadata ?? {}),
-        agent_app_host_bridge: {
-          source: "agent_app_runtime_page",
-          retryOfTaskId: retry?.retryOfTaskId,
-          retryAttempt: retry?.retryAttempt,
-        },
-      },
+      metadata,
     });
     const state: RuntimeTaskState = {
       appId: result.appId,

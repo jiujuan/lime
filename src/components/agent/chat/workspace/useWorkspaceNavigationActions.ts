@@ -8,7 +8,7 @@ import { SettingsTabs } from "@/types/settings";
 import type { WorkspacePathMissingState } from "../hooks/agentChatShared";
 
 interface UseWorkspaceNavigationActionsParams {
-  applyProjectSelection: (projectId: string) => void;
+  applyProjectSelection: (projectId: string | null) => void;
   compactSession: () => Promise<void>;
   dismissWorkspacePathError: () => void;
   fixWorkspacePathAndRetry: (newPath: string) => Promise<void>;
@@ -47,7 +47,7 @@ export function useWorkspaceNavigationActions({
   }, [onNavigate]);
 
   const handleProjectChange = useCallback(
-    (newProjectId: string) => {
+    (newProjectId: string | null) => {
       applyProjectSelection(newProjectId);
     },
     [applyProjectSelection],

@@ -262,7 +262,7 @@ describe("sessionExecutionRuntime", () => {
       preferredTeamPresetId: "code-triage-team",
       selectedTeamId: "code-triage-team",
       selectedTeamSource: "builtin",
-      selectedTeamLabel: "代码排障团队",
+      selectedTeamLabel: "代码排障 profile",
       selectedTeamDescription: builtinTeam?.description,
       selectedTeamSummary: expect.any(String),
       selectedTeamRoles: expect.arrayContaining([

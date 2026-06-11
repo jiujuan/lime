@@ -1,42 +1,44 @@
-## Lime v1.65.0
+## Lime v1.66.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- `lime media video generate` now uses the current media runtime to create and execute video-generation tasks, resolve service endpoint/API key from local config or environment variables, and persist progress, error, and artifact state.
-- `@limecloud/agent-runtime-projection` now exposes dedicated builders for artifact, context, conversation, diagnostic, hydration, lifecycle, permission, plan approval, queue, thread item, and tool events.
-- Agent Chat projections continue to consume the shared projection package for runtime state, queue, permissions, history hydration, tool timeline, thread items, and context-event read model semantics.
+- Agent App runtime now connects to the current App Server client and capability APIs, allowing standalone Agent Apps to reuse the JSON-RPC client, capability host, and runtime projection path.
+- Agent Runtime standard packages now include App Server facts, fixture replay, subagents, refs, and validation support for shared runtime, projection, and UI consumption.
+- App Server workspace protocol now exposes project-summary reads, with matching Rust client, npm `app-server-client`, and frontend project API updates.
+- The Agent input bar can read and surface project context so workspace project summaries can participate in the main chat orchestration path.
 
 ### Fixes
 
-- Fixed the video-generation skill recommendation so it points at the current `lime media video generate --prompt "..." --aspect-ratio 9:16` entrypoint.
-- Fixed governance wording that could still treat old `lime-rs/src/**` files as current Rust owners; restoring old Tauri wrappers, stubs, or legacy facades is now explicitly guarded as backflow.
-- Removed duplicate voice settings dependencies on ASR credentials and shortcut runtime state, reducing old command-surface coupling and making the current voice model install state the default source for model status.
+- Fixed Agent UI projection summary and subagents read-model naming so old Team Workbench terminology no longer leaks into the current model.
+- Fixed Agent App runtime page and projection bridge wiring for the current capability host / client APIs, reducing drift between standalone apps and the desktop host.
+- Fixed several state-sync issues around the input bar, tool display, workspace send runtime, and thread grouping.
+- Fixed DevBridge command policy and legacy surface catalog classification for retired command surfaces.
 
 ### Improvements And Refactors
 
-- Physically removed the old orphaned `lime-rs/src/**` directory, including old Tauri command, service, dev_bridge, and runner implementations; Rust backend ownership is now centered on `lime-rs/crates/**`.
-- Moved agent tools catalog, execution, and inventory into `lime-rs/crates/agent`; the old path now exists only as deletion history, not as a runtime owner.
-- Split video-generation CLI logic into `lime-rs/crates/lime-cli/src/video.rs` and moved video task execution into `lime-rs/crates/media-runtime/src/video_worker.rs`.
-- Reduced duplicated Agent Chat frontend projection state machines by moving reusable event semantics into the npm projection package.
-- Simplified the voice and hotkey settings boundary: the voice page focuses on models, instructions, and preferences, while the hotkey page owns global shortcut configuration and validation.
+- Converged the Agent Chat workbench path from old Team Workspace components, selectors, canvas runtime, and suggestion helpers onto the current subagents / workbench presentation, deleting a large amount of retired team-workspace UI surface.
+- Split `AppSidebar` into account, appearance, invite, search, session, navigation-target, and style modules, reducing single-file complexity.
+- Removed Companion API, settings card, provider overview, desktop mock, and sidebar-entry remnants from the current settings and provider surfaces.
+- Continued moving input-bar project context, team preference, project storage, and workspace selection logic into hooks and focused helpers.
+- Expanded the Agent Runtime / Agent UI npm packages with standard contracts, fixtures, projection helpers, runtime facts, and UI exports to reduce duplicated GUI and SDK implementation.
 
 ### Tests And Quality
 
-- Added Agent Runtime projection unit coverage for artifact, context, diagnostic, hydration, lifecycle, permission, routing, and turn context events, and expanded the main projection regression suite.
-- Updated App Server client contracts, Harness contracts, Rust current-boundary guards, legacy tool permission guards, and Electron current rules guards to prevent old paths from becoming fact sources again.
-- Expanded regressions for the input bar, Markdown rendering, Agent Chat home surface, voice settings, hotkey settings, media tasks, gallery materials, session images, and video diagnostics.
-- Updated the root app, Rust workspace, CLI npm package, Agent App runtime package, App Server client package, Agent Runtime client dependency, and lockfiles to `1.65.0`.
+- Expanded App Server protocol catalog, workspace project API, npm `app-server-client`, Agent Runtime client, projection, UI contracts, and fixture replay regressions.
+- Updated AppSidebar, Agent Chat input bar, workspace scene, workspace send, settings v2, Agent App runtime page, and i18n resource tests.
+- Updated Electron SDK fixture smoke, tool-surface smoke, command-contract checks, quality-task planning, and i18n readiness reporting.
+- Updated the root app, Rust workspace, CLI npm package, Agent App runtime package, App Server client package, Agent Runtime client dependency, and lockfiles to `1.66.0`.
 
 ### Documentation
 
-- Updated AGENTS, quality workflow, governance, command-boundary, and parallel-collaboration docs to record the June 10, 2026 `lime-rs/src/**` deletion and the directory-level dead-surface decision rule.
-- Updated production command current migration, Tauri wrapper inventory / cleanup queue, tech-debt tracking, and the App Server frontend integration matrix.
-- Updated Agent Runtime projection and Lime CLI npm package documentation with the current projection modules and video-generation entrypoint.
+- Added Agent Workbench and Subagents roadmap entries, including acceptance, iteration plan, parallel workstreams, and task board artifacts.
+- Updated Agent Runtime, Agent UI standard gap, completion audit, implementation plan, test cases, and adjacent protocol documentation.
+- Updated quality workflow, command-boundary, Playwright E2E, protocol standards map, and tech-debt tracking docs for the current workbench / subagents / App Server boundaries.
 
 ### Other
 
-- This release continues to center release facts on App Server JSON-RPC, Electron Desktop Host, current clients, `lime-rs/crates/**`, and machine-readable guards while blocking old Tauri wrappers and renderer mocks from returning to GUI production paths.
+- This release keeps release facts centered on App Server JSON-RPC, Electron Desktop Host, current npm clients, `lime-rs/crates/**`, and machine-readable guards while preventing old Team Workspace, Companion, and legacy command surfaces from flowing back into the product path.
 
-**Full changes**: `v1.64.0` -> `v1.65.0`
+**Full changes**: `v1.65.0` -> `v1.66.0`

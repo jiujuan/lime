@@ -116,19 +116,8 @@ const LeadBlock = styled.div`
 const LeadTopRow = styled.div`
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-`;
-
-const EyebrowText = styled.div`
-  display: inline-flex;
-  align-items: center;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  color: rgb(47 111 70 / 0.86);
+  justify-content: flex-end;
+  min-height: 0;
 `;
 
 const LeadBody = styled.div`
@@ -153,14 +142,27 @@ const SloganWrap = styled.div`
   overflow: visible;
 `;
 
-const SloganLine = styled.p`
+const SloganLine = styled.div`
   position: relative;
   margin: 0;
   display: inline-flex;
   width: fit-content;
   align-items: center;
   gap: 0.8rem;
+  flex-wrap: wrap;
+`;
 
+const SloganPulseDot = styled.span`
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--lime-home-dot-gradient);
+  box-shadow: var(--lime-home-dot-shadow);
+  animation: ${dotPulse} 4s ease-in-out infinite;
+`;
+
+const SloganText = styled.span`
   background: 
     /* Layer 1: Prismatic Holographic Sweep */
     linear-gradient(
@@ -203,16 +205,36 @@ const SloganLine = styled.p`
 
   text-shadow: var(--lime-home-title-shadow);
   animation: ${sloganShine} 10s ease-in-out infinite;
+`;
 
-  &::before {
-    content: "";
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
-    border-radius: 9999px;
-    background: var(--lime-home-dot-gradient);
-    box-shadow: var(--lime-home-dot-shadow);
-    animation: ${dotPulse} 4s ease-in-out infinite;
+const SloganBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 9999px;
+  border: 1px solid rgb(134 239 172 / 0.46);
+  background:
+    radial-gradient(
+      circle at 32% 24%,
+      rgb(255 255 255 / 0.94),
+      transparent 45%
+    ),
+    linear-gradient(145deg, rgb(232 250 233 / 0.94), rgb(182 231 196 / 0.68));
+  color: rgb(39 104 65 / 0.95);
+  box-shadow:
+    0 13px 30px -23px rgb(21 128 61 / 0.86),
+    inset 0 1px 0 rgb(255 255 255 / 0.82);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+
+  @media (min-width: 768px) {
+    min-width: 2.35rem;
+    height: 2.35rem;
+    font-size: 0.78rem;
   }
 `;
 
@@ -227,14 +249,6 @@ const LeadDescriptionText = styled.p`
   @media (min-width: 768px) {
     font-size: 17px;
   }
-`;
-
-const LeadSupportingText = styled.p`
-  margin: 0;
-  max-width: 48rem;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--lime-text-muted, #6b826b);
 `;
 
 const PriorityShell = styled.div<{ $delay: number }>`
@@ -377,7 +391,6 @@ interface EmptyStateHeroProps {
   title: string;
   slogan?: string;
   description: string;
-  supportingDescription?: string;
   cards: EmptyStateHeroCard[];
   prioritySlot?: ReactNode;
   supportingSlot?: ReactNode;
@@ -389,7 +402,6 @@ export function EmptyStateHero({
   title,
   slogan,
   description,
-  supportingDescription,
   cards,
   prioritySlot,
   supportingSlot,
@@ -401,16 +413,21 @@ export function EmptyStateHero({
         <StageGrid>
           <LeadColumn>
             <LeadBlock className="flex w-full min-w-0 flex-col gap-2.5 px-2.5 py-2.5 text-left md:gap-3 md:px-4 md:py-3.5">
-              <LeadTopRow>
-                <EyebrowText>{eyebrow}</EyebrowText>
-                {headerControls}
-              </LeadTopRow>
+              {headerControls ? (
+                <LeadTopRow>{headerControls}</LeadTopRow>
+              ) : null}
 
               <LeadBody>
                 <LeadTextGroup>
                   {slogan ? (
                     <SloganWrap>
-                      <SloganLine>{slogan}</SloganLine>
+                      <SloganLine>
+                        <SloganPulseDot aria-hidden="true" />
+                        <SloganText>{slogan}</SloganText>
+                        <SloganBadge data-testid="empty-state-hero-eyebrow-badge">
+                          {eyebrow}
+                        </SloganBadge>
+                      </SloganLine>
                     </SloganWrap>
                   ) : null}
                   {title ? (
@@ -422,11 +439,6 @@ export function EmptyStateHero({
                     </h1>
                   ) : null}
                   <LeadDescriptionText>{description}</LeadDescriptionText>
-                  {supportingDescription ? (
-                    <LeadSupportingText>
-                      {supportingDescription}
-                    </LeadSupportingText>
-                  ) : null}
                 </LeadTextGroup>
               </LeadBody>
             </LeadBlock>

@@ -164,7 +164,7 @@ afterEach(() => {
 });
 
 describe("AppearanceSettings", () => {
-  it("应在同一页面中渲染基础外观、可选系统入口与推荐行为设置", async () => {
+  it("应在同一页面中渲染基础外观与推荐行为设置", async () => {
     const { container } = await renderPage();
     const text = container.textContent ?? "";
     const buttonTexts = Array.from(container.querySelectorAll("button")).map(
@@ -173,7 +173,7 @@ describe("AppearanceSettings", () => {
 
     expect(text).toContain("外观");
     expect(text).toContain(
-      "管理主题、界面语言、回复语言、提示音效、推荐行为和底部入口。",
+      "管理主题、界面语言、回复语言、提示音效和推荐行为。",
     );
     expect(text).toContain("主题：跟随系统");
     expect(text).toContain("配色：墨绿");
@@ -197,10 +197,9 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("奢华");
     expect(text).toContain("界面语言");
     expect(text).toContain("回复语言");
-    expect(text).toContain("可选系统入口");
     expect(text).not.toContain("持续流程");
     expect(text).not.toContain("消息渠道");
-    expect(text).toContain("桌宠");
+    expect(text).not.toContain("桌宠");
     expect(text).toContain("推荐行为");
     expect(text).toContain("推荐自动附带选中内容");
     expect(text).not.toContain("重新运行引导");
@@ -231,7 +230,7 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("Reply Language");
     expect(text).toContain("Random");
     expect(text).not.toContain("Setup & Recovery");
-    expect(text).toContain("Optional System Entries");
+    expect(text).not.toContain("Optional System Entries");
     expect(text).not.toContain("Plugin Center");
     expect(text).toContain("Recommendation Behavior");
     expect(text).not.toContain("管理主题、语言");
@@ -409,7 +408,7 @@ describe("AppearanceSettings", () => {
     await renderPage();
 
     expect(getBodyText()).not.toContain(
-      "管理主题、界面语言、回复语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。",
+      "管理主题、界面语言、回复语言、提示音效，以及推荐问题的上下文带入方式。",
     );
     expect(getBodyText()).not.toContain(
       "先确定全局主题、界面语言和声音反馈，再统一工作区里的视觉节奏。",
@@ -417,7 +416,7 @@ describe("AppearanceSettings", () => {
 
     const heroTip = await hoverTip("外观设置总览说明");
     expect(getBodyText()).toContain(
-      "管理主题、界面语言、回复语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。",
+      "管理主题、界面语言、回复语言、提示音效，以及推荐问题的上下文带入方式。",
     );
     await leaveTip(heroTip);
 
@@ -438,26 +437,5 @@ describe("AppearanceSettings", () => {
       "控制对话默认回复语言；不影响界面语言、浏览器站点语言或内容产物目标语言。",
     );
     await leaveTip(responseLanguageTip);
-  });
-
-  it("切换可选系统入口时应写回 navigation.enabled_items 并保留其他配置", async () => {
-    const { container } = await renderPage();
-    const switchButton = container.querySelector(
-      'button[aria-label="切换显示桌宠入口"]',
-    );
-
-    await act(async () => {
-      switchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    const savedConfig = mockSaveConfig.mock.calls.at(-1)?.[0] as any;
-
-    expect(savedConfig.navigation.enabled_items).toEqual(["companion"]);
-    expect(
-      savedConfig.workspace_preferences.media_defaults.voice
-        .preferredProviderId,
-    ).toBe("openai");
-    expect(savedConfig.chat_appearance.showAvatar).toBe(false);
   });
 });

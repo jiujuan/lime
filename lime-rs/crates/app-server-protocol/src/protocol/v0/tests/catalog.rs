@@ -47,6 +47,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_SESSION_FILE_LIST,
             METHOD_WORKSPACE_LIST,
             METHOD_WORKSPACE_READ,
+            METHOD_WORKSPACE_ENSURE,
             METHOD_WORKSPACE_BY_PATH_READ,
             METHOD_WORKSPACE_DEFAULT_READ,
             METHOD_WORKSPACE_DEFAULT_ENSURE,

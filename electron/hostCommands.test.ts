@@ -14,7 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AppServerRequestError } from "app-server-client";
+import { AppServerRequestError } from "@limecloud/app-server-client";
 import { ElectronHostCommands } from "./hostCommands";
 import type { ElectronAppServerHost } from "./appServerHost";
 

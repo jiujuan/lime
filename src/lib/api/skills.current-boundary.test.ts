@@ -77,6 +77,10 @@ function repoFileExists(path: string): boolean {
   return existsSync(resolve(cwd(), path));
 }
 
+function readOptionalRepoFile(path: string): string {
+  return repoFileExists(path) ? readRepoFile(path) : "";
+}
+
 function expectStringLiteralsAbsent(source: string, literals: string[]): void {
   for (const literal of literals) {
     expect(source).not.toContain(`"${literal}"`);
@@ -149,11 +153,15 @@ describe("skillsApi current App Server boundary", () => {
       readRepoFile("src/lib/dev-bridge/commandPolicy.ts"),
       readRepoFile("src/lib/dev-bridge/mockPriorityCommands.ts"),
       readRepoFile("src/lib/desktop-host/skillManagementMocks.ts"),
-      readRepoFile("lime-rs/src/dev_bridge/dispatcher/skills.rs"),
+      readOptionalRepoFile("lime-rs/src/dev_bridge/dispatcher/skills.rs"),
     ].join("\n");
-    const runnerSource = readRepoFile("lime-rs/src/app/runner.rs");
+    const runnerSource = readOptionalRepoFile("lime-rs/src/app/runner.rs");
 
     expect(repoFileExists("lime-rs/src/commands/skill_cmd.rs")).toBe(false);
+    expect(repoFileExists("lime-rs/src/app/runner.rs")).toBe(false);
+    expect(repoFileExists("lime-rs/src/dev_bridge/dispatcher/skills.rs")).toBe(
+      false,
+    );
     expectStringLiteralsAbsent(
       productionSources,
       LEGACY_SKILL_MANAGEMENT_FACADE_COMMANDS,

@@ -411,32 +411,6 @@ function assertI18nKeyTypes() {
     fileName: "cover.png",
   });
   i18n.t("agentChat.inputbar.imageAttachments.imagePasted", { ns: "agent" });
-  i18n.t("agentChat.inputbar.teamSelector.trigger.default", { ns: "agent" });
-  i18n.t("agentChat.inputbar.teamSelector.trigger.selected", {
-    ns: "agent",
-    label: "Code triage",
-  });
-  i18n.t("agentChat.inputbar.teamSelector.toast.saveProjectSuccess", {
-    ns: "agent",
-    label: "Code triage",
-  });
-  i18n.t("agentChat.inputbar.teamSelector.toast.saveFailed", {
-    ns: "agent",
-    error: "disk full",
-  });
-  i18n.t("agentChat.inputbar.teamSelector.editor.customCloneLabel", {
-    ns: "agent",
-    label: "Code triage",
-  });
-  i18n.t("agentChat.inputbar.teamSelector.editor.roleIndex", {
-    ns: "agent",
-    index: 1,
-  });
-  i18n.t("agentChat.inputbar.teamSelector.editor.recommendedSkills", {
-    ns: "agent",
-    skills: "source-grounding",
-  });
-  i18n.t("agentChat.inputbar.teamSelector.section.system", { ns: "agent" });
   i18n.t("agentChat.inputbar.knowledge.fallbackPackLabel", { ns: "agent" });
   i18n.t("agentChat.inputbar.knowledge.toggle.label.enabledWithCompanions", {
     ns: "agent",
@@ -801,62 +775,6 @@ function assertI18nKeyTypes() {
     ns: "agent",
     severity: "High",
   });
-  i18n.t("agentChat.teamWorkspace.canvasToolbar.currentProgress", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.canvasToolbar.laneCount", {
-    ns: "agent",
-    count: 3,
-  });
-  i18n.t("agentChat.teamWorkspace.canvasToolbar.fitProgress", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.canvasStage.badge", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.canvasStage.shortcutHint", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.canvasStage.emptyTitle", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.dock.currentProgress", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.dock.processingCount", {
-    ns: "agent",
-    formattedCount: "2",
-  });
-  i18n.t("agentChat.teamWorkspace.dock.selectedPlan", {
-    ns: "agent",
-    label: "Writers",
-  });
-  i18n.t("agentChat.teamWorkspace.dock.aria.expand", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.teamActions.waitAny", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.board.canvas.title", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.board.canvas.subtitle.runtime", {
-    ns: "agent",
-    formattedCount: "2",
-  });
-  i18n.t("agentChat.teamWorkspace.boardChrome.headline.runningWithQueued", {
-    ns: "agent",
-    runningCount: "1",
-    queuedCount: "1",
-  });
-  i18n.t("agentChat.teamWorkspace.boardChrome.hint.runtime", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.boardChrome.chip.focus", {
-    ns: "agent",
-    name: "Researcher",
-  });
-  i18n.t("agentChat.teamWorkspace.boardChrome.statusSummary", {
-    ns: "agent",
-    status: "Running",
-    formattedCount: "1",
-  });
-  i18n.t("agentChat.teamWorkspace.activityPreview.line", {
-    ns: "agent",
-    title: "Reply",
-    detail: "Done",
-  });
-  i18n.t("agentChat.teamWorkspace.activityPreview.status.message", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.activityPreview.messageTitle.output", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.activityPreview.error.syncFailed", {
-    ns: "agent",
-  });
   i18n.t("agentChat.teamWorkspace.liveRuntime.title.statusChanged", {
     ns: "agent",
   });
@@ -868,100 +786,7 @@ function assertI18nKeyTypes() {
     ns: "agent",
   });
   i18n.t("agentChat.teamWorkspace.liveRuntime.status.retry", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.overview.selectedSession.focusBadge", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.overview.taskCount.waitable", {
-    ns: "agent",
-    formattedCount: "2",
-  });
   i18n.t("agentChat.teamWorkspace.runtimeStatus.completed", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.operations.heading", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.operations.recentCount", {
-    ns: "agent",
-    formattedCount: "2",
-  });
-  i18n.t("agentChat.teamWorkspace.operations.wait.resolved", {
-    ns: "agent",
-    sessionName: "Researcher",
-    status: "Completed",
-  });
-  i18n.t("agentChat.teamWorkspace.operations.control.closeOne", {
-    ns: "agent",
-    sessionName: "Researcher",
-  });
-  i18n.t("agentChat.teamWorkspace.canvasLane.runtimeDetail.recentProgress", {
-    ns: "agent",
-    status: "Running",
-  });
-  i18n.t("agentChat.teamWorkspace.canvasLane.empty.syncLoading", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.canvasLane.planned.statusHint", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.formation.hint.formed", { ns: "agent" });
-  i18n.t("agentChat.teamWorkspace.formation.summaryBadge.planRoleCount", {
-    ns: "agent",
-    formattedCount: "2",
-  });
-  i18n.t("agentChat.teamWorkspace.formation.summaryBadge.referenceLabel", {
-    ns: "agent",
-    label: "Writers",
-  });
-  i18n.t("agentChat.teamWorkspace.formation.summaryBadge.taskCount", {
-    ns: "agent",
-    formattedCount: "2",
-  });
-  i18n.t("agentChat.teamWorkspace.formation.detail.hint.runtimeWithReference", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.formation.detail.roleSection.runtime", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.formation.status.formed.title", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.formation.memberStatus.planned", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.selectedSession.header.eyebrow", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.selectedSession.collaboration.wait", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.selectedSession.activity.entryCount", {
-    ns: "agent",
-    formattedCount: "2",
-  });
-  i18n.t("agentChat.teamWorkspace.selectedSession.footer.updatedAt", {
-    ns: "agent",
-    updatedAt: "just now",
-  });
-  i18n.t("agentChat.teamWorkspace.selectedSession.detail.setting.preset", {
-    ns: "agent",
-    label: "Writers",
-  });
-  i18n.t(
-    "agentChat.teamWorkspace.selectedSession.detail.metadata.createdFromTurn",
-    {
-      ns: "agent",
-      turnId: "turn-42",
-    },
-  );
-  i18n.t(
-    "agentChat.teamWorkspace.selectedSession.detail.sessionType.subAgent",
-    {
-      ns: "agent",
-    },
-  );
-  i18n.t("agentChat.teamWorkspace.selectedSession.detail.roleHint.executor", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.teamWorkspace.teamPreset.codeTriageTeam", {
-    ns: "agent",
-  });
   i18n.t("agentChat.teamWorkspace.control.resume.resumedOne", { ns: "agent" });
   i18n.t("agentChat.teamWorkspace.control.wait.enteredStatusOne", {
     ns: "agent",
@@ -1580,13 +1405,6 @@ function assertI18nKeyTypes() {
   i18n.t("settings.providers.importExport.import.result.errors", {
     ns: "settings",
     errors: "OpenAI exists",
-  });
-  i18n.t("settings.providers.companion.preference.title", { ns: "settings" });
-  i18n.t("settings.providers.companion.preference.general.title", {
-    ns: "settings",
-  });
-  i18n.t("settings.providers.companion.preference.message.saved", {
-    ns: "settings",
   });
   i18n.t("settings.mediaGeneration.image.title", { ns: "settings" });
   i18n.t("settings.mediaGeneration.video.hint.ready", { ns: "settings" });

@@ -16,7 +16,6 @@ describe("mockPriorityCommands", () => {
       "check_for_updates",
       "download_update",
       "open_update_window",
-      "companion_get_pet_status",
       "workspace_list",
       "aster_agent_init",
       "agent_runtime_get_tool_inventory",
@@ -347,8 +346,5 @@ describe("mockPriorityCommands", () => {
         "agent_subagent_stream:session-1",
       ),
     ).toBe(true);
-    expect(
-      shouldDisallowMockEventFallbackInBrowser("companion-pet-status"),
-    ).toBe(false);
   });
 });

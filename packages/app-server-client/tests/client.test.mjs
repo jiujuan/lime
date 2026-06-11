@@ -269,6 +269,7 @@ const {
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
+  METHOD_WORKSPACE_ENSURE,
   METHOD_WORKSPACE_ENSURE_READY,
   METHOD_WORKSPACE_LIST,
   METHOD_WORKSPACE_PROJECTS_ROOT_READ,
@@ -418,6 +419,11 @@ test("builds workspace and skill read requests with current methods", () => {
   const workspaceByPath = client.readWorkspaceByPath({
     rootPath: "/workspace/project",
   });
+  const ensuredWorkspace = client.ensureWorkspace({
+    name: "content-studio",
+    rootPath: "/workspace/content-studio",
+    workspaceType: "general",
+  });
   const defaultWorkspace = client.readDefaultWorkspace();
   const ensuredDefault = client.ensureDefaultWorkspace();
   const projectsRoot = client.readWorkspaceProjectsRoot();
@@ -492,6 +498,12 @@ test("builds workspace and skill read requests with current methods", () => {
   assert.equal(workspaceByPath.method, METHOD_WORKSPACE_BY_PATH_READ);
   assert.deepEqual(workspaceByPath.params, {
     rootPath: "/workspace/project",
+  });
+  assert.equal(ensuredWorkspace.method, METHOD_WORKSPACE_ENSURE);
+  assert.deepEqual(ensuredWorkspace.params, {
+    name: "content-studio",
+    rootPath: "/workspace/content-studio",
+    workspaceType: "general",
   });
   assert.equal(defaultWorkspace.method, METHOD_WORKSPACE_DEFAULT_READ);
   assert.deepEqual(defaultWorkspace.params, {});
@@ -1773,6 +1785,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_SESSION_FILE_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_READ, kind: "request" },
+    { method: METHOD_WORKSPACE_ENSURE, kind: "request" },
     { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
     { method: METHOD_WORKSPACE_DEFAULT_READ, kind: "request" },
     { method: METHOD_WORKSPACE_DEFAULT_ENSURE, kind: "request" },

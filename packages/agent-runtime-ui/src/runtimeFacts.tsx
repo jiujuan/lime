@@ -72,7 +72,7 @@ export function RuntimeFactCard<TEvent extends AgentRuntimeExecutionEvent = Agen
       : [];
   return (
     <article
-      className={event.status}
+      className={`agent-runtime-event ${event.status}`}
       data-event-id={event.id}
       data-event-class={event.source.eventClass}
       data-owner={event.source.owner}

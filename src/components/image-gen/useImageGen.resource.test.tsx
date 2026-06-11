@@ -10,8 +10,10 @@ import {
   type MountedRoot,
 } from "./test-utils";
 
-const { mockGetNextApiKey, mockInvoke } = vi.hoisted(() => ({
+const { mockGetNextApiKey, mockImportProjectMaterialFromUrl, mockInvoke } =
+  vi.hoisted(() => ({
   mockGetNextApiKey: vi.fn(),
+  mockImportProjectMaterialFromUrl: vi.fn(),
   mockInvoke: vi.fn(),
 }));
 
@@ -44,6 +46,14 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
   apiKeyProviderApi: {
     getNextApiKey: mockGetNextApiKey,
   },
+}));
+
+vi.mock("@/lib/api/appServer", () => ({
+  APP_SERVER_METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL:
+    "project/material/importFromUrl",
+  createAppServerClient: () => ({
+    importProjectMaterialFromUrl: mockImportProjectMaterialFromUrl,
+  }),
 }));
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -172,6 +182,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   silenceConsole();
   mockGetNextApiKey.mockResolvedValue("test-api-key");
+  mockImportProjectMaterialFromUrl.mockResolvedValue({
+    result: { material: { id: "material-1" } },
+  });
   mockInvoke.mockResolvedValue({ id: "material-1" });
 
   vi.stubGlobal(
@@ -233,21 +246,21 @@ describe("useImageGen 资源入库", () => {
     expect(typeof completed?.resourceSavedAt).toBe("number");
     expect(completed?.resourceSaveError).toBeUndefined();
 
-    expect(mockInvoke).toHaveBeenCalledTimes(1);
-    expect(mockInvoke).toHaveBeenCalledWith(
-      "import_material_from_url",
+    expect(mockImportProjectMaterialFromUrl).toHaveBeenCalledTimes(1);
+    expect(mockImportProjectMaterialFromUrl).toHaveBeenCalledWith(
       expect.objectContaining({
-        req: expect.objectContaining({
-          projectId: "project-1",
-          type: "image",
-          url: "https://cdn.example.com/generated.png",
-        }),
+        projectId: "project-1",
+        type: "image",
+        url: "https://cdn.example.com/generated.png",
       }),
     );
+    expect(mockInvoke).not.toHaveBeenCalled();
   });
 
   it("自动入库失败时应保留图片并写入错误信息", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("resource save failed"));
+    mockImportProjectMaterialFromUrl.mockRejectedValueOnce(
+      new Error("resource save failed"),
+    );
     const harness = mountHook();
     await waitForReady(harness);
 

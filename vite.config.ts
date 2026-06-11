@@ -57,10 +57,17 @@ export default defineConfig(({ command, mode }) => {
           replacement: path.resolve(__dirname, "./src"),
         },
         {
-          find: "app-server-client",
+          find: "@limecloud/app-server-client",
           replacement: path.resolve(
             __dirname,
             "./packages/app-server-client/src/index.ts",
+          ),
+        },
+        {
+          find: "@limecloud/agent-runtime-client/sessionGateway",
+          replacement: path.resolve(
+            __dirname,
+            "./packages/agent-runtime-client/src/sessionGateway.ts",
           ),
         },
         {

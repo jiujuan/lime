@@ -492,7 +492,7 @@ export function createAlignedRuntimeToolInventory(): AgentRuntimeToolInventory {
       },
       {
         name: "TeamCreate",
-        description: "创建协作团队",
+        description: "创建子代理组",
         source_kind: "current_surface",
         catalog_entry_name: "TeamCreate",
         catalog_source: "aster_builtin",
@@ -509,7 +509,7 @@ export function createAlignedRuntimeToolInventory(): AgentRuntimeToolInventory {
       },
       {
         name: "TeamDelete",
-        description: "删除协作团队",
+        description: "删除子代理组",
         source_kind: "current_surface",
         catalog_entry_name: "TeamDelete",
         catalog_source: "aster_builtin",
@@ -526,7 +526,7 @@ export function createAlignedRuntimeToolInventory(): AgentRuntimeToolInventory {
       },
       {
         name: "ListPeers",
-        description: "列出当前团队成员",
+        description: "列出当前子代理成员",
         source_kind: "current_surface",
         catalog_entry_name: "ListPeers",
         catalog_source: "aster_builtin",

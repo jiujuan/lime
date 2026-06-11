@@ -33,14 +33,6 @@ describe("desktop-host/core 未注册 mock command", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("Companion 默认 mock 被清理后不再伪造状态成功", async () => {
-    await expect(invokeMockOnly("companion_get_pet_status")).rejects.toThrow(
-      '未注册命令 "companion_get_pet_status"',
-    );
-
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
   it("Agent App uninstall / shell 默认 mock 被清理后不再伪造成功", async () => {
     for (const command of ["agent_app_uninstall", "agent_app_launch_shell"]) {
       await expect(invokeMockOnly(command)).rejects.toThrow(
@@ -104,9 +96,7 @@ describe("desktop-host/core 未注册 mock command", () => {
       invokeMockOnly("agent_runtime_export_evidence_pack", {
         sessionId: "mock-session",
       }),
-    ).rejects.toThrow(
-      '未注册命令 "agent_runtime_export_evidence_pack"',
-    );
+    ).rejects.toThrow('未注册命令 "agent_runtime_export_evidence_pack"');
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });

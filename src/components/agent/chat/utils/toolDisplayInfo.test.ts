@@ -128,8 +128,8 @@ describe("toolDisplayInfo", () => {
     expect(resolveToolDisplayLabel("AgentTool")).toBe("创建子任务");
     expect(resolveToolDisplayLabel("SendMessageTool")).toBe("补充说明");
     expect(resolveToolDisplayLabel("ListPeersTool")).toBe("子任务");
-    expect(resolveToolDisplayLabel("TeamCreateTool")).toBe("创建团队");
-    expect(resolveToolDisplayLabel("TeamDeleteTool")).toBe("删除团队");
+    expect(resolveToolDisplayLabel("TeamCreateTool")).toBe("创建子代理组");
+    expect(resolveToolDisplayLabel("TeamDeleteTool")).toBe("删除子代理组");
     expect(resolveToolDisplayLabel("ScheduleCronTool")).toBe("定时触发器");
     expect(resolveToolDisplayLabel("SyntheticOutputTool")).toBe("最终答复");
     expect(resolveToolDisplayLabel("AgentOutputTool")).toBe("任务输出");
@@ -237,7 +237,9 @@ describe("toolDisplayInfo", () => {
     expect(
       resolveUserFacingToolDisplayLabel("lime_create_audio_generation_task"),
     ).toBe("生成配音");
-    expect(resolveUserFacingToolDisplayLabel("generate_image")).toBe("生成图片");
+    expect(resolveUserFacingToolDisplayLabel("generate_image")).toBe(
+      "生成图片",
+    );
     expect(
       resolveUserFacingToolDisplayLabel("lime_create_image_generation_task"),
     ).toBe("生成图片");

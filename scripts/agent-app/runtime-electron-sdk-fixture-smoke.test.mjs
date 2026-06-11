@@ -22,8 +22,13 @@ describe("agent app runtime Electron SDK fixture smoke guard", () => {
     expect(content).toContain(
       'typeof window.electronAPI?.invoke === "function"',
     );
-    expect(content).toContain("waitForAgentAppSidebarEntry(");
-    expect(content).toContain("clickAgentAppSidebarEntry(");
+    expect(content).toContain("clickAgentAppsNavEntry(");
+    expect(content).toContain("openAgentAppRuntimeFromAgentAppsPage(");
+    expect(content).toContain('[data-testid="agent-apps-page"]');
+    expect(content).toContain('[data-testid="agent-apps-list"]');
+    expect(content).toContain("agent-apps-list-row-${APP_ID}");
+    expect(content).toContain("agent-apps-open-detail-${APP_ID}");
+    expect(content).toContain("agent-apps-launch-entry-${ENTRY_KEY}");
     expect(content).toContain('[data-testid="agent-app-runtime-surface"]');
     expect(content).toContain('[data-testid="agent-app-runtime-frame"]');
     expect(content).toContain("__agentAppSdkFixtureResult");
@@ -71,14 +76,22 @@ describe("agent app runtime Electron SDK fixture smoke guard", () => {
     expect(content).not.toContain("?? TURN_ID");
     expect(content).not.toContain("agent-app-electron-sdk-turn-1");
     expect(content).toContain("const runtimeTurnId =");
+    expect(content).toContain("const runtimeSessionId =");
     expect(content).toContain("startTask did not return runtime turnId");
+    expect(content).toContain("startTask did not return runtime sessionId");
     expect(content).toMatch(
-      /method: "submitHostResponse"[\s\S]*actionScope: \{[\s\S]*sessionId: SESSION_ID,[\s\S]*turnId: runtimeTurnId[\s\S]*\}/,
+      /method: "submitHostResponse"[\s\S]*actionScope: \{[\s\S]*sessionId: runtimeSessionId,[\s\S]*turnId: runtimeTurnId[\s\S]*\}/,
     );
     expect(content).toMatch(
-      /method: "cancelTask"[\s\S]*args: \{[\s\S]*taskId: TASK_ID,[\s\S]*sessionId: SESSION_ID,[\s\S]*turnId: runtimeTurnId[\s\S]*\}/,
+      /method: "cancelTask"[\s\S]*args: \{[\s\S]*taskId: TASK_ID,[\s\S]*sessionId: runtimeSessionId,[\s\S]*turnId: runtimeTurnId[\s\S]*\}/,
     );
+    expect(content).not.toContain("const SESSION_ID");
+    expect(content).not.toContain("sessionId: SESSION_ID");
     expect(content).toContain("SDK startTask 未返回有效 turnId");
+    expect(content).toContain("SDK startTask 未返回有效 sessionId");
+    expect(content).toContain(
+      "external backend turnStart sessionId 未与 SDK startTask 返回值一致",
+    );
     expect(content).toContain(
       "external backend turnStart turnId 未与 SDK startTask 返回值一致",
     );
@@ -87,6 +100,9 @@ describe("agent app runtime Electron SDK fixture smoke guard", () => {
     );
     expect(content).toContain(
       "turnId: sdkEvidence.result?.taskLifecycle?.startTask?.turnId ?? null",
+    );
+    expect(content).toContain(
+      "sessionId: sdkEvidence.result?.taskLifecycle?.startTask?.sessionId ?? null",
     );
     expect(content).not.toContain("backendSummary.startTurnId === TURN_ID");
     expect(content).not.toContain("backendSummary.cancelTurnId === TURN_ID");
@@ -115,6 +131,29 @@ describe("agent app runtime Electron SDK fixture smoke guard", () => {
     );
     expect(content).toContain(
       "SDK secondRead result.artifacts 未包含 App Server artifact path",
+    );
+  });
+
+  it("proves the Host Agent Run standard projection without requiring stale pending actions", () => {
+    const content = readSmokeScript();
+
+    const selectorDeclaration = content.match(
+      /const REQUIRED_AGENT_UI_PROJECTION_SELECTORS = \[[\s\S]*?\];/,
+    )?.[0] ?? "";
+    expect(selectorDeclaration).toContain('".agent-ui-projection"');
+    expect(selectorDeclaration).toContain('".agent-ui-main"');
+    expect(selectorDeclaration).toContain('".agent-ui-sidecar"');
+    expect(selectorDeclaration).toContain('".agent-message-parts"');
+    expect(selectorDeclaration).toContain('".agent-process-timeline"');
+    expect(selectorDeclaration).toContain('".agent-execution-graph"');
+    expect(selectorDeclaration).toContain('".agent-artifact-refs"');
+    expect(selectorDeclaration).toContain('".agent-evidence-refs"');
+    expect(selectorDeclaration).not.toContain(".agent-action-required-list");
+    expect(content).toContain("actionRequiredListVisible");
+    expect(content).toContain("Host Agent Run 标准 EvidenceRef surface 未渲染");
+    expect(content).toContain("Host Agent Run 标准 ProcessTimeline 未渲染 tool entry");
+    expect(content).not.toContain(
+      "Host Agent Run 标准 ActionRequired surface 未关联 fixture requestId",
     );
   });
 

@@ -19717,6 +19717,48 @@
       "title": "WorkspaceEnsureParams",
       "type": "object"
     },
+    "WorkspaceEnsureProjectParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "workspaceType": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "rootPath"
+      ],
+      "title": "WorkspaceEnsureProjectParams",
+      "type": "object"
+    },
+    "WorkspaceEnsureProjectResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "created": {
+          "type": "boolean"
+        },
+        "rootCreated": {
+          "type": "boolean"
+        },
+        "workspace": true
+      },
+      "required": [
+        "created",
+        "rootCreated",
+        "workspace"
+      ],
+      "title": "WorkspaceEnsureProjectResponse",
+      "type": "object"
+    },
     "WorkspaceEnsureReadyResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -20197,6 +20239,7 @@
               "workspace/byPath/read",
               "workspace/default/ensure",
               "workspace/default/read",
+              "workspace/ensure",
               "workspace/ensureReady",
               "workspace/list",
               "workspace/projectPath/resolve",

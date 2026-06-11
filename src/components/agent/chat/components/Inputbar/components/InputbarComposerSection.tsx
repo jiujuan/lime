@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { FolderOpen } from "lucide-react";
 import type { ChatInputAdapter } from "@/components/input-kit/adapters/types";
 import type { Character } from "@/lib/api/memory";
@@ -10,15 +10,12 @@ import type { MessageImage, MessagePathReference } from "../../../types";
 import { CharacterMention } from "../../../skill-selection/CharacterMention";
 import { InputbarCore } from "./InputbarCore";
 import { SkillSelector } from "../../../skill-selection/SkillSelector";
-import { TeamSelector } from "./TeamSelector";
 import { InputbarWorkflowStatusPanel } from "./InputbarWorkflowStatusPanel";
 import { InputbarModelExtra } from "./InputbarModelExtra";
 import { InputbarVisionCapabilityNotice } from "./InputbarVisionCapabilityNotice";
 import { InputbarAccessModeSelect } from "./InputbarAccessModeSelect";
 import { InputbarModeStatusChip } from "./InputbarModeStatusChip";
 import { isGeneralResearchTheme } from "../../../utils/generalAgentPrompt";
-import type { TeamDefinition } from "../../../utils/teamDefinitions";
-import type { WorkspaceSettings } from "@/types/workspace";
 import {
   buildSkillSelectionBindings,
   type SkillSelectionProps,
@@ -66,7 +63,6 @@ interface InputbarComposerSectionProps {
   activeCapability?: InputCapabilitySelection | null;
   defaultCuratedTaskReferenceMemoryIds?: string[];
   defaultCuratedTaskReferenceEntries?: CuratedTaskReferenceEntry[];
-  selectedTeam?: TeamDefinition | null;
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   knowledgePackOptions?: InputbarKnowledgePackOption[];
   knowledgeHubOpenRequestKey?: number;
@@ -75,9 +71,6 @@ interface InputbarComposerSectionProps {
   onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
-  onSelectTeam?: (team: TeamDefinition | null) => void;
-  teamWorkspaceSettings?: WorkspaceSettings | null;
-  onPersistCustomTeams?: (teams: TeamDefinition[]) => void | Promise<void>;
   onSend: () => void;
   onToolClick: (tool: string) => void;
   activeTools: Record<string, boolean>;
@@ -135,7 +128,6 @@ export const InputbarComposerSection: React.FC<
   activeCapability,
   defaultCuratedTaskReferenceMemoryIds = [],
   defaultCuratedTaskReferenceEntries = [],
-  selectedTeam,
   knowledgePackSelection,
   knowledgePackOptions = [],
   knowledgeHubOpenRequestKey,
@@ -144,9 +136,6 @@ export const InputbarComposerSection: React.FC<
   onToggleKnowledgeCompanionPack,
   onStartKnowledgeOrganize,
   onManageKnowledgePacks,
-  onSelectTeam,
-  teamWorkspaceSettings,
-  onPersistCustomTeams,
   onSend,
   onToolClick,
   activeTools,
@@ -180,9 +169,6 @@ export const InputbarComposerSection: React.FC<
   inputbarCopy,
   workflowPanelCopy,
 }) => {
-  const [teamSelectorAutoOpenToken, setTeamSelectorAutoOpenToken] = useState<
-    number | null
-  >(null);
   const showSkillSelector = isGeneralResearchTheme(activeTheme);
   const currentPendingImages =
     (inputAdapter.state.attachments as MessageImage[] | undefined) ||
@@ -217,17 +203,8 @@ export const InputbarComposerSection: React.FC<
       </>
     ) : undefined;
   const handleToolAction = (tool: string) => {
-    if (
-      tool === "subagent_mode" &&
-      !activeTools["subagent_mode"] &&
-      !selectedTeam
-    ) {
-      setTeamSelectorAutoOpenToken((current) => (current ?? 0) + 1);
-    }
     onToolClick(tool);
   };
-  const shouldShowTeamSelector =
-    isGeneralResearchTheme(activeTheme) && activeTools["subagent_mode"];
   const planModeStatusLabel = copy.plusMenu.planMode
     .replace(/模式$/, "")
     .replace(/ mode$/i, "");
@@ -280,8 +257,7 @@ export const InputbarComposerSection: React.FC<
     Boolean(activeTools["task_mode"]) ||
     Boolean(activeTools["objective_mode"]) ||
     Boolean(setAccessMode) ||
-    Boolean(onToggleFileManager) ||
-    shouldShowTeamSelector;
+    Boolean(onToggleFileManager);
   const leftExtra = shouldShowLeftExtra ? (
     <>
       <InputbarAccessModeSelect
@@ -303,18 +279,6 @@ export const InputbarComposerSection: React.FC<
           label={objectiveStatusLabel}
           testId="inputbar-objective-status"
           onRemove={() => handleToolAction("objective_mode")}
-        />
-      ) : null}
-
-      {shouldShowTeamSelector ? (
-        <TeamSelector
-          activeTheme={activeTheme}
-          input={input}
-          autoOpenToken={teamSelectorAutoOpenToken}
-          selectedTeam={selectedTeam}
-          workspaceSettings={teamWorkspaceSettings}
-          onPersistCustomTeams={onPersistCustomTeams}
-          onSelectTeam={(team) => onSelectTeam?.(team)}
         />
       ) : null}
 
@@ -346,7 +310,6 @@ export const InputbarComposerSection: React.FC<
       executionRuntime={executionRuntime}
     />
   ) : undefined;
-
   if (renderWorkflowGeneratingPanel) {
     return (
       <InputbarWorkflowStatusPanel
@@ -430,6 +393,7 @@ export const InputbarComposerSection: React.FC<
         toolMode={isWorkspaceVariant ? "attach-only" : "default"}
         showDragHandle={!isWorkspaceVariant}
         visualVariant={isWorkspaceVariant ? "floating" : "default"}
+        connectedContextBar={false}
         topExtra={resolvedTopExtra}
         activeTheme={activeTheme}
         queuedTurns={queuedTurns}

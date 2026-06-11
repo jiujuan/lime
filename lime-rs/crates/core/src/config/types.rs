@@ -692,9 +692,6 @@ pub struct WorkspacePreferencesConfig {
     /// 全局媒体生成默认设置
     #[serde(default)]
     pub media_defaults: MediaGenerationDefaultsConfig,
-    /// 桌宠能力偏好设置
-    #[serde(default)]
-    pub companion_defaults: CompanionDefaultsConfig,
     /// 服务模型设置
     #[serde(default, skip_serializing_if = "ServiceModelsConfig::is_default")]
     pub service_models: ServiceModelsConfig,
@@ -710,7 +707,6 @@ impl Default for WorkspacePreferencesConfig {
             schema_version: current_workspace_preferences_schema_version(),
             agent_response_language: None,
             media_defaults: MediaGenerationDefaultsConfig::default(),
-            companion_defaults: CompanionDefaultsConfig::default(),
             service_models: ServiceModelsConfig::default(),
         }
     }
@@ -750,14 +746,6 @@ pub struct MediaGenerationDefaultsConfig {
     pub video: MediaGenerationPreferenceConfig,
     #[serde(default)]
     pub voice: MediaGenerationPreferenceConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct CompanionDefaultsConfig {
-    #[serde(default)]
-    pub general: MediaGenerationPreferenceConfig,
-    #[serde(default)]
-    pub tts: MediaGenerationPreferenceConfig,
 }
 
 fn default_service_model_enabled() -> bool {
@@ -854,13 +842,13 @@ impl ServiceModelsConfig {
 
 /// 导航栏模块配置
 ///
-/// 配置左侧导航栏里可显式开启的隐藏系统入口
+/// 保留历史导航配置字段；当前不再提供可显式开启的隐藏系统入口
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NavigationConfig {
     /// 工作区导航默认值版本
     #[serde(default)]
     pub schema_version: u8,
-    /// 已显式开启的隐藏系统入口列表；固定主导航不写入配置
+    /// 历史隐藏系统入口列表；归一化时清空，固定主导航不写入配置
     #[serde(default = "default_enabled_nav_items")]
     pub enabled_items: Vec<String>,
 }
@@ -878,7 +866,7 @@ impl Default for NavigationConfig {
     }
 }
 
-const CURRENT_CONFIGURABLE_NAV_ITEM_IDS: &[&str] = &["plugins", "companion"];
+const CURRENT_CONFIGURABLE_NAV_ITEM_IDS: &[&str] = &[];
 
 fn normalize_navigation_enabled_items(items: &[String]) -> Vec<String> {
     let mut normalized = Vec::new();
@@ -2984,17 +2972,14 @@ mod unit_tests {
     }
 
     #[test]
-    fn test_normalize_workspace_preferences_preserves_current_custom_values() {
+    fn test_normalize_workspace_preferences_clears_current_custom_values() {
         let mut config = Config::default();
         config.navigation.enabled_items = vec!["plugins".to_string(), "companion".to_string()];
 
         let changed = config.normalize_workspace_preferences();
 
-        assert!(!changed);
-        assert_eq!(
-            config.navigation.enabled_items,
-            vec!["plugins".to_string(), "companion".to_string()]
-        );
+        assert!(changed);
+        assert!(config.navigation.enabled_items.is_empty());
     }
 
     #[test]
@@ -3031,63 +3016,7 @@ mod unit_tests {
         let changed = config.normalize_workspace_preferences();
 
         assert!(changed);
-        assert_eq!(
-            config.navigation.enabled_items,
-            vec!["plugins".to_string(), "companion".to_string()]
-        );
-    }
-
-    #[test]
-    fn test_workspace_preferences_supports_companion_defaults_roundtrip() {
-        let mut config = Config::default();
-        config
-            .workspace_preferences
-            .companion_defaults
-            .general
-            .preferred_provider_id = Some("deepseek".to_string());
-        config
-            .workspace_preferences
-            .companion_defaults
-            .general
-            .preferred_model_id = Some("deepseek-chat".to_string());
-        config
-            .workspace_preferences
-            .companion_defaults
-            .tts
-            .preferred_provider_id = Some("openai-tts".to_string());
-
-        let value =
-            serde_json::to_value(&config).expect("config should serialize companion defaults");
-        let parsed: Config =
-            serde_json::from_value(value).expect("config should deserialize companion defaults");
-
-        assert_eq!(
-            parsed
-                .workspace_preferences
-                .companion_defaults
-                .general
-                .preferred_provider_id
-                .as_deref(),
-            Some("deepseek")
-        );
-        assert_eq!(
-            parsed
-                .workspace_preferences
-                .companion_defaults
-                .general
-                .preferred_model_id
-                .as_deref(),
-            Some("deepseek-chat")
-        );
-        assert_eq!(
-            parsed
-                .workspace_preferences
-                .companion_defaults
-                .tts
-                .preferred_provider_id
-                .as_deref(),
-            Some("openai-tts")
-        );
+        assert!(config.navigation.enabled_items.is_empty());
     }
 
     #[test]

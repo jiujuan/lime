@@ -769,6 +769,7 @@ const currentElectronHostRequiredCommands = new Set([
   "project_memory_get",
   "save_experimental_config",
   "start_oem_cloud_oauth_callback_bridge",
+  "workspace_ensure",
   "workspace_ensure_default_ready",
   "workspace_ensure_ready",
   "workspace_get",
@@ -4638,6 +4639,7 @@ function main() {
   const registeredCommands = collectElectronHostCommands();
   const mockPriorityCommands = collectMockPriorityCommands();
   const bridgeTruthCommands = collectBridgeTruthCommands();
+  const noMockFallbackCompatCommands = collectNoMockFallbackCompatCommands();
   const agentCommandCatalog = readAgentCommandCatalog();
   const retiredMemoryRuntimeCatalogSectionLeaks = Object.keys(
     agentCommandCatalog,
@@ -4753,6 +4755,21 @@ function main() {
   const missingDevBridgeTruthCommands = new Set(
     [...currentDevBridgeTruthRequiredCommands].filter(
       (command) => !bridgeTruthCommands.has(command),
+    ),
+  );
+  const agentAppRuntimeDevBridgeTruthLeaks = new Set(
+    [...currentAgentAppRuntimeDesktopHostCommands].filter((command) =>
+      bridgeTruthCommands.has(command),
+    ),
+  );
+  const missingAgentAppRuntimeNoMockCompatCommands = new Set(
+    [...currentAgentAppRuntimeDesktopHostCommands].filter(
+      (command) => !noMockFallbackCompatCommands.has(command),
+    ),
+  );
+  const agentAppRuntimeMockPriorityLeaks = new Set(
+    [...currentAgentAppRuntimeDesktopHostCommands].filter((command) =>
+      mockPriorityCommands.has(command),
     ),
   );
   const deprecatedCommandsStillUsed = new Set(
@@ -5319,6 +5336,30 @@ function main() {
       "current App Server 数据面命令缺少 DevBridge truth 分类",
       missingDevBridgeTruthCommands,
       frontendUsage,
+    );
+  }
+
+  if (agentAppRuntimeDevBridgeTruthLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Agent App runtime task compat 命令不能回到 DevBridge truth surface",
+      agentAppRuntimeDevBridgeTruthLeaks,
+    );
+  }
+
+  if (missingAgentAppRuntimeNoMockCompatCommands.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Agent App runtime task compat 命令必须保留 no-mock fail-closed 分类",
+      missingAgentAppRuntimeNoMockCompatCommands,
+    );
+  }
+
+  if (agentAppRuntimeMockPriorityLeaks.size > 0) {
+    hasError = true;
+    printCommandGroup(
+      "Agent App runtime task compat 命令不能回到 mock priority surface",
+      agentAppRuntimeMockPriorityLeaks,
     );
   }
 

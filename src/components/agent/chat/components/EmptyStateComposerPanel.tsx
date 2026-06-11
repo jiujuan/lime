@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FolderOpen, Lightbulb, X } from "lucide-react";
 import {
   Select,
@@ -7,25 +7,25 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { TeamSuggestionBar } from "./TeamSuggestionBar";
 import { CharacterMention } from "../skill-selection/CharacterMention";
 import { BuiltinCommandBadge } from "./Inputbar/components/BuiltinCommandBadge";
 import { InputbarAccessModeSelect } from "./Inputbar/components/InputbarAccessModeSelect";
 import { InputbarCore } from "./Inputbar/components/InputbarCore";
 import { InputbarModeStatusChip } from "./Inputbar/components/InputbarModeStatusChip";
+import {
+  InputbarProjectContextBar,
+  type InputbarOpenedProject,
+} from "./Inputbar/components/InputbarProjectContextBar";
 import { InputbarKnowledgeControl } from "./Inputbar/knowledge/InputbarKnowledgeControl";
 import { InputbarModelExtra } from "./Inputbar/components/InputbarModelExtra";
 import { RuntimeSceneBadge } from "./Inputbar/components/RuntimeSceneBadge";
 import { CuratedTaskBadge } from "../skill-selection/CuratedTaskBadge";
 import { SkillBadge } from "../skill-selection/SkillBadge";
 import { SkillSelector } from "../skill-selection/SkillSelector";
-import { TeamSelector } from "./Inputbar/components/TeamSelector";
-import type { WorkspaceSettings } from "@/types/workspace";
 import { CREATION_MODE_CONFIG } from "./constants";
 import type { CreationMode } from "./types";
 import type { Character } from "@/lib/api/memory";
 import type { MessageImage, MessagePathReference } from "../types";
-import type { TeamDefinition } from "../utils/teamDefinitions";
 import {
   EMPTY_STATE_PASSIVE_BADGE_CLASSNAME,
   EMPTY_STATE_SELECT_TRIGGER_CLASSNAME,
@@ -35,7 +35,6 @@ import {
   resolveEmptyStateActiveCapability,
 } from "./EmptyStateComposerPanelViewModel";
 import { MetaIconButton } from "./Inputbar/styles";
-import { getTeamSuggestion } from "../utils/teamSuggestion";
 import {
   buildSkillSelectionBindings,
   type SkillSelectionProps,
@@ -90,6 +89,10 @@ interface EmptyStateComposerPanelProps {
   onApplyCuratedTaskReviewSuggestion?: (task: CuratedTaskTemplateItem) => void;
   creationReplaySurface?: CreationReplaySurfaceModel | null;
   projectId?: string | null;
+  openedProjects?: InputbarOpenedProject[];
+  onProjectContextChange?: (projectId: string | null) => void;
+  projectContextModeLabel?: string;
+  projectContextBranchLabel?: string;
   sessionId?: string | null;
   defaultCuratedTaskReferenceMemoryIds?: string[];
   defaultCuratedTaskReferenceEntries?: CuratedTaskReferenceEntry[];
@@ -112,11 +115,6 @@ interface EmptyStateComposerPanelProps {
   onObjectiveEnabledChange?: (enabled: boolean) => void;
   subagentEnabled: boolean;
   onSubagentEnabledChange?: (enabled: boolean) => void;
-  selectedTeam?: TeamDefinition | null;
-  onSelectTeam?: (team: TeamDefinition | null) => void;
-  teamWorkspaceSettings?: WorkspaceSettings | null;
-  onPersistCustomTeams?: (teams: TeamDefinition[]) => void | Promise<void>;
-  onEnableSuggestedTeam?: (suggestedPresetId?: string) => void;
   pendingImages: MessageImage[];
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onPaste?: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -216,6 +214,10 @@ export function EmptyStateComposerPanel({
   onApplyCuratedTaskReviewSuggestion,
   creationReplaySurface = null,
   projectId = null,
+  openedProjects = [],
+  onProjectContextChange,
+  projectContextModeLabel,
+  projectContextBranchLabel,
   sessionId = null,
   defaultCuratedTaskReferenceMemoryIds = [],
   defaultCuratedTaskReferenceEntries = [],
@@ -238,11 +240,6 @@ export function EmptyStateComposerPanel({
   onObjectiveEnabledChange,
   subagentEnabled,
   onSubagentEnabledChange,
-  selectedTeam,
-  onSelectTeam,
-  teamWorkspaceSettings,
-  onPersistCustomTeams,
-  onEnableSuggestedTeam,
   pendingImages,
   onFileSelect,
   onPaste,
@@ -262,12 +259,6 @@ export function EmptyStateComposerPanel({
   const [draftInput, setDraftInput] = useState(input);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const [dismissedSuggestionKey, setDismissedSuggestionKey] = useState<
-    string | null
-  >(null);
-  const [teamSelectorAutoOpenToken, setTeamSelectorAutoOpenToken] = useState<
-    number | null
-  >(null);
   const [localObjectiveEnabled, setLocalObjectiveEnabled] = useState(false);
   const objectiveEnabled = objectiveEnabledProp ?? localObjectiveEnabled;
   const activeCapabilityState = resolveEmptyStateActiveCapability({
@@ -298,22 +289,6 @@ export function EmptyStateComposerPanel({
     });
   };
 
-  const suggestionKey = `${activeTheme}:${draftInput.trim().toLowerCase()}`;
-  const teamSuggestion = useMemo(
-    () =>
-      getTeamSuggestion({
-        input: draftInput,
-        activeTheme,
-        subagentEnabled,
-      }),
-    [activeTheme, draftInput, subagentEnabled],
-  );
-  const shouldShowTeamSuggestion =
-    isGeneralTheme &&
-    Boolean(onSubagentEnabledChange) &&
-    teamSuggestion.shouldSuggest &&
-    dismissedSuggestionKey !== suggestionKey;
-  const shouldShowTeamSelector = isGeneralTheme && subagentEnabled;
   const [inputSuggestionIndex, setInputSuggestionIndex] = useState(0);
   const {
     sortedInputSuggestions,
@@ -367,20 +342,7 @@ export function EmptyStateComposerPanel({
     });
   };
 
-  const handleEnableTeamSuggestion = () => {
-    onSubagentEnabledChange?.(true);
-    onEnableSuggestedTeam?.(teamSuggestion.suggestedPresetId);
-    setDismissedSuggestionKey(suggestionKey);
-  };
-
-  const handleContinueSingleAgent = () => {
-    setDismissedSuggestionKey(suggestionKey);
-  };
-
   const handleToggleSubagentMode = () => {
-    if (!subagentEnabled && !selectedTeam) {
-      setTeamSelectorAutoOpenToken((current) => (current ?? 0) + 1);
-    }
     onSubagentEnabledChange?.(!subagentEnabled);
   };
 
@@ -423,8 +385,7 @@ export function EmptyStateComposerPanel({
     activeRuntimeScene ||
     activeCuratedTask ||
     activeSkill ||
-    creationReplaySurface ||
-    shouldShowTeamSuggestion ? (
+    creationReplaySurface ? (
       <>
         {guideHelpActive ? (
           <GuideHelpBadge
@@ -480,18 +441,6 @@ export function EmptyStateComposerPanel({
             </span>
             <span className="truncate">{creationReplaySurface.title}</span>
           </Badge>
-        ) : null}
-
-        {shouldShowTeamSuggestion ? (
-          <TeamSuggestionBar
-            compact
-            score={teamSuggestion.score}
-            reasons={teamSuggestion.reasons}
-            suggestedRoles={teamSuggestion.suggestedRoles}
-            suggestedPresetLabel={teamSuggestion.suggestedPresetLabel}
-            onEnableTeam={handleEnableTeamSuggestion}
-            onContinueSingleAgent={handleContinueSingleAgent}
-          />
         ) : null}
       </>
     ) : undefined;
@@ -573,18 +522,6 @@ export function EmptyStateComposerPanel({
         />
       ) : null}
 
-      {shouldShowTeamSelector ? (
-        <TeamSelector
-          activeTheme={activeTheme}
-          input={draftInput}
-          autoOpenToken={teamSelectorAutoOpenToken}
-          selectedTeam={selectedTeam}
-          workspaceSettings={teamWorkspaceSettings}
-          onPersistCustomTeams={onPersistCustomTeams}
-          onSelectTeam={(team) => onSelectTeam?.(team)}
-        />
-      ) : null}
-
       {showCreationModeSelector ? (
         <Select
           value={creationMode}
@@ -647,7 +584,21 @@ export function EmptyStateComposerPanel({
       onManageProviders={onManageProviders}
     />
   );
-
+  const projectContextBar = (
+    <div
+      data-testid="inputbar-context-bar-slot"
+      className="-mt-px flex min-h-11 w-full items-center rounded-b-[26px] border border-t-0 border-emerald-200/80 bg-slate-50/85 px-5 py-2 shadow-[0_20px_42px_-34px_rgba(15,23,42,0.34)]"
+    >
+      <InputbarProjectContextBar
+        projectId={projectId}
+        openedProjects={openedProjects}
+        onProjectChange={onProjectContextChange}
+        modeLabel={projectContextModeLabel}
+        branchLabel={projectContextBranchLabel}
+        copy={inputbarCopy.projectContext}
+      />
+    </div>
+  );
   return (
     <>
       <CharacterMention
@@ -709,6 +660,7 @@ export function EmptyStateComposerPanel({
         activeTheme={activeTheme}
         showDragHandle={false}
         visualVariant="floating"
+        connectedContextBar
         deferSendOnEnter
         topExtra={topExtra}
         leftExtra={leftExtra}
@@ -721,6 +673,7 @@ export function EmptyStateComposerPanel({
         inputSuggestion={activeInputSuggestion}
         onAcceptInputSuggestion={handleAcceptInputSuggestion}
       />
+      {projectContextBar}
     </>
   );
 }

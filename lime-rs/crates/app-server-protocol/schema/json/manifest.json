@@ -924,6 +924,10 @@
     },
     {
       "kind": "request",
+      "method": "workspace/ensure"
+    },
+    {
+      "kind": "request",
       "method": "workspace/ensureReady"
     },
     {
@@ -1385,6 +1389,8 @@
       "WindowsStartupCheck",
       "WindowsStartupDiagnosticsResponse",
       "WorkspaceEnsureParams",
+      "WorkspaceEnsureProjectParams",
+      "WorkspaceEnsureProjectResponse",
       "WorkspaceEnsureReadyResponse",
       "WorkspaceListResponse",
       "WorkspacePathReadParams",

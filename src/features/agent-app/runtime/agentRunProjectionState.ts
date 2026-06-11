@@ -44,6 +44,7 @@ export function collectAgentRunProjectionSourceEvents(state: unknown): unknown[]
   return [
     ...readEventArrays(root),
     ...readRuntimeProcessTimelineEvents(root, "root"),
+    ...readRuntimeProcessTextEvents(root, "root"),
     ...readRuntimeMetricEvents(root, "root"),
     ...readNestedEventArrays(root, "runtimeFacts"),
     ...(runtimeFacts ? readRuntimeMetricEvents(runtimeFacts, "runtimeFacts") : []),
@@ -103,6 +104,7 @@ function readNestedEventArrays(
   return [
     ...readEventArrays(nested),
     ...readRuntimeProcessTimelineEvents(nested, key),
+    ...readRuntimeProcessTextEvents(nested, key),
   ];
 }
 
@@ -161,6 +163,65 @@ function readRuntimeMetricEvents(
       cost,
     },
   }];
+}
+
+function readRuntimeProcessTextEvents(
+  value: Record<string, unknown>,
+  sourceKey: string,
+): Record<string, unknown>[] {
+  const process = recordValue(value, "runtimeProcess") ?? recordValue(value, "process");
+  if (!process) {
+    return [];
+  }
+  const terminal = process.terminal === true;
+  const status = terminal ? "completed" : "streaming";
+  const thinkingText = readString(process, "thinkingText");
+  const executionText = readString(process, "executionText");
+  const streamText = readString(process, "streamText");
+  const events: Record<string, unknown>[] = [];
+
+  if (thinkingText) {
+    events.push({
+      id: `${sourceKey}:runtime-process:thinking-text`,
+      eventType: "task:partialArtifact",
+      status,
+      message: thinkingText,
+      payload: {
+        source: "runtimeProcess.thinkingText",
+        streamKind: "thinking_delta",
+        delta: thinkingText,
+      },
+    });
+  }
+
+  if (executionText) {
+    events.push({
+      id: `${sourceKey}:runtime-process:execution-text`,
+      eventType: "task:status",
+      status,
+      message: executionText,
+      payload: {
+        source: "runtimeProcess.executionText",
+        title: "executionText",
+      },
+    });
+  }
+
+  if (streamText) {
+    events.push({
+      id: `${sourceKey}:runtime-process:stream-text`,
+      eventType: "task:partialArtifact",
+      status,
+      message: streamText,
+      payload: {
+        source: "runtimeProcess.streamText",
+        streamKind: "assistant_text_delta",
+        delta: streamText,
+      },
+    });
+  }
+
+  return events;
 }
 
 function readMetricModel(
@@ -253,6 +314,8 @@ function timelineRecordToProjectionSourceEvent(
     source: "runtimeProcess.timeline",
     timelineKind: kind,
     title,
+    displayTitle: readString(value, "displayTitle"),
+    displayMessage: readString(value, "displayMessage"),
   };
 
   if (kind === "tool" || kind === "skill") {

@@ -5,6 +5,7 @@ import {
   currentAgentAppStandardVersion,
 } from "../readiness/hostCapabilityProfile";
 import {
+  appServerClientMocks,
   apiMocks,
   buildReadyState,
   dispatchBridgeMessage,
@@ -14,6 +15,41 @@ import {
   runtimeApiMocks,
   useAgentAppRuntimePageTestLifecycle,
 } from "./AgentAppRuntimePage.testFixtures";
+
+type PostMessageSpy = ReturnType<typeof vi.spyOn>;
+
+function readHostBridgeResult(
+  postMessage: PostMessageSpy,
+  requestId: string,
+): Record<string, unknown> & { taskId: string; traceId: string } {
+  const call = postMessage.mock.calls.find(([message]) => {
+    return (
+      isRecord(message) &&
+      message.type === "host:response" &&
+      message.requestId === requestId
+    );
+  });
+  const message = call?.[0];
+  if (!isRecord(message) || !isRecord(message.payload)) {
+    throw new Error(`未找到 Host Bridge 响应：${requestId}`);
+  }
+  const result = message.payload.result;
+  if (
+    !isRecord(result) ||
+    typeof result.taskId !== "string" ||
+    typeof result.traceId !== "string"
+  ) {
+    throw new Error(`Host Bridge 响应缺少任务标识：${requestId}`);
+  }
+  return result as Record<string, unknown> & {
+    taskId: string;
+    traceId: string;
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 describe("AgentAppRuntimePage Host Bridge", () => {
   useAgentAppRuntimePageTestLifecycle();
@@ -353,13 +389,25 @@ describe("AgentAppRuntimePage Host Bridge", () => {
       },
       "task-start",
     );
+    const startTaskResult = readHostBridgeResult(postMessage, "task-start");
+    expect(startTaskResult).toEqual(
+      expect.objectContaining({
+        taskId: expect.stringMatching(/^agent-app-task-/),
+        traceId: expect.stringMatching(/^agent-app-trace-agent-app-task-/),
+        status: "running",
+        humanReview: true,
+      }),
+    );
+    const taskId = startTaskResult.taskId;
+    const traceId = startTaskResult.traceId;
+
     await dispatchBridgeMessage(
       frame,
       "capability:invoke",
       {
         capability: "lime.agent",
         method: "streamTask",
-        input: { taskId: "agent-app-task-1" },
+        input: { taskId },
       },
       "task-stream",
     );
@@ -369,7 +417,7 @@ describe("AgentAppRuntimePage Host Bridge", () => {
       {
         capability: "lime.agent",
         method: "getTask",
-        input: { taskId: "agent-app-task-1" },
+        input: { taskId },
       },
       "task-get",
     );
@@ -380,7 +428,7 @@ describe("AgentAppRuntimePage Host Bridge", () => {
         capability: "lime.agent",
         method: "submitHostResponse",
         input: {
-          taskId: "agent-app-task-1",
+          taskId,
           requestId: "runtime-request-1",
           actionType: "ask_user",
           response: "补充项目定位：高客单价咨询服务。",
@@ -394,7 +442,7 @@ describe("AgentAppRuntimePage Host Bridge", () => {
       {
         capability: "lime.agent",
         method: "cancelTask",
-        input: { taskId: "agent-app-task-1" },
+        input: { taskId },
       },
       "task-cancel",
     );
@@ -404,27 +452,11 @@ describe("AgentAppRuntimePage Host Bridge", () => {
       {
         capability: "lime.agent",
         method: "retryTask",
-        input: { taskId: "agent-app-task-1" },
+        input: { taskId },
       },
       "task-retry",
     );
 
-    expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "host:response",
-        requestId: "task-start",
-        payload: expect.objectContaining({
-          ok: true,
-          result: expect.objectContaining({
-            taskId: "agent-app-task-1",
-            traceId: "agent-app-trace-1",
-            status: "running",
-            humanReview: true,
-          }),
-        }),
-      }),
-      "http://127.0.0.1:4199",
-    );
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "host:response",
@@ -433,7 +465,7 @@ describe("AgentAppRuntimePage Host Bridge", () => {
           ok: true,
           result: [
             expect.objectContaining({
-              type: "task:progress",
+              type: "task:queued",
               status: "running",
             }),
           ],
@@ -448,8 +480,8 @@ describe("AgentAppRuntimePage Host Bridge", () => {
         payload: expect.objectContaining({
           ok: true,
           result: expect.objectContaining({
-            taskId: "agent-app-task-1",
-            traceId: "agent-app-trace-1",
+            taskId,
+            traceId,
             status: "running",
             taskKind: "content.scenario_planning",
           }),
@@ -464,7 +496,7 @@ describe("AgentAppRuntimePage Host Bridge", () => {
         payload: expect.objectContaining({
           ok: true,
           result: {
-            taskId: "agent-app-task-1",
+            taskId,
             requestId: "runtime-request-1",
             status: "submitted",
             submittedAt: expect.any(String),
@@ -480,7 +512,7 @@ describe("AgentAppRuntimePage Host Bridge", () => {
         payload: expect.objectContaining({
           ok: true,
           result: expect.objectContaining({
-            taskId: "agent-app-task-1",
+            taskId,
             status: "cancelled",
             events: expect.arrayContaining([
               expect.objectContaining({ type: "task:cancelled" }),
@@ -497,9 +529,9 @@ describe("AgentAppRuntimePage Host Bridge", () => {
         payload: expect.objectContaining({
           ok: true,
           result: expect.objectContaining({
-            taskId: "agent-app-task-2",
-            traceId: "agent-app-trace-2",
-            retryOfTaskId: "agent-app-task-1",
+            taskId: expect.stringMatching(/^agent-app-task-/),
+            traceId: expect.stringMatching(/^agent-app-trace-agent-app-task-/),
+            retryOfTaskId: taskId,
             retryAttempt: 1,
             status: "running",
             humanReview: true,
@@ -508,34 +540,65 @@ describe("AgentAppRuntimePage Host Bridge", () => {
       }),
       "http://127.0.0.1:4199",
     );
-    expect(runtimeApiMocks.getAgentAppRuntimeTask).toHaveBeenCalledWith({
+    expect(appServerClientMocks.startSession).toHaveBeenCalledWith({
       appId: "content-factory-app",
-      taskId: "agent-app-task-1",
-      sessionId: "agent-app-session-1",
-    });
-    expect(runtimeApiMocks.cancelAgentAppRuntimeTask).toHaveBeenCalledWith({
-      appId: "content-factory-app",
-      taskId: "agent-app-task-1",
-      sessionId: "agent-app-session-1",
-      turnId: "agent-app-turn-1",
-    });
-    expect(
-      runtimeApiMocks.submitAgentAppRuntimeHostResponse,
-    ).toHaveBeenCalledWith({
-      appId: "content-factory-app",
-      taskId: "agent-app-task-1",
-      runtimeRequest: expect.objectContaining({
-        session_id: "agent-app-session-1",
-        request_id: "runtime-request-1",
-        action_type: "ask_user",
-        confirmed: true,
-        response: "补充项目定位：高客单价咨询服务。",
-        action_scope: expect.objectContaining({
-          session_id: "agent-app-session-1",
-          turn_id: "agent-app-turn-1",
+      workspaceId: "workspace-1",
+      businessObjectRef: expect.objectContaining({
+        kind: "agent_app.task",
+        id: expect.stringContaining(`content-factory-app:${taskId}`),
+        metadata: expect.objectContaining({
+          source: "agent_app_runtime_page",
+          appId: "content-factory-app",
+          entryKey: "dashboard",
+          taskKind: "content.scenario_planning",
         }),
       }),
     });
+    expect(appServerClientMocks.startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "agent-app-session-1",
+        runtimeOptions: expect.objectContaining({
+          hostOptions: {
+            asterChatRequest: expect.objectContaining({
+              workspace_id: "workspace-1",
+              turn_config: expect.any(Object),
+            }),
+          },
+        }),
+      }),
+    );
+    expect(appServerClientMocks.readSession).toHaveBeenCalledWith({
+      sessionId: "agent-app-session-1",
+    });
+    expect(appServerClientMocks.respondAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "agent-app-session-1",
+        requestId: "runtime-request-1",
+        actionType: "ask_user",
+        confirmed: true,
+        response: "补充项目定位：高客单价咨询服务。",
+        actionScope: expect.objectContaining({
+          sessionId: "agent-app-session-1",
+          turnId: "agent-app-turn-1",
+        }),
+        metadata: expect.objectContaining({
+          agent_app_runtime: expect.objectContaining({
+            app_id: "content-factory-app",
+            task_id: taskId,
+          }),
+        }),
+      }),
+    );
+    expect(appServerClientMocks.cancelTurn).toHaveBeenCalledWith({
+      sessionId: "agent-app-session-1",
+      turnId: "agent-app-turn-1",
+    });
+    expect(runtimeApiMocks.startAgentAppRuntimeTask).not.toHaveBeenCalled();
+    expect(runtimeApiMocks.getAgentAppRuntimeTask).not.toHaveBeenCalled();
+    expect(runtimeApiMocks.cancelAgentAppRuntimeTask).not.toHaveBeenCalled();
+    expect(
+      runtimeApiMocks.submitAgentAppRuntimeHostResponse,
+    ).not.toHaveBeenCalled();
   });
 
   it("Host Bridge 写回 artifact / evidence 时应拒绝未声明 subject", async () => {

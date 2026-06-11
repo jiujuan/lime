@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "rootPath": {
+      "type": "string"
+    },
+    "workspaceType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "rootPath"
+  ],
+  "title": "WorkspaceEnsureProjectParams",
+  "type": "object"
+}

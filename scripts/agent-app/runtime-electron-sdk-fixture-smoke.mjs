@@ -28,7 +28,6 @@ const APP_ID = "content-factory-sdk-fixture-app";
 const ENTRY_KEY = "dashboard";
 const ENTRY_ROUTE = "/dashboard";
 const RUNTIME_VERSION = "0.8.0";
-const SESSION_ID = "agent-app-electron-sdk-session";
 const TASK_ID = "agent-app-electron-sdk-task-1";
 const REQUEST_ID = "agent-app-electron-sdk-request-1";
 const TASK_KIND = "content_factory.sdk_write";
@@ -50,6 +49,16 @@ const SDK_METHODS = [
   "submitHostResponse",
   "cancelTask",
 ];
+const REQUIRED_AGENT_UI_PROJECTION_SELECTORS = [
+  ".agent-ui-projection",
+  ".agent-ui-main",
+  ".agent-ui-sidecar",
+  ".agent-message-parts",
+  ".agent-process-timeline",
+  ".agent-execution-graph",
+  ".agent-artifact-refs",
+  ".agent-evidence-refs",
+];
 const REQUIRED_HOST_ADAPTER_CAPABILITIES = [
   "lime.agent",
   "lime.storage",
@@ -64,7 +73,7 @@ Agent App Runtime Electron SDK Fixture Smoke
 
 用途:
   启动真实 Electron Desktop Host，种子临时 Agent App installed state，
-  通过正式侧栏进入 Agent App runtime page，再由 iframe 内真实 SDK
+  通过正式侧栏 Agent Apps 聚合入口进入 Agent App runtime page，再由 iframe 内真实 SDK
   createLimeHostBridgeCapabilityInvoker 调用 lime.agent start/get/respond/cancel。
   后端使用一次性 external backend fixture 记录 App Server RuntimeCore 请求。
 
@@ -596,7 +605,6 @@ function pageHtml() {
 
       const APP_ID = ${JSON.stringify(APP_ID)};
       const ENTRY_KEY = ${JSON.stringify(ENTRY_KEY)};
-      const SESSION_ID = ${JSON.stringify(SESSION_ID)};
       const TASK_ID = ${JSON.stringify(TASK_ID)};
       const REQUEST_ID = ${JSON.stringify(REQUEST_ID)};
       const TASK_KIND = ${JSON.stringify(TASK_KIND)};
@@ -801,7 +809,6 @@ function pageHtml() {
           requestId: "sdk-fixture-start-task",
           args: {
             taskId: TASK_ID,
-            sessionId: SESSION_ID,
             workspaceId: "workspace-agent-app-sdk-fixture",
             taskKind: TASK_KIND,
             title: "Agent App SDK task fixture",
@@ -847,13 +854,20 @@ function pageHtml() {
         if (!runtimeTurnId) {
           throw new Error("startTask did not return runtime turnId");
         }
+        const runtimeSessionId =
+          typeof startTask?.sessionId === "string" && startTask.sessionId.length > 0
+            ? startTask.sessionId
+            : null;
+        if (!runtimeSessionId) {
+          throw new Error("startTask did not return runtime sessionId");
+        }
         const firstRead = unwrap("getTask blocked", await bridge.call({
           capability: "lime.agent",
           method: "getTask",
           requestId: "sdk-fixture-get-task-blocked",
           args: {
             taskId: TASK_ID,
-            sessionId: SESSION_ID
+            sessionId: runtimeSessionId
           }
         }));
         const hostResponse = unwrap("submitHostResponse", await bridge.call({
@@ -871,7 +885,7 @@ function pageHtml() {
             },
             eventName: HOST_RESPONSE_EVENT_NAME,
             actionScope: {
-              sessionId: SESSION_ID,
+              sessionId: runtimeSessionId,
               turnId: runtimeTurnId
             }
           }
@@ -882,19 +896,35 @@ function pageHtml() {
           requestId: "sdk-fixture-get-task-running",
           args: {
             taskId: TASK_ID,
-            sessionId: SESSION_ID,
+            sessionId: runtimeSessionId,
             turnId: runtimeTurnId
           }
         }));
         const artifactEvidence = readArtifactEvidenceFromTaskRecord(secondRead);
         const toolEvidence = readToolCallEvidenceFromTaskRecord(secondRead);
+        const hostRun = unwrap("openAgentRun", await bridge.call({
+          capability: "lime.ui",
+          method: "openAgentRun",
+          requestId: "sdk-fixture-open-agent-run",
+          args: {
+            taskId: TASK_ID,
+            sessionId: runtimeSessionId,
+            bridgeAction: "agent_app_sdk_fixture.standard_projection",
+            title: "Agent App SDK Host Bridge current path",
+            mode: "drawer",
+            task: secondRead,
+            snapshot: secondRead,
+            runtimeProcess: secondRead?.runtimeProcess ?? secondRead?.process,
+            events: readTaskEvents(secondRead)
+          }
+        }));
         const cancel = unwrap("cancelTask", await bridge.call({
           capability: "lime.agent",
           method: "cancelTask",
           requestId: "sdk-fixture-cancel-task",
           args: {
             taskId: TASK_ID,
-            sessionId: SESSION_ID,
+            sessionId: runtimeSessionId,
             turnId: runtimeTurnId
           }
         }));
@@ -910,6 +940,7 @@ function pageHtml() {
             firstRead,
             hostResponse,
             secondRead,
+            hostRun,
             cancel
           },
           artifactEvidence,
@@ -1509,23 +1540,27 @@ async function clearInvokeBuffers(page) {
   });
 }
 
-async function waitForAgentAppSidebarEntry(page, options) {
+async function clickAgentAppsNavEntry(page, options) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < options.timeoutMs) {
     const entry = await evaluatePageSnapshot(page, () => {
-      const buttons = Array.from(document.querySelectorAll("button"));
+      const sidebar =
+        document.querySelector('[data-testid="app-sidebar"]') ?? document;
+      const buttons = Array.from(sidebar.querySelectorAll("button"));
       const matched = buttons.find((button) => {
-        const label = [button.getAttribute("title"), button.textContent]
+        const label = [
+          button.getAttribute("aria-label"),
+          button.getAttribute("title"),
+          button.textContent,
+        ]
           .filter(Boolean)
           .join(" ");
-        return (
-          label.includes("SDK 内容工厂") ||
-          label.includes("content-factory-sdk-fixture-app")
-        );
+        return /Agent Apps|应用中心|App Center/i.test(label);
       });
       if (!matched) {
         return null;
       }
+      matched.click();
       return {
         title: matched.getAttribute("title"),
         text: matched.textContent,
@@ -1537,24 +1572,94 @@ async function waitForAgentAppSidebarEntry(page, options) {
     }
     await sleep(options.intervalMs);
   }
-  throw new Error("未在正式侧栏观察到 SDK fixture Agent App 入口");
+  throw new Error("未在正式侧栏观察到 Agent Apps 聚合入口");
 }
 
-async function clickAgentAppSidebarEntry(page) {
-  const button = page
-    .locator("button")
-    .filter({ hasText: /SDK 内容工厂|content-factory-sdk-fixture-app/ })
+async function waitForAgentAppsInstalledRow(page, options) {
+  const rowSelector = `[data-testid="agent-apps-list-row-${APP_ID}"]`;
+  const installedSelector = `[data-testid="agent-apps-installed-${APP_ID}"]`;
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      ({ rowSelector, installedSelector }) => {
+        const pageRoot = document.querySelector(
+          '[data-testid="agent-apps-page"]',
+        );
+        const list = document.querySelector('[data-testid="agent-apps-list"]');
+        const row = document.querySelector(rowSelector);
+        const installedMarker = document.querySelector(installedSelector);
+        return {
+          pageVisible: Boolean(pageRoot),
+          listVisible: Boolean(list),
+          rowVisible: Boolean(row),
+          installedMarkerVisible: Boolean(installedMarker),
+          url: window.location.href,
+          bodyText: document.body?.innerText?.slice(0, 1_200) ?? "",
+        };
+      },
+      { rowSelector, installedSelector },
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (
+      snapshot.pageVisible &&
+      snapshot.listVisible &&
+      snapshot.rowVisible &&
+      snapshot.installedMarkerVisible
+    ) {
+      return {
+        ...snapshot,
+        bodyText: sanitizeText(snapshot.bodyText),
+      };
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Agent Apps 聚合页未显示 SDK fixture installed row: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+      null,
+      2,
+    )}`,
+  );
+}
+
+async function openAgentAppRuntimeFromAgentAppsPage(page, options) {
+  const navEntry = await clickAgentAppsNavEntry(page, options);
+  await page.waitForSelector('[data-testid="agent-apps-page"]', {
+    timeout: options.timeoutMs,
+  });
+  await page.waitForSelector('[data-testid="agent-apps-list"]', {
+    timeout: options.timeoutMs,
+  });
+  const installedRow = await waitForAgentAppsInstalledRow(page, options);
+
+  const detailButton = page
+    .locator(`[data-testid="agent-apps-open-detail-${APP_ID}"]`)
     .first();
-  if ((await button.count()) > 0) {
-    await button.click();
-    return;
-  }
-  const titled = page.locator('button[title*="SDK 内容工厂"]').first();
-  if ((await titled.count()) > 0) {
-    await titled.click();
-    return;
-  }
-  throw new Error("SDK fixture Agent App 侧栏按钮不可点击");
+  await detailButton.click({ timeout: options.timeoutMs });
+  await page.waitForSelector('[data-testid="agent-apps-detail"]', {
+    timeout: options.timeoutMs,
+  });
+  const launchEntrySelector = `[data-testid="agent-apps-launch-entry-${ENTRY_KEY}"]`;
+  await page.waitForSelector(launchEntrySelector, {
+    timeout: options.timeoutMs,
+  });
+  await page.locator(launchEntrySelector).first().click({
+    timeout: options.timeoutMs,
+  });
+
+  return {
+    navEntry,
+    installedRow,
+    detailVisible:
+      (await page.locator('[data-testid="agent-apps-detail"]').count()) > 0,
+    launchEntryKey: ENTRY_KEY,
+  };
 }
 
 async function waitForSdkFixtureResult(page, options) {
@@ -1617,6 +1722,97 @@ async function captureRuntimePageEvidence(page) {
   });
 }
 
+async function waitForHostProjectionSurface(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      (requiredSelectors) => {
+        const dock = document.querySelector(
+          '[data-testid="agent-app-host-agent-run-dock"]',
+        );
+        const drawer = document.querySelector(
+          '[data-testid="agent-app-host-agent-run-drawer"]',
+        );
+        const missingSelectors = requiredSelectors.filter(
+          (selector) => !document.querySelector(selector),
+        );
+        const projectionRoot = document.querySelector(".agent-ui-projection");
+        const action = document.querySelector("[data-action-id]");
+        const actionRequiredList = document.querySelector(
+          ".agent-action-required-list",
+        );
+        const artifact = document.querySelector(
+          '.agent-artifact-refs [data-ref-kind="artifact"]',
+        );
+        const evidence = document.querySelector(
+          '.agent-evidence-refs [data-ref-kind="evidence"]',
+        );
+        const toolEntry = document.querySelector(
+          '.agent-process-entry[data-entry-kind="tool"]',
+        );
+        return {
+          dockVisible: Boolean(dock),
+          drawerVisible: Boolean(drawer),
+          projectionVisible: Boolean(projectionRoot),
+          runtimeStatus:
+            projectionRoot instanceof HTMLElement
+              ? projectionRoot.dataset.runtimeStatus ?? null
+              : null,
+          hydrationStatus:
+            projectionRoot instanceof HTMLElement
+              ? projectionRoot.dataset.hydrationStatus ?? null
+              : null,
+          missingSelectors,
+          actionId:
+            action instanceof HTMLElement ? action.dataset.actionId ?? null : null,
+          actionRequiredListVisible: Boolean(actionRequiredList),
+          artifactRefId:
+            artifact instanceof HTMLElement ? artifact.dataset.refId ?? null : null,
+          evidenceRefId:
+            evidence instanceof HTMLElement ? evidence.dataset.refId ?? null : null,
+          toolEntryVisible: Boolean(toolEntry),
+          textPreview: document.body?.innerText?.slice(0, 1_000) ?? "",
+        };
+      },
+      REQUIRED_AGENT_UI_PROJECTION_SELECTORS,
+    );
+    if (!snapshot) {
+      await sleep(options.intervalMs);
+      continue;
+    }
+    lastSnapshot = snapshot;
+    if (snapshot.dockVisible && !snapshot.drawerVisible) {
+      await page
+        .locator('[data-testid="agent-app-host-agent-run-dock"]')
+        .first()
+        .click({ timeout: Math.min(options.intervalMs, 1_000) })
+        .catch(() => {});
+      await sleep(options.intervalMs);
+      continue;
+    }
+    if (
+      snapshot.drawerVisible &&
+      snapshot.projectionVisible &&
+      snapshot.missingSelectors.length === 0
+    ) {
+      return {
+        ...snapshot,
+        textPreview: sanitizeText(snapshot.textPreview),
+      };
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Host Agent Run 标准 AgentUI projection surface 未就绪: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+      null,
+      2,
+    )}`,
+  );
+}
+
 async function stopRuntimeFromPage(page) {
   return await page.evaluate(
     async ({ appId }) => {
@@ -1663,8 +1859,9 @@ function assertSdkLifecycleResult(result, backendSummary) {
     "SDK startTask taskId 不正确",
   );
   assert(
-    result.taskLifecycle?.startTask?.sessionId === SESSION_ID,
-    "SDK startTask sessionId 不正确",
+    typeof result.taskLifecycle?.startTask?.sessionId === "string" &&
+      result.taskLifecycle.startTask.sessionId.length > 0,
+    "SDK startTask 未返回有效 sessionId",
   );
   assert(
     typeof result.taskLifecycle?.startTask?.turnId === "string" &&
@@ -1674,6 +1871,10 @@ function assertSdkLifecycleResult(result, backendSummary) {
   assert(
     result.ids?.turnId === result.taskLifecycle?.startTask?.turnId,
     "SDK ids.turnId 未使用 startTask 返回的 runtime turnId",
+  );
+  assert(
+    result.ids?.sessionId === result.taskLifecycle?.startTask?.sessionId,
+    "SDK ids.sessionId 未使用 startTask 返回的 runtime sessionId",
   );
   assert(
     result.taskLifecycle?.firstRead?.status === "running",
@@ -1686,6 +1887,14 @@ function assertSdkLifecycleResult(result, backendSummary) {
   assert(
     result.taskLifecycle?.secondRead?.status === "running",
     `submitHostResponse 后 SDK getTask status 应为 running，实际 ${result.taskLifecycle?.secondRead?.status}`,
+  );
+  assert(
+    result.taskLifecycle?.hostRun?.surface === "host_agent_run",
+    "SDK lime.ui.openAgentRun 未返回 host_agent_run surface",
+  );
+  assert(
+    result.taskLifecycle?.hostRun?.opened === true,
+    "SDK lime.ui.openAgentRun 未打开 Host Agent Run 面板",
   );
   assert(
     result.taskLifecycle?.cancel?.status === "cancelled",
@@ -1772,8 +1981,8 @@ function assertSdkLifecycleResult(result, backendSummary) {
     "turn_config provider_config.model 未抵达 backend",
   );
   assert(
-    backendSummary.startSessionId === SESSION_ID,
-    "external backend turnStart sessionId 不正确",
+    backendSummary.startSessionId === result.taskLifecycle?.startTask?.sessionId,
+    "external backend turnStart sessionId 未与 SDK startTask 返回值一致",
   );
   assert(
     backendSummary.startTurnId === result.taskLifecycle?.startTask?.turnId,
@@ -1839,7 +2048,7 @@ async function run() {
     checkedAt: new Date().toISOString(),
     appId: APP_ID,
     entryKey: ENTRY_KEY,
-    sessionId: SESSION_ID,
+    sessionId: null,
     taskId: TASK_ID,
     turnId: null,
     requestId: REQUEST_ID,
@@ -1856,6 +2065,9 @@ async function run() {
     backendLogPath: options.keepTemp ? runtimeEnv.backendLogPath : null,
     electronPreloadBridge: false,
     sidebarEntryVisible: false,
+    agentAppsPageVisible: false,
+    agentAppsInstalledRowVisible: false,
+    agentAppsLaunchEntryVisible: false,
     runtimeSurfaceVisible: false,
     runtimeFrameVisible: false,
     frameSrc: null,
@@ -1915,17 +2127,26 @@ async function run() {
       rendererSnapshot.electron && rendererSnapshot.hasInvokeBridge;
     await clearInvokeBuffers(page);
 
-    logStage("wait-sidebar-entry");
-    const sidebarEntry = await waitForAgentAppSidebarEntry(page, options);
+    logStage("open-agent-apps-runtime-page");
+    const agentAppsLaunch = await openAgentAppRuntimeFromAgentAppsPage(
+      page,
+      options,
+    );
     summary.sidebarEntryVisible = true;
-    summary.sidebarEntry = sanitizeJson(sidebarEntry);
-
-    logStage("open-runtime-page");
-    await clickAgentAppSidebarEntry(page);
+    summary.sidebarEntry = sanitizeJson(agentAppsLaunch.navEntry);
+    summary.agentAppsPageVisible = true;
+    summary.agentAppsInstalledRowVisible = true;
+    summary.agentAppsLaunchEntryVisible = true;
+    summary.agentAppsLaunch = sanitizeJson(agentAppsLaunch);
 
     logStage("wait-sdk-result");
     const sdkEvidence = await waitForSdkFixtureResult(page, options);
     const runtimeEvidence = await captureRuntimePageEvidence(page);
+    logStage("wait-host-agentui-projection");
+    const hostProjectionEvidence = await waitForHostProjectionSurface(
+      page,
+      options,
+    );
     const traceEntries = invokeTraceEntriesFromStorage(
       runtimeEvidence?.traceRaw,
     );
@@ -1934,6 +2155,7 @@ async function run() {
     const backendSummary = summarizeBackendLog(backendEntries);
 
     Object.assign(summary, {
+      sessionId: sdkEvidence.result?.taskLifecycle?.startTask?.sessionId ?? null,
       turnId: sdkEvidence.result?.taskLifecycle?.startTask?.turnId ?? null,
       runtimeSurfaceVisible: Boolean(runtimeEvidence?.surfaceVisible),
       runtimeFrameVisible: Boolean(runtimeEvidence?.frameVisible),
@@ -1943,6 +2165,7 @@ async function run() {
         sdkEvidence.result?.artifactEvidence ?? null,
       ),
       toolEvidence: sanitizeJson(sdkEvidence.result?.toolEvidence ?? null),
+      hostProjectionEvidence: sanitizeJson(hostProjectionEvidence),
       frameContent: sanitizeJson({
         url: sdkEvidence.url,
         bodyTextPreview: sdkEvidence.bodyTextPreview,
@@ -2004,6 +2227,22 @@ async function run() {
     assert(
       summary.appServerHandleJsonLinesSeen,
       "未观察到 app_server_handle_json_lines",
+    );
+    assert(
+      summary.hostProjectionEvidence?.projectionVisible === true,
+      "未观察到 Host Agent Run 标准 AgentUI projection surface",
+    );
+    assert(
+      summary.hostProjectionEvidence?.artifactRefId,
+      "Host Agent Run 标准 ArtifactRef surface 未渲染",
+    );
+    assert(
+      summary.hostProjectionEvidence?.evidenceRefId,
+      "Host Agent Run 标准 EvidenceRef surface 未渲染",
+    );
+    assert(
+      summary.hostProjectionEvidence?.toolEntryVisible === true,
+      "Host Agent Run 标准 ProcessTimeline 未渲染 tool entry",
     );
     assert(
       consoleErrors.length === 0,

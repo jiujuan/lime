@@ -89,22 +89,16 @@ export interface ServiceModelsConfig {
   resource_prompt_rewrite?: ServiceModelPreferenceConfig;
 }
 
-export interface CompanionDefaultsConfig {
-  general?: MediaGenerationPreferenceConfig;
-  tts?: MediaGenerationPreferenceConfig;
-}
-
 export interface WorkspacePreferencesConfig {
   schema_version?: number;
   agent_response_language?: string;
   media_defaults?: MediaGenerationDefaultsConfig;
-  companion_defaults?: CompanionDefaultsConfig;
   service_models?: ServiceModelsConfig;
 }
 
 export const CURRENT_SIDEBAR_NAV_SCHEMA_VERSION = 3;
 
-export type NavigationEnabledItemId = "companion";
+export type NavigationEnabledItemId = never;
 
 export interface NavigationConfig {
   schema_version?: number;

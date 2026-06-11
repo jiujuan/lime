@@ -200,6 +200,8 @@ pub use app_server_protocol::WechatConfiguredAccount;
 pub use app_server_protocol::WindowsStartupCheck;
 pub use app_server_protocol::WindowsStartupDiagnosticsResponse;
 pub use app_server_protocol::WorkspaceEnsureParams;
+pub use app_server_protocol::WorkspaceEnsureProjectParams;
+pub use app_server_protocol::WorkspaceEnsureProjectResponse;
 pub use app_server_protocol::WorkspaceEnsureReadyResponse;
 pub use app_server_protocol::WorkspaceListResponse;
 pub use app_server_protocol::WorkspacePathReadParams;
@@ -347,6 +349,7 @@ pub use app_server_protocol::METHOD_WECHAT_CHANNEL_ACCOUNT_LIST;
 pub use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
+pub use app_server_protocol::METHOD_WORKSPACE_ENSURE;
 pub use app_server_protocol::METHOD_WORKSPACE_ENSURE_READY;
 pub use app_server_protocol::METHOD_WORKSPACE_LIST;
 pub use app_server_protocol::METHOD_WORKSPACE_PROJECTS_ROOT_READ;
@@ -514,6 +517,13 @@ impl AppServerClient {
         params: WorkspacePathReadParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::read_workspace_by_path(params))
+    }
+
+    pub fn ensure_workspace(
+        &mut self,
+        params: WorkspaceEnsureProjectParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::ensure_workspace(params))
     }
 
     pub fn read_default_workspace(&mut self) -> Result<JsonRpcRequest, ClientError> {
@@ -1350,6 +1360,12 @@ pub mod typed {
         params: WorkspacePathReadParams,
     ) -> TypedRequest<WorkspacePathReadParams> {
         TypedRequest::new(METHOD_WORKSPACE_BY_PATH_READ, params)
+    }
+
+    pub fn ensure_workspace(
+        params: WorkspaceEnsureProjectParams,
+    ) -> TypedRequest<WorkspaceEnsureProjectParams> {
+        TypedRequest::new(METHOD_WORKSPACE_ENSURE, params)
     }
 
     pub fn read_default_workspace() -> TypedRequest<serde_json::Value> {
@@ -2408,6 +2424,13 @@ mod tests {
                 root_path: "/workspace/project".to_string(),
             })
             .expect("workspace by path");
+        let ensured_workspace = client
+            .ensure_workspace(WorkspaceEnsureProjectParams {
+                name: "content-studio".to_string(),
+                root_path: "/workspace/content-studio".to_string(),
+                workspace_type: Some("general".to_string()),
+            })
+            .expect("ensure workspace");
         let default_workspace = client.read_default_workspace().expect("default workspace");
         let ensured_default = client
             .ensure_default_workspace()
@@ -2438,6 +2461,15 @@ mod tests {
         assert_eq!(
             workspace_by_path.params.expect("params"),
             json!({ "rootPath": "/workspace/project" })
+        );
+        assert_eq!(ensured_workspace.method, METHOD_WORKSPACE_ENSURE);
+        assert_eq!(
+            ensured_workspace.params.expect("params"),
+            json!({
+                "name": "content-studio",
+                "rootPath": "/workspace/content-studio",
+                "workspaceType": "general",
+            })
         );
         assert_eq!(default_workspace.method, METHOD_WORKSPACE_DEFAULT_READ);
         assert_eq!(ensured_default.method, METHOD_WORKSPACE_DEFAULT_ENSURE);
@@ -3411,6 +3443,7 @@ mod tests {
         assert!(methods.contains(&METHOD_AGENT_APP_SHELL_PREPARE));
         assert!(methods.contains(&METHOD_WORKSPACE_READ));
         assert!(methods.contains(&METHOD_WORKSPACE_BY_PATH_READ));
+        assert!(methods.contains(&METHOD_WORKSPACE_ENSURE));
         assert!(methods.contains(&METHOD_WORKSPACE_DEFAULT_READ));
         assert!(methods.contains(&METHOD_WORKSPACE_DEFAULT_ENSURE));
         assert!(methods.contains(&METHOD_WORKSPACE_PROJECTS_ROOT_READ));

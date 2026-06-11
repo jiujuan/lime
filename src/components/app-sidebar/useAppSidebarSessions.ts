@@ -1,0 +1,492 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  listAgentRuntimeSessions,
+  type AsterSessionInfo,
+} from "@/lib/api/agentRuntime";
+import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
+import { logAgentDebug } from "@/lib/agentDebug";
+import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
+import {
+  SIDEBAR_CONVERSATION_NAVIGATION_DEFER_MS,
+  SIDEBAR_NEW_TASK_HOME_SESSION_LOAD_DEFER_MS,
+  SIDEBAR_RECENT_SESSION_PAGE_SIZE,
+  SIDEBAR_SEARCH_RESULT_LIMIT,
+  SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
+  SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS,
+} from "./AppSidebar.constants";
+import {
+  buildSidebarSessionRequestLimit,
+  buildVisibleSidebarSessions,
+  hasCachedSidebarSessionEntry,
+  matchesSidebarSessionTitle,
+  normalizeSidebarSearchText,
+  sortSidebarSessions,
+  splitSidebarSessionResult,
+} from "./sidebarSessions";
+
+interface UseAppSidebarSessionsParams {
+  currentSessionId: string | null;
+  openedProjectIds?: string[];
+  shouldShowConversationList: boolean;
+  sidebarSearchOpen: boolean;
+  sidebarSearchQuery: string;
+  isNewTaskHome: boolean;
+  isClawTaskCenter: boolean;
+  conversationUntitledLabel: string;
+}
+
+function mergeSidebarSessions(
+  sessionGroups: AsterSessionInfo[][],
+): AsterSessionInfo[] {
+  const sessionsById = new Map<string, AsterSessionInfo>();
+  sessionGroups.flat().forEach((session) => {
+    sessionsById.set(session.id, session);
+  });
+  return sortSidebarSessions([...sessionsById.values()]);
+}
+
+export function useAppSidebarSessions({
+  currentSessionId,
+  openedProjectIds = [],
+  shouldShowConversationList,
+  sidebarSearchOpen,
+  sidebarSearchQuery,
+  isNewTaskHome,
+  isClawTaskCenter,
+  conversationUntitledLabel,
+}: UseAppSidebarSessionsParams) {
+  const sidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
+  const [sidebarSessions, setSidebarSessions] = useState<AsterSessionInfo[]>(
+    [],
+  );
+  const [sidebarSessionsHasMore, setSidebarSessionsHasMore] = useState(false);
+  const [sidebarSessionsLoading, setSidebarSessionsLoading] = useState(false);
+  const [sidebarSessionActionId, setSidebarSessionActionId] = useState<
+    string | null
+  >(null);
+  const [recentSessionsVisibleCount, setRecentSessionsVisibleCount] = useState(
+    SIDEBAR_RECENT_SESSION_PAGE_SIZE,
+  );
+  const conversationNavigationDeferUntilRef = useRef(0);
+  const recentSidebarLoadInFlightRef = useRef(false);
+  const recentSidebarReloadPendingRef = useRef(false);
+  const recentSidebarReloadCancelRef = useRef<(() => void) | null>(null);
+  const loadRecentSidebarSessionsRef = useRef<() => Promise<void>>(
+    async () => undefined,
+  );
+  const sidebarFocusRefreshCancelRef = useRef<(() => void) | null>(null);
+  const newTaskHomeSessionLoadCancelRef = useRef<(() => void) | null>(null);
+  const shouldLoadSidebarConversations =
+    shouldShowConversationList || sidebarSearchOpen;
+  const openedProjectIdsKey = useMemo(() => {
+    const seen = new Set<string>();
+    return openedProjectIds
+      .map((projectId) => projectId.trim())
+      .filter((projectId) => {
+        if (!projectId || seen.has(projectId)) {
+          return false;
+        }
+        seen.add(projectId);
+        return true;
+      })
+      .join("\n");
+  }, [openedProjectIds]);
+  const normalizedOpenedProjectIds = useMemo(
+    () => (openedProjectIdsKey ? openedProjectIdsKey.split("\n") : []),
+    [openedProjectIdsKey],
+  );
+  const shouldShowSessionLoadingState =
+    sidebarSessionsLoading && sidebarSessions.length === 0;
+  const hasCachedCurrentSessionSidebarEntry = hasCachedSidebarSessionEntry(
+    sidebarSessionsRef.current,
+    currentSessionId,
+  );
+
+  useEffect(() => {
+    return () => {
+      recentSidebarReloadCancelRef.current?.();
+      recentSidebarReloadCancelRef.current = null;
+      sidebarFocusRefreshCancelRef.current?.();
+      sidebarFocusRefreshCancelRef.current = null;
+      newTaskHomeSessionLoadCancelRef.current?.();
+      newTaskHomeSessionLoadCancelRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    sidebarSessionsRef.current = sidebarSessions;
+  }, [sidebarSessions]);
+
+  useEffect(() => {
+    setRecentSessionsVisibleCount(SIDEBAR_RECENT_SESSION_PAGE_SIZE);
+  }, [openedProjectIdsKey]);
+
+  const recentSessionRequestLimit = useMemo(() => {
+    return buildSidebarSessionRequestLimit(
+      recentSessionsVisibleCount,
+      SIDEBAR_RECENT_SESSION_PAGE_SIZE,
+    );
+  }, [recentSessionsVisibleCount]);
+
+  const scheduleRecentSidebarReload = useCallback((minimumDelayMs: number) => {
+    recentSidebarReloadCancelRef.current?.();
+    recentSidebarReloadCancelRef.current = scheduleMinimumDelayIdleTask(
+      () => {
+        recentSidebarReloadCancelRef.current = null;
+        void loadRecentSidebarSessionsRef.current();
+      },
+      {
+        minimumDelayMs,
+        idleTimeoutMs: Math.max(
+          minimumDelayMs,
+          SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS,
+        ),
+      },
+    );
+  }, []);
+
+  const loadRecentSidebarSessions = useCallback(async () => {
+    if (!shouldLoadSidebarConversations) {
+      setSidebarSessions([]);
+      setSidebarSessionsHasMore(false);
+      setSidebarSessionsLoading(false);
+      return;
+    }
+
+    if (recentSidebarLoadInFlightRef.current) {
+      recentSidebarReloadPendingRef.current = true;
+      return;
+    }
+
+    const deferRemainingMs =
+      conversationNavigationDeferUntilRef.current - Date.now();
+    if (deferRemainingMs > 0 && sidebarSessionsRef.current.length > 0) {
+      scheduleRecentSidebarReload(deferRemainingMs);
+      return;
+    }
+
+    recentSidebarLoadInFlightRef.current = true;
+    setSidebarSessionsLoading(
+      (current) => current || sidebarSessionsRef.current.length === 0,
+    );
+    const startedAt = Date.now();
+    logAgentDebug("AppSidebar", "recentConversations.load.start", {
+      limit: recentSessionRequestLimit,
+      workspaceIds: normalizedOpenedProjectIds,
+    });
+    try {
+      const sessionGroups = await Promise.all([
+        listAgentRuntimeSessions({
+          limit: recentSessionRequestLimit,
+        }),
+        ...normalizedOpenedProjectIds.map((workspaceId) =>
+          listAgentRuntimeSessions({
+            limit: recentSessionRequestLimit,
+            workspaceId,
+          }),
+        ),
+      ]);
+      const listDurationMs = Date.now() - startedAt;
+      const sortStartedAt = Date.now();
+      const sortedSessions = mergeSidebarSessions(sessionGroups);
+      const sortDurationMs = Date.now() - sortStartedAt;
+      const { hasMore } = splitSidebarSessionResult({
+        sessions: sortedSessions,
+        visibleCount: recentSessionsVisibleCount,
+        pageSize: SIDEBAR_RECENT_SESSION_PAGE_SIZE,
+      });
+      const metricContext = {
+        hasMore,
+        limit: recentSessionRequestLimit,
+        listDurationMs,
+        sessionsCount: sortedSessions.length,
+        sortDurationMs,
+        totalDurationMs: Date.now() - startedAt,
+        visibleCount: recentSessionsVisibleCount,
+        workspaceIds: normalizedOpenedProjectIds,
+      };
+      recordAgentUiPerformanceMetric(
+        "appSidebar.recentConversations.loadBreakdown",
+        metricContext,
+      );
+      logAgentDebug(
+        "AppSidebar",
+        "recentConversations.load.success",
+        metricContext,
+        {
+          dedupeKey: `appSidebar.recentConversations.load.success:${openedProjectIdsKey}:${recentSessionRequestLimit}`,
+          throttleMs: 1000,
+        },
+      );
+      setSidebarSessions(sortedSessions);
+      setSidebarSessionsHasMore(hasMore);
+    } catch (error) {
+      console.warn("加载导航任务列表失败:", error);
+      logAgentDebug(
+        "AppSidebar",
+        "recentConversations.load.error",
+        {
+          durationMs: Date.now() - startedAt,
+          error,
+          limit: recentSessionRequestLimit,
+          workspaceIds: normalizedOpenedProjectIds,
+        },
+        { level: "warn" },
+      );
+      setSidebarSessions([]);
+      setSidebarSessionsHasMore(false);
+    } finally {
+      recentSidebarLoadInFlightRef.current = false;
+      setSidebarSessionsLoading(false);
+      if (recentSidebarReloadPendingRef.current) {
+        recentSidebarReloadPendingRef.current = false;
+        scheduleRecentSidebarReload(SIDEBAR_SESSION_LOAD_RESTART_DEFER_MS);
+      }
+    }
+  }, [
+    normalizedOpenedProjectIds,
+    openedProjectIdsKey,
+    recentSessionRequestLimit,
+    recentSessionsVisibleCount,
+    scheduleRecentSidebarReload,
+    shouldLoadSidebarConversations,
+  ]);
+
+  useEffect(() => {
+    loadRecentSidebarSessionsRef.current = loadRecentSidebarSessions;
+  }, [loadRecentSidebarSessions]);
+
+  const refreshSidebarSessions = useCallback(async () => {
+    await loadRecentSidebarSessions();
+  }, [loadRecentSidebarSessions]);
+
+  useEffect(() => {
+    if (!shouldLoadSidebarConversations) {
+      newTaskHomeSessionLoadCancelRef.current?.();
+      newTaskHomeSessionLoadCancelRef.current = null;
+      return;
+    }
+
+    if (isNewTaskHome && sidebarSessionsRef.current.length === 0) {
+      newTaskHomeSessionLoadCancelRef.current?.();
+      newTaskHomeSessionLoadCancelRef.current = scheduleMinimumDelayIdleTask(
+        () => {
+          newTaskHomeSessionLoadCancelRef.current = null;
+          void loadRecentSidebarSessionsRef.current();
+        },
+        {
+          minimumDelayMs: SIDEBAR_NEW_TASK_HOME_SESSION_LOAD_DEFER_MS,
+          idleTimeoutMs: SIDEBAR_NEW_TASK_HOME_SESSION_LOAD_DEFER_MS,
+        },
+      );
+      return () => {
+        newTaskHomeSessionLoadCancelRef.current?.();
+        newTaskHomeSessionLoadCancelRef.current = null;
+      };
+    }
+
+    if (isClawTaskCenter && hasCachedCurrentSessionSidebarEntry) {
+      return scheduleMinimumDelayIdleTask(
+        () => {
+          void loadRecentSidebarSessionsRef.current();
+        },
+        {
+          minimumDelayMs: SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
+          idleTimeoutMs: SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
+        },
+      );
+    }
+
+    void loadRecentSidebarSessionsRef.current();
+  }, [
+    hasCachedCurrentSessionSidebarEntry,
+    isClawTaskCenter,
+    isNewTaskHome,
+    openedProjectIdsKey,
+    shouldLoadSidebarConversations,
+  ]);
+
+  useEffect(() => {
+    if (!shouldLoadSidebarConversations || typeof window === "undefined") {
+      return;
+    }
+
+    const handleFocus = () => {
+      sidebarFocusRefreshCancelRef.current?.();
+      sidebarFocusRefreshCancelRef.current = scheduleMinimumDelayIdleTask(
+        () => {
+          sidebarFocusRefreshCancelRef.current = null;
+          void refreshSidebarSessions();
+        },
+        {
+          minimumDelayMs: SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
+          idleTimeoutMs: SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS,
+        },
+      );
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      sidebarFocusRefreshCancelRef.current?.();
+      sidebarFocusRefreshCancelRef.current = null;
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [refreshSidebarSessions, shouldLoadSidebarConversations]);
+
+  useEffect(() => {
+    if (!shouldLoadSidebarConversations || !sidebarSessionsHasMore) {
+      return;
+    }
+
+    if (recentSessionsVisibleCount < sidebarSessions.length) {
+      return;
+    }
+
+    void loadRecentSidebarSessions();
+  }, [
+    loadRecentSidebarSessions,
+    recentSessionsVisibleCount,
+    shouldLoadSidebarConversations,
+    sidebarSessions.length,
+    sidebarSessionsHasMore,
+  ]);
+
+  const recentSidebarSessions = useMemo(() => {
+    return sidebarSessions.filter((session) => !session.archived_at);
+  }, [sidebarSessions]);
+  const visibleRecentSidebarSessions = useMemo(
+    () =>
+      buildVisibleSidebarSessions({
+        sessions: recentSidebarSessions,
+        currentSessionId,
+        limit: recentSessionsVisibleCount,
+    }),
+    [currentSessionId, recentSessionsVisibleCount, recentSidebarSessions],
+  );
+  const hasMoreRecentSidebarSessions =
+    sidebarSessionsHasMore ||
+    recentSessionsVisibleCount < recentSidebarSessions.length;
+  const normalizedSidebarSearchQuery = useMemo(
+    () => normalizeSidebarSearchText(sidebarSearchQuery),
+    [sidebarSearchQuery],
+  );
+  const sidebarSearchResultLimit = Math.max(
+    recentSessionsVisibleCount,
+    SIDEBAR_SEARCH_RESULT_LIMIT,
+  );
+  const sidebarSearchMatchedSessions = useMemo(() => {
+    if (!normalizedSidebarSearchQuery) {
+      return recentSidebarSessions;
+    }
+
+    return recentSidebarSessions.filter((session) =>
+      matchesSidebarSessionTitle(
+        session,
+        normalizedSidebarSearchQuery,
+        conversationUntitledLabel,
+      ),
+    );
+  }, [
+    conversationUntitledLabel,
+    normalizedSidebarSearchQuery,
+    recentSidebarSessions,
+  ]);
+  const sidebarSearchResultSessions = useMemo(() => {
+    if (!normalizedSidebarSearchQuery) {
+      return buildVisibleSidebarSessions({
+        sessions: recentSidebarSessions,
+        currentSessionId,
+        limit: sidebarSearchResultLimit,
+      });
+    }
+
+    return sidebarSearchMatchedSessions.slice(0, sidebarSearchResultLimit);
+  }, [
+    currentSessionId,
+    normalizedSidebarSearchQuery,
+    recentSidebarSessions,
+    sidebarSearchMatchedSessions,
+    sidebarSearchResultLimit,
+  ]);
+  const sidebarSearchHasQuery = normalizedSidebarSearchQuery.length > 0;
+  const sidebarSearchHasMoreResults = sidebarSearchHasQuery
+    ? sidebarSessionsHasMore ||
+      sidebarSearchResultLimit < sidebarSearchMatchedSessions.length
+    : hasMoreRecentSidebarSessions;
+  const fallbackSessionId =
+    recentSidebarSessions[0]?.id ?? sidebarSessions[0]?.id ?? null;
+
+  const deferConversationNavigation = useCallback(() => {
+    conversationNavigationDeferUntilRef.current =
+      Date.now() + SIDEBAR_CONVERSATION_NAVIGATION_DEFER_MS;
+  }, []);
+
+  const showMoreRecentSessions = useCallback(() => {
+    setRecentSessionsVisibleCount(
+      (current) => current + SIDEBAR_RECENT_SESSION_PAGE_SIZE,
+    );
+  }, []);
+
+  const beginSidebarSessionAction = useCallback((sessionId: string) => {
+    setSidebarSessionActionId(sessionId);
+  }, []);
+
+  const clearSidebarSessionAction = useCallback((sessionId: string) => {
+    setSidebarSessionActionId((current) =>
+      current === sessionId ? null : current,
+    );
+  }, []);
+
+  const renameSidebarSessionOptimistically = useCallback(
+    (nextSession: AsterSessionInfo) => {
+      setSidebarSessions((current) =>
+        sortSidebarSessions(
+          current.map((item) =>
+            item.id === nextSession.id ? nextSession : item,
+          ),
+        ),
+      );
+    },
+    [],
+  );
+
+  const moveSidebarSessionArchiveStateOptimistically = useCallback(
+    (nextSession: AsterSessionInfo) => {
+      setSidebarSessions((current) =>
+        sortSidebarSessions(
+          current
+            .map((item) => (item.id === nextSession.id ? nextSession : item))
+            .filter((item) => !item.archived_at),
+        ),
+      );
+    },
+    [],
+  );
+
+  const removeSidebarSessionOptimistically = useCallback((sessionId: string) => {
+    setSidebarSessions((current) =>
+      current.filter((item) => item.id !== sessionId),
+    );
+  }, []);
+
+  return {
+    beginSidebarSessionAction,
+    clearSidebarSessionAction,
+    deferConversationNavigation,
+    fallbackSessionId,
+    hasMoreRecentSidebarSessions,
+    moveSidebarSessionArchiveStateOptimistically,
+    recentSessionsLoading: sidebarSessionsLoading,
+    refreshSidebarSessions,
+    removeSidebarSessionOptimistically,
+    renameSidebarSessionOptimistically,
+    shouldShowSessionLoadingState,
+    showMoreRecentSessions,
+    sidebarSearchHasMoreResults,
+    sidebarSearchHasQuery,
+    sidebarSearchResultSessions,
+    sidebarSessionActionId,
+    visibleRecentSidebarSessions,
+  };
+}

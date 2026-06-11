@@ -300,7 +300,7 @@ describe("useSelectedTeamPreference", () => {
     }
   });
 
-  it("recent team runtime 应优先 hydrate，并把 custom Team 降级成可回退的影子缓存", async () => {
+  it("recent team runtime 应优先 hydrate custom Team，但不写本地影子缓存", async () => {
     const syncSpy = vi.fn().mockResolvedValue(undefined);
     const harness = mountHook("general", {
       runtimeSelection: {
@@ -332,10 +332,7 @@ describe("useSelectedTeamPreference", () => {
       await flushEffects();
       expect(harness.getValue().selectedTeam?.id).toBe("custom-team-1");
       expect(harness.getValue().selectedTeam?.label).toBe("前端联调团队");
-      expect(loadSelectedTeamReference("general")).toEqual({
-        id: "custom-team-1",
-        source: "custom",
-      });
+      expect(loadSelectedTeamReference("general")).toBeNull();
 
       harness.rerender("general", {
         runtimeSelection: null,
@@ -346,8 +343,7 @@ describe("useSelectedTeamPreference", () => {
       });
       await flushEffects();
 
-      expect(harness.getValue().selectedTeam?.id).toBe("custom-team-1");
-      expect(harness.getValue().selectedTeam?.label).toBe("前端联调团队");
+      expect(harness.getValue().selectedTeam).toBeNull();
     } finally {
       harness.unmount();
     }
