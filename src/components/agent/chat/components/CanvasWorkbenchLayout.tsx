@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { listDirectory, type DirectoryListing } from "@/lib/api/fileBrowser";
 import type { Artifact } from "@/lib/artifact/types";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { TaskFile } from "./TaskFiles";
 import type { HarnessFilePreviewResult } from "./HarnessStatusPanel";
 import {

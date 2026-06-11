@@ -5,8 +5,8 @@ import {
   type SetStateAction,
 } from "react";
 import { toast } from "sonner";
-import { createInitialDocumentState } from "@/lib/workspace/workbenchCanvas";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import { createInitialDocumentState } from "@/components/workspace/canvas/canvasUtils";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
 import {
   hasAgentRuntimeArtifactPreviewScope,

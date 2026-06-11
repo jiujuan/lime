@@ -5,7 +5,7 @@ import {
   ArtifactRenderer,
   ArtifactToolbar,
 } from "@/components/artifact";
-import { CanvasFactory } from "@/lib/workspace/workbenchCanvas";
+import { CanvasFactory } from "@/components/workspace/canvas/CanvasFactory";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
 import { CanvasPanel as GeneralCanvasPanel } from "@/components/general-chat/bridge";
 import type { Artifact } from "@/lib/artifact/types";

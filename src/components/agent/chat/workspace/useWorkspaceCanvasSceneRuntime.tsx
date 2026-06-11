@@ -9,8 +9,8 @@ import {
 import { toast } from "sonner";
 import { ArtifactCanvasOverlay, ArtifactToolbar } from "@/components/artifact";
 import { useImageGen } from "@/components/image-gen/useImageGen";
-import { CanvasFactory } from "@/lib/workspace/workbenchCanvas";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import { CanvasFactory } from "@/components/workspace/canvas/canvasUtils";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
 import {
   CanvasPanel as GeneralCanvasPanel,

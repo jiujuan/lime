@@ -1,4 +1,4 @@
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
 import type { CanvasState as GeneralCanvasState } from "@/components/general-chat/bridge";
 import type { TaskFile } from "../components/TaskFiles";

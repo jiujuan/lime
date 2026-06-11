@@ -10,8 +10,8 @@ import {
 import {
   createInitialCanvasState,
   type CanvasStateUnion,
-} from "@/lib/workspace/workbenchCanvas";
-import { createInitialDocumentState } from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/canvas/canvasUtils";
+import { createInitialDocumentState } from "@/components/workspace/canvas/canvasUtils";
 import {
   DEFAULT_CANVAS_STATE,
   type CanvasState as GeneralCanvasState,

@@ -23,7 +23,7 @@ import {
   normalizeImageTaskPath,
 } from "./imageTaskLocator";
 import { parseImageWorkbenchCommand } from "../utils/imageWorkbenchCommand";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import {
   markdownContainsDocumentImageTaskPlaceholder,
   replaceDocumentImageTaskPlaceholderWithImage,

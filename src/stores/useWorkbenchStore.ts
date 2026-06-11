@@ -12,7 +12,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   ContentReviewExpert,
   CustomContentReviewExpertInput,
-} from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/canvas/canvasUtils";
 import type { Skill } from "@/lib/api/skills";
 
 export interface WorkbenchContentReviewRailState {

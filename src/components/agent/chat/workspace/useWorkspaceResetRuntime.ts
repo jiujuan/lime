@@ -11,7 +11,7 @@ import type {
   LayoutMode,
   ThemeType,
 } from "@/lib/workspace/workbenchContract";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { TaskFile } from "../components/TaskFiles";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import type { Character } from "@/lib/api/memory";

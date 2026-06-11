@@ -8,11 +8,16 @@ import type { ThemeType } from "@/lib/workspace/workflowTypes";
 import {
   createInitialDocumentState,
   type DocumentCanvasState,
+  type DocumentVersion,
+  type PlatformType,
 } from "@/components/workspace/document/types";
 import { createInitialVideoState } from "@/components/workspace/video/types";
 import type { VideoCanvasState } from "@/components/workspace/video/types";
 import type { DesignCanvasState } from "@/components/workspace/design/types";
-import { createInitialDesignCanvasState } from "@/components/workspace/design/types";
+import {
+  createDesignCanvasStateFromContent,
+  createInitialDesignCanvasState,
+} from "@/components/workspace/design/types";
 
 /**
  * 画布状态联合类型
@@ -74,5 +79,16 @@ export function createInitialCanvasState(
   }
 }
 
-export { createInitialDesignCanvasState };
-export type { DesignCanvasState };
+export {
+  createDesignCanvasStateFromContent,
+  createInitialDesignCanvasState,
+  createInitialDocumentState,
+  createInitialVideoState,
+};
+export type {
+  DesignCanvasState,
+  DocumentCanvasState,
+  DocumentVersion,
+  PlatformType,
+  VideoCanvasState,
+};

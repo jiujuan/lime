@@ -7,7 +7,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type {
   CreateImageGenerationTaskArtifactRequest,
   MediaTaskArtifactOutput,

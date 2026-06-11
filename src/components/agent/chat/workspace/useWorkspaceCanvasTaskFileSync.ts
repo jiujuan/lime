@@ -4,8 +4,8 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
-import { createInitialDocumentState } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
+import { createInitialDocumentState } from "@/components/workspace/canvas/canvasUtils";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
 import type { TaskFile } from "../components/TaskFiles";
 import {

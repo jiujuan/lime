@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import styled from "styled-components";
 import { createCanvasStateFromArtifact } from "@/components/artifact/canvasAdapterUtils";
+import { CanvasFactory } from "@/components/workspace/canvas/CanvasFactory";
 import {
-  CanvasFactory,
   createInitialDesignCanvasState,
   type CanvasStateUnion,
   type DesignCanvasProps,
-} from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/design/types";
 import type {
   CreateImageGenerationTaskArtifactRequest,
   MediaTaskArtifactOutput,

@@ -6,12 +6,12 @@ import {
 } from "react";
 import { open as openDialog } from "@/lib/desktop-host/plugin-dialog";
 import { toast } from "sonner";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type {
   AutoContinueRunPayload,
   ContentReviewRunPayload,
   TextStylizeRunPayload,
-} from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/canvas/canvasUtils";
 import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
 import { importDocument } from "@/lib/api/session-files";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";

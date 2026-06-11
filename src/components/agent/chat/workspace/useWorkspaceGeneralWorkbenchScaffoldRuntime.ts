@@ -8,9 +8,9 @@ import {
 import { safeListen } from "@/lib/api/bridgeEvents";
 import {
   createInitialCanvasState,
+  createInitialDocumentState,
   type CanvasStateUnion,
-} from "@/lib/workspace/workbenchCanvas";
-import { createInitialDocumentState } from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/canvas/canvasUtils";
 import type { LayoutMode, ThemeType } from "@/lib/workspace/workbenchContract";
 import type { GeneralWorkbenchCreationTaskEvent } from "../components/generalWorkbenchWorkflowData";
 import { useTopicBranchBoard } from "../hooks";

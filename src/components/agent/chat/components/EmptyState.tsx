@@ -113,6 +113,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   recentSessionSummary = null,
   recentSessionActionLabel,
   onResumeRecentSession,
+  projectConversationGroups = [],
+  onOpenProjectConversation,
   projectId = null,
   openedProjects = [],
   onProjectContextChange,
@@ -866,8 +868,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       guideCards={homeGuideCards}
       guideOpen={guideHelpActive}
       sections={homeSkillSections}
+      conversationGroups={projectConversationGroups}
       supplementalActions={homeSupplementalActions}
       onGuideOpenChange={setGuideHelpActive}
+      onSelectConversation={onOpenProjectConversation}
       onSelectStarterChip={handleSelectHomeStarterChip}
       onSelectGuideCard={handleSelectHomeGuideCard}
       onSelectSkillItem={handleSelectHomeSkillItem}

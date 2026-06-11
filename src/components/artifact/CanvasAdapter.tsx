@@ -24,7 +24,7 @@ import {
   CanvasFactory,
   type CanvasStateUnion,
   type DesignCanvasState,
-} from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/canvas/CanvasFactory";
 
 // 工具函数导入
 import {

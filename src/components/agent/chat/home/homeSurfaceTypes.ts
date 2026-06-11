@@ -73,6 +73,19 @@ export interface HomeGuideCard {
   testId?: string;
 }
 
+export interface HomeProjectConversationItem {
+  id: string;
+  title: string;
+  summary?: string;
+  statusReason?: string;
+}
+
+export interface HomeProjectConversationGroup {
+  projectId: string;
+  projectName: string;
+  conversations: HomeProjectConversationItem[];
+}
+
 export interface HomeInputSuggestion {
   id: string;
   label: string;

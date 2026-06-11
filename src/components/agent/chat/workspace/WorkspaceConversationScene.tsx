@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import type { A2UIFormData, A2UIResponse } from "@/components/workspace/a2ui/types";
 import { CanvasWorkbenchLayout } from "../components/CanvasWorkbenchLayout";

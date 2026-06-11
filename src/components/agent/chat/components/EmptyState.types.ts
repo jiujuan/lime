@@ -11,6 +11,7 @@ import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import type { MessagePathReference } from "../types";
 import type { InputbarSendHandler } from "./Inputbar/inputbarSendPayload";
 import type { InputbarOpenedProject } from "./Inputbar/components/InputbarProjectContextBar";
+import type { EmptyStateProjectConversationGroupModel } from "./EmptyStateViewModel";
 import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
@@ -67,6 +68,13 @@ export interface EmptyStateProps extends SkillSelectionSourceProps {
   recentSessionActionLabel?: string;
   /** 恢复最近一次会话上下文 */
   onResumeRecentSession?: () => void;
+  /** 当前项目下可继续的会话列表 */
+  projectConversationGroups?: EmptyStateProjectConversationGroupModel[];
+  /** 打开项目下的会话 */
+  onOpenProjectConversation?: (
+    conversationId: string,
+    statusReason?: string,
+  ) => void;
   /** 当前项目 ID */
   projectId?: string | null;
   /** 已打开项目列表 */

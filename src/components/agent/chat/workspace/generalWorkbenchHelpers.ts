@@ -1,5 +1,5 @@
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
-import type { DocumentVersion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
+import type { DocumentVersion } from "@/components/workspace/canvas/canvasUtils";
 import type { StepStatus } from "@/lib/workspace/workbenchContract";
 import type {
   GeneralWorkbenchRunTodoItem,

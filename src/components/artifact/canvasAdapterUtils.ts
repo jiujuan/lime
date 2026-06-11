@@ -16,12 +16,12 @@ import type {
   CanvasStateUnion,
   CanvasType,
   DocumentCanvasState,
-} from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/canvas/canvasUtils";
 import {
-  createInitialDocumentState,
   createDesignCanvasStateFromContent,
+  createInitialDocumentState,
   createInitialVideoState,
-} from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/canvas/canvasUtils";
 
 // ============================================================================
 // 类型定义

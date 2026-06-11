@@ -40,10 +40,10 @@ import { type TaskFile } from "./components/TaskFiles";
 import { useWorkflow } from "@/components/workspace/hooks/useWorkflow";
 import {
   createInitialCanvasState,
+  createInitialDocumentState,
   createInitialVideoState,
   type CanvasStateUnion,
-} from "@/lib/workspace/workbenchCanvas";
-import { createInitialDocumentState } from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/canvas/canvasUtils";
 import {
   type CanvasState as GeneralCanvasState,
   DEFAULT_CANVAS_STATE,

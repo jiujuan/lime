@@ -5,8 +5,8 @@ import {
   COVER_IMAGE_WORKBENCH_REQUEST_EVENT,
   type CoverImageReplacedDetail,
   type CoverImageWorkbenchRequestDetail,
-} from "@/lib/workspace/workbenchCanvas";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/document/platforms/CoverImagePlaceholder";
+import type { CanvasStateUnion } from "@/components/workspace/document/platforms/CoverImagePlaceholder";
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
 import {
   findImageProviderForSelection,

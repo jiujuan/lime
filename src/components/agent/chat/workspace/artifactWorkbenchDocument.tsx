@@ -65,7 +65,7 @@ import type { ArtifactBlockRewriteCompletion } from "./artifactWorkbenchRewrite"
 import {
   NotionEditor,
   type NotionEditorHandle,
-} from "@/lib/workspace/workbenchCanvas";
+} from "@/components/workspace/document/editor/NotionEditor";
 
 type ArtifactWorkbenchInspectorTab =
   | "overview"

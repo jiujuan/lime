@@ -1,6 +1,6 @@
 import { useEffect, type MutableRefObject } from "react";
 import { updateContent } from "@/lib/api/project";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { TopicBranchStatus } from "../hooks/useTopicBranchBoard";
 import {
   GENERAL_WORKBENCH_DOCUMENT_META_KEY,

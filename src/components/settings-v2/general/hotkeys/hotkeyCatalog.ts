@@ -8,8 +8,8 @@ import {
   type HotkeyPlatform,
 } from "@/lib/hotkeys/platform";
 import type { AuditedHotkeyDefinition, HotkeyScene } from "@/lib/hotkeys/types";
-import { DOCUMENT_CANVAS_HOTKEYS } from "@/lib/workspace/workbenchCanvas";
-import { DOCUMENT_EDITOR_HOTKEYS } from "@/lib/workspace/workbenchCanvas";
+import { DOCUMENT_CANVAS_HOTKEYS } from "@/components/workspace/document/documentCanvasHotkeys";
+import { DOCUMENT_EDITOR_HOTKEYS } from "@/components/workspace/document/documentEditorHotkeys";
 import { WORKBENCH_SIDEBAR_TOGGLE_HOTKEY } from "@/components/workspace/hooks/workbenchHotkeys";
 
 export type HotkeyStatusKind =

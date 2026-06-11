@@ -85,66 +85,6 @@
       "rule": "lib→features"
     },
     {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/canvas/CanvasFactory",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/canvas/canvasUtils",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/document/types",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/document/editor/NotionEditor",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/document/ContentReviewPanel",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/document/documentCanvasHotkeys",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/document/documentEditorHotkeys",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/document/platforms/CoverImagePlaceholder",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/video/VideoCanvas",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/video/types",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/design/DesignCanvas",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchCanvas.ts",
-      "import": "@/components/workspace/design/types",
-      "rule": "lib→components"
-    },
-    {
       "file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx",
       "import": "@/components/agent/chat/components/InlineToolProcessStep",
       "rule": "features→components"

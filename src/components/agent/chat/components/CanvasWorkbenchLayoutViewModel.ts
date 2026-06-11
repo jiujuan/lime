@@ -1,8 +1,8 @@
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
 import type { DirectoryListing } from "@/lib/api/fileBrowser";
 import type { Artifact } from "@/lib/artifact/types";
-import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
-import type { DocumentVersion } from "@/lib/workspace/workbenchCanvas";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
+import type { DocumentVersion } from "@/components/workspace/canvas/canvasUtils";
 import {
   extractFileNameFromPath,
   normalizeManagedWorkspacePathForDisplay,

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { DocumentVersion } from "@/lib/workspace/workbenchCanvas";
+import type { DocumentVersion } from "@/components/workspace/document/types";
 
 export function resolvePreviousDocumentVersionContent(
   version: DocumentVersion | null | undefined,
