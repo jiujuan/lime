@@ -4,8 +4,9 @@ use serde_json::Value;
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
     JsonRpcError, SessionFileGetOrCreateParams, SessionFileIdParams, SessionFileSaveParams,
-    SessionFileUpdateMetaParams, WorkspaceEnsureParams, WorkspaceEnsureProjectParams,
-    WorkspacePathReadParams, WorkspaceProjectPathResolveParams, WorkspaceReadParams,
+    SessionFileUpdateMetaParams, WorkspaceDeleteParams, WorkspaceEnsureParams,
+    WorkspaceEnsureProjectParams, WorkspacePathReadParams, WorkspaceProjectPathResolveParams,
+    WorkspaceReadParams, WorkspaceUpdateParams,
     WorkspaceRegisteredSkillsListParams, WorkspaceSkillBindingsListParams,
 };
 
@@ -143,6 +144,34 @@ impl RequestProcessor {
         let response = self
             .runtime
             .read_workspace(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_workspace_update_impl(
+        &self,
+        params: Option<Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: WorkspaceUpdateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .update_workspace(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_workspace_delete_impl(
+        &self,
+        params: Option<Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: WorkspaceDeleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_workspace(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

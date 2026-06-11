@@ -11,6 +11,7 @@ mod skill;
 mod gallery;
 mod project;
 mod unified;
+mod wechat;
 mod voice;
 mod workspace;
 
@@ -504,17 +505,17 @@ impl RequestProcessor {
             METHOD_TELEGRAM_CHANNEL_PROBE => self.handle_telegram_channel_probe(params).await,
             METHOD_FEISHU_CHANNEL_PROBE => self.handle_feishu_channel_probe(params).await,
             METHOD_DISCORD_CHANNEL_PROBE => self.handle_discord_channel_probe(params).await,
-            METHOD_WECHAT_CHANNEL_PROBE => self.handle_wechat_channel_probe(params).await,
+            METHOD_WECHAT_CHANNEL_PROBE => self.handle_wechat_channel_probe_impl(params).await,
             METHOD_WECHAT_CHANNEL_LOGIN_START => {
-                self.handle_wechat_channel_login_start(params).await
+                self.handle_wechat_channel_login_start_impl(params).await
             }
-            METHOD_WECHAT_CHANNEL_LOGIN_WAIT => self.handle_wechat_channel_login_wait(params).await,
-            METHOD_WECHAT_CHANNEL_ACCOUNT_LIST => self.handle_wechat_channel_account_list().await,
+            METHOD_WECHAT_CHANNEL_LOGIN_WAIT => self.handle_wechat_channel_login_wait_impl(params).await,
+            METHOD_WECHAT_CHANNEL_ACCOUNT_LIST => self.handle_wechat_channel_account_list_impl().await,
             METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE => {
-                self.handle_wechat_channel_account_remove(params).await
+                self.handle_wechat_channel_account_remove_impl(params).await
             }
             METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET => {
-                self.handle_wechat_channel_runtime_model_set(params).await
+                self.handle_wechat_channel_runtime_model_set_impl(params).await
             }
             METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE => {
                 self.handle_media_task_artifact_image_create_impl(params).await
@@ -875,85 +876,7 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    async fn handle_wechat_channel_probe(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ChannelProbeParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .probe_wechat_channel(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_wechat_channel_login_start(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WechatLoginStartParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .start_wechat_channel_login(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_wechat_channel_login_wait(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WechatLoginWaitParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .wait_wechat_channel_login(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_wechat_channel_account_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_wechat_channel_accounts()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_wechat_channel_account_remove(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WechatChannelAccountRemoveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .remove_wechat_channel_account(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_wechat_channel_runtime_model_set(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WechatRuntimeModelSetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .set_wechat_channel_runtime_model(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // wechat handlers 已提取到 processor/wechat.rs
 
     // media handlers 已提取到 processor/media.rs
     // gallery handlers 已提取到 processor/gallery.rs
