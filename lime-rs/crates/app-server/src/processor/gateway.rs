@@ -50,7 +50,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_gateway_tunnel_probe_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_gateway_tunnel_probe_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -60,7 +62,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_gateway_tunnel_cloudflared_detect_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_gateway_tunnel_cloudflared_detect_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -98,7 +102,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_gateway_tunnel_start_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_gateway_tunnel_start_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -108,7 +114,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_gateway_tunnel_stop_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_gateway_tunnel_stop_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -118,7 +126,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_gateway_tunnel_restart_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_gateway_tunnel_restart_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -128,7 +138,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_gateway_tunnel_status_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_gateway_tunnel_status_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -151,5 +163,4 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
 }

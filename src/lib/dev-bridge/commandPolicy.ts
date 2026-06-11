@@ -196,6 +196,8 @@ const APP_SERVER_STARTUP_TRUTH_METHODS = new Set([
   "workspace/default/ensure",
   "workspace/list",
   "workspace/read",
+  "workspace/update",
+  "workspace/delete",
   "workspace/byPath/read",
   "workspace/ensure",
   "workspace/projectsRoot/read",

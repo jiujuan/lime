@@ -2,7 +2,9 @@
 
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
-    JsonRpcError, ProjectMaterialListParams, ProjectMaterialLookupParams, ProjectMaterialUploadParams, ProjectMaterialImportFromUrlParams, ProjectMaterialUpdateParams, ProjectMemoryReadParams,
+    JsonRpcError, ProjectMaterialImportFromUrlParams, ProjectMaterialListParams,
+    ProjectMaterialLookupParams, ProjectMaterialUpdateParams, ProjectMaterialUploadParams,
+    ProjectMemoryReadParams,
 };
 
 impl RequestProcessor {

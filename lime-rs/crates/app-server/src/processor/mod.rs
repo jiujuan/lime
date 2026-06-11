@@ -1,22 +1,22 @@
 mod agent_app;
 mod agent_session;
 mod automation;
-mod gateway;
-mod mcp;
-mod media;
-mod model;
-mod knowledge;
-mod project_git;
-mod skill;
-mod gallery;
-mod project;
-mod unified;
 mod connect;
 mod diagnostics;
 mod file;
+mod gallery;
+mod gateway;
+mod knowledge;
 mod log;
-mod wechat;
+mod mcp;
+mod media;
+mod model;
+mod project;
+mod project_git;
+mod skill;
+mod unified;
 mod voice;
+mod wechat;
 mod workspace;
 
 use crate::AppServerError;
@@ -80,6 +80,7 @@ use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
 use app_server_protocol::METHOD_AGENT_SESSION_ACTION_REPLAY;
 use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
+use app_server_protocol::METHOD_AGENT_SESSION_ARCHIVE_MANY;
 use app_server_protocol::METHOD_AGENT_SESSION_COMPACT;
 use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
 use app_server_protocol::METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF;
@@ -370,17 +371,25 @@ impl RequestProcessor {
             METHOD_FILE_SYSTEM_READ_FILE_PREVIEW => {
                 self.handle_file_system_read_file_preview_impl(params).await
             }
-            METHOD_FILE_SYSTEM_CREATE_FILE => self.handle_file_system_create_file_impl(params).await,
+            METHOD_FILE_SYSTEM_CREATE_FILE => {
+                self.handle_file_system_create_file_impl(params).await
+            }
             METHOD_FILE_SYSTEM_CREATE_DIRECTORY => {
                 self.handle_file_system_create_directory_impl(params).await
             }
-            METHOD_FILE_SYSTEM_RENAME_FILE => self.handle_file_system_rename_file_impl(params).await,
-            METHOD_FILE_SYSTEM_DELETE_FILE => self.handle_file_system_delete_file_impl(params).await,
+            METHOD_FILE_SYSTEM_RENAME_FILE => {
+                self.handle_file_system_rename_file_impl(params).await
+            }
+            METHOD_FILE_SYSTEM_DELETE_FILE => {
+                self.handle_file_system_delete_file_impl(params).await
+            }
             METHOD_PROJECT_GIT_STATUS => self.handle_project_git_status_impl(params).await,
             METHOD_PROJECT_GIT_BRANCH_CHECKOUT => {
                 self.handle_project_git_branch_checkout_impl(params).await
             }
-            METHOD_PROJECT_GIT_BRANCH_CREATE => self.handle_project_git_branch_create_impl(params).await,
+            METHOD_PROJECT_GIT_BRANCH_CREATE => {
+                self.handle_project_git_branch_create_impl(params).await
+            }
             METHOD_PROJECT_GIT_WORKTREE_CREATE => {
                 self.handle_project_git_worktree_create_impl(params).await
             }
@@ -400,16 +409,23 @@ impl RequestProcessor {
             }
             METHOD_AGENT_SESSION_LIST => self.handle_session_list_impl(params).await,
             METHOD_AGENT_SESSION_UPDATE => self.handle_session_update_impl(params).await,
+            METHOD_AGENT_SESSION_ARCHIVE_MANY => {
+                self.handle_session_archive_many_impl(params).await
+            }
             METHOD_AGENT_SESSION_OBJECTIVE_READ => self.handle_objective_read_impl(params).await,
             METHOD_AGENT_SESSION_OBJECTIVE_SET => self.handle_objective_set_impl(params).await,
             METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE => {
                 self.handle_objective_status_update_impl(params).await
             }
             METHOD_AGENT_SESSION_OBJECTIVE_CLEAR => self.handle_objective_clear_impl(params).await,
-            METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE => self.handle_objective_continue_impl(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE => {
+                self.handle_objective_continue_impl(params).await
+            }
             METHOD_AGENT_SESSION_OBJECTIVE_AUDIT => self.handle_objective_audit_impl(params).await,
             METHOD_AGENT_SESSION_COMPACT => self.handle_session_compact_impl(params).await,
-            METHOD_AGENT_SESSION_THREAD_RESUME => self.handle_session_thread_resume_impl(params).await,
+            METHOD_AGENT_SESSION_THREAD_RESUME => {
+                self.handle_session_thread_resume_impl(params).await
+            }
             METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE => {
                 self.handle_session_queued_turn_remove_impl(params).await
             }
@@ -431,10 +447,14 @@ impl RequestProcessor {
             METHOD_SESSION_FILE_GET_OR_CREATE => {
                 self.handle_session_file_get_or_create_impl(params).await
             }
-            METHOD_SESSION_FILE_UPDATE_META => self.handle_session_file_update_meta_impl(params).await,
+            METHOD_SESSION_FILE_UPDATE_META => {
+                self.handle_session_file_update_meta_impl(params).await
+            }
             METHOD_SESSION_FILE_SAVE => self.handle_session_file_save_impl(params).await,
             METHOD_SESSION_FILE_READ => self.handle_session_file_read_impl(params).await,
-            METHOD_SESSION_FILE_RESOLVE_PATH => self.handle_session_file_resolve_path_impl(params).await,
+            METHOD_SESSION_FILE_RESOLVE_PATH => {
+                self.handle_session_file_resolve_path_impl(params).await
+            }
             METHOD_SESSION_FILE_DELETE => self.handle_session_file_delete_impl(params).await,
             METHOD_SESSION_FILE_LIST => self.handle_session_file_list_impl(params).await,
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
@@ -445,21 +465,28 @@ impl RequestProcessor {
             METHOD_WORKSPACE_BY_PATH_READ => self.handle_workspace_by_path_read_impl(params).await,
             METHOD_WORKSPACE_DEFAULT_READ => self.handle_workspace_default_read_impl().await,
             METHOD_WORKSPACE_DEFAULT_ENSURE => self.handle_workspace_default_ensure_impl().await,
-            METHOD_WORKSPACE_PROJECTS_ROOT_READ => self.handle_workspace_projects_root_read_impl().await,
+            METHOD_WORKSPACE_PROJECTS_ROOT_READ => {
+                self.handle_workspace_projects_root_read_impl().await
+            }
             METHOD_WORKSPACE_PROJECT_PATH_RESOLVE => {
-                self.handle_workspace_project_path_resolve_impl(params).await
+                self.handle_workspace_project_path_resolve_impl(params)
+                    .await
             }
             METHOD_WORKSPACE_ENSURE_READY => self.handle_workspace_ensure_ready_impl(params).await,
             METHOD_SKILL_LIST => self.handle_skill_list_impl().await,
             METHOD_SKILL_READ => self.handle_skill_read_impl(params).await,
             METHOD_SKILL_MANAGEMENT_LIST => self.handle_skill_management_list_impl(params).await,
-            METHOD_SKILL_MANAGEMENT_INSTALL => self.handle_skill_management_install_impl(params).await,
+            METHOD_SKILL_MANAGEMENT_INSTALL => {
+                self.handle_skill_management_install_impl(params).await
+            }
             METHOD_SKILL_MANAGEMENT_UNINSTALL => {
                 self.handle_skill_management_uninstall_impl(params).await
             }
             METHOD_SKILL_REPOSITORY_LIST => self.handle_skill_repository_list_impl().await,
             METHOD_SKILL_REPOSITORY_SAVE => self.handle_skill_repository_save_impl(params).await,
-            METHOD_SKILL_REPOSITORY_DELETE => self.handle_skill_repository_delete_impl(params).await,
+            METHOD_SKILL_REPOSITORY_DELETE => {
+                self.handle_skill_repository_delete_impl(params).await
+            }
             METHOD_SKILL_CACHE_REFRESH => self.handle_skill_cache_refresh_impl().await,
             METHOD_SKILL_INSTALLED_DIRECTORIES_LIST => {
                 self.handle_skill_installed_directories_list_impl().await
@@ -484,7 +511,9 @@ impl RequestProcessor {
                 self.handle_skill_package_local_replace_impl(params).await
             }
             METHOD_SKILL_PACKAGE_EXPORT => self.handle_skill_package_export_impl(params).await,
-            METHOD_SKILL_MARKETPLACE_INSTALL => self.handle_skill_marketplace_install_impl(params).await,
+            METHOD_SKILL_MARKETPLACE_INSTALL => {
+                self.handle_skill_marketplace_install_impl(params).await
+            }
             METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL => {
                 self.handle_skill_download_install_impl(params).await
             }
@@ -496,7 +525,8 @@ impl RequestProcessor {
                 self.handle_gateway_tunnel_cloudflared_detect_impl().await
             }
             METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL => {
-                self.handle_gateway_tunnel_cloudflared_install_impl(params).await
+                self.handle_gateway_tunnel_cloudflared_install_impl(params)
+                    .await
             }
             METHOD_GATEWAY_TUNNEL_CREATE => self.handle_gateway_tunnel_create_impl(params).await,
             METHOD_GATEWAY_TUNNEL_START => self.handle_gateway_tunnel_start_impl().await,
@@ -504,7 +534,8 @@ impl RequestProcessor {
             METHOD_GATEWAY_TUNNEL_RESTART => self.handle_gateway_tunnel_restart_impl().await,
             METHOD_GATEWAY_TUNNEL_STATUS => self.handle_gateway_tunnel_status_impl().await,
             METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL => {
-                self.handle_gateway_tunnel_sync_webhook_url_impl(params).await
+                self.handle_gateway_tunnel_sync_webhook_url_impl(params)
+                    .await
             }
             METHOD_TELEGRAM_CHANNEL_PROBE => self.handle_telegram_channel_probe(params).await,
             METHOD_FEISHU_CHANNEL_PROBE => self.handle_feishu_channel_probe(params).await,
@@ -513,43 +544,59 @@ impl RequestProcessor {
             METHOD_WECHAT_CHANNEL_LOGIN_START => {
                 self.handle_wechat_channel_login_start_impl(params).await
             }
-            METHOD_WECHAT_CHANNEL_LOGIN_WAIT => self.handle_wechat_channel_login_wait_impl(params).await,
-            METHOD_WECHAT_CHANNEL_ACCOUNT_LIST => self.handle_wechat_channel_account_list_impl().await,
+            METHOD_WECHAT_CHANNEL_LOGIN_WAIT => {
+                self.handle_wechat_channel_login_wait_impl(params).await
+            }
+            METHOD_WECHAT_CHANNEL_ACCOUNT_LIST => {
+                self.handle_wechat_channel_account_list_impl().await
+            }
             METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE => {
                 self.handle_wechat_channel_account_remove_impl(params).await
             }
             METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET => {
-                self.handle_wechat_channel_runtime_model_set_impl(params).await
+                self.handle_wechat_channel_runtime_model_set_impl(params)
+                    .await
             }
             METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE => {
-                self.handle_media_task_artifact_image_create_impl(params).await
+                self.handle_media_task_artifact_image_create_impl(params)
+                    .await
             }
             METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE => {
-                self.handle_media_task_artifact_audio_create_impl(params).await
+                self.handle_media_task_artifact_audio_create_impl(params)
+                    .await
             }
             METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE => {
-                self.handle_media_task_artifact_video_create_impl(params).await
+                self.handle_media_task_artifact_video_create_impl(params)
+                    .await
             }
             METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE => {
-                self.handle_media_task_artifact_audio_complete_impl(params).await
+                self.handle_media_task_artifact_audio_complete_impl(params)
+                    .await
             }
-            METHOD_MEDIA_TASK_ARTIFACT_GET => self.handle_media_task_artifact_get_impl(params).await,
-            METHOD_MEDIA_TASK_ARTIFACT_LIST => self.handle_media_task_artifact_list_impl(params).await,
+            METHOD_MEDIA_TASK_ARTIFACT_GET => {
+                self.handle_media_task_artifact_get_impl(params).await
+            }
+            METHOD_MEDIA_TASK_ARTIFACT_LIST => {
+                self.handle_media_task_artifact_list_impl(params).await
+            }
             METHOD_MEDIA_TASK_ARTIFACT_CANCEL => {
                 self.handle_media_task_artifact_cancel_impl(params).await
             }
             METHOD_GALLERY_MATERIAL_GET => self.handle_gallery_material_get_impl(params).await,
             METHOD_GALLERY_MATERIAL_METADATA_CREATE => {
-                self.handle_gallery_material_metadata_create_impl(params).await
+                self.handle_gallery_material_metadata_create_impl(params)
+                    .await
             }
             METHOD_GALLERY_MATERIAL_METADATA_GET => {
                 self.handle_gallery_material_metadata_get_impl(params).await
             }
             METHOD_GALLERY_MATERIAL_METADATA_UPDATE => {
-                self.handle_gallery_material_metadata_update_impl(params).await
+                self.handle_gallery_material_metadata_update_impl(params)
+                    .await
             }
             METHOD_GALLERY_MATERIAL_METADATA_DELETE => {
-                self.handle_gallery_material_metadata_delete_impl(params).await
+                self.handle_gallery_material_metadata_delete_impl(params)
+                    .await
             }
             METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY => {
                 self.handle_gallery_material_list_by_image_category_impl(params)
@@ -565,13 +612,22 @@ impl RequestProcessor {
             METHOD_PROJECT_MATERIAL_LIST => self.handle_project_material_list_impl(params).await,
             METHOD_PROJECT_MATERIAL_GET => self.handle_project_material_get_impl(params).await,
             METHOD_PROJECT_MATERIAL_COUNT => self.handle_project_material_count_impl(params).await,
-            METHOD_PROJECT_MATERIAL_UPLOAD => self.handle_project_material_upload_impl(params).await,
-            METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL => {
-                self.handle_project_material_import_from_url_impl(params).await
+            METHOD_PROJECT_MATERIAL_UPLOAD => {
+                self.handle_project_material_upload_impl(params).await
             }
-            METHOD_PROJECT_MATERIAL_UPDATE => self.handle_project_material_update_impl(params).await,
-            METHOD_PROJECT_MATERIAL_DELETE => self.handle_project_material_delete_impl(params).await,
-            METHOD_PROJECT_MATERIAL_CONTENT => self.handle_project_material_content_impl(params).await,
+            METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL => {
+                self.handle_project_material_import_from_url_impl(params)
+                    .await
+            }
+            METHOD_PROJECT_MATERIAL_UPDATE => {
+                self.handle_project_material_update_impl(params).await
+            }
+            METHOD_PROJECT_MATERIAL_DELETE => {
+                self.handle_project_material_delete_impl(params).await
+            }
+            METHOD_PROJECT_MATERIAL_CONTENT => {
+                self.handle_project_material_content_impl(params).await
+            }
             METHOD_VOICE_ASR_CREDENTIAL_LIST => self.handle_voice_asr_credential_list_impl().await,
             METHOD_VOICE_ASR_CREDENTIAL_CREATE => {
                 self.handle_voice_asr_credential_create_impl(params).await
@@ -583,32 +639,45 @@ impl RequestProcessor {
                 self.handle_voice_asr_credential_delete_impl(params).await
             }
             METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET => {
-                self.handle_voice_asr_credential_default_set_impl(params).await
+                self.handle_voice_asr_credential_default_set_impl(params)
+                    .await
             }
-            METHOD_VOICE_ASR_CREDENTIAL_TEST => self.handle_voice_asr_credential_test_impl(params).await,
+            METHOD_VOICE_ASR_CREDENTIAL_TEST => {
+                self.handle_voice_asr_credential_test_impl(params).await
+            }
             METHOD_VOICE_INSTRUCTION_LIST => self.handle_voice_instruction_list_impl().await,
             METHOD_VOICE_INSTRUCTION_SAVE => self.handle_voice_instruction_save_impl(params).await,
-            METHOD_VOICE_INSTRUCTION_DELETE => self.handle_voice_instruction_delete_impl(params).await,
-            METHOD_VOICE_MODEL_DEFAULT_SET => self.handle_voice_model_default_set_impl(params).await,
+            METHOD_VOICE_INSTRUCTION_DELETE => {
+                self.handle_voice_instruction_delete_impl(params).await
+            }
+            METHOD_VOICE_MODEL_DEFAULT_SET => {
+                self.handle_voice_model_default_set_impl(params).await
+            }
             METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE => {
-                self.handle_voice_model_test_transcribe_file_impl(params).await
+                self.handle_voice_model_test_transcribe_file_impl(params)
+                    .await
             }
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
                 self.handle_workspace_skill_bindings_list_impl(params).await
             }
             METHOD_WORKSPACE_REGISTERED_SKILLS_LIST => {
-                self.handle_workspace_registered_skills_list_impl(params).await
+                self.handle_workspace_registered_skills_list_impl(params)
+                    .await
             }
             METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT => {
-                self.handle_agent_app_local_package_inspect_impl(params).await
+                self.handle_agent_app_local_package_inspect_impl(params)
+                    .await
             }
             METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD => {
                 self.handle_agent_app_package_fetch_cloud_impl(params).await
             }
-            METHOD_AGENT_APP_INSTALLED_SAVE => self.handle_agent_app_installed_save_impl(params).await,
+            METHOD_AGENT_APP_INSTALLED_SAVE => {
+                self.handle_agent_app_installed_save_impl(params).await
+            }
             METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list_impl().await,
             METHOD_AGENT_APP_INSTALLED_DISABLED_SET => {
-                self.handle_agent_app_installed_disabled_set_impl(params).await
+                self.handle_agent_app_installed_disabled_set_impl(params)
+                    .await
             }
             METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL => {
                 self.handle_agent_app_installed_uninstall_rehearsal_impl(params)
@@ -617,17 +686,23 @@ impl RequestProcessor {
             METHOD_AGENT_APP_INSTALLED_UNINSTALL => {
                 self.handle_agent_app_installed_uninstall_impl(params).await
             }
-            METHOD_AGENT_APP_SHELL_PREPARE => self.handle_agent_app_shell_prepare_impl(params).await,
+            METHOD_AGENT_APP_SHELL_PREPARE => {
+                self.handle_agent_app_shell_prepare_impl(params).await
+            }
             METHOD_AGENT_APP_UI_RUNTIME_START => {
                 self.handle_agent_app_ui_runtime_start_impl(params).await
             }
             METHOD_AGENT_APP_UI_RUNTIME_STATUS => {
                 self.handle_agent_app_ui_runtime_status_impl(params).await
             }
-            METHOD_AGENT_APP_UI_RUNTIME_STOP => self.handle_agent_app_ui_runtime_stop_impl(params).await,
+            METHOD_AGENT_APP_UI_RUNTIME_STOP => {
+                self.handle_agent_app_ui_runtime_stop_impl(params).await
+            }
             METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list_impl(params).await,
             METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read_impl(params).await,
-            METHOD_KNOWLEDGE_SOURCE_IMPORT => self.handle_knowledge_source_import_impl(params).await,
+            METHOD_KNOWLEDGE_SOURCE_IMPORT => {
+                self.handle_knowledge_source_import_impl(params).await
+            }
             METHOD_KNOWLEDGE_PACK_COMPILE => self.handle_knowledge_pack_compile_impl(params).await,
             METHOD_KNOWLEDGE_PACK_DEFAULT_SET => {
                 self.handle_knowledge_pack_default_set_impl(params).await
@@ -635,17 +710,23 @@ impl RequestProcessor {
             METHOD_KNOWLEDGE_PACK_STATUS_UPDATE => {
                 self.handle_knowledge_pack_status_update_impl(params).await
             }
-            METHOD_KNOWLEDGE_CONTEXT_RESOLVE => self.handle_knowledge_context_resolve_impl(params).await,
+            METHOD_KNOWLEDGE_CONTEXT_RESOLVE => {
+                self.handle_knowledge_context_resolve_impl(params).await
+            }
             METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE => {
-                self.handle_knowledge_context_run_validate_impl(params).await
+                self.handle_knowledge_context_run_validate_impl(params)
+                    .await
             }
             METHOD_AUTOMATION_SCHEDULER_CONFIG_READ => {
                 self.handle_automation_scheduler_config_read_impl().await
             }
             METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE => {
-                self.handle_automation_scheduler_config_update_impl(params).await
+                self.handle_automation_scheduler_config_update_impl(params)
+                    .await
             }
-            METHOD_AUTOMATION_SCHEDULER_STATUS => self.handle_automation_scheduler_status_impl().await,
+            METHOD_AUTOMATION_SCHEDULER_STATUS => {
+                self.handle_automation_scheduler_status_impl().await
+            }
             METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list_impl().await,
             METHOD_AUTOMATION_JOB_READ => self.handle_automation_job_read_impl(params).await,
             METHOD_AUTOMATION_JOB_CREATE => self.handle_automation_job_create_impl(params).await,
@@ -671,14 +752,20 @@ impl RequestProcessor {
             METHOD_MCP_SERVER_IMPORT_FROM_APP => {
                 self.handle_mcp_server_import_from_app_impl(params).await
             }
-            METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => self.handle_mcp_server_sync_all_to_live_impl().await,
+            METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => {
+                self.handle_mcp_server_sync_all_to_live_impl().await
+            }
             METHOD_MCP_SERVER_START => self.handle_mcp_server_start_impl(params).await,
             METHOD_MCP_SERVER_STOP => self.handle_mcp_server_stop_impl(params).await,
             METHOD_MCP_TOOL_LIST => self.handle_mcp_tool_list_impl().await,
-            METHOD_MCP_TOOL_LIST_FOR_CONTEXT => self.handle_mcp_tool_list_for_context_impl(params).await,
+            METHOD_MCP_TOOL_LIST_FOR_CONTEXT => {
+                self.handle_mcp_tool_list_for_context_impl(params).await
+            }
             METHOD_MCP_TOOL_SEARCH => self.handle_mcp_tool_search_impl(params).await,
             METHOD_MCP_TOOL_CALL => self.handle_mcp_tool_call_impl(params).await,
-            METHOD_MCP_TOOL_CALL_WITH_CALLER => self.handle_mcp_tool_call_with_caller_impl(params).await,
+            METHOD_MCP_TOOL_CALL_WITH_CALLER => {
+                self.handle_mcp_tool_call_with_caller_impl(params).await
+            }
             METHOD_MCP_PROMPT_LIST => self.handle_mcp_prompt_list_impl().await,
             METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get_impl(params).await,
             METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list_impl().await,
@@ -693,7 +780,8 @@ impl RequestProcessor {
             METHOD_UNIFIED_MEMORY_STATS => self.handle_unified_memory_stats_impl().await,
             METHOD_UNIFIED_MEMORY_ANALYZE => self.handle_unified_memory_analyze_impl(params).await,
             METHOD_UNIFIED_MEMORY_SEMANTIC_SEARCH => {
-                self.handle_unified_memory_semantic_search_impl(params).await
+                self.handle_unified_memory_semantic_search_impl(params)
+                    .await
             }
             METHOD_UNIFIED_MEMORY_HYBRID_SEARCH => {
                 self.handle_unified_memory_hybrid_search_impl(params).await
@@ -701,8 +789,12 @@ impl RequestProcessor {
             METHOD_LOG_LIST => self.handle_log_list_impl().await,
             METHOD_LOG_PERSISTED_TAIL => self.handle_log_persisted_tail_impl(params).await,
             METHOD_LOG_CLEAR => self.handle_log_clear_impl().await,
-            METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR => self.handle_log_diagnostic_history_clear_impl().await,
-            METHOD_DIAGNOSTICS_LOG_STORAGE_READ => self.handle_diagnostics_log_storage_read_impl().await,
+            METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR => {
+                self.handle_log_diagnostic_history_clear_impl().await
+            }
+            METHOD_DIAGNOSTICS_LOG_STORAGE_READ => {
+                self.handle_diagnostics_log_storage_read_impl().await
+            }
             METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT => {
                 self.handle_diagnostics_support_bundle_export_impl().await
             }
@@ -721,13 +813,16 @@ impl RequestProcessor {
             METHOD_MODEL_PREFERENCES_LIST => self.handle_model_preferences_list_impl().await,
             METHOD_MODEL_SYNC_STATE_READ => self.handle_model_sync_state_read_impl().await,
             METHOD_MODEL_PROVIDER_LIST => self.handle_model_provider_list_impl().await,
-            METHOD_MODEL_PROVIDER_CATALOG_LIST => self.handle_model_provider_catalog_list_impl().await,
+            METHOD_MODEL_PROVIDER_CATALOG_LIST => {
+                self.handle_model_provider_catalog_list_impl().await
+            }
             METHOD_MODEL_PROVIDER_READ => self.handle_model_provider_read_impl(params).await,
             METHOD_MODEL_PROVIDER_CREATE => self.handle_model_provider_create_impl(params).await,
             METHOD_MODEL_PROVIDER_UPDATE => self.handle_model_provider_update_impl(params).await,
             METHOD_MODEL_PROVIDER_DELETE => self.handle_model_provider_delete_impl(params).await,
             METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE => {
-                self.handle_model_provider_sort_orders_update_impl(params).await
+                self.handle_model_provider_sort_orders_update_impl(params)
+                    .await
             }
             METHOD_MODEL_PROVIDER_CONFIG_EXPORT => {
                 self.handle_model_provider_config_export_impl(params).await
@@ -736,21 +831,34 @@ impl RequestProcessor {
                 self.handle_model_provider_config_import_impl(params).await
             }
             METHOD_MODEL_PROVIDER_TEST_CONNECTION => {
-                self.handle_model_provider_test_connection_impl(params).await
+                self.handle_model_provider_test_connection_impl(params)
+                    .await
             }
-            METHOD_MODEL_PROVIDER_TEST_CHAT => self.handle_model_provider_test_chat_impl(params).await,
+            METHOD_MODEL_PROVIDER_TEST_CHAT => {
+                self.handle_model_provider_test_chat_impl(params).await
+            }
             METHOD_MODEL_PROVIDER_FETCH_MODELS => {
                 self.handle_model_provider_fetch_models_impl(params).await
             }
-            METHOD_MODEL_PROVIDER_KEY_CREATE => self.handle_model_provider_key_create_impl(params).await,
-            METHOD_MODEL_PROVIDER_KEY_UPDATE => self.handle_model_provider_key_update_impl(params).await,
-            METHOD_MODEL_PROVIDER_KEY_DELETE => self.handle_model_provider_key_delete_impl(params).await,
-            METHOD_MODEL_PROVIDER_KEY_NEXT => self.handle_model_provider_key_next_impl(params).await,
+            METHOD_MODEL_PROVIDER_KEY_CREATE => {
+                self.handle_model_provider_key_create_impl(params).await
+            }
+            METHOD_MODEL_PROVIDER_KEY_UPDATE => {
+                self.handle_model_provider_key_update_impl(params).await
+            }
+            METHOD_MODEL_PROVIDER_KEY_DELETE => {
+                self.handle_model_provider_key_delete_impl(params).await
+            }
+            METHOD_MODEL_PROVIDER_KEY_NEXT => {
+                self.handle_model_provider_key_next_impl(params).await
+            }
             METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD => {
-                self.handle_model_provider_key_usage_record_impl(params).await
+                self.handle_model_provider_key_usage_record_impl(params)
+                    .await
             }
             METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD => {
-                self.handle_model_provider_key_error_record_impl(params).await
+                self.handle_model_provider_key_error_record_impl(params)
+                    .await
             }
             METHOD_MODEL_PROVIDER_UI_STATE_READ => {
                 self.handle_model_provider_ui_state_read_impl(params).await
@@ -758,11 +866,16 @@ impl RequestProcessor {
             METHOD_MODEL_PROVIDER_UI_STATE_WRITE => {
                 self.handle_model_provider_ui_state_write_impl(params).await
             }
-            METHOD_MODEL_PROVIDER_ALIAS_READ => self.handle_model_provider_alias_read_impl(params).await,
+            METHOD_MODEL_PROVIDER_ALIAS_READ => {
+                self.handle_model_provider_alias_read_impl(params).await
+            }
             METHOD_MODEL_PROVIDER_ALIAS_LIST => self.handle_model_provider_alias_list_impl().await,
-            METHOD_CONNECT_DEEP_LINK_RESOLVE => self.handle_connect_deep_link_resolve_impl(params).await,
+            METHOD_CONNECT_DEEP_LINK_RESOLVE => {
+                self.handle_connect_deep_link_resolve_impl(params).await
+            }
             METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE => {
-                self.handle_connect_open_deep_link_resolve_impl(params).await
+                self.handle_connect_open_deep_link_resolve_impl(params)
+                    .await
             }
             METHOD_CONNECT_RELAY_API_KEY_SAVE => {
                 self.handle_connect_relay_api_key_save_impl(params).await

@@ -331,6 +331,14 @@ export function createSessionClient({
     return await appServerSessionClient.updateAgentRuntimeSession(request);
   }
 
+  async function archiveManyAgentRuntimeSessions(
+    sessionIds: string[],
+  ): Promise<AsterSessionInfo[]> {
+    return await appServerSessionClient.archiveManyAgentRuntimeSessions(
+      sessionIds,
+    );
+  }
+
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
     return await updateAgentRuntimeSession({
       session_id: sessionId,
@@ -339,6 +347,7 @@ export function createSessionClient({
   }
 
   return {
+    archiveManyAgentRuntimeSessions,
     createAgentRuntimeSession,
     deleteAgentRuntimeSession,
     getAgentRuntimeSession,
@@ -348,6 +357,7 @@ export function createSessionClient({
 }
 
 export const {
+  archiveManyAgentRuntimeSessions,
   createAgentRuntimeSession,
   deleteAgentRuntimeSession,
   getAgentRuntimeSession,

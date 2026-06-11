@@ -2,9 +2,9 @@
 
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
-    MediaTaskArtifactAudioCompleteParams, MediaTaskArtifactAudioCreateParams,
-    MediaTaskArtifactImageCreateParams, MediaTaskArtifactListParams,
-    MediaTaskArtifactLookupParams, MediaTaskArtifactVideoCreateParams, JsonRpcError,
+    JsonRpcError, MediaTaskArtifactAudioCompleteParams, MediaTaskArtifactAudioCreateParams,
+    MediaTaskArtifactImageCreateParams, MediaTaskArtifactListParams, MediaTaskArtifactLookupParams,
+    MediaTaskArtifactVideoCreateParams,
 };
 
 impl RequestProcessor {
@@ -105,5 +105,4 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
 }

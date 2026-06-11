@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { Artifact } from "@/lib/artifact/types";
-import { createInitialDocumentState } from "@/lib/workspace/workbenchCanvas";
+import { createInitialDocumentState } from "@/components/workspace/canvas/canvasUtils";
 import type { ArtifactBlockRewriteCompletion } from "./artifactWorkbenchRewrite";
 import { useWorkspaceCanvasWorkflowActions } from "./useWorkspaceCanvasWorkflowActions";
 

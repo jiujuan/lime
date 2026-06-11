@@ -68,6 +68,26 @@ function appServerClientMock(): AppServerSessionRpcClient {
       notifications: [],
       messages: [],
     }),
+    archiveManySessions: vi.fn().mockResolvedValue({
+      id: 5,
+      result: {
+        sessions: [
+          {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            title: "归档会话",
+            model: "gpt-5.4",
+            createdAt: "2026-06-06T00:00:00.000Z",
+            updatedAt: "2026-06-06T00:00:02.000Z",
+            archivedAt: "2026-06-06T00:00:03.000Z",
+            messagesCount: 3,
+          },
+        ],
+      },
+      response: { id: 5, result: {} },
+      notifications: [],
+      messages: [],
+    }),
   };
 }
 
@@ -622,5 +642,47 @@ describe("appServerSessionClient", () => {
         disabled: true,
       },
     });
+  });
+
+  it("archiveMany 应通过 agentSession/archiveMany 批量归档 current sessions", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(
+      client.archiveManyAgentRuntimeSessions([
+        " session-1 ",
+        "",
+        "session-1",
+        " session-2 ",
+      ]),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "session-1",
+        archived_at: Date.parse("2026-06-06T00:00:03.000Z"),
+      }),
+    ]);
+
+    expect(appServerClient.archiveManySessions).toHaveBeenCalledWith({
+      sessionIds: ["session-1", "session-2"],
+    });
+    expect(appServerClient.updateSession).not.toHaveBeenCalled();
+  });
+
+  it("archiveMany 返回形状漂移时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.archiveManySessions).mockResolvedValueOnce({
+      id: 5,
+      result: { sessions: [{ sessionId: "" }] },
+      response: { id: 5, result: {} },
+      notifications: [],
+      messages: [],
+    } as never);
+    const client = createAppServerSessionClient({ appServerClient });
+
+    await expect(
+      client.archiveManyAgentRuntimeSessions(["session-1"]),
+    ).rejects.toThrow(
+      "agentSession/archiveMany did not return archived sessions",
+    );
   });
 });

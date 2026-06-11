@@ -29,6 +29,7 @@ import {
   METHOD_AGENT_SESSION_ACTION_REPLAY,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+  METHOD_AGENT_SESSION_ARCHIVE_MANY,
   METHOD_AGENT_SESSION_COMPACT,
   METHOD_AGENT_SESSION_EVENT,
   METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
@@ -245,6 +246,7 @@ import {
   METHOD_WECHAT_CHANNEL_PROBE,
   METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
   METHOD_WORKSPACE_BY_PATH_READ,
+  METHOD_WORKSPACE_DELETE,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
   METHOD_WORKSPACE_ENSURE,
@@ -255,6 +257,7 @@ import {
   METHOD_WORKSPACE_READ,
   METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
   METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+  METHOD_WORKSPACE_UPDATE,
   PROTOCOL_VERSION,
   agentSessionEventNotification,
   decodeMessage,
@@ -271,6 +274,8 @@ import {
   type AgentSessionActionReplayResponse,
   type AgentSessionActionRespondParams,
   type AgentSessionActionRespondResponse,
+  type AgentSessionArchiveManyParams,
+  type AgentSessionArchiveManyResponse,
   type AgentSessionCompactParams,
   type AgentSessionCompactResponse,
   type AgentSessionEventNotification,
@@ -605,6 +610,8 @@ import {
   type WechatLoginWaitResponse,
   type WechatRuntimeModelSetParams,
   type WechatRuntimeModelSetResponse,
+  type WorkspaceDeleteParams,
+  type WorkspaceDeleteResponse,
   type WorkspaceEnsureParams,
   type WorkspaceEnsureProjectParams,
   type WorkspaceEnsureProjectResponse,
@@ -620,6 +627,8 @@ import {
   type WorkspaceRegisteredSkillsListResponse,
   type WorkspaceSkillBindingsListParams,
   type WorkspaceSkillBindingsListResponse,
+  type WorkspaceUpdateParams,
+  type WorkspaceUpdateResponse,
 } from "./protocol.js";
 
 export * from "./protocol.js";
@@ -874,6 +883,10 @@ export class AppServerClient {
     return this.request(METHOD_AGENT_SESSION_UPDATE, params);
   }
 
+  archiveManySessions(params: AgentSessionArchiveManyParams): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_ARCHIVE_MANY, params);
+  }
+
   readAgentSessionObjective(
     params: AgentSessionObjectiveReadParams,
   ): JsonRpcRequest {
@@ -990,6 +1003,14 @@ export class AppServerClient {
 
   readWorkspace(params: WorkspaceReadParams): JsonRpcRequest {
     return this.request(METHOD_WORKSPACE_READ, params);
+  }
+
+  updateWorkspace(params: WorkspaceUpdateParams): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_UPDATE, params);
+  }
+
+  deleteWorkspace(params: WorkspaceDeleteParams): JsonRpcRequest {
+    return this.request(METHOD_WORKSPACE_DELETE, params);
   }
 
   ensureWorkspace(params: WorkspaceEnsureProjectParams): JsonRpcRequest {
@@ -2035,6 +2056,17 @@ export class AppServerConnection {
     );
   }
 
+  async archiveManySessions(
+    params: AgentSessionArchiveManyParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionArchiveManyResponse>> {
+    return await this.request<AgentSessionArchiveManyResponse>(
+      this.client.archiveManySessions(params),
+      METHOD_AGENT_SESSION_ARCHIVE_MANY,
+      options,
+    );
+  }
+
   async readAgentSessionObjective(
     params: AgentSessionObjectiveReadParams,
     options: AppServerRequestOptions = {},
@@ -2287,6 +2319,28 @@ export class AppServerConnection {
     return await this.request<WorkspaceReadResponse>(
       this.client.readWorkspace(params),
       METHOD_WORKSPACE_READ,
+      options,
+    );
+  }
+
+  async updateWorkspace(
+    params: WorkspaceUpdateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceUpdateResponse>> {
+    return await this.request<WorkspaceUpdateResponse>(
+      this.client.updateWorkspace(params),
+      METHOD_WORKSPACE_UPDATE,
+      options,
+    );
+  }
+
+  async deleteWorkspace(
+    params: WorkspaceDeleteParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<WorkspaceDeleteResponse>> {
+    return await this.request<WorkspaceDeleteResponse>(
+      this.client.deleteWorkspace(params),
+      METHOD_WORKSPACE_DELETE,
       options,
     );
   }

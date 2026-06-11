@@ -35,9 +35,7 @@ import {
   EmptyStatePrimaryStack,
   EmptyStateLayout,
 } from "./EmptyStateLayout";
-import {
-  buildSkillSelectionProps,
-} from "../skill-selection/skillSelectionBindings";
+import { buildSkillSelectionProps } from "../skill-selection/skillSelectionBindings";
 import { isGeneralResearchTheme } from "../utils/generalAgentPrompt";
 import { buildPathReferenceRequestMetadata } from "../utils/pathReferences";
 import { buildKnowledgeRequestMetadata } from "@/features/knowledge/agent/knowledgeMetadata";

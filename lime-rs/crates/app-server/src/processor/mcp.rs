@@ -19,7 +19,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_mcp_server_status_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_mcp_server_status_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -99,7 +101,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_mcp_server_sync_all_to_live_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_mcp_server_sync_all_to_live_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime

@@ -34,6 +34,7 @@ export const METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE =
   "agentSession/reviewDecision/save";
 export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
 export const METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
+export const METHOD_AGENT_SESSION_ARCHIVE_MANY = "agentSession/archiveMany";
 export const METHOD_AGENT_SESSION_OBJECTIVE_READ =
   "agentSession/objective/read";
 export const METHOD_AGENT_SESSION_OBJECTIVE_SET = "agentSession/objective/set";
@@ -68,6 +69,8 @@ export const METHOD_SESSION_FILE_DELETE = "sessionFile/delete";
 export const METHOD_SESSION_FILE_LIST = "sessionFile/list";
 export const METHOD_WORKSPACE_LIST = "workspace/list";
 export const METHOD_WORKSPACE_READ = "workspace/read";
+export const METHOD_WORKSPACE_UPDATE = "workspace/update";
+export const METHOD_WORKSPACE_DELETE = "workspace/delete";
 export const METHOD_WORKSPACE_ENSURE = "workspace/ensure";
 export const METHOD_WORKSPACE_BY_PATH_READ = "workspace/byPath/read";
 export const METHOD_WORKSPACE_DEFAULT_READ = "workspace/default/read";
@@ -346,6 +349,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, kind: "request" },
   { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
   { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
+  { method: METHOD_AGENT_SESSION_ARCHIVE_MANY, kind: "request" },
   { method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" },
   {
@@ -372,6 +376,8 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_SESSION_FILE_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_READ, kind: "request" },
+  { method: METHOD_WORKSPACE_UPDATE, kind: "request" },
+  { method: METHOD_WORKSPACE_DELETE, kind: "request" },
   { method: METHOD_WORKSPACE_ENSURE, kind: "request" },
   { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
   { method: METHOD_WORKSPACE_DEFAULT_READ, kind: "request" },
@@ -1203,6 +1209,14 @@ export type AgentSessionUpdateResponse = {
   session: AgentSessionOverview;
 };
 
+export type AgentSessionArchiveManyParams = {
+  sessionIds?: string[];
+};
+
+export type AgentSessionArchiveManyResponse = {
+  sessions: AgentSessionOverview[];
+};
+
 export type ManagedObjectiveStatus =
   | "active"
   | "verifying"
@@ -1494,6 +1508,24 @@ export type WorkspaceReadParams = {
   id: string;
 };
 
+export type WorkspaceUpdateParams = {
+  id: string;
+  name?: string;
+  rootPath?: string;
+  settings?: unknown;
+  icon?: string;
+  color?: string;
+  isFavorite?: boolean;
+  isArchived?: boolean;
+  tags?: string[];
+  defaultPersonaId?: string;
+};
+
+export type WorkspaceDeleteParams = {
+  id: string;
+  deleteDirectory?: boolean;
+};
+
 export type WorkspacePathReadParams = {
   rootPath: string;
 };
@@ -1519,6 +1551,14 @@ export type WorkspaceListResponse = {
 
 export type WorkspaceReadResponse = {
   workspace?: unknown;
+};
+
+export type WorkspaceUpdateResponse = {
+  workspace: unknown;
+};
+
+export type WorkspaceDeleteResponse = {
+  deleted: boolean;
 };
 
 export type WorkspaceEnsureProjectResponse = {

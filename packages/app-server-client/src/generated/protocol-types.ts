@@ -290,6 +290,14 @@ export interface AgentSessionAnalysisHandoffExportResponse {
   workspaceRoot: string;
 }
 
+export interface AgentSessionArchiveManyParams {
+  sessionIds?: (string)[];
+}
+
+export interface AgentSessionArchiveManyResponse {
+  sessions?: (AgentSessionOverview)[];
+}
+
 export interface AgentSessionCompactParams {
   eventName?: null | string;
   sessionId: string;
@@ -1992,6 +2000,16 @@ export interface ProjectGitWorktreeCreateResponse {
   worktreePath: string;
 }
 
+export interface ProjectGitWorktreeDeleteParams {
+  discardChanges?: boolean | null;
+  rootPath: string;
+}
+
+export interface ProjectGitWorktreeDeleteResponse {
+  repositoryRoot?: null | string;
+  worktreePath: string;
+}
+
 export interface ProjectMaterial {
   content?: null | string;
   createdAt: number;
@@ -2792,6 +2810,15 @@ export interface WindowsStartupDiagnosticsResponse {
   webview2Version?: null | string;
 }
 
+export interface WorkspaceDeleteParams {
+  deleteDirectory?: boolean | null;
+  id: string;
+}
+
+export interface WorkspaceDeleteResponse {
+  deleted: boolean;
+}
+
 export interface WorkspaceEnsureParams {
   id: string;
 }
@@ -2858,6 +2885,23 @@ export interface WorkspaceSkillBindingsListParams {
 
 export interface WorkspaceSkillBindingsListResponse {
   bindings: unknown;
+}
+
+export interface WorkspaceUpdateParams {
+  color?: null | string;
+  defaultPersonaId?: null | string;
+  icon?: null | string;
+  id: string;
+  isArchived?: boolean | null;
+  isFavorite?: boolean | null;
+  name?: null | string;
+  rootPath?: null | string;
+  settings?: unknown;
+  tags?: unknown | null;
+}
+
+export interface WorkspaceUpdateResponse {
+  workspace: unknown;
 }
 
 export interface jsonRpcError {

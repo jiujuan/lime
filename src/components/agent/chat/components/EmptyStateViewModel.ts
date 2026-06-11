@@ -22,8 +22,8 @@ export interface EmptyStateRecentSessionActionModel {
 export interface EmptyStateProjectConversationTopicInput {
   id: string;
   title: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date | string | number | null;
+  updatedAt?: Date | string | number | null;
   workspaceId?: string | null;
   messagesCount?: number;
   status?: string;
@@ -53,12 +53,37 @@ export const EMPTY_STATE_THEME_ICONS: Record<string, string> = {
   general: "✨",
 };
 
-export function truncateEmptyStatePrompt(value: string, maxLength = 92): string {
+export function truncateEmptyStatePrompt(
+  value: string,
+  maxLength = 92,
+): string {
   const normalized = value.trim().replace(/\s+/g, " ");
   if (normalized.length <= maxLength) {
     return normalized;
   }
   return `${normalized.slice(0, maxLength).trim()}…`;
+}
+
+function resolveTopicTimeMs(value: Date | string | number | null | undefined) {
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  return 0;
+}
+
+function resolveTopicLatestTime(topic: EmptyStateProjectConversationTopicInput) {
+  return Math.max(
+    resolveTopicTimeMs(topic.updatedAt),
+    resolveTopicTimeMs(topic.createdAt),
+    0,
+  );
 }
 
 export function resolveEffectiveCuratedTaskReferences({
@@ -135,7 +160,10 @@ export function resolveRecentSessionLinkModel({
   recentSessionLinkLabel: string;
   recentSessionLinkTitle: string;
 } {
-  const normalizedTitle = truncateEmptyStatePrompt(recentSessionTitle || "", 18);
+  const normalizedTitle = truncateEmptyStatePrompt(
+    recentSessionTitle || "",
+    18,
+  );
   const effectiveActionLabel = recentSessionActionLabel ?? defaultActionLabel;
 
   return {
@@ -223,11 +251,7 @@ export function buildEmptyStateProjectConversationGroups({
       continue;
     }
 
-    const latestTime = Math.max(
-      topic.updatedAt.getTime(),
-      topic.createdAt.getTime(),
-      0,
-    );
+    const latestTime = resolveTopicLatestTime(topic);
     const group = projectGroups.get(projectId) ?? {
       latestTime: 0,
       topics: [],
@@ -239,7 +263,8 @@ export function buildEmptyStateProjectConversationGroups({
 
   return [...projectGroups.entries()]
     .sort(([leftProjectId, left], [rightProjectId, right]) => {
-      const leftCurrentRank = leftProjectId === normalizedCurrentProjectId ? 0 : 1;
+      const leftCurrentRank =
+        leftProjectId === normalizedCurrentProjectId ? 0 : 1;
       const rightCurrentRank =
         rightProjectId === normalizedCurrentProjectId ? 0 : 1;
       if (leftCurrentRank !== rightCurrentRank) {
@@ -252,11 +277,15 @@ export function buildEmptyStateProjectConversationGroups({
       const conversations = [...group.topics]
         .sort((left, right) => {
           const updatedDiff =
-            right.updatedAt.getTime() - left.updatedAt.getTime();
+            resolveTopicTimeMs(right.updatedAt) -
+            resolveTopicTimeMs(left.updatedAt);
           if (updatedDiff !== 0) {
             return updatedDiff;
           }
-          return right.createdAt.getTime() - left.createdAt.getTime();
+          return (
+            resolveTopicTimeMs(right.createdAt) -
+            resolveTopicTimeMs(left.createdAt)
+          );
         })
         .slice(0, Math.max(0, maxConversationsPerProject))
         .map((topic) => ({

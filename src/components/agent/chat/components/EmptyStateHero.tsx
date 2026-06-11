@@ -100,8 +100,10 @@ const LeadColumn = styled.div`
   display: flex;
   min-width: 0;
   flex-direction: column;
+  align-items: center;
   gap: 0.56rem;
   max-width: min(1100px, 100%);
+  margin: 0 auto;
 `;
 
 const LeadBlock = styled.div`
@@ -131,8 +133,10 @@ const LeadTextGroup = styled.div`
   display: flex;
   width: 100%;
   flex-direction: column;
+  align-items: center;
   gap: 0.34rem;
   max-width: 56rem;
+  text-align: center;
 `;
 
 const SloganWrap = styled.div`
@@ -148,6 +152,7 @@ const SloganLine = styled.div`
   display: inline-flex;
   width: fit-content;
   align-items: center;
+  justify-content: center;
   gap: 0.8rem;
   flex-wrap: wrap;
 `;
@@ -201,7 +206,7 @@ const SloganText = styled.span`
   font-size: clamp(36px, 4vw, 52px);
   line-height: 1.15;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 
   text-shadow: var(--lime-home-title-shadow);
   animation: ${sloganShine} 10s ease-in-out infinite;
@@ -235,19 +240,6 @@ const SloganBadge = styled.span`
     min-width: 2.35rem;
     height: 2.35rem;
     font-size: 0.78rem;
-  }
-`;
-
-const LeadDescriptionText = styled.p`
-  margin: 0;
-  max-width: 44rem;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.72;
-  color: var(--lime-text, #1a3b2b);
-
-  @media (min-width: 768px) {
-    font-size: 17px;
   }
 `;
 
@@ -401,7 +393,6 @@ export function EmptyStateHero({
   eyebrow,
   title,
   slogan,
-  description,
   cards,
   prioritySlot,
   supportingSlot,
@@ -438,7 +429,6 @@ export function EmptyStateHero({
                       {title}
                     </h1>
                   ) : null}
-                  <LeadDescriptionText>{description}</LeadDescriptionText>
                 </LeadTextGroup>
               </LeadBody>
             </LeadBlock>

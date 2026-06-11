@@ -3,14 +3,15 @@
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
     AgentAppFetchCloudPackageParams, AgentAppInstalledDisabledSetParams,
-    AgentAppInstalledSaveParams, AgentAppLocalPackageInspectParams,
-    AgentAppShellPrepareParams, AgentAppUiRuntimeStartParams,
-    AgentAppUiRuntimeStatusParams, AgentAppUiRuntimeStopParams,
+    AgentAppInstalledSaveParams, AgentAppLocalPackageInspectParams, AgentAppShellPrepareParams,
+    AgentAppUiRuntimeStartParams, AgentAppUiRuntimeStatusParams, AgentAppUiRuntimeStopParams,
     AgentAppUninstallParams, AgentAppUninstallRehearsalParams, JsonRpcError,
 };
 
 impl RequestProcessor {
-    pub(super) async fn handle_agent_app_installed_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_agent_app_installed_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime

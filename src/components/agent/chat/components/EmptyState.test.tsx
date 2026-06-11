@@ -311,7 +311,9 @@ vi.mock("@/components/ui/popover", () => ({
     sideOffset?: number;
     onCloseAutoFocus?: unknown;
     [key: string]: unknown;
-  }) => <div {...(rest as React.HTMLAttributes<HTMLDivElement>)}>{children}</div>,
+  }) => (
+    <div {...(rest as React.HTMLAttributes<HTMLDivElement>)}>{children}</div>
+  ),
   PopoverTrigger: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -646,7 +648,9 @@ describe("EmptyState", () => {
       container.querySelector('[data-testid="empty-state-hero-eyebrow-badge"]')
         ?.textContent,
     ).toBe("创作");
-    expect(container.textContent).toContain("说一句目标，Lime 就接着帮你做。");
+    expect(container.textContent).not.toContain(
+      "说一句目标，Lime 就接着帮你做。",
+    );
     expect(container.textContent).not.toContain(
       "文案、图片、视频、搜索和网页任务围绕同一目标持续推进，并沉淀上下文、偏好和做法。",
     );
@@ -689,13 +693,19 @@ describe("EmptyState", () => {
     const projectContextSlot = primaryStack?.querySelector(
       '[data-testid="inputbar-context-bar-slot"]',
     );
+    const connectedComposer = primaryStack?.querySelector(
+      '[data-testid="inputbar-connected-composer"]',
+    );
     const projectContextBar = primaryStack?.querySelector(
       '[data-testid="inputbar-project-context-bar"]',
     );
     expect(primaryStack).toBeTruthy();
     expect(inputbarCore).toBeTruthy();
+    expect(connectedComposer).toBeTruthy();
     expect(projectContextSlot).toBeTruthy();
     expect(projectContextBar).toBeTruthy();
+    expect(connectedComposer?.contains(inputbarCore ?? null)).toBe(true);
+    expect(connectedComposer?.contains(projectContextSlot ?? null)).toBe(true);
     expect(homeStartSurface).toBeTruthy();
     expect(
       Boolean(
@@ -997,7 +1007,7 @@ describe("EmptyState", () => {
 
     expect(container.textContent).toContain("Creation");
     expect(container.textContent).toContain("Ask Lime, spark the idea");
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       "Say the goal and Lime will keep going with you.",
     );
     expect(container.textContent).toContain("Guide help");
@@ -3590,5 +3600,65 @@ describe("EmptyState", () => {
     });
 
     expect(onResumeRecentSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("存在项目会话目录时应替换最近会话入口并打开对应会话", async () => {
+    const onResumeRecentSession = vi.fn();
+    const onOpenProjectConversation = vi.fn();
+    const container = renderEmptyState({
+      activeTheme: "general",
+      recentSessionTitle: "品牌发布节奏整理",
+      recentSessionSummary: "已整理到待确认发布标题这一步。",
+      recentSessionActionLabel: "继续最近会话",
+      onResumeRecentSession,
+      projectConversationGroups: [
+        {
+          projectId: "project-1",
+          projectName: "内容项目",
+          conversations: [
+            {
+              id: "topic-1",
+              title: "发布计划",
+              summary: "已记录 6 条消息。",
+              statusReason: "workspace_error",
+            },
+          ],
+        },
+      ],
+      onOpenProjectConversation,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="home-project-conversations"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="home-supplemental-actions"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="entry-recent-session-resume"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("发布计划");
+    expect(container.textContent).not.toContain("内容项目");
+    expect(container.textContent).not.toContain("已记录 6 条消息。");
+
+    const conversationButton = container.querySelector(
+      '[data-testid="home-project-conversation"]',
+    ) as HTMLButtonElement | null;
+    expect(conversationButton?.textContent).toContain("发布计划");
+
+    act(() => {
+      conversationButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(onOpenProjectConversation).toHaveBeenCalledWith(
+      "topic-1",
+      "workspace_error",
+    );
+    expect(onResumeRecentSession).not.toHaveBeenCalled();
   });
 });

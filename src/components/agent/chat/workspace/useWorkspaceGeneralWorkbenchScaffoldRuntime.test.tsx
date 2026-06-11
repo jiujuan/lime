@@ -24,7 +24,7 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeListen: vi.fn(),
 }));
 
-vi.mock("@/lib/workspace/workbenchCanvas", () => ({
+vi.mock("@/components/workspace/canvas/canvasUtils", () => ({
   createInitialCanvasState: mockCreateInitialCanvasState,
   createInitialDocumentState: mockCreateInitialDocumentState,
 }));

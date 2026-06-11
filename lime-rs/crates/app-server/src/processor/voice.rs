@@ -3,13 +3,14 @@
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
     JsonRpcError, VoiceAsrCredentialCreateParams, VoiceAsrCredentialIdParams,
-    VoiceAsrCredentialUpdateParams, VoiceInstructionIdParams,
-    VoiceInstructionSaveParams, VoiceModelDefaultSetParams,
-    VoiceModelTestTranscribeFileParams,
+    VoiceAsrCredentialUpdateParams, VoiceInstructionIdParams, VoiceInstructionSaveParams,
+    VoiceModelDefaultSetParams, VoiceModelTestTranscribeFileParams,
 };
 
 impl RequestProcessor {
-    pub(super) async fn handle_voice_asr_credential_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_voice_asr_credential_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -103,7 +104,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_voice_instruction_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_voice_instruction_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -154,6 +157,4 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
-
 }

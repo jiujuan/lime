@@ -35,13 +35,14 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 const SESSION_ID: &str = "persisted-session";
+const SECOND_SESSION_ID: &str = "persisted-session-second";
 const STDIO_SESSION_ID: &str = "persisted-stdio-session";
 const THREAD_ID: &str = "persisted-thread";
 const WORKSPACE_ID: &str = "workspace-current";
 
 #[derive(Debug)]
 struct PersistedSessionArchiveStore {
-    session: Mutex<AgentSessionOverview>,
+    sessions: Mutex<Vec<AgentSessionOverview>>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,21 +52,18 @@ struct PersistedSessionArchiveDataSource {
 
 impl PersistedSessionArchiveDataSource {
     fn new() -> Self {
+        Self::with_sessions(vec![persisted_session_overview(
+            SESSION_ID,
+            Some(THREAD_ID),
+            "Persisted Session",
+            "2026-06-07T00:00:00.000Z",
+        )])
+    }
+
+    fn with_sessions(sessions: Vec<AgentSessionOverview>) -> Self {
         Self {
             store: Arc::new(PersistedSessionArchiveStore {
-                session: Mutex::new(AgentSessionOverview {
-                    session_id: SESSION_ID.to_string(),
-                    thread_id: Some(THREAD_ID.to_string()),
-                    title: Some("Persisted Session".to_string()),
-                    model: "gpt-5.4".to_string(),
-                    created_at: "2026-06-07T00:00:00.000Z".to_string(),
-                    updated_at: "2026-06-07T00:00:00.000Z".to_string(),
-                    archived_at: None,
-                    workspace_id: Some(WORKSPACE_ID.to_string()),
-                    working_dir: Some("/tmp/workspace-current".to_string()),
-                    execution_strategy: Some("react".to_string()),
-                    messages_count: 2,
-                }),
+                sessions: Mutex::new(sessions),
             }),
         }
     }
@@ -75,13 +73,26 @@ impl PersistedSessionArchiveDataSource {
             store: Arc::clone(&self.store),
         }
     }
+}
 
-    fn current_session(&self) -> AgentSessionOverview {
-        self.store
-            .session
-            .lock()
-            .expect("persisted session mutex poisoned")
-            .clone()
+fn persisted_session_overview(
+    session_id: &str,
+    thread_id: Option<&str>,
+    title: &str,
+    updated_at: &str,
+) -> AgentSessionOverview {
+    AgentSessionOverview {
+        session_id: session_id.to_string(),
+        thread_id: thread_id.map(str::to_string),
+        title: Some(title.to_string()),
+        model: "gpt-5.4".to_string(),
+        created_at: "2026-06-07T00:00:00.000Z".to_string(),
+        updated_at: updated_at.to_string(),
+        archived_at: None,
+        workspace_id: Some(WORKSPACE_ID.to_string()),
+        working_dir: Some("/tmp/workspace-current".to_string()),
+        execution_strategy: Some("react".to_string()),
+        messages_count: 2,
     }
 }
 
@@ -91,39 +102,58 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
         &self,
         params: AgentSessionListParams,
     ) -> Result<AgentSessionListResponse, RuntimeCoreError> {
-        let session = self.current_session();
-        let archived = session.archived_at.is_some();
         let include_archived = params.include_archived.unwrap_or(false);
         let archived_only = params.archived_only.unwrap_or(false);
-        let workspace_matches = params
-            .workspace_id
-            .as_deref()
-            .is_none_or(|workspace_id| session.workspace_id.as_deref() == Some(workspace_id));
-        let visible = workspace_matches
-            && ((archived_only && archived) || (!archived_only && (!archived || include_archived)));
-
-        Ok(AgentSessionListResponse {
-            sessions: if visible { vec![session] } else { Vec::new() },
-        })
+        let mut sessions = self
+            .store
+            .sessions
+            .lock()
+            .expect("persisted session mutex poisoned")
+            .iter()
+            .filter(|session| {
+                let archived = session.archived_at.is_some();
+                let workspace_matches = params.workspace_id.as_deref().is_none_or(|workspace_id| {
+                    session.workspace_id.as_deref() == Some(workspace_id)
+                });
+                workspace_matches
+                    && ((archived_only && archived)
+                        || (!archived_only && (!archived || include_archived)))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+        Ok(AgentSessionListResponse { sessions })
     }
 
     async fn read_current_timeline_session(
         &self,
         params: AgentSessionReadParams,
     ) -> Result<Option<AgentSessionReadResponse>, RuntimeCoreError> {
-        if params.session_id != SESSION_ID {
+        let overview = self
+            .store
+            .sessions
+            .lock()
+            .expect("persisted session mutex poisoned")
+            .iter()
+            .find(|session| session.session_id == params.session_id)
+            .cloned();
+        let Some(overview) = overview else {
             return Ok(None);
-        }
-        let overview = self.current_session();
+        };
+        let session_id = overview.session_id.clone();
+        let thread_id = overview
+            .thread_id
+            .clone()
+            .unwrap_or_else(|| session_id.clone());
         Ok(Some(AgentSessionReadResponse {
             session: AgentSession {
-                session_id: overview.session_id,
-                thread_id: overview.thread_id.unwrap_or_else(|| THREAD_ID.to_string()),
+                session_id: session_id.clone(),
+                thread_id,
                 app_id: "desktop".to_string(),
                 workspace_id: overview.workspace_id,
                 business_object_ref: Some(BusinessObjectRef {
                     kind: "agent.session".to_string(),
-                    id: SESSION_ID.to_string(),
+                    id: session_id.clone(),
                     title: overview.title,
                     uri: None,
                     metadata: Some(json!({
@@ -136,8 +166,8 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
             },
             turns: Vec::new(),
             detail: Some(json!({
-                "id": SESSION_ID,
-                "thread_id": THREAD_ID,
+                "id": session_id,
+                "thread_id": overview.thread_id,
                 "messages": [],
                 "turns": [],
                 "items": [],
@@ -156,14 +186,15 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
         &self,
         params: AgentSessionUpdateParams,
     ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError> {
-        if params.session_id != SESSION_ID {
-            return Err(RuntimeCoreError::SessionNotFound(params.session_id));
-        }
-        let mut session = self
+        let mut sessions = self
             .store
-            .session
+            .sessions
             .lock()
             .expect("persisted session mutex poisoned");
+        let session = sessions
+            .iter_mut()
+            .find(|session| session.session_id == params.session_id)
+            .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
         if let Some(title) = params.title.as_deref().map(str::trim) {
             if !title.is_empty() {
                 session.title = Some(title.to_string());
@@ -631,6 +662,112 @@ async fn persisted_session_archive_and_unarchive_use_current_jsonrpc() {
     )
     .await;
     assert_eq!(session_ids(&restored_archived), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn persisted_session_archive_many_uses_current_jsonrpc() {
+    let data_source = Arc::new(PersistedSessionArchiveDataSource::with_sessions(vec![
+        persisted_session_overview(
+            SESSION_ID,
+            Some(THREAD_ID),
+            "Persisted Session",
+            "2026-06-07T00:00:00.000Z",
+        ),
+        persisted_session_overview(
+            SECOND_SESSION_ID,
+            Some("persisted-thread-second"),
+            "Second Persisted Session",
+            "2026-06-07T00:00:02.000Z",
+        ),
+    ]));
+    let server = app_server(Arc::clone(&data_source));
+    initialize_server(&server, 1, "session-archive-many-jsonrpc-test").await;
+
+    let archived = request(
+        &server,
+        2,
+        METHOD_AGENT_SESSION_ARCHIVE_MANY,
+        json!({
+            "sessionIds": [
+                format!(" {SESSION_ID} "),
+                "",
+                SECOND_SESSION_ID,
+                SESSION_ID
+            ]
+        }),
+    )
+    .await;
+    let mut archived_session_ids = session_ids(&archived);
+    archived_session_ids.sort();
+    assert_eq!(
+        archived_session_ids,
+        vec![SESSION_ID.to_string(), SECOND_SESSION_ID.to_string()]
+    );
+    assert!(
+        session_archived_at(&archived, SESSION_ID).is_some(),
+        "primary session should be archived"
+    );
+    assert!(
+        session_archived_at(&archived, SECOND_SESSION_ID).is_some(),
+        "second session should be archived"
+    );
+
+    let recent = request(
+        &server,
+        3,
+        METHOD_AGENT_SESSION_LIST,
+        json!({
+            "workspaceId": WORKSPACE_ID
+        }),
+    )
+    .await;
+    assert_eq!(session_ids(&recent), Vec::<String>::new());
+
+    let archived_only = request(
+        &server,
+        4,
+        METHOD_AGENT_SESSION_LIST,
+        json!({
+            "workspaceId": WORKSPACE_ID,
+            "archivedOnly": true
+        }),
+    )
+    .await;
+    let mut archived_only_session_ids = session_ids(&archived_only);
+    archived_only_session_ids.sort();
+    assert_eq!(
+        archived_only_session_ids,
+        vec![SESSION_ID.to_string(), SECOND_SESSION_ID.to_string()]
+    );
+}
+
+#[tokio::test]
+async fn persisted_session_archive_many_ignores_empty_request() {
+    let data_source = Arc::new(PersistedSessionArchiveDataSource::new());
+    let server = app_server(Arc::clone(&data_source));
+    initialize_server(&server, 1, "session-archive-many-empty-test").await;
+
+    let archived = request(
+        &server,
+        2,
+        METHOD_AGENT_SESSION_ARCHIVE_MANY,
+        json!({
+            "sessionIds": ["", "   "]
+        }),
+    )
+    .await;
+    assert_eq!(session_ids(&archived), Vec::<String>::new());
+
+    let recent = request(
+        &server,
+        3,
+        METHOD_AGENT_SESSION_LIST,
+        json!({
+            "workspaceId": WORKSPACE_ID
+        }),
+    )
+    .await;
+    assert_eq!(session_ids(&recent), vec![SESSION_ID.to_string()]);
 }
 
 #[test]

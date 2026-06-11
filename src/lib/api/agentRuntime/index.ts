@@ -35,6 +35,7 @@ export {
   updateAgentRuntimeObjectiveStatus,
 } from "./objectiveClient";
 export {
+  archiveManyAgentRuntimeSessions,
   createSessionClient,
   createAgentRuntimeSession,
   deleteAgentRuntimeSession,

@@ -74,7 +74,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_skill_repository_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_skill_repository_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -112,7 +114,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_skill_cache_refresh_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_skill_cache_refresh_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -122,7 +126,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_skill_installed_directories_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_skill_installed_directories_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime

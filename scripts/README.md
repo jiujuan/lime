@@ -63,6 +63,14 @@ npm run governance:scripts
 
 ## 现有专题说明
 
+### 根目录当前例外
+
+以下根入口已被 `package.json` 明确引用，当前按 `current` 例外纳入冻结基线；后续迁移时优先进入对应领域目录，并同步缩小 `scripts/script-root-governance-baseline.json`：
+
+- `scripts/check-file-size-governance.mjs`：文件体量治理入口，后续可迁到 `scripts/governance/`
+- `scripts/check-import-boundaries.mjs`：导入边界治理入口，后续可迁到 `scripts/governance/`
+- `scripts/generate-protocol-types.mjs`：App Server 协议类型生成入口，后续可迁到 `scripts/app-server/`
+
 ### i18n 脚本
 
 i18n workflow、report、benchmark、检测脚本和测试已整体迁到 `scripts/i18n/`。对外仍优先使用 `package.json` 里的 `detect-translations` 与 `i18n:*` npm scripts，不直接依赖根目录脚本路径。

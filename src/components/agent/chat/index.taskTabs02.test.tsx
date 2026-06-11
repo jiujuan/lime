@@ -260,6 +260,47 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(setMessages).not.toHaveBeenCalledWith([]);
   });
 
+  it("new-task 首页应支持连续新增多个本地草稿标签", async () => {
+    const onNavigate = vi.fn();
+    vi.mocked(buildHomeAgentParams).mockClear();
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: null,
+      topics: [],
+    });
+    state.createFreshSession = vi.fn(async () => "new-topic");
+    installMockAgentChatUnifiedState(state);
+
+    const mounted = mountPage({
+      agentEntry: "new-task",
+      projectId: "workspace-test",
+      onNavigate,
+    });
+    await flushEffects();
+
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects();
+    mounted.rerender();
+    await flushEffects();
+
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects();
+    mounted.rerender();
+    await flushEffects();
+
+    const draftTabs = mounted.container.querySelectorAll(
+      '[data-testid^="task-center-tab-task-draft-"]',
+    );
+    expect(draftTabs).toHaveLength(2);
+    expect(
+      mounted.container.querySelectorAll(
+        '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
+      ),
+    ).toHaveLength(1);
+    expect(state.createFreshSession).not.toHaveBeenCalled();
+    expect(buildHomeAgentParams).not.toHaveBeenCalled();
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
   it("new-task 首页收到外层侧栏打开历史会话时应立即切换会话", async () => {
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
       sessionId: null,

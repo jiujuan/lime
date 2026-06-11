@@ -71,6 +71,37 @@ describe("EmptyStateComposerPanel", () => {
     expect(composer?.className).toContain("floating-composer");
   });
 
+  it("首页项目栏应连接在同一个输入壳内以继承聚焦态", () => {
+    const container = renderPanel({
+      isGeneralTheme: true,
+      projectId: "default",
+      openedProjects: [
+        {
+          id: "default",
+          name: "默认项目",
+          rootPath: "/workspace/default",
+        },
+      ],
+      projectContextModeLabel: "本地模式",
+    });
+
+    const connectedComposer = container.querySelector(
+      '[data-testid="inputbar-connected-composer"]',
+    );
+    const composer = container.querySelector(
+      '[data-testid="inputbar-core-container"]',
+    );
+    const projectContextSlot = container.querySelector(
+      '[data-testid="inputbar-context-bar-slot"]',
+    );
+
+    expect(connectedComposer).toBeTruthy();
+    expect(composer).toBeTruthy();
+    expect(projectContextSlot).toBeTruthy();
+    expect(connectedComposer?.contains(composer ?? null)).toBe(true);
+    expect(connectedComposer?.contains(projectContextSlot ?? null)).toBe(true);
+  });
+
   it("首页空态输入区应显示文件管理器按钮并触发开关", () => {
     const onToggleFileManager = vi.fn();
     const container = renderPanel({

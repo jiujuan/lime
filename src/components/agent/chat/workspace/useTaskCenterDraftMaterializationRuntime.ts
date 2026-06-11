@@ -355,6 +355,7 @@ export function useTaskCenterDraftMaterializationRuntime({
       });
       void materializeTaskCenterDraftTab(draftTabId, {
         reason: "input_warmup",
+        commit: false,
       }).catch((error) => {
         logAgentDebug(
           "AgentChatPage",

@@ -68,6 +68,10 @@
     },
     {
       "kind": "request",
+      "method": "agentSession/archiveMany"
+    },
+    {
+      "kind": "request",
       "method": "agentSession/compact"
     },
     {
@@ -940,6 +944,10 @@
     },
     {
       "kind": "request",
+      "method": "workspace/delete"
+    },
+    {
+      "kind": "request",
       "method": "workspace/ensure"
     },
     {
@@ -961,6 +969,10 @@
     {
       "kind": "request",
       "method": "workspace/read"
+    },
+    {
+      "kind": "request",
+      "method": "workspace/update"
     },
     {
       "kind": "request",
@@ -1019,6 +1031,8 @@
       "AgentSessionActionType",
       "AgentSessionAnalysisHandoffExportParams",
       "AgentSessionAnalysisHandoffExportResponse",
+      "AgentSessionArchiveManyParams",
+      "AgentSessionArchiveManyResponse",
       "AgentSessionCompactParams",
       "AgentSessionCompactResponse",
       "AgentSessionEventParams",
@@ -1272,6 +1286,8 @@
       "ProjectGitStatusResponse",
       "ProjectGitWorktreeCreateParams",
       "ProjectGitWorktreeCreateResponse",
+      "ProjectGitWorktreeDeleteParams",
+      "ProjectGitWorktreeDeleteResponse",
       "ProjectMaterial",
       "ProjectMaterialContentResponse",
       "ProjectMaterialCountResponse",
@@ -1410,6 +1426,8 @@
       "WechatRuntimeModelSetResponse",
       "WindowsStartupCheck",
       "WindowsStartupDiagnosticsResponse",
+      "WorkspaceDeleteParams",
+      "WorkspaceDeleteResponse",
       "WorkspaceEnsureParams",
       "WorkspaceEnsureProjectParams",
       "WorkspaceEnsureProjectResponse",
@@ -1424,7 +1442,9 @@
       "WorkspaceRegisteredSkillsListParams",
       "WorkspaceRegisteredSkillsListResponse",
       "WorkspaceSkillBindingsListParams",
-      "WorkspaceSkillBindingsListResponse"
+      "WorkspaceSkillBindingsListResponse",
+      "WorkspaceUpdateParams",
+      "WorkspaceUpdateResponse"
     ]
   }
 }

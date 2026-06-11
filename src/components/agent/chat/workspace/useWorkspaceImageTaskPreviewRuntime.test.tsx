@@ -25,7 +25,7 @@ import {
 } from "./imageWorkbenchHelpers";
 import { useWorkspaceImageTaskPreviewRuntime } from "./useWorkspaceImageTaskPreviewRuntime";
 import type { DirectoryListing } from "@/lib/api/fileBrowser";
-import { createInitialDocumentState } from "@/lib/workspace/workbenchCanvas";
+import { createInitialDocumentState } from "@/components/workspace/canvas/canvasUtils";
 
 vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),

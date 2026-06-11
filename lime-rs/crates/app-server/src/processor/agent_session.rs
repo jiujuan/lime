@@ -1,11 +1,11 @@
 //! agent_session domain handlers for the App Server processor.
 
 use super::{
-    dispatch_result, dispatch_result_with_events, parse_params, to_jsonrpc_error,
-    RequestProcessor, RpcDispatch,
+    dispatch_result, dispatch_result_with_events, parse_params, to_jsonrpc_error, RequestProcessor,
+    RpcDispatch,
 };
 use app_server_protocol::{
-    AgentSessionCompactParams, AgentSessionFileCheckpointDiffParams,
+    AgentSessionArchiveManyParams, AgentSessionCompactParams, AgentSessionFileCheckpointDiffParams,
     AgentSessionFileCheckpointGetParams, AgentSessionFileCheckpointListParams,
     AgentSessionFileCheckpointRestoreParams, AgentSessionListParams,
     AgentSessionObjectiveAuditParams, AgentSessionObjectiveClearParams,
@@ -39,6 +39,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .update_session_current(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_session_archive_many_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionArchiveManyParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .archive_many_agent_sessions(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

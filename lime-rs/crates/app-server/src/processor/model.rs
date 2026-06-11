@@ -2,12 +2,11 @@
 
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
-    JsonRpcError, ModelListParams, ModelProviderAliasReadParams,
-    ModelProviderConfigExportParams, ModelProviderConfigImportParams,
-    ModelProviderCreateParams, ModelProviderDeleteParams, ModelProviderKeyDeleteParams,
-    ModelProviderFetchModelsParams, ModelProviderKeyCreateParams, ModelProviderKeyEventParams, ModelProviderReadParams,
-    ModelProviderKeyNextParams, ModelProviderKeyUpdateParams,
-    ModelProviderSortOrdersUpdateParams, ModelProviderTestChatParams,
+    JsonRpcError, ModelListParams, ModelProviderAliasReadParams, ModelProviderConfigExportParams,
+    ModelProviderConfigImportParams, ModelProviderCreateParams, ModelProviderDeleteParams,
+    ModelProviderFetchModelsParams, ModelProviderKeyCreateParams, ModelProviderKeyDeleteParams,
+    ModelProviderKeyEventParams, ModelProviderKeyNextParams, ModelProviderKeyUpdateParams,
+    ModelProviderReadParams, ModelProviderSortOrdersUpdateParams, ModelProviderTestChatParams,
     ModelProviderTestConnectionParams, ModelProviderUiStateReadParams,
     ModelProviderUiStateWriteParams, ModelProviderUpdateParams,
 };
@@ -27,7 +26,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_model_preferences_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_model_preferences_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -37,7 +38,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_model_sync_state_read_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_model_sync_state_read_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -47,7 +50,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_model_provider_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_model_provider_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -57,7 +62,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_model_provider_catalog_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_model_provider_catalog_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -333,7 +340,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_model_provider_alias_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_model_provider_alias_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -342,5 +351,4 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
 }

@@ -21,6 +21,26 @@ function appServerClientMock(): AppServerSessionRpcClient {
       notifications: [],
       messages: [],
     }),
+    archiveManySessions: vi.fn().mockResolvedValue({
+      id: 2,
+      result: {
+        sessions: [
+          {
+            sessionId: "session-bulk",
+            threadId: "thread-bulk",
+            title: "批量归档",
+            model: "gpt-5.4",
+            createdAt: "2026-06-07T00:00:00.000Z",
+            updatedAt: "2026-06-07T00:00:00.000Z",
+            archivedAt: "2026-06-07T00:00:00.000Z",
+            messagesCount: 1,
+          },
+        ],
+      },
+      response: { id: 2, result: {} },
+      notifications: [],
+      messages: [],
+    }),
   };
 }
 
@@ -59,6 +79,31 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       sessionId: "session-deleted",
       archived: true,
     });
+    expect(appServerClient.request).not.toHaveBeenCalled();
+  });
+
+  it("archiveMany projection must use agentSession/archiveMany instead of per-session update", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createSessionClient({
+      appServerClient,
+    });
+
+    await expect(
+      client.archiveManyAgentRuntimeSessions([
+        " session-bulk ",
+        "",
+        "session-bulk",
+      ]),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "session-bulk",
+      }),
+    ]);
+
+    expect(appServerClient.archiveManySessions).toHaveBeenCalledWith({
+      sessionIds: ["session-bulk"],
+    });
+    expect(appServerClient.updateSession).not.toHaveBeenCalled();
     expect(appServerClient.request).not.toHaveBeenCalled();
   });
 

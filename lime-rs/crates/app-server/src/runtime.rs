@@ -28,6 +28,8 @@ use app_server_protocol::AgentSessionActionRespondParams;
 use app_server_protocol::AgentSessionActionRespondResponse;
 use app_server_protocol::AgentSessionActionScope;
 use app_server_protocol::AgentSessionActionType;
+use app_server_protocol::AgentSessionArchiveManyParams;
+use app_server_protocol::AgentSessionArchiveManyResponse;
 use app_server_protocol::AgentSessionCompactParams;
 use app_server_protocol::AgentSessionCompactResponse;
 use app_server_protocol::AgentSessionFileCheckpointDetail;
@@ -354,6 +356,8 @@ use app_server_protocol::WechatLoginWaitResponse;
 use app_server_protocol::WechatRuntimeModelSetParams;
 use app_server_protocol::WechatRuntimeModelSetResponse;
 use app_server_protocol::WindowsStartupDiagnosticsResponse;
+use app_server_protocol::WorkspaceDeleteParams;
+use app_server_protocol::WorkspaceDeleteResponse;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspaceEnsureProjectParams;
 use app_server_protocol::WorkspaceEnsureProjectResponse;
@@ -369,6 +373,8 @@ use app_server_protocol::WorkspaceRegisteredSkillsListParams;
 use app_server_protocol::WorkspaceRegisteredSkillsListResponse;
 use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::WorkspaceSkillBindingsListResponse;
+use app_server_protocol::WorkspaceUpdateParams;
+use app_server_protocol::WorkspaceUpdateResponse;
 use async_trait::async_trait;
 use chrono::SecondsFormat;
 use chrono::Utc;
@@ -515,6 +521,24 @@ pub trait AppDataSource: Send + Sync {
         params: AgentSessionUpdateParams,
     ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError>;
 
+    async fn archive_many_current_timeline_sessions(
+        &self,
+        params: AgentSessionArchiveManyParams,
+    ) -> Result<AgentSessionArchiveManyResponse, RuntimeCoreError> {
+        let mut sessions = Vec::new();
+        for session_id in params.session_ids {
+            let response = self
+                .update_current_timeline_session(AgentSessionUpdateParams {
+                    session_id,
+                    archived: Some(true),
+                    ..AgentSessionUpdateParams::default()
+                })
+                .await?;
+            sessions.push(response.session);
+        }
+        Ok(AgentSessionArchiveManyResponse { sessions })
+    }
+
     async fn read_agent_session_objective(
         &self,
         _params: AgentSessionObjectiveReadParams,
@@ -642,6 +666,24 @@ pub trait AppDataSource: Send + Sync {
         &self,
         params: WorkspaceReadParams,
     ) -> Result<WorkspaceReadResponse, RuntimeCoreError>;
+
+    async fn update_workspace(
+        &self,
+        _params: WorkspaceUpdateParams,
+    ) -> Result<WorkspaceUpdateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "workspace/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_workspace(
+        &self,
+        _params: WorkspaceDeleteParams,
+    ) -> Result<WorkspaceDeleteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "workspace/delete is not available without an app data source".to_string(),
+        ))
+    }
 
     async fn read_workspace_by_path(
         &self,
@@ -2318,6 +2360,24 @@ impl AppDataSource for NoopAppDataSource {
         Ok(WorkspaceReadResponse::default())
     }
 
+    async fn update_workspace(
+        &self,
+        _params: WorkspaceUpdateParams,
+    ) -> Result<WorkspaceUpdateResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "workspace/update is not available without an app data source".to_string(),
+        ))
+    }
+
+    async fn delete_workspace(
+        &self,
+        _params: WorkspaceDeleteParams,
+    ) -> Result<WorkspaceDeleteResponse, RuntimeCoreError> {
+        Err(RuntimeCoreError::Backend(
+            "workspace/delete is not available without an app data source".to_string(),
+        ))
+    }
+
     async fn read_workspace_by_path(
         &self,
         _params: WorkspacePathReadParams,
@@ -3848,6 +3908,54 @@ impl RuntimeCore {
             .await
     }
 
+    pub async fn archive_many_agent_sessions(
+        &self,
+        params: AgentSessionArchiveManyParams,
+    ) -> Result<AgentSessionArchiveManyResponse, RuntimeCoreError> {
+        let mut seen = HashSet::new();
+        let mut normalized_session_ids = Vec::new();
+        for session_id in params.session_ids {
+            let normalized = session_id.trim().to_string();
+            if normalized.is_empty() || !seen.insert(normalized.clone()) {
+                continue;
+            }
+            normalized_session_ids.push(normalized);
+        }
+
+        if normalized_session_ids.is_empty() {
+            return Ok(AgentSessionArchiveManyResponse::default());
+        }
+
+        let mut sessions = Vec::new();
+        let mut remaining_persisted_session_ids = Vec::new();
+        for session_id in normalized_session_ids {
+            match self.update_runtime_core_session_overview(
+                AgentSessionUpdateParams {
+                    session_id: session_id.clone(),
+                    archived: Some(true),
+                    ..AgentSessionUpdateParams::default()
+                },
+                &session_id,
+            )? {
+                Some(session) => sessions.push(session),
+                None => remaining_persisted_session_ids.push(session_id),
+            }
+        }
+
+        if !remaining_persisted_session_ids.is_empty() {
+            let response = self
+                .app_data_source
+                .archive_many_current_timeline_sessions(AgentSessionArchiveManyParams {
+                    session_ids: remaining_persisted_session_ids,
+                })
+                .await?;
+            sessions.extend(response.sessions);
+        }
+
+        sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+        Ok(AgentSessionArchiveManyResponse { sessions })
+    }
+
     pub async fn read_agent_session_objective(
         &self,
         params: AgentSessionObjectiveReadParams,
@@ -4536,6 +4644,20 @@ impl RuntimeCore {
         params: WorkspaceReadParams,
     ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
         self.app_data_source.read_workspace(params).await
+    }
+
+    pub async fn update_workspace(
+        &self,
+        params: WorkspaceUpdateParams,
+    ) -> Result<WorkspaceUpdateResponse, RuntimeCoreError> {
+        self.app_data_source.update_workspace(params).await
+    }
+
+    pub async fn delete_workspace(
+        &self,
+        params: WorkspaceDeleteParams,
+    ) -> Result<WorkspaceDeleteResponse, RuntimeCoreError> {
+        self.app_data_source.delete_workspace(params).await
     }
 
     pub async fn read_workspace_by_path(

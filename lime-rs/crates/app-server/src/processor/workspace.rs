@@ -6,8 +6,8 @@ use app_server_protocol::{
     JsonRpcError, SessionFileGetOrCreateParams, SessionFileIdParams, SessionFileSaveParams,
     SessionFileUpdateMetaParams, WorkspaceDeleteParams, WorkspaceEnsureParams,
     WorkspaceEnsureProjectParams, WorkspacePathReadParams, WorkspaceProjectPathResolveParams,
-    WorkspaceReadParams, WorkspaceUpdateParams,
-    WorkspaceRegisteredSkillsListParams, WorkspaceSkillBindingsListParams,
+    WorkspaceReadParams, WorkspaceRegisteredSkillsListParams, WorkspaceSkillBindingsListParams,
+    WorkspaceUpdateParams,
 };
 
 impl RequestProcessor {
@@ -123,9 +123,7 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_workspace_list_impl(
-        &self,
-    ) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_workspace_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime

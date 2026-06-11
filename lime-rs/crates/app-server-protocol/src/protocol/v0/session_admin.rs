@@ -75,6 +75,20 @@ pub struct AgentSessionUpdateResponse {
     pub session: AgentSessionOverview,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionArchiveManyParams {
+    #[serde(default)]
+    pub session_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionArchiveManyResponse {
+    #[serde(default)]
+    pub sessions: Vec<AgentSessionOverview>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedObjectiveStatus {

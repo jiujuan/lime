@@ -4,6 +4,7 @@ import {
   METHOD_AGENT_SESSION_ACTION_REPLAY,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+  METHOD_AGENT_SESSION_ARCHIVE_MANY,
   METHOD_AGENT_SESSION_COMPACT,
   METHOD_AGENT_SESSION_EVENT,
   METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF,
@@ -154,6 +155,8 @@ import {
   type AgentSessionHandoffArtifact,
   type AgentSessionHandoffBundleExportParams,
   type AgentSessionHandoffBundleExportResponse,
+  type AgentSessionArchiveManyParams,
+  type AgentSessionArchiveManyResponse,
   type AgentSessionListParams,
   type AgentSessionListResponse,
   type AgentSessionObjectiveClearParams,
@@ -379,6 +382,8 @@ export const APP_SERVER_METHOD_AGENT_SESSION_LIST = METHOD_AGENT_SESSION_LIST;
 export const APP_SERVER_METHOD_AGENT_SESSION_READ = METHOD_AGENT_SESSION_READ;
 export const APP_SERVER_METHOD_AGENT_SESSION_UPDATE =
   METHOD_AGENT_SESSION_UPDATE;
+export const APP_SERVER_METHOD_AGENT_SESSION_ARCHIVE_MANY =
+  METHOD_AGENT_SESSION_ARCHIVE_MANY;
 export const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_READ =
   METHOD_AGENT_SESSION_OBJECTIVE_READ;
 export const APP_SERVER_METHOD_AGENT_SESSION_OBJECTIVE_SET =
@@ -666,6 +671,10 @@ export type AppServerAgentSessionStartResponse = AgentSessionStartResponse;
 export type AppServerAgentSessionReadResponse = AgentSessionReadResponse;
 export type AppServerAgentSessionUpdateParams = AgentSessionUpdateParams;
 export type AppServerAgentSessionUpdateResponse = AgentSessionUpdateResponse;
+export type AppServerAgentSessionArchiveManyParams =
+  AgentSessionArchiveManyParams;
+export type AppServerAgentSessionArchiveManyResponse =
+  AgentSessionArchiveManyResponse;
 export type AppServerManagedObjectiveStatus = ManagedObjectiveStatus;
 export type AppServerManagedObjective = ManagedObjective;
 export type AppServerAgentSessionObjectiveReadParams =
@@ -1208,6 +1217,17 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerAgentSessionUpdateResponse>> {
     return await this.request<AppServerAgentSessionUpdateResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
+      params,
+    );
+  }
+
+  async archiveManySessions(
+    params: AppServerAgentSessionArchiveManyParams,
+  ): Promise<
+    AppServerRequestResult<AppServerAgentSessionArchiveManyResponse>
+  > {
+    return await this.request<AppServerAgentSessionArchiveManyResponse>(
+      APP_SERVER_METHOD_AGENT_SESSION_ARCHIVE_MANY,
       params,
     );
   }

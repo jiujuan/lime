@@ -1983,6 +1983,101 @@
       "title": "AgentSessionAnalysisHandoffExportResponse",
       "type": "object"
     },
+    "AgentSessionArchiveManyParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "AgentSessionArchiveManyParams",
+      "type": "object"
+    },
+    "AgentSessionArchiveManyResponse": {
+      "$defs": {
+        "AgentSessionOverview": {
+          "properties": {
+            "archivedAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "executionStrategy": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "messagesCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "model": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "title": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "workingDir": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "createdAt",
+            "messagesCount",
+            "model",
+            "sessionId",
+            "updatedAt"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentSessionOverview"
+          },
+          "type": "array"
+        }
+      },
+      "title": "AgentSessionArchiveManyResponse",
+      "type": "object"
+    },
     "AgentSessionCompactParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -13711,6 +13806,44 @@
       "title": "ProjectGitWorktreeCreateResponse",
       "type": "object"
     },
+    "ProjectGitWorktreeDeleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "discardChanges": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "ProjectGitWorktreeDeleteParams",
+      "type": "object"
+    },
+    "ProjectGitWorktreeDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "repositoryRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "worktreePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "worktreePath"
+      ],
+      "title": "ProjectGitWorktreeDeleteResponse",
+      "type": "object"
+    },
     "ProjectMaterial": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -19881,6 +20014,38 @@
       "title": "WindowsStartupDiagnosticsResponse",
       "type": "object"
     },
+    "WorkspaceDeleteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "deleteDirectory": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "WorkspaceDeleteParams",
+      "type": "object"
+    },
+    "WorkspaceDeleteResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "WorkspaceDeleteResponse",
+      "type": "object"
+    },
     "WorkspaceEnsureParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -20101,6 +20266,82 @@
       "title": "WorkspaceSkillBindingsListResponse",
       "type": "object"
     },
+    "WorkspaceUpdateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "color": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultPersonaId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "icon": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "isArchived": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "isFavorite": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rootPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "settings": true,
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "WorkspaceUpdateParams",
+      "type": "object"
+    },
+    "WorkspaceUpdateResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "workspace": true
+      },
+      "required": [
+        "workspace"
+      ],
+      "title": "WorkspaceUpdateResponse",
+      "type": "object"
+    },
     "jsonRpcError": {
       "additionalProperties": false,
       "properties": {
@@ -20204,6 +20445,7 @@
               "agentSession/action/replay",
               "agentSession/action/respond",
               "agentSession/analysisHandoff/export",
+              "agentSession/archiveMany",
               "agentSession/compact",
               "agentSession/fileCheckpoint/diff",
               "agentSession/fileCheckpoint/get",
@@ -20420,12 +20662,14 @@
               "workspace/byPath/read",
               "workspace/default/ensure",
               "workspace/default/read",
+              "workspace/delete",
               "workspace/ensure",
               "workspace/ensureReady",
               "workspace/list",
               "workspace/projectPath/resolve",
               "workspace/projectsRoot/read",
               "workspace/read",
+              "workspace/update",
               "workspaceRegisteredSkills/list",
               "workspaceSkillBindings/list"
             ]

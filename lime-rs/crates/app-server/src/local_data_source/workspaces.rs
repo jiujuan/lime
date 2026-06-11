@@ -1,5 +1,7 @@
 use super::data_error;
 use crate::RuntimeCoreError;
+use app_server_protocol::WorkspaceDeleteParams;
+use app_server_protocol::WorkspaceDeleteResponse;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspaceEnsureProjectParams;
 use app_server_protocol::WorkspaceEnsureProjectResponse;
@@ -11,6 +13,8 @@ use app_server_protocol::WorkspaceProjectPathResolveResponse;
 use app_server_protocol::WorkspaceProjectsRootReadResponse;
 use app_server_protocol::WorkspaceReadParams;
 use app_server_protocol::WorkspaceReadResponse;
+use app_server_protocol::WorkspaceUpdateParams;
+use app_server_protocol::WorkspaceUpdateResponse;
 use chrono::Utc;
 use lime_core::app_paths;
 use lime_core::database;
@@ -65,6 +69,112 @@ pub(crate) fn read_workspace(
     let conn = database::lock_db(db).map_err(data_error)?;
     let workspace = read_workspace_by_id(&conn, &params.id).map_err(data_error)?;
     Ok(WorkspaceReadResponse { workspace })
+}
+
+pub(crate) fn update_workspace(
+    db: &DbConnection,
+    params: WorkspaceUpdateParams,
+) -> Result<WorkspaceUpdateResponse, RuntimeCoreError> {
+    let id = params.id.trim();
+    if id.is_empty() {
+        return Err(data_error("workspace id is required"));
+    }
+
+    let conn = database::lock_db(db).map_err(data_error)?;
+    if read_workspace_by_id(&conn, id)
+        .map_err(data_error)?
+        .is_none()
+    {
+        return Err(data_error(format!("workspace not found: {id}")));
+    }
+
+    let name = params
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let root_path = params
+        .root_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let settings_json = match params.settings {
+        Some(settings) => Some(serde_json::to_string(&settings).map_err(data_error)?),
+        None => None,
+    };
+    let tags_json = match params.tags {
+        Some(tags) => Some(serde_json::to_string(&tags).map_err(data_error)?),
+        None => None,
+    };
+    let now = Utc::now().timestamp_millis();
+
+    conn.execute(
+        "UPDATE workspaces
+         SET name = COALESCE(?, name),
+             root_path = COALESCE(?, root_path),
+             settings_json = COALESCE(?, settings_json),
+             icon = COALESCE(?, icon),
+             color = COALESCE(?, color),
+             is_favorite = COALESCE(?, is_favorite),
+             is_archived = COALESCE(?, is_archived),
+             tags_json = COALESCE(?, tags_json),
+             default_persona_id = COALESCE(?, default_persona_id),
+             updated_at = ?
+         WHERE id = ?",
+        params![
+            name,
+            root_path,
+            settings_json,
+            params.icon,
+            params.color,
+            params.is_favorite,
+            params.is_archived,
+            tags_json,
+            params.default_persona_id,
+            now,
+            id,
+        ],
+    )
+    .map_err(|error| data_error(format!("update workspace failed: {error}")))?;
+
+    let workspace = read_workspace_by_id(&conn, id)
+        .map_err(data_error)?
+        .ok_or_else(|| data_error("failed to reload updated workspace"))?;
+    Ok(WorkspaceUpdateResponse { workspace })
+}
+
+pub(crate) fn delete_workspace(
+    db: &DbConnection,
+    params: WorkspaceDeleteParams,
+) -> Result<WorkspaceDeleteResponse, RuntimeCoreError> {
+    let id = params.id.trim();
+    if id.is_empty() {
+        return Err(data_error("workspace id is required"));
+    }
+    if params.delete_directory == Some(true) {
+        return Err(data_error(
+            "workspace/delete does not support deleting local directories",
+        ));
+    }
+
+    let conn = database::lock_db(db).map_err(data_error)?;
+    let workspace = read_workspace_by_id(&conn, id)
+        .map_err(data_error)?
+        .ok_or_else(|| data_error(format!("workspace not found: {id}")))?;
+    if workspace
+        .get("is_default")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(data_error("default workspace cannot be deleted"));
+    }
+
+    let affected = conn
+        .execute("DELETE FROM workspaces WHERE id = ?", params![id])
+        .map_err(|error| data_error(format!("delete workspace failed: {error}")))?;
+    Ok(WorkspaceDeleteResponse {
+        deleted: affected > 0,
+    })
 }
 
 pub(crate) fn read_workspace_by_path(

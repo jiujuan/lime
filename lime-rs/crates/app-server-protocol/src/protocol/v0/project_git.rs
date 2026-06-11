@@ -33,6 +33,14 @@ pub struct ProjectGitWorktreeCreateParams {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectGitWorktreeDeleteParams {
+    pub root_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discard_changes: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectGitStatusResponse {
     pub root_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -55,4 +63,12 @@ pub struct ProjectGitWorktreeCreateResponse {
     pub worktree_path: String,
     pub branch: String,
     pub status: ProjectGitStatusResponse,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGitWorktreeDeleteResponse {
+    pub worktree_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository_root: Option<String>,
 }

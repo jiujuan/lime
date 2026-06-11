@@ -33,6 +33,8 @@ use app_server_protocol::AgentAppUninstallParams;
 use app_server_protocol::AgentAppUninstallRehearsalParams;
 use app_server_protocol::AgentAppUninstallRehearsalResponse;
 use app_server_protocol::AgentAppUninstallResponse;
+use app_server_protocol::AgentSessionArchiveManyParams;
+use app_server_protocol::AgentSessionArchiveManyResponse;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionListResponse;
 use app_server_protocol::AgentSessionObjectiveClearParams;
@@ -290,6 +292,8 @@ use app_server_protocol::WechatLoginWaitResponse;
 use app_server_protocol::WechatRuntimeModelSetParams;
 use app_server_protocol::WechatRuntimeModelSetResponse;
 use app_server_protocol::WindowsStartupDiagnosticsResponse;
+use app_server_protocol::WorkspaceDeleteParams;
+use app_server_protocol::WorkspaceDeleteResponse;
 use app_server_protocol::WorkspaceEnsureParams;
 use app_server_protocol::WorkspaceEnsureProjectParams;
 use app_server_protocol::WorkspaceEnsureProjectResponse;
@@ -305,6 +309,8 @@ use app_server_protocol::WorkspaceRegisteredSkillsListParams;
 use app_server_protocol::WorkspaceRegisteredSkillsListResponse;
 use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::WorkspaceSkillBindingsListResponse;
+use app_server_protocol::WorkspaceUpdateParams;
+use app_server_protocol::WorkspaceUpdateResponse;
 use async_trait::async_trait;
 use lime_agent::initialize_aster_runtime;
 use lime_agent::AsterAgentState;
@@ -399,6 +405,13 @@ impl AppDataSource for LocalAppDataSource {
         params: AgentSessionUpdateParams,
     ) -> Result<AgentSessionUpdateResponse, RuntimeCoreError> {
         current_timeline::update_current_timeline_session(&self.db, params)
+    }
+
+    async fn archive_many_current_timeline_sessions(
+        &self,
+        params: AgentSessionArchiveManyParams,
+    ) -> Result<AgentSessionArchiveManyResponse, RuntimeCoreError> {
+        current_timeline::archive_many_current_timeline_sessions(&self.db, params)
     }
 
     async fn read_agent_session_objective(
@@ -504,6 +517,20 @@ impl AppDataSource for LocalAppDataSource {
         params: WorkspaceReadParams,
     ) -> Result<WorkspaceReadResponse, RuntimeCoreError> {
         workspaces::read_workspace(&self.db, params)
+    }
+
+    async fn update_workspace(
+        &self,
+        params: WorkspaceUpdateParams,
+    ) -> Result<WorkspaceUpdateResponse, RuntimeCoreError> {
+        workspaces::update_workspace(&self.db, params)
+    }
+
+    async fn delete_workspace(
+        &self,
+        params: WorkspaceDeleteParams,
+    ) -> Result<WorkspaceDeleteResponse, RuntimeCoreError> {
+        workspaces::delete_workspace(&self.db, params)
     }
 
     async fn read_workspace_by_path(

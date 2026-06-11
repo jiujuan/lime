@@ -110,6 +110,12 @@ interface BuildWorkspaceEmptyStatePropsParams {
   onResumeRecentSession?: ComponentProps<
     typeof EmptyState
   >["onResumeRecentSession"];
+  projectConversationGroups?: ComponentProps<
+    typeof EmptyState
+  >["projectConversationGroups"];
+  onOpenProjectConversation?: ComponentProps<
+    typeof EmptyState
+  >["onOpenProjectConversation"];
   projectId: string | null;
   openedProjects?: ComponentProps<typeof EmptyState>["openedProjects"];
   sessionId?: string | null;
@@ -215,6 +221,8 @@ export function buildWorkspaceEmptyStateProps({
   recentSessionSummary,
   recentSessionActionLabel,
   onResumeRecentSession,
+  projectConversationGroups,
+  onOpenProjectConversation,
   projectId,
   openedProjects,
   onProjectChange,
@@ -297,6 +305,8 @@ export function buildWorkspaceEmptyStateProps({
     recentSessionSummary,
     recentSessionActionLabel,
     onResumeRecentSession,
+    projectConversationGroups,
+    onOpenProjectConversation,
     projectId,
     openedProjects,
     onProjectContextChange: onProjectChange,

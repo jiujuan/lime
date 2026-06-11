@@ -112,6 +112,7 @@ export type HomeSurfaceCopyKey =
   | "agentChat.home.gallery.description"
   | "agentChat.home.scrollCue.label"
   | "agentChat.home.secondScreen.label"
+  | "agentChat.home.projectConversations.more"
   | "agentChat.home.supplemental.recentSession.defaultAction";
 
 type HomeSurfaceCopyValue = number | string;
@@ -130,6 +131,7 @@ export interface HomeSurfaceChromeCopy {
   galleryDescription: string;
   scrollCueLabel: string;
   secondScreenLabel: string;
+  projectConversationsMoreLabel: (count: number) => string;
   recentSessionDefaultActionLabel: string;
 }
 
@@ -388,6 +390,8 @@ export function buildHomeSurfaceCopy(
       galleryDescription: translate("agentChat.home.gallery.description"),
       scrollCueLabel: translate("agentChat.home.scrollCue.label"),
       secondScreenLabel: translate("agentChat.home.secondScreen.label"),
+      projectConversationsMoreLabel: (count) =>
+        translate("agentChat.home.projectConversations.more", { count }),
       recentSessionDefaultActionLabel: translate(
         "agentChat.home.supplemental.recentSession.defaultAction",
       ),

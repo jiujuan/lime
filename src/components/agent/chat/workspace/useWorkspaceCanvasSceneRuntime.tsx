@@ -9,7 +9,7 @@ import {
 import { toast } from "sonner";
 import { ArtifactCanvasOverlay, ArtifactToolbar } from "@/components/artifact";
 import { useImageGen } from "@/components/image-gen/useImageGen";
-import { CanvasFactory } from "@/components/workspace/canvas/canvasUtils";
+import { CanvasFactory } from "@/components/workspace/canvas/CanvasFactory";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
 import {

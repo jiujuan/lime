@@ -374,7 +374,16 @@ describe("项目管理 API", () => {
       expect(safeInvoke).not.toHaveBeenCalled();
     });
 
-    it("项目写命令默认 fail closed，读链仍通过 App Server", async () => {
+    it("项目创建和设置默认仍 fail closed，读链仍通过 App Server", async () => {
+      resolveAppServerRequest({
+        workspace: {
+          id: "project-1",
+          name: "项目 1-更新",
+          workspace_type: "general",
+          root_path: "/tmp/project-1",
+        },
+      });
+      resolveAppServerRequest({ deleted: true });
       resolveAppServerRequest({
         workspaces: [
           {
@@ -413,12 +422,8 @@ describe("项目管理 API", () => {
       );
       await expect(
         updateProject("project-1", { name: "项目 1-更新" }),
-      ).rejects.toThrow(
-        "workspace_update is retired until Workspace writes and Content CRUD move to App Server current methods",
-      );
-      await expect(deleteProject("project-1", true)).rejects.toThrow(
-        "workspace_delete is retired until Workspace writes and Content CRUD move to App Server current methods",
-      );
+      ).resolves.toEqual(expect.objectContaining({ name: "项目 1-更新" }));
+      await expect(deleteProject("project-1", false)).resolves.toBe(true);
       await expect(listProjects()).resolves.toEqual([
         expect.objectContaining({ id: "project-1" }),
       ]);
@@ -428,11 +433,75 @@ describe("项目管理 API", () => {
       await expect(getProject("project-1")).resolves.toEqual(
         expect.objectContaining({ id: "project-1" }),
       );
-      expectAppServerRequest(1, "workspace/list", {});
-      expectAppServerRequest(2, "workspace/default/ensure", {});
-      expectAppServerRequest(3, "workspace/read", {
+      expectAppServerRequest(1, "workspace/update", {
+        id: "project-1",
+        name: "项目 1-更新",
+      });
+      expectAppServerRequest(2, "workspace/delete", {
+        id: "project-1",
+        deleteDirectory: false,
+      });
+      expectAppServerRequest(3, "workspace/list", {});
+      expectAppServerRequest(4, "workspace/default/ensure", {});
+      expectAppServerRequest(5, "workspace/read", {
         id: "project-1",
       });
+      expect(safeInvoke).not.toHaveBeenCalled();
+    });
+
+    it("应该通过 App Server 更新项目", async () => {
+      resolveAppServerRequest({
+        workspace: {
+          id: "project-update",
+          name: "更新后项目",
+          workspace_type: "general",
+          root_path: "/tmp/project-update",
+          is_favorite: true,
+        },
+      });
+
+      await expect(
+        updateProject(" project-update ", {
+          name: "更新后项目",
+          isFavorite: true,
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          id: "project-update",
+          name: "更新后项目",
+          isFavorite: true,
+        }),
+      );
+
+      expectAppServerRequest(1, "workspace/update", {
+        id: "project-update",
+        name: "更新后项目",
+        isFavorite: true,
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
+    });
+
+    it("应该通过 App Server 移除项目记录但不删除本地目录", async () => {
+      resolveAppServerRequest({ deleted: true });
+
+      await expect(deleteProject(" project-delete ")).resolves.toBe(true);
+
+      expectAppServerRequest(1, "workspace/delete", {
+        id: "project-delete",
+        deleteDirectory: false,
+      });
+      expect(safeInvoke).not.toHaveBeenCalled();
+    });
+
+    it("项目更新和删除缺少 workspace id 时应 fail closed", async () => {
+      await expect(updateProject("   ", { name: "空项目" })).rejects.toThrow(
+        "workspace id is required to update project",
+      );
+      await expect(deleteProject("   ")).rejects.toThrow(
+        "workspace id is required to delete project",
+      );
+
+      expect(appServerRequestMock).not.toHaveBeenCalled();
       expect(safeInvoke).not.toHaveBeenCalled();
     });
 
@@ -623,13 +692,13 @@ describe("项目管理 API", () => {
         "workspace_create is retired until Workspace writes and Content CRUD move to App Server current methods",
       );
 
+      resolveAppServerRequest({});
       await expect(updateProject("project-1", { name: "诊断" })).rejects.toThrow(
-        "workspace_update is retired until Workspace writes and Content CRUD move to App Server current methods",
+        "App Server workspace/update did not return workspace",
       );
 
-      await expect(deleteProject("project-1", true)).rejects.toThrow(
-        "workspace_delete is retired until Workspace writes and Content CRUD move to App Server current methods",
-      );
+      resolveAppServerRequest({ deleted: false });
+      await expect(deleteProject("project-1", true)).resolves.toBe(false);
 
       await expect(setDefaultProject("project-1")).rejects.toThrow(
         "workspace_set_default is retired until Workspace writes and Content CRUD move to App Server current methods",

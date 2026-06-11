@@ -73,6 +73,7 @@ const retiredAgentUiPackageNames = [
 const agentUiPackageNamingGuardFiles = [
   "package.json",
   "package-lock.json",
+  "pnpm-lock.yaml",
   "tsconfig.json",
   "vite.config.ts",
 ];
@@ -511,7 +512,7 @@ const checks = [
   },
   {
     name: "Rust server initializes capability discovery and dispatches capability/list",
-    file: "lime-rs/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor/mod.rs",
     snippets: [
       "METHOD_CAPABILITY_LIST => self.handle_capability_list(params)",
       "let params: CapabilityListParams = parse_params(params)?",
@@ -522,7 +523,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches agentSession/action/respond into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor/mod.rs",
     snippets: [
       "METHOD_AGENT_SESSION_ACTION_RESPOND => self.handle_action_respond(params).await",
       "let params: AgentSessionActionRespondParams = parse_params(params)?",
@@ -532,7 +533,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches agentSession/action/replay into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor/mod.rs",
     snippets: [
       "METHOD_AGENT_SESSION_ACTION_REPLAY => self.handle_action_replay(params).await",
       "let params: AgentSessionActionReplayParams = parse_params(params)?",
@@ -542,7 +543,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches artifact/read into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor/mod.rs",
     snippets: [
       "METHOD_ARTIFACT_READ => self.handle_artifact_read(params)",
       "fn handle_artifact_read(",
@@ -554,14 +555,20 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches fileSystem read/write into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor.rs",
+    files: [
+      "lime-rs/crates/app-server/src/processor/mod.rs",
+      "lime-rs/crates/app-server/src/processor/file.rs",
+    ],
     snippets: [
       "METHOD_FILE_SYSTEM_LIST_DIRECTORY =>",
       "METHOD_FILE_SYSTEM_READ_FILE_PREVIEW =>",
-      "METHOD_FILE_SYSTEM_CREATE_FILE => self.handle_file_system_create_file(params).await",
+      "METHOD_FILE_SYSTEM_CREATE_FILE =>",
+      "self.handle_file_system_create_file_impl(params).await",
       "METHOD_FILE_SYSTEM_CREATE_DIRECTORY =>",
-      "METHOD_FILE_SYSTEM_RENAME_FILE => self.handle_file_system_rename_file(params).await",
-      "METHOD_FILE_SYSTEM_DELETE_FILE => self.handle_file_system_delete_file(params).await",
+      "METHOD_FILE_SYSTEM_RENAME_FILE =>",
+      "self.handle_file_system_rename_file_impl(params).await",
+      "METHOD_FILE_SYSTEM_DELETE_FILE =>",
+      "self.handle_file_system_delete_file_impl(params).await",
       "let params: FileSystemCreateFileParams = parse_params(params)?",
       "let params: FileSystemCreateDirectoryParams = parse_params(params)?",
       "let params: FileSystemRenameFileParams = parse_params(params)?",
@@ -575,7 +582,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches evidence/export into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor.rs",
+    file: "lime-rs/crates/app-server/src/processor/mod.rs",
     snippets: [
       "METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params)",
       "fn handle_evidence_export(",
@@ -980,28 +987,35 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches current app data surface into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor.rs",
+    files: [
+      "lime-rs/crates/app-server/src/processor/mod.rs",
+      "lime-rs/crates/app-server/src/processor/agent_app.rs",
+      "lime-rs/crates/app-server/src/processor/knowledge.rs",
+      "lime-rs/crates/app-server/src/processor/automation.rs",
+      "lime-rs/crates/app-server/src/processor/project.rs",
+    ],
     snippets: [
-      "METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list().await",
+      "METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list_impl().await",
       "METHOD_AGENT_APP_SHELL_PREPARE =>",
       "METHOD_AGENT_APP_UI_RUNTIME_START =>",
       "METHOD_AGENT_APP_UI_RUNTIME_STATUS =>",
       "METHOD_AGENT_APP_UI_RUNTIME_STOP =>",
-      "METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list(params).await",
-      "METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read(params).await",
+      "METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list_impl(params).await",
+      "METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read_impl(params).await",
       "METHOD_KNOWLEDGE_SOURCE_IMPORT =>",
       "METHOD_KNOWLEDGE_PACK_COMPILE =>",
       "METHOD_KNOWLEDGE_PACK_DEFAULT_SET =>",
       "METHOD_KNOWLEDGE_PACK_STATUS_UPDATE =>",
-      "METHOD_KNOWLEDGE_CONTEXT_RESOLVE => self.handle_knowledge_context_resolve(params).await",
+      "METHOD_KNOWLEDGE_CONTEXT_RESOLVE =>",
+      "self.handle_knowledge_context_resolve_impl(params).await",
       "METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE =>",
-      "METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list().await",
-      "METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await",
-      "async fn handle_agent_app_installed_list(&self)",
-      "async fn handle_agent_app_shell_prepare(",
-      "async fn handle_agent_app_ui_runtime_start(",
-      "async fn handle_agent_app_ui_runtime_status(",
-      "async fn handle_agent_app_ui_runtime_stop(",
+      "METHOD_AUTOMATION_JOB_LIST => self.handle_automation_job_list_impl().await",
+      "METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read_impl(params).await",
+      "async fn handle_agent_app_installed_list_impl(",
+      "async fn handle_agent_app_shell_prepare_impl(",
+      "async fn handle_agent_app_ui_runtime_start_impl(",
+      "async fn handle_agent_app_ui_runtime_status_impl(",
+      "async fn handle_agent_app_ui_runtime_stop_impl(",
       "self.ensure_initialized()?",
       ".list_agent_app_installed()",
       ".start_agent_app_ui_runtime(params)",
@@ -1023,7 +1037,7 @@ const checks = [
       ".resolve_knowledge_context(params)",
       "let params: KnowledgeValidateContextRunParams = parse_params(params)?",
       ".validate_knowledge_context_run(params)",
-      "async fn handle_automation_job_list(&self)",
+      "async fn handle_automation_job_list_impl(",
       ".list_automation_jobs()",
       "let params: ProjectMemoryReadParams = parse_params(params)?",
       ".read_project_memory(params)",
@@ -2786,7 +2800,7 @@ const checks = [
     name: "App Server stdio streams backend events before turn response",
     files: [
       "lime-rs/crates/app-server/src/lib.rs",
-      "lime-rs/crates/app-server/src/processor.rs",
+      "lime-rs/crates/app-server/src/processor/mod.rs",
       "lime-rs/crates/app-server/src/runtime.rs",
       "lime-rs/crates/app-server-transport/src/lib.rs",
     ],
@@ -3101,7 +3115,8 @@ const checks = [
       "src/lib/api/videoGeneration.ts",
       "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
       "lime-rs/crates/app-server-protocol/src/protocol/v0/media.rs",
-      "lime-rs/crates/app-server/src/processor.rs",
+      "lime-rs/crates/app-server/src/processor/mod.rs",
+      "lime-rs/crates/app-server/src/processor/media.rs",
       "lime-rs/crates/app-server/src/runtime.rs",
       "lime-rs/crates/app-server/src/media_task.rs",
     ],
@@ -3384,6 +3399,28 @@ const checks = [
       "updateSession(params: AgentSessionUpdateParams): JsonRpcRequest",
       "this.client.updateSession(params)",
       "Promise<AppServerRequestResult<AgentSessionUpdateResponse>>",
+    ],
+  },
+  {
+    name: "TypeScript protocol exposes typed agentSession/archiveMany contract",
+    file: "packages/app-server-client/src/protocol.ts",
+    snippets: [
+      'export const METHOD_AGENT_SESSION_ARCHIVE_MANY = "agentSession/archiveMany"',
+      '{ method: METHOD_AGENT_SESSION_ARCHIVE_MANY, kind: "request" }',
+      "export type AgentSessionArchiveManyParams = {",
+      "sessionIds?: string[]",
+      "export type AgentSessionArchiveManyResponse = {",
+      "sessions: AgentSessionOverview[]",
+    ],
+  },
+  {
+    name: "TypeScript client wraps typed agentSession/archiveMany helper",
+    file: "packages/app-server-client/src/index.ts",
+    snippets: [
+      "METHOD_AGENT_SESSION_ARCHIVE_MANY",
+      "archiveManySessions(params: AgentSessionArchiveManyParams): JsonRpcRequest",
+      "this.client.archiveManySessions(params)",
+      "Promise<AppServerRequestResult<AgentSessionArchiveManyResponse>>",
     ],
   },
   {
@@ -4108,13 +4145,18 @@ const checks = [
     snippets: [
       'import { METHOD_AGENT_SESSION_LIST } from "../../../../packages/app-server-client/src/protocol"',
       "export type AppServerSessionRpcClient = Pick<",
-      '"startSession" | "readSession" | "updateSession" | "request"',
+      '| "startSession"',
+      '| "readSession"',
+      '| "updateSession"',
+      '| "archiveManySessions"',
+      '| "request"',
       "appServerClient.request<AppServerAgentSessionListResponse>",
       "METHOD_AGENT_SESSION_LIST",
       "appServerSessionListParamsFromOptions(options)",
       "appServerSessionReadParamsFromOptions(sessionId, options)",
       "appServerClient.readSession(",
       "appServerClient.updateSession(",
+      "appServerClient.archiveManySessions(",
       "appServerSessionUpdateParamsFromRequest(request)",
       "providerSelector: request.provider_selector?.trim() || undefined",
       "recentAccessMode: request.recent_access_mode",
@@ -4459,7 +4501,7 @@ const checks = [
       'from "@limecloud/agent-runtime-projection"',
       "buildAgentUiProjectionBase as buildStandardAgentUiProjectionBase",
       "sequenceAgentUiProjectionEvents",
-      "typeof event.item?.type === \"string\"",
+      'typeof event.item?.type === "string"',
       "return buildStandardAgentUiProjectionBase(",
       "return sequenceAgentUiProjectionEvents(events, startSequence)",
     ],
@@ -4621,7 +4663,7 @@ const checks = [
       'owner: "action"',
       'scope: "action_request"',
       'surface: "hitl"',
-      'control: ',
+      "control: ",
     ],
   },
   {
@@ -5526,7 +5568,7 @@ const checks = [
       "src/features/agent-app/runtime/agentRuntimeClientApi.test.ts",
     ],
     snippets: [
-      '@limecloud/agent-runtime-client',
+      "@limecloud/agent-runtime-client",
       "createFailClosedAgentAppRuntimeCapabilityApi",
       "createAgentAppRuntimeCapabilityApiFromClient",
       '"startTurn" | "readThread" | "cancelTurn" | "respondAction"',
@@ -7099,7 +7141,12 @@ function checkAgentUiPackageCanonicalNaming() {
     .map((entry) => `packages/${entry.name}/package.json`)
     .filter((relativePath) => fs.existsSync(path.join(repoRoot, relativePath)));
 
-  const files = [...agentUiPackageNamingGuardFiles, ...packageManifestFiles];
+  const files = [
+    ...agentUiPackageNamingGuardFiles.filter((relativePath) =>
+      fs.existsSync(path.join(repoRoot, relativePath)),
+    ),
+    ...packageManifestFiles,
+  ];
   const contentByFile = new Map(
     files.map((relativePath) => [
       relativePath,
@@ -7217,18 +7264,22 @@ function checkMcpRuntimeCurrentContracts() {
       ],
     ],
     [
-      "lime-rs/crates/app-server/src/processor.rs",
       [
-        "METHOD_MCP_SERVER_CREATE => self.handle_mcp_server_create(params).await",
-        "METHOD_MCP_SERVER_UPDATE => self.handle_mcp_server_update(params).await",
-        "METHOD_MCP_SERVER_DELETE => self.handle_mcp_server_delete(params).await",
-        "METHOD_MCP_SERVER_ENABLED_SET => self.handle_mcp_server_enabled_set(params).await",
+        "lime-rs/crates/app-server/src/processor/mod.rs",
+        "lime-rs/crates/app-server/src/processor/mcp.rs",
+      ],
+      [
+        "METHOD_MCP_SERVER_CREATE => self.handle_mcp_server_create_impl(params).await",
+        "METHOD_MCP_SERVER_UPDATE => self.handle_mcp_server_update_impl(params).await",
+        "METHOD_MCP_SERVER_DELETE => self.handle_mcp_server_delete_impl(params).await",
+        "METHOD_MCP_SERVER_ENABLED_SET => self.handle_mcp_server_enabled_set_impl(params).await",
         "METHOD_MCP_SERVER_IMPORT_FROM_APP =>",
-        "METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => self.handle_mcp_server_sync_all_to_live().await",
-        "METHOD_MCP_TOOL_CALL => self.handle_mcp_tool_call(params).await",
+        "METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE =>",
+        "self.handle_mcp_server_sync_all_to_live_impl().await",
+        "METHOD_MCP_TOOL_CALL => self.handle_mcp_tool_call_impl(params).await",
         "METHOD_MCP_TOOL_CALL_WITH_CALLER =>",
-        "METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get(params).await",
-        "METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read(params).await",
+        "METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get_impl(params).await",
+        "METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read_impl(params).await",
         "let params: McpServerCreateParams = parse_params(params)?",
         "let params: McpServerUpdateParams = parse_params(params)?",
         "let params: McpServerDeleteParams = parse_params(params)?",
@@ -7388,7 +7439,8 @@ function checkMcpRuntimeCurrentContracts() {
   const appServerCurrentContent = [
     "lime-rs/crates/app-server/src/runtime.rs",
     "lime-rs/crates/app-server/src/local_data_source.rs",
-    "lime-rs/crates/app-server/src/processor.rs",
+    "lime-rs/crates/app-server/src/processor/mod.rs",
+    "lime-rs/crates/app-server/src/processor/mcp.rs",
   ]
     .map((file) => fs.readFileSync(path.join(repoRoot, file), "utf8"))
     .join("\n");

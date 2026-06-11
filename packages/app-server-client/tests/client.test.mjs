@@ -53,6 +53,7 @@ const {
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
   METHOD_AGENT_SESSION_ACTION_REPLAY,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
+  METHOD_AGENT_SESSION_ARCHIVE_MANY,
   METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
   METHOD_AGENT_SESSION_COMPACT,
   METHOD_AGENT_SESSION_EVENT,
@@ -273,6 +274,7 @@ const {
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
+  METHOD_WORKSPACE_DELETE,
   METHOD_WORKSPACE_ENSURE,
   METHOD_WORKSPACE_ENSURE_READY,
   METHOD_WORKSPACE_LIST,
@@ -281,6 +283,7 @@ const {
   METHOD_WORKSPACE_READ,
   METHOD_WORKSPACE_REGISTERED_SKILLS_LIST,
   METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+  METHOD_WORKSPACE_UPDATE,
   assertCompatibleManifest,
   assertCompatibleProtocolSchemaManifest,
   assertSha256,
@@ -397,6 +400,9 @@ test("builds workspace and skill read requests with current methods", () => {
     recentPreferences: { task: true, subagent: false },
     recentTeamSelection: { disabled: true },
   });
+  const archiveManySessions = client.archiveManySessions({
+    sessionIds: ["session-main", "session-second"],
+  });
   const readObjective = client.readAgentSessionObjective({
     sessionId: "session-main",
   });
@@ -466,6 +472,10 @@ test("builds workspace and skill read requests with current methods", () => {
     recentAccessMode: "full-access",
     recentPreferences: { task: true, subagent: false },
     recentTeamSelection: { disabled: true },
+  });
+  assert.equal(archiveManySessions.method, METHOD_AGENT_SESSION_ARCHIVE_MANY);
+  assert.deepEqual(archiveManySessions.params, {
+    sessionIds: ["session-main", "session-second"],
   });
   assert.equal(readObjective.method, METHOD_AGENT_SESSION_OBJECTIVE_READ);
   assert.deepEqual(readObjective.params, {
@@ -1807,6 +1817,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, kind: "request" },
     { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
     { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
+    { method: METHOD_AGENT_SESSION_ARCHIVE_MANY, kind: "request" },
     { method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" },
     { method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" },
     {
@@ -1833,6 +1844,8 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_SESSION_FILE_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_READ, kind: "request" },
+    { method: METHOD_WORKSPACE_UPDATE, kind: "request" },
+    { method: METHOD_WORKSPACE_DELETE, kind: "request" },
     { method: METHOD_WORKSPACE_ENSURE, kind: "request" },
     { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
     { method: METHOD_WORKSPACE_DEFAULT_READ, kind: "request" },
@@ -2089,6 +2102,10 @@ test("exports app-server method catalog with request and notification kinds", ()
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_UPDATE), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_AGENT_SESSION_ARCHIVE_MANY),
+    true,
+  );
   assert.equal(
     isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_READ),
     true,

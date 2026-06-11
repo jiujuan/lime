@@ -11,6 +11,9 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@limecloud/app-server-client": [
+        "packages/app-server-client/src/index.ts"
+      ],
       "app-server-client": ["packages/app-server-client/src/index.ts"]
     },
     "types": ["node", "electron"],

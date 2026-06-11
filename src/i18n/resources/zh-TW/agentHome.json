@@ -104,6 +104,7 @@
   "agentChat.home.gallery.description": "往下看更多任務範例；真正執行仍會回到生成裡繼續補充。",
   "agentChat.home.scrollCue.label": "向下滑，看看 Lime 可以幫你做什麼",
   "agentChat.home.secondScreen.label": "Lime 可執行任務範例",
+  "agentChat.home.projectConversations.more": "更多 {{count}} 個對話",
   "agentChat.home.supplemental.recentSession.defaultAction": "繼續最近會話",
   "agentChat.home.sceneManager.defaultTemplateTitle": "開始",
   "agentChat.home.sceneManager.customSceneSummaryFallback": "自訂場景",

@@ -9,6 +9,7 @@ import { normalizeThemeType } from "@/lib/workspace/workbenchContract";
 import type { WorkspaceSettings } from "@/types/workspace";
 import {
   METHOD_WORKSPACE_BY_PATH_READ,
+  METHOD_WORKSPACE_DELETE,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
   METHOD_WORKSPACE_DEFAULT_READ,
   METHOD_WORKSPACE_ENSURE,
@@ -17,6 +18,7 @@ import {
   METHOD_WORKSPACE_PROJECTS_ROOT_READ,
   METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
   METHOD_WORKSPACE_READ,
+  METHOD_WORKSPACE_UPDATE,
 } from "../../../packages/app-server-client/src/protocol";
 
 type ProjectAppServerClient = Pick<AppServerClient, "request">;
@@ -27,6 +29,14 @@ type WorkspaceListAppServerResponse = {
 
 type WorkspaceReadAppServerResponse = {
   workspace?: RawProject | null;
+};
+
+type WorkspaceUpdateAppServerResponse = {
+  workspace?: RawProject | null;
+};
+
+type WorkspaceDeleteAppServerResponse = {
+  deleted?: boolean | null;
 };
 
 type WorkspaceEnsureProjectAppServerResponse = {
@@ -611,9 +621,28 @@ export async function updateProject(
   id: string,
   request: UpdateProjectRequest,
 ): Promise<Project> {
-  void id;
-  void request;
-  return rejectRetiredWorkspaceContentCommand("workspace_update");
+  const normalizedId = id.trim();
+  if (!normalizedId) {
+    throw new Error("workspace id is required to update project");
+  }
+
+  const response =
+    await requestProjectAppServer<WorkspaceUpdateAppServerResponse>(
+      METHOD_WORKSPACE_UPDATE,
+      {
+        id: normalizedId,
+        ...request,
+      },
+    );
+  const project = response.workspace;
+  if (!project) {
+    throw new Error("App Server workspace/update did not return workspace");
+  }
+
+  const normalized = normalizeProject(project);
+  writeCachedProjectDetail(normalizedId, normalized);
+  resetDefaultProjectCache();
+  return normalized;
 }
 
 /** 删除项目 */
@@ -621,9 +650,22 @@ export async function deleteProject(
   id: string,
   deleteDirectory?: boolean,
 ): Promise<boolean> {
-  void id;
-  void deleteDirectory;
-  return rejectRetiredWorkspaceContentCommand("workspace_delete");
+  const normalizedId = id.trim();
+  if (!normalizedId) {
+    throw new Error("workspace id is required to delete project");
+  }
+
+  const response =
+    await requestProjectAppServer<WorkspaceDeleteAppServerResponse>(
+      METHOD_WORKSPACE_DELETE,
+      {
+        id: normalizedId,
+        deleteDirectory: Boolean(deleteDirectory),
+      },
+    );
+  projectDetailCache.delete(resolveProjectDetailCacheKey(normalizedId));
+  resetDefaultProjectCache();
+  return Boolean(response.deleted);
 }
 
 // ==================== 内容 API ====================

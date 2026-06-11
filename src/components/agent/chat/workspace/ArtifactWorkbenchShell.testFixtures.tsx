@@ -15,61 +15,66 @@ import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { Artifact } from "@/lib/artifact/types";
 import type { AgentThreadItem } from "../types";
 
-vi.mock("@/lib/workspace/workbenchCanvas", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/workspace/workbenchCanvas")>();
-  const ReactModule = await import("react");
+vi.mock(
+  "@/components/workspace/document/editor/NotionEditor",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/components/workspace/document/editor/NotionEditor")
+      >();
+    const ReactModule = await import("react");
 
-  const MockNotionEditor = ReactModule.forwardRef<
-    { flushContent: () => string },
-    {
-      content: string;
-      onCommit: (content: string) => void;
-      onSave: (latestContent?: string) => void;
-      onCancel: () => void;
-    }
-  >(({ content, onCommit, onSave, onCancel }, ref) => {
-    const [value, setValue] = ReactModule.useState(content);
+    const MockNotionEditor = ReactModule.forwardRef<
+      { flushContent: () => string },
+      {
+        content: string;
+        onCommit: (content: string) => void;
+        onSave: (latestContent?: string) => void;
+        onCancel: () => void;
+      }
+    >(({ content, onCommit, onSave, onCancel }, ref) => {
+      const [value, setValue] = ReactModule.useState(content);
 
-    ReactModule.useEffect(() => {
-      setValue(content);
-    }, [content]);
+      ReactModule.useEffect(() => {
+        setValue(content);
+      }, [content]);
 
-    ReactModule.useImperativeHandle(
-      ref,
-      () => ({
-        flushContent: () => value,
-      }),
-      [value],
-    );
+      ReactModule.useImperativeHandle(
+        ref,
+        () => ({
+          flushContent: () => value,
+        }),
+        [value],
+      );
 
-    return (
-      <div data-testid="mock-notion-editor">
-        <textarea
-          data-testid="mock-notion-editor-input"
-          value={value}
-          onChange={(event) => {
-            setValue(event.target.value);
-            onCommit(event.target.value);
-          }}
-        />
-        <button type="button" onClick={() => onSave(value)}>
-          保存编辑器
-        </button>
-        <button type="button" onClick={onCancel}>
-          取消编辑器
-        </button>
-      </div>
-    );
-  });
+      return (
+        <div data-testid="mock-notion-editor">
+          <textarea
+            data-testid="mock-notion-editor-input"
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              onCommit(event.target.value);
+            }}
+          />
+          <button type="button" onClick={() => onSave(value)}>
+            保存编辑器
+          </button>
+          <button type="button" onClick={onCancel}>
+            取消编辑器
+          </button>
+        </div>
+      );
+    });
 
-  MockNotionEditor.displayName = "MockNotionEditor";
+    MockNotionEditor.displayName = "MockNotionEditor";
 
-  return {
-    ...actual,
-    NotionEditor: MockNotionEditor,
-  };
-});
+    return {
+      ...actual,
+      NotionEditor: MockNotionEditor,
+    };
+  },
+);
 
 export interface MountedShell {
   container: HTMLDivElement;

@@ -4,6 +4,7 @@ import {
   type AppServerAgentTurn,
   type AppServerAgentSessionReadParams,
   type AppServerAgentSessionReadResponse,
+  type AppServerAgentSessionArchiveManyResponse,
   type AppServerAgentSessionUpdateParams,
   type AppServerBusinessObjectRef,
 } from "@/lib/api/appServer";
@@ -24,7 +25,11 @@ const DEFAULT_APP_ID = "desktop";
 
 export type AppServerSessionRpcClient = Pick<
   AppServerClient,
-  "startSession" | "readSession" | "updateSession" | "request"
+  | "startSession"
+  | "readSession"
+  | "updateSession"
+  | "archiveManySessions"
+  | "request"
 >;
 
 export type AppServerAgentSessionListParams = {
@@ -116,7 +121,18 @@ export function createAppServerSessionClient({
     );
   }
 
+  async function archiveManyAgentRuntimeSessions(
+    sessionIds: string[],
+  ): Promise<AsterSessionInfo[]> {
+    const response = await appServerClient.archiveManySessions({
+      sessionIds: normalizeSessionIds(sessionIds),
+    });
+    assertAppServerAgentSessionArchiveManyResponse(response.result);
+    return response.result.sessions.map(appServerSessionOverviewToRuntimeInfo);
+  }
+
   return {
+    archiveManyAgentRuntimeSessions,
     createAgentRuntimeSession,
     getAgentRuntimeSession,
     listAgentRuntimeSessions,
@@ -140,6 +156,16 @@ function assertAppServerAgentSessionListResponse(
   }
 }
 
+function assertAppServerAgentSessionArchiveManyResponse(
+  value: unknown,
+): asserts value is AppServerAgentSessionArchiveManyResponse {
+  if (!isAppServerAgentSessionListResponse(value)) {
+    throw new Error(
+      "agentSession/archiveMany did not return archived sessions",
+    );
+  }
+}
+
 function assertAppServerAgentSessionReadResponse(
   value: unknown,
 ): asserts value is AppServerAgentSessionReadResponse {
@@ -152,7 +178,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isAppServerAgentSession(value: unknown): value is AppServerAgentSession {
+function isAppServerAgentSession(
+  value: unknown,
+): value is AppServerAgentSession {
   return (
     isRecord(value) &&
     isNonEmptyString(value.sessionId) &&
@@ -342,6 +370,19 @@ function appServerSessionUpdateParamsFromRequest(
     recentPreferences: request.recent_preferences,
     recentTeamSelection: request.recent_team_selection,
   });
+}
+
+function normalizeSessionIds(sessionIds: string[]): string[] {
+  const seen = new Set<string>();
+  return sessionIds
+    .map((sessionId) => sessionId.trim())
+    .filter((sessionId) => {
+      if (!sessionId || seen.has(sessionId)) {
+        return false;
+      }
+      seen.add(sessionId);
+      return true;
+    });
 }
 
 function appServerSessionOverviewToRuntimeInfo(

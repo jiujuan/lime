@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInitialDesignCanvasState } from "@/lib/workspace/workbenchCanvas";
+import { createInitialDesignCanvasState } from "@/components/workspace/canvas/canvasUtils";
 import type { Message } from "../types";
 import {
   applyBackendGeneralWorkbenchDocumentState,

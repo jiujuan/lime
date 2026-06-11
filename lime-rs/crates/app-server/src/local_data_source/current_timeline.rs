@@ -2,6 +2,8 @@ use super::data_error;
 use super::workspaces;
 use crate::RuntimeCoreError;
 use app_server_protocol::AgentSession;
+use app_server_protocol::AgentSessionArchiveManyParams;
+use app_server_protocol::AgentSessionArchiveManyResponse;
 use app_server_protocol::AgentSessionListParams;
 use app_server_protocol::AgentSessionListResponse;
 use app_server_protocol::AgentSessionOverview;
@@ -184,6 +186,29 @@ pub(crate) fn update_current_timeline_session(
     Ok(AgentSessionUpdateResponse {
         session: current_timeline_session_overview(session),
     })
+}
+
+pub(crate) fn archive_many_current_timeline_sessions(
+    db: &DbConnection,
+    params: AgentSessionArchiveManyParams,
+) -> Result<AgentSessionArchiveManyResponse, RuntimeCoreError> {
+    let mut sessions = Vec::new();
+    for session_id in params.session_ids {
+        let normalized_session_id = session_id.trim();
+        if normalized_session_id.is_empty() {
+            continue;
+        }
+        let response = update_current_timeline_session(
+            db,
+            AgentSessionUpdateParams {
+                session_id: normalized_session_id.to_string(),
+                archived: Some(true),
+                ..AgentSessionUpdateParams::default()
+            },
+        )?;
+        sessions.push(response.session);
+    }
+    Ok(AgentSessionArchiveManyResponse { sessions })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

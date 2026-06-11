@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import styled from "styled-components";
 import { FolderOpen, Lightbulb, X } from "lucide-react";
 import {
   Select,
@@ -55,6 +56,25 @@ import type {
 } from "./Inputbar/types";
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
+
+const ConnectedComposerShell = styled.div`
+  width: 100%;
+  border-radius: 34px;
+  transition: none;
+
+  &:focus-within [data-testid="inputbar-context-bar-slot"] {
+    border-color: rgba(74, 222, 128, 0.62);
+    background: linear-gradient(
+      180deg,
+      rgba(236, 253, 245, 0.34) 0%,
+      rgba(248, 253, 250, 0.76) 48%,
+      rgba(255, 255, 255, 0.62) 100%
+    );
+    box-shadow:
+      0 18px 42px -38px var(--lime-shadow-color),
+      inset 0 -1px 0 rgba(74, 222, 128, 0.18);
+  }
+`;
 
 interface EmptyStateComposerPanelProps {
   input: string;
@@ -587,7 +607,7 @@ export function EmptyStateComposerPanel({
   const projectContextBar = (
     <div
       data-testid="inputbar-context-bar-slot"
-      className="-mt-px flex min-h-11 w-full items-center rounded-b-[26px] border border-t-0 border-emerald-200/80 bg-slate-50/85 px-5 py-2 shadow-[0_20px_42px_-34px_rgba(15,23,42,0.34)]"
+      className="-mt-px flex min-h-11 w-full items-center rounded-b-[26px] border border-t-0 border-emerald-200/45 bg-gradient-to-b from-emerald-50/35 via-white/70 to-white/45 px-5 py-2 shadow-[0_18px_42px_-40px_rgba(15,23,42,0.3)]"
     >
       <InputbarProjectContextBar
         projectId={projectId}
@@ -632,48 +652,50 @@ export function EmptyStateComposerPanel({
         onChange={onFileSelect}
       />
 
-      <InputbarCore
-        uiCopy={inputbarCopy}
-        textareaRef={textareaRef}
-        text={draftInput}
-        setText={setDraftInput}
-        onSend={handleSendDraft}
-        isLoading={isLoading}
-        disabled={disabled}
-        onToolClick={handleToolAction}
-        activeTools={{
-          objective_mode: objectiveEnabled,
-          task_mode: taskEnabled,
-          subagent_mode: subagentEnabled,
-        }}
-        pendingImages={pendingImages}
-        onRemoveImage={onRemoveImage}
-        onPaste={
-          onPaste
-            ? (event) =>
-                onPaste(event as React.ClipboardEvent<HTMLTextAreaElement>)
-            : undefined
-        }
-        onDragOver={onDragOver}
-        onDrop={onDrop}
-        placeholder={placeholder}
-        activeTheme={activeTheme}
-        showDragHandle={false}
-        visualVariant="floating"
-        connectedContextBar
-        deferSendOnEnter
-        topExtra={topExtra}
-        leftExtra={leftExtra}
-        trailingMeta={trailingMeta}
-        pathReferences={pathReferences}
-        onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
-        onRemovePathReference={onRemovePathReference}
-        showMetaTools={false}
-        plusMenu={plusMenu}
-        inputSuggestion={activeInputSuggestion}
-        onAcceptInputSuggestion={handleAcceptInputSuggestion}
-      />
-      {projectContextBar}
+      <ConnectedComposerShell data-testid="inputbar-connected-composer">
+        <InputbarCore
+          uiCopy={inputbarCopy}
+          textareaRef={textareaRef}
+          text={draftInput}
+          setText={setDraftInput}
+          onSend={handleSendDraft}
+          isLoading={isLoading}
+          disabled={disabled}
+          onToolClick={handleToolAction}
+          activeTools={{
+            objective_mode: objectiveEnabled,
+            task_mode: taskEnabled,
+            subagent_mode: subagentEnabled,
+          }}
+          pendingImages={pendingImages}
+          onRemoveImage={onRemoveImage}
+          onPaste={
+            onPaste
+              ? (event) =>
+                  onPaste(event as React.ClipboardEvent<HTMLTextAreaElement>)
+              : undefined
+          }
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          placeholder={placeholder}
+          activeTheme={activeTheme}
+          showDragHandle={false}
+          visualVariant="floating"
+          connectedContextBar
+          deferSendOnEnter
+          topExtra={topExtra}
+          leftExtra={leftExtra}
+          trailingMeta={trailingMeta}
+          pathReferences={pathReferences}
+          onImportPathReferenceAsKnowledge={onImportPathReferenceAsKnowledge}
+          onRemovePathReference={onRemovePathReference}
+          showMetaTools={false}
+          plusMenu={plusMenu}
+          inputSuggestion={activeInputSuggestion}
+          onAcceptInputSuggestion={handleAcceptInputSuggestion}
+        />
+        {projectContextBar}
+      </ConnectedComposerShell>
     </>
   );
 }

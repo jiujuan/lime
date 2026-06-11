@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 import {
+  buildEmptyStateProjectConversationGroups,
   buildEmptyStateQuickActionItems,
   buildRecentSessionSupplementalAction,
   resolveEffectiveCuratedTaskReferences,
@@ -154,6 +155,86 @@ describe("EmptyStateViewModel", () => {
         hasResumeHandler: false,
       }),
     ).toBeNull();
+  });
+
+  it("应按项目生成空态会话目录并过滤当前会话和空草稿", () => {
+    const groups = buildEmptyStateProjectConversationGroups({
+      currentProjectId: "project-current",
+      currentSessionId: "topic-current",
+      openedProjects: [
+        { id: "project-current", name: "当前项目" },
+        { id: "project-other", name: "另一个项目" },
+      ],
+      topics: [
+        {
+          id: "topic-other-project",
+          title: "另一个项目的对话",
+          workspaceId: "project-other",
+          messagesCount: 3,
+          status: "done",
+          statusReason: "default",
+          lastPreview: "已经整理出可继续的结果。",
+          createdAt: new Date("2026-05-01T00:00:00Z"),
+          updatedAt: new Date("2026-05-03T00:00:00Z"),
+        },
+        {
+          id: "topic-current",
+          title: "当前打开的对话",
+          workspaceId: "project-current",
+          messagesCount: 5,
+          status: "done",
+          createdAt: new Date("2026-05-02T00:00:00Z"),
+          updatedAt: new Date("2026-05-04T00:00:00Z"),
+        },
+        {
+          id: "topic-current-project",
+          title: "当前项目的对话",
+          workspaceId: "project-current",
+          messagesCount: 2,
+          status: "done",
+          statusReason: "workspace_error",
+          lastPreview: "继续修复工作区。",
+          createdAt: new Date("2026-05-01T00:00:00Z"),
+          updatedAt: new Date("2026-05-02T00:00:00Z"),
+        },
+        {
+          id: "topic-empty-draft",
+          title: "空草稿",
+          workspaceId: "project-current",
+          messagesCount: 0,
+          status: "draft",
+          createdAt: new Date("2026-05-05T00:00:00Z"),
+          updatedAt: new Date("2026-05-05T00:00:00Z"),
+        },
+      ],
+    });
+
+    expect(groups).toEqual([
+      {
+        projectId: "project-current",
+        projectName: "当前项目",
+        conversations: [
+          {
+            id: "topic-current-project",
+            title: "当前项目的对话",
+            summary: "继续修复工作区。",
+            statusReason: "workspace_error",
+          },
+        ],
+      },
+      {
+        projectId: "project-other",
+        projectName: "另一个项目",
+        conversations: [
+          {
+            id: "topic-other-project",
+            title: "另一个项目的对话",
+            summary: "已经整理出可继续的结果。",
+            statusReason: "default",
+          },
+        ],
+      },
+    ]);
   });
 
   it("站点技能自动启动或引导帮助模式应隐藏 composer 起手建议", () => {

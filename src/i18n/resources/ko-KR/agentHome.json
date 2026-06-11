@@ -104,6 +104,7 @@
   "agentChat.home.gallery.description": "아래로 스크롤해 더 많은 작업 예시를 확인하세요. 실제 실행은 생성 화면으로 돌아와 이어집니다.",
   "agentChat.home.scrollCue.label": "아래로 스크롤해 Lime이 무엇을 도와줄 수 있는지 보세요",
   "agentChat.home.secondScreen.label": "Lime 실행 가능한 작업 예시",
+  "agentChat.home.projectConversations.more": "{{count}}개 대화 더 보기",
   "agentChat.home.supplemental.recentSession.defaultAction": "최근 세션 계속하기",
   "agentChat.home.sceneManager.defaultTemplateTitle": "시작",
   "agentChat.home.sceneManager.customSceneSummaryFallback": "사용자 지정 장면",

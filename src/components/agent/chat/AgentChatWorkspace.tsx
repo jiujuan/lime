@@ -22,6 +22,7 @@ import {
   resolveRecentTopicCandidate,
   type TaskStatusReason,
 } from "./hooks/agentChatShared";
+import { buildEmptyStateProjectConversationGroups } from "./components/EmptyStateViewModel";
 import {
   settleLiveArtifactAfterStreamStops,
   useArtifactDisplayState,
@@ -3643,8 +3644,11 @@ export function AgentChatWorkspace({
     taskCenterOpenTabIdsRef.current = taskCenterOpenTabIds;
   }, [taskCenterOpenTabIds]);
 
+  const isTaskCenterEntry =
+    agentEntry === "claw" || agentEntry === "new-task";
+
   useEffect(() => {
-    if (agentEntry !== "claw") {
+    if (!isTaskCenterEntry) {
       taskCenterDraftSurfaceActiveRef.current = false;
       setTaskCenterTransitionTopicId(null);
       return;
@@ -3656,10 +3660,10 @@ export function AgentChatWorkspace({
     ) {
       setTaskCenterTransitionTopicId(null);
     }
-  }, [agentEntry, sessionId, taskCenterTransitionTopicId]);
+  }, [isTaskCenterEntry, sessionId, taskCenterTransitionTopicId]);
 
   useEffect(() => {
-    if (agentEntry !== "claw") {
+    if (!isTaskCenterEntry) {
       setTaskCenterDetachedTopicId(null);
       setTaskCenterEmbeddedHomeSessionIds((current) =>
         current.size > 0 ? new Set<string>() : current,
@@ -3672,6 +3676,10 @@ export function AgentChatWorkspace({
         setHomePendingPreviewRequest(null);
         setTaskCenterLocalSessionOverride(null);
       }
+      return;
+    }
+
+    if (agentEntry !== "claw") {
       return;
     }
 
@@ -3690,7 +3698,13 @@ export function AgentChatWorkspace({
     setTaskCenterDetachedTopicId((current) =>
       current === sessionId ? current : sessionId,
     );
-  }, [agentEntry, normalizedInitialSessionId, sessionId, topicById]);
+  }, [
+    agentEntry,
+    isTaskCenterEntry,
+    normalizedInitialSessionId,
+    sessionId,
+    topicById,
+  ]);
 
   useEffect(() => {
     const syncIntent = resolveTaskCenterRouteTabSyncIntent({
@@ -4104,11 +4118,11 @@ export function AgentChatWorkspace({
     [activeTaskCenterDraftTabId, taskCenterDraftTabs],
   );
   const isTaskCenterDraftTabActive = Boolean(
-    agentEntry === "claw" && activeTaskCenterDraftTab,
+    isTaskCenterEntry && activeTaskCenterDraftTab,
   );
   const isTaskCenterDraftSurfaceActive = Boolean(
-    agentEntry === "claw" &&
-    (activeTaskCenterDraftTab || taskCenterDraftSurfaceActiveRef.current),
+    isTaskCenterEntry &&
+      (activeTaskCenterDraftTab || taskCenterDraftSurfaceActiveRef.current),
   );
   const isTaskCenterDraftSendInFlight = Boolean(
     agentEntry === "claw" &&
@@ -4451,6 +4465,25 @@ export function AgentChatWorkspace({
       forceRefresh: recentSessionTopic.statusReason === "workspace_error",
     });
   }, [handleOpenTaskTopic, recentSessionTopic]);
+  const projectConversationGroups = useMemo(
+    () =>
+      buildEmptyStateProjectConversationGroups({
+        topics,
+        currentProjectId: projectId,
+        currentSessionId: sessionId,
+        openedProjects,
+      }),
+    [openedProjects, projectId, sessionId, topics],
+  );
+  const handleOpenProjectConversation = useCallback(
+    (topicId: string, statusReason?: string) => {
+      void handleOpenTaskTopic(topicId, {
+        preferResume: true,
+        forceRefresh: statusReason === "workspace_error",
+      });
+    },
+    [handleOpenTaskTopic],
+  );
   const handleOpenTaskCenterNewTaskPage = useCallback(() => {
     if (agentEntry !== "claw" && agentEntry !== "new-task") {
       return;
@@ -6887,6 +6920,8 @@ export function AgentChatWorkspace({
     recentSessionSummary: recentSessionTopic?.lastPreview ?? null,
     recentSessionActionLabel,
     handleResumeRecentSession,
+    projectConversationGroups,
+    handleOpenProjectConversation,
     taskCenterTabsNode: shouldRenderTaskCenterTabStrip
       ? taskCenterTabsNode
       : browserWorkspaceHomeTabsNode,

@@ -2,10 +2,9 @@
 
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
-    JsonRpcError, UnifiedMemoryAnalyzeParams, UnifiedMemoryCreateParams,
-    UnifiedMemoryDeleteParams, UnifiedMemoryGetParams, UnifiedMemoryHybridSearchParams,
-    UnifiedMemoryListParams, UnifiedMemorySearchParams, UnifiedMemorySemanticSearchParams,
-    UnifiedMemoryUpdateParams,
+    JsonRpcError, UnifiedMemoryAnalyzeParams, UnifiedMemoryCreateParams, UnifiedMemoryDeleteParams,
+    UnifiedMemoryGetParams, UnifiedMemoryHybridSearchParams, UnifiedMemoryListParams,
+    UnifiedMemorySearchParams, UnifiedMemorySemanticSearchParams, UnifiedMemoryUpdateParams,
 };
 
 impl RequestProcessor {
@@ -93,7 +92,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_unified_memory_stats_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_unified_memory_stats_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -145,5 +146,4 @@ impl RequestProcessor {
         dispatch_result(response)
     }
     // mcp handlers 已提取到 processor/mcp.rs
-
 }

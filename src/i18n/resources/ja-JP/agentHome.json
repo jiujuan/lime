@@ -104,6 +104,7 @@
   "agentChat.home.gallery.description": "下にスクロールすると、さらにタスク例を確認できます。実行は生成画面に戻って続けます。",
   "agentChat.home.scrollCue.label": "下にスクロールして Lime でできることを見る",
   "agentChat.home.secondScreen.label": "Lime が実行できるタスク例",
+  "agentChat.home.projectConversations.more": "さらに{{count}}件の会話",
   "agentChat.home.supplemental.recentSession.defaultAction": "最近のセッションを続ける",
   "agentChat.home.sceneManager.defaultTemplateTitle": "開始",
   "agentChat.home.sceneManager.customSceneSummaryFallback": "カスタムシーン",

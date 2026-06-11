@@ -82,6 +82,7 @@ export const InputBarContainer = styled.div`
   &.floating-composer.context-connected {
     border-bottom-right-radius: 0;
     border-bottom-left-radius: 0;
+    border-bottom-color: transparent;
     box-shadow:
       0 18px 42px -36px var(--lime-shadow-color),
       inset 0 1px 0 rgba(255, 255, 255, 0.88);
@@ -98,6 +99,14 @@ export const InputBarContainer = styled.div`
     box-shadow:
       0 0 0 3px var(--lime-focus-ring, rgba(74, 222, 128, 0.24)),
       0 28px 56px -34px var(--lime-shadow-color),
+      inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  }
+
+  &.floating-composer.context-connected:focus-within {
+    border-bottom-color: transparent;
+    box-shadow:
+      0 0 0 3px rgba(74, 222, 128, 0.16),
+      0 22px 48px -38px var(--lime-shadow-color),
       inset 0 1px 0 rgba(255, 255, 255, 0.88);
   }
 `;

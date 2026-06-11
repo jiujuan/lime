@@ -636,12 +636,13 @@ vi.mock("./components/CanvasWorkbenchLayout", () => ({
     mockCanvasWorkbenchLayout(props),
 }));
 
-vi.mock("@/lib/workspace/workbenchCanvas", async (importOriginal) => {
+vi.mock("@/components/workspace/canvas/canvasUtils", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/workspace/workbenchCanvas")>();
+    await importOriginal<
+      typeof import("@/components/workspace/canvas/canvasUtils")
+    >();
   return {
     ...actual,
-    CanvasFactory: () => <div data-testid="canvas-factory" />,
     createInitialCanvasState: vi.fn(() => null),
     createInitialDocumentState: vi.fn((content = "") => ({
       type: "document",

@@ -265,7 +265,9 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   recentSessionTitle?: ConversationScenePresentationParams["scene"]["recentSessionTitle"];
   recentSessionSummary?: ConversationScenePresentationParams["scene"]["recentSessionSummary"];
   recentSessionActionLabel?: ConversationScenePresentationParams["scene"]["recentSessionActionLabel"];
-  handleResumeRecentSession?: ConversationScenePresentationParams["scene"]["onResumeRecentSession"];
+  handleResumeRecentSession?: ConversationScenePresentationParams["scene"]["handleResumeRecentSession"];
+  projectConversationGroups?: ConversationScenePresentationParams["scene"]["projectConversationGroups"];
+  handleOpenProjectConversation?: ConversationScenePresentationParams["scene"]["handleOpenProjectConversation"];
   projectId: string | null;
   openedProjects?: ConversationScenePresentationParams["scene"]["openedProjects"];
   onCloseProject?: ConversationScenePresentationParams["scene"]["onCloseProject"];
@@ -423,6 +425,8 @@ export function useWorkspaceConversationSceneRuntime({
   recentSessionSummary,
   recentSessionActionLabel,
   handleResumeRecentSession,
+  projectConversationGroups,
+  handleOpenProjectConversation,
   projectId,
   openedProjects,
   onCloseProject,
@@ -850,10 +854,18 @@ export function useWorkspaceConversationSceneRuntime({
         messageListEmptyStateVariant === "task-center"
           ? undefined
           : recentSessionActionLabel,
-      onResumeRecentSession:
+      handleResumeRecentSession:
         messageListEmptyStateVariant === "task-center"
           ? undefined
           : handleResumeRecentSession,
+      projectConversationGroups:
+        messageListEmptyStateVariant === "task-center"
+          ? undefined
+          : projectConversationGroups,
+      handleOpenProjectConversation:
+        messageListEmptyStateVariant === "task-center"
+          ? undefined
+          : handleOpenProjectConversation,
       projectId,
       openedProjects,
       deferWorkspaceListLoad,

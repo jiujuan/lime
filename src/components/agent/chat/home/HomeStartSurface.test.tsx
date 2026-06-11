@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomeStartSurface } from "./HomeStartSurface";
 import type {
   HomeGuideCard,
+  HomeProjectConversationGroup,
   HomeSkillSection,
   HomeSkillSurfaceItem,
   HomeStarterChip,
@@ -39,6 +40,7 @@ const TEST_CHROME_COPY: HomeSurfaceChromeCopy = {
   galleryDescription: "往下看更多任务样例；真正执行仍会回到生成里继续补充。",
   scrollCueLabel: "向下滑，看看 Lime 可以帮你做什么",
   secondScreenLabel: "Lime 可执行任务示例",
+  projectConversationsMoreLabel: (count) => `更多 ${count} 个对话`,
   recentSessionDefaultActionLabel: "继续最近会话",
 };
 
@@ -106,7 +108,12 @@ function renderSurface(options?: {
   supplementalActions?: React.ComponentProps<
     typeof HomeStartSurface
   >["supplementalActions"];
+  conversationGroups?: HomeProjectConversationGroup[];
   guideCards?: HomeGuideCard[];
+  onSelectConversation?: (
+    conversationId: string,
+    statusReason?: string,
+  ) => void;
   onSelectStarterChip?: (chip: HomeStarterChip) => void;
   onSelectGuideCard?: (card: HomeGuideCard) => void;
   onSelectSkillItem?: (item: HomeSkillSurfaceItem) => void;
@@ -118,6 +125,7 @@ function renderSurface(options?: {
   const onSelectStarterChip = options?.onSelectStarterChip ?? vi.fn();
   const onSelectGuideCard = options?.onSelectGuideCard ?? vi.fn();
   const onSelectSkillItem = options?.onSelectSkillItem ?? vi.fn();
+  const onSelectConversation = options?.onSelectConversation ?? vi.fn();
   mountedRoots.push({ root, container });
 
   act(() => {
@@ -131,7 +139,9 @@ function renderSurface(options?: {
             { id: "social", title: "社交媒体", items: [item] },
           ]
         }
+        conversationGroups={options?.conversationGroups}
         supplementalActions={options?.supplementalActions}
+        onSelectConversation={onSelectConversation}
         onSelectStarterChip={onSelectStarterChip}
         onSelectGuideCard={onSelectGuideCard}
         onSelectSkillItem={onSelectSkillItem}
@@ -145,6 +155,7 @@ function renderSurface(options?: {
     onSelectStarterChip,
     onSelectGuideCard,
     onSelectSkillItem,
+    onSelectConversation,
   };
 }
 
@@ -311,5 +322,100 @@ describe("HomeStartSurface", () => {
     });
 
     expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("有项目会话时以左对齐目录替代补充入口", () => {
+    const onSelect = vi.fn();
+    const { container } = renderSurface({
+      onSelectConversation: onSelect,
+      conversationGroups: [
+        {
+          projectId: "project-1",
+          projectName: "内容项目",
+          conversations: [
+            {
+              id: "topic-1",
+              title: "选题复盘",
+              summary: "已记录 8 条消息。",
+              statusReason: "workspace_error",
+            },
+          ],
+        },
+      ],
+      supplementalActions: [
+        {
+          id: "recent-session",
+          label: "继续最近会话",
+          testId: "entry-recent-session-resume",
+          onSelect: vi.fn(),
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="home-project-conversations"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="home-supplemental-actions"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="entry-recent-session-resume"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("选题复盘");
+    expect(container.textContent).not.toContain("内容项目");
+    expect(container.textContent).not.toContain("已记录 8 条消息。");
+
+    const conversation = container.querySelector(
+      '[data-testid="home-project-conversation"]',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      conversation?.click();
+    });
+
+    expect(onSelect).toHaveBeenCalledWith("topic-1", "workspace_error");
+  });
+
+  it("项目会话超过上限时应收进更多下拉", () => {
+    const { container } = renderSurface({
+      conversationGroups: [
+        {
+          projectId: "project-1",
+          projectName: "默认项目",
+          conversations: [
+            { id: "topic-1", title: "对话 1" },
+            { id: "topic-2", title: "对话 2" },
+            { id: "topic-3", title: "对话 3" },
+            { id: "topic-4", title: "对话 4" },
+            { id: "topic-5", title: "对话 5" },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      container.querySelectorAll('[data-testid="home-project-conversation"]'),
+    ).toHaveLength(3);
+    expect(container.textContent).toContain("对话 1");
+    expect(container.textContent).toContain("对话 3");
+    expect(container.textContent).not.toContain("对话 4");
+    expect(container.textContent).not.toContain("默认项目");
+
+    const more = container.querySelector(
+      '[data-testid="home-project-conversation-more"]',
+    );
+    expect(more?.textContent).toContain("更多 2 个对话");
+
+    const moreButton = more?.querySelector(
+      "button",
+    ) as HTMLButtonElement | null;
+    expect(moreButton?.getAttribute("aria-expanded")).toBe("false");
+
+    act(() => {
+      moreButton?.click();
+    });
+
+    expect(moreButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("对话 4");
+    expect(container.textContent).toContain("对话 5");
   });
 });

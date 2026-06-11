@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
-import type { A2UIFormData, A2UIResponse } from "@/components/workspace/a2ui/types";
+import type {
+  A2UIFormData,
+  A2UIResponse,
+} from "@/components/workspace/a2ui/types";
 import { CanvasWorkbenchLayout } from "../components/CanvasWorkbenchLayout";
 import { ChatNavbar } from "../components/ChatNavbar";
 import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurfaceBanner";
@@ -363,9 +366,15 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   recentSessionActionLabel?: ComponentProps<
     typeof EmptyState
   >["recentSessionActionLabel"];
-  onResumeRecentSession?: ComponentProps<
+  handleResumeRecentSession?: ComponentProps<
     typeof EmptyState
   >["onResumeRecentSession"];
+  projectConversationGroups?: ComponentProps<
+    typeof EmptyState
+  >["projectConversationGroups"];
+  handleOpenProjectConversation?: ComponentProps<
+    typeof EmptyState
+  >["onOpenProjectConversation"];
   projectId: string | null;
   openedProjects?: ComponentProps<typeof EmptyState>["openedProjects"];
   sessionId?: ComponentProps<typeof EmptyState>["sessionId"];
@@ -532,7 +541,9 @@ export function WorkspaceConversationScene({
   recentSessionTitle,
   recentSessionSummary,
   recentSessionActionLabel,
-  onResumeRecentSession,
+  handleResumeRecentSession,
+  projectConversationGroups,
+  handleOpenProjectConversation,
   projectId,
   openedProjects,
   sessionId,
@@ -641,7 +652,9 @@ export function WorkspaceConversationScene({
     recentSessionTitle,
     recentSessionSummary,
     recentSessionActionLabel,
-    onResumeRecentSession,
+    onResumeRecentSession: handleResumeRecentSession,
+    projectConversationGroups,
+    onOpenProjectConversation: handleOpenProjectConversation,
     projectId,
     openedProjects,
     onProjectChange: onProjectChange

@@ -3,12 +3,14 @@
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
     AutomationJobCreateParams, AutomationJobHealthParams, AutomationJobIdParams,
-    AutomationJobRunHistoryParams, AutomationJobUpdateParams, AutomationScheduleParams, AutomationSchedulerConfigUpdateParams,
-     JsonRpcError,
+    AutomationJobRunHistoryParams, AutomationJobUpdateParams, AutomationScheduleParams,
+    AutomationSchedulerConfigUpdateParams, JsonRpcError,
 };
 
 impl RequestProcessor {
-    pub(super) async fn handle_automation_job_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_automation_job_list_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -18,7 +20,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_automation_scheduler_config_read_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_automation_scheduler_config_read_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -42,7 +46,9 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    pub(super) async fn handle_automation_scheduler_status_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+    pub(super) async fn handle_automation_scheduler_status_impl(
+        &self,
+    ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let response = self
             .runtime
@@ -177,5 +183,4 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
 }
