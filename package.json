@@ -51,6 +51,7 @@
     "governance:electron-release-workflow": "node scripts/electron/release-workflow-guard.mjs",
     "generate:protocol-types": "node scripts/generate-protocol-types.mjs",
     "check:protocol-types": "node scripts/generate-protocol-types.mjs --check",
+    "governance:import-boundaries": "node scripts/check-import-boundaries.mjs",
     "predev": "npm run generate:agent-runtime-clients && npm run generate:extension-site-adapters && npm run verify:app-version && node scripts/ensure-dev-port.mjs",
     "dev": "npm run electron:dev",
     "dev:renderer": "vite",

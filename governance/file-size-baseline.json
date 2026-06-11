@@ -1,0 +1,1316 @@
+{
+  "generatedAt": "2026-06-11",
+  "policy": "Prevents code bloat. Existing oversized files may only shrink (±5% tolerance). New files must not exceed 800 lines. Generated code (protocol.generated.ts etc.) is exempt. See AGENTS.md § 基础约束 3 and internal/refactor/progressive-refactor-plan.md R-60.",
+  "frontend": {
+    "scanPaths": [
+      "src/**/*.ts",
+      "src/**/*.tsx"
+    ],
+    "excludePatterns": [
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "**/*.d.ts",
+      "**/*.testFixtures.tsx"
+    ],
+    "oversizedFrozen": [
+      {
+        "path": "src/components/agent/chat/AgentChatWorkspace.tsx",
+        "lines": 7030
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceSendActions.ts",
+        "lines": 5118
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceImageTaskPreviewRuntime.ts",
+        "lines": 4355
+      },
+      {
+        "path": "src/features/agent-app/runtime/capabilityDispatcher.ts",
+        "lines": 4345
+      },
+      {
+        "path": "src/components/workspace/design/DesignCanvas.tsx",
+        "lines": 3803
+      },
+      {
+        "path": "src/components/agent/chat/hooks/agentChatHistory.ts",
+        "lines": 3561
+      },
+      {
+        "path": "src/components/image-gen/useImageGen.ts",
+        "lines": 3530
+      },
+      {
+        "path": "src/lib/api/oemCloudControlPlane.ts",
+        "lines": 3131
+      },
+      {
+        "path": "src/components/settings-v2/system/chrome-relay/index.tsx",
+        "lines": 3015
+      },
+      {
+        "path": "src/components/agent/chat/workspace/artifactWorkbenchDocument.tsx",
+        "lines": 2920
+      },
+      {
+        "path": "src/components/agent/chat/hooks/useAgentSession.ts",
+        "lines": 2918
+      },
+      {
+        "path": "src/components/settings-v2/system/channels/ChannelsDebugWorkbench.tsx",
+        "lines": 2913
+      },
+      {
+        "path": "src/components/agent/chat/utils/toolDisplayInfo.ts",
+        "lines": 2876
+      },
+      {
+        "path": "src/components/channels/ImConfigPage.tsx",
+        "lines": 2814
+      },
+      {
+        "path": "src/components/skills/SkillsWorkspacePage.tsx",
+        "lines": 2797
+      },
+      {
+        "path": "src/components/agent/chat/components/CanvasWorkbenchLayout.tsx",
+        "lines": 2383
+      },
+      {
+        "path": "src/components/workspace/video/VideoWorkspace.tsx",
+        "lines": 2369
+      },
+      {
+        "path": "src/features/browser-runtime/BrowserRuntimeDebugPanel.tsx",
+        "lines": 2287
+      },
+      {
+        "path": "src/components/api-key-provider/ModelAddPanel.tsx",
+        "lines": 2244
+      },
+      {
+        "path": "src/features/knowledge/KnowledgePage.tsx",
+        "lines": 2204
+      },
+      {
+        "path": "src/lib/api/appServer.ts",
+        "lines": 2184
+      },
+      {
+        "path": "src/components/agent/chat/components/MarkdownRenderer.tsx",
+        "lines": 2117
+      },
+      {
+        "path": "src/features/capability-drafts/components/WorkspaceRegisteredSkillsPanel.tsx",
+        "lines": 2112
+      },
+      {
+        "path": "src/lib/api/skillCatalog.ts",
+        "lines": 2107
+      },
+      {
+        "path": "src/lib/api/agentRuntime/types.ts",
+        "lines": 2070
+      },
+      {
+        "path": "src/components/settings-v2/system/automation/index.tsx",
+        "lines": 2047
+      },
+      {
+        "path": "src/components/agent/chat/utils/curatedTaskTemplates.ts",
+        "lines": 2033
+      },
+      {
+        "path": "src/features/agent-app/runtime/hostBridge.ts",
+        "lines": 1980
+      },
+      {
+        "path": "src/lib/api/capabilityDrafts.ts",
+        "lines": 1975
+      },
+      {
+        "path": "src/components/AppSidebar.tsx",
+        "lines": 1925
+      },
+      {
+        "path": "src/features/agent-app/ui/AgentAppsPage.tsx",
+        "lines": 1896
+      },
+      {
+        "path": "src/components/api-key-provider/ProviderSetting.tsx",
+        "lines": 1893
+      },
+      {
+        "path": "src/components/workspace/video/VideoSidebar.tsx",
+        "lines": 1840
+      },
+      {
+        "path": "src/components/app-sidebar/AppSidebar.styles.ts",
+        "lines": 1825
+      },
+      {
+        "path": "src/features/agent-app/ui/AgentAppLabPage.tsx",
+        "lines": 1824
+      },
+      {
+        "path": "src/lib/api/agentRuntime/normalizers.ts",
+        "lines": 1818
+      },
+      {
+        "path": "src/components/agent/chat/components/StreamingRenderer.tsx",
+        "lines": 1817
+      },
+      {
+        "path": "src/components/agent/chat/utils/taskPreviewFromToolResult.ts",
+        "lines": 1811
+      },
+      {
+        "path": "src/hooks/useOemCloudAccess.ts",
+        "lines": 1811
+      },
+      {
+        "path": "src/components/agent/chat/components/ToolCallDisplay.tsx",
+        "lines": 1800
+      },
+      {
+        "path": "src/components/agent/chat/skill-selection/inputCapabilitySections.ts",
+        "lines": 1763
+      },
+      {
+        "path": "src/lib/base-setup/seededServiceSkillPackage.ts",
+        "lines": 1708
+      },
+      {
+        "path": "src/components/agent/chat/components/AgentThreadFileCheckpointDialog.tsx",
+        "lines": 1687
+      },
+      {
+        "path": "src/components/agent/chat/utils/mentionCommandReplayText.ts",
+        "lines": 1680
+      },
+      {
+        "path": "src/components/agent/chat/hooks/agentStreamRuntimeHandler.ts",
+        "lines": 1672
+      },
+      {
+        "path": "src/lib/api/agentRuntime/threadClient.ts",
+        "lines": 1670
+      },
+      {
+        "path": "src/components/agent/chat/components/DecisionPanel.tsx",
+        "lines": 1663
+      },
+      {
+        "path": "src/lib/api/agentProtocol.ts",
+        "lines": 1649
+      },
+      {
+        "path": "src/features/browser-runtime/BrowserSiteAdapterPanel.tsx",
+        "lines": 1644
+      },
+      {
+        "path": "src/components/agent/chat/utils/harnessState.ts",
+        "lines": 1617
+      },
+      {
+        "path": "src/components/agent/chat/components/generalWorkbenchWorkflowPanelViewModel.ts",
+        "lines": 1613
+      },
+      {
+        "path": "src/components/settings-v2/system/web-search/index.tsx",
+        "lines": 1535
+      },
+      {
+        "path": "src/components/resources/ResourcesPage.tsx",
+        "lines": 1529
+      },
+      {
+        "path": "src/components/agent/chat/components/ChatSidebar.tsx",
+        "lines": 1514
+      },
+      {
+        "path": "src/components/settings-v2/system/automation/AutomationJobDialog.tsx",
+        "lines": 1501
+      },
+      {
+        "path": "src/components/projects/ProjectSelector.tsx",
+        "lines": 1487
+      },
+      {
+        "path": "src/components/agent/chat/hooks/agentStreamEventProcessor.ts",
+        "lines": 1484
+      },
+      {
+        "path": "src/lib/artifact-document/parser.ts",
+        "lines": 1466
+      },
+      {
+        "path": "src/components/agent/chat/utils/threadReliabilityView.ts",
+        "lines": 1465
+      },
+      {
+        "path": "src/lib/webview-api.ts",
+        "lines": 1448
+      },
+      {
+        "path": "src/features/agent-app/runtime/agentRuntimeProcess.ts",
+        "lines": 1438
+      },
+      {
+        "path": "src/components/agent/chat/utils/toolProcessSummary.ts",
+        "lines": 1417
+      },
+      {
+        "path": "src/features/agent-app/types.ts",
+        "lines": 1408
+      },
+      {
+        "path": "src/lib/layered-design/export.ts",
+        "lines": 1405
+      },
+      {
+        "path": "src/lib/layered-design/structuredAnalyzerWorkerHeuristic.ts",
+        "lines": 1401
+      },
+      {
+        "path": "src/components/settings-v2/system/automation/AutomationJobDetailsDialog.tsx",
+        "lines": 1400
+      },
+      {
+        "path": "src/components/agent/chat/components/GeneralWorkbenchWorkflowPanel.tsx",
+        "lines": 1391
+      },
+      {
+        "path": "src/lib/appearance/colorSchemes.ts",
+        "lines": 1370
+      },
+      {
+        "path": "src/lib/crashDiagnostic.ts",
+        "lines": 1370
+      },
+      {
+        "path": "src/components/agent/chat/utils/threadReliabilityDiagnosticText.ts",
+        "lines": 1337
+      },
+      {
+        "path": "src/components/agent/chat/workspace/workspaceSendHelpers.ts",
+        "lines": 1327
+      },
+      {
+        "path": "src/lib/layered-design/analyzer.ts",
+        "lines": 1319
+      },
+      {
+        "path": "src/lib/api/serviceSkills.ts",
+        "lines": 1306
+      },
+      {
+        "path": "src/components/agent/chat/experts/ExpertInfoPanel.tsx",
+        "lines": 1291
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceBrowserAssistRuntime.ts",
+        "lines": 1288
+      },
+      {
+        "path": "src/components/agent/chat/skill-selection/CharacterMention.tsx",
+        "lines": 1272
+      },
+      {
+        "path": "src/components/settings-v2/agent/voice/index.tsx",
+        "lines": 1254
+      },
+      {
+        "path": "src/features/agent-app/runtime/agentRuntimeCapabilityHost.ts",
+        "lines": 1253
+      },
+      {
+        "path": "src/components/agent/chat/hooks/useThemeContextWorkspace.ts",
+        "lines": 1248
+      },
+      {
+        "path": "src/components/agent/chat/components/AgentThreadReliabilityPanel.tsx",
+        "lines": 1184
+      },
+      {
+        "path": "src/lib/base-setup/seededCommandPackage.ts",
+        "lines": 1173
+      },
+      {
+        "path": "src/features/agent-app/ui/AgentAppRuntimePage.tsx",
+        "lines": 1170
+      },
+      {
+        "path": "src/components/agent/chat/workspace/generalWorkbenchHelpers.ts",
+        "lines": 1170
+      },
+      {
+        "path": "src/lib/api/agentApps.ts",
+        "lines": 1162
+      },
+      {
+        "path": "src/lib/desktop-host/mediaTaskMocks.ts",
+        "lines": 1156
+      },
+      {
+        "path": "src/components/artifact/renderers/artifact-document/ArtifactDocumentBlocks.tsx",
+        "lines": 1139
+      },
+      {
+        "path": "src/components/agent/chat/team-workspace-runtime/liveRuntimeProjector.ts",
+        "lines": 1131
+      },
+      {
+        "path": "src/components/agent/chat/components/messageListItemProjection.ts",
+        "lines": 1127
+      },
+      {
+        "path": "src/components/input-kit/ModelSelector.tsx",
+        "lines": 1125
+      },
+      {
+        "path": "src/components/agent/chat/components/AgentThreadTimeline.tsx",
+        "lines": 1115
+      },
+      {
+        "path": "src/features/agent-app/sdk/hostBridgeClient.ts",
+        "lines": 1065
+      },
+      {
+        "path": "src/components/settings-v2/general/appearance/index.tsx",
+        "lines": 1061
+      },
+      {
+        "path": "src/components/agent/chat/utils/agentThreadGrouping.ts",
+        "lines": 1050
+      },
+      {
+        "path": "src/components/settings-v2/general/memory/index.tsx",
+        "lines": 1040
+      },
+      {
+        "path": "src/components/agent/chat/components/InlineToolProcessStep.tsx",
+        "lines": 1038
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceImageWorkbenchActionRuntime.ts",
+        "lines": 1031
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.tsx",
+        "lines": 1029
+      },
+      {
+        "path": "src/lib/layered-design/document.ts",
+        "lines": 1029
+      },
+      {
+        "path": "src/components/settings-v2/system/environment/index.tsx",
+        "lines": 1016
+      },
+      {
+        "path": "src/components/experts/ExpertPlazaPage.tsx",
+        "lines": 1008
+      },
+      {
+        "path": "src/features/browser-runtime/useBrowserRuntimeDebug.ts",
+        "lines": 1004
+      },
+      {
+        "path": "src/components/agent/chat/components/FileManager/FileManagerSidebar.tsx",
+        "lines": 1004
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceCanvasSceneRuntime.tsx",
+        "lines": 1003
+      },
+      {
+        "path": "src/lib/desktop-host/runtimeToolInventoryMocks.ts",
+        "lines": 1003
+      },
+      {
+        "path": "src/features/browser-runtime/BrowserProfileManager.tsx",
+        "lines": 1000
+      },
+      {
+        "path": "src/components/agent/chat/components/GeneralWorkbenchContextPanel.tsx",
+        "lines": 993
+      },
+      {
+        "path": "src/components/agent/chat/components/Inputbar/styles.ts",
+        "lines": 978
+      },
+      {
+        "path": "src/components/agent/chat/projection/remoteTaskAgentUiProjection.ts",
+        "lines": 975
+      },
+      {
+        "path": "src/lib/base-setup/serviceSkillCatalogAdapter.ts",
+        "lines": 964
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceTranscriptionTaskPreviewRuntime.ts",
+        "lines": 952
+      },
+      {
+        "path": "src/components/agent/chat/workspace/artifactWorkbenchActions.ts",
+        "lines": 951
+      },
+      {
+        "path": "src/components/settings-v2/system/experimental/index.tsx",
+        "lines": 950
+      },
+      {
+        "path": "src/components/agent/chat/components/CanvasWorkbenchLayoutViewModel.ts",
+        "lines": 945
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceInputbarSceneRuntime.tsx",
+        "lines": 932
+      },
+      {
+        "path": "src/components/workspace/document/DocumentCanvas.tsx",
+        "lines": 925
+      },
+      {
+        "path": "src/components/agent/chat/home/HomeSceneSkillManagerDialog.tsx",
+        "lines": 919
+      },
+      {
+        "path": "src/components/agent/chat/workspace/useWorkspaceServiceSkillEntryActions.ts",
+        "lines": 918
+      },
+      {
+        "path": "src/components/agent/chat/components/EmptyState.tsx",
+        "lines": 912
+      },
+      {
+        "path": "src/components/workspace/document/ContentReviewPanel.tsx",
+        "lines": 893
+      },
+      {
+        "path": "src/components/settings-v2/account/profile/index.tsx",
+        "lines": 893
+      },
+      {
+        "path": "src/components/dev/ComponentDebugOverlay.tsx",
+        "lines": 891
+      },
+      {
+        "path": "src/features/agent-app/install/cloudBootstrap.ts",
+        "lines": 882
+      },
+      {
+        "path": "src/components/agent/chat/utils/taskCenterTabs.ts",
+        "lines": 879
+      },
+      {
+        "path": "src/lib/api/project.ts",
+        "lines": 874
+      },
+      {
+        "path": "src/pages/design-canvas-smoke.tsx",
+        "lines": 863
+      },
+      {
+        "path": "src/components/agent/chat/workspace/SceneAppExecutionSummaryCard.tsx",
+        "lines": 858
+      },
+      {
+        "path": "src/lib/api/skills.ts",
+        "lines": 857
+      },
+      {
+        "path": "src/components/agent/chat/utils/submitOpRuntimeCompaction.ts",
+        "lines": 854
+      },
+      {
+        "path": "src/features/resource-manager/ResourceManagerToolbar.tsx",
+        "lines": 851
+      },
+      {
+        "path": "src/components/memory/MemoryPage.tsx",
+        "lines": 845
+      },
+      {
+        "path": "src/components/agent/chat/service-skills/siteCapabilityBinding.ts",
+        "lines": 840
+      },
+      {
+        "path": "src/components/agent/chat/projection/agentUiSubagentsViewModel.ts",
+        "lines": 838
+      },
+      {
+        "path": "src/components/app-sidebar/AppSidebarConversationShelf.tsx",
+        "lines": 831
+      },
+      {
+        "path": "src/components/artifact/ArtifactRenderer.tsx",
+        "lines": 831
+      },
+      {
+        "path": "src/components/settings-v2/account/user-center-session/index.tsx",
+        "lines": 826
+      },
+      {
+        "path": "src/components/settings-v2/account/stats/index.tsx",
+        "lines": 825
+      },
+      {
+        "path": "src/lib/layered-design/cleanPlate.ts",
+        "lines": 823
+      },
+      {
+        "path": "src/components/agent/chat/components/CuratedTaskLauncherDialog.tsx",
+        "lines": 821
+      },
+      {
+        "path": "src/lib/dev-bridge/http-client.ts",
+        "lines": 820
+      },
+      {
+        "path": "src/lib/layered-design/subjectMatting.ts",
+        "lines": 820
+      },
+      {
+        "path": "src/components/voice/InstructionEditor.tsx",
+        "lines": 815
+      },
+      {
+        "path": "src/features/resource-manager/ResourceManagerPage.tsx",
+        "lines": 804
+      },
+      {
+        "path": "src/lib/api/serverRuntime.ts",
+        "lines": 803
+      },
+      {
+        "path": "src/features/agent-app/runtime/agentUiProjectionViewModel.ts",
+        "lines": 801
+      },
+      {
+        "path": "src/components/agent/chat/service-skills/creationReplaySlotPrefill.ts",
+        "lines": 800
+      }
+    ]
+  },
+  "rust": {
+    "scanPaths": [
+      "lime-rs/**/*.rs"
+    ],
+    "excludePatterns": [
+      "**/*_test.rs",
+      "**/*_tests.rs",
+      "**/tests/**",
+      "**/tests.rs",
+      "lime-rs/target/**"
+    ],
+    "oversizedFrozen": [
+      {
+        "path": "lime-rs/target/debug/build/coreaudio-sys-81809877eea15f67/out/coreaudio.rs",
+        "lines": 23036
+      },
+      {
+        "path": "lime-rs/target/debug/build/coreaudio-sys-6412a6ede44796bc/out/coreaudio.rs",
+        "lines": 23036
+      },
+      {
+        "path": "lime-rs/target/debug/build/markup5ever-f0beb1ad17f7e021/out/named_entities.rs",
+        "lines": 11845
+      },
+      {
+        "path": "lime-rs/target/debug/build/markup5ever-c049b8151eea413e/out/named_entities.rs",
+        "lines": 11845
+      },
+      {
+        "path": "lime-rs/target/debug/build/markup5ever-58f1e8b1a369eebf/out/named_entities.rs",
+        "lines": 11845
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs",
+        "lines": 8207
+      },
+      {
+        "path": "lime-rs/crates/app-server/src/runtime.rs",
+        "lines": 8106
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/scheduler/types.rs",
+        "lines": 5618
+      },
+      {
+        "path": "lime-rs/crates/app-server/src/processor.rs",
+        "lines": 5103
+      },
+      {
+        "path": "lime-rs/crates/media-runtime/src/lib.rs",
+        "lines": 5063
+      },
+      {
+        "path": "lime-rs/crates/core/src/config/types.rs",
+        "lines": 4967
+      },
+      {
+        "path": "lime-rs/crates/knowledge/src/lib.rs",
+        "lines": 4964
+      },
+      {
+        "path": "lime-rs/crates/services/src/model_registry_service.rs",
+        "lines": 4690
+      },
+      {
+        "path": "lime-rs/crates/services/src/api_key_provider_service.rs",
+        "lines": 4146
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/hooks/internal.rs",
+        "lines": 4032
+      },
+      {
+        "path": "lime-rs/crates/agent/src/request_tool_policy.rs",
+        "lines": 3947
+      },
+      {
+        "path": "lime-rs/target/debug/build/libsqlite3-sys-4d965f6059484a32/out/bindgen.rs",
+        "lines": 3682
+      },
+      {
+        "path": "lime-rs/target/debug/build/libsqlite3-sys-dae8ecaef6694feb/out/bindgen.rs",
+        "lines": 3682
+      },
+      {
+        "path": "lime-rs/target/debug/build/libsqlite3-sys-65d091352c435329/out/bindgen.rs",
+        "lines": 3682
+      },
+      {
+        "path": "lime-rs/target/debug/build/libsqlite3-sys-5b3ed8d108c265ab/out/bindgen.rs",
+        "lines": 3682
+      },
+      {
+        "path": "lime-rs/target/debug/build/libsqlite3-sys-1eb8ce1c17ddc519/out/bindgen.rs",
+        "lines": 3682
+      },
+      {
+        "path": "lime-rs/crates/app-server-client/src/lib.rs",
+        "lines": 3523
+      },
+      {
+        "path": "lime-rs/target/debug/build/libsqlite3-sys-10bb95fc57e321b7/out/bindgen.rs",
+        "lines": 3433
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/reply_parts.rs",
+        "lines": 3303
+      },
+      {
+        "path": "lime-rs/crates/server/src/handlers/api.rs",
+        "lines": 3243
+      },
+      {
+        "path": "lime-rs/target/debug/build/markup5ever-f0beb1ad17f7e021/out/generated.rs",
+        "lines": 2928
+      },
+      {
+        "path": "lime-rs/target/debug/build/markup5ever-c049b8151eea413e/out/generated.rs",
+        "lines": 2928
+      },
+      {
+        "path": "lime-rs/target/debug/build/markup5ever-58f1e8b1a369eebf/out/generated.rs",
+        "lines": 2928
+      },
+      {
+        "path": "lime-rs/crates/mcp/src/manager.rs",
+        "lines": 2921
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/web.rs",
+        "lines": 2921
+      },
+      {
+        "path": "lime-rs/crates/agent/src/session_execution_runtime.rs",
+        "lines": 2908
+      },
+      {
+        "path": "lime-rs/crates/agent/src/event_converter.rs",
+        "lines": 2798
+      },
+      {
+        "path": "lime-rs/crates/server/src/handlers/image_api_provider.rs",
+        "lines": 2573
+      },
+      {
+        "path": "lime-rs/crates/gateway/src/telegram.rs",
+        "lines": 2500
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/extension_manager.rs",
+        "lines": 2474
+      },
+      {
+        "path": "lime-rs/crates/core/src/database/dao/agent.rs",
+        "lines": 2451
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/session/session_manager.rs",
+        "lines": 2447
+      },
+      {
+        "path": "lime-rs/crates/gateway/src/feishu.rs",
+        "lines": 2428
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/formats/openai.rs",
+        "lines": 2413
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/permission/manager.rs",
+        "lines": 2219
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/specialized/plan.rs",
+        "lines": 2184
+      },
+      {
+        "path": "lime-rs/crates/server/src/handlers/provider_calls.rs",
+        "lines": 2170
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/agent_control.rs",
+        "lines": 2132
+      },
+      {
+        "path": "lime-rs/crates/gateway/src/discord.rs",
+        "lines": 2120
+      },
+      {
+        "path": "lime-rs/crates/gateway/src/wechat/runtime.rs",
+        "lines": 2120
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/task_list_tools.rs",
+        "lines": 2049
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/lsp.rs",
+        "lines": 2019
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/bash.rs",
+        "lines": 2016
+      },
+      {
+        "path": "lime-rs/crates/providers/src/streaming/manager.rs",
+        "lines": 1996
+      },
+      {
+        "path": "lime-rs/crates/app-server/src/lib.rs",
+        "lines": 1991
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/skills/executor.rs",
+        "lines": 1975
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/session/runtime_store.rs",
+        "lines": 1964
+      },
+      {
+        "path": "lime-rs/crates/services/src/aster_session_store.rs",
+        "lines": 1935
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/hooks/executor.rs",
+        "lines": 1917
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/skills/loader.rs",
+        "lines": 1899
+      },
+      {
+        "path": "lime-rs/crates/services/src/skill_service.rs",
+        "lines": 1870
+      },
+      {
+        "path": "lime-rs/crates/app-server/src/local_data_source.rs",
+        "lines": 1861
+      },
+      {
+        "path": "lime-rs/crates/agent/src/agent_tools/inventory.rs",
+        "lines": 1852
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/skills/tool.rs",
+        "lines": 1840
+      },
+      {
+        "path": "lime-rs/crates/providers/src/streaming/aws_parser.rs",
+        "lines": 1790
+      },
+      {
+        "path": "lime-rs/crates/providers/src/streaming/converter.rs",
+        "lines": 1732
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/blueprint/codebase_analyzer.rs",
+        "lines": 1719
+      },
+      {
+        "path": "lime-rs/crates/websocket/src/handlers/rpc_handler.rs",
+        "lines": 1697
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/plan_mode_tool.rs",
+        "lines": 1683
+      },
+      {
+        "path": "lime-rs/crates/lime-cli/src/main.rs",
+        "lines": 1683
+      },
+      {
+        "path": "lime-rs/crates/providers/src/converter/openai_to_antigravity.rs",
+        "lines": 1676
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/file/read.rs",
+        "lines": 1667
+      },
+      {
+        "path": "lime-rs/target/debug/build/html5ever-fb29d161e23201b9/out/rules.rs",
+        "lines": 1656
+      },
+      {
+        "path": "lime-rs/target/debug/build/html5ever-35c7fc6f927e0a31/out/rules.rs",
+        "lines": 1656
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/config_tool.rs",
+        "lines": 1655
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/utils.rs",
+        "lines": 1646
+      },
+      {
+        "path": "lime-rs/crates/core/src/database/schema.rs",
+        "lines": 1631
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/conversation/message.rs",
+        "lines": 1608
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/config/base.rs",
+        "lines": 1599
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/powershell_tool.rs",
+        "lines": 1572
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/specialized/explore.rs",
+        "lines": 1565
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/context/manager.rs",
+        "lines": 1541
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/formats/databricks.rs",
+        "lines": 1521
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/registry.rs",
+        "lines": 1519
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/skills/types.rs",
+        "lines": 1511
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/formats/openai_responses.rs",
+        "lines": 1510
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/ask.rs",
+        "lines": 1508
+      },
+      {
+        "path": "lime-rs/crates/agent/src/tools/skill_tool_gate.rs",
+        "lines": 1504
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/formats/google.rs",
+        "lines": 1494
+      },
+      {
+        "path": "lime-rs/crates/server/src/chrome_bridge.rs",
+        "lines": 1485
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/formats/anthropic.rs",
+        "lines": 1482
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/parallel/executor.rs",
+        "lines": 1467
+      },
+      {
+        "path": "lime-rs/crates/providers/src/providers/claude_custom.rs",
+        "lines": 1445
+      },
+      {
+        "path": "lime-rs/crates/app-server-daemon/src/lib.rs",
+        "lines": 1428
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/communication/message_bus.rs",
+        "lines": 1377
+      },
+      {
+        "path": "lime-rs/crates/core/src/tool_calling.rs",
+        "lines": 1374
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/subagent_tool.rs",
+        "lines": 1370
+      },
+      {
+        "path": "lime-rs/crates/core/src/database/dao/api_key_provider.rs",
+        "lines": 1363
+      },
+      {
+        "path": "lime-rs/crates/core/src/app_paths.rs",
+        "lines": 1355
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/mcp/config_manager.rs",
+        "lines": 1339
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/code_execution_extension.rs",
+        "lines": 1337
+      },
+      {
+        "path": "lime-rs/crates/agent/src/agent_tools/catalog.rs",
+        "lines": 1323
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/communication/coordinator.rs",
+        "lines": 1318
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/scheduler/executor.rs",
+        "lines": 1315
+      },
+      {
+        "path": "lime-rs/crates/server/src/lib.rs",
+        "lines": 1297
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/mcp/lifecycle_manager.rs",
+        "lines": 1289
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/blueprint/requirement_dialog.rs",
+        "lines": 1253
+      },
+      {
+        "path": "lime-rs/crates/agent/src/agent_tools/execution.rs",
+        "lines": 1245
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/scheduler.rs",
+        "lines": 1233
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/notebook_edit_tool.rs",
+        "lines": 1223
+      },
+      {
+        "path": "lime-rs/crates/browser-runtime/src/manager.rs",
+        "lines": 1217
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/tool_search_tool.rs",
+        "lines": 1201
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/codex_app_server.rs",
+        "lines": 1182
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/task.rs",
+        "lines": 1175
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/conversation/mod.rs",
+        "lines": 1174
+      },
+      {
+        "path": "lime-rs/crates/providers/src/providers/openai_custom.rs",
+        "lines": 1173
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/auto_reply/manager.rs",
+        "lines": 1172
+      },
+      {
+        "path": "lime-rs/crates/agent/src/write_artifact_events.rs",
+        "lines": 1168
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/config/config_manager.rs",
+        "lines": 1137
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/auto_reply/schedule.rs",
+        "lines": 1129
+      },
+      {
+        "path": "lime-rs/crates/agent/src/credential_bridge.rs",
+        "lines": 1128
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/auto_reply/config.rs",
+        "lines": 1125
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/team_tools.rs",
+        "lines": 1120
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/gcpauth.rs",
+        "lines": 1120
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/scheduler/migration.rs",
+        "lines": 1118
+      },
+      {
+        "path": "lime-rs/crates/services/src/material_service.rs",
+        "lines": 1117
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/resume/state_manager.rs",
+        "lines": 1111
+      },
+      {
+        "path": "lime-rs/crates/server-utils/src/lib.rs",
+        "lines": 1090
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/context/types.rs",
+        "lines": 1082
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/monitor/metrics.rs",
+        "lines": 1082
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/mod.rs",
+        "lines": 1080
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/claude_plugin_cache.rs",
+        "lines": 1069
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/execution/manager.rs",
+        "lines": 1063
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/subagent_scheduler/executor.rs",
+        "lines": 1057
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/auto_reply/keyword_matcher.rs",
+        "lines": 1053
+      },
+      {
+        "path": "lime-rs/crates/services/src/context_memory_service.rs",
+        "lines": 1050
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/context/manager.rs",
+        "lines": 1040
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/search/grep.rs",
+        "lines": 1037
+      },
+      {
+        "path": "lime-rs/crates/core/src/config/yaml.rs",
+        "lines": 1035
+      },
+      {
+        "path": "lime-rs/crates/core/src/plugin/installer/plugin_installer.rs",
+        "lines": 1035
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/monitor/analyzer.rs",
+        "lines": 1035
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/tool_execution.rs",
+        "lines": 1030
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/file/edit.rs",
+        "lines": 1025
+      },
+      {
+        "path": "lime-rs/crates/agent/src/aster_state.rs",
+        "lines": 1023
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/auto_reply/webhook.rs",
+        "lines": 1020
+      },
+      {
+        "path": "lime-rs/crates/providers/src/streaming/anthropic_sse.rs",
+        "lines": 1019
+      },
+      {
+        "path": "lime-rs/crates/core/src/database/dao/agent_timeline.rs",
+        "lines": 1001
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/skills/workflow.rs",
+        "lines": 992
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/context/isolation.rs",
+        "lines": 991
+      },
+      {
+        "path": "lime-rs/crates/services/src/video_generation_service.rs",
+        "lines": 978
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/codex.rs",
+        "lines": 976
+      },
+      {
+        "path": "lime-rs/crates/core/src/plugin/installer/validator.rs",
+        "lines": 974
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/skills_extension.rs",
+        "lines": 974
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/mcp/tool_manager.rs",
+        "lines": 970
+      },
+      {
+        "path": "lime-rs/crates/app-server/src/media_task.rs",
+        "lines": 965
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/communication/shared_state.rs",
+        "lines": 954
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/tools/worktree_tools.rs",
+        "lines": 945
+      },
+      {
+        "path": "lime-rs/crates/core/src/database/system_providers.rs",
+        "lines": 939
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/mcp/resource_manager.rs",
+        "lines": 935
+      },
+      {
+        "path": "lime-rs/crates/infra/src/telemetry/tokens.rs",
+        "lines": 929
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/blueprint/task_tree_manager.rs",
+        "lines": 928
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/mcp/connection_manager.rs",
+        "lines": 920
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/blueprint/types.rs",
+        "lines": 912
+      },
+      {
+        "path": "lime-rs/crates/core/src/database/dao/orchestrator.rs",
+        "lines": 904
+      },
+      {
+        "path": "lime-rs/crates/app-server/src/runtime/agent_apps.rs",
+        "lines": 896
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/search/ripgrep.rs",
+        "lines": 896
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/context/compressor.rs",
+        "lines": 895
+      },
+      {
+        "path": "lime-rs/crates/core/src/models/project_model.rs",
+        "lines": 894
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/blueprint/task_granularity.rs",
+        "lines": 892
+      },
+      {
+        "path": "lime-rs/crates/app-server/src/runtime_backend.rs",
+        "lines": 891
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/providers/openai.rs",
+        "lines": 873
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/agents/monitor/alerts.rs",
+        "lines": 873
+      },
+      {
+        "path": "lime-rs/crates/agent/src/tool_io_offload.rs",
+        "lines": 861
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/streaming/message_stream.rs",
+        "lines": 859
+      },
+      {
+        "path": "lime-rs/crates/core/src/database/dao/material_dao.rs",
+        "lines": 858
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/permission/restriction.rs",
+        "lines": 857
+      },
+      {
+        "path": "lime-rs/crates/core/src/plugin/task.rs",
+        "lines": 856
+      },
+      {
+        "path": "lime-rs/crates/aster-rust/crates/aster/src/blueprint/worker_executor.rs",
+        "lines": 853
+      },
+      {
+        "path": "lime-rs/crates/services/src/session_context_service.rs",
+        "lines": 821
+      },
+      {
+        "path": "lime-rs/crates/core/src/models/model_registry.rs",
+        "lines": 820
+      }
+    ]
+  },
+  "thresholds": {
+    "newFileMax": 800,
+    "frozenTolerance": 0.05
+  }
+}

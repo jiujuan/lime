@@ -1291,4 +1291,53 @@ export default [
       ],
     },
   },
+  // === 分层 import 边界守卫（R-30）===
+  // lib/** 禁止 import components/features/pages（反向依赖）
+  {
+    files: ["src/lib/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx", "**/*.d.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/components/**"],
+              message:
+                "lib 层禁止 import components 层。将纯逻辑下沉到 lib，或把 UI 留在 components 层消费 lib。详见 internal/refactor/progressive-refactor-plan.md R-30。",
+            },
+            {
+              group: ["@/features/**"],
+              message:
+                "lib 层禁止 import features 层。将共享逻辑下沉到 lib，或用参数注入/类型契约解耦。详见 internal/refactor/progressive-refactor-plan.md R-30。",
+            },
+            {
+              group: ["@/pages/**"],
+              message:
+                "lib 层禁止 import pages 层。详见 internal/refactor/progressive-refactor-plan.md R-30。",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // features/** 禁止 import components（UI 组件不应被 features 直接引用）
+  {
+    files: ["src/features/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx", "**/*.d.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/components/**"],
+              message:
+                "features 层禁止 import components 层。将 UI 组件下沉到共享层，或通过 contracts/类型契约解耦。详见 internal/refactor/progressive-refactor-plan.md R-30。",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];

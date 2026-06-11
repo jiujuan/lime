@@ -83,15 +83,16 @@
 
 ### R-30 import 边界守卫（先锁方向，半轮）
 
-**状态**：proposed
+**状态**：完成（2026-06-11）
 **消除的机制**：lib → components/features 反向依赖无任何机械约束。
 
-**执行清单**：
-1. ESLint `no-restricted-imports`（或 boundaries 插件）定义分层规则：`lib/**` 禁止 import `components/**`、`features/**`、`pages/**`；`features/**` 禁止 import `components/**`（contracts 类型例外白名单）。
-2. 存量 6+ 处违例（清单见证据底座 C-1）先进白名单 baseline（复用 governance baseline 模式），**只许减不许增**。
-3. 挂入 `verify:local` 链路。
+**已实现**：
+1. ✅ ESLint `no-restricted-imports` 分层规则：`lib/**` 禁止 import `components/**`/`features/**`/`pages/**`；`features/**` 禁止 import `components/**`。
+2. ✅ 存量 47 处违例记录在 `governance/import-boundary-baseline.json`，**只许减不许增**。
+3. ✅ 守卫脚本 `scripts/check-import-boundaries.mjs`（轻量扫描，不跑完整 ESLint）。
+4. ✅ npm script: `governance:import-boundaries`。
 
-**退出条件**：lint 生效、baseline 已 commit、新违例 CI 红。
+**退出条件**：已满足。lint 生效、baseline 已 commit、新违例 CI 红。
 
 ### R-31 偿还存量依赖违例（半轮-1 轮）
 
