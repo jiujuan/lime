@@ -210,6 +210,13 @@ import {
   buildUploadDispatchBody,
   buildWritingDispatchBody,
 } from "./commands/dispatchBodyBuilders";
+import {
+  matchesVoiceCommandSkill,
+  matchesGrowthCommandSkill,
+  resolveGrowthCommandServiceSkill,
+  resolveVoiceCommandServiceSkill,
+  normalizeLocalServiceSkillExecutionKind,
+} from "./commands/serviceSkillMatch";
 
 type CurrentExecutionStrategy = "react";
 type SetStringState = (value: string) => void;
@@ -1321,90 +1328,7 @@ function buildPdfReadSkillLaunchRequestContext(params: {
   };
 }
 
-function matchesVoiceCommandSkill(skill: ServiceSkillHomeItem): boolean {
-  const searchable = [
-    skill.id,
-    skill.skillKey,
-    skill.title,
-    skill.summary,
-    ...(skill.aliases ?? []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return /配音|dubbing|voice/.test(searchable);
-}
-
-function matchesGrowthCommandSkill(skill: ServiceSkillHomeItem): boolean {
-  const searchable = [
-    skill.id,
-    skill.skillKey,
-    skill.title,
-    skill.summary,
-    ...(skill.aliases ?? []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return /增长|growth|account-performance|涨粉/.test(searchable);
-}
-
-function resolveGrowthCommandServiceSkill(
-  serviceSkills: ServiceSkillHomeItem[],
-): ServiceSkillHomeItem | null {
-  return (
-    serviceSkills.find(
-      (skill) =>
-        (skill.id === "account-performance-tracking" ||
-          skill.skillKey === "account-performance-tracking") &&
-        skill.defaultExecutorBinding !== "browser_assist",
-    ) ||
-    serviceSkills.find(
-      (skill) =>
-        matchesGrowthCommandSkill(skill) &&
-        skill.defaultExecutorBinding !== "browser_assist" &&
-        skill.slotSchema.some((slot) => slot.key === "platform") &&
-        skill.slotSchema.some((slot) => slot.key === "account_list"),
-    ) ||
-    serviceSkills.find((skill) => matchesGrowthCommandSkill(skill)) ||
-    null
-  );
-}
-
-function resolveVoiceCommandServiceSkill(
-  serviceSkills: ServiceSkillHomeItem[],
-): ServiceSkillHomeItem | null {
-  return (
-    serviceSkills.find(
-      (skill) =>
-        matchesVoiceCommandSkill(skill) &&
-        skill.defaultExecutorBinding !== "browser_assist" &&
-        skill.slotSchema.some((slot) =>
-          ["reference_video", "target_language", "voice_style"].includes(
-            slot.key,
-          ),
-        ),
-    ) ||
-    serviceSkills.find((skill) => matchesVoiceCommandSkill(skill)) ||
-    null
-  );
-}
-
-function normalizeLocalServiceSkillExecutionKind(
-  value?: string | null,
-): "agent_turn" | "native_skill" | "automation_job" {
-  if (value === "native_skill") {
-    return "native_skill";
-  }
-
-  if (value === "automation_job") {
-    return "automation_job";
-  }
-
-  return "agent_turn";
-}
+// matchesVoice/GrowthCommandSkill + resolve*CommandServiceSkill 已提取到 ./commands/serviceSkillMatch.ts
 
 interface VoiceSkillLaunchRequest {
   dispatchText: string;
