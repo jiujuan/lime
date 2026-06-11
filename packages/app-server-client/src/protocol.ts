@@ -1,3 +1,7 @@
+// @generated types re-export — 从 Rust JSON Schema 自动生成的类型定义
+// 新代码优先从这里导入类型；手写类型逐步迁移后将删除
+export * from "./generated/protocol-types";
+
 export const JSONRPC_VERSION = "2.0";
 export const PROTOCOL_VERSION = "appserver.v0";
 export const SERVER_NAME = "app-server";

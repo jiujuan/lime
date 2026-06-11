@@ -193,17 +193,9 @@ function generateTypes() {
     try {
       const schema = globalDefs[name];
       const tsType = schemaToTs(schema, 0);
-      // 只有对象类型用 interface，其他用 type alias
-      if (
-        schema.type === "object" ||
-        schema.properties ||
-        (schema.type && !Array.isArray(schema.type) && schema.type !== "object")
-      ) {
-        if (schema.type === "object" || schema.properties) {
-          typeBlocks.push(`export interface ${name} ${tsType}`);
-        } else {
-          typeBlocks.push(`export type ${name} = ${tsType};`);
-        }
+      // 只有有 properties 的对象用 interface，其他用 type alias
+      if (schema.properties) {
+        typeBlocks.push(`export interface ${name} ${tsType}`);
       } else {
         typeBlocks.push(`export type ${name} = ${tsType};`);
       }

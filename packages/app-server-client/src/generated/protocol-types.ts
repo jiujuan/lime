@@ -254,7 +254,7 @@ export interface AgentSessionActionRespondParams {
   userData?: unknown;
 }
 
-export interface AgentSessionActionRespondResponse Record<string, unknown>
+export type AgentSessionActionRespondResponse = Record<string, unknown>;
 
 export interface AgentSessionActionScope {
   sessionId?: null | string;
@@ -672,7 +672,7 @@ export interface AgentSessionTurnCancelParams {
   turnId: string;
 }
 
-export interface AgentSessionTurnCancelResponse Record<string, unknown>
+export type AgentSessionTurnCancelResponse = Record<string, unknown>;
 
 export interface AgentSessionTurnStartParams {
   input: AgentInput;
@@ -1069,7 +1069,7 @@ export interface FileSystemListDirectoryParams {
   path: string;
 }
 
-export interface FileSystemMutationResponse Record<string, unknown>
+export type FileSystemMutationResponse = Record<string, unknown>;
 
 export interface FileSystemReadFilePreviewParams {
   maxSize?: number | null;
@@ -1096,7 +1096,7 @@ export interface GalleryMaterial {
   type: string;
 }
 
-export interface GalleryMaterialDeleteResponse Record<string, unknown>
+export type GalleryMaterialDeleteResponse = Record<string, unknown>;
 
 export interface GalleryMaterialFilterParams {
   category?: null | string;
@@ -1541,7 +1541,7 @@ export interface McpServerImportFromAppResponse {
   servers?: (unknown)[];
 }
 
-export interface McpServerLifecycleResponse Record<string, unknown>
+export type McpServerLifecycleResponse = Record<string, unknown>;
 
 export interface McpServerListResponse {
   servers?: (unknown)[];
@@ -1873,7 +1873,7 @@ export interface ModelProviderListResponse {
   providers?: (unknown)[];
 }
 
-export interface ModelProviderMutationResponse Record<string, unknown>
+export type ModelProviderMutationResponse = Record<string, unknown>;
 
 export interface ModelProviderReadParams {
   providerId: string;
@@ -2014,7 +2014,7 @@ export interface ProjectMaterialCountResponse {
   count: number;
 }
 
-export interface ProjectMaterialDeleteResponse Record<string, unknown>
+export type ProjectMaterialDeleteResponse = Record<string, unknown>;
 
 export interface ProjectMaterialFilter {
   searchQuery?: null | string;
@@ -2155,7 +2155,7 @@ export interface SessionFileMetaResponse {
   meta: SessionFileMeta;
 }
 
-export interface SessionFileMutationResponse Record<string, unknown>
+export type SessionFileMutationResponse = Record<string, unknown>;
 
 export interface SessionFileReadResponse {
   content: string;
@@ -2617,7 +2617,7 @@ export interface VoiceAsrCredentialListResponse {
   credentials?: (VoiceAsrCredential)[];
 }
 
-export interface VoiceAsrCredentialMutationResponse Record<string, unknown>
+export type VoiceAsrCredentialMutationResponse = Record<string, unknown>;
 
 export interface VoiceAsrCredentialTestResponse {
   message: string;
@@ -2679,7 +2679,7 @@ export interface VoiceInstructionListResponse {
   instructions?: (VoiceInstruction)[];
 }
 
-export interface VoiceInstructionMutationResponse Record<string, unknown>
+export type VoiceInstructionMutationResponse = Record<string, unknown>;
 
 export interface VoiceInstructionSaveParams {
   instruction: VoiceInstruction;
@@ -2715,7 +2715,7 @@ export interface WechatChannelAccountRemoveParams {
   purgeData?: boolean;
 }
 
-export interface WechatChannelAccountRemoveResponse Record<string, unknown>
+export type WechatChannelAccountRemoveResponse = Record<string, unknown>;
 
 export interface WechatConfiguredAccount {
   accountId: string;
