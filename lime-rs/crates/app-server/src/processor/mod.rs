@@ -11,6 +11,7 @@ mod skill;
 mod gallery;
 mod project;
 mod unified;
+mod file;
 mod wechat;
 mod voice;
 mod workspace;
@@ -361,17 +362,17 @@ impl RequestProcessor {
             METHOD_CAPABILITY_LIST => self.handle_capability_list(params),
             METHOD_ARTIFACT_READ => self.handle_artifact_read(params),
             METHOD_FILE_SYSTEM_LIST_DIRECTORY => {
-                self.handle_file_system_list_directory(params).await
+                self.handle_file_system_list_directory_impl(params).await
             }
             METHOD_FILE_SYSTEM_READ_FILE_PREVIEW => {
-                self.handle_file_system_read_file_preview(params).await
+                self.handle_file_system_read_file_preview_impl(params).await
             }
-            METHOD_FILE_SYSTEM_CREATE_FILE => self.handle_file_system_create_file(params).await,
+            METHOD_FILE_SYSTEM_CREATE_FILE => self.handle_file_system_create_file_impl(params).await,
             METHOD_FILE_SYSTEM_CREATE_DIRECTORY => {
-                self.handle_file_system_create_directory(params).await
+                self.handle_file_system_create_directory_impl(params).await
             }
-            METHOD_FILE_SYSTEM_RENAME_FILE => self.handle_file_system_rename_file(params).await,
-            METHOD_FILE_SYSTEM_DELETE_FILE => self.handle_file_system_delete_file(params).await,
+            METHOD_FILE_SYSTEM_RENAME_FILE => self.handle_file_system_rename_file_impl(params).await,
+            METHOD_FILE_SYSTEM_DELETE_FILE => self.handle_file_system_delete_file_impl(params).await,
             METHOD_PROJECT_GIT_STATUS => self.handle_project_git_status_impl(params).await,
             METHOD_PROJECT_GIT_BRANCH_CHECKOUT => {
                 self.handle_project_git_branch_checkout_impl(params).await
@@ -1072,90 +1073,7 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
-    async fn handle_file_system_list_directory(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: FileSystemListDirectoryParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_directory(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_file_system_read_file_preview(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: FileSystemReadFilePreviewParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_file_preview(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_file_system_create_file(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: FileSystemCreateFileParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_file(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_file_system_create_directory(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: FileSystemCreateDirectoryParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_directory(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_file_system_rename_file(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: FileSystemRenameFileParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .rename_file(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_file_system_delete_file(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: FileSystemDeleteFileParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_file(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // file system handlers 已提取到 processor/file.rs
 
     // project_git handlers 已提取到 processor/project_git.rs
 
