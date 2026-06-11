@@ -641,8 +641,8 @@
       },
       {
         "path": "lime-rs/crates/app-server/src/processor/mod.rs",
-        "lines": 5048,
-        "comment": "R-20: 已转为目录模块，继续按 domain 拆分"
+        "lines": 4930,
+        "comment": "R-20: knowledge domain 已提取，继续按 domain 拆分"
       },
       {
         "path": "lime-rs/crates/media-runtime/src/lib.rs",

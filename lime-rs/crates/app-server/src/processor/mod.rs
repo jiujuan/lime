@@ -1,3 +1,4 @@
+mod knowledge;
 mod project_git;
 
 use crate::AppServerError;
@@ -80,14 +81,6 @@ use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::JsonRpcResponse;
-use app_server_protocol::KnowledgeCompilePackParams;
-use app_server_protocol::KnowledgeImportSourceParams;
-use app_server_protocol::KnowledgeListPacksParams;
-use app_server_protocol::KnowledgeReadPackParams;
-use app_server_protocol::KnowledgeResolveContextParams;
-use app_server_protocol::KnowledgeSetDefaultPackParams;
-use app_server_protocol::KnowledgeUpdatePackStatusParams;
-use app_server_protocol::KnowledgeValidateContextRunParams;
 use app_server_protocol::LogPersistedTailParams;
 use app_server_protocol::McpPromptGetParams;
 use app_server_protocol::McpResourceReadParams;
@@ -746,19 +739,19 @@ impl RequestProcessor {
                 self.handle_agent_app_ui_runtime_status(params).await
             }
             METHOD_AGENT_APP_UI_RUNTIME_STOP => self.handle_agent_app_ui_runtime_stop(params).await,
-            METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list(params).await,
-            METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read(params).await,
-            METHOD_KNOWLEDGE_SOURCE_IMPORT => self.handle_knowledge_source_import(params).await,
-            METHOD_KNOWLEDGE_PACK_COMPILE => self.handle_knowledge_pack_compile(params).await,
+            METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list_impl(params).await,
+            METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read_impl(params).await,
+            METHOD_KNOWLEDGE_SOURCE_IMPORT => self.handle_knowledge_source_import_impl(params).await,
+            METHOD_KNOWLEDGE_PACK_COMPILE => self.handle_knowledge_pack_compile_impl(params).await,
             METHOD_KNOWLEDGE_PACK_DEFAULT_SET => {
-                self.handle_knowledge_pack_default_set(params).await
+                self.handle_knowledge_pack_default_set_impl(params).await
             }
             METHOD_KNOWLEDGE_PACK_STATUS_UPDATE => {
-                self.handle_knowledge_pack_status_update(params).await
+                self.handle_knowledge_pack_status_update_impl(params).await
             }
-            METHOD_KNOWLEDGE_CONTEXT_RESOLVE => self.handle_knowledge_context_resolve(params).await,
+            METHOD_KNOWLEDGE_CONTEXT_RESOLVE => self.handle_knowledge_context_resolve_impl(params).await,
             METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE => {
-                self.handle_knowledge_context_run_validate(params).await
+                self.handle_knowledge_context_run_validate_impl(params).await
             }
             METHOD_AUTOMATION_SCHEDULER_CONFIG_READ => {
                 self.handle_automation_scheduler_config_read().await
@@ -2603,117 +2596,7 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    async fn handle_knowledge_pack_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: KnowledgeListPacksParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_knowledge_packs(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_knowledge_pack_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: KnowledgeReadPackParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_knowledge_pack(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_knowledge_source_import(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: KnowledgeImportSourceParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .import_knowledge_source(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_knowledge_pack_compile(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: KnowledgeCompilePackParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .compile_knowledge_pack(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_knowledge_pack_default_set(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: KnowledgeSetDefaultPackParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .set_default_knowledge_pack(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_knowledge_pack_status_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: KnowledgeUpdatePackStatusParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_knowledge_pack_status(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_knowledge_context_resolve(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: KnowledgeResolveContextParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .resolve_knowledge_context(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_knowledge_context_run_validate(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: KnowledgeValidateContextRunParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .validate_knowledge_context_run(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // knowledge handlers 已提取到 processor/knowledge.rs
 
     async fn handle_automation_job_list(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
