@@ -135,8 +135,11 @@
 
 ### R-41 packages 收缩：下线零引用的 agent-app-runtime
 
-**状态**：proposed（低优先级，半轮）
-**证据**：`agent-app-runtime` 在 src/ 零引用（见证据底座 packages 表）。确认无外部发布/CI 引用后删除；`agent-runtime-ui`（1 处引用）评估是否并回 src。
+**状态**：调查完成（2026-06-11）
+**证据**：
+- `agent-app-runtime`：src/ 零 import（只有字符串字面量匹配），CI 无引用，可安全删除。
+- `agent-runtime-ui`：1 处 import（`AgentRunProjectionPanel.tsx`），评估是否并回 src。
+**剩余**：执行删除（低风险，半轮）。
 
 ---
 
@@ -144,10 +147,10 @@
 
 ### R-50 core/services 抗膨胀规则 + 模型注册重复定义归并
 
-**状态**：规则完成（2026-06-11）
+**状态**：规则完成 + 调查完成（2026-06-11）
 **执行清单**：
 1. ✅ `AGENTS.md` 基础约束 21 已补："新增 Rust 逻辑禁止默认落 `lime-core` / `services` 平铺层"。
-2. 模型注册类型归并：待做。
+2. ✅ 模型注册类型调查：`lime_core::models::model_registry` 定义类型（`EnhancedModelMetadata` 等），`services/model_registry_service.rs` 消费这些类型。不是"双写"，是"类型定义 + 服务实现"的正常分层。无需归并。
 3. `services/` 目录分组：延后到 R-20 完成后评估。
 
 ---
