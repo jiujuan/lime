@@ -119,14 +119,17 @@
 
 ### R-40 业务代码统一走 lib/api，dev-bridge 降为传输细节
 
-**状态**：proposed
+**状态**：守卫完成（2026-06-11）
 **消除的机制**：业务 hook 直接 import `@/lib/dev-bridge` 造成的多路径调用。
 
-**执行清单**：
-1. 盘点业务代码直接 import `dev-bridge` 的点（已知：`useWorkspaceImageTaskPreviewRuntime.ts`、`useWorkspaceAudioTaskPreviewRuntime.ts` 等 workspace 预览 runtime），为其在 `lib/api/` 补正式网关函数后改线。
-2. R-30 的 lint 规则追加一条：`components/**`、`features/**` 禁止 import `lib/dev-bridge/**`（lib/api 内部豁免）。
-3. `lib/agentRuntime` 与 `lib/api/agentRuntime/` 的关系核实后归并（证据底座显示前者仅 4 文件）。
-4. dev-bridge 内部的 commandPolicy/mock 退场**不在本条目范围**——那是 CCD-012 的主线，本条目只收"业务直连"这一个口。
+**已实现**：
+1. ✅ 盘点完成：11 处直接引用（10 个 `safeListen` + 1 个 `safeInvoke`）
+2. ✅ ESLint 规则：`components/**`、`features/**`、`hooks/**` 禁止 import `lib/dev-bridge/**`（lib/api 内部豁免）
+3. ✅ 存量 11 处违例记录在 `governance/import-boundary-baseline.json`（`business→dev-bridge` 规则）
+4. ✅ 包装模块 `lib/api/bridgeEvents.ts`（re-export safeListen/safeEmit）
+5. ✅ 守卫脚本更新：`check-import-boundaries.mjs` 扫描 components/hooks 目录
+
+**剩余迁移**（R-31 协同）：逐个把 11 处 `import { safeListen } from "@/lib/dev-bridge"` 改为 `import { safeListen } from "@/lib/api/bridgeEvents"`，每修一处从 baseline 删除一行。
 
 **退出条件**：dev-bridge 的非 lib/api 消费者归零且有 lint 守卫。
 
@@ -141,11 +144,11 @@
 
 ### R-50 core/services 抗膨胀规则 + 模型注册重复定义归并
 
-**状态**：proposed
+**状态**：规则完成（2026-06-11）
 **执行清单**：
-1. `AGENTS.md` 补一条基础约束："新增 Rust 逻辑禁止默认落 `lime-core` / `services` 平铺层，必须先回答'为什么不是独立模块/既有 domain'"（参照 Codex "resist adding to core"，见 `codex-engineering-patterns.md` § 2）。
-2. 模型注册类型归并：`lime_core::models::model_registry` 与 `services/model_registry_service.rs` 的缓存类型二选一 owner，消除双写。
-3. `services/` 32 个 service 的目录分组（按 `lib.rs` 注释里已有的四类落成物理目录）延后到 R-20 完成后评估，不提前动。
+1. ✅ `AGENTS.md` 基础约束 21 已补："新增 Rust 逻辑禁止默认落 `lime-core` / `services` 平铺层"。
+2. 模型注册类型归并：待做。
+3. `services/` 目录分组：延后到 R-20 完成后评估。
 
 ---
 

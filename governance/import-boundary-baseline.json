@@ -5,55 +5,299 @@
     "lib→components": "src/lib/** 禁止 import @/components/**",
     "lib→features": "src/lib/** 禁止 import @/features/**",
     "lib→pages": "src/lib/** 禁止 import @/pages/**",
-    "features→components": "src/features/** 禁止 import @/components/**"
+    "features→components": "src/features/** 禁止 import @/components/**",
+    "business→dev-bridge": "components/features/hooks 禁止直接 import @/lib/dev-bridge，应通过 lib/api/ 统一入口"
   },
   "violations": [
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/install/cloudBootstrap", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/install/installedAppState", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/shell", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/install/installedAppPreview", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/install/packageIdentity", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/install/labInstallFlow", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/install/packageCache", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/install/installReview", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/types", "rule": "lib→features"},
-    {"file": "src/lib/api/agentApps.ts", "import": "@/features/agent-app/fixtures/content-factory-app.json", "rule": "lib→features"},
-    {"file": "src/lib/api/oemCloudControlPlane.ts", "import": "@/features/agent-app/install/cloudBootstrap", "rule": "lib→features"},
-    {"file": "src/lib/api/oemCloudControlPlane.ts", "import": "@/features/agent-app/types", "rule": "lib→features"},
-    {"file": "src/lib/deepLink/websiteLaunch.ts", "import": "@/components/agent/chat/utils/curatedTaskTemplates", "rule": "lib→components"},
-    {"file": "src/lib/imageGeneration.ts", "import": "@/components/image-gen/types", "rule": "lib→components"},
-    {"file": "src/lib/navigation/sidebarNav.ts", "import": "@/features/agent-app/featureFlag", "rule": "lib→features"},
-    {"file": "src/lib/navigation/sidebarNav.ts", "import": "@/features/agent-app/types", "rule": "lib→features"},
-    {"file": "src/lib/workspace/a2ui.ts", "import": "@/components/workspace/a2ui/types", "rule": "lib→components"},
-    {"file": "src/lib/workspace/a2ui.ts", "import": "@/components/workspace/a2ui/parser", "rule": "lib→components"},
-    {"file": "src/lib/workspace/a2ui.ts", "import": "@/components/workspace/a2ui", "rule": "lib→components"},
-    {"file": "src/lib/workspace/a2ui.ts", "import": "@/components/workspace/a2ui/taskCardPresets", "rule": "lib→components"},
-    {"file": "src/lib/workspace/a2ui.ts", "import": "@/components/workspace/a2ui/taskCardPrimitives", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/canvas/CanvasFactory", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/canvas/canvasUtils", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/document/types", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/document/editor/NotionEditor", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/document/ContentReviewPanel", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/document/documentCanvasHotkeys", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/document/documentEditorHotkeys", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/document/platforms/CoverImagePlaceholder", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/video/VideoCanvas", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/video/types", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/design/DesignCanvas", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchCanvas.ts", "import": "@/components/workspace/design/types", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchUi.ts", "import": "@/components/workspace/canvas/shared/CanvasBreadcrumbHeader", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchUi.ts", "import": "@/components/workspace/layout/LayoutTransition", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchUi.ts", "import": "@/components/workspace/layout/StepProgress", "rule": "lib→components"},
-    {"file": "src/lib/workspace/workbenchWorkflow.ts", "import": "@/components/workspace/hooks/useWorkflow", "rule": "lib→components"},
-    {"file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx", "import": "@/components/agent/chat/components/InlineToolProcessStep", "rule": "features→components"},
-    {"file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx", "import": "@/components/agent/chat/components/MarkdownRenderer", "rule": "features→components"},
-    {"file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx", "import": "@/components/agent/chat/components/ThinkingBlock", "rule": "features→components"},
-    {"file": "src/features/agent-app/ui/AgentRunHostDrawerProjectionInput.ts", "import": "@/components/agent/chat/utils/toolDisplayInfo", "rule": "features→components"},
-    {"file": "src/features/agent-app/ui/AgentRunHostDrawerProjectionInput.ts", "import": "@/components/agent/chat/utils/toolProcessSummary", "rule": "features→components"},
-    {"file": "src/features/capability-drafts/components/WorkspaceRegisteredSkillsPanel.tsx", "import": "@/components/agent/chat/projection/automationJobAgentUiProjection", "rule": "features→components"},
-    {"file": "src/features/capability-drafts/components/WorkspaceRegisteredSkillsPanel.tsx", "import": "@/components/ui/button", "rule": "features→components"},
-    {"file": "src/features/capability-drafts/workspaceSkillAgentAutomationDraft.ts", "import": "@/components/settings-v2/system/automation/AutomationJobDialog", "rule": "features→components"},
-    {"file": "src/features/knowledge/KnowledgePage.tsx", "import": "@/components/projects/ProjectSelector", "rule": "features→components"},
-    {"file": "src/features/resource-manager/TextResourceRenderer.tsx", "import": "@/components/agent/chat/components/MarkdownRenderer", "rule": "features→components"}
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/install/cloudBootstrap",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/install/installedAppState",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/shell",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/install/installedAppPreview",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/install/packageIdentity",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/install/labInstallFlow",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/install/packageCache",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/install/installReview",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/types",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/agentApps.ts",
+      "import": "@/features/agent-app/fixtures/content-factory-app.json",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/oemCloudControlPlane.ts",
+      "import": "@/features/agent-app/install/cloudBootstrap",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/api/oemCloudControlPlane.ts",
+      "import": "@/features/agent-app/types",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/deepLink/websiteLaunch.ts",
+      "import": "@/components/agent/chat/utils/curatedTaskTemplates",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/imageGeneration.ts",
+      "import": "@/components/image-gen/types",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/navigation/sidebarNav.ts",
+      "import": "@/features/agent-app/featureFlag",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/navigation/sidebarNav.ts",
+      "import": "@/features/agent-app/types",
+      "rule": "lib→features"
+    },
+    {
+      "file": "src/lib/workspace/a2ui.ts",
+      "import": "@/components/workspace/a2ui/types",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/a2ui.ts",
+      "import": "@/components/workspace/a2ui/parser",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/a2ui.ts",
+      "import": "@/components/workspace/a2ui",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/a2ui.ts",
+      "import": "@/components/workspace/a2ui/taskCardPresets",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/a2ui.ts",
+      "import": "@/components/workspace/a2ui/taskCardPrimitives",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/canvas/CanvasFactory",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/canvas/canvasUtils",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/document/types",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/document/editor/NotionEditor",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/document/ContentReviewPanel",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/document/documentCanvasHotkeys",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/document/documentEditorHotkeys",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/document/platforms/CoverImagePlaceholder",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/video/VideoCanvas",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/video/types",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/design/DesignCanvas",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchCanvas.ts",
+      "import": "@/components/workspace/design/types",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchUi.ts",
+      "import": "@/components/workspace/canvas/shared/CanvasBreadcrumbHeader",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchUi.ts",
+      "import": "@/components/workspace/layout/LayoutTransition",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchUi.ts",
+      "import": "@/components/workspace/layout/StepProgress",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/lib/workspace/workbenchWorkflow.ts",
+      "import": "@/components/workspace/hooks/useWorkflow",
+      "rule": "lib→components"
+    },
+    {
+      "file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx",
+      "import": "@/components/agent/chat/components/InlineToolProcessStep",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx",
+      "import": "@/components/agent/chat/components/MarkdownRenderer",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx",
+      "import": "@/components/agent/chat/components/ThinkingBlock",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/agent-app/ui/AgentRunHostDrawerProjectionInput.ts",
+      "import": "@/components/agent/chat/utils/toolDisplayInfo",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/agent-app/ui/AgentRunHostDrawerProjectionInput.ts",
+      "import": "@/components/agent/chat/utils/toolProcessSummary",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/capability-drafts/components/WorkspaceRegisteredSkillsPanel.tsx",
+      "import": "@/components/agent/chat/projection/automationJobAgentUiProjection",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/capability-drafts/components/WorkspaceRegisteredSkillsPanel.tsx",
+      "import": "@/components/ui/button",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/capability-drafts/workspaceSkillAgentAutomationDraft.ts",
+      "import": "@/components/settings-v2/system/automation/AutomationJobDialog",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/knowledge/KnowledgePage.tsx",
+      "import": "@/components/projects/ProjectSelector",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/features/resource-manager/TextResourceRenderer.tsx",
+      "import": "@/components/agent/chat/components/MarkdownRenderer",
+      "rule": "features→components"
+    },
+    {
+      "file": "src/components/agent/chat/workspace/useWorkspaceAudioTaskPreviewRuntime.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/components/agent/chat/workspace/useWorkspaceGeneralWorkbenchScaffoldRuntime.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/components/agent/chat/workspace/useWorkspaceTranscriptionTaskPreviewRuntime.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/components/agent/chat/workspace/useWorkspaceImageTaskPreviewRuntime.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/components/agent/chat/hooks/useTrayModelShortcuts.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/features/browser-runtime/api.ts",
+      "import": "@/lib/dev-bridge/safeInvoke",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/features/agent-app/runtime/hostBridge.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/hooks/useSkillPackageOpenRequests.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/hooks/useMcp.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    },
+    {
+      "file": "src/hooks/useGlobalTrayModelSync.ts",
+      "import": "@/lib/dev-bridge",
+      "rule": "business→dev-bridge"
+    }
   ]
 }

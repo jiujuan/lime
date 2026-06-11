@@ -99,6 +99,25 @@ function checkBoundaries() {
     }
   }
 
+  // R-40：检查 src/components/**、src/hooks/** → @/lib/dev-bridge/**
+  for (const dir of ["src/components", "src/hooks"]) {
+    const files = scanTsFiles(path.join(REPO_ROOT, dir));
+    for (const file of files) {
+      const relativeFile = path.relative(REPO_ROOT, file).replace(/\\/g, "/");
+      if (relativeFile.includes(".test.")) continue;
+      const imports = extractImports(file);
+      for (const imp of imports) {
+        if (imp.startsWith("@/lib/dev-bridge")) {
+          violations.push({
+            file: relativeFile,
+            import: imp,
+            rule: "business→dev-bridge",
+          });
+        }
+      }
+    }
+  }
+
   // 比较：找出新增违例
   const newViolations = violations.filter(
     (v) => !baselineSet.has(`${v.file}|${v.import}`),

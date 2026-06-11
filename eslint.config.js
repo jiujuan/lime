@@ -1340,4 +1340,23 @@ export default [
       ],
     },
   },
+  // === R-40：业务代码禁止直接 import dev-bridge ===
+  {
+    files: ["src/components/**/*.{ts,tsx}", "src/features/**/*.{ts,tsx}", "src/hooks/**/*.ts"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx", "**/*.d.ts", "src/lib/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/lib/dev-bridge/**", "@/lib/dev-bridge"],
+              message:
+                "业务代码禁止直接 import dev-bridge。请改用 lib/api/ 统一入口（如 lib/api/bridgeEvents.ts）。详见 internal/refactor/progressive-refactor-plan.md R-40。",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
