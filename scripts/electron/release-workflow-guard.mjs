@@ -154,8 +154,8 @@ function assertBuildSteps(buildJob) {
   if (pnpmSetupStep?.uses !== "pnpm/action-setup@v4") {
     throw new Error("release build must set up pnpm with pnpm/action-setup@v4");
   }
-  if (String(pnpmSetupStep?.with?.version || "") !== "9") {
-    throw new Error("release build must pin pnpm setup to version 9");
+  if (pnpmSetupStep?.with && Object.hasOwn(pnpmSetupStep.with, "version")) {
+    throw new Error("release build must read pnpm version from packageManager, not workflow version");
   }
 
   const nodeSetupStep = stepByName(steps, "Setup Node.js");

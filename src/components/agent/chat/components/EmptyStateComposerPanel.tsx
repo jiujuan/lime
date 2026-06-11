@@ -63,16 +63,16 @@ const ConnectedComposerShell = styled.div`
   transition: none;
 
   &:focus-within [data-testid="inputbar-context-bar-slot"] {
-    border-color: rgba(74, 222, 128, 0.62);
+    border-color: rgba(74, 222, 128, 0.38);
     background: linear-gradient(
       180deg,
-      rgba(236, 253, 245, 0.34) 0%,
-      rgba(248, 253, 250, 0.76) 48%,
-      rgba(255, 255, 255, 0.62) 100%
+      rgba(236, 253, 245, 0.18) 0%,
+      rgba(248, 253, 250, 0.44) 48%,
+      rgba(255, 255, 255, 0.7) 100%
     );
     box-shadow:
-      0 18px 42px -38px var(--lime-shadow-color),
-      inset 0 -1px 0 rgba(74, 222, 128, 0.18);
+      0 14px 36px -40px var(--lime-shadow-color),
+      inset 0 -1px 0 rgba(74, 222, 128, 0.1);
   }
 `;
 
@@ -607,7 +607,7 @@ export function EmptyStateComposerPanel({
   const projectContextBar = (
     <div
       data-testid="inputbar-context-bar-slot"
-      className="-mt-px flex min-h-11 w-full items-center rounded-b-[26px] border border-t-0 border-emerald-200/45 bg-gradient-to-b from-emerald-50/35 via-white/70 to-white/45 px-5 py-2 shadow-[0_18px_42px_-40px_rgba(15,23,42,0.3)]"
+      className="-mt-px flex min-h-11 w-full items-center rounded-b-[26px] border border-t-0 border-emerald-200/35 bg-gradient-to-b from-emerald-50/20 via-white/55 to-white/65 px-5 py-2 shadow-[0_14px_36px_-42px_rgba(15,23,42,0.28)]"
     >
       <InputbarProjectContextBar
         projectId={projectId}

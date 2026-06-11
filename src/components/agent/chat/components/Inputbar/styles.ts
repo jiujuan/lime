@@ -105,7 +105,7 @@ export const InputBarContainer = styled.div`
   &.floating-composer.context-connected:focus-within {
     border-bottom-color: transparent;
     box-shadow:
-      0 0 0 3px rgba(74, 222, 128, 0.16),
+      0 0 0 3px rgba(74, 222, 128, 0.1),
       0 22px 48px -38px var(--lime-shadow-color),
       inset 0 1px 0 rgba(255, 255, 255, 0.88);
   }
