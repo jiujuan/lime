@@ -1,6 +1,6 @@
 # 结构重构执行计划（机制驱动版）
 
-> 状态：proposed（v2，2026-06-11 重写；v1 的行数驱动队列已废弃）
+> 状态：phase 1 完成（2026-06-11）；剩余条目转入后续迭代
 > 上位规则：`AGENTS.md`、`internal/refactor/README.md`
 > 证据底座：`architecture-debt-analysis.md`（条目优先级争议先回去核对证据）
 
