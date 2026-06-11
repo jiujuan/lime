@@ -225,6 +225,7 @@ import {
   pickUsageSlotValues,
   resolveLaunchScopedRequestContext,
 } from "./commands/skillSlotUtils";
+import { waitForNextPaint, hasHarnessLaunchRequestMetadata } from "./commands/sendHelpers";
 import {
   MENTION_USAGE_REQUEST_FIELDS,
   resolveMentionCommandUsageSlotValues,
@@ -329,29 +330,11 @@ const PROMPT_REWRITE_PURPOSES = new Set<RewritePurpose>([
   "style_audit",
 ]);
 
-function waitForNextPaint(): Promise<void> {
-  if (
-    typeof window === "undefined" ||
-    typeof window.requestAnimationFrame !== "function"
-  ) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    window.requestAnimationFrame(() => resolve());
-  });
-}
 
 // asRecord 已提取到 ./commands/skillSlotUtils.ts
 
 // normalizeOptionalText 已提取到 ./commands/commandRecentDefaults.ts
 
-function hasHarnessLaunchRequestMetadata(
-  requestMetadata: Record<string, unknown> | undefined,
-  launchKey: "translation_skill_launch" | "resource_search_skill_launch",
-): boolean {
-  return Boolean(asRecord(asRecord(requestMetadata?.harness)?.[launchKey]));
-}
 
 function resolveServiceModelSendOverrides(params: {
   requestMetadata: Record<string, unknown> | undefined;
