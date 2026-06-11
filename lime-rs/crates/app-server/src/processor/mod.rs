@@ -1,3 +1,5 @@
+mod project_git;
+
 use crate::AppServerError;
 use crate::RuntimeCore;
 use crate::RuntimeCoreError;
@@ -126,10 +128,7 @@ use app_server_protocol::ModelProviderUiStateReadParams;
 use app_server_protocol::ModelProviderUiStateWriteParams;
 use app_server_protocol::ModelProviderUpdateParams;
 use app_server_protocol::PlatformInfo;
-use app_server_protocol::ProjectGitBranchCheckoutParams;
-use app_server_protocol::ProjectGitBranchCreateParams;
-use app_server_protocol::ProjectGitStatusParams;
-use app_server_protocol::ProjectGitWorktreeCreateParams;
+// ProjectGit* 类型已移至 processor/project_git.rs
 use app_server_protocol::ProjectMaterialImportFromUrlParams;
 use app_server_protocol::ProjectMaterialListParams;
 use app_server_protocol::ProjectMaterialLookupParams;
@@ -498,13 +497,13 @@ impl RequestProcessor {
             }
             METHOD_FILE_SYSTEM_RENAME_FILE => self.handle_file_system_rename_file(params).await,
             METHOD_FILE_SYSTEM_DELETE_FILE => self.handle_file_system_delete_file(params).await,
-            METHOD_PROJECT_GIT_STATUS => self.handle_project_git_status(params).await,
+            METHOD_PROJECT_GIT_STATUS => self.handle_project_git_status_impl(params).await,
             METHOD_PROJECT_GIT_BRANCH_CHECKOUT => {
-                self.handle_project_git_branch_checkout(params).await
+                self.handle_project_git_branch_checkout_impl(params).await
             }
-            METHOD_PROJECT_GIT_BRANCH_CREATE => self.handle_project_git_branch_create(params).await,
+            METHOD_PROJECT_GIT_BRANCH_CREATE => self.handle_project_git_branch_create_impl(params).await,
             METHOD_PROJECT_GIT_WORKTREE_CREATE => {
-                self.handle_project_git_worktree_create(params).await
+                self.handle_project_git_worktree_create_impl(params).await
             }
             METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params).await,
             METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT => {
@@ -3879,61 +3878,7 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    async fn handle_project_git_status(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectGitStatusParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_project_git_status(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_git_branch_checkout(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectGitBranchCheckoutParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .checkout_project_git_branch(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_git_branch_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectGitBranchCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_project_git_branch(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_project_git_worktree_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ProjectGitWorktreeCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_project_git_worktree(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // project_git handlers 已提取到 processor/project_git.rs
 
     async fn handle_evidence_export(
         &self,
@@ -4173,7 +4118,7 @@ pub fn event_notification_jsonrpc(event: AgentEvent) -> Result<JsonRpcMessage, J
     )))
 }
 
-fn parse_params<T>(params: Option<serde_json::Value>) -> Result<T, JsonRpcError>
+pub(super) fn parse_params<T>(params: Option<serde_json::Value>) -> Result<T, JsonRpcError>
 where
     T: DeserializeOwned,
 {
@@ -4194,7 +4139,7 @@ fn serialize_result(value: impl Serialize) -> Result<serde_json::Value, JsonRpcE
     })
 }
 
-struct RpcDispatch {
+pub(super) struct RpcDispatch {
     result: serde_json::Value,
     events: Vec<AgentEvent>,
 }
@@ -4208,7 +4153,7 @@ impl RpcDispatch {
     }
 }
 
-fn dispatch_result(value: impl Serialize) -> Result<RpcDispatch, JsonRpcError> {
+pub(super) fn dispatch_result(value: impl Serialize) -> Result<RpcDispatch, JsonRpcError> {
     Ok(RpcDispatch::single(serialize_result(value)?))
 }
 
@@ -4229,7 +4174,7 @@ fn event_notification(event: AgentEvent) -> Result<JsonRpcMessage, AppServerErro
     )))
 }
 
-fn to_jsonrpc_error(error: RuntimeCoreError) -> JsonRpcError {
+pub(super) fn to_jsonrpc_error(error: RuntimeCoreError) -> JsonRpcError {
     error.into_jsonrpc_error()
 }
 

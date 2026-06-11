@@ -1,0 +1,66 @@
+//! project_git domain handlers for the App Server processor.
+
+use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
+use app_server_protocol::{
+    JsonRpcError, ProjectGitBranchCheckoutParams, ProjectGitBranchCreateParams,
+    ProjectGitStatusParams, ProjectGitWorktreeCreateParams,
+};
+use serde_json::Value;
+
+impl RequestProcessor {
+    pub(super) async fn handle_project_git_status_impl(
+        &self,
+        params: Option<Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectGitStatusParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_project_git_status(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_project_git_branch_checkout_impl(
+        &self,
+        params: Option<Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectGitBranchCheckoutParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .checkout_project_git_branch(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_project_git_branch_create_impl(
+        &self,
+        params: Option<Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectGitBranchCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_project_git_branch(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_project_git_worktree_create_impl(
+        &self,
+        params: Option<Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectGitWorktreeCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_project_git_worktree(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+}
