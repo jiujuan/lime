@@ -77,7 +77,6 @@
   "navigation.sidebar.conversations.shelfMenu.organize.moveUp": "위로 이동",
   "navigation.sidebar.conversations.shelfMenu.sort.createdAt": "생성 시간",
   "navigation.sidebar.conversations.shelfMenu.sort.updatedAt": "업데이트 시간",
-  "navigation.sidebar.conversations.toggleHistory": "기록 전환",
   "navigation.sidebar.conversations.closeTab": "{{label}} 닫기",
   "navigation.sidebar.conversations.workbench.label": "워크벤치",
   "navigation.sidebar.conversations.workbench.expand": "워크벤치 펼치기",

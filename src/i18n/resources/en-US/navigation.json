@@ -77,7 +77,6 @@
   "navigation.sidebar.conversations.shelfMenu.organize.moveUp": "Move up",
   "navigation.sidebar.conversations.shelfMenu.sort.createdAt": "Created time",
   "navigation.sidebar.conversations.shelfMenu.sort.updatedAt": "Updated time",
-  "navigation.sidebar.conversations.toggleHistory": "Toggle history",
   "navigation.sidebar.conversations.closeTab": "Close {{label}}",
   "navigation.sidebar.conversations.workbench.label": "Workbench",
   "navigation.sidebar.conversations.workbench.expand": "Expand workbench",

@@ -688,7 +688,6 @@
   "agentChat.navbar.openSettings": "Open settings",
   "agentChat.navbar.projectManagement": "Project management",
   "agentChat.navbar.projectPlaceholder": "Select project",
-  "agentChat.navbar.toggleHistory": "Toggle history",
   "agentChat.runtimeError.internalRuntime": "The runtime returned an internal error. Details are preserved for diagnostics. Try again later, or check the provider and tool connection.",
   "agentChat.runtimeError.providerQuota": "The current model channel returned a billing or quota error. Check the provider/model channel billing, quota, or authorization state, or switch to another available model.",
   "agentChat.runtimeError.providerUnavailable": "The current model channel is temporarily unavailable. Try again later; if it keeps failing, check the provider status or switch to another available model.",

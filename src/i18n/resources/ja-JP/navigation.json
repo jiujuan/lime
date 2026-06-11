@@ -77,7 +77,6 @@
   "navigation.sidebar.conversations.shelfMenu.organize.moveUp": "上へ移動",
   "navigation.sidebar.conversations.shelfMenu.sort.createdAt": "作成日時",
   "navigation.sidebar.conversations.shelfMenu.sort.updatedAt": "更新日時",
-  "navigation.sidebar.conversations.toggleHistory": "履歴を切り替え",
   "navigation.sidebar.conversations.closeTab": "{{label}}を閉じる",
   "navigation.sidebar.conversations.workbench.label": "ワークベンチ",
   "navigation.sidebar.conversations.workbench.expand": "ワークベンチを展開",

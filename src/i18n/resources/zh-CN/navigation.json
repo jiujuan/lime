@@ -77,7 +77,6 @@
   "navigation.sidebar.conversations.shelfMenu.organize.moveUp": "上移",
   "navigation.sidebar.conversations.shelfMenu.sort.createdAt": "创建时间",
   "navigation.sidebar.conversations.shelfMenu.sort.updatedAt": "更新时间",
-  "navigation.sidebar.conversations.toggleHistory": "切换历史",
   "navigation.sidebar.conversations.closeTab": "关闭 {{label}}",
   "navigation.sidebar.conversations.workbench.label": "工作台",
   "navigation.sidebar.conversations.workbench.expand": "展开工作台",

@@ -132,6 +132,16 @@
       "allowedPaths": []
     },
     {
+      "id": "agent-chat-legacy-history-sidebar-runtime-entry",
+      "classification": "dead-candidate",
+      "description": "旧会话历史侧栏已退出 WorkspaceShell 生产主路径；多对话打开与切换必须收敛到任务中心 tab/dropdown，不得重新从运行时代码 import ChatSidebar",
+      "targets": ["src/components/agent/chat/components/ChatSidebar.tsx"],
+      "allowedPaths": [
+        "src/components/agent/chat/components/ChatSidebar.testFixtures.tsx",
+        "src/components/agent/chat/index.testFixtures.tsx"
+      ]
+    },
+    {
       "id": "sceneapps-workflow-rail-entry",
       "classification": "dead-candidate",
       "description": "已删除的 SceneApps 独立工作流 rail；现役页面流程统一收敛到 SceneAppsPage 顶部状态条、view tabs 与 workflowShortcut",
