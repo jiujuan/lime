@@ -1,5 +1,6 @@
 mod knowledge;
 mod project_git;
+mod skill;
 
 use crate::AppServerError;
 use crate::RuntimeCore;
@@ -134,24 +135,6 @@ use app_server_protocol::SessionFileGetOrCreateParams;
 use app_server_protocol::SessionFileIdParams;
 use app_server_protocol::SessionFileSaveParams;
 use app_server_protocol::SessionFileUpdateMetaParams;
-use app_server_protocol::SkillDownloadInstallParams;
-use app_server_protocol::SkillLocalDetailInspectParams;
-use app_server_protocol::SkillLocalImportParams;
-use app_server_protocol::SkillLocalInspectParams;
-use app_server_protocol::SkillLocalRenameParams;
-use app_server_protocol::SkillManagementInstallParams;
-use app_server_protocol::SkillManagementListParams;
-use app_server_protocol::SkillManagementUninstallParams;
-use app_server_protocol::SkillMarketplaceInstallParams;
-use app_server_protocol::SkillPackageExportParams;
-use app_server_protocol::SkillPackageLocalInspectParams;
-use app_server_protocol::SkillPackageLocalInstallParams;
-use app_server_protocol::SkillPackageLocalReplaceParams;
-use app_server_protocol::SkillReadParams;
-use app_server_protocol::SkillRemoteInspectParams;
-use app_server_protocol::SkillRepositoryDeleteParams;
-use app_server_protocol::SkillRepositorySaveParams;
-use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::UnifiedMemoryAnalyzeParams;
 use app_server_protocol::UnifiedMemoryCreateParams;
 use app_server_protocol::UnifiedMemoryDeleteParams;
@@ -564,43 +547,43 @@ impl RequestProcessor {
                 self.handle_workspace_project_path_resolve(params).await
             }
             METHOD_WORKSPACE_ENSURE_READY => self.handle_workspace_ensure_ready(params).await,
-            METHOD_SKILL_LIST => self.handle_skill_list().await,
-            METHOD_SKILL_READ => self.handle_skill_read(params).await,
-            METHOD_SKILL_MANAGEMENT_LIST => self.handle_skill_management_list(params).await,
-            METHOD_SKILL_MANAGEMENT_INSTALL => self.handle_skill_management_install(params).await,
+            METHOD_SKILL_LIST => self.handle_skill_list_impl().await,
+            METHOD_SKILL_READ => self.handle_skill_read_impl(params).await,
+            METHOD_SKILL_MANAGEMENT_LIST => self.handle_skill_management_list_impl(params).await,
+            METHOD_SKILL_MANAGEMENT_INSTALL => self.handle_skill_management_install_impl(params).await,
             METHOD_SKILL_MANAGEMENT_UNINSTALL => {
-                self.handle_skill_management_uninstall(params).await
+                self.handle_skill_management_uninstall_impl(params).await
             }
-            METHOD_SKILL_REPOSITORY_LIST => self.handle_skill_repository_list().await,
-            METHOD_SKILL_REPOSITORY_SAVE => self.handle_skill_repository_save(params).await,
-            METHOD_SKILL_REPOSITORY_DELETE => self.handle_skill_repository_delete(params).await,
-            METHOD_SKILL_CACHE_REFRESH => self.handle_skill_cache_refresh().await,
+            METHOD_SKILL_REPOSITORY_LIST => self.handle_skill_repository_list_impl().await,
+            METHOD_SKILL_REPOSITORY_SAVE => self.handle_skill_repository_save_impl(params).await,
+            METHOD_SKILL_REPOSITORY_DELETE => self.handle_skill_repository_delete_impl(params).await,
+            METHOD_SKILL_CACHE_REFRESH => self.handle_skill_cache_refresh_impl().await,
             METHOD_SKILL_INSTALLED_DIRECTORIES_LIST => {
-                self.handle_skill_installed_directories_list().await
+                self.handle_skill_installed_directories_list_impl().await
             }
-            METHOD_SKILL_LOCAL_INSPECT => self.handle_skill_local_inspect(params).await,
+            METHOD_SKILL_LOCAL_INSPECT => self.handle_skill_local_inspect_impl(params).await,
             METHOD_SKILL_LOCAL_DETAIL_INSPECT => {
-                self.handle_skill_local_detail_inspect(params).await
+                self.handle_skill_local_detail_inspect_impl(params).await
             }
             METHOD_SKILL_LOCAL_SCAFFOLD_CREATE => {
-                self.handle_skill_local_scaffold_create(params).await
+                self.handle_skill_local_scaffold_create_impl(params).await
             }
-            METHOD_SKILL_LOCAL_IMPORT => self.handle_skill_local_import(params).await,
-            METHOD_SKILL_LOCAL_RENAME => self.handle_skill_local_rename(params).await,
-            METHOD_SKILL_REMOTE_INSPECT => self.handle_skill_remote_inspect(params).await,
+            METHOD_SKILL_LOCAL_IMPORT => self.handle_skill_local_import_impl(params).await,
+            METHOD_SKILL_LOCAL_RENAME => self.handle_skill_local_rename_impl(params).await,
+            METHOD_SKILL_REMOTE_INSPECT => self.handle_skill_remote_inspect_impl(params).await,
             METHOD_SKILL_PACKAGE_LOCAL_INSPECT => {
-                self.handle_skill_package_local_inspect(params).await
+                self.handle_skill_package_local_inspect_impl(params).await
             }
             METHOD_SKILL_PACKAGE_LOCAL_INSTALL => {
-                self.handle_skill_package_local_install(params).await
+                self.handle_skill_package_local_install_impl(params).await
             }
             METHOD_SKILL_PACKAGE_LOCAL_REPLACE => {
-                self.handle_skill_package_local_replace(params).await
+                self.handle_skill_package_local_replace_impl(params).await
             }
-            METHOD_SKILL_PACKAGE_EXPORT => self.handle_skill_package_export(params).await,
-            METHOD_SKILL_MARKETPLACE_INSTALL => self.handle_skill_marketplace_install(params).await,
+            METHOD_SKILL_PACKAGE_EXPORT => self.handle_skill_package_export_impl(params).await,
+            METHOD_SKILL_MARKETPLACE_INSTALL => self.handle_skill_marketplace_install_impl(params).await,
             METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL => {
-                self.handle_skill_download_install(params).await
+                self.handle_skill_download_install_impl(params).await
             }
             METHOD_GATEWAY_CHANNEL_START => self.handle_gateway_channel_start(params).await,
             METHOD_GATEWAY_CHANNEL_STOP => self.handle_gateway_channel_stop(params).await,
@@ -1395,294 +1378,7 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
-    async fn handle_skill_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self.runtime.list_skills().await.map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_skill(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_management_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillManagementListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_management_skills(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_management_install(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillManagementInstallParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .install_management_skill(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_management_uninstall(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillManagementUninstallParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .uninstall_management_skill(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_repository_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_skill_repositories()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_repository_save(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillRepositorySaveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .save_skill_repository(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_repository_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillRepositoryDeleteParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_skill_repository(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_cache_refresh(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .refresh_skill_cache()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_installed_directories_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_installed_skill_directories()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_local_inspect(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillLocalInspectParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .inspect_local_skill(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_package_local_inspect(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillPackageLocalInspectParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .inspect_local_skill_package(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_local_detail_inspect(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillLocalDetailInspectParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .inspect_local_skill_detail(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_local_scaffold_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillScaffoldCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_skill_scaffold(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_local_import(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillLocalImportParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .import_local_skill(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_local_rename(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillLocalRenameParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .rename_local_skill(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_remote_inspect(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillRemoteInspectParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .inspect_remote_skill(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_package_local_install(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillPackageLocalInstallParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .install_local_skill_package(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_package_local_replace(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillPackageLocalReplaceParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .replace_local_skill_package(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_package_export(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillPackageExportParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .export_local_skill_package(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_marketplace_install(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillMarketplaceInstallParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .install_marketplace_skill(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_skill_download_install(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SkillDownloadInstallParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .install_skill_from_download_url(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // skill handlers 已提取到 processor/skill.rs
 
     async fn handle_gateway_channel_status(
         &self,

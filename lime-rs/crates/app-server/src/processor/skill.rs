@@ -1,0 +1,303 @@
+//! skill domain handlers for the App Server processor.
+
+use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
+use app_server_protocol::{
+    JsonRpcError, SkillDownloadInstallParams, SkillLocalDetailInspectParams,
+    SkillLocalImportParams, SkillLocalInspectParams, SkillLocalRenameParams,
+    SkillManagementInstallParams, SkillManagementListParams, SkillManagementUninstallParams,
+    SkillMarketplaceInstallParams, SkillPackageExportParams, SkillPackageLocalInspectParams,
+    SkillPackageLocalInstallParams, SkillPackageLocalReplaceParams, SkillReadParams,
+    SkillRemoteInspectParams, SkillRepositoryDeleteParams, SkillRepositorySaveParams,
+    SkillScaffoldCreateParams,
+};
+use serde_json::Value;
+
+impl RequestProcessor {
+    pub(super) async fn handle_skill_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self.runtime.list_skills().await.map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_read_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_management_list_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillManagementListParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .list_management_skills(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_management_install_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillManagementInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_management_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_management_uninstall_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillManagementUninstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .uninstall_management_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_repository_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_skill_repositories()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_repository_save_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillRepositorySaveParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .save_skill_repository(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_repository_delete_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillRepositoryDeleteParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .delete_skill_repository(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_cache_refresh_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .refresh_skill_cache()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_installed_directories_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let response = self
+            .runtime
+            .list_installed_skill_directories()
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_local_inspect_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillLocalInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_local_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_package_local_inspect_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillPackageLocalInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_local_skill_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_local_detail_inspect_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillLocalDetailInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_local_skill_detail(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_local_scaffold_create_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillScaffoldCreateParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .create_skill_scaffold(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_local_import_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillLocalImportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .import_local_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_local_rename_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillLocalRenameParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .rename_local_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_remote_inspect_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillRemoteInspectParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .inspect_remote_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_package_local_install_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillPackageLocalInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_local_skill_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_package_local_replace_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillPackageLocalReplaceParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .replace_local_skill_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_package_export_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillPackageExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_local_skill_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_marketplace_install_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillMarketplaceInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_marketplace_skill(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_skill_download_install_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: SkillDownloadInstallParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .install_skill_from_download_url(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+}
