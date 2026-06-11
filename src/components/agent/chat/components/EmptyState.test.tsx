@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EmptyState } from "./EmptyState";
 import type { Character } from "@/lib/api/memory";
+import type { ProjectGitStatus } from "@/lib/api/projectGit";
 import type { Skill } from "@/lib/api/skills";
 import type { UnifiedMemory } from "@/lib/api/unifiedMemory";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
@@ -31,7 +32,7 @@ const {
 } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(async () => ({})),
   mockProjectSelector: vi.fn(),
-  mockReadProjectGitStatus: vi.fn(async () => ({
+  mockReadProjectGitStatus: vi.fn(async (): Promise<ProjectGitStatus> => ({
     rootPath: "/workspace/lime",
     repositoryRoot: undefined,
     hasGitRepository: false,

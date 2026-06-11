@@ -390,4 +390,7 @@ export function buildPdfReadSkillLaunchRequestContext(params: {
   };
 }
 
-export { buildGrowthSkillLaunchRequestContext, buildVoiceSkillLaunchRequestContext };
+export {
+  resolveGrowthSkillLaunchRequestContext as buildGrowthSkillLaunchRequestContext,
+  resolveVoiceSkillLaunchRequestContext as buildVoiceSkillLaunchRequestContext,
+} from "./skillLaunchResolvers";

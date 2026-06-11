@@ -246,6 +246,16 @@ import {
 import { resolveMentionCommandUsage } from "./commands/mentionCommandUtils";
 
 type CurrentExecutionStrategy = "react";
+
+export type WorkspaceHandleSend = (
+  images?: MessageImage[],
+  webSearch?: boolean,
+  thinking?: boolean,
+  textOverride?: string,
+  sendExecutionStrategy?: CurrentExecutionStrategy,
+  autoContinuePayload?: AutoContinueRequestPayload,
+  sendOptions?: HandleSendOptions,
+) => Promise<boolean>;
 type SetStringState = (value: string) => void;
 type ParsedImageWorkbenchCommand = NonNullable<
   ReturnType<typeof parseImageWorkbenchCommand>

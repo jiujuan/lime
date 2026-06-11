@@ -117,14 +117,14 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
   it("输入预热只应创建底层会话，不应提交并移除草稿标签", async () => {
     const createFreshSession = vi.fn(async () => "session-warmup");
     const upsertTaskCenterOpenTab = vi.fn();
-    let latestSnapshot: ProbeSnapshot | null = null;
+    const snapshots: ProbeSnapshot[] = [];
 
     await act(async () => {
       root.render(
         <Probe
           createFreshSession={createFreshSession}
           onSnapshot={(snapshot) => {
-            latestSnapshot = snapshot;
+            snapshots.push(snapshot);
           }}
           upsertTaskCenterOpenTab={upsertTaskCenterOpenTab}
         />,
@@ -141,6 +141,7 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
       preserveCurrentSnapshot: false,
     });
     expect(upsertTaskCenterOpenTab).not.toHaveBeenCalled();
+    const latestSnapshot = snapshots.at(-1);
     expect(latestSnapshot?.activeDraftTabId).toBe(initialDraft.id);
     expect(latestSnapshot?.draftTabs.map((tab) => tab.id)).toEqual([
       initialDraft.id,

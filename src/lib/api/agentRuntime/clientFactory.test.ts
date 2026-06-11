@@ -105,6 +105,19 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
+    archiveManySessions: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        updatedSessionIds: ["session-1"],
+        updatedCount: 1,
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     request: vi.fn().mockImplementation((method: string) => {
       if (method === "workspaceSkillBindings/list") {
         return Promise.resolve({

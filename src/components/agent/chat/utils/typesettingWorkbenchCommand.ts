@@ -6,6 +6,7 @@ export interface ParsedTypesettingWorkbenchCommand {
   body: string;
   prompt: string;
   targetPlatform?: string;
+  outputFormat?: string;
 }
 
 const TYPESETTING_COMMAND_PREFIX_REGEX =

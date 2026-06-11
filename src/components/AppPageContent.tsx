@@ -146,6 +146,27 @@ function serializeExpertAgentLaunchKey(params: AgentPageParams): string {
   ].join(":");
 }
 
+function serializeAgentChatPageInstanceKey(params: AgentPageParams): string {
+  return [
+    params.projectId || "",
+    params.contentId || "",
+    params.theme || "",
+    params.lockTheme ? "1" : "0",
+    params.agentEntry || "claw",
+    params.immersiveHome ? "immersive" : "standard",
+    params.preferHomeForInitialInputCapability
+      ? "home-input"
+      : "workspace-input",
+    params.initialPendingServiceSkillLaunch?.skillId || "",
+    params.initialPendingServiceSkillLaunch?.requestKey ?? 0,
+    serializeInitialInputCapabilityKey(params),
+    serializeInitialKnowledgePackSelectionKey(params),
+    params.initialProjectFileOpenTarget?.relativePath || "",
+    params.initialProjectFileOpenTarget?.requestKey ?? 0,
+    serializeExpertAgentLaunchKey(params),
+  ].join(":");
+}
+
 interface AppPageContentProps {
   currentPage: Page;
   pageParams: PageParams;
@@ -196,7 +217,7 @@ export function AppPageContent({
     return (
       <div style={columnPageStyle}>
         <AgentChatPage
-          key={`${agentPageParams.projectId || ""}:${agentPageParams.contentId || ""}:${agentPageParams.theme || ""}:${agentPageParams.lockTheme ? "1" : "0"}:${agentPageParams.agentEntry || "claw"}:${agentPageParams.immersiveHome ? "immersive" : "standard"}:${agentPageParams.preferHomeForInitialInputCapability ? "home-input" : "workspace-input"}:${agentPageParams.newChatAt ?? 0}:${agentPageParams.initialPendingServiceSkillLaunch?.skillId || ""}:${agentPageParams.initialPendingServiceSkillLaunch?.requestKey ?? 0}:${serializeInitialInputCapabilityKey(agentPageParams)}:${serializeInitialKnowledgePackSelectionKey(agentPageParams)}:${agentPageParams.initialProjectFileOpenTarget?.relativePath || ""}:${agentPageParams.initialProjectFileOpenTarget?.requestKey ?? 0}:${serializeExpertAgentLaunchKey(agentPageParams)}`}
+          key={serializeAgentChatPageInstanceKey(agentPageParams)}
           onNavigate={onNavigate}
           projectId={agentPageParams.projectId}
           contentId={agentPageParams.contentId}

@@ -26,6 +26,9 @@ import type {
 } from "@/lib/layered-design";
 import { getCanvasTypeForTheme, type CanvasStateUnion } from "./canvasUtils";
 
+export type { CanvasStateUnion } from "./canvasUtils";
+export type { DesignCanvasState } from "@/components/workspace/design/types";
+
 /**
  * 画布工厂 Props
  */

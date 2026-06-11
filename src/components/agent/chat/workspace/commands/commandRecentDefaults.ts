@@ -24,7 +24,13 @@ import { parseChannelPreviewWorkbenchCommand } from "../../utils/channelPreviewW
 import { parseUploadWorkbenchCommand } from "../../utils/uploadWorkbenchCommand";
 import { parsePublishWorkbenchCommand } from "../../utils/publishWorkbenchCommand";
 import { parseWritingWorkbenchCommand } from "../../utils/writingWorkbenchCommand";
-import { normalizeContentPostPlatform } from "../../utils/contentPostPlatform";
+import { parseGrowthWorkbenchCommand } from "../../utils/growthWorkbenchCommand";
+import { parseVoiceWorkbenchCommand } from "../../utils/voiceWorkbenchCommand";
+import type { ParsedLogoDecompositionWorkbenchCommand } from "../../utils/logoDecompositionWorkbenchCommand";
+import {
+  normalizeContentPostPlatform,
+  type ContentPostPlatformType,
+} from "../../utils/contentPostPlatform";
 
 // --- 类型别名（从 useWorkspaceSendActions.ts 提取） ---
 
@@ -63,6 +69,12 @@ export type ParsedPublishWorkbenchCommand = NonNullable<
 >;
 export type ParsedWritingWorkbenchCommand = NonNullable<
   ReturnType<typeof parseWritingWorkbenchCommand>
+>;
+export type ParsedGrowthWorkbenchCommand = NonNullable<
+  ReturnType<typeof parseGrowthWorkbenchCommand>
+>;
+export type ParsedVoiceWorkbenchCommand = NonNullable<
+  ReturnType<typeof parseVoiceWorkbenchCommand>
 >;
 
 export type ParsedPublishLikeWorkbenchCommand =
@@ -164,7 +176,8 @@ export function mergeTranslationCommandRecentDefaults(params: {
 export function mergeAnalysisCommandRecentDefaults<
   T extends
     | ParsedAnalysisWorkbenchCommand
-    | ParsedComplianceWorkbenchCommand,
+    | ParsedComplianceWorkbenchCommand
+    | ParsedLogoDecompositionWorkbenchCommand,
 >(params: { parsedCommand: T; slotValues?: ServiceSkillSlotValues }): T {
   const slotValues = params.slotValues;
   if (!slotValues) {
@@ -245,45 +258,80 @@ export function normalizeRecentPositiveInteger(
 export function normalizeRecentPresentationDeckType(
   value?: string | null,
 ): ParsedPresentationWorkbenchCommand["deckType"] | undefined {
-  if (
-    value === "general" ||
-    value === "pitch" ||
-    value === "report" ||
-    value === "education"
-  ) {
-    return value;
+  switch (value) {
+    case "pitch":
+    case "pitch_deck":
+      return "pitch_deck";
+    case "sales":
+    case "sales_deck":
+      return "sales_deck";
+    case "education":
+    case "training":
+    case "training_deck":
+      return "training_deck";
+    case "report":
+    case "report_deck":
+      return "report_deck";
+    case "proposal":
+    case "proposal_deck":
+      return "proposal_deck";
+    default:
+      return undefined;
   }
-  return undefined;
 }
 
 export function normalizeRecentFormType(
   value?: string | null,
 ): ParsedFormWorkbenchCommand["formType"] | undefined {
-  if (
-    value === "survey" ||
-    value === "registration" ||
-    value === "feedback" ||
-    value === "application" ||
-    value === "order"
-  ) {
-    return value;
+  switch (value) {
+    case "survey":
+    case "survey_form":
+      return "survey_form";
+    case "lead":
+    case "lead_form":
+      return "lead_form";
+    case "registration":
+    case "registration_form":
+      return "registration_form";
+    case "feedback":
+    case "feedback_form":
+      return "feedback_form";
+    case "application":
+    case "application_form":
+      return "application_form";
+    default:
+      return undefined;
   }
-  return undefined;
 }
 
 export function normalizeRecentWebpageType(
   value?: string | null,
-): ParsedWebpageWorkbenchCommand["webpageType"] | undefined {
-  if (
-    value === "landing" ||
-    value === "blog" ||
-    value === "product" ||
-    value === "portfolio" ||
-    value === "documentation"
-  ) {
-    return value;
+): ParsedWebpageWorkbenchCommand["pageType"] | undefined {
+  switch (value) {
+    case "landing":
+    case "landing_page":
+      return "landing_page";
+    case "home":
+    case "homepage":
+      return "homepage";
+    case "campaign":
+    case "campaign_page":
+      return "campaign_page";
+    case "product":
+    case "product_page":
+      return "product_page";
+    case "documentation":
+    case "docs":
+    case "docs_page":
+      return "docs_page";
+    case "portfolio":
+      return "portfolio";
+    case "resume":
+    case "resume_page":
+      return "resume_page";
+    default:
+      return undefined;
   }
-  return undefined;
 }
 
 export function mergeTypesettingCommandRecentDefaults(params: {
@@ -297,13 +345,9 @@ export function mergeTypesettingCommandRecentDefaults(params: {
 
   return {
     ...params.parsedCommand,
-    typesettingStyle: resolvePreferredRecentCommandText(
-      params.parsedCommand.typesettingStyle,
+    targetPlatform: resolvePreferredRecentCommandText(
+      params.parsedCommand.targetPlatform,
       slotValues.style,
-    ),
-    outputFormat: resolvePreferredRecentCommandText(
-      params.parsedCommand.outputFormat,
-      slotValues.output_format,
     ),
   };
 }
@@ -319,10 +363,10 @@ export function mergePresentationCommandRecentDefaults(params: {
 
   return {
     ...params.parsedCommand,
-    topic: resolvePreferredRecentCommandText(
-      params.parsedCommand.topic,
+    prompt: resolvePreferredRecentCommandText(
+      params.parsedCommand.prompt,
       slotValues.topic,
-    ),
+    ) ?? params.parsedCommand.prompt,
     slideCount:
       params.parsedCommand.slideCount ??
       normalizeRecentPositiveInteger(slotValues.slide_count),
@@ -332,10 +376,6 @@ export function mergePresentationCommandRecentDefaults(params: {
     style: resolvePreferredRecentCommandText(
       params.parsedCommand.style,
       slotValues.style,
-    ),
-    outputFormat: resolvePreferredRecentCommandText(
-      params.parsedCommand.outputFormat,
-      slotValues.output_format,
     ),
   };
 }
@@ -351,10 +391,10 @@ export function mergeFormCommandRecentDefaults(params: {
 
   return {
     ...params.parsedCommand,
-    topic: resolvePreferredRecentCommandText(
-      params.parsedCommand.topic,
+    prompt: resolvePreferredRecentCommandText(
+      params.parsedCommand.prompt,
       slotValues.topic,
-    ),
+    ) ?? params.parsedCommand.prompt,
     formType:
       params.parsedCommand.formType ??
       normalizeRecentFormType(slotValues.form_type),
@@ -364,10 +404,6 @@ export function mergeFormCommandRecentDefaults(params: {
     style: resolvePreferredRecentCommandText(
       params.parsedCommand.style,
       slotValues.style,
-    ),
-    outputFormat: resolvePreferredRecentCommandText(
-      params.parsedCommand.outputFormat,
-      slotValues.output_format,
     ),
   };
 }
@@ -383,20 +419,16 @@ export function mergeWebpageCommandRecentDefaults(params: {
 
   return {
     ...params.parsedCommand,
-    topic: resolvePreferredRecentCommandText(
-      params.parsedCommand.topic,
+    prompt: resolvePreferredRecentCommandText(
+      params.parsedCommand.prompt,
       slotValues.topic,
-    ),
-    webpageType:
-      params.parsedCommand.webpageType ??
+    ) ?? params.parsedCommand.prompt,
+    pageType:
+      params.parsedCommand.pageType ??
       normalizeRecentWebpageType(slotValues.webpage_type),
     style: resolvePreferredRecentCommandText(
       params.parsedCommand.style,
       slotValues.style,
-    ),
-    outputFormat: resolvePreferredRecentCommandText(
-      params.parsedCommand.outputFormat,
-      slotValues.output_format,
     ),
   };
 }
@@ -405,21 +437,22 @@ export function normalizeRecentPublishPlatform(params: {
   platformType?: string | null;
   platformLabel?: string | null;
 }): {
-  platformType: string | undefined;
+  platformType: ContentPostPlatformType | undefined;
   platformLabel: string | undefined;
 } {
   const normalized = normalizeContentPostPlatform(
     params.platformType ?? undefined,
   );
-  if (normalized) {
+  if (normalized.platformType || normalized.platformLabel) {
     return {
-      platformType: normalized,
+      platformType: normalized.platformType,
       platformLabel:
-        normalizeOptionalText(params.platformLabel) ?? normalized,
+        normalizeOptionalText(params.platformLabel) ??
+        normalized.platformLabel,
     };
   }
   return {
-    platformType: normalizeOptionalText(params.platformType),
+    platformType: undefined,
     platformLabel: normalizeOptionalText(params.platformLabel),
   };
 }

@@ -25,7 +25,7 @@ import type {
   A2UIFormData,
   ParseResult,
   ParsedMessageContent,
-} from "@/components/workspace/a2ui/taskCardPresets";
+} from "@/components/workspace/a2ui/types";
 import { CHAT_A2UI_TASK_CARD_PRESET } from "@/components/workspace/a2ui/taskCardPresets";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import type {

@@ -17,10 +17,12 @@ export interface ParsedPresentationWorkbenchCommand {
   trigger: PresentationWorkbenchCommandTrigger;
   body: string;
   prompt: string;
+  topic?: string;
   deckType?: PresentationDeckType;
   style?: string;
   audience?: string;
   slideCount?: number;
+  outputFormat?: string;
 }
 
 const PRESENTATION_COMMAND_PREFIX_REGEX =

@@ -68,7 +68,7 @@ export function resolveServiceModelSendOverrides(params: {
   }
 
   return {
-    providerOverride: preference.providerId ?? undefined,
-    modelOverride: preference.modelId ?? undefined,
+    providerOverride: preference.preferredProviderId ?? undefined,
+    modelOverride: preference.preferredModelId ?? undefined,
   };
 }

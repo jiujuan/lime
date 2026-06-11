@@ -20,9 +20,11 @@ export interface ParsedWebpageWorkbenchCommand {
   trigger: WebpageWorkbenchCommandTrigger;
   body: string;
   prompt: string;
+  topic?: string;
   pageType?: WebpageType;
   style?: string;
   techStack?: string;
+  outputFormat?: string;
 }
 
 const WEBPAGE_COMMAND_PREFIX_REGEX =

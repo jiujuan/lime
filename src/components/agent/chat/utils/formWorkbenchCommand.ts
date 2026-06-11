@@ -16,10 +16,12 @@ export interface ParsedFormWorkbenchCommand {
   trigger: FormWorkbenchCommandTrigger;
   body: string;
   prompt: string;
+  topic?: string;
   formType?: FormType;
   style?: string;
   audience?: string;
   fieldCount?: number;
+  outputFormat?: string;
 }
 
 const FORM_COMMAND_PREFIX_REGEX =

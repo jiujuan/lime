@@ -7,9 +7,14 @@
 import type { ThemeType } from "@/lib/workspace/workflowTypes";
 import {
   createInitialDocumentState,
+  type AutoContinueRunPayload,
+  type ContentReviewExpert,
+  type ContentReviewRunPayload,
+  type CustomContentReviewExpertInput,
   type DocumentCanvasState,
   type DocumentVersion,
   type PlatformType,
+  type TextStylizeRunPayload,
 } from "@/components/workspace/document/types";
 import { createInitialVideoState } from "@/components/workspace/video/types";
 import type { VideoCanvasState } from "@/components/workspace/video/types";
@@ -86,9 +91,14 @@ export {
   createInitialVideoState,
 };
 export type {
+  AutoContinueRunPayload,
+  ContentReviewExpert,
+  ContentReviewRunPayload,
+  CustomContentReviewExpertInput,
   DesignCanvasState,
   DocumentCanvasState,
   DocumentVersion,
   PlatformType,
+  TextStylizeRunPayload,
   VideoCanvasState,
 };

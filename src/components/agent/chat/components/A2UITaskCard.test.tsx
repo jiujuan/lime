@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
-import {
-  CHAT_A2UI_TASK_CARD_PRESET,
-  type A2UIResponse,
-} from "@/lib/workspace/a2ui";
+import { CHAT_A2UI_TASK_CARD_PRESET } from "@/components/workspace/a2ui/taskCardPresets";
+import type { A2UIResponse } from "@/components/workspace/a2ui/types";
 import {
   cleanupMountedRoots,
   clickButtonByText,

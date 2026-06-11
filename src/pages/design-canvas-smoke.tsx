@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import styled from "styled-components";
 import { createCanvasStateFromArtifact } from "@/components/artifact/canvasAdapterUtils";
 import { CanvasFactory } from "@/components/workspace/canvas/CanvasFactory";
+import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import {
   createInitialDesignCanvasState,
-  type CanvasStateUnion,
   type DesignCanvasProps,
 } from "@/components/workspace/design/types";
 import type {
