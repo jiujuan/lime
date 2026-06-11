@@ -543,7 +543,8 @@
       },
       {
         "path": "src/components/app-sidebar/AppSidebarConversationShelf.tsx",
-        "lines": 831
+        "lines": 1478,
+        "comment": "v1.66.0 功能新增"
       },
       {
         "path": "src/components/artifact/ArtifactRenderer.tsx",
@@ -592,6 +593,16 @@
       {
         "path": "src/components/agent/chat/service-skills/creationReplaySlotPrefill.ts",
         "lines": 800
+      },
+      {
+        "path": "src/components/agent/chat/workspace/WorkspaceConversationScene.tsx",
+        "lines": 801,
+        "comment": "v1.66.0 功能新增"
+      },
+      {
+        "path": "src/components/agent/chat/components/ChatNavbar.tsx",
+        "lines": 854,
+        "comment": "v1.66.0 功能新增"
       }
     ]
   },
