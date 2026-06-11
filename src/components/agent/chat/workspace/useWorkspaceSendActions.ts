@@ -227,6 +227,7 @@ import {
 } from "./commands/skillSlotUtils";
 import { waitForNextPaint, hasHarnessLaunchRequestMetadata } from "./commands/sendHelpers";
 import { readFastResponseMode, withFastResponseMetadata } from "./commands/fastResponseHelpers";
+import { isImageGenerationPlainInputIntent, isPlainInputIntentAffirmativeReply } from "./commands/intentHelpers";
 import { buildFileReadSkillLaunchRequestContext, buildVideoSkillLaunchRequestContext, buildCoverSkillLaunchRequestContext, buildResearchSkillLaunchRequestContext, buildDeepSearchSkillLaunchRequestContext, buildReportSkillLaunchRequestContext, buildCompetitorSkillLaunchRequestContext, buildSiteSearchSkillLaunchRequestContext, buildPdfReadSkillLaunchRequestContext } from "./commands/skillLaunchContextBuilders";
 import { resolveGrowthSkillLaunchRequestContext, resolveVoiceSkillLaunchRequestContext, type VoiceSkillLaunchRequest } from "./commands/skillLaunchResolvers";
 import {
@@ -710,40 +711,6 @@ async function resolveSkillInstallPromptConfirmation(
       error: message,
     });
   }
-}
-
-function isImageGenerationPlainInputIntent(
-  intent: Pick<PendingPlainInputIntent, "commandKey" | "intentId">,
-): boolean {
-  const commandKey = intent.commandKey.trim().toLowerCase();
-  const intentId = intent.intentId.trim().toLowerCase();
-  return commandKey.includes("image") || intentId.includes("image");
-}
-
-function isPlainInputIntentAffirmativeReply(value: string): boolean {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[。.!！?？,，\s]/g, "");
-  if (!normalized || normalized.length > 32) {
-    return false;
-  }
-
-  if (
-    /^(是|是的|好|好的|可以|确认|确认生成|要|要的|嗯|嗯嗯|对|对的)$/.test(
-      normalized,
-    )
-  ) {
-    return true;
-  }
-
-  if (/(调用画图|直接生成|现在生成|开始生成|开始画|画吧|生成吧)/.test(normalized)) {
-    return true;
-  }
-
-  return /^(y|yes|ok|okay|sure|goahead|generate|create|createit|start)$/.test(
-    normalized,
-  );
 }
 
 export type WorkspaceHandleSend = (
