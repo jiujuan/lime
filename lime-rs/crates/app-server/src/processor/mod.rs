@@ -1,3 +1,4 @@
+mod agent_session;
 mod knowledge;
 mod project_git;
 mod skill;
@@ -22,27 +23,11 @@ use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSessionActionReplayParams;
 use app_server_protocol::AgentSessionActionRespondParams;
 use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
-use app_server_protocol::AgentSessionCompactParams;
 use app_server_protocol::AgentSessionEventParams;
-use app_server_protocol::AgentSessionFileCheckpointDiffParams;
-use app_server_protocol::AgentSessionFileCheckpointGetParams;
-use app_server_protocol::AgentSessionFileCheckpointListParams;
-use app_server_protocol::AgentSessionFileCheckpointRestoreParams;
 use app_server_protocol::AgentSessionHandoffBundleExportParams;
-use app_server_protocol::AgentSessionListParams;
-use app_server_protocol::AgentSessionObjectiveAuditParams;
-use app_server_protocol::AgentSessionObjectiveClearParams;
-use app_server_protocol::AgentSessionObjectiveContinueParams;
-use app_server_protocol::AgentSessionObjectiveReadParams;
-use app_server_protocol::AgentSessionObjectiveSetParams;
-use app_server_protocol::AgentSessionObjectiveStatusUpdateParams;
-use app_server_protocol::AgentSessionQueuedTurnPromoteParams;
-use app_server_protocol::AgentSessionQueuedTurnRemoveParams;
 use app_server_protocol::AgentSessionReplayCaseExportParams;
 use app_server_protocol::AgentSessionReviewDecisionSaveParams;
 use app_server_protocol::AgentSessionReviewDecisionTemplateExportParams;
-use app_server_protocol::AgentSessionThreadResumeParams;
-use app_server_protocol::AgentSessionUpdateParams;
 use app_server_protocol::ArtifactReadParams;
 use app_server_protocol::AutomationJobCreateParams;
 use app_server_protocol::AutomationJobHealthParams;
@@ -485,35 +470,35 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE => {
                 self.handle_review_decision_save(params).await
             }
-            METHOD_AGENT_SESSION_LIST => self.handle_session_list(params).await,
-            METHOD_AGENT_SESSION_UPDATE => self.handle_session_update(params).await,
-            METHOD_AGENT_SESSION_OBJECTIVE_READ => self.handle_objective_read(params).await,
-            METHOD_AGENT_SESSION_OBJECTIVE_SET => self.handle_objective_set(params).await,
+            METHOD_AGENT_SESSION_LIST => self.handle_session_list_impl(params).await,
+            METHOD_AGENT_SESSION_UPDATE => self.handle_session_update_impl(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_READ => self.handle_objective_read_impl(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_SET => self.handle_objective_set_impl(params).await,
             METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE => {
-                self.handle_objective_status_update(params).await
+                self.handle_objective_status_update_impl(params).await
             }
-            METHOD_AGENT_SESSION_OBJECTIVE_CLEAR => self.handle_objective_clear(params).await,
-            METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE => self.handle_objective_continue(params).await,
-            METHOD_AGENT_SESSION_OBJECTIVE_AUDIT => self.handle_objective_audit(params).await,
-            METHOD_AGENT_SESSION_COMPACT => self.handle_session_compact(params).await,
-            METHOD_AGENT_SESSION_THREAD_RESUME => self.handle_session_thread_resume(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_CLEAR => self.handle_objective_clear_impl(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE => self.handle_objective_continue_impl(params).await,
+            METHOD_AGENT_SESSION_OBJECTIVE_AUDIT => self.handle_objective_audit_impl(params).await,
+            METHOD_AGENT_SESSION_COMPACT => self.handle_session_compact_impl(params).await,
+            METHOD_AGENT_SESSION_THREAD_RESUME => self.handle_session_thread_resume_impl(params).await,
             METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE => {
-                self.handle_session_queued_turn_remove(params).await
+                self.handle_session_queued_turn_remove_impl(params).await
             }
             METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE => {
-                self.handle_session_queued_turn_promote(params).await
+                self.handle_session_queued_turn_promote_impl(params).await
             }
             METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST => {
-                self.handle_file_checkpoint_list(params).await
+                self.handle_file_checkpoint_list_impl(params).await
             }
             METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET => {
-                self.handle_file_checkpoint_get(params).await
+                self.handle_file_checkpoint_get_impl(params).await
             }
             METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF => {
-                self.handle_file_checkpoint_diff(params).await
+                self.handle_file_checkpoint_diff_impl(params).await
             }
             METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE => {
-                self.handle_file_checkpoint_restore(params).await
+                self.handle_file_checkpoint_restore_impl(params).await
             }
             METHOD_SESSION_FILE_GET_OR_CREATE => {
                 self.handle_session_file_get_or_create_impl(params).await
@@ -920,232 +905,7 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
-    async fn handle_session_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_agent_sessions(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_session_current(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_objective_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_agent_session_objective(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_objective_set(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveSetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .set_agent_session_objective(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_objective_status_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveStatusUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_agent_session_objective_status(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_objective_clear(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveClearParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .clear_agent_session_objective(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_objective_continue(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveContinueParams = parse_params(params)?;
-        let host = self.runtime_host_context();
-        let output = self
-            .runtime
-            .continue_agent_session_objective(params, host)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result_with_events(output.response, output.events)
-    }
-
-    async fn handle_objective_audit(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionObjectiveAuditParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .audit_agent_session_objective(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_compact(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionCompactParams = parse_params(params)?;
-        let output = self
-            .runtime
-            .compact_agent_session(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result_with_events(output.response, output.events)
-    }
-
-    async fn handle_session_thread_resume(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionThreadResumeParams = parse_params(params)?;
-        let host = self.runtime_host_context();
-        let output = self
-            .runtime
-            .resume_agent_session_thread(params, host)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result_with_events(output.response, output.events)
-    }
-
-    async fn handle_session_queued_turn_remove(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionQueuedTurnRemoveParams = parse_params(params)?;
-        let output = self
-            .runtime
-            .remove_agent_session_queued_turn(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result_with_events(output.response, output.events)
-    }
-
-    async fn handle_session_queued_turn_promote(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionQueuedTurnPromoteParams = parse_params(params)?;
-        let output = self
-            .runtime
-            .promote_agent_session_queued_turn(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result_with_events(output.response, output.events)
-    }
-
-    async fn handle_file_checkpoint_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionFileCheckpointListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_agent_session_file_checkpoints(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_file_checkpoint_get(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionFileCheckpointGetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .get_agent_session_file_checkpoint(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_file_checkpoint_diff(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionFileCheckpointDiffParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .diff_agent_session_file_checkpoint(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_file_checkpoint_restore(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: AgentSessionFileCheckpointRestoreParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .restore_agent_session_file_checkpoint(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // agent_session handlers 已提取到 processor/agent_session.rs
     // workspace + session_file handlers 已提取到 processor/workspace.rs
     // skill handlers 已提取到 processor/skill.rs
 
@@ -3415,7 +3175,7 @@ impl RequestProcessor {
         Ok(())
     }
 
-    fn runtime_host_context(&self) -> RuntimeHostContext {
+    pub(super) fn runtime_host_context(&self) -> RuntimeHostContext {
         let client_info = self
             .state
             .lock()
@@ -3478,7 +3238,7 @@ pub(super) fn dispatch_result(value: impl Serialize) -> Result<RpcDispatch, Json
     Ok(RpcDispatch::single(serialize_result(value)?))
 }
 
-fn dispatch_result_with_events(
+pub(super) fn dispatch_result_with_events(
     value: impl Serialize,
     events: Vec<AgentEvent>,
 ) -> Result<RpcDispatch, JsonRpcError> {

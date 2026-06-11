@@ -641,8 +641,8 @@
       },
       {
         "path": "lime-rs/crates/app-server/src/processor/mod.rs",
-        "lines": 4369,
-        "comment": "R-20: knowledge+skill+workspace domain 已提取，继续按 domain 拆分"
+        "lines": 4128,
+        "comment": "R-20: agent_session+knowledge+skill+workspace 已提取，继续按 domain 拆分"
       },
       {
         "path": "lime-rs/crates/media-runtime/src/lib.rs",
