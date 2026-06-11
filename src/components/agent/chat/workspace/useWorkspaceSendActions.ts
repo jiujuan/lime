@@ -228,6 +228,7 @@ import {
 import { waitForNextPaint, hasHarnessLaunchRequestMetadata } from "./commands/sendHelpers";
 import { readFastResponseMode, withFastResponseMetadata } from "./commands/fastResponseHelpers";
 import { isImageGenerationPlainInputIntent, isPlainInputIntentAffirmativeReply } from "./commands/intentHelpers";
+import { resolveServiceModelSendOverrides } from "./commands/serviceModelHelpers";
 import { buildFileReadSkillLaunchRequestContext, buildVideoSkillLaunchRequestContext, buildCoverSkillLaunchRequestContext, buildResearchSkillLaunchRequestContext, buildDeepSearchSkillLaunchRequestContext, buildReportSkillLaunchRequestContext, buildCompetitorSkillLaunchRequestContext, buildSiteSearchSkillLaunchRequestContext, buildPdfReadSkillLaunchRequestContext } from "./commands/skillLaunchContextBuilders";
 import { resolveGrowthSkillLaunchRequestContext, resolveVoiceSkillLaunchRequestContext, type VoiceSkillLaunchRequest } from "./commands/skillLaunchResolvers";
 import {
@@ -327,82 +328,6 @@ type CompletedMentionCommandUsage = {
   slotValues?: ServiceSkillSlotValues;
 };
 type RewritePurpose = NonNullable<HandleSendOptions["purpose"]>;
-
-const PROMPT_REWRITE_PURPOSES = new Set<RewritePurpose>([
-  "content_review",
-  "text_stylize",
-  "style_rewrite",
-  "style_audit",
-]);
-
-
-// asRecord 已提取到 ./commands/skillSlotUtils.ts
-
-// normalizeOptionalText 已提取到 ./commands/commandRecentDefaults.ts
-
-
-function resolveServiceModelSendOverrides(params: {
-  requestMetadata: Record<string, unknown> | undefined;
-  purpose?: HandleSendOptions["purpose"];
-  serviceModels?: ServiceModelsConfig;
-}): Pick<HandleSendOptions, "providerOverride" | "modelOverride"> {
-  const { requestMetadata, purpose, serviceModels } = params;
-
-  const harnessMetadata = asRecord(requestMetadata?.harness);
-  const serviceSceneLaunch =
-    asRecord(harnessMetadata?.service_scene_launch) ??
-    asRecord(harnessMetadata?.serviceSceneLaunch);
-  const serviceSceneRun =
-    asRecord(serviceSceneLaunch?.service_scene_run) ??
-    asRecord(serviceSceneLaunch?.serviceSceneRun);
-
-  let preference: ServiceModelPreferenceConfig | undefined;
-  if (
-    hasHarnessLaunchRequestMetadata(requestMetadata, "translation_skill_launch")
-  ) {
-    preference = serviceModels?.translation;
-  } else if (
-    hasHarnessLaunchRequestMetadata(
-      requestMetadata,
-      "resource_search_skill_launch",
-    )
-  ) {
-    preference = serviceModels?.resource_prompt_rewrite;
-  } else if (purpose && PROMPT_REWRITE_PURPOSES.has(purpose)) {
-    preference = serviceModels?.prompt_rewrite;
-  }
-
-  const resolvedPreference = resolveServiceModelExecutionPreference(preference);
-  const serviceScenePreferredProvider = normalizeOptionalText(
-    typeof serviceSceneRun?.preferred_provider_id === "string"
-      ? serviceSceneRun.preferred_provider_id
-      : typeof serviceSceneRun?.preferredProviderId === "string"
-        ? serviceSceneRun.preferredProviderId
-        : undefined,
-  );
-  const serviceScenePreferredModel = normalizeOptionalText(
-    typeof serviceSceneRun?.preferred_model_id === "string"
-      ? serviceSceneRun.preferred_model_id
-      : typeof serviceSceneRun?.preferredModelId === "string"
-        ? serviceSceneRun.preferredModelId
-        : typeof serviceSceneRun?.model === "string"
-          ? serviceSceneRun.model
-          : undefined,
-  );
-
-  return {
-    providerOverride:
-      resolvedPreference.providerOverride ??
-      (serviceScenePreferredProvider && serviceScenePreferredModel
-        ? serviceScenePreferredProvider
-        : undefined),
-    modelOverride:
-      resolvedPreference.modelOverride ??
-      (serviceScenePreferredProvider && serviceScenePreferredModel
-        ? serviceScenePreferredModel
-        : undefined),
-  };
-}
 
 function shouldSkipBrowserAssistPrimeForPlainFirstTurn(params: {
   activeTheme: string;
