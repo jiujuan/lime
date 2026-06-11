@@ -2,6 +2,7 @@ mod agent_app;
 mod agent_session;
 mod automation;
 mod gateway;
+mod mcp;
 mod media;
 mod model;
 mod knowledge;
@@ -709,27 +710,27 @@ impl RequestProcessor {
             METHOD_AUTOMATION_SCHEDULE_VALIDATE => {
                 self.handle_automation_schedule_validate_impl(params).await
             }
-            METHOD_MCP_SERVER_LIST => self.handle_mcp_server_list().await,
-            METHOD_MCP_SERVER_STATUS_LIST => self.handle_mcp_server_status_list().await,
-            METHOD_MCP_SERVER_CREATE => self.handle_mcp_server_create(params).await,
-            METHOD_MCP_SERVER_UPDATE => self.handle_mcp_server_update(params).await,
-            METHOD_MCP_SERVER_DELETE => self.handle_mcp_server_delete(params).await,
-            METHOD_MCP_SERVER_ENABLED_SET => self.handle_mcp_server_enabled_set(params).await,
+            METHOD_MCP_SERVER_LIST => self.handle_mcp_server_list_impl().await,
+            METHOD_MCP_SERVER_STATUS_LIST => self.handle_mcp_server_status_list_impl().await,
+            METHOD_MCP_SERVER_CREATE => self.handle_mcp_server_create_impl(params).await,
+            METHOD_MCP_SERVER_UPDATE => self.handle_mcp_server_update_impl(params).await,
+            METHOD_MCP_SERVER_DELETE => self.handle_mcp_server_delete_impl(params).await,
+            METHOD_MCP_SERVER_ENABLED_SET => self.handle_mcp_server_enabled_set_impl(params).await,
             METHOD_MCP_SERVER_IMPORT_FROM_APP => {
-                self.handle_mcp_server_import_from_app(params).await
+                self.handle_mcp_server_import_from_app_impl(params).await
             }
-            METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => self.handle_mcp_server_sync_all_to_live().await,
-            METHOD_MCP_SERVER_START => self.handle_mcp_server_start(params).await,
-            METHOD_MCP_SERVER_STOP => self.handle_mcp_server_stop(params).await,
-            METHOD_MCP_TOOL_LIST => self.handle_mcp_tool_list().await,
-            METHOD_MCP_TOOL_LIST_FOR_CONTEXT => self.handle_mcp_tool_list_for_context(params).await,
-            METHOD_MCP_TOOL_SEARCH => self.handle_mcp_tool_search(params).await,
-            METHOD_MCP_TOOL_CALL => self.handle_mcp_tool_call(params).await,
-            METHOD_MCP_TOOL_CALL_WITH_CALLER => self.handle_mcp_tool_call_with_caller(params).await,
-            METHOD_MCP_PROMPT_LIST => self.handle_mcp_prompt_list().await,
-            METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get(params).await,
-            METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list().await,
-            METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read(params).await,
+            METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE => self.handle_mcp_server_sync_all_to_live_impl().await,
+            METHOD_MCP_SERVER_START => self.handle_mcp_server_start_impl(params).await,
+            METHOD_MCP_SERVER_STOP => self.handle_mcp_server_stop_impl(params).await,
+            METHOD_MCP_TOOL_LIST => self.handle_mcp_tool_list_impl().await,
+            METHOD_MCP_TOOL_LIST_FOR_CONTEXT => self.handle_mcp_tool_list_for_context_impl(params).await,
+            METHOD_MCP_TOOL_SEARCH => self.handle_mcp_tool_search_impl(params).await,
+            METHOD_MCP_TOOL_CALL => self.handle_mcp_tool_call_impl(params).await,
+            METHOD_MCP_TOOL_CALL_WITH_CALLER => self.handle_mcp_tool_call_with_caller_impl(params).await,
+            METHOD_MCP_PROMPT_LIST => self.handle_mcp_prompt_list_impl().await,
+            METHOD_MCP_PROMPT_GET => self.handle_mcp_prompt_get_impl(params).await,
+            METHOD_MCP_RESOURCE_LIST => self.handle_mcp_resource_list_impl().await,
+            METHOD_MCP_RESOURCE_READ => self.handle_mcp_resource_read_impl(params).await,
             METHOD_PROJECT_MEMORY_READ => self.handle_project_memory_read(params).await,
             METHOD_UNIFIED_MEMORY_LIST => self.handle_unified_memory_list(params).await,
             METHOD_UNIFIED_MEMORY_GET => self.handle_unified_memory_get(params).await,
@@ -1530,248 +1531,7 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
-    async fn handle_mcp_server_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_mcp_servers()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_status_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_mcp_servers_with_status()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpServerCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_mcp_server(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpServerUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_mcp_server(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpServerDeleteParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_mcp_server(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_enabled_set(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpServerEnabledSetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .set_mcp_server_enabled(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_import_from_app(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpServerImportFromAppParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .import_mcp_servers_from_app(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_sync_all_to_live(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .sync_all_mcp_servers_to_live()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_start(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpServerStartParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .start_mcp_server(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_server_stop(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpServerStopParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .stop_mcp_server(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_tool_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_mcp_tools()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_tool_list_for_context(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpToolListForContextParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_mcp_tools_for_context(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_tool_search(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpToolSearchParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .search_mcp_tools(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_tool_call(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpToolCallParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .call_mcp_tool(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_tool_call_with_caller(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpToolCallWithCallerParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .call_mcp_tool_with_caller(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_prompt_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_mcp_prompts()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_prompt_get(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpPromptGetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .get_mcp_prompt(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_resource_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_mcp_resources()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_mcp_resource_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: McpResourceReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_mcp_resource(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // mcp handlers 已提取到 processor/mcp.rs
 
     async fn handle_log_list(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
