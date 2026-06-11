@@ -297,9 +297,21 @@ vi.mock("@/components/ui/popover", () => ({
   Popover: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  PopoverContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  PopoverContent: ({
+    children,
+    align: _align,
+    side: _side,
+    sideOffset: _sideOffset,
+    onCloseAutoFocus: _onCloseAutoFocus,
+    ...rest
+  }: {
+    children: React.ReactNode;
+    align?: string;
+    side?: string;
+    sideOffset?: number;
+    onCloseAutoFocus?: unknown;
+    [key: string]: unknown;
+  }) => <div {...(rest as React.HTMLAttributes<HTMLDivElement>)}>{children}</div>,
   PopoverTrigger: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -439,6 +451,21 @@ async function flushAsyncEffects(turns = 4): Promise<void> {
       await Promise.resolve();
     }
   });
+}
+
+async function waitForProjectContextSelector(
+  container: HTMLElement,
+  selector: string,
+  turns = 12,
+): Promise<Element | null> {
+  for (let index = 0; index < turns; index += 1) {
+    const element = container.querySelector(selector);
+    if (element) {
+      return element;
+    }
+    await flushAsyncEffects(1);
+  }
+  return container.querySelector(selector);
 }
 
 function expectEmptyStateSend(
@@ -756,6 +783,10 @@ describe("EmptyState", () => {
     });
 
     await flushAsyncEffects(6);
+    await waitForProjectContextSelector(
+      container,
+      '[data-testid="inputbar-project-context-branch"]',
+    );
 
     const projectContextBar = container.querySelector(
       '[data-testid="inputbar-project-context-bar"]',

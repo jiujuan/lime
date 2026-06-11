@@ -7,7 +7,7 @@ import type {
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatNumber } from "@/i18n/format";
-import { StepProgress } from "@/lib/workspace/workbenchUi";
+import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceCanvasSceneRuntime } from "./useWorkspaceCanvasSceneRuntime";
@@ -268,6 +268,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   handleResumeRecentSession?: ConversationScenePresentationParams["scene"]["onResumeRecentSession"];
   projectId: string | null;
   openedProjects?: ConversationScenePresentationParams["scene"]["openedProjects"];
+  onCloseProject?: ConversationScenePresentationParams["scene"]["onCloseProject"];
   deferWorkspaceListLoad?: ConversationScenePresentationParams["scene"]["deferWorkspaceListLoad"];
   workspaceHintMessage?: ConversationScenePresentationParams["scene"]["workspaceHintMessage"];
   workspaceHintVisible?: ConversationScenePresentationParams["scene"]["workspaceHintVisible"];
@@ -424,6 +425,7 @@ export function useWorkspaceConversationSceneRuntime({
   handleResumeRecentSession,
   projectId,
   openedProjects,
+  onCloseProject,
   deferWorkspaceListLoad,
   workspaceHintMessage,
   workspaceHintVisible,
@@ -812,7 +814,7 @@ export function useWorkspaceConversationSceneRuntime({
         setChatToolPreferences((previous) => ({
           ...previous,
           [key]: enabled,
-      })),
+        })),
       objectiveEnabled,
       onObjectiveEnabledChange,
       creationMode,
@@ -860,6 +862,7 @@ export function useWorkspaceConversationSceneRuntime({
       onDismissWorkspaceHint,
       sessionId,
       onProjectChange: navigationActions.handleProjectChange,
+      onCloseProject,
       onOpenSettings: navbarUtilityActionsVisible
         ? navigationActions.handleOpenAppearanceSettings
         : undefined,

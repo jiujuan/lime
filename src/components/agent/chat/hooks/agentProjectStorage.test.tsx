@@ -3,10 +3,13 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   LAST_PROJECT_ID_KEY,
+  closeProjectOpened,
   getSessionWorkspaceStorageKey,
+  loadOpenedProjectIds,
   loadPersistedProjectId,
   loadPersistedSessionWorkspaceId,
   loadStoredSessionWorkspaceIdRaw,
+  markProjectOpened,
   savePersistedProjectId,
   savePersistedSessionWorkspaceId,
   usePersistedProjectId,
@@ -77,6 +80,16 @@ describe("agentProjectStorage", () => {
     savePersistedProjectId(LAST_PROJECT_ID_KEY, "project-a");
 
     expect(loadPersistedProjectId(LAST_PROJECT_ID_KEY)).toBe("project-a");
+  });
+
+  it("应关闭已打开项目标签但不影响其他项目记录", () => {
+    markProjectOpened("project-a");
+    markProjectOpened("project-b");
+    markProjectOpened("project-a");
+
+    expect(loadOpenedProjectIds()).toEqual(["project-a", "project-b"]);
+    expect(closeProjectOpened("project-b")).toEqual(["project-a"]);
+    expect(loadOpenedProjectIds()).toEqual(["project-a"]);
   });
 
   it("应保存并读取会话绑定工作区影子缓存", () => {

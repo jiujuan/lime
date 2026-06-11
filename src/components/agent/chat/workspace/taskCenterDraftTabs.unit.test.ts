@@ -25,7 +25,7 @@ function createDraft(id: string, overrides?: Partial<TaskCenterDraftTab>) {
 }
 
 describe("taskCenterDraftTabs", () => {
-  it("应构建并前置 upsert 草稿标签，同时控制最大数量", () => {
+  it("应构建并稳定 upsert 草稿标签，同时控制最大数量", () => {
     const now = new Date("2026-04-20T01:00:00.000Z");
     const draft = buildTaskCenterDraftTab({
       id: "task-draft-new",
@@ -46,7 +46,15 @@ describe("taskCenterDraftTabs", () => {
         draft,
         2,
       ).map((item) => item.id),
-    ).toEqual(["task-draft-new", "task-draft-a"]);
+    ).toEqual(["task-draft-a", "task-draft-new"]);
+
+    expect(
+      upsertTaskCenterDraftTab(
+        [createDraft("task-draft-a"), createDraft("task-draft-b")],
+        draft,
+        2,
+      ).map((item) => item.id),
+    ).toEqual(["task-draft-b", "task-draft-new"]);
   });
 
   it("应把提交中的草稿标记为 running，并在创建失败时标记 failed", () => {

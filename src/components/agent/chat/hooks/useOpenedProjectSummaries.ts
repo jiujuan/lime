@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { getProject } from "@/lib/api/project";
-import {
-  markProjectOpened,
-  useOpenedProjectIds,
-} from "./agentProjectStorage";
+import { markProjectOpened, useOpenedProjectIds } from "./agentProjectStorage";
 
 export interface OpenedProjectSummary {
   id: string;
   name: string;
   rootPath?: string | null;
+  isFavorite?: boolean;
 }
 
 function normalizeProjectId(projectId?: string | null): string {
@@ -16,26 +14,32 @@ function normalizeProjectId(projectId?: string | null): string {
 }
 
 function resolveProjectNameFromId(projectId: string): string {
-  return (
-    projectId
-      .split(/[\\/]/)
-      .filter(Boolean)
-      .pop()
-      ?.trim() || projectId
-  );
+  return projectId.split(/[\\/]/).filter(Boolean).pop()?.trim() || projectId;
 }
 
 function dedupeProjectIds(projectIds: Array<string | null | undefined>) {
   const seen = new Set<string>();
-  return projectIds
-    .map(normalizeProjectId)
-    .filter((projectId) => {
-      if (!projectId || seen.has(projectId)) {
-        return false;
-      }
-      seen.add(projectId);
-      return true;
-    });
+  return projectIds.map(normalizeProjectId).filter((projectId) => {
+    if (!projectId || seen.has(projectId)) {
+      return false;
+    }
+    seen.add(projectId);
+    return true;
+  });
+}
+
+export function buildOpenedProjectIdOrder(
+  openedProjectIds: Array<string | null | undefined>,
+  currentProjectId?: string | null,
+): string[] {
+  const opened = dedupeProjectIds(openedProjectIds);
+  const normalizedCurrentProjectId = normalizeProjectId(currentProjectId);
+  if (!normalizedCurrentProjectId) {
+    return opened;
+  }
+  return opened.includes(normalizedCurrentProjectId)
+    ? opened
+    : [...opened, normalizedCurrentProjectId];
 }
 
 export function useOpenedProjectSummaries(
@@ -55,7 +59,8 @@ export function useOpenedProjectSummaries(
   }, [normalizedCurrentProjectId]);
 
   const projectIds = useMemo(
-    () => dedupeProjectIds([normalizedCurrentProjectId, ...openedProjectIds]),
+    () =>
+      buildOpenedProjectIdOrder(openedProjectIds, normalizedCurrentProjectId),
     [normalizedCurrentProjectId, openedProjectIds],
   );
 
@@ -73,6 +78,10 @@ export function useOpenedProjectSummaries(
         currentProject?.rootPath ??
         resolvedProjectsById[normalizedCurrentProjectId]?.rootPath ??
         null,
+      isFavorite:
+        currentProject?.isFavorite ??
+        resolvedProjectsById[normalizedCurrentProjectId]?.isFavorite ??
+        false,
     };
   }, [currentProject, normalizedCurrentProjectId, resolvedProjectsById]);
 
@@ -97,17 +106,20 @@ export function useOpenedProjectSummaries(
                 id: project.id,
                 name: project.name,
                 rootPath: project.rootPath,
+                isFavorite: project.isFavorite,
               }
             : {
                 id: projectId,
                 name: resolveProjectNameFromId(projectId),
                 rootPath: null,
+                isFavorite: false,
               };
         } catch {
           return {
             id: projectId,
             name: resolveProjectNameFromId(projectId),
             rootPath: null,
+            isFavorite: false,
           };
         }
       }),
@@ -143,6 +155,7 @@ export function useOpenedProjectSummaries(
         id: projectId,
         name: resolveProjectNameFromId(projectId),
         rootPath: null,
+        isFavorite: false,
       }
     );
   });

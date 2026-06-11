@@ -17,6 +17,10 @@ import {
   TASK_CENTER_CHROME_STAGE_BLEND,
   TASK_CENTER_CHROME_STAGE_SEAM,
 } from "../workspace/taskCenterChromeTokens";
+import {
+  buildFileNameTabTooltip,
+  resolveFileNameTabLabel,
+} from "../utils/tabFileDisplay";
 
 const TASK_CENTER_TAB_STATUS_META: Record<
   TaskStatus,
@@ -69,13 +73,17 @@ interface TaskCenterTabStripProps {
   onWorkbenchToggle?: () => void;
 }
 
-function formatTaskTabTitle(item: TaskCenterTabItem): string {
+function formatTaskTabTitle(
+  item: TaskCenterTabItem,
+  displayTitle: string,
+): string {
   const statusMeta =
     TASK_CENTER_TAB_STATUS_META[item.status] ??
     TASK_CENTER_TAB_STATUS_META.done;
-  return `${item.title} · ${statusMeta.label} · 更新于 ${item.updatedAt.toLocaleString(
-    "zh-CN",
-  )}`;
+  return `${buildFileNameTabTooltip({
+    label: displayTitle,
+    source: item.title,
+  })} · ${statusMeta.label} · 更新于 ${item.updatedAt.toLocaleString("zh-CN")}`;
 }
 
 const conversationTabShellClassName =
@@ -126,6 +134,11 @@ export function TaskCenterTabStrip({
   const historyToggleLabel = t(
     "navigation.sidebar.conversations.toggleHistory",
   );
+  const closeTabLabel = (label: string) =>
+    t("navigation.sidebar.conversations.closeTab", {
+      label,
+      defaultValue: "关闭 {{label}}",
+    });
   const workbenchLabel = t("navigation.sidebar.conversations.workbench.label");
   const workbenchToggleLabel = workbenchVisible
     ? t("navigation.sidebar.conversations.workbench.collapse")
@@ -144,6 +157,9 @@ export function TaskCenterTabStrip({
               const statusMeta =
                 TASK_CENTER_TAB_STATUS_META[item.status] ??
                 TASK_CENTER_TAB_STATUS_META.done;
+              const displayTitle = resolveFileNameTabLabel(item.title);
+              const tabTitle = formatTaskTabTitle(item, displayTitle);
+              const closeLabel = closeTabLabel(displayTitle);
 
               return (
                 <div
@@ -161,7 +177,7 @@ export function TaskCenterTabStrip({
                     type="button"
                     className={conversationTabButtonClassName}
                     aria-current={item.isActive ? "page" : undefined}
-                    title={formatTaskTabTitle(item)}
+                    title={tabTitle}
                     onClick={() => {
                       void onSelectTask(item.id);
                     }}
@@ -185,7 +201,7 @@ export function TaskCenterTabStrip({
                       />
                     )}
                     <span className="truncate text-[11px] font-semibold">
-                      {item.title}
+                      {displayTitle}
                     </span>
                     {item.hasUnread ? (
                       <span
@@ -230,7 +246,8 @@ export function TaskCenterTabStrip({
                           ? "opacity-100"
                           : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
                       )}
-                      aria-label={`关闭 ${item.title}`}
+                      aria-label={closeLabel}
+                      title={closeLabel}
                       data-testid={`task-center-tab-close-${item.id}`}
                       onClick={(event) => {
                         event.stopPropagation();

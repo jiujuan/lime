@@ -2,7 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
-import { StepProgress } from "@/lib/workspace/workbenchUi";
+import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
 import { CanvasWorkbenchLayout } from "../components/CanvasWorkbenchLayout";
 import { ChatNavbar } from "../components/ChatNavbar";
@@ -370,6 +370,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   openedProjects?: ComponentProps<typeof EmptyState>["openedProjects"];
   sessionId?: ComponentProps<typeof EmptyState>["sessionId"];
   onProjectChange?: (projectId: string | null) => void;
+  onCloseProject?: ComponentProps<typeof ChatNavbar>["onCloseProject"];
   deferWorkspaceListLoad?: ComponentProps<
     typeof ChatNavbar
   >["deferWorkspaceListLoad"];
@@ -536,6 +537,7 @@ export function WorkspaceConversationScene({
   openedProjects,
   sessionId,
   onProjectChange,
+  onCloseProject,
   deferWorkspaceListLoad,
   workspaceHintMessage,
   workspaceHintVisible,
@@ -719,6 +721,7 @@ export function WorkspaceConversationScene({
     projectId,
     openedProjects,
     onProjectChange,
+    onCloseProject,
     deferWorkspaceListLoad,
     workspaceHintMessage,
     workspaceHintVisible,

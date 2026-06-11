@@ -41,10 +41,14 @@ export function upsertTaskCenterDraftTab(
   draftTab: TaskCenterDraftTab,
   maxCount = MAX_TASK_CENTER_OPEN_TABS,
 ): TaskCenterDraftTab[] {
-  return [
-    draftTab,
-    ...current.filter((item) => item.id !== draftTab.id),
-  ].slice(0, maxCount);
+  const existingIndex = current.findIndex((item) => item.id === draftTab.id);
+  if (existingIndex >= 0) {
+    return current
+      .map((item, index) => (index === existingIndex ? draftTab : item))
+      .slice(0, maxCount);
+  }
+
+  return [...current, draftTab].slice(-maxCount);
 }
 
 export function removeTaskCenterDraftTab(

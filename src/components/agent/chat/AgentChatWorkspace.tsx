@@ -130,8 +130,11 @@ import {
   resolveAgentChatMode,
 } from "./utils/generalAgentPrompt";
 import { loadPersisted, savePersisted } from "./hooks/agentChatStorage";
-import { loadPersistedProjectId } from "./hooks/agentProjectStorage";
-import { loadPersistedSessionWorkspaceId } from "./hooks/agentProjectStorage";
+import {
+  closeProjectOpened,
+  loadPersistedProjectId,
+  loadPersistedSessionWorkspaceId,
+} from "./hooks/agentProjectStorage";
 import { useSelectedTeamPreference } from "./hooks/useSelectedTeamPreference";
 import { useTeamMemoryShadowSync } from "./hooks/useTeamMemoryShadowSync";
 import { useThemeScopedChatToolPreferences } from "./hooks/useThemeScopedChatToolPreferences";
@@ -994,14 +997,55 @@ export function AgentChatWorkspace({
   const [projectMemory, setProjectMemory] = useState<ProjectMemory | null>(
     null,
   );
-  const openedProjects = useOpenedProjectSummaries(
-    project ??
-      (projectId
+  const currentOpenedProjectSummary =
+    normalizeProjectId(project?.id) === normalizeProjectId(projectId)
+      ? project
+      : projectId
         ? {
             id: projectId,
             name: projectId,
           }
-        : null),
+        : null;
+  const openedProjects = useOpenedProjectSummaries(currentOpenedProjectSummary);
+  const handleCloseOpenedProject = useCallback(
+    (closingProjectId: string) => {
+      const normalizedClosingProjectId = normalizeProjectId(closingProjectId);
+      if (!normalizedClosingProjectId) {
+        return;
+      }
+
+      const remainingStoredProjectIds = closeProjectOpened(
+        normalizedClosingProjectId,
+      );
+      if (normalizeProjectId(projectId) !== normalizedClosingProjectId) {
+        return;
+      }
+
+      const fallbackProjectId =
+        openedProjects
+          .map((openedProject) => normalizeProjectId(openedProject.id))
+          .find(
+            (openedProjectId) =>
+              openedProjectId && openedProjectId !== normalizedClosingProjectId,
+          ) ??
+        remainingStoredProjectIds.find(
+          (openedProjectId) =>
+            normalizeProjectId(openedProjectId) !== normalizedClosingProjectId,
+        ) ??
+        null;
+
+      if (fallbackProjectId) {
+        setProject(null);
+        setProjectMemory(null);
+        applyProjectSelection(fallbackProjectId);
+        return;
+      }
+
+      applyProjectSelection(null);
+      setProject(null);
+      setProjectMemory(null);
+    },
+    [applyProjectSelection, openedProjects, projectId],
   );
   const runtimeWorkspaceId =
     projectSelectionSource === "remembered" &&
@@ -4408,15 +4452,14 @@ export function AgentChatWorkspace({
     });
   }, [handleOpenTaskTopic, recentSessionTopic]);
   const handleOpenTaskCenterNewTaskPage = useCallback(() => {
-    if (agentEntry !== "claw") {
-      handleBackHome?.();
+    if (agentEntry !== "claw" && agentEntry !== "new-task") {
       return;
     }
 
     openTaskCenterDraftTab();
-  }, [agentEntry, handleBackHome, openTaskCenterDraftTab]);
+  }, [agentEntry, openTaskCenterDraftTab]);
   useEffect(() => {
-    if (agentEntry !== "claw") {
+    if (agentEntry !== "claw" && agentEntry !== "new-task") {
       return;
     }
 
@@ -4555,7 +4598,6 @@ export function AgentChatWorkspace({
     onCloseTaskCenterTab: handleCloseTaskCenterTab,
     onOpenTaskCenterNewTaskPage: handleOpenTaskCenterNewTaskPage,
     onToggleWorkbench: handleToggleCanvas,
-    onBackHome: handleBackHome,
   });
   useEffect(() => {
     const restorePlan = resolveTaskCenterFallbackRestorePlan({
@@ -6227,6 +6269,8 @@ export function AgentChatWorkspace({
     compactSession,
     dismissWorkspacePathError,
     fixWorkspacePathAndRetry,
+    agentEntry,
+    externalProjectId,
     onNavigate: _onNavigate,
     projectId: projectId || undefined,
     setEntryBannerVisible,
@@ -6585,7 +6629,10 @@ export function AgentChatWorkspace({
         (agentEntry === "claw" && shouldRenderTaskCenterEmbeddedHome
           ? openTaskCenterDraftTab()
           : null);
-      if (agentEntry === "claw" && activeDraftTabId) {
+      if (
+        (agentEntry === "claw" || agentEntry === "new-task") &&
+        activeDraftTabId
+      ) {
         const submittedAt = Date.now();
         const requestId = createTaskCenterDraftSendRequestId();
         recordAgentUiPerformanceMetric("homeInput.submit", {
@@ -6768,6 +6815,7 @@ export function AgentChatWorkspace({
     currentImageWorkbenchActive: currentImageWorkbenchState.active,
     projectId: projectId ?? null,
     openedProjects,
+    onCloseProject: handleCloseOpenedProject,
     deferWorkspaceListLoad: shouldUseBrowserWorkspaceHomeChrome,
     workspaceHintMessage: shouldUseBrowserWorkspaceHomeChrome
       ? BROWSER_WORKSPACE_HOME_HINT_MESSAGE

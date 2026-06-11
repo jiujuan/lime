@@ -117,7 +117,9 @@ describe("TaskCenterTabStrip", () => {
       container.querySelector('[data-testid="task-center-tab-unread-topic-a"]'),
     ).toBeTruthy();
     expect(
-      container.querySelector('[data-testid="task-center-tab-loading-topic-a"]'),
+      container.querySelector(
+        '[data-testid="task-center-tab-loading-topic-a"]',
+      ),
     ).toBeTruthy();
     expect(
       container.querySelector('[data-testid="task-center-tab-close-topic-b"]')
@@ -221,6 +223,39 @@ describe("TaskCenterTabStrip", () => {
     });
 
     expect(onCreateTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("路径型会话标题应显示文件名并在 tooltip 保留完整路径", () => {
+    const conversationPath =
+      "/Users/coso/Documents/other/conversations/conv-1777047467972";
+    const { container } = renderTabStrip({
+      items: [
+        {
+          id: "topic-path",
+          title: conversationPath,
+          status: "done",
+          updatedAt: new Date("2026-04-24T10:00:00.000Z"),
+          isActive: true,
+          hasUnread: false,
+          isPinned: false,
+        },
+      ],
+    });
+
+    const tab = container.querySelector(
+      '[data-testid="task-center-tab-topic-path"] button[title]',
+    ) as HTMLButtonElement | null;
+    const closeButton = container.querySelector(
+      '[data-testid="task-center-tab-close-topic-path"]',
+    ) as HTMLButtonElement | null;
+
+    expect(tab?.textContent).toContain("conv-1777047467972");
+    expect(tab?.textContent).not.toContain("/Users/coso/Documents");
+    expect(tab?.getAttribute("title")).toContain("conv-1777047467972");
+    expect(tab?.getAttribute("title")).toContain(conversationPath);
+    expect(closeButton?.getAttribute("aria-label")).toBe(
+      "关闭 conv-1777047467972",
+    );
   });
 
   it("没有打开会话时也应保留第二层 tabs 壳和加号入口", () => {

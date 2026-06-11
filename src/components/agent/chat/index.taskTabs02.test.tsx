@@ -303,4 +303,24 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     ).toBe("true");
   });
 
+  it("外部路由带项目时顶部项目切换应同步导航", async () => {
+    const onNavigate = vi.fn();
+    installMockAgentChatUnifiedState(createMockAgentChatUnifiedState());
+
+    const mounted = mountPage({
+      agentEntry: "claw",
+      projectId: "project-default",
+      onNavigate,
+    });
+    await flushEffects();
+
+    clickButton(mounted.container, "set-project");
+    await flushEffects();
+
+    expect(onNavigate).toHaveBeenCalledWith("agent", {
+      agentEntry: "claw",
+      projectId: "project-manual",
+    });
+  });
+
 });

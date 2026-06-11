@@ -55,7 +55,7 @@ import {
   setStoredResourceProjectId,
 } from "@/lib/resourceProjectSelection";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
-import { CanvasBreadcrumbHeader } from "@/lib/workspace/workbenchUi";
+import { CanvasBreadcrumbHeader } from "@/components/workspace/canvas/shared/CanvasBreadcrumbHeader";
 import { cn } from "@/lib/utils";
 import type { Page, PageParams, ResourcesPageParams } from "@/types/page";
 import { ResourcesImageWorkbench } from "./ResourcesImageWorkbench";

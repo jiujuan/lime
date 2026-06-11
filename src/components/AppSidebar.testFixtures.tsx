@@ -39,7 +39,14 @@ const {
   mockSubscribeAppConfigChanged,
   mockListAgentRuntimeSessions,
   mockListInstalledAgentApps,
+  mockGetProject,
+  mockUpdateProject,
+  mockDeleteProject,
+  mockEnsureProjectWorkspace,
+  mockCreateProjectGitWorktree,
+  mockRevealPathInFinder,
   mockUpdateAgentRuntimeSession,
+  mockArchiveManyAgentRuntimeSessions,
   mockDeleteAgentRuntimeSession,
   mockSetI18nLanguage,
   mockScheduleMinimumDelayIdleTask,
@@ -68,7 +75,14 @@ const {
   mockSubscribeAppConfigChanged: vi.fn(),
   mockListAgentRuntimeSessions: vi.fn(),
   mockListInstalledAgentApps: vi.fn(),
+  mockGetProject: vi.fn(),
+  mockUpdateProject: vi.fn(),
+  mockDeleteProject: vi.fn(),
+  mockEnsureProjectWorkspace: vi.fn(),
+  mockCreateProjectGitWorktree: vi.fn(),
+  mockRevealPathInFinder: vi.fn(),
   mockUpdateAgentRuntimeSession: vi.fn(),
+  mockArchiveManyAgentRuntimeSessions: vi.fn(),
   mockDeleteAgentRuntimeSession: vi.fn(),
   mockSetI18nLanguage: vi.fn(),
   mockScheduleMinimumDelayIdleTask: vi.fn((task: () => void) => {
@@ -103,6 +117,7 @@ export {
   mockClearSiteAdapterCatalogCache,
   mockCheckForUpdates,
   mockCreateExternalBrowserOpenTarget,
+  mockArchiveManyAgentRuntimeSessions,
   mockDeleteAgentRuntimeSession,
   mockGetUpdateInstallSession,
   mockGetClientReferralDashboard,
@@ -111,6 +126,12 @@ export {
   mockListenUpdateInstallSession,
   mockListAgentRuntimeSessions,
   mockListInstalledAgentApps,
+  mockGetProject,
+  mockUpdateProject,
+  mockDeleteProject,
+  mockEnsureProjectWorkspace,
+  mockCreateProjectGitWorktree,
+  mockRevealPathInFinder,
   mockLogoutClient,
   mockOpenExternalUrl,
   mockOpenUpdateWindow,
@@ -143,6 +164,7 @@ vi.mock("@/i18n/legacy-patch/I18nPatchProvider", () => ({
 }));
 
 vi.mock("@/lib/api/agentRuntime", () => ({
+  archiveManyAgentRuntimeSessions: mockArchiveManyAgentRuntimeSessions,
   deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
   updateAgentRuntimeSession: mockUpdateAgentRuntimeSession,
@@ -151,6 +173,23 @@ vi.mock("@/lib/api/agentRuntime", () => ({
 vi.mock("@/lib/api/agentApps", () => ({
   AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
   listInstalledAgentApps: mockListInstalledAgentApps,
+}));
+
+vi.mock("@/lib/api/project", () => ({
+  getProject: mockGetProject,
+  updateProject: mockUpdateProject,
+  deleteProject: mockDeleteProject,
+  ensureProjectWorkspace: mockEnsureProjectWorkspace,
+  extractErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
+}));
+
+vi.mock("@/lib/api/projectGit", () => ({
+  createProjectGitWorktree: mockCreateProjectGitWorktree,
+}));
+
+vi.mock("@/lib/api/fileSystem", () => ({
+  revealPathInFinder: mockRevealPathInFinder,
 }));
 
 vi.mock("@/lib/api/appUpdate", () => ({
@@ -287,6 +326,21 @@ export async function openConversationMenu(title: string) {
   );
 }
 
+export async function openProjectMenu(title: string) {
+  await act(async () => {
+    document
+      .querySelector<HTMLButtonElement>(
+        `button[aria-label="打开 ${title} 项目菜单"]`,
+      )
+      ?.click();
+    await Promise.resolve();
+  });
+
+  return document.body.querySelector<HTMLElement>(
+    '[data-testid="app-sidebar-project-menu"]',
+  );
+}
+
 export async function clickConversationMenuItem(testId: string) {
   await act(async () => {
     document.body
@@ -410,6 +464,27 @@ export async function resetAppSidebarTest() {
   mockSaveConfig.mockResolvedValue(undefined);
   mockListAgentRuntimeSessions.mockResolvedValue([]);
   mockListInstalledAgentApps.mockResolvedValue({ states: [], issues: [] });
+  mockGetProject.mockResolvedValue(null);
+  mockUpdateProject.mockResolvedValue({});
+  mockDeleteProject.mockResolvedValue(true);
+  mockArchiveManyAgentRuntimeSessions.mockResolvedValue([]);
+  mockEnsureProjectWorkspace.mockResolvedValue({
+    id: "project-worktree",
+    name: "project-worktree",
+    rootPath: "/tmp/project-worktree",
+  });
+  mockCreateProjectGitWorktree.mockResolvedValue({
+    worktreePath: "/tmp/project-worktree",
+    branch: "worktree",
+    status: {
+      rootPath: "/tmp/project",
+      hasGitRepository: true,
+      currentBranch: "main",
+      branches: ["main"],
+      uncommittedFileCount: 0,
+    },
+  });
+  mockRevealPathInFinder.mockResolvedValue(undefined);
   mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
   mockDeleteAgentRuntimeSession.mockResolvedValue(undefined);
   mockCheckForUpdates.mockResolvedValue({

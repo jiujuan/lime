@@ -84,6 +84,15 @@ interface InputbarProjectContextBarProps {
   onProjectChange?: (projectId: string | null) => void;
   modeLabel?: string;
   branchLabel?: string;
+  projectOpen?: boolean;
+  onProjectOpenChange?: (open: boolean) => void;
+  showModeControls?: boolean;
+  className?: string;
+  projectTriggerClassName?: string;
+  projectTriggerContentClassName?: string;
+  projectMenuAlign?: "start" | "center" | "end";
+  projectMenuSide?: "top" | "right" | "bottom" | "left";
+  projectMenuSideOffset?: number;
   copy: InputbarProjectContextCopy;
 }
 
@@ -127,13 +136,23 @@ export function InputbarProjectContextBar({
   onProjectChange,
   modeLabel,
   branchLabel,
+  projectOpen,
+  onProjectOpenChange,
+  showModeControls = true,
+  className,
+  projectTriggerClassName,
+  projectTriggerContentClassName,
+  projectMenuAlign = "start",
+  projectMenuSide = "bottom",
+  projectMenuSideOffset = 8,
   copy,
 }: InputbarProjectContextBarProps) {
   const normalizedProjectId = normalizeProjectId(projectId);
   const [resolvedProject, setResolvedProject] =
     useState<InputbarOpenedProject | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [uncontrolledProjectOpen, setUncontrolledProjectOpen] =
+    useState(false);
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
   const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
@@ -142,6 +161,16 @@ export function InputbarProjectContextBar({
   const [gitActionState, setGitActionState] = useState<GitActionState>(null);
   const [gitRepositoryState, setGitRepositoryState] =
     useState<ProjectGitStatus | null>(null);
+  const projectPopoverOpen = projectOpen ?? uncontrolledProjectOpen;
+  const handleProjectPopoverOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      if (projectOpen === undefined) {
+        setUncontrolledProjectOpen(nextOpen);
+      }
+      onProjectOpenChange?.(nextOpen);
+    },
+    [onProjectOpenChange, projectOpen],
+  );
 
   const openedProjectsContainCurrent = Boolean(
     normalizedProjectId &&
@@ -228,7 +257,7 @@ export function InputbarProjectContextBar({
   const activeProjectRootPath = activeProject?.rootPath?.trim() || "";
 
   useEffect(() => {
-    if (!activeProjectRootPath) {
+    if (!showModeControls || !activeProjectRootPath) {
       setGitRepositoryState(null);
       return;
     }
@@ -250,7 +279,7 @@ export function InputbarProjectContextBar({
     return () => {
       cancelled = true;
     };
-  }, [activeProjectRootPath]);
+  }, [activeProjectRootPath, showModeControls]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const filteredOpenedProjects = normalizedSearch
@@ -292,7 +321,7 @@ export function InputbarProjectContextBar({
   const openEnsuredProject = (project: InputbarOpenedProject) => {
     markProjectOpened(project.id);
     onProjectChange?.(project.id);
-    setPopoverOpen(false);
+    handleProjectPopoverOpenChange(false);
   };
 
   const handleCreateBlankProject = async () => {
@@ -430,32 +459,39 @@ export function InputbarProjectContextBar({
 
   return (
     <div
-      className="inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 text-slate-600"
+      className={cn(
+        "inline-flex max-w-full min-w-0 flex-wrap items-center gap-1.5 text-slate-600",
+        className,
+      )}
       data-testid="inputbar-project-context-bar"
     >
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      <Popover
+        open={projectPopoverOpen}
+        onOpenChange={handleProjectPopoverOpenChange}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
             className={cn(
               "inline-flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition",
               "text-slate-700 hover:bg-white hover:text-slate-950 hover:shadow-sm hover:shadow-slate-950/5",
+              projectTriggerClassName,
             )}
             aria-label={copy.projectAria}
             title={activeProject?.name || copy.noProjectLabel}
             data-testid="inputbar-project-context-project-trigger"
           >
             <FolderOpen className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
-            <span className="truncate">
+            <span className={cn("truncate", projectTriggerContentClassName)}>
               {activeProject?.name || copy.noProjectLabel}
             </span>
             <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
           </button>
         </PopoverTrigger>
         <PopoverContent
-          align="start"
-          side="bottom"
-          sideOffset={8}
+          align={projectMenuAlign}
+          side={projectMenuSide}
+          sideOffset={projectMenuSideOffset}
           className="z-[70] w-[292px] overflow-visible rounded-xl border border-slate-200 bg-white p-1.5 text-slate-900 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.52)]"
           data-testid="inputbar-project-context-menu"
           onCloseAutoFocus={(event) => event.preventDefault()}
@@ -581,7 +617,7 @@ export function InputbarProjectContextBar({
             data-testid="inputbar-project-context-no-project"
             onClick={() => {
               onProjectChange?.(null);
-              setPopoverOpen(false);
+              handleProjectPopoverOpenChange(false);
             }}
           >
             <FolderX className="h-4 w-4 text-slate-500" />
@@ -598,147 +634,158 @@ export function InputbarProjectContextBar({
         </PopoverContent>
       </Popover>
 
-      <span className="h-4 w-px bg-slate-200" aria-hidden />
-      {hasGitRepository ? (
-        <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-white hover:text-slate-950"
+      {showModeControls ? (
+        <>
+          <span className="h-4 w-px bg-slate-200" aria-hidden />
+          {hasGitRepository ? (
+            <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-white hover:text-slate-950"
+                  title={`${copy.modeLabel}: ${resolvedModeLabel}`}
+                  data-testid="inputbar-project-context-mode"
+                >
+                  <Monitor className="h-3.5 w-3.5 shrink-0 text-sky-700" />
+                  <span className="truncate">{resolvedModeLabel}</span>
+                  <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                side="bottom"
+                sideOffset={8}
+                className="z-[70] w-[216px] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-900 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.52)]"
+                data-testid="inputbar-project-context-mode-menu"
+                onCloseAutoFocus={(event) => event.preventDefault()}
+              >
+                <div className="px-2 pb-1 pt-1 text-[11px] font-semibold text-slate-400">
+                  {copy.modeMenuTitle}
+                </div>
+                <button
+                  type="button"
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium text-slate-800 transition hover:bg-slate-50"
+                  onClick={() => setModePopoverOpen(false)}
+                >
+                  <Monitor className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {copy.localProcessing}
+                  </span>
+                  <Check className="h-3.5 w-3.5 text-slate-600" />
+                </button>
+                <button
+                  type="button"
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                  disabled={gitActionState === "worktree"}
+                  onClick={() => void handleCreateWorktree()}
+                >
+                  <FolderPlus className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {copy.newWorktree}
+                  </span>
+                </button>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <span
+              className="inline-flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600"
               title={`${copy.modeLabel}: ${resolvedModeLabel}`}
               data-testid="inputbar-project-context-mode"
             >
               <Monitor className="h-3.5 w-3.5 shrink-0 text-sky-700" />
               <span className="truncate">{resolvedModeLabel}</span>
-              <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            side="bottom"
-            sideOffset={8}
-            className="z-[70] w-[216px] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-900 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.52)]"
-            data-testid="inputbar-project-context-mode-menu"
-            onCloseAutoFocus={(event) => event.preventDefault()}
-          >
-            <div className="px-2 pb-1 pt-1 text-[11px] font-semibold text-slate-400">
-              {copy.modeMenuTitle}
-            </div>
-            <button
-              type="button"
-              className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium text-slate-800 transition hover:bg-slate-50"
-              onClick={() => setModePopoverOpen(false)}
+            </span>
+          )}
+          {hasGitRepository ? (
+            <Popover
+              open={branchPopoverOpen}
+              onOpenChange={setBranchPopoverOpen}
             >
-              <Monitor className="h-3.5 w-3.5 text-slate-500" />
-              <span className="min-w-0 flex-1 truncate">
-                {copy.localProcessing}
-              </span>
-              <Check className="h-3.5 w-3.5 text-slate-600" />
-            </button>
-            <button
-              type="button"
-              className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
-              disabled={gitActionState === "worktree"}
-              onClick={() => void handleCreateWorktree()}
-            >
-              <FolderPlus className="h-3.5 w-3.5 text-slate-500" />
-              <span className="min-w-0 flex-1 truncate">
-                {copy.newWorktree}
-              </span>
-            </button>
-          </PopoverContent>
-        </Popover>
-      ) : (
-        <span
-          className="inline-flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600"
-          title={`${copy.modeLabel}: ${resolvedModeLabel}`}
-          data-testid="inputbar-project-context-mode"
-        >
-          <Monitor className="h-3.5 w-3.5 shrink-0 text-sky-700" />
-          <span className="truncate">{resolvedModeLabel}</span>
-        </span>
-      )}
-      {hasGitRepository ? (
-        <Popover open={branchPopoverOpen} onOpenChange={setBranchPopoverOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-white hover:text-slate-950"
-              title={`${copy.branchLabel}: ${resolvedBranchLabel}`}
-              data-testid="inputbar-project-context-branch"
-            >
-              <GitBranch className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-              <span className="truncate">{resolvedBranchLabel}</span>
-              <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            side="bottom"
-            sideOffset={8}
-            className="z-[70] w-[300px] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-900 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.52)]"
-            data-testid="inputbar-project-context-branch-menu"
-            onCloseAutoFocus={(event) => event.preventDefault()}
-          >
-            <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2">
-              <Search className="h-3.5 w-3.5 text-slate-400" />
-              <input
-                className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-slate-900 outline-none placeholder:text-slate-400"
-                value={branchSearchQuery}
-                placeholder={copy.branchSearchPlaceholder}
-                onChange={(event) => setBranchSearchQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && canCreateBranch) {
-                    event.preventDefault();
-                    void handleCreateBranch();
-                  }
-                }}
-              />
-            </div>
-            <div className="px-2 pb-1 pt-2 text-[11px] font-semibold text-slate-500">
-              {gitRepositoryState?.uncommittedFileCount
-                ? copy.uncommittedFiles(gitRepositoryState.uncommittedFileCount)
-                : copy.branchLabel}
-            </div>
-            <div className="max-h-[190px] overflow-auto pb-1">
-              {filteredBranchOptions.map((branch) => (
+              <PopoverTrigger asChild>
                 <button
-                  key={branch}
                   type="button"
-                  className="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium text-slate-800 transition hover:bg-slate-50"
-                  disabled={Boolean(gitActionState)}
-                  onClick={() => void handleCheckoutBranch(branch)}
+                  className="inline-flex h-7 min-w-0 max-w-[180px] items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-white hover:text-slate-950"
+                  title={`${copy.branchLabel}: ${resolvedBranchLabel}`}
+                  data-testid="inputbar-project-context-branch"
                 >
-                  <GitBranch className="h-4 w-4 shrink-0 text-slate-500" />
-                  <span className="min-w-0 flex-1 truncate">{branch}</span>
-                  {branch === resolvedBranchLabel ? (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-                  ) : null}
+                  <GitBranch className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <span className="truncate">{resolvedBranchLabel}</span>
+                  <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
                 </button>
-              ))}
-            </div>
-            <div className="my-1 h-px bg-slate-100" />
-            <button
-              type="button"
-              className={cn(
-                "flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium transition",
-                canCreateBranch
-                  ? "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
-                  : "text-slate-400",
-              )}
-              aria-disabled={!canCreateBranch}
-              disabled={!canCreateBranch || Boolean(gitActionState)}
-              onClick={() => void handleCreateBranch()}
-            >
-              <Plus className="h-4 w-4 text-slate-400" />
-              <span className="min-w-0 flex-1 truncate">
-                {canCreateBranch
-                  ? copy.branchCreateNamedAction(normalizedBranchCreateName)
-                  : copy.branchCreateAction}
-              </span>
-            </button>
-          </PopoverContent>
-        </Popover>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                side="bottom"
+                sideOffset={8}
+                className="z-[70] w-[300px] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-900 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.52)]"
+                data-testid="inputbar-project-context-branch-menu"
+                onCloseAutoFocus={(event) => event.preventDefault()}
+              >
+                <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2">
+                  <Search className="h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-slate-900 outline-none placeholder:text-slate-400"
+                    value={branchSearchQuery}
+                    placeholder={copy.branchSearchPlaceholder}
+                    onChange={(event) =>
+                      setBranchSearchQuery(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && canCreateBranch) {
+                        event.preventDefault();
+                        void handleCreateBranch();
+                      }
+                    }}
+                  />
+                </div>
+                <div className="px-2 pb-1 pt-2 text-[11px] font-semibold text-slate-500">
+                  {gitRepositoryState?.uncommittedFileCount
+                    ? copy.uncommittedFiles(
+                        gitRepositoryState.uncommittedFileCount,
+                      )
+                    : copy.branchLabel}
+                </div>
+                <div className="max-h-[190px] overflow-auto pb-1">
+                  {filteredBranchOptions.map((branch) => (
+                    <button
+                      key={branch}
+                      type="button"
+                      className="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium text-slate-800 transition hover:bg-slate-50"
+                      disabled={Boolean(gitActionState)}
+                      onClick={() => void handleCheckoutBranch(branch)}
+                    >
+                      <GitBranch className="h-4 w-4 shrink-0 text-slate-500" />
+                      <span className="min-w-0 flex-1 truncate">{branch}</span>
+                      {branch === resolvedBranchLabel ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+                <div className="my-1 h-px bg-slate-100" />
+                <button
+                  type="button"
+                  className={cn(
+                    "flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium transition",
+                    canCreateBranch
+                      ? "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                      : "text-slate-400",
+                  )}
+                  aria-disabled={!canCreateBranch}
+                  disabled={!canCreateBranch || Boolean(gitActionState)}
+                  onClick={() => void handleCreateBranch()}
+                >
+                  <Plus className="h-4 w-4 text-slate-400" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {canCreateBranch
+                      ? copy.branchCreateNamedAction(normalizedBranchCreateName)
+                      : copy.branchCreateAction}
+                  </span>
+                </button>
+              </PopoverContent>
+            </Popover>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

@@ -41,7 +41,6 @@ interface UseTaskCenterTabChromeParams {
   onCloseTaskCenterTab: (topicId: string) => void | Promise<void>;
   onOpenTaskCenterNewTaskPage: () => void;
   onToggleWorkbench: () => void;
-  onBackHome?: () => void;
 }
 
 export function useTaskCenterTabChrome({
@@ -69,7 +68,6 @@ export function useTaskCenterTabChrome({
   onCloseTaskCenterTab,
   onOpenTaskCenterNewTaskPage,
   onToggleWorkbench,
-  onBackHome,
 }: UseTaskCenterTabChromeParams) {
   const shouldHideDetachedTabs = useMemo(
     () =>
@@ -169,16 +167,14 @@ export function useTaskCenterTabChrome({
         ]}
         onSelectTask={() => undefined}
         onCloseTask={() => undefined}
-        onCreateTask={() => {
-          onBackHome?.();
-        }}
+        onCreateTask={onOpenTaskCenterNewTaskPage}
       />
     );
   }, [
     homeMountedAt,
     newChatAt,
     newConversationLabel,
-    onBackHome,
+    onOpenTaskCenterNewTaskPage,
     shouldUseBrowserWorkspaceHomeChrome,
   ]);
 

@@ -170,21 +170,6 @@
       "rule": "lib→components"
     },
     {
-      "file": "src/lib/workspace/workbenchUi.ts",
-      "import": "@/components/workspace/canvas/shared/CanvasBreadcrumbHeader",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchUi.ts",
-      "import": "@/components/workspace/layout/LayoutTransition",
-      "rule": "lib→components"
-    },
-    {
-      "file": "src/lib/workspace/workbenchUi.ts",
-      "import": "@/components/workspace/layout/StepProgress",
-      "rule": "lib→components"
-    },
-    {
       "file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx",
       "import": "@/components/agent/chat/components/InlineToolProcessStep",
       "rule": "features→components"

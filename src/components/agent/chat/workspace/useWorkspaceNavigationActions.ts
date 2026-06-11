@@ -12,6 +12,8 @@ interface UseWorkspaceNavigationActionsParams {
   compactSession: () => Promise<void>;
   dismissWorkspacePathError: () => void;
   fixWorkspacePathAndRetry: (newPath: string) => Promise<void>;
+  agentEntry?: "new-task" | "claw";
+  externalProjectId?: string | null;
   onNavigate?: (page: Page, params?: PageParams) => void;
   projectId?: string;
   setEntryBannerVisible: Dispatch<SetStateAction<boolean>>;
@@ -30,6 +32,8 @@ export function useWorkspaceNavigationActions({
   compactSession,
   dismissWorkspacePathError,
   fixWorkspacePathAndRetry,
+  agentEntry = "claw",
+  externalProjectId,
   onNavigate,
   projectId,
   setEntryBannerVisible,
@@ -48,9 +52,24 @@ export function useWorkspaceNavigationActions({
 
   const handleProjectChange = useCallback(
     (newProjectId: string | null) => {
-      applyProjectSelection(newProjectId);
+      const normalizedProjectId = newProjectId?.trim() || null;
+      applyProjectSelection(normalizedProjectId);
+
+      const normalizedExternalProjectId = externalProjectId?.trim() || null;
+      if (
+        !onNavigate ||
+        !normalizedExternalProjectId ||
+        normalizedExternalProjectId === normalizedProjectId
+      ) {
+        return;
+      }
+
+      onNavigate("agent", {
+        agentEntry,
+        ...(normalizedProjectId ? { projectId: normalizedProjectId } : {}),
+      });
     },
-    [applyProjectSelection],
+    [agentEntry, applyProjectSelection, externalProjectId, onNavigate],
   );
 
   const handleSelectWorkspaceDirectory = useCallback(async () => {

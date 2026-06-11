@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { StepProgress } from "@/lib/workspace/workbenchUi";
+import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import { ChatNavbar } from "../components/ChatNavbar";
 import { ChatSidebar } from "../components/ChatSidebar";
 import { EmptyState } from "../components/EmptyState";
@@ -52,9 +52,7 @@ interface BuildWorkspaceEmptyStatePropsParams {
   model: ComponentProps<typeof EmptyState>["model"];
   setModel: ComponentProps<typeof EmptyState>["setModel"];
   reasoningEffort?: ComponentProps<typeof EmptyState>["reasoningEffort"];
-  setReasoningEffort?: ComponentProps<
-    typeof EmptyState
-  >["setReasoningEffort"];
+  setReasoningEffort?: ComponentProps<typeof EmptyState>["setReasoningEffort"];
   accessMode: ComponentProps<typeof EmptyState>["accessMode"];
   setAccessMode: ComponentProps<typeof EmptyState>["setAccessMode"];
   onManageProviders?: ComponentProps<typeof EmptyState>["onManageProviders"];
@@ -267,8 +265,7 @@ export function buildWorkspaceEmptyStateProps({
     setAccessMode,
     onManageProviders,
     taskEnabled: toolPreferences.task,
-    onTaskEnabledChange: (enabled) =>
-      onToolPreferenceChange("task", enabled),
+    onTaskEnabledChange: (enabled) => onToolPreferenceChange("task", enabled),
     objectiveEnabled,
     onObjectiveEnabledChange,
     subagentEnabled: toolPreferences.subagent,
@@ -352,6 +349,7 @@ interface BuildWorkspaceNavbarPropsParams {
   projectId: string | null;
   openedProjects?: ComponentProps<typeof ChatNavbar>["openedProjects"];
   onProjectChange?: ComponentProps<typeof ChatNavbar>["onProjectChange"];
+  onCloseProject?: ComponentProps<typeof ChatNavbar>["onCloseProject"];
   workspaceType?: ComponentProps<typeof ChatNavbar>["workspaceType"];
   deferWorkspaceListLoad?: ComponentProps<
     typeof ChatNavbar
@@ -404,6 +402,7 @@ export function buildWorkspaceNavbarProps({
   projectId,
   openedProjects,
   onProjectChange,
+  onCloseProject,
   workspaceType,
   deferWorkspaceListLoad,
   workspaceHintMessage,
@@ -445,6 +444,7 @@ export function buildWorkspaceNavbarProps({
     projectId,
     openedProjects,
     onProjectChange,
+    onCloseProject,
     workspaceType,
     deferWorkspaceListLoad,
     workspaceHintMessage,

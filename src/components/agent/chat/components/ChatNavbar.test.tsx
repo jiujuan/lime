@@ -15,6 +15,50 @@ vi.mock("@/components/projects/ProjectSelector", () => ({
   },
 }));
 
+vi.mock("@/lib/api/project", () => ({
+  ensureProjectWorkspace: vi.fn(
+    async (input: { name: string; rootPath?: string | null }) => ({
+      id: input.rootPath || input.name,
+      name: input.name,
+      rootPath: input.rootPath ?? null,
+    }),
+  ),
+  extractErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
+  getProject: vi.fn(async (projectId: string) => ({
+    id: projectId,
+    name: projectId,
+    rootPath: null,
+  })),
+  getWorkspaceProjectsRoot: vi.fn(async () => "/tmp/projects"),
+  resolveProjectRootPath: vi.fn(async (name: string, root: string) =>
+    `${root}/${name}`,
+  ),
+}));
+
+vi.mock("@/lib/api/projectGit", () => ({
+  checkoutProjectGitBranch: vi.fn(),
+  createProjectGitBranch: vi.fn(),
+  createProjectGitWorktree: vi.fn(),
+  readProjectGitStatus: vi.fn(async () => ({
+    hasGitRepository: false,
+    currentBranch: null,
+    branches: [],
+    uncommittedFileCount: 0,
+  })),
+}));
+
+vi.mock("@/lib/desktop-host/plugin-dialog", () => ({
+  open: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    success: vi.fn(),
+  },
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     i18n: {
@@ -211,11 +255,12 @@ describe("ChatNavbar", () => {
     expect(container.querySelector('[aria-label="压缩上下文"]')).not.toBeNull();
   });
 
-  it("任务中心顶栏应渲染第一层 workspace tab bar", () => {
+  it("任务中心顶栏应渲染第一层 workspace tab bar", async () => {
     const onBackToProjectManagement = vi.fn();
     const container = renderChatNavbar({
       contextVariant: "task-center",
       projectId: "project-1",
+      openedProjects: [{ id: "project-1", name: "project-1" }],
       workspaceType: "general",
       onBackToProjectManagement,
       onToggleSettings: vi.fn(),
@@ -225,14 +270,23 @@ describe("ChatNavbar", () => {
       container.querySelector('[data-testid="task-center-workspace-bar"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="project-selector"]'),
+      container.querySelector('[data-testid="inputbar-project-context-bar"]'),
     ).not.toBeNull();
-    expect(mockProjectSelector).toHaveBeenCalledWith(
-      expect.objectContaining({
-        chrome: "workspace-tab",
-        open: false,
-      }),
-    );
+    expect(
+      container.querySelector(
+        '[data-testid="inputbar-project-context-project-trigger"]',
+      )?.textContent,
+    ).toContain("project-1");
+    expect(mockProjectSelector).not.toHaveBeenCalled();
+    expect(
+      document.body.querySelector('[data-testid="inputbar-project-context-menu"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-project-context-mode"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-project-context-branch"]'),
+    ).toBeNull();
     const menuTrigger = container.querySelector(
       'button[aria-label="展开工作区菜单"]',
     ) as HTMLButtonElement | null;
@@ -244,24 +298,27 @@ describe("ChatNavbar", () => {
     expect(settingsButton?.querySelector(".lucide-settings")).not.toBeNull();
     expect(container.querySelector('[aria-label="切换历史"]')).toBeNull();
 
-    act(() => {
+    await act(async () => {
       menuTrigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
     expect(onBackToProjectManagement).not.toHaveBeenCalled();
-    expect(mockProjectSelector).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        chrome: "workspace-tab",
-        open: true,
-      }),
-    );
+    expect(
+      document.body.querySelector('[data-testid="inputbar-project-context-menu"]'),
+    ).not.toBeNull();
+    expect(
+      document.body.querySelector(
+        '[data-testid="inputbar-project-context-add-project"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("任务中心顶栏应按已打开项目渲染多个项目 tab 并联动切换", () => {
     const onProjectChange = vi.fn();
     const container = renderChatNavbar({
       contextVariant: "task-center",
-      projectId: "project-1",
+      projectId: "project-2",
       openedProjects: [
         { id: "project-1", name: "默认项目" },
         { id: "project-2", name: "lime" },
@@ -272,19 +329,23 @@ describe("ChatNavbar", () => {
       onProjectChange,
     });
 
-    const activeProjectShell = container.querySelector(
-      '[data-testid="task-center-workspace-shell"]',
-    ) as HTMLElement | null;
+    const projectShells = Array.from(
+      container.querySelectorAll("div[data-project-id]"),
+    ) as HTMLElement[];
     const openedProjectTabs = Array.from(
-      container.querySelectorAll('[data-testid="task-center-opened-project-tab"]'),
+      container.querySelectorAll(
+        '[data-testid="task-center-opened-project-tab"]',
+      ),
     ) as HTMLButtonElement[];
 
-    expect(activeProjectShell?.getAttribute("data-project-id")).toBe(
+    expect(projectShells.map((shell) => shell.dataset.projectId)).toEqual([
       "project-1",
-    );
+      "project-2",
+      "project-3",
+    ]);
     expect(openedProjectTabs).toHaveLength(2);
     expect(openedProjectTabs.map((tab) => tab.textContent)).toEqual([
-      "lime",
+      "默认项目",
       "content-factory-app",
     ]);
 
@@ -292,13 +353,74 @@ describe("ChatNavbar", () => {
       openedProjectTabs[0]?.click();
     });
 
-    expect(onProjectChange).toHaveBeenCalledWith("project-2");
+    expect(onProjectChange).toHaveBeenCalledWith("project-1");
+  });
+
+  it("任务中心工作区 tab 应显示目录名并支持关闭", () => {
+    const onProjectChange = vi.fn();
+    const onCloseProject = vi.fn();
+    const container = renderChatNavbar({
+      contextVariant: "task-center",
+      projectId: "project-1",
+      openedProjects: [
+        {
+          id: "project-1",
+          name: "默认工作区",
+          rootPath: "/Users/coso/Documents/other/conversations",
+        },
+        {
+          id: "project-2",
+          name: "工作区二",
+          rootPath:
+            "/Users/coso/Documents/other/conversations/conv-1777047467972",
+        },
+      ],
+      workspaceType: "general",
+      onProjectChange,
+      onCloseProject,
+    });
+
+    const openedProjectTab = container.querySelector(
+      '[data-testid="task-center-opened-project-tab"]',
+    ) as HTMLButtonElement | null;
+    const inactiveCloseButton = container.querySelector(
+      '[data-testid="task-center-opened-project-close-project-2"]',
+    ) as HTMLButtonElement | null;
+    const activeCloseButton = container.querySelector(
+      '[data-testid="task-center-opened-project-close-project-1"]',
+    ) as HTMLButtonElement | null;
+
+    expect(openedProjectTab?.textContent).toContain("conv-1777047467972");
+    expect(openedProjectTab?.textContent).not.toContain(
+      "/Users/coso/Documents",
+    );
+    expect(openedProjectTab?.getAttribute("title")).toContain(
+      "/Users/coso/Documents/other/conversations/conv-1777047467972",
+    );
+    expect(inactiveCloseButton?.getAttribute("aria-label")).toBe(
+      "关闭conv-1777047467972",
+    );
+    expect(activeCloseButton?.getAttribute("aria-label")).toBe(
+      "关闭conversations",
+    );
+
+    act(() => {
+      inactiveCloseButton?.click();
+    });
+    act(() => {
+      activeCloseButton?.click();
+    });
+
+    expect(onCloseProject).toHaveBeenNthCalledWith(1, "project-2");
+    expect(onCloseProject).toHaveBeenNthCalledWith(2, "project-1");
+    expect(onProjectChange).not.toHaveBeenCalled();
   });
 
   it("任务中心第一层应保持紧凑比例并让第二层内容覆盖连接弧面", () => {
     const container = renderChatNavbar({
       contextVariant: "task-center",
       projectId: "project-1",
+      openedProjects: [{ id: "project-1", name: "project-1" }],
       workspaceType: "general",
     });
 
@@ -321,11 +443,12 @@ describe("ChatNavbar", () => {
     );
   });
 
-  it("任务中心工作区提示应浮在加号上方，并在点击加号时关闭", () => {
+  it("任务中心工作区提示应浮在加号上方，并在点击加号时关闭", async () => {
     const onDismissWorkspaceHint = vi.fn();
     const container = renderChatNavbar({
       contextVariant: "task-center",
       projectId: "project-1",
+      openedProjects: [{ id: "project-1", name: "project-1" }],
       workspaceType: "general",
       workspaceHintVisible: true,
       workspaceHintMessage: "在这里切换或新建工作区",
@@ -347,8 +470,9 @@ describe("ChatNavbar", () => {
     );
     expect(hint?.className).not.toContain("sky");
 
-    act(() => {
+    await act(async () => {
       menuTrigger?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
     expect(onDismissWorkspaceHint).toHaveBeenCalledTimes(1);

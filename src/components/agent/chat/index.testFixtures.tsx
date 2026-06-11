@@ -413,7 +413,7 @@ vi.mock("./components/ChatNavbar", () => ({
     onToggleCanvas?: () => void;
     showCanvasToggle?: boolean;
     isCanvasOpen?: boolean;
-    onProjectChange?: (projectId: string) => void;
+    onProjectChange?: (projectId: string | null) => void;
     showHarnessToggle?: boolean;
     harnessPanelVisible?: boolean;
     onToggleHarnessPanel?: () => void;

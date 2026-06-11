@@ -75,6 +75,46 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ).not.toBeNull();
   });
 
+  it("空白新建任务首页点击加号应连续创建草稿标签", async () => {
+    const mounted = mountPage({
+      agentEntry: "new-task",
+      showChatPanel: false,
+      theme: "general",
+      projectId: "project-home",
+    });
+    await flushEffects(10);
+
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="task-center-tab-new-task-home"]',
+      ),
+    ).not.toBeNull();
+
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects(4);
+
+    const firstDraftTabs = mounted.container.querySelectorAll(
+      '[data-testid^="task-center-tab-task-draft-"]',
+    );
+    expect(firstDraftTabs).toHaveLength(1);
+    expect(firstDraftTabs[0]?.getAttribute("data-active")).toBe("true");
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="task-center-tab-new-task-home"]',
+      ),
+    ).toBeNull();
+
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects(4);
+
+    const draftTabs = mounted.container.querySelectorAll(
+      '[data-testid^="task-center-tab-task-draft-"]',
+    );
+    expect(draftTabs).toHaveLength(2);
+    expect(draftTabs[0]?.getAttribute("data-active")).toBe("false");
+    expect(draftTabs[1]?.getAttribute("data-active")).toBe("true");
+  });
+
   it("空白新建任务首页刷新后不应自动恢复最近会话", async () => {
     renderPage({
       agentEntry: "new-task",

@@ -1,6 +1,6 @@
 import { memo, type ReactNode } from "react";
 import styled from "styled-components";
-import { LayoutTransition } from "@/lib/workspace/workbenchUi";
+import { LayoutTransition } from "@/components/workspace/layout/LayoutTransition";
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
 import type { SyncStatus } from "../hooks/useContentSync";
 import {

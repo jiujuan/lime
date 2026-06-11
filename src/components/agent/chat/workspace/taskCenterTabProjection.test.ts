@@ -28,7 +28,7 @@ function createTopic(id: string, overrides?: Partial<Topic>): Topic {
 }
 
 describe("taskCenterTabProjection", () => {
-  it("应把草稿与可见任务投影为第二层标签，并保留草稿优先级", () => {
+  it("应把已有任务排在新对话草稿前面", () => {
     const draft: TaskCenterDraftTab = {
       id: "task-draft-a",
       title: "新对话",
@@ -67,28 +67,66 @@ describe("taskCenterTabProjection", () => {
     });
 
     expect(items.map((item) => item.id)).toEqual([
-      "task-draft-a",
       "topic-a",
       "topic-b",
+      "task-draft-a",
     ]);
     expect(items[0]).toMatchObject({
-      isActive: true,
-      renamable: false,
-      status: "draft",
-    });
-    expect(items[1]).toMatchObject({
       title: "未命名任务",
       hasUnread: true,
       isActive: false,
     });
-    expect(items[2]).toMatchObject({
+    expect(items[1]).toMatchObject({
       title: "任务 B",
       isPinned: true,
       renamable: true,
       isActive: false,
       status: "running",
     });
-    expect(items[2]?.updatedAt).toBeInstanceOf(Date);
+    expect(items[1]?.updatedAt).toBeInstanceOf(Date);
+    expect(items[2]).toMatchObject({
+      isActive: true,
+      renamable: false,
+      status: "draft",
+    });
+  });
+
+  it("达到标签上限时仍应把活跃新对话保留在最后", () => {
+    const draft: TaskCenterDraftTab = {
+      id: "task-draft-a",
+      title: "新对话",
+      createdAt: new Date("2026-04-20T04:00:00.000Z"),
+      updatedAt: new Date("2026-04-20T04:00:00.000Z"),
+      status: "draft",
+    };
+    const topicById = new Map<string, Topic>(
+      ["topic-a", "topic-b", "topic-c"].map((topicId) => [
+        topicId,
+        createTopic(topicId),
+      ]),
+    );
+
+    const items = buildTaskCenterTabItems({
+      draftTabs: [draft],
+      activeDraftTabId: draft.id,
+      isDraftTabActive: true,
+      sessionId: "topic-a",
+      previewTopicId: null,
+      visibleTabIds: ["topic-a", "topic-b", "topic-c"],
+      topicById,
+      untitledTaskLabel: "未命名任务",
+      maxCount: 3,
+    });
+
+    expect(items.map((item) => item.id)).toEqual([
+      "topic-a",
+      "topic-b",
+      "task-draft-a",
+    ]);
+    expect(items[2]).toMatchObject({
+      isActive: true,
+      status: "draft",
+    });
   });
 
   it("应构建不可关闭的浏览器首页标签", () => {
@@ -125,7 +163,7 @@ describe("taskCenterTabProjection", () => {
     );
   });
 
-  it("应只在 claw 或 new-task 已有本地会话时渲染任务标签栏", () => {
+  it("应在 claw 或 new-task 有标签项时渲染任务标签栏", () => {
     expect(
       shouldRenderTaskCenterTabStrip({
         agentEntry: "claw",
@@ -145,6 +183,13 @@ describe("taskCenterTabProjection", () => {
         agentEntry: "new-task",
         hasLocalSessionOverride: false,
         tabItemCount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRenderTaskCenterTabStrip({
+        agentEntry: "new-task",
+        hasLocalSessionOverride: false,
+        tabItemCount: 0,
       }),
     ).toBe(false);
   });

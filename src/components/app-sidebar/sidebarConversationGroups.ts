@@ -4,6 +4,7 @@ export interface SidebarOpenedProjectSummary {
   id: string;
   name: string;
   rootPath?: string | null;
+  isFavorite?: boolean;
 }
 
 export interface SidebarConversationProjectSection {

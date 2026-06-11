@@ -154,10 +154,23 @@ export function markProjectOpened(projectId?: string | null): string[] {
     return loadOpenedProjectIds();
   }
 
-  const nextProjectIds = [
-    normalized,
-    ...loadOpenedProjectIds().filter((candidate) => candidate !== normalized),
-  ];
+  const currentProjectIds = loadOpenedProjectIds();
+  const nextProjectIds = currentProjectIds.includes(normalized)
+    ? currentProjectIds
+    : [...currentProjectIds, normalized];
+  saveOpenedProjectIds(nextProjectIds);
+  return nextProjectIds;
+}
+
+export function closeProjectOpened(projectId?: string | null): string[] {
+  const normalized = normalizeProjectId(projectId);
+  if (!normalized) {
+    return loadOpenedProjectIds();
+  }
+
+  const nextProjectIds = loadOpenedProjectIds().filter(
+    (candidate) => candidate !== normalized,
+  );
   saveOpenedProjectIds(nextProjectIds);
   return nextProjectIds;
 }
@@ -172,7 +185,10 @@ export function useOpenedProjectIds() {
       setProjectIds(loadOpenedProjectIds());
     };
 
-    window.addEventListener(OPENED_PROJECT_IDS_CHANGED_EVENT, refreshProjectIds);
+    window.addEventListener(
+      OPENED_PROJECT_IDS_CHANGED_EVENT,
+      refreshProjectIds,
+    );
     window.addEventListener("storage", refreshProjectIds);
     return () => {
       window.removeEventListener(

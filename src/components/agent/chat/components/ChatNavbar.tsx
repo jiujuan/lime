@@ -9,11 +9,18 @@ import {
   Plus,
   Settings,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ProjectSelector } from "@/components/projects/ProjectSelector";
 import { cn } from "@/lib/utils";
+import {
+  buildFileNameTabTooltip,
+  resolveFileNameTabLabel,
+} from "../utils/tabFileDisplay";
+import { InputbarProjectContextBar } from "./Inputbar/components/InputbarProjectContextBar";
+import { buildInputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import { Navbar } from "../styles";
 import {
   TASK_CENTER_CHROME_ACTIVE_TAB,
@@ -40,7 +47,8 @@ interface ChatNavbarProps {
   onToggleCanvas?: () => void;
   projectId?: string | null;
   openedProjects?: ChatNavbarOpenedProject[];
-  onProjectChange?: (projectId: string) => void;
+  onProjectChange?: (projectId: string | null) => void;
+  onCloseProject?: (projectId: string) => void;
   workspaceType?: string;
   deferWorkspaceListLoad?: boolean;
   workspaceHintMessage?: string;
@@ -84,8 +92,14 @@ const taskCenterTopRailClassName =
 const taskCenterWorkspaceTabClassName =
   "relative z-20 flex h-9 min-w-[148px] max-w-[224px] items-center rounded-t-[18px] rounded-b-none border border-b-0 border-[color:var(--lime-chrome-border)] bg-[color:var(--lime-chrome-tab-active-surface)] px-2 text-sm font-medium text-[color:var(--lime-chrome-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] dark:border-white/10 dark:bg-slate-900 dark:text-slate-300";
 
-const taskCenterWorkspaceInactiveTabClassName =
-  "relative z-10 ml-1 flex h-8 min-w-[108px] max-w-[184px] items-center gap-1.5 rounded-t-[15px] border border-b-0 border-transparent bg-transparent px-3 pb-0.5 text-xs font-medium text-[color:var(--lime-chrome-muted)] transition hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)]";
+const taskCenterWorkspaceInactiveTabShellClassName =
+  "group relative z-10 ml-1 flex h-8 min-w-[108px] max-w-[184px] items-center rounded-t-[15px] border border-b-0 border-transparent bg-transparent text-[color:var(--lime-chrome-muted)] transition hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)]";
+
+const taskCenterWorkspaceInactiveTabButtonClassName =
+  "flex h-full min-w-0 flex-1 items-center gap-1.5 px-3 pb-0.5 text-left text-xs font-medium";
+
+const taskCenterWorkspaceTabCloseButtonClassName =
+  "mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[color:var(--lime-chrome-muted)] opacity-80 transition hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)] focus-visible:opacity-100 group-hover:opacity-100";
 
 const taskCenterWorkspaceTabCurveClassName =
   "pointer-events-none absolute bottom-0 h-[18px] w-[18px] bg-transparent";
@@ -102,17 +116,22 @@ function normalizeProjectId(value?: string | null): string | null {
 }
 
 function resolveProjectDisplayName(project: ChatNavbarOpenedProject): string {
-  return project.name.trim() || project.id;
+  return resolveFileNameTabLabel(
+    project.rootPath?.trim() || project.name.trim() || project.id,
+    project.id,
+  );
+}
+
+function resolveProjectTooltip(project: ChatNavbarOpenedProject): string {
+  return buildFileNameTabTooltip({
+    label: resolveProjectDisplayName(project),
+    source: project.rootPath?.trim() || project.name.trim() || project.id,
+    fallback: project.id,
+  });
 }
 
 function resolveProjectNameFromId(projectId: string): string {
-  return (
-    projectId
-      .split(/[\\/]/)
-      .filter(Boolean)
-      .pop()
-      ?.trim() || projectId
-  );
+  return projectId.split(/[\\/]/).filter(Boolean).pop()?.trim() || projectId;
 }
 
 function buildOpenedProjectTabs(
@@ -150,6 +169,7 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
   projectId = null,
   openedProjects = [],
   onProjectChange,
+  onCloseProject,
   workspaceType,
   deferWorkspaceListLoad,
   workspaceHintMessage,
@@ -180,6 +200,13 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
         } as never,
       ),
     );
+  const inputbarCoreCopy = React.useMemo(
+    () =>
+      buildInputbarCoreCopy((key, values) =>
+        String(t(key as never, (values ?? {}) as never)),
+      ),
+    [t],
+  );
   const [workspaceSelectorOpen, setWorkspaceSelectorOpen] =
     React.useState(false);
   const isTaskCenterChrome = contextVariant === "task-center";
@@ -228,16 +255,33 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
     () => buildOpenedProjectTabs(openedProjects),
     [openedProjects],
   );
-  const activeOpenedProject = normalizedProjectId
-    ? (openedProjectTabs.find(
-        (project) => normalizeProjectId(project.id) === normalizedProjectId,
-      ) ?? {
-        id: normalizedProjectId,
-        name: resolveProjectNameFromId(normalizedProjectId),
-      })
-    : null;
-  const inactiveOpenedProjectTabs = openedProjectTabs.filter(
-    (project) => normalizeProjectId(project.id) !== normalizedProjectId,
+  const openedProjectPickerItems = React.useMemo(
+    () =>
+      openedProjectTabs.map((project) => ({
+        ...project,
+        name: resolveProjectDisplayName(project),
+      })),
+    [openedProjectTabs],
+  );
+  const orderedOpenedProjectTabs = React.useMemo(() => {
+    if (!normalizedProjectId) {
+      return [{ id: "", name: "" }, ...openedProjectTabs];
+    }
+    const hasCurrentProject = openedProjectTabs.some(
+      (project) => normalizeProjectId(project.id) === normalizedProjectId,
+    );
+    return hasCurrentProject
+      ? openedProjectTabs
+      : [
+          ...openedProjectTabs,
+          {
+            id: normalizedProjectId,
+            name: resolveProjectNameFromId(normalizedProjectId),
+          },
+        ];
+  }, [normalizedProjectId, openedProjectTabs]);
+  const canCloseProjectTabs = Boolean(
+    onCloseProject && orderedOpenedProjectTabs.length > 1,
   );
 
   if (isTaskCenterChrome) {
@@ -260,65 +304,119 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
           style={{ background: TASK_CENTER_CHROME_RAIL_SURFACE }}
         >
           <div className="flex min-w-0 items-center">
-            <div
-              className={taskCenterWorkspaceTabClassName}
-              data-testid="task-center-workspace-shell"
-              data-project-id={activeOpenedProject?.id ?? ""}
-            >
-              <span
-                aria-hidden="true"
-                className={cn(taskCenterWorkspaceTabCurveClassName, "-left-4")}
-                style={{
-                  borderBottomRightRadius: 18,
-                  boxShadow: `5px 5px 0 5px ${TASK_CENTER_CHROME_ACTIVE_TAB}`,
-                }}
-              />
-              <span
-                aria-hidden="true"
-                className={cn(taskCenterWorkspaceTabCurveClassName, "-right-4")}
-                style={{
-                  borderBottomLeftRadius: 18,
-                  boxShadow: `-5px 5px 0 5px ${TASK_CENTER_CHROME_ACTIVE_TAB}`,
-                }}
-              />
-              <ProjectSelector
-                value={projectId}
-                onChange={(nextProjectId) => onProjectChange?.(nextProjectId)}
-                open={workspaceSelectorOpen}
-                onOpenChange={setWorkspaceSelectorOpen}
-                onOpenProjectContents={
-                  onBackToResources ? () => onBackToResources() : undefined
-                }
-                workspaceType={workspaceType}
-                placeholder={navText(
-                  "agentChat.navbar.workspacePlaceholder",
-                  "选择工作区",
-                )}
-                dropdownSide="bottom"
-                dropdownAlign="start"
-                enableManagement={workspaceType === "general"}
-                density="compact"
-                chrome="workspace-tab"
-                deferProjectListLoad={shouldDeferWorkspaceListLoad}
-                skipDefaultWorkspaceReadyCheck={isTaskCenterChrome}
-                className="w-auto max-w-[224px]"
-              />
-            </div>
-            {inactiveOpenedProjectTabs.map((project) => {
+            {orderedOpenedProjectTabs.map((project, index) => {
+              const isActiveProject = normalizedProjectId
+                ? normalizeProjectId(project.id) === normalizedProjectId
+                : project.id === "";
               const projectName = resolveProjectDisplayName(project);
+              const projectTooltip = resolveProjectTooltip(project);
+              const closeProjectLabel = navText(
+                "agentChat.navbar.closeWorkspaceTab",
+                "关闭{{label}}",
+                { label: projectName },
+              );
+              if (isActiveProject) {
+                const canCloseActiveProject = Boolean(
+                  project.id && canCloseProjectTabs,
+                );
+                return (
+                  <div
+                    key={project.id || "__workspace-selector__"}
+                    className={cn(
+                      taskCenterWorkspaceTabClassName,
+                      index > 0 && "ml-1",
+                    )}
+                    data-testid="task-center-workspace-shell"
+                    data-project-id={project.id}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        taskCenterWorkspaceTabCurveClassName,
+                        "-left-4",
+                      )}
+                      style={{
+                        borderBottomRightRadius: 18,
+                        boxShadow: `5px 5px 0 5px ${TASK_CENTER_CHROME_ACTIVE_TAB}`,
+                      }}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        taskCenterWorkspaceTabCurveClassName,
+                        "-right-4",
+                      )}
+                      style={{
+                        borderBottomLeftRadius: 18,
+                        boxShadow: `-5px 5px 0 5px ${TASK_CENTER_CHROME_ACTIVE_TAB}`,
+                      }}
+                    />
+                    <InputbarProjectContextBar
+                      projectId={project.id || projectId}
+                      openedProjects={openedProjectPickerItems}
+                      onProjectChange={onProjectChange}
+                      projectOpen={workspaceSelectorOpen}
+                      onProjectOpenChange={setWorkspaceSelectorOpen}
+                      showModeControls={false}
+                      copy={inputbarCoreCopy.projectContext}
+                      className="min-w-0 flex-1 flex-nowrap"
+                      projectTriggerClassName={cn(
+                        "h-8 w-full max-w-none justify-start rounded-t-[16px] rounded-b-none bg-transparent px-2.5 pb-0.5 text-sm text-[color:var(--lime-chrome-text)] hover:bg-transparent hover:text-[color:var(--lime-chrome-text)] hover:shadow-none",
+                        canCloseActiveProject
+                          ? "max-w-[188px]"
+                          : "max-w-[224px]",
+                      )}
+                      projectTriggerContentClassName="text-left"
+                      projectMenuAlign="start"
+                      projectMenuSide="bottom"
+                      projectMenuSideOffset={8}
+                    />
+                    {canCloseActiveProject ? (
+                      <button
+                        type="button"
+                        className={taskCenterWorkspaceTabCloseButtonClassName}
+                        aria-label={closeProjectLabel}
+                        title={closeProjectLabel}
+                        data-testid={`task-center-opened-project-close-${project.id}`}
+                        onClick={() => onCloseProject?.(project.id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              }
               return (
-                <button
+                <div
                   key={project.id}
-                  type="button"
-                  className={taskCenterWorkspaceInactiveTabClassName}
-                  title={projectName}
-                  data-testid="task-center-opened-project-tab"
+                  className={taskCenterWorkspaceInactiveTabShellClassName}
                   data-project-id={project.id}
-                  onClick={() => onProjectChange?.(project.id)}
+                  title={projectTooltip}
                 >
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                  <span className="min-w-0 truncate">{projectName}</span>
-                </button>
+                  <button
+                    type="button"
+                    className={taskCenterWorkspaceInactiveTabButtonClassName}
+                    title={projectTooltip}
+                    data-testid="task-center-opened-project-tab"
+                    data-project-id={project.id}
+                    onClick={() => onProjectChange?.(project.id)}
+                  >
+                    <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{projectName}</span>
+                  </button>
+                  {onCloseProject ? (
+                    <button
+                      type="button"
+                      className={taskCenterWorkspaceTabCloseButtonClassName}
+                      aria-label={closeProjectLabel}
+                      title={closeProjectLabel}
+                      data-testid={`task-center-opened-project-close-${project.id}`}
+                      onClick={() => onCloseProject(project.id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  ) : null}
+                </div>
               );
             })}
             <div className="relative ml-2 flex h-9 items-center pb-1">

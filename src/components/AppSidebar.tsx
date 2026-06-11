@@ -40,6 +40,7 @@ import {
   requestTaskCenterDraftTask,
 } from "@/components/agent/chat/taskCenterDraftTaskEvents";
 import {
+  archiveManyAgentRuntimeSessions,
   deleteAgentRuntimeSession,
   updateAgentRuntimeSession,
   type AsterSessionInfo,
@@ -67,6 +68,7 @@ import { AppSidebarSearchDialog } from "@/components/app-sidebar/AppSidebarSearc
 import { AppUpdateEntry } from "@/components/app-sidebar/AppUpdateEntry";
 import { useOpenedProjectSummaries } from "@/components/agent/chat/hooks/useOpenedProjectSummaries";
 import { useAppSidebarAppearance } from "@/components/app-sidebar/useAppSidebarAppearance";
+import { useAppSidebarProjectActions } from "@/components/app-sidebar/useAppSidebarProjectActions";
 import { useAppSidebarSessions } from "@/components/app-sidebar/useAppSidebarSessions";
 import {
   AGENT_APP_RUNTIME_SIDEBAR_COLLAPSE_SOURCE,
@@ -985,6 +987,12 @@ export function AppSidebar({
     onNavigate(target.page, target.rawParams);
   }, [currentProjectId, onNavigate, tryOpenTaskCenterDraftFromSidebar]);
 
+  const projectActions = useAppSidebarProjectActions({
+    currentProjectId,
+    onNavigate,
+    refreshSidebarSessions,
+  });
+
   const handleSidebarSearchCreateConversation = () => {
     closeSidebarSearchDialog();
     handleNavigateToNewTask();
@@ -1086,6 +1094,26 @@ export function AppSidebar({
       moveSidebarSessionArchiveStateOptimistically,
       refreshSidebarSessions,
     ],
+  );
+
+  const handleArchiveManyConversations = useCallback(
+    async (sessions: AsterSessionInfo[]) => {
+      const sessionIds = sessions
+        .map((session) => session.id.trim())
+        .filter(Boolean);
+      if (sessionIds.length === 0) {
+        return;
+      }
+
+      try {
+        await archiveManyAgentRuntimeSessions(sessionIds);
+        await refreshSidebarSessions();
+      } catch (error) {
+        console.error("批量归档会话失败:", error);
+        await refreshSidebarSessions();
+      }
+    },
+    [refreshSidebarSessions],
   );
 
   const handleDeleteConversation = useCallback(
@@ -1672,6 +1700,24 @@ export function AppSidebar({
               onDeleteConversation={handleDeleteConversation}
               onToggleArchive={(session, archived) => {
                 void handleToggleSessionArchive(session, archived);
+              }}
+              onArchiveManyConversations={(sessions) => {
+                void handleArchiveManyConversations(sessions);
+              }}
+              onToggleProjectPin={(project) => {
+                void projectActions.handleToggleProjectPin(project);
+              }}
+              onRevealProject={(project) => {
+                void projectActions.handleRevealProject(project);
+              }}
+              onCreateProjectWorktree={(project) => {
+                void projectActions.handleCreateProjectWorktree(project);
+              }}
+              onRenameProject={(project) => {
+                void projectActions.handleRenameProject(project);
+              }}
+              onRemoveProject={(project) => {
+                void projectActions.handleRemoveProject(project);
               }}
               onShowMoreRecent={showMoreRecentSessions}
             />

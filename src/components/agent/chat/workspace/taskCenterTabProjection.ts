@@ -93,7 +93,24 @@ export function buildTaskCenterTabItems({
       renamable: true,
     }));
 
-  return [...draftItems, ...topicItems].slice(0, maxCount);
+  const orderedItems = [...topicItems, ...draftItems];
+  if (orderedItems.length <= maxCount) {
+    return orderedItems;
+  }
+
+  const visibleItems = orderedItems.slice(0, maxCount);
+  const activeDraftItem = draftItems.find((item) => item.isActive);
+  if (
+    activeDraftItem &&
+    !visibleItems.some((item) => item.id === activeDraftItem.id)
+  ) {
+    return [
+      ...visibleItems.slice(0, Math.max(0, maxCount - 1)),
+      activeDraftItem,
+    ];
+  }
+
+  return visibleItems;
 }
 
 export function buildBrowserWorkspaceHomeTabItem({
@@ -120,6 +137,7 @@ export function shouldRenderTaskCenterTabStrip({
 }: ShouldRenderTaskCenterTabStripParams): boolean {
   return (
     agentEntry === "claw" ||
-    (agentEntry === "new-task" && hasLocalSessionOverride && tabItemCount > 0)
+    (agentEntry === "new-task" &&
+      (hasLocalSessionOverride || tabItemCount > 0))
   );
 }
