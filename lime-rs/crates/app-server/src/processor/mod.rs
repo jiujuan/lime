@@ -8,6 +8,7 @@ mod model;
 mod knowledge;
 mod project_git;
 mod skill;
+mod voice;
 mod workspace;
 
 use crate::AppServerError;
@@ -620,26 +621,26 @@ impl RequestProcessor {
             METHOD_PROJECT_MATERIAL_UPDATE => self.handle_project_material_update(params).await,
             METHOD_PROJECT_MATERIAL_DELETE => self.handle_project_material_delete(params).await,
             METHOD_PROJECT_MATERIAL_CONTENT => self.handle_project_material_content(params).await,
-            METHOD_VOICE_ASR_CREDENTIAL_LIST => self.handle_voice_asr_credential_list().await,
+            METHOD_VOICE_ASR_CREDENTIAL_LIST => self.handle_voice_asr_credential_list_impl().await,
             METHOD_VOICE_ASR_CREDENTIAL_CREATE => {
-                self.handle_voice_asr_credential_create(params).await
+                self.handle_voice_asr_credential_create_impl(params).await
             }
             METHOD_VOICE_ASR_CREDENTIAL_UPDATE => {
-                self.handle_voice_asr_credential_update(params).await
+                self.handle_voice_asr_credential_update_impl(params).await
             }
             METHOD_VOICE_ASR_CREDENTIAL_DELETE => {
-                self.handle_voice_asr_credential_delete(params).await
+                self.handle_voice_asr_credential_delete_impl(params).await
             }
             METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET => {
-                self.handle_voice_asr_credential_default_set(params).await
+                self.handle_voice_asr_credential_default_set_impl(params).await
             }
-            METHOD_VOICE_ASR_CREDENTIAL_TEST => self.handle_voice_asr_credential_test(params).await,
-            METHOD_VOICE_INSTRUCTION_LIST => self.handle_voice_instruction_list().await,
-            METHOD_VOICE_INSTRUCTION_SAVE => self.handle_voice_instruction_save(params).await,
-            METHOD_VOICE_INSTRUCTION_DELETE => self.handle_voice_instruction_delete(params).await,
-            METHOD_VOICE_MODEL_DEFAULT_SET => self.handle_voice_model_default_set(params).await,
+            METHOD_VOICE_ASR_CREDENTIAL_TEST => self.handle_voice_asr_credential_test_impl(params).await,
+            METHOD_VOICE_INSTRUCTION_LIST => self.handle_voice_instruction_list_impl().await,
+            METHOD_VOICE_INSTRUCTION_SAVE => self.handle_voice_instruction_save_impl(params).await,
+            METHOD_VOICE_INSTRUCTION_DELETE => self.handle_voice_instruction_delete_impl(params).await,
+            METHOD_VOICE_MODEL_DEFAULT_SET => self.handle_voice_model_default_set_impl(params).await,
             METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE => {
-                self.handle_voice_model_test_transcribe_file(params).await
+                self.handle_voice_model_test_transcribe_file_impl(params).await
             }
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
                 self.handle_workspace_skill_bindings_list_impl(params).await
@@ -1232,153 +1233,7 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
-    async fn handle_voice_asr_credential_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_voice_asr_credentials()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_asr_credential_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceAsrCredentialCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_voice_asr_credential(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_asr_credential_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceAsrCredentialUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_voice_asr_credential(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_asr_credential_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceAsrCredentialIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_voice_asr_credential(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_asr_credential_default_set(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceAsrCredentialIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .set_default_voice_asr_credential(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_asr_credential_test(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceAsrCredentialIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .test_voice_asr_credential(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_model_test_transcribe_file(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceModelTestTranscribeFileParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .test_transcribe_voice_model_file(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_instruction_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_voice_instructions()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_instruction_save(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceInstructionSaveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .save_voice_instruction(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_instruction_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceInstructionIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_voice_instruction(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_voice_model_default_set(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: VoiceModelDefaultSetParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .set_default_voice_model(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
+    // voice handlers 已提取到 processor/voice.rs
 
     // agent_app handlers 已提取到 processor/agent_app.rs
 
