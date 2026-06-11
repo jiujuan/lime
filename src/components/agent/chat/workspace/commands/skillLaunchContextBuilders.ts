@@ -79,7 +79,7 @@ export function buildFileReadSkillLaunchRequestContext(params: {
   };
 }
 
-function buildVideoSkillLaunchRequestContext(params: {
+export function buildVideoSkillLaunchRequestContext(params: {
   rawText: string;
   parsedCommand: ParsedVideoWorkbenchCommand;
   projectId?: string | null;
@@ -113,7 +113,7 @@ function buildVideoSkillLaunchRequestContext(params: {
   };
 }
 
-function buildCoverSkillLaunchRequestContext(params: {
+export function buildCoverSkillLaunchRequestContext(params: {
   rawText: string;
   parsedCommand: ParsedCoverWorkbenchCommand;
   projectId?: string | null;
@@ -146,7 +146,7 @@ function buildCoverSkillLaunchRequestContext(params: {
   };
 }
 
-function buildResearchSkillLaunchRequestContext(params: {
+export function buildResearchSkillLaunchRequestContext(params: {
   rawText: string;
   parsedCommand: ParsedSearchWorkbenchCommand;
   projectId?: string | null;
@@ -187,7 +187,7 @@ function buildResearchSkillLaunchRequestContext(params: {
   };
 }
 
-function buildDeepSearchSkillLaunchRequestContext(params: {
+export function buildDeepSearchSkillLaunchRequestContext(params: {
   rawText: string;
   parsedCommand: ParsedDeepSearchWorkbenchCommand;
   projectId?: string | null;
@@ -228,7 +228,7 @@ function buildDeepSearchSkillLaunchRequestContext(params: {
   };
 }
 
-function buildReportSkillLaunchRequestContext(params: {
+export function buildReportSkillLaunchRequestContext(params: {
   rawText: string;
   parsedCommand: ParsedReportWorkbenchCommand;
   projectId?: string | null;
@@ -269,7 +269,7 @@ function buildReportSkillLaunchRequestContext(params: {
   };
 }
 
-function buildCompetitorSkillLaunchRequestContext(params: {
+export function buildCompetitorSkillLaunchRequestContext(params: {
   rawText: string;
   parsedCommand: ParsedCompetitorWorkbenchCommand;
   projectId?: string | null;
@@ -310,7 +310,7 @@ function buildCompetitorSkillLaunchRequestContext(params: {
   };
 }
 
-function buildSiteSearchSkillLaunchRequestContext(params: {
+export function buildSiteSearchSkillLaunchRequestContext(params: {
   rawText: string;
   parsedCommand: ParsedSiteSearchWorkbenchCommand;
   projectId?: string | null;
@@ -348,7 +348,7 @@ function buildSiteSearchSkillLaunchRequestContext(params: {
   };
 }
 
-function buildPdfReadSkillLaunchRequestContext(params: {
+export function buildPdfReadSkillLaunchRequestContext(params: {
   rawText: string;
   parsedCommand: ParsedPdfWorkbenchCommand;
   projectId?: string | null;
