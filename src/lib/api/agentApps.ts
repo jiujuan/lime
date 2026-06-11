@@ -6,32 +6,32 @@ import {
   submitClientAgentAppRegistrationCode,
 } from "./oemCloudControlPlane";
 import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
-import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import contentFactoryFixture from "../../features/agent-app/fixtures/content-factory-app.json";
 import {
   AgentAppCloudBootstrapError,
   buildCloudBootstrapInstalledAppPreview,
   buildCloudReleaseDescriptor,
   buildVerifiedCloudReleasePackage,
   parseCloudBootstrapPayload,
-} from "@/features/agent-app/install/cloudBootstrap";
+} from "../../features/agent-app/install/cloudBootstrap";
 import {
   buildInstalledAgentAppState,
   type InstalledAgentAppStateListResult,
-} from "@/features/agent-app/install/installedAppState";
-import type { ShellDescriptor } from "@/features/agent-app/shell";
-import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { buildAgentAppLabResolvedSetupState } from "@/features/agent-app/install/labInstallFlow";
+} from "../../features/agent-app/install/installedAppState";
+import type { ShellDescriptor } from "../../features/agent-app/shell";
+import { buildInstalledAppPreview } from "../../features/agent-app/install/installedAppPreview";
+import { buildPackageIdentity } from "../../features/agent-app/install/packageIdentity";
+import { buildAgentAppLabResolvedSetupState } from "../../features/agent-app/install/labInstallFlow";
 import {
   verifyAgentAppPackageCacheEntry,
   type AgentAppPackageCacheEntry,
-} from "@/features/agent-app/install/packageCache";
+} from "../../features/agent-app/install/packageCache";
 import {
   buildAgentAppInstallReview,
   buildCloudAgentAppSourceState,
   buildLocalAgentAppSourceState,
   type AgentAppInstallReview,
-} from "@/features/agent-app/install/installReview";
+} from "../../features/agent-app/install/installReview";
 import type {
   AppManifest,
   CloudBootstrapApp,
@@ -40,7 +40,7 @@ import type {
   HostCapabilityProfile,
   InstalledAgentAppState,
   PackageSourceKind,
-} from "@/features/agent-app/types";
+} from "../../features/agent-app/types";
 import {
   METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
   METHOD_AGENT_APP_INSTALLED_LIST,

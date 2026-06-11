@@ -1,7 +1,5 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { PanelLeftOpen } from "lucide-react";
-import { ChatSidebar } from "../components/ChatSidebar";
-import { buildWorkspaceChatSidebarProps } from "./chatSurfaceProps";
 import {
   GeneralWorkbenchLeftExpandButton,
   PageContainer,
@@ -11,122 +9,25 @@ interface WorkspaceShellSceneProps {
   compactChrome: boolean;
   isThemeWorkbench: boolean;
   generalWorkbenchSidebarNode: ReactNode;
-  showChatPanel: boolean;
-  showSidebar: boolean;
   showGeneralWorkbenchLeftExpandButton: boolean;
   onExpandGeneralWorkbenchSidebar: () => void;
   fileManagerNode?: ReactNode;
   fileManagerToggleNode?: ReactNode;
   mainAreaNode: ReactNode;
   rightRailNode?: ReactNode;
-  sidebarContextVariant?: ComponentProps<typeof ChatSidebar>["contextVariant"];
-  currentTopicId: ComponentProps<typeof ChatSidebar>["currentTopicId"];
-  topics: ComponentProps<typeof ChatSidebar>["topics"];
-  topicsReady?: ComponentProps<typeof ChatSidebar>["topicsReady"];
-  onNewChat: ComponentProps<typeof ChatSidebar>["onNewChat"];
-  onOpenTaskCenterHome?: ComponentProps<
-    typeof ChatSidebar
-  >["onOpenTaskCenterHome"];
-  onOpenSkillsPage?: ComponentProps<typeof ChatSidebar>["onOpenSkillsPage"];
-  onOpenKnowledgePage?: ComponentProps<
-    typeof ChatSidebar
-  >["onOpenKnowledgePage"];
-  onOpenMemoryPage?: ComponentProps<typeof ChatSidebar>["onOpenMemoryPage"];
-  onSwitchTopic: ComponentProps<typeof ChatSidebar>["onSwitchTopic"];
-  onOpenArchivedTopic?: ComponentProps<
-    typeof ChatSidebar
-  >["onOpenArchivedTopic"];
-  onResumeTask: ComponentProps<typeof ChatSidebar>["onResumeTask"];
-  onDeleteTopic: ComponentProps<typeof ChatSidebar>["onDeleteTopic"];
-  onRenameTopic: ComponentProps<typeof ChatSidebar>["onRenameTopic"];
-  currentMessages: ComponentProps<typeof ChatSidebar>["currentMessages"];
-  isSending: ComponentProps<typeof ChatSidebar>["isSending"];
-  pendingActionCount: number;
-  queuedTurnCount: number;
-  threadStatus?: ComponentProps<typeof ChatSidebar>["threadStatus"];
-  workspaceError: boolean;
-  childSubagentSessions: ComponentProps<
-    typeof ChatSidebar
-  >["childSubagentSessions"];
-  subagentParentContext: ComponentProps<
-    typeof ChatSidebar
-  >["subagentParentContext"];
-  onOpenSubagentSession: ComponentProps<
-    typeof ChatSidebar
-  >["onOpenSubagentSession"];
-  onReturnToParentSession: ComponentProps<
-    typeof ChatSidebar
-  >["onReturnToParentSession"];
 }
 
 export function WorkspaceShellScene({
   compactChrome,
   isThemeWorkbench,
   generalWorkbenchSidebarNode,
-  showChatPanel,
-  showSidebar,
   showGeneralWorkbenchLeftExpandButton,
   onExpandGeneralWorkbenchSidebar,
   fileManagerNode,
   fileManagerToggleNode,
   mainAreaNode,
   rightRailNode,
-  sidebarContextVariant = "default",
-  currentTopicId,
-  topics,
-  topicsReady = true,
-  onNewChat,
-  onOpenTaskCenterHome,
-  onOpenSkillsPage,
-  onOpenKnowledgePage,
-  onOpenMemoryPage,
-  onSwitchTopic,
-  onOpenArchivedTopic,
-  onResumeTask,
-  onDeleteTopic,
-  onRenameTopic,
-  currentMessages,
-  isSending,
-  pendingActionCount,
-  queuedTurnCount,
-  threadStatus,
-  workspaceError,
-  childSubagentSessions,
-  subagentParentContext,
-  onOpenSubagentSession,
-  onReturnToParentSession,
 }: WorkspaceShellSceneProps) {
-  const shouldRenderChatSidebar =
-    !isThemeWorkbench && showChatPanel && showSidebar;
-  const chatSidebarProps = shouldRenderChatSidebar
-    ? buildWorkspaceChatSidebarProps({
-        contextVariant: sidebarContextVariant,
-        onNewChat,
-        onOpenTaskCenterHome,
-        onOpenSkillsPage,
-        onOpenKnowledgePage,
-        onOpenMemoryPage,
-        topics,
-        topicsReady,
-        currentTopicId,
-        onSwitchTopic,
-        onOpenArchivedTopic,
-        onResumeTask,
-        onDeleteTopic,
-        onRenameTopic,
-        currentMessages,
-        isSending,
-        pendingActionCount,
-        queuedTurnCount,
-        threadStatus,
-        workspaceError,
-        childSubagentSessions,
-        subagentParentContext,
-        onOpenSubagentSession,
-        onReturnToParentSession,
-      })
-    : null;
-
   return (
     <PageContainer
       $compact={compactChrome}
@@ -135,8 +36,6 @@ export function WorkspaceShellScene({
     >
       {isThemeWorkbench ? (
         generalWorkbenchSidebarNode
-      ) : shouldRenderChatSidebar && chatSidebarProps ? (
-        <ChatSidebar {...chatSidebarProps} />
       ) : null}
       {showGeneralWorkbenchLeftExpandButton ? (
         <GeneralWorkbenchLeftExpandButton

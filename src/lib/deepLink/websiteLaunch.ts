@@ -1,4 +1,4 @@
-import { findCuratedTaskTemplateById } from "@/components/agent/chat/utils/curatedTaskTemplates";
+import { findCuratedTaskTemplateById } from "../../components/agent/chat/utils/curatedTaskTemplates";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import type { AgentPageParams, Page, PageParams } from "@/types/page";
 

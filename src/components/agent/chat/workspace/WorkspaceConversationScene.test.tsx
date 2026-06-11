@@ -175,8 +175,6 @@ function renderScene(
       navbarVisible: false,
       isRunning: false,
       navbarChrome: "default" as any,
-      onToggleHistory: vi.fn(),
-      showHistoryToggle: false,
       onBackToProjectManagement: undefined,
       onBackToResources: undefined,
       layoutMode: "chat" as any,

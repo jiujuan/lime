@@ -34,9 +34,6 @@ interface ChatNavbarProps {
   contextVariant?: "default" | "task-center";
   entryContextLabel?: string;
   entryContextHint?: string;
-  onToggleHistory: () => void;
-  onPrefetchHistory?: () => void;
-  showHistoryToggle?: boolean;
   onToggleFullscreen: () => void;
   onBackToProjectManagement?: () => void;
   onBackToResources?: () => void;
@@ -155,9 +152,6 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
   contextVariant = "default",
   entryContextLabel,
   entryContextHint,
-  onToggleHistory,
-  onPrefetchHistory,
-  showHistoryToggle = true,
   onToggleFullscreen: _onToggleFullscreen,
   onBackToProjectManagement,
   onBackToResources,
@@ -238,8 +232,7 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
     (Boolean(onBackHome) ||
       Boolean(onBackToResources) ||
       Boolean(onBackToProjectManagement));
-  const showWorkspaceTools =
-    !effectiveCollapseChrome && (showHistoryToggle || showCanvasToggle);
+  const showWorkspaceTools = !effectiveCollapseChrome && showCanvasToggle;
   const showProjectSelector = !isWorkspaceCompact && !isTaskCenterChrome;
   const showCompactSettingsButton =
     isWorkspaceCompact && !isTaskCenterChrome && Boolean(onToggleSettings);
@@ -637,26 +630,6 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
 
         {showWorkspaceTools ? (
           <div className={groupClassName}>
-            {showHistoryToggle && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className={ghostIconButtonClassName}
-                onClick={onToggleHistory}
-                onFocus={onPrefetchHistory}
-                onMouseEnter={onPrefetchHistory}
-                aria-label={navText(
-                  "agentChat.navbar.toggleHistory",
-                  "切换历史",
-                )}
-                title={navText("agentChat.navbar.toggleHistory", "切换历史")}
-              >
-                <Box size={18} />
-              </Button>
-            )}
-            {showHistoryToggle && showCanvasToggle ? (
-              <div className={dividerClassName} aria-hidden="true" />
-            ) : null}
             {showCanvasToggle ? (
               <Button
                 variant="ghost"

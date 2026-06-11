@@ -477,7 +477,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     expect(mockGetAgentRuntimeToolInventory).not.toHaveBeenCalled();
   });
 
-  it("窄屏工作台在手动展开侧栏后切到 stacked 时应自动收起，恢复 split 也不应自动重开", async () => {
+  it("窄屏工作台切换 stacked/split 时不应恢复旧对话侧栏入口", async () => {
     mockCanvasWorkbenchLayoutState.renderPreview = true;
 
     const container = renderPage({
@@ -487,13 +487,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     await flushEffects();
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
-
-    clickButton(container, "toggle-history");
-    await flushEffects();
-
-    expect(
-      container.querySelector('[data-testid="chat-sidebar"]'),
-    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
 
     clickButton(container, "toggle-canvas");
     await flushEffects(4);
@@ -513,6 +507,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     await flushEffects(4);
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
+    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
 
     act(() => {
       getWorkbenchProps()?.onLayoutModeChange?.("split");

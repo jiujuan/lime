@@ -18,7 +18,6 @@ export interface AgentChatWorkspaceShellViewModel {
   hasDisplayMessages: boolean;
   hasMessages: boolean;
   effectiveShowChatPanel: boolean;
-  allowTopicSidebarToggle: boolean;
   shouldRestoreImageTasksFromWorkspace: boolean;
 }
 
@@ -51,8 +50,6 @@ export function resolveAgentChatWorkspaceShellViewModel({
         isHomePendingPreviewActive ||
         isSending ||
         queuedTurnCount > 0));
-  const allowTopicSidebarToggle =
-    showChatPanel || (agentEntry === "new-task" && effectiveShowChatPanel);
   const shouldRestoreImageTasksFromWorkspace = !(
     agentEntry === "new-task" &&
     !contentId &&
@@ -66,7 +63,6 @@ export function resolveAgentChatWorkspaceShellViewModel({
     hasDisplayMessages,
     hasMessages: hasDisplayMessages,
     effectiveShowChatPanel,
-    allowTopicSidebarToggle,
     shouldRestoreImageTasksFromWorkspace,
   };
 }

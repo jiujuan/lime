@@ -252,46 +252,6 @@ export function useTaskCenterTopicNavigationRuntime({
     ],
   );
 
-  const handleOpenArchivedTaskTopic = useCallback(
-    async (topicId: string) => {
-      taskCenterDraftSurfaceActiveRef.current = false;
-      resetLocalImageWorkbenchSessionScope();
-      setActiveTaskCenterDraftTabId(null);
-      setTaskCenterDetachedTopicId(topicId);
-      setTaskCenterTransitionTopicId(topicId);
-      clearEntryPendingA2UI();
-      markTaskCenterLocalSessionOverride(topicId);
-      rememberInitialSessionNavigationStart(topicId);
-      const switchResult = await switchTopic(topicId, {
-        allowDetachedSession: true,
-      });
-      if (switchResult === "success" || switchResult === "deferred") {
-        return;
-      }
-
-      setTaskCenterLocalSessionOverride((current) =>
-        current?.sessionId === topicId ? null : current,
-      );
-      setTaskCenterTransitionTopicId((current) =>
-        current === topicId ? null : current,
-      );
-      setTaskCenterDetachedTopicId((current) =>
-        current === topicId ? null : current,
-      );
-    },
-    [
-      clearEntryPendingA2UI,
-      markTaskCenterLocalSessionOverride,
-      resetLocalImageWorkbenchSessionScope,
-      setActiveTaskCenterDraftTabId,
-      setTaskCenterDetachedTopicId,
-      setTaskCenterLocalSessionOverride,
-      setTaskCenterTransitionTopicId,
-      switchTopic,
-      taskCenterDraftSurfaceActiveRef,
-    ],
-  );
-
   const handleSelectTaskCenterDraftTab = useCallback(
     (draftTabId: string) => {
       const draft = taskCenterDraftTabsRef.current.find(
@@ -430,7 +390,6 @@ export function useTaskCenterTopicNavigationRuntime({
 
   return {
     handleCloseTaskCenterTab,
-    handleOpenArchivedTaskTopic,
     handleOpenTaskTopic,
     handleSelectTaskCenterDraftTab,
     handleSwitchTaskTopic,

@@ -57,13 +57,14 @@ describe("AgentChatPage 侧栏显示控制", () => {
     await flushEffects();
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
+    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
 
     clickButton(container, "set-project");
     await flushEffects();
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
   });
 
-  it("锁定 general 主题进入 Claw 页面时也应默认收起左侧对话列表", async () => {
+  it("锁定 general 主题进入 Claw 页面时不再暴露旧左侧对话列表入口", async () => {
     const container = renderPage({
       theme: "general",
       lockTheme: true,
@@ -71,29 +72,18 @@ describe("AgentChatPage 侧栏显示控制", () => {
     await flushEffects();
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
-
-    clickButton(container, "toggle-history");
-    await flushEffects();
-
-    expect(
-      container.querySelector('[data-testid="chat-sidebar"]'),
-    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
   });
 
-  it("Claw 模式可通过顶栏手动展开侧栏", async () => {
+  it("Claw 模式不再通过顶栏手动展开旧侧栏", async () => {
     const container = renderPage();
     await flushEffects();
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
-
-    clickButton(container, "toggle-history");
-    await flushEffects();
-    expect(
-      container.querySelector('[data-testid="chat-sidebar"]'),
-    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
   });
 
-  it("重新进入新的 Claw 对话页时，不应沿用上一次手动展开的侧栏状态", async () => {
+  it("重新进入新的 Claw 对话页时，旧侧栏入口仍不应恢复", async () => {
     const mounted = mountPage({
       theme: "general",
       lockTheme: true,
@@ -104,13 +94,9 @@ describe("AgentChatPage 侧栏显示控制", () => {
     expect(
       mounted.container.querySelector('[data-testid="chat-sidebar"]'),
     ).toBeNull();
-
-    clickButton(mounted.container, "toggle-history");
-    await flushEffects();
-
     expect(
-      mounted.container.querySelector('[data-testid="chat-sidebar"]'),
-    ).not.toBeNull();
+      mounted.container.querySelector('[data-testid="toggle-history"]'),
+    ).toBeNull();
 
     mounted.rerender({
       contentId: "content-b",
@@ -120,6 +106,9 @@ describe("AgentChatPage 侧栏显示控制", () => {
     expect(
       mounted.container.querySelector('[data-testid="chat-sidebar"]'),
     ).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="toggle-history"]'),
+    ).toBeNull();
   });
 
   it("showChatPanel=false 时应保持侧栏隐藏", async () => {
@@ -128,9 +117,7 @@ describe("AgentChatPage 侧栏显示控制", () => {
     await flushEffects();
 
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
-
-    clickButton(container, "toggle-history");
-    await flushEffects();
+    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
     expect(
       consoleErrorSpy.mock.calls.some((call) =>
@@ -139,7 +126,7 @@ describe("AgentChatPage 侧栏显示控制", () => {
     ).toBe(false);
   });
 
-  it("new-task 执行态即使初始 showChatPanel=false 也应允许从顶栏展开对话侧栏", async () => {
+  it("new-task 执行态也不再通过顶栏展开旧对话侧栏", async () => {
     installMockAgentChatUnifiedState(
       createMockAgentChatUnifiedState({
         messages: [{ id: "msg-new-task", role: "user", content: "继续执行" }],
@@ -158,13 +145,7 @@ describe("AgentChatPage 侧栏显示控制", () => {
       container.querySelector('[data-testid="toggle-harness"]'),
     ).not.toBeNull();
     expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
-
-    clickButton(container, "toggle-history");
-    await flushEffects();
-
-    expect(
-      container.querySelector('[data-testid="chat-sidebar"]'),
-    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
   });
 
   it("Claw 模式无激活任务时应展示任务选择空态", async () => {

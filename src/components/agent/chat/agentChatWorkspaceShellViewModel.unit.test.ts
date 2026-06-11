@@ -32,19 +32,17 @@ describe("agentChatWorkspaceShellViewModel", () => {
       hasDisplayMessages: false,
       hasMessages: false,
       effectiveShowChatPanel: false,
-      allowTopicSidebarToggle: false,
       shouldRestoreImageTasksFromWorkspace: false,
     });
   });
 
-  it("显式 showChatPanel=true 时应允许侧栏切换", () => {
+  it("显式 showChatPanel=true 时应打开聊天面板", () => {
     expect(
       resolve({
         showChatPanel: true,
       }),
     ).toMatchObject({
       effectiveShowChatPanel: true,
-      allowTopicSidebarToggle: true,
     });
   });
 
@@ -61,7 +59,6 @@ describe("agentChatWorkspaceShellViewModel", () => {
           Boolean(overrides.displayMessageCount) ||
           Boolean(overrides.isHomePendingPreviewActive),
         effectiveShowChatPanel: true,
-        allowTopicSidebarToggle: true,
       });
     }
   });
@@ -118,7 +115,6 @@ describe("agentChatWorkspaceShellViewModel", () => {
       }),
     ).toMatchObject({
       effectiveShowChatPanel: false,
-      allowTopicSidebarToggle: false,
       shouldRestoreImageTasksFromWorkspace: true,
     });
   });

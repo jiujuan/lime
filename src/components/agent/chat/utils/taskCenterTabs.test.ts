@@ -3,7 +3,6 @@ import type { Topic } from "../hooks/agentChatShared";
 import {
   applyTaskCenterRouteTabSyncToMap,
   areTaskCenterTabIdsEqual,
-  buildDefaultTaskCenterTabIds,
   clearTaskCenterLocalSessionOverrideForTopic,
   clearTaskCenterTransitionTopicForTopic,
   initializeTaskCenterOpenTabMap,
@@ -81,34 +80,6 @@ function createFallbackRestoreParams(
 }
 
 describe("taskCenterTabs", () => {
-  it("应优先把当前任务、固定任务与待继续任务放入默认标签", () => {
-    const topics = [
-      createTopic("done-recent", {
-        updatedAt: new Date("2026-04-20T03:00:00.000Z"),
-      }),
-      createTopic("waiting", {
-        status: "waiting",
-        statusReason: "user_action",
-        updatedAt: new Date("2026-04-20T02:00:00.000Z"),
-      }),
-      createTopic("pinned", {
-        isPinned: true,
-        updatedAt: new Date("2026-04-20T01:00:00.000Z"),
-      }),
-      createTopic("current", {
-        status: "running",
-        updatedAt: new Date("2026-04-20T04:00:00.000Z"),
-      }),
-    ];
-
-    expect(buildDefaultTaskCenterTabIds(topics, "current")).toEqual([
-      "current",
-      "pinned",
-      "waiting",
-      "done-recent",
-    ]);
-  });
-
   it("reconcile 应过滤失效 id 并把当前任务前置", () => {
     const topics = [
       createTopic("topic-a"),
@@ -125,7 +96,7 @@ describe("taskCenterTabs", () => {
     ).toEqual(["topic-b", "topic-a", "topic-c"]);
   });
 
-  it("reconcile 在没有历史标签时应回退到默认标签", () => {
+  it("reconcile 在没有历史标签时应保持为空，避免自动打开项目历史会话", () => {
     const topics = [
       createTopic("topic-a", { status: "waiting" }),
       createTopic("topic-b"),
@@ -137,28 +108,22 @@ describe("taskCenterTabs", () => {
         topics,
         currentTopicId: null,
       }),
-    ).toEqual(["topic-a", "topic-b"]);
+    ).toEqual([]);
   });
 
-  it("默认标签应纳入非当前运行中任务", () => {
+  it("reconcile 没有历史标签但存在当前任务时，只打开当前任务", () => {
     const topics = [
-      createTopic("done-recent", {
-        updatedAt: new Date("2026-04-20T04:00:00.000Z"),
-      }),
-      createTopic("running-background", {
-        status: "running",
-        updatedAt: new Date("2026-04-20T01:00:00.000Z"),
-      }),
-      createTopic("done-older", {
-        updatedAt: new Date("2026-04-20T03:00:00.000Z"),
-      }),
+      createTopic("topic-a", { status: "waiting" }),
+      createTopic("topic-b"),
     ];
 
-    expect(buildDefaultTaskCenterTabIds(topics, null)).toEqual([
-      "running-background",
-      "done-recent",
-      "done-older",
-    ]);
+    expect(
+      reconcileTaskCenterTabIds({
+        existingIds: [],
+        topics,
+        currentTopicId: "topic-b",
+      }),
+    ).toEqual(["topic-b"]);
   });
 
   it("应按 workspace 读取和更新标签列表", () => {
@@ -585,6 +550,22 @@ describe("taskCenterTabs", () => {
         currentTopicId: "topic-archived-preview",
       }),
     ).toEqual(["topic-archived-preview"]);
+  });
+
+  it("项目会话目录加载多条历史 topics 时，顶部不应突然打开所有对话", () => {
+    const topics = [
+      createTopic("topic-project-a"),
+      createTopic("topic-project-b"),
+      createTopic("topic-project-c"),
+    ];
+
+    expect(
+      resolveTaskCenterVisibleTabIds({
+        openTabIds: [],
+        topics,
+        currentTopicId: null,
+      }),
+    ).toEqual([]);
   });
 
   it("当前对话已在 open tabs 中时，应继续展示原有任务标签", () => {

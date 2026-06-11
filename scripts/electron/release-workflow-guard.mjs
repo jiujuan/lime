@@ -167,8 +167,13 @@ function assertBuildSteps(buildJob) {
   }
 
   const installStep = stepByName(steps, "Install dependencies");
-  if (installStep?.run !== "pnpm install --frozen-lockfile") {
-    throw new Error("release build must install dependencies with pnpm install --frozen-lockfile");
+  if (
+    installStep?.run !==
+    "pnpm install --frozen-lockfile --config.node-linker=hoisted"
+  ) {
+    throw new Error(
+      "release build must install dependencies with pnpm install --frozen-lockfile --config.node-linker=hoisted",
+    );
   }
 
   const macSecretStep = stepByName(

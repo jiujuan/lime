@@ -396,7 +396,6 @@ vi.mock("@/lib/workspace/workbenchUi", () => ({
 
 vi.mock("./components/ChatNavbar", () => ({
   ChatNavbar: ({
-    onToggleHistory,
     onToggleCanvas,
     showCanvasToggle,
     isCanvasOpen,
@@ -409,7 +408,6 @@ vi.mock("./components/ChatNavbar", () => ({
     onToggleSettings,
     contextVariant,
   }: {
-    onToggleHistory?: () => void;
     onToggleCanvas?: () => void;
     showCanvasToggle?: boolean;
     isCanvasOpen?: boolean;
@@ -435,15 +433,6 @@ vi.mock("./components/ChatNavbar", () => ({
       }
       data-show-settings-button={onToggleSettings ? "true" : "false"}
     >
-      <button
-        type="button"
-        data-testid="toggle-history"
-        onClick={() => {
-          onToggleHistory?.();
-        }}
-      >
-        切换侧边栏
-      </button>
       {showCanvasToggle ? (
         <button
           type="button"

@@ -102,7 +102,7 @@ export function useAppSidebarProjectActions({
 
   const handleToggleProjectPin = useCallback(
     async (project: SidebarOpenedProjectSummary) => {
-      const nextFavorite = !Boolean(project.isFavorite);
+      const nextFavorite = !project.isFavorite;
       try {
         await updateProject(project.id, { isFavorite: nextFavorite });
         toast.success(nextFavorite ? pinSuccessLabel : unpinSuccessLabel);

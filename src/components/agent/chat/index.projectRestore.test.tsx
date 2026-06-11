@@ -9,6 +9,7 @@ import {
   observedWorkspaceIds,
   renderPage,
 } from "./index.testFixtures";
+import { notifyTaskCenterTaskOpen } from "./taskCenterDraftTaskEvents";
 
 const {
   mockEnsureWorkspaceReady,
@@ -26,12 +27,15 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       JSON.stringify("project-topic"),
     );
 
-    const container = renderPage();
+    renderPage();
     await flushEffects();
 
-    clickButton(container, "toggle-history");
-    await flushEffects();
-    clickButton(container, "switch-topic");
+    expect(
+      notifyTaskCenterTaskOpen({
+        sessionId: "topic-a",
+        source: "conversation_shelf",
+      }),
+    ).toBe(true);
     await flushEffects();
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
@@ -51,12 +55,15 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       JSON.stringify("topic-project"),
     );
 
-    const container = renderPage({ projectId: "locked-project" });
+    renderPage({ projectId: "locked-project" });
     await flushEffects();
 
-    clickButton(container, "toggle-history");
-    await flushEffects();
-    clickButton(container, "switch-topic");
+    expect(
+      notifyTaskCenterTaskOpen({
+        sessionId: "topic-a",
+        source: "conversation_shelf",
+      }),
+    ).toBe(true);
     await flushEffects();
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
@@ -75,12 +82,15 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       createProject("default-new"),
     );
 
-    const container = renderPage();
+    renderPage();
     await flushEffects();
 
-    clickButton(container, "toggle-history");
-    await flushEffects();
-    clickButton(container, "switch-topic");
+    expect(
+      notifyTaskCenterTaskOpen({
+        sessionId: "topic-a",
+        source: "conversation_shelf",
+      }),
+    ).toBe(true);
     await flushEffects();
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value

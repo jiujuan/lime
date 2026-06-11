@@ -205,65 +205,6 @@ export function resolveTaskCenterTopicClosePlan(params: {
   };
 }
 
-function resolveTaskCenterTabPriority(
-  topic: Topic,
-  currentTopicId: string | null,
-): number {
-  if (topic.id === currentTopicId) {
-    return 0;
-  }
-
-  if (topic.isPinned) {
-    return 1;
-  }
-
-  if (shouldResumeTaskSession(topic)) {
-    return 2;
-  }
-
-  if (topic.status === "running") {
-    return 3;
-  }
-
-  if (topic.status === "done") {
-    return 4;
-  }
-
-  return 5;
-}
-
-function sortTaskCenterTabCandidates(
-  topics: Topic[],
-  currentTopicId: string | null,
-): Topic[] {
-  const resolveUpdatedAtMs = (topic: Topic): number => {
-    const candidate = (topic.updatedAt ?? topic.createdAt) as
-      | Date
-      | number
-      | string
-      | null
-      | undefined;
-
-    if (candidate instanceof Date) {
-      return candidate.getTime();
-    }
-
-    const resolvedTime = new Date(candidate ?? 0).getTime();
-    return Number.isFinite(resolvedTime) ? resolvedTime : 0;
-  };
-
-  return [...topics].sort((left, right) => {
-    const priorityDiff =
-      resolveTaskCenterTabPriority(left, currentTopicId) -
-      resolveTaskCenterTabPriority(right, currentTopicId);
-    if (priorityDiff !== 0) {
-      return priorityDiff;
-    }
-
-    return resolveUpdatedAtMs(right) - resolveUpdatedAtMs(left);
-  });
-}
-
 function normalizeTaskCenterTabIds(
   value: unknown,
   maxCount = MAX_TASK_CENTER_OPEN_TABS,
@@ -595,20 +536,6 @@ export function resolveTaskCenterReconcileCurrentTopicId(params: {
   return effectiveCurrentTopicId;
 }
 
-export function buildDefaultTaskCenterTabIds(
-  topics: Topic[],
-  currentTopicId: string | null,
-  maxCount = MAX_TASK_CENTER_OPEN_TABS,
-): string[] {
-  return sortTaskCenterTabCandidates(topics, currentTopicId)
-    .map((topic) => topic.id)
-    .filter(
-      (topicId, index, ids) =>
-        !isAuxiliaryAgentSessionId(topicId) && ids.indexOf(topicId) === index,
-    )
-    .slice(0, maxCount);
-}
-
 export function resolveTaskCenterVisibleTabIds(params: {
   openTabIds: string[];
   topics: Topic[];
@@ -858,10 +785,6 @@ export function reconcileTaskCenterTabIds(params: {
   const dedupedIds = nextIds.filter(
     (topicId, index, ids) => ids.indexOf(topicId) === index,
   );
-
-  if (dedupedIds.length === 0) {
-    return buildDefaultTaskCenterTabIds(topics, currentTopicId, maxCount);
-  }
 
   return dedupedIds.slice(0, maxCount);
 }

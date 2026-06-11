@@ -138,7 +138,6 @@ function renderChatNavbar(
 ) {
   const defaultProps: React.ComponentProps<typeof ChatNavbar> = {
     isRunning: false,
-    onToggleHistory: vi.fn(),
     onToggleFullscreen: vi.fn(),
   };
 
@@ -192,39 +191,16 @@ describe("ChatNavbar", () => {
   it("工作区紧凑顶栏应保留执行入口但隐藏项目选择器", () => {
     const container = renderChatNavbar({
       chrome: "workspace-compact",
-      showHistoryToggle: true,
       showHarnessToggle: true,
     });
 
-    expect(container.querySelector('[aria-label="切换历史"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="切换历史"]')).toBeNull();
     expect(
       container.querySelector('[aria-label="打开Harness"]'),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="project-selector"]'),
     ).toBeNull();
-  });
-
-  it("历史按钮在悬停和聚焦时应预取历史列表", () => {
-    const onPrefetchHistory = vi.fn();
-    const container = renderChatNavbar({
-      showHistoryToggle: true,
-      onPrefetchHistory,
-    });
-    const button = container.querySelector(
-      '[aria-label="切换历史"]',
-    ) as HTMLButtonElement | null;
-
-    expect(button).not.toBeNull();
-
-    act(() => {
-      button?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    });
-    act(() => {
-      button?.focus();
-    });
-
-    expect(onPrefetchHistory).toHaveBeenCalledTimes(2);
   });
 
   it("任务中心折叠顶栏应隐藏左侧重导航，但保留右侧项目与工具入口", () => {
@@ -234,7 +210,6 @@ describe("ChatNavbar", () => {
       onBackToResources: vi.fn(),
       onBackToProjectManagement: vi.fn(),
       onToggleSettings: vi.fn(),
-      showHistoryToggle: true,
       showCanvasToggle: true,
       projectId: "project-1",
       workspaceType: "general",
@@ -502,7 +477,6 @@ describe("ChatNavbar", () => {
         <>
           <ChatNavbar
             isRunning={false}
-            onToggleHistory={() => {}}
             onToggleFullscreen={() => {}}
             showHarnessToggle
             harnessPanelVisible={visible}

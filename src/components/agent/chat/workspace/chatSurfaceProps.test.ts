@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildWorkspaceNavbarProps } from "./chatSurfaceProps";
 
 function createNavbarParams(
@@ -9,8 +9,6 @@ function createNavbarParams(
     isRunning: false,
     chrome: "workspace-compact",
     navbarContextVariant: "task-center",
-    onToggleHistory: vi.fn(),
-    showHistoryToggle: true,
     showCanvasToggle: false,
     isCanvasOpen: false,
     projectId: null,

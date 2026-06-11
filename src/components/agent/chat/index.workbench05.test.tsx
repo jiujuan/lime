@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  clickButton,
   flushEffects,
   getIndexTestMocks,
   observedWorkspaceIds,
@@ -16,7 +15,7 @@ const {
 } = getIndexTestMocks();
 
 describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
-  it("当前待处理任务从侧栏恢复时应回到对应会话", async () => {
+  it("当前待处理任务不再暴露旧侧栏恢复入口", async () => {
     const onNavigate = vi.fn();
     mockUseAgentChatUnified.mockImplementation(
       ({ workspaceId }: { workspaceId: string }) => {
@@ -84,14 +83,9 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     });
     await flushEffects(10);
 
-    clickButton(container, "toggle-history");
-    await flushEffects();
-    clickButton(container, "resume-topic");
-    await flushEffects(12);
-
-    expect(sharedSwitchTopicMock).toHaveBeenCalledWith("topic-a", {
-      resumeSessionStartHooks: true,
-    });
+    expect(container.querySelector('[data-testid="toggle-history"]')).toBeNull();
+    expect(container.querySelector('[data-testid="chat-sidebar"]')).toBeNull();
+    expect(sharedSwitchTopicMock).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
     expect(mockLaunchBrowserSession).not.toHaveBeenCalled();
   });

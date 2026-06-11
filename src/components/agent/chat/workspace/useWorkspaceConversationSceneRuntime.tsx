@@ -277,14 +277,10 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   onDismissWorkspaceHint?: ConversationScenePresentationParams["scene"]["onDismissWorkspaceHint"];
   taskCenterTabsNode?: ConversationScenePresentationParams["scene"]["taskCenterTabsNode"];
   suppressNavbarUtilityActions?: boolean;
-  hideHistoryToggle: boolean;
-  showChatPanel: boolean;
   topBarChrome: ConversationScenePresentationParams["scene"]["navbarChrome"];
   onBackToProjectManagement?: ConversationScenePresentationParams["scene"]["onBackToProjectManagement"];
   fromResources: boolean;
   handleBackHome: ConversationScenePresentationParams["scene"]["onBackHome"];
-  handleToggleSidebar: ConversationScenePresentationParams["scene"]["onToggleHistory"];
-  handlePrefetchHistory?: ConversationScenePresentationParams["scene"]["onPrefetchHistory"];
   showHarnessToggle: ConversationScenePresentationParams["scene"]["showHarnessToggle"];
   navbarHarnessPanelVisible: ConversationScenePresentationParams["scene"]["harnessPanelVisible"];
   handleToggleHarnessPanel: ConversationScenePresentationParams["scene"]["onToggleHarnessPanel"];
@@ -436,14 +432,10 @@ export function useWorkspaceConversationSceneRuntime({
   onDismissWorkspaceHint,
   taskCenterTabsNode,
   suppressNavbarUtilityActions = false,
-  hideHistoryToggle,
-  showChatPanel,
   topBarChrome,
   onBackToProjectManagement,
   fromResources,
   handleBackHome,
-  handleToggleSidebar,
-  handlePrefetchHistory,
   showHarnessToggle,
   navbarHarnessPanelVisible,
   handleToggleHarnessPanel,
@@ -902,9 +894,6 @@ export function useWorkspaceConversationSceneRuntime({
       isRunning: Boolean(isSending),
       navbarChrome: topBarChrome,
       navbarContextVariant,
-      onToggleHistory: handleToggleSidebar,
-      onPrefetchHistory: handlePrefetchHistory,
-      showHistoryToggle: !hideHistoryToggle && showChatPanel,
       onBackToProjectManagement,
       onBackToResources: fromResources
         ? navigationActions.handleBackToResources

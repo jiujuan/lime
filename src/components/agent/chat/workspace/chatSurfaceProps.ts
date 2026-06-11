@@ -1,7 +1,6 @@
 import type { ComponentProps } from "react";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import { ChatNavbar } from "../components/ChatNavbar";
-import { ChatSidebar } from "../components/ChatSidebar";
 import { EmptyState } from "../components/EmptyState";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
@@ -344,11 +343,6 @@ interface BuildWorkspaceNavbarPropsParams {
   collapseChrome?: boolean;
   navbarContextVariant?: "default" | "task-center";
   collapseEntryContext?: boolean;
-  onToggleHistory: NonNullable<
-    ComponentProps<typeof ChatNavbar>["onToggleHistory"]
-  >;
-  onPrefetchHistory?: ComponentProps<typeof ChatNavbar>["onPrefetchHistory"];
-  showHistoryToggle: boolean;
   onBackToProjectManagement?: ComponentProps<
     typeof ChatNavbar
   >["onBackToProjectManagement"];
@@ -401,9 +395,6 @@ export function buildWorkspaceNavbarProps({
   collapseChrome = false,
   navbarContextVariant = "default",
   collapseEntryContext = false,
-  onToggleHistory,
-  onPrefetchHistory,
-  showHistoryToggle,
   onBackToProjectManagement,
   onBackToResources,
   showCanvasToggle,
@@ -442,9 +433,6 @@ export function buildWorkspaceNavbarProps({
       navbarContextVariant === "task-center" && !collapseEntryContext
         ? "task-center"
         : "default",
-    onToggleHistory,
-    onPrefetchHistory,
-    showHistoryToggle,
     onToggleFullscreen: () => undefined,
     onBackToProjectManagement,
     onBackToResources,
@@ -472,10 +460,4 @@ export function buildWorkspaceNavbarProps({
     onCompactContext,
     onToggleSettings: onOpenSettings,
   };
-}
-
-export function buildWorkspaceChatSidebarProps(
-  params: ComponentProps<typeof ChatSidebar>,
-): ComponentProps<typeof ChatSidebar> {
-  return params;
 }

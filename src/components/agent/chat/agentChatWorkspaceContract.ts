@@ -36,7 +36,6 @@ export interface AgentChatWorkspaceProps {
   initialCreationMode?: CreationMode;
   lockTheme?: boolean;
   fromResources?: boolean;
-  hideHistoryToggle?: boolean;
   showChatPanel?: boolean;
   hideTopBar?: boolean;
   topBarChrome?: "full" | "workspace-compact";

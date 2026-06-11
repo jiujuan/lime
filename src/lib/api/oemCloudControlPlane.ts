@@ -1,7 +1,7 @@
 import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
-import { parseCloudBootstrapPayload } from "@/features/agent-app/install/cloudBootstrap";
+import { parseCloudBootstrapPayload } from "../../features/agent-app/install/cloudBootstrap";
 import type { OemCloudCurrentSessionLike } from "@/lib/oemCloudSession";
-import type { CloudBootstrapPayload } from "@/features/agent-app/types";
+import type { CloudBootstrapPayload } from "../../features/agent-app/types";
 import type {
   ModelAliasSource,
   ModelDeploymentSource,

@@ -1,5 +1,4 @@
 import {
-  Box,
   MessageSquareText,
   PanelRightClose,
   PanelRightOpen,
@@ -66,8 +65,6 @@ interface TaskCenterTabStripProps {
   onRenameTask?: (taskId: string) => void | Promise<void>;
   onCloseTask: (taskId: string) => void | Promise<void>;
   onCreateTask: () => void;
-  showHistoryToggle?: boolean;
-  onToggleHistory?: () => void;
   showWorkbenchToggle?: boolean;
   workbenchVisible?: boolean;
   onWorkbenchToggle?: () => void;
@@ -119,20 +116,15 @@ export function TaskCenterTabStrip({
   onRenameTask,
   onCloseTask,
   onCreateTask,
-  showHistoryToggle = false,
-  onToggleHistory,
   showWorkbenchToggle = false,
   workbenchVisible = false,
   onWorkbenchToggle,
 }: TaskCenterTabStripProps) {
   const { t } = useTranslation("navigation");
-  const showToolbarActions = showHistoryToggle || showWorkbenchToggle;
+  const showToolbarActions = showWorkbenchToggle;
   const renameActionLabel = t("navigation.sidebar.conversations.menu.rename");
   const createConversationLabel = t(
     "navigation.sidebar.conversations.newConversation",
-  );
-  const historyToggleLabel = t(
-    "navigation.sidebar.conversations.toggleHistory",
   );
   const closeTabLabel = (label: string) =>
     t("navigation.sidebar.conversations.closeTab", {
@@ -279,18 +271,6 @@ export function TaskCenterTabStrip({
             className="flex shrink-0 items-center gap-1 border-l border-[color:var(--lime-chrome-divider)] pl-1.5 dark:border-slate-700/80"
             data-testid="task-center-tab-toolbar"
           >
-            {showHistoryToggle ? (
-              <button
-                type="button"
-                className={tabUtilityButtonClassName}
-                data-testid="task-center-tab-history"
-                aria-label={historyToggleLabel}
-                title={historyToggleLabel}
-                onClick={onToggleHistory}
-              >
-                <Box className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
             {showWorkbenchToggle ? (
               <button
                 type="button"

@@ -6,15 +6,10 @@ import type {
   AgentRuntimeWebSearchMode,
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime";
-import type {
-  ServiceModelPreferenceConfig,
-  ServiceModelsConfig,
-} from "@/lib/api/appConfigTypes";
+import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
-import { getOrCreateDefaultProject } from "@/lib/api/project";
-import { normalizeMediaGenerationPreference } from "@/lib/mediaGeneration";
 import {
   mergeServiceModelPrompt,
   resolveServiceModelExecutionPreference,
@@ -45,9 +40,7 @@ import { parseSiteSearchWorkbenchCommand } from "../utils/siteSearchWorkbenchCom
 import { parseSummaryWorkbenchCommand } from "../utils/summaryWorkbenchCommand";
 import { parseTranslationWorkbenchCommand } from "../utils/translationWorkbenchCommand";
 import {
-  buildMentionCommandReplayText,
   resolveMentionCommandMergedPrefillReplayText,
-  resolveMentionCommandPrefillReplayText,
 } from "../utils/mentionCommandReplayText";
 import {
   parseMentionCommand,
@@ -66,12 +59,8 @@ import { parseVoiceWorkbenchCommand } from "../utils/voiceWorkbenchCommand";
 import { parseWritingWorkbenchCommand } from "../utils/writingWorkbenchCommand";
 import { parseWebpageWorkbenchCommand } from "../utils/webpageWorkbenchCommand";
 import {
-  AGENT_FAST_RESPONSE_MODE_STORAGE_KEY,
-  buildAgentFastResponseMetadata,
   buildAgentFastResponseSystemPrompt,
   resolveAgentFastResponseRouting,
-  type AgentFastResponseRoutingDecision,
-  type AgentFastResponseMode,
 } from "../utils/fastResponseRouting";
 import { resolvePlainInputIntentConfirmation } from "../utils/plainInputIntentConfirmation";
 import { detectBrowserTaskRequirement } from "../utils/browserTaskRequirement";
@@ -84,7 +73,6 @@ import {
   saveChatToolPreferences,
   type ChatToolPreferences,
 } from "../utils/chatToolPreferences";
-import { buildImageTaskAssistantContent } from "./imageTaskPersona";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { extractAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerformanceMetrics";
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
@@ -93,7 +81,6 @@ import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 import type {
   Message,
   MessageImage,
-  MessageImageWorkbenchPreview,
 } from "../types";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
@@ -125,7 +112,6 @@ import type {
   ServiceSkillSlotValues,
 } from "../service-skills/types";
 import type { ImageWorkbenchSkillRequest } from "./imageSkillLaunch";
-import { MODEL_SKILL_LAUNCH_DESCRIPTORS } from "./modelSkillLaunchDescriptors";
 import {
   attachSessionIdToRequestContext,
   attachSessionIdToScopedRequestContext,
@@ -142,19 +128,9 @@ import {
   buildUrlParseSkillLaunchRequestContext,
   buildWebpageSkillLaunchRequestContext,
   extractBoundSessionRequestContext,
-  resolveContractEntrySource,
   type PendingCommandSessionBinding,
 } from "./workspaceModelSkillLaunchRequestContext";
 import { buildBrowserControlLaunchRequestMetadata } from "./browserControlLaunch";
-import {
-  PDF_EXTRACT_DEFAULT_ENTRY_SOURCE,
-  VOICE_GENERATION_DEFAULT_ENTRY_SOURCE,
-  WEB_RESEARCH_DEFAULT_ENTRY_SOURCE,
-  resolvePdfExtractRuntimeContractBinding,
-  resolveTextTransformRuntimeContractBinding,
-  resolveVoiceGenerationRuntimeContractBinding,
-  resolveWebResearchRuntimeContractBinding,
-} from "@/lib/governance/modalityRuntimeContracts";
 import {
   buildServiceSceneLaunchRequestMetadata,
   parseRuntimeSceneCommand,
@@ -176,32 +152,20 @@ import {
   useRuntimeMentionCommandCatalog,
 } from "../skill-selection/runtimeInputCapabilityCatalog";
 import { recordServiceSkillUsage } from "../service-skills/storage";
-import { composeServiceSkillPrompt } from "../service-skills/promptComposer";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import { CONTENT_POST_SKILL_KEY } from "../utils/contentPostSkill";
 import {
-  installSkillFromPromptInstruction,
   parseSkillInstallPromptInstruction,
-  type SkillInstallPromptInstruction,
 } from "@/lib/skills/skillInstallPrompt";
 import {
-  normalizeOptionalText,
-  resolvePreferredRecentCommandText,
-  normalizeRecentSummaryLength,
   mergeSummaryCommandRecentDefaults,
   mergeTranslationCommandRecentDefaults,
   mergeAnalysisCommandRecentDefaults,
-  resolvePreferredComplianceCommandText,
   mergeComplianceCommandRecentDefaults,
-  normalizeRecentPositiveInteger,
-  normalizeRecentPresentationDeckType,
-  normalizeRecentFormType,
-  normalizeRecentWebpageType,
   mergeTypesettingCommandRecentDefaults,
   mergePresentationCommandRecentDefaults,
   mergeFormCommandRecentDefaults,
   mergeWebpageCommandRecentDefaults,
-  normalizeRecentPublishPlatform,
   mergePublishLikeCommandRecentDefaults,
 } from "./commands/commandRecentDefaults";
 import {
@@ -210,34 +174,18 @@ import {
   buildUploadDispatchBody,
   buildWritingDispatchBody,
 } from "./commands/dispatchBodyBuilders";
-import {
-  matchesVoiceCommandSkill,
-  matchesGrowthCommandSkill,
-  resolveGrowthCommandServiceSkill,
-  resolveVoiceCommandServiceSkill,
-  normalizeLocalServiceSkillExecutionKind,
-} from "./commands/serviceSkillMatch";
-import {
-  asRecord,
-  readPositiveInteger,
-  normalizeImageWorkbenchMode,
-  normalizeServiceSkillUsageSlotValue,
-  pickUsageSlotValues,
-  resolveLaunchScopedRequestContext,
-} from "./commands/skillSlotUtils";
-import { waitForNextPaint, hasHarnessLaunchRequestMetadata } from "./commands/sendHelpers";
+import { asRecord } from "./commands/skillSlotUtils";
+import { waitForNextPaint } from "./commands/sendHelpers";
 import { readFastResponseMode, withFastResponseMetadata } from "./commands/fastResponseHelpers";
 import { isImageGenerationPlainInputIntent, isPlainInputIntentAffirmativeReply } from "./commands/intentHelpers";
 import { resolveServiceModelSendOverrides } from "./commands/serviceModelHelpers";
 import { shouldSkipBrowserAssistPrimeForPlainFirstTurn, buildFastResponseAssistantDraft } from "./commands/browserAssistHelpers";
-import { readImageSkillLaunchContext, buildImageWorkbenchAssistantDraft } from "./commands/imageWorkbenchHelpers";
+import { buildImageWorkbenchAssistantDraft } from "./commands/imageWorkbenchHelpers";
 import { resolveSkillInstallPromptConfirmation } from "./commands/skillInstallHelpers";
 import { buildFileReadSkillLaunchRequestContext, buildVideoSkillLaunchRequestContext, buildCoverSkillLaunchRequestContext, buildResearchSkillLaunchRequestContext, buildDeepSearchSkillLaunchRequestContext, buildReportSkillLaunchRequestContext, buildCompetitorSkillLaunchRequestContext, buildSiteSearchSkillLaunchRequestContext, buildPdfReadSkillLaunchRequestContext } from "./commands/skillLaunchContextBuilders";
-import { resolveGrowthSkillLaunchRequestContext, resolveVoiceSkillLaunchRequestContext, type VoiceSkillLaunchRequest } from "./commands/skillLaunchResolvers";
+import { resolveGrowthSkillLaunchRequestContext, resolveVoiceSkillLaunchRequestContext } from "./commands/skillLaunchResolvers";
 import {
-  MENTION_USAGE_REQUEST_FIELDS,
   resolveMentionCommandUsageSlotValues,
-  resolveMentionCommandUsageLaunchUserInput,
   resolveImageMentionCommandKey,
   normalizeMentionCommandReplayText,
   resolveMentionCommandReplayText,
@@ -260,75 +208,6 @@ type SetStringState = (value: string) => void;
 type ParsedImageWorkbenchCommand = NonNullable<
   ReturnType<typeof parseImageWorkbenchCommand>
 >;
-type ParsedCoverWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseCoverWorkbenchCommand>
->;
-type ParsedCompetitorWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseCompetitorWorkbenchCommand>
->;
-type ParsedComplianceWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseComplianceWorkbenchCommand>
->;
-type ParsedAnalysisWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseAnalysisWorkbenchCommand>
->;
-type ParsedReportWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseReportWorkbenchCommand>
->;
-type ParsedPdfWorkbenchCommand = NonNullable<
-  ReturnType<typeof parsePdfWorkbenchCommand>
->;
-type ParsedPresentationWorkbenchCommand = NonNullable<
-  ReturnType<typeof parsePresentationWorkbenchCommand>
->;
-type ParsedChannelPreviewWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseChannelPreviewWorkbenchCommand>
->;
-type ParsedFormWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseFormWorkbenchCommand>
->;
-type ParsedGrowthWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseGrowthWorkbenchCommand>
->;
-type ParsedPublishWorkbenchCommand = NonNullable<
-  ReturnType<typeof parsePublishWorkbenchCommand>
->;
-type ParsedSearchWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseSearchWorkbenchCommand>
->;
-type ParsedDeepSearchWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseDeepSearchWorkbenchCommand>
->;
-type ParsedSiteSearchWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseSiteSearchWorkbenchCommand>
->;
-type ParsedSummaryWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseSummaryWorkbenchCommand>
->;
-type ParsedFileReadWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseFileReadWorkbenchCommand>
->;
-type ParsedTranslationWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseTranslationWorkbenchCommand>
->;
-type ParsedVideoWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseVideoWorkbenchCommand>
->;
-type ParsedTypesettingWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseTypesettingWorkbenchCommand>
->;
-type ParsedUploadWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseUploadWorkbenchCommand>
->;
-type ParsedVoiceWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseVoiceWorkbenchCommand>
->;
-type ParsedWritingWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseWritingWorkbenchCommand>
->;
-type ParsedWebpageWorkbenchCommand = NonNullable<
-  ReturnType<typeof parseWebpageWorkbenchCommand>
->;
 type CompletedMentionUsage = {
   skillId: string;
   runnerType: ServiceSkillHomeItem["runnerType"];
@@ -340,8 +219,6 @@ type CompletedMentionCommandUsage = {
   replayText?: string;
   slotValues?: ServiceSkillSlotValues;
 };
-type RewritePurpose = NonNullable<HandleSendOptions["purpose"]>;
-
 // normalizeServiceSkillUsageSlotValue 已提取到 ./commands/skillSlotUtils.ts
 
 // MENTION_USAGE_REQUEST_FIELDS + resolve*Mention* 函数组已提取到 ./commands/mentionCommandUtils.ts

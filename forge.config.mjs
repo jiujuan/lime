@@ -274,7 +274,9 @@ export default {
     ],
     ignore: ignorePackagerInput,
   },
-  rebuildConfig: {},
+  rebuildConfig: {
+    ignoreModules: ["canvas"],
+  },
   makers: [
     new MakerDMG(
       {

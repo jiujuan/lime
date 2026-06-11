@@ -1,7 +1,7 @@
 /**
  * AI Agent 聊天页面
  *
- * 包含聊天区域和侧边栏（任务列表）
+ * 包含聊天区域、任务中心和工作台布局
  * 支持内容创作模式下的布局过渡和步骤引导
  * 当主题为 general 时，使用 GeneralChat 组件实现
  */
@@ -20,7 +20,6 @@ import { useAgentChatUnified } from "./hooks";
 import {
   resolveRecentTopicActionLabel,
   resolveRecentTopicCandidate,
-  type TaskStatusReason,
 } from "./hooks/agentChatShared";
 import { buildEmptyStateProjectConversationGroups } from "./components/EmptyStateViewModel";
 import {
@@ -170,7 +169,6 @@ import { useWorkspaceNavigationActions } from "./workspace/useWorkspaceNavigatio
 import { useWorkspaceWriteFileAction } from "./workspace/useWorkspaceWriteFileAction";
 import { useWorkspaceArtifactPreviewActions } from "./workspace/useWorkspaceArtifactPreviewActions";
 import { useWorkspaceCanvasLayoutRuntime } from "./workspace/useWorkspaceCanvasLayoutRuntime";
-import { useWorkspaceHistorySidebarPrefetch } from "./workspace/useWorkspaceHistorySidebarPrefetch";
 import { useSessionRecentMetadataSyncRuntime } from "./workspace/useSessionRecentMetadataSyncRuntime";
 import {
   useTaskCenterDraftSendDispatchRuntime,
@@ -399,7 +397,6 @@ export function AgentChatWorkspace({
   initialCreationMode,
   lockTheme = false,
   fromResources = false,
-  hideHistoryToggle = false,
   showChatPanel = true,
   hideTopBar = false,
   topBarChrome = "full",
@@ -1949,7 +1946,6 @@ export function AgentChatWorkspace({
     submittedActionsInFlight = [],
     triggerAIGuide,
     topics = [],
-    topicsReady = true,
     sessionHistoryWindow = null,
     isAutoRestoringSession = false,
     isSessionHydrating = false,
@@ -1957,10 +1953,8 @@ export function AgentChatWorkspace({
     createFreshSession,
     ensureSession = async () => null,
     switchTopic: originalSwitchTopic,
-    loadTopics = async () => undefined,
     loadFullSessionHistory = async () => false,
     refreshSessionReadModel = async () => false,
-    deleteTopic,
     renameTopic,
     workspacePathMissing = false,
     fixWorkspacePathAndRetry,
@@ -2130,18 +2124,6 @@ export function AgentChatWorkspace({
     },
     [deferSessionRecentMetadataSyncForNavigation, originalSwitchTopic],
   );
-  const handleReturnToParentSession = useCallback(() => {
-    const parentSessionId = subagentParentContext?.parent_session_id?.trim();
-    if (!parentSessionId) {
-      return;
-    }
-    deferSessionRecentMetadataSyncForNavigation(parentSessionId);
-    void originalSwitchTopic(parentSessionId);
-  }, [
-    deferSessionRecentMetadataSyncForNavigation,
-    originalSwitchTopic,
-    subagentParentContext?.parent_session_id,
-  ]);
   const runtimeChatToolPreferences = useMemo(
     () => createChatToolPreferencesFromExecutionRuntime(executionRuntime),
     [executionRuntime],
@@ -4147,7 +4129,6 @@ export function AgentChatWorkspace({
     hasDisplayMessages,
     hasMessages,
     effectiveShowChatPanel,
-    allowTopicSidebarToggle,
     shouldRestoreImageTasksFromWorkspace,
   } = resolveAgentChatWorkspaceShellViewModel({
     agentEntry,
@@ -4181,7 +4162,6 @@ export function AgentChatWorkspace({
   }, [activeTheme, contentId]);
 
   const {
-    handleToggleSidebar,
     handleToggleCanvas,
     handleCloseCanvas,
     resolvedCanvasState,
@@ -4191,7 +4171,6 @@ export function AgentChatWorkspace({
     hasPendingA2UIForm,
     layoutMode,
     showChatPanel: effectiveShowChatPanel,
-    allowSidebarToggle: allowTopicSidebarToggle,
     showSidebar,
     defaultTopicSidebarVisible,
     hasMessages,
@@ -4217,14 +4196,6 @@ export function AgentChatWorkspace({
     setCanvasState,
     setCanvasWorkbenchLayoutMode,
   });
-  const { handleToggleHistorySidebar, prefetchHistoryTopics } =
-    useWorkspaceHistorySidebarPrefetch({
-      topicsReady,
-      projectId,
-      showSidebar,
-      loadTopics,
-      onToggleSidebar: handleToggleSidebar,
-    });
 
   useWorkspaceCanvasTaskFileSync({
     taskFiles,
@@ -4361,7 +4332,6 @@ export function AgentChatWorkspace({
   });
   const {
     handleCloseTaskCenterTab,
-    handleOpenArchivedTaskTopic,
     handleOpenTaskTopic,
     handleSwitchTaskTopic,
   } = useTaskCenterTopicNavigationRuntime({
@@ -4425,23 +4395,6 @@ export function AgentChatWorkspace({
       await renameTopic(topicId, nextTitle);
     },
     [renameTopic, taskCenterRenamePromptLabel, topicById, untitledTaskLabel],
-  );
-
-  const handleOpenSidebarTaskTopic = useCallback(
-    async (topicId: string) => {
-      await handleOpenTaskTopic(topicId);
-    },
-    [handleOpenTaskTopic],
-  );
-
-  const handleResumeSidebarTask = useCallback(
-    async (topicId: string, statusReason?: TaskStatusReason) => {
-      await handleOpenTaskTopic(topicId, {
-        preferResume: true,
-        forceRefresh: statusReason === "workspace_error",
-      });
-    },
-    [handleOpenTaskTopic],
   );
 
   const recentSessionTopic = useMemo(
@@ -4716,34 +4669,6 @@ export function AgentChatWorkspace({
     topicById,
     topics,
   ]);
-  const handleOpenTaskCenterSkillsPage = useCallback(() => {
-    if (!_onNavigate) {
-      return;
-    }
-
-    _onNavigate(
-      "skills",
-      projectId
-        ? {
-            creationProjectId: projectId,
-          }
-        : undefined,
-    );
-  }, [_onNavigate, projectId]);
-  const handleOpenTaskCenterKnowledgePage = useCallback(() => {
-    _onNavigate?.(
-      "knowledge",
-      project?.rootPath
-        ? {
-            workingDir: project.rootPath,
-          }
-        : undefined,
-    );
-  }, [_onNavigate, project?.rootPath]);
-  const handleOpenTaskCenterMemoryPage = useCallback(() => {
-    _onNavigate?.("memory");
-  }, [_onNavigate]);
-
   const handleWriteFile = useWorkspaceWriteFileAction({
     activeTheme,
     artifacts,
@@ -6926,14 +6851,10 @@ export function AgentChatWorkspace({
       ? taskCenterTabsNode
       : browserWorkspaceHomeTabsNode,
     suppressNavbarUtilityActions: suppressHomeNavbarUtilityActions,
-    hideHistoryToggle,
-    showChatPanel: effectiveShowChatPanel,
     topBarChrome,
     onBackToProjectManagement,
     fromResources,
     handleBackHome,
-    handleToggleSidebar: handleToggleHistorySidebar,
-    handlePrefetchHistory: prefetchHistoryTopics,
     showHarnessToggle: !suppressHomeNavbarUtilityActions && showHarnessToggle,
     navbarHarnessPanelVisible:
       !suppressHomeNavbarUtilityActions && navbarHarnessPanelVisible,
@@ -7009,13 +6930,6 @@ export function AgentChatWorkspace({
     timelineFocusRequestKey,
   });
 
-  const shellPendingActions = scenePendingActions ?? [];
-  const shellQueuedTurns = sceneQueuedTurns ?? [];
-  const shellHandleBackHome = handleBackHome ?? (() => undefined);
-  const shellHandleOpenSubagentSession =
-    handleOpenSubagentSession ?? (() => undefined);
-  const shellDisplayMessages = sceneDisplayMessages ?? [];
-  const shellIsSending = sceneIsSending ?? false;
   const fileManagerNode =
     fileManagerAvailable && fileManagerSidebarOpen ? (
       <FileManagerSidebar
@@ -7049,11 +6963,6 @@ export function AgentChatWorkspace({
         compactChrome={shellChromeRuntime.isWorkspaceCompactChrome}
         isThemeWorkbench={isThemeWorkbench}
         generalWorkbenchSidebarNode={generalWorkbenchSidebarNode}
-        showChatPanel={effectiveShowChatPanel}
-        showSidebar={showSidebar}
-        sidebarContextVariant={
-          agentEntry === "claw" ? "task-center" : "default"
-        }
         showGeneralWorkbenchLeftExpandButton={
           showGeneralWorkbenchLeftExpandButton
         }
@@ -7061,29 +6970,6 @@ export function AgentChatWorkspace({
         fileManagerNode={fileManagerNode}
         mainAreaNode={conversationSceneRuntime.mainAreaNode}
         rightRailNode={expertInfoPanelNode}
-        currentTopicId={activeTaskCenterDraftTabId ?? sessionId ?? null}
-        topics={topics}
-        topicsReady={topicsReady}
-        onNewChat={shellHandleBackHome}
-        onOpenTaskCenterHome={handleOpenTaskCenterNewTaskPage}
-        onOpenSkillsPage={handleOpenTaskCenterSkillsPage}
-        onOpenKnowledgePage={handleOpenTaskCenterKnowledgePage}
-        onOpenMemoryPage={handleOpenTaskCenterMemoryPage}
-        onSwitchTopic={handleOpenSidebarTaskTopic}
-        onOpenArchivedTopic={handleOpenArchivedTaskTopic}
-        onResumeTask={handleResumeSidebarTask}
-        onDeleteTopic={deleteTopic}
-        onRenameTopic={renameTopic}
-        currentMessages={shellDisplayMessages}
-        isSending={shellIsSending}
-        pendingActionCount={shellPendingActions.length}
-        queuedTurnCount={shellQueuedTurns.length}
-        threadStatus={threadRead?.status ?? (currentTurnId ? "running" : null)}
-        workspaceError={conversationSceneRuntime.workspaceAlertVisible}
-        childSubagentSessions={childSubagentSessions}
-        subagentParentContext={subagentParentContext}
-        onOpenSubagentSession={shellHandleOpenSubagentSession}
-        onReturnToParentSession={handleReturnToParentSession}
       />
       <AutomationJobDialog
         open={workspaceServiceSkillEntryActions.automationDialogOpen}

@@ -84,7 +84,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     ).toBeNull();
   });
 
-  it("从任务中心侧栏切到非路由会话时，不应被初始路由抢回", async () => {
+  it("从任务中心外部入口切到非路由会话时，不应被初始路由抢回", async () => {
     let resolveSwitchTopic: (() => void) | null = null;
     const state: Record<string, unknown> = createMockAgentChatUnifiedState({
       sessionId: "topic-current",
@@ -119,10 +119,13 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    clickButton(mounted.container, "toggle-history");
-    await flushEffects();
-
-    clickButton(mounted.container, "switch-topic");
+    expect(
+      notifyTaskCenterTaskOpen({
+        sessionId: "topic-a",
+        workspaceId: "workspace-test",
+        source: "conversation_shelf",
+      }),
+    ).toBe(true);
     mounted.rerender();
     await flushEffects();
 
@@ -244,16 +247,20 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     state.switchTopic = switchTopic;
     installMockAgentChatUnifiedState(state);
 
-    const mounted = mountPage({
+    mountPage({
       agentEntry: "claw",
       initialSessionId: "topic-current",
       projectId: "workspace-test",
     });
     await flushEffects();
 
-    clickButton(mounted.container, "toggle-history");
-    await flushEffects();
-    clickButton(mounted.container, "switch-topic");
+    expect(
+      notifyTaskCenterTaskOpen({
+        sessionId: "topic-a",
+        workspaceId: "workspace-test",
+        source: "conversation_shelf",
+      }),
+    ).toBe(true);
     await flushEffects();
 
     expect(switchTopic).toHaveBeenNthCalledWith(1, "topic-a");
