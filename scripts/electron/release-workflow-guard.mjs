@@ -150,9 +150,25 @@ function assertBuildSteps(buildJob) {
     "release build job",
   );
 
+  const pnpmSetupStep = stepByName(steps, "Setup pnpm");
+  if (pnpmSetupStep?.uses !== "pnpm/action-setup@v4") {
+    throw new Error("release build must set up pnpm with pnpm/action-setup@v4");
+  }
+  if (String(pnpmSetupStep?.with?.version || "") !== "9") {
+    throw new Error("release build must pin pnpm setup to version 9");
+  }
+
+  const nodeSetupStep = stepByName(steps, "Setup Node.js");
+  if (nodeSetupStep?.with?.cache !== "pnpm") {
+    throw new Error("release build must cache pnpm dependencies");
+  }
+  if (nodeSetupStep?.with?.["cache-dependency-path"] !== "pnpm-lock.yaml") {
+    throw new Error("release build must use pnpm-lock.yaml as cache dependency path");
+  }
+
   const installStep = stepByName(steps, "Install dependencies");
-  if (installStep?.run !== "npm ci") {
-    throw new Error("release build must install dependencies with npm ci");
+  if (installStep?.run !== "pnpm install --frozen-lockfile") {
+    throw new Error("release build must install dependencies with pnpm install --frozen-lockfile");
   }
 
   const macSecretStep = stepByName(
