@@ -37,7 +37,7 @@ import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
 import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
 import type { CreationMode } from "./components/types";
 import { type TaskFile } from "./components/TaskFiles";
-import { useWorkflow } from "@/lib/workspace/workbenchWorkflow";
+import { useWorkflow } from "@/components/workspace/hooks/useWorkflow";
 import {
   createInitialCanvasState,
   createInitialVideoState,

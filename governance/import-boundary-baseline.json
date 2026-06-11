@@ -190,11 +190,6 @@
       "rule": "lib→components"
     },
     {
-      "file": "src/lib/workspace/workbenchWorkflow.ts",
-      "import": "@/components/workspace/hooks/useWorkflow",
-      "rule": "lib→components"
-    },
-    {
       "file": "src/features/agent-app/ui/AgentRunHostDrawerFallback.tsx",
       "import": "@/components/agent/chat/components/InlineToolProcessStep",
       "rule": "features→components"
