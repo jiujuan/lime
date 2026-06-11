@@ -3,6 +3,7 @@ mod agent_session;
 mod automation;
 mod gateway;
 mod media;
+mod model;
 mod knowledge;
 mod project_git;
 mod skill;
@@ -72,7 +73,6 @@ use app_server_protocol::ModelProviderDeleteParams;
 use app_server_protocol::ModelProviderFetchModelsParams;
 use app_server_protocol::ModelProviderKeyCreateParams;
 use app_server_protocol::ModelProviderKeyDeleteParams;
-use app_server_protocol::ModelProviderKeyEventParams;
 use app_server_protocol::ModelProviderKeyNextParams;
 use app_server_protocol::ModelProviderKeyUpdateParams;
 use app_server_protocol::ModelProviderReadParams;
@@ -764,49 +764,49 @@ impl RequestProcessor {
             METHOD_USAGE_STATS_DAILY_TRENDS_LIST => {
                 self.handle_usage_stats_daily_trends_list(params).await
             }
-            METHOD_MODEL_LIST => self.handle_model_list(params).await,
-            METHOD_MODEL_PREFERENCES_LIST => self.handle_model_preferences_list().await,
-            METHOD_MODEL_SYNC_STATE_READ => self.handle_model_sync_state_read().await,
-            METHOD_MODEL_PROVIDER_LIST => self.handle_model_provider_list().await,
-            METHOD_MODEL_PROVIDER_CATALOG_LIST => self.handle_model_provider_catalog_list().await,
-            METHOD_MODEL_PROVIDER_READ => self.handle_model_provider_read(params).await,
-            METHOD_MODEL_PROVIDER_CREATE => self.handle_model_provider_create(params).await,
-            METHOD_MODEL_PROVIDER_UPDATE => self.handle_model_provider_update(params).await,
-            METHOD_MODEL_PROVIDER_DELETE => self.handle_model_provider_delete(params).await,
+            METHOD_MODEL_LIST => self.handle_model_list_impl(params).await,
+            METHOD_MODEL_PREFERENCES_LIST => self.handle_model_preferences_list_impl().await,
+            METHOD_MODEL_SYNC_STATE_READ => self.handle_model_sync_state_read_impl().await,
+            METHOD_MODEL_PROVIDER_LIST => self.handle_model_provider_list_impl().await,
+            METHOD_MODEL_PROVIDER_CATALOG_LIST => self.handle_model_provider_catalog_list_impl().await,
+            METHOD_MODEL_PROVIDER_READ => self.handle_model_provider_read_impl(params).await,
+            METHOD_MODEL_PROVIDER_CREATE => self.handle_model_provider_create_impl(params).await,
+            METHOD_MODEL_PROVIDER_UPDATE => self.handle_model_provider_update_impl(params).await,
+            METHOD_MODEL_PROVIDER_DELETE => self.handle_model_provider_delete_impl(params).await,
             METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE => {
-                self.handle_model_provider_sort_orders_update(params).await
+                self.handle_model_provider_sort_orders_update_impl(params).await
             }
             METHOD_MODEL_PROVIDER_CONFIG_EXPORT => {
-                self.handle_model_provider_config_export(params).await
+                self.handle_model_provider_config_export_impl(params).await
             }
             METHOD_MODEL_PROVIDER_CONFIG_IMPORT => {
-                self.handle_model_provider_config_import(params).await
+                self.handle_model_provider_config_import_impl(params).await
             }
             METHOD_MODEL_PROVIDER_TEST_CONNECTION => {
-                self.handle_model_provider_test_connection(params).await
+                self.handle_model_provider_test_connection_impl(params).await
             }
-            METHOD_MODEL_PROVIDER_TEST_CHAT => self.handle_model_provider_test_chat(params).await,
+            METHOD_MODEL_PROVIDER_TEST_CHAT => self.handle_model_provider_test_chat_impl(params).await,
             METHOD_MODEL_PROVIDER_FETCH_MODELS => {
-                self.handle_model_provider_fetch_models(params).await
+                self.handle_model_provider_fetch_models_impl(params).await
             }
-            METHOD_MODEL_PROVIDER_KEY_CREATE => self.handle_model_provider_key_create(params).await,
-            METHOD_MODEL_PROVIDER_KEY_UPDATE => self.handle_model_provider_key_update(params).await,
-            METHOD_MODEL_PROVIDER_KEY_DELETE => self.handle_model_provider_key_delete(params).await,
-            METHOD_MODEL_PROVIDER_KEY_NEXT => self.handle_model_provider_key_next(params).await,
+            METHOD_MODEL_PROVIDER_KEY_CREATE => self.handle_model_provider_key_create_impl(params).await,
+            METHOD_MODEL_PROVIDER_KEY_UPDATE => self.handle_model_provider_key_update_impl(params).await,
+            METHOD_MODEL_PROVIDER_KEY_DELETE => self.handle_model_provider_key_delete_impl(params).await,
+            METHOD_MODEL_PROVIDER_KEY_NEXT => self.handle_model_provider_key_next_impl(params).await,
             METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD => {
-                self.handle_model_provider_key_usage_record(params).await
+                self.handle_model_provider_key_usage_record_impl(params).await
             }
             METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD => {
-                self.handle_model_provider_key_error_record(params).await
+                self.handle_model_provider_key_error_record_impl(params).await
             }
             METHOD_MODEL_PROVIDER_UI_STATE_READ => {
-                self.handle_model_provider_ui_state_read(params).await
+                self.handle_model_provider_ui_state_read_impl(params).await
             }
             METHOD_MODEL_PROVIDER_UI_STATE_WRITE => {
-                self.handle_model_provider_ui_state_write(params).await
+                self.handle_model_provider_ui_state_write_impl(params).await
             }
-            METHOD_MODEL_PROVIDER_ALIAS_READ => self.handle_model_provider_alias_read(params).await,
-            METHOD_MODEL_PROVIDER_ALIAS_LIST => self.handle_model_provider_alias_list().await,
+            METHOD_MODEL_PROVIDER_ALIAS_READ => self.handle_model_provider_alias_read_impl(params).await,
+            METHOD_MODEL_PROVIDER_ALIAS_LIST => self.handle_model_provider_alias_list_impl().await,
             METHOD_CONNECT_DEEP_LINK_RESOLVE => self.handle_connect_deep_link_resolve(params).await,
             METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE => {
                 self.handle_connect_open_deep_link_resolve(params).await
@@ -1891,336 +1891,6 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    async fn handle_model_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_models(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_preferences_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_model_preferences()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_sync_state_read(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_model_sync_state()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_model_providers()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_catalog_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_model_provider_catalog()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_model_provider(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_model_provider(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_model_provider(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderDeleteParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_model_provider(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_sort_orders_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderSortOrdersUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_model_provider_sort_orders(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_config_export(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderConfigExportParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .export_model_provider_config(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_config_import(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderConfigImportParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .import_model_provider_config(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_test_connection(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderTestConnectionParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .test_model_provider_connection(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_test_chat(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderTestChatParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .test_model_provider_chat(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_fetch_models(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderFetchModelsParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .fetch_model_provider_models(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_key_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .create_model_provider_key(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_key_update(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyUpdateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_model_provider_key(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_key_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyDeleteParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_model_provider_key(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_key_next(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyNextParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_next_model_provider_key(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_key_usage_record(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyEventParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .record_model_provider_key_usage(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_key_error_record(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderKeyEventParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .record_model_provider_key_error(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_ui_state_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderUiStateReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_model_provider_ui_state(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_ui_state_write(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderUiStateWriteParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .write_model_provider_ui_state(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_alias_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ModelProviderAliasReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_model_provider_alias(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_model_provider_alias_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_model_provider_aliases()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
     async fn handle_connect_deep_link_resolve(
         &self,
         params: Option<serde_json::Value>,
@@ -2234,6 +1904,8 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
+
+    // model handlers 已提取到 processor/model.rs
 
     async fn handle_connect_open_deep_link_resolve(
         &self,
