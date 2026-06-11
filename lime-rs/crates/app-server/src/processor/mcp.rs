@@ -7,7 +7,6 @@ use app_server_protocol::{
     McpServerStartParams, McpServerStopParams, McpServerUpdateParams, McpToolCallParams,
     McpToolCallWithCallerParams, McpToolListForContextParams, McpToolSearchParams,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_mcp_server_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {

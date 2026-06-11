@@ -1,4 +1,5 @@
 //! workspace domain handlers for the App Server processor.
+use serde_json::Value;
 
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
@@ -7,7 +8,6 @@ use app_server_protocol::{
     WorkspacePathReadParams, WorkspaceProjectPathResolveParams, WorkspaceReadParams,
     WorkspaceRegisteredSkillsListParams, WorkspaceSkillBindingsListParams,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_session_file_get_or_create_impl(

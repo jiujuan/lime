@@ -4,7 +4,6 @@ use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, R
 use app_server_protocol::{
     JsonRpcError, ProjectMaterialListParams, ProjectMaterialLookupParams, ProjectMaterialUploadParams, ProjectMaterialImportFromUrlParams, ProjectMaterialUpdateParams, ProjectMemoryReadParams,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_project_material_list_impl(

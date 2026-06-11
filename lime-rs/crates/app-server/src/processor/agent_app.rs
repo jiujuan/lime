@@ -8,7 +8,6 @@ use app_server_protocol::{
     AgentAppUiRuntimeStatusParams, AgentAppUiRuntimeStopParams,
     AgentAppUninstallParams, AgentAppUninstallRehearsalParams, JsonRpcError,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_agent_app_installed_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {

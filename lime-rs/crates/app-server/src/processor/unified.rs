@@ -7,7 +7,6 @@ use app_server_protocol::{
     UnifiedMemoryListParams, UnifiedMemorySearchParams, UnifiedMemorySemanticSearchParams,
     UnifiedMemoryUpdateParams,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_unified_memory_list_impl(

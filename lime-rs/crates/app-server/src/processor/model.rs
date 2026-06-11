@@ -11,7 +11,6 @@ use app_server_protocol::{
     ModelProviderTestConnectionParams, ModelProviderUiStateReadParams,
     ModelProviderUiStateWriteParams, ModelProviderUpdateParams,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_model_list_impl(

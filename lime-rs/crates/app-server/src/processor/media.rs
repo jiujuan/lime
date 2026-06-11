@@ -6,7 +6,6 @@ use app_server_protocol::{
     MediaTaskArtifactImageCreateParams, MediaTaskArtifactListParams,
     MediaTaskArtifactLookupParams, MediaTaskArtifactVideoCreateParams, JsonRpcError,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_media_task_artifact_image_create_impl(

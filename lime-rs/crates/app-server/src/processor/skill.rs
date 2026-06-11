@@ -10,7 +10,6 @@ use app_server_protocol::{
     SkillRemoteInspectParams, SkillRepositoryDeleteParams, SkillRepositorySaveParams,
     SkillScaffoldCreateParams,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_skill_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {

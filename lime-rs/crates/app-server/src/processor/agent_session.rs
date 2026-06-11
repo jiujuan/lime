@@ -14,7 +14,6 @@ use app_server_protocol::{
     AgentSessionQueuedTurnPromoteParams, AgentSessionQueuedTurnRemoveParams,
     AgentSessionThreadResumeParams, AgentSessionUpdateParams, JsonRpcError,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_session_list_impl(

@@ -6,7 +6,6 @@ use app_server_protocol::{
     GalleryMaterialMetadataCreateParams, GalleryMaterialMetadataUpdateParams,
     JsonRpcError,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_gallery_material_get_impl(

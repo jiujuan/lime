@@ -6,7 +6,6 @@ use app_server_protocol::{
     GatewayTunnelCloudflaredInstallParams, GatewayTunnelCreateParams,
     GatewayTunnelSyncWebhookUrlParams, JsonRpcError,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_gateway_channel_status_impl(

@@ -7,7 +7,6 @@ use app_server_protocol::{
     VoiceInstructionSaveParams, VoiceModelDefaultSetParams,
     VoiceModelTestTranscribeFileParams,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_voice_asr_credential_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {

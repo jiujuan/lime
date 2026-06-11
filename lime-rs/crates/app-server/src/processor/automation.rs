@@ -6,7 +6,6 @@ use app_server_protocol::{
     AutomationJobRunHistoryParams, AutomationJobUpdateParams, AutomationScheduleParams, AutomationSchedulerConfigUpdateParams,
      JsonRpcError,
 };
-use serde_json::Value;
 
 impl RequestProcessor {
     pub(super) async fn handle_automation_job_list_impl(&self) -> Result<RpcDispatch, JsonRpcError> {
