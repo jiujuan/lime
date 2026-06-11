@@ -22,12 +22,33 @@ import type {
   ServiceSkillHomeItem,
   ServiceSkillSlotValues,
 } from "../../service-skills/types";
+import type {
+  ParsedGrowthWorkbenchCommand,
+  ParsedVoiceWorkbenchCommand,
+} from "./commandRecentDefaults";
 
 export interface VoiceSkillLaunchRequest {
   dispatchText: string;
   requestContext: Record<string, unknown>;
 }
 
+export async function resolveGrowthSkillLaunchRequestContext(params: {
+  rawText: string;
+  parsedCommand: ParsedGrowthWorkbenchCommand;
+  serviceSkills: ServiceSkillHomeItem[];
+  projectId?: string | null;
+  contentId?: string | null;
+}): Promise<VoiceSkillLaunchRequest | null> {
+  const skill = resolveGrowthCommandServiceSkill(params.serviceSkills);
+  if (!skill) {
+    toast.error("当前未安装可用的增长跟踪技能，请先同步技能目录后再试");
+    return null;
+  }
+
+  const prompt = params.parsedCommand.prompt.trim();
+  const slotValues: ServiceSkillSlotValues = {
+    ...(params.parsedCommand.platformType
+      ? {
           platform: params.parsedCommand.platformType,
         }
       : {}),

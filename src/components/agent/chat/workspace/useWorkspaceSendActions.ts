@@ -553,33 +553,8 @@ function buildImageWorkbenchAssistantDraft(
 
 // MENTION_USAGE_REQUEST_FIELDS + resolve*Mention* 函数组已提取到 ./commands/mentionCommandUtils.ts
 
-// 命令 recent defaults 合并函数已提取到 ./commands/commandRecentDefaults.ts
-
-// build*DispatchBody 函数已提取到 ./commands/dispatchBodyBuilders.ts
-}
-
-// matchesVoice/GrowthCommandSkill + resolve*CommandServiceSkill 已提取到 ./commands/serviceSkillMatch.ts
-
-interface VoiceSkillLaunchRequest {
-  dispatchText: string;
-  requestContext: Record<string, unknown>;
-}
-
-async function resolveGrowthSkillLaunchRequestContext(params: {
-  rawText: string;
-  parsedCommand: ParsedGrowthWorkbenchCommand;
-  serviceSkills: ServiceSkillHomeItem[];
-  projectId?: string | null;
-  contentId?: string | null;
-}): Promise<VoiceSkillLaunchRequest | null> {
-  const skill = resolveGrowthCommandServiceSkill(params.serviceSkills);
-  if (!skill) {
-    toast.error("当前未安装可用的增长跟踪技能，请先同步技能目录后再试");
-    return null;
-  }
-}
-
 interface UseWorkspaceSendActionsParams {
+// 命令 recent defaults 合并函数已提取到 ./commands/commandRecentDefaults.ts
   input: string;
   setInput: SetStringState;
   mentionedCharacters: Character[];
