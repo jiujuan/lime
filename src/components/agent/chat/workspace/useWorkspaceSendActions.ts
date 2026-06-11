@@ -231,6 +231,7 @@ import { isImageGenerationPlainInputIntent, isPlainInputIntentAffirmativeReply }
 import { resolveServiceModelSendOverrides } from "./commands/serviceModelHelpers";
 import { shouldSkipBrowserAssistPrimeForPlainFirstTurn, buildFastResponseAssistantDraft } from "./commands/browserAssistHelpers";
 import { readImageSkillLaunchContext, buildImageWorkbenchAssistantDraft } from "./commands/imageWorkbenchHelpers";
+import { resolveSkillInstallPromptConfirmation } from "./commands/skillInstallHelpers";
 import { buildFileReadSkillLaunchRequestContext, buildVideoSkillLaunchRequestContext, buildCoverSkillLaunchRequestContext, buildResearchSkillLaunchRequestContext, buildDeepSearchSkillLaunchRequestContext, buildReportSkillLaunchRequestContext, buildCompetitorSkillLaunchRequestContext, buildSiteSearchSkillLaunchRequestContext, buildPdfReadSkillLaunchRequestContext } from "./commands/skillLaunchContextBuilders";
 import { resolveGrowthSkillLaunchRequestContext, resolveVoiceSkillLaunchRequestContext, type VoiceSkillLaunchRequest } from "./commands/skillLaunchResolvers";
 import {
@@ -467,42 +468,6 @@ type AgentWorkspaceTranslator = (
   key: string,
   options?: Record<string, unknown>,
 ) => string;
-
-async function resolveSkillInstallPromptConfirmation(
-  instruction: SkillInstallPromptInstruction,
-  translate: AgentWorkspaceTranslator,
-): Promise<string> {
-  try {
-    const result = await installSkillFromPromptInstruction(instruction, "lime");
-    return translate("agentChat.skillInstallPrompt.installedConfirmation", {
-      skill: result.directory,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (/already exists|已存在/i.test(message)) {
-      return translate(
-        "agentChat.skillInstallPrompt.alreadyInstalledConfirmation",
-        {
-          skill: instruction.skillName,
-        },
-      );
-    }
-    return translate("agentChat.skillInstallPrompt.failedConfirmation", {
-      skill: instruction.skillName,
-      error: message,
-    });
-  }
-}
-
-export type WorkspaceHandleSend = (
-  images?: MessageImage[],
-  webSearch?: boolean,
-  thinking?: boolean,
-  textOverride?: string,
-  sendExecutionStrategy?: CurrentExecutionStrategy,
-  autoContinuePayload?: AutoContinueRequestPayload,
-  sendOptions?: HandleSendOptions,
-) => Promise<boolean>;
 
 export function useWorkspaceSendActions({
   input,
