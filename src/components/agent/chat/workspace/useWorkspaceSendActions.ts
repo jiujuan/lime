@@ -217,6 +217,14 @@ import {
   resolveVoiceCommandServiceSkill,
   normalizeLocalServiceSkillExecutionKind,
 } from "./commands/serviceSkillMatch";
+import {
+  asRecord,
+  readPositiveInteger,
+  normalizeImageWorkbenchMode,
+  normalizeServiceSkillUsageSlotValue,
+  pickUsageSlotValues,
+  resolveLaunchScopedRequestContext,
+} from "./commands/skillSlotUtils";
 
 type CurrentExecutionStrategy = "react";
 type SetStringState = (value: string) => void;
@@ -325,12 +333,7 @@ function waitForNextPaint(): Promise<void> {
   });
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-  return value as Record<string, unknown>;
-}
+// asRecord 已提取到 ./commands/skillSlotUtils.ts
 
 // normalizeOptionalText 已提取到 ./commands/commandRecentDefaults.ts
 
@@ -505,25 +508,7 @@ function readImageSkillLaunchContext(
   );
 }
 
-function readPositiveInteger(value: unknown): number | undefined {
-  const numericValue =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number.parseInt(value, 10)
-        : Number.NaN;
-  return Number.isFinite(numericValue) && numericValue > 0
-    ? Math.floor(numericValue)
-    : undefined;
-}
-
-function normalizeImageWorkbenchMode(
-  value: unknown,
-): MessageImageWorkbenchPreview["mode"] {
-  return value === "edit" || value === "variation" || value === "generate"
-    ? value
-    : "generate";
-}
+// readPositiveInteger, normalizeImageWorkbenchMode 已提取到 ./commands/skillSlotUtils.ts
 
 function buildImageWorkbenchAssistantDraft(
   requestMetadata: Record<string, unknown> | undefined,
@@ -597,20 +582,7 @@ function buildImageWorkbenchAssistantDraft(
   };
 }
 
-function normalizeServiceSkillUsageSlotValue(
-  value: unknown,
-): string | undefined {
-  if (typeof value === "string") {
-    return normalizeOptionalText(value);
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-  return undefined;
-}
+// normalizeServiceSkillUsageSlotValue 已提取到 ./commands/skillSlotUtils.ts
 
 const MENTION_USAGE_REQUEST_FIELDS: Readonly<
   Record<string, readonly string[]>
@@ -740,31 +712,7 @@ const MENTION_USAGE_REQUEST_FIELDS: Readonly<
   ],
 };
 
-function pickUsageSlotValues(
-  record: Record<string, unknown>,
-  fieldKeys: readonly string[],
-): ServiceSkillSlotValues | undefined {
-  const nextValues = Object.fromEntries(
-    fieldKeys
-      .map((fieldKey) => [
-        fieldKey,
-        normalizeServiceSkillUsageSlotValue(record[fieldKey]),
-      ])
-      .filter((entry): entry is [string, string] => Boolean(entry[1])),
-  );
-
-  return Object.keys(nextValues).length > 0 ? nextValues : undefined;
-}
-
-function resolveLaunchScopedRequestContext(
-  launchMetadata: Record<string, unknown>,
-  requestContextKey: string,
-): Record<string, unknown> | undefined {
-  return (
-    asRecord(launchMetadata[requestContextKey]) ||
-    asRecord(asRecord(launchMetadata.request_context)?.[requestContextKey])
-  );
-}
+// pickUsageSlotValues, resolveLaunchScopedRequestContext 已提取到 ./commands/skillSlotUtils.ts
 
 function resolveMentionCommandUsageSlotValues(
   requestMetadata: Record<string, unknown> | undefined,
