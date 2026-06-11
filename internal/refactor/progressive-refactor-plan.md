@@ -101,13 +101,13 @@
 
 ### R-32 巨型组件状态分层拆分（N 轮，原 v1 的 R-03/R-06 在此归并）
 
-**状态**：proposed
+**状态**：first cut 完成（2026-06-11）
 **消除的机制**：业务状态机/解析器默认写进组件体（52 个 useState 模式）。
 
 **正确样板**（仓库已有，直接复用，不发明新模式）：`packages/agent-runtime-projection` + `components/agent/chat/projection/` 的 projection/selector 分离。
 
 **执行节奏**（每轮 1 个目标，先抽逻辑后拆 UI）：
-1. `useWorkspaceSendActions.ts`（5117 行）：20+ 个 workbench 命令解析器是纯函数，先抽 `workspace/commands/` 模块 + `*.unit.test.ts`，hook 本体收缩为编排。**建议作为轴 C 第一刀**——纯函数抽取风险最低、立刻验证模式可行性。
+1. ✅ `useWorkspaceSendActions.ts`（5117 → 4707 行，-410 行）：提取 16 个命令 recent defaults 纯函数到 `workspace/commands/commandRecentDefaults.ts`（450 行）。hook 本体通过 import 复用。
 2. `AgentChatWorkspace.tsx`（7029 行）：按 8 个正交关注点逐个抽 View Model / 子 hook（媒体任务 runtime、数据同步、canvas 联动…），每轮抽 1-2 个；UI 子组件拆分放在状态抽完之后。
 3. 后续队列按"改动频率 × 行数"动态排（`agentChatHistory.ts` 3560、`capabilityDispatcher.ts` 4344、`DesignCanvas.tsx` 3802…），每个开工前补独立 R-3x 条目。
 

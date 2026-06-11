@@ -23,11 +23,7 @@ import { parseAnalysisWorkbenchCommand } from "../utils/analysisWorkbenchCommand
 import { parseBrowserWorkbenchCommand } from "../utils/browserWorkbenchCommand";
 import { parseBroadcastWorkbenchCommand } from "../utils/broadcastWorkbenchCommand";
 import { parseChannelPreviewWorkbenchCommand } from "../utils/channelPreviewWorkbenchCommand";
-import { normalizeContentPostPlatform } from "../utils/contentPostPlatform";
 import {
-  DEFAULT_COMPLIANCE_FOCUS,
-  DEFAULT_COMPLIANCE_OUTPUT_FORMAT,
-  DEFAULT_COMPLIANCE_STYLE,
   parseComplianceWorkbenchCommand,
 } from "../utils/complianceWorkbenchCommand";
 import { parseCompetitorWorkbenchCommand } from "../utils/competitorWorkbenchCommand";
@@ -188,6 +184,26 @@ import {
   parseSkillInstallPromptInstruction,
   type SkillInstallPromptInstruction,
 } from "@/lib/skills/skillInstallPrompt";
+import {
+  normalizeOptionalText,
+  resolvePreferredRecentCommandText,
+  normalizeRecentSummaryLength,
+  mergeSummaryCommandRecentDefaults,
+  mergeTranslationCommandRecentDefaults,
+  mergeAnalysisCommandRecentDefaults,
+  resolvePreferredComplianceCommandText,
+  mergeComplianceCommandRecentDefaults,
+  normalizeRecentPositiveInteger,
+  normalizeRecentPresentationDeckType,
+  normalizeRecentFormType,
+  normalizeRecentWebpageType,
+  mergeTypesettingCommandRecentDefaults,
+  mergePresentationCommandRecentDefaults,
+  mergeFormCommandRecentDefaults,
+  mergeWebpageCommandRecentDefaults,
+  normalizeRecentPublishPlatform,
+  mergePublishLikeCommandRecentDefaults,
+} from "./commands/commandRecentDefaults";
 
 type CurrentExecutionStrategy = "react";
 type SetStringState = (value: string) => void;
@@ -303,14 +319,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
-function normalizeOptionalText(value?: string | null): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const normalized = value.trim();
-  return normalized ? normalized : undefined;
-}
+// normalizeOptionalText 已提取到 ./commands/commandRecentDefaults.ts
 
 function hasHarnessLaunchRequestMetadata(
   requestMetadata: Record<string, unknown> | undefined,
@@ -903,428 +912,9 @@ function resolveBareMentionCommandPrefillSourceText(
   return `${matched.commandPrefix} ${replayText}`;
 }
 
-function resolvePreferredRecentCommandText(
-  current?: string | null,
-  fallback?: string | null,
-): string | undefined {
-  return normalizeOptionalText(current) || normalizeOptionalText(fallback);
-}
+// 命令 recent defaults 合并函数已提取到 ./commands/commandRecentDefaults.ts
 
-function normalizeRecentSummaryLength(
-  value?: string | null,
-): ParsedSummaryWorkbenchCommand["length"] | undefined {
-  if (value === "short" || value === "medium" || value === "long") {
-    return value;
-  }
-  return undefined;
-}
-
-function mergeSummaryCommandRecentDefaults(params: {
-  parsedCommand: ParsedSummaryWorkbenchCommand;
-  slotValues?: ServiceSkillSlotValues;
-}): ParsedSummaryWorkbenchCommand {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  return {
-    ...params.parsedCommand,
-    focus: resolvePreferredRecentCommandText(
-      params.parsedCommand.focus,
-      slotValues.focus,
-    ),
-    length:
-      params.parsedCommand.length ??
-      normalizeRecentSummaryLength(slotValues.length),
-    style: resolvePreferredRecentCommandText(
-      params.parsedCommand.style,
-      slotValues.style,
-    ),
-    outputFormat: resolvePreferredRecentCommandText(
-      params.parsedCommand.outputFormat,
-      slotValues.output_format,
-    ),
-  };
-}
-
-function mergeTranslationCommandRecentDefaults(params: {
-  parsedCommand: ParsedTranslationWorkbenchCommand;
-  slotValues?: ServiceSkillSlotValues;
-}): ParsedTranslationWorkbenchCommand {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  return {
-    ...params.parsedCommand,
-    sourceLanguage: resolvePreferredRecentCommandText(
-      params.parsedCommand.sourceLanguage,
-      slotValues.source_language,
-    ),
-    targetLanguage: resolvePreferredRecentCommandText(
-      params.parsedCommand.targetLanguage,
-      slotValues.target_language,
-    ),
-    style: resolvePreferredRecentCommandText(
-      params.parsedCommand.style,
-      slotValues.style,
-    ),
-    outputFormat: resolvePreferredRecentCommandText(
-      params.parsedCommand.outputFormat,
-      slotValues.output_format,
-    ),
-  };
-}
-
-type AnalysisCommandRecentDefaultsTarget = Pick<
-  ParsedAnalysisWorkbenchCommand,
-  "focus" | "style" | "outputFormat"
->;
-
-function mergeAnalysisCommandRecentDefaults<
-  T extends AnalysisCommandRecentDefaultsTarget,
->(params: { parsedCommand: T; slotValues?: ServiceSkillSlotValues }): T {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  return {
-    ...params.parsedCommand,
-    focus: resolvePreferredRecentCommandText(
-      params.parsedCommand.focus,
-      slotValues.focus,
-    ),
-    style: resolvePreferredRecentCommandText(
-      params.parsedCommand.style,
-      slotValues.style,
-    ),
-    outputFormat: resolvePreferredRecentCommandText(
-      params.parsedCommand.outputFormat,
-      slotValues.output_format,
-    ),
-  } as T;
-}
-
-function resolvePreferredComplianceCommandText(params: {
-  current?: string | null;
-  fallback?: string | null;
-  defaultValue: string;
-}): string | undefined {
-  const fallback = normalizeOptionalText(params.fallback);
-  const current = normalizeOptionalText(params.current);
-  if (!fallback) {
-    return current;
-  }
-  if (!current || current === params.defaultValue) {
-    return fallback;
-  }
-  return current;
-}
-
-function mergeComplianceCommandRecentDefaults(params: {
-  parsedCommand: ParsedComplianceWorkbenchCommand;
-  slotValues?: ServiceSkillSlotValues;
-}): ParsedComplianceWorkbenchCommand {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  return {
-    ...params.parsedCommand,
-    focus: resolvePreferredComplianceCommandText({
-      current: params.parsedCommand.focus,
-      fallback: slotValues.focus,
-      defaultValue: DEFAULT_COMPLIANCE_FOCUS,
-    }),
-    style: resolvePreferredComplianceCommandText({
-      current: params.parsedCommand.style,
-      fallback: slotValues.style,
-      defaultValue: DEFAULT_COMPLIANCE_STYLE,
-    }),
-    outputFormat: resolvePreferredComplianceCommandText({
-      current: params.parsedCommand.outputFormat,
-      fallback: slotValues.output_format,
-      defaultValue: DEFAULT_COMPLIANCE_OUTPUT_FORMAT,
-    }),
-  };
-}
-
-function normalizeRecentPositiveInteger(
-  value?: string | null,
-): number | undefined {
-  const normalized = normalizeOptionalText(value);
-  if (!normalized) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(normalized, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return undefined;
-  }
-
-  return parsed;
-}
-
-function normalizeRecentPresentationDeckType(
-  value?: string | null,
-): ParsedPresentationWorkbenchCommand["deckType"] | undefined {
-  switch (value?.trim().toLowerCase()) {
-    case "pitch_deck":
-      return "pitch_deck";
-    case "sales_deck":
-      return "sales_deck";
-    case "training_deck":
-      return "training_deck";
-    case "report_deck":
-      return "report_deck";
-    case "proposal_deck":
-      return "proposal_deck";
-    default:
-      return undefined;
-  }
-}
-
-function normalizeRecentFormType(
-  value?: string | null,
-): ParsedFormWorkbenchCommand["formType"] | undefined {
-  switch (value?.trim().toLowerCase()) {
-    case "survey_form":
-      return "survey_form";
-    case "lead_form":
-      return "lead_form";
-    case "registration_form":
-      return "registration_form";
-    case "feedback_form":
-      return "feedback_form";
-    case "application_form":
-      return "application_form";
-    default:
-      return undefined;
-  }
-}
-
-function normalizeRecentWebpageType(
-  value?: string | null,
-): ParsedWebpageWorkbenchCommand["pageType"] | undefined {
-  switch (value?.trim().toLowerCase()) {
-    case "landing_page":
-      return "landing_page";
-    case "homepage":
-      return "homepage";
-    case "campaign_page":
-      return "campaign_page";
-    case "product_page":
-      return "product_page";
-    case "docs_page":
-      return "docs_page";
-    case "portfolio":
-      return "portfolio";
-    case "resume_page":
-      return "resume_page";
-    default:
-      return undefined;
-  }
-}
-
-function mergeTypesettingCommandRecentDefaults(params: {
-  parsedCommand: ParsedTypesettingWorkbenchCommand;
-  slotValues?: ServiceSkillSlotValues;
-}): ParsedTypesettingWorkbenchCommand {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  return {
-    ...params.parsedCommand,
-    targetPlatform: resolvePreferredRecentCommandText(
-      params.parsedCommand.targetPlatform,
-      slotValues.target_platform,
-    ),
-  };
-}
-
-function mergePresentationCommandRecentDefaults(params: {
-  parsedCommand: ParsedPresentationWorkbenchCommand;
-  slotValues?: ServiceSkillSlotValues;
-}): ParsedPresentationWorkbenchCommand {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  return {
-    ...params.parsedCommand,
-    deckType:
-      params.parsedCommand.deckType ??
-      normalizeRecentPresentationDeckType(slotValues.deck_type),
-    style: resolvePreferredRecentCommandText(
-      params.parsedCommand.style,
-      slotValues.style,
-    ),
-    audience: resolvePreferredRecentCommandText(
-      params.parsedCommand.audience,
-      slotValues.audience,
-    ),
-    slideCount:
-      params.parsedCommand.slideCount ??
-      normalizeRecentPositiveInteger(slotValues.slide_count),
-  };
-}
-
-function mergeFormCommandRecentDefaults(params: {
-  parsedCommand: ParsedFormWorkbenchCommand;
-  slotValues?: ServiceSkillSlotValues;
-}): ParsedFormWorkbenchCommand {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  return {
-    ...params.parsedCommand,
-    formType:
-      params.parsedCommand.formType ??
-      normalizeRecentFormType(slotValues.form_type),
-    style: resolvePreferredRecentCommandText(
-      params.parsedCommand.style,
-      slotValues.style,
-    ),
-    audience: resolvePreferredRecentCommandText(
-      params.parsedCommand.audience,
-      slotValues.audience,
-    ),
-    fieldCount:
-      params.parsedCommand.fieldCount ??
-      normalizeRecentPositiveInteger(slotValues.field_count),
-  };
-}
-
-function mergeWebpageCommandRecentDefaults(params: {
-  parsedCommand: ParsedWebpageWorkbenchCommand;
-  slotValues?: ServiceSkillSlotValues;
-}): ParsedWebpageWorkbenchCommand {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  return {
-    ...params.parsedCommand,
-    pageType:
-      params.parsedCommand.pageType ??
-      normalizeRecentWebpageType(slotValues.page_type),
-    style: resolvePreferredRecentCommandText(
-      params.parsedCommand.style,
-      slotValues.style,
-    ),
-    techStack: resolvePreferredRecentCommandText(
-      params.parsedCommand.techStack,
-      slotValues.tech_stack,
-    ),
-  };
-}
-
-type ParsedPublishLikeWorkbenchCommand =
-  | ParsedChannelPreviewWorkbenchCommand
-  | ParsedUploadWorkbenchCommand
-  | ParsedPublishWorkbenchCommand
-  | ParsedWritingWorkbenchCommand;
-
-function normalizeRecentPublishPlatform(params: {
-  platformType?: string | null;
-  platformLabel?: string | null;
-}): {
-  platformType?: ParsedPublishWorkbenchCommand["platformType"];
-  platformLabel?: string;
-} {
-  const normalizedLabel = normalizeOptionalText(params.platformLabel);
-  if (normalizedLabel) {
-    const normalizedPlatform = normalizeContentPostPlatform(normalizedLabel);
-    if (normalizedPlatform.platformType || normalizedPlatform.platformLabel) {
-      return normalizedPlatform;
-    }
-  }
-
-  switch (params.platformType?.trim().toLowerCase()) {
-    case "wechat_official_account":
-      return {
-        platformType: "wechat_official_account",
-        platformLabel: "微信公众号后台",
-      };
-    case "xiaohongshu":
-      return {
-        platformType: "xiaohongshu",
-        platformLabel: "小红书",
-      };
-    case "zhihu":
-      return {
-        platformType: "zhihu",
-        platformLabel: "知乎",
-      };
-    case "douyin":
-      return {
-        platformType: "douyin",
-        platformLabel: "抖音",
-      };
-    case "bilibili":
-      return {
-        platformType: "bilibili",
-        platformLabel: "B站",
-      };
-    case "instagram":
-      return {
-        platformType: "instagram",
-        platformLabel: "Instagram",
-      };
-    case "youtube":
-      return {
-        platformType: "youtube",
-        platformLabel: "YouTube",
-      };
-    case "tiktok":
-      return {
-        platformType: "tiktok",
-        platformLabel: "TikTok",
-      };
-    case "x":
-      return {
-        platformType: "x",
-        platformLabel: "X / Twitter",
-      };
-    default:
-      return {};
-  }
-}
-
-function mergePublishLikeCommandRecentDefaults<
-  T extends ParsedPublishLikeWorkbenchCommand,
->(params: { parsedCommand: T; slotValues?: ServiceSkillSlotValues }): T {
-  const slotValues = params.slotValues;
-  if (!slotValues) {
-    return params.parsedCommand;
-  }
-
-  const currentPlatform = normalizeRecentPublishPlatform({
-    platformType: params.parsedCommand.platformType,
-    platformLabel: params.parsedCommand.platformLabel,
-  });
-  const fallbackPlatform = normalizeRecentPublishPlatform({
-    platformType: slotValues.platform_type,
-    platformLabel: slotValues.platform_label,
-  });
-
-  return {
-    ...params.parsedCommand,
-    platformType: currentPlatform.platformType ?? fallbackPlatform.platformType,
-    platformLabel:
-      currentPlatform.platformLabel ?? fallbackPlatform.platformLabel,
-  };
-}
+// merge*CommandRecentDefaults + normalizeRecent* 系列函数已提取到 ./commands/commandRecentDefaults.ts
 
 function buildPublishDispatchBody(params: {
   prompt?: string | null;
