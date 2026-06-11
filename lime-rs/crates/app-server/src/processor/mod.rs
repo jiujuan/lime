@@ -1,6 +1,7 @@
 mod knowledge;
 mod project_git;
 mod skill;
+mod workspace;
 
 use crate::AppServerError;
 use crate::RuntimeCore;
@@ -131,10 +132,6 @@ use app_server_protocol::ProjectMaterialUploadParams;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
-use app_server_protocol::SessionFileGetOrCreateParams;
-use app_server_protocol::SessionFileIdParams;
-use app_server_protocol::SessionFileSaveParams;
-use app_server_protocol::SessionFileUpdateMetaParams;
 use app_server_protocol::UnifiedMemoryAnalyzeParams;
 use app_server_protocol::UnifiedMemoryCreateParams;
 use app_server_protocol::UnifiedMemoryDeleteParams;
@@ -156,13 +153,6 @@ use app_server_protocol::WechatChannelAccountRemoveParams;
 use app_server_protocol::WechatLoginStartParams;
 use app_server_protocol::WechatLoginWaitParams;
 use app_server_protocol::WechatRuntimeModelSetParams;
-use app_server_protocol::WorkspaceEnsureParams;
-use app_server_protocol::WorkspaceEnsureProjectParams;
-use app_server_protocol::WorkspacePathReadParams;
-use app_server_protocol::WorkspaceProjectPathResolveParams;
-use app_server_protocol::WorkspaceReadParams;
-use app_server_protocol::WorkspaceRegisteredSkillsListParams;
-use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::METHOD_AGENT_APP_INSTALLED_DISABLED_SET;
 use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
 use app_server_protocol::METHOD_AGENT_APP_INSTALLED_SAVE;
@@ -526,27 +516,27 @@ impl RequestProcessor {
                 self.handle_file_checkpoint_restore(params).await
             }
             METHOD_SESSION_FILE_GET_OR_CREATE => {
-                self.handle_session_file_get_or_create(params).await
+                self.handle_session_file_get_or_create_impl(params).await
             }
-            METHOD_SESSION_FILE_UPDATE_META => self.handle_session_file_update_meta(params).await,
-            METHOD_SESSION_FILE_SAVE => self.handle_session_file_save(params).await,
-            METHOD_SESSION_FILE_READ => self.handle_session_file_read(params).await,
-            METHOD_SESSION_FILE_RESOLVE_PATH => self.handle_session_file_resolve_path(params).await,
-            METHOD_SESSION_FILE_DELETE => self.handle_session_file_delete(params).await,
-            METHOD_SESSION_FILE_LIST => self.handle_session_file_list(params).await,
+            METHOD_SESSION_FILE_UPDATE_META => self.handle_session_file_update_meta_impl(params).await,
+            METHOD_SESSION_FILE_SAVE => self.handle_session_file_save_impl(params).await,
+            METHOD_SESSION_FILE_READ => self.handle_session_file_read_impl(params).await,
+            METHOD_SESSION_FILE_RESOLVE_PATH => self.handle_session_file_resolve_path_impl(params).await,
+            METHOD_SESSION_FILE_DELETE => self.handle_session_file_delete_impl(params).await,
+            METHOD_SESSION_FILE_LIST => self.handle_session_file_list_impl(params).await,
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
-            METHOD_AGENT_SESSION_READ => self.handle_session_read(params).await,
-            METHOD_WORKSPACE_LIST => self.handle_workspace_list().await,
-            METHOD_WORKSPACE_READ => self.handle_workspace_read(params).await,
-            METHOD_WORKSPACE_ENSURE => self.handle_workspace_ensure(params).await,
-            METHOD_WORKSPACE_BY_PATH_READ => self.handle_workspace_by_path_read(params).await,
-            METHOD_WORKSPACE_DEFAULT_READ => self.handle_workspace_default_read().await,
-            METHOD_WORKSPACE_DEFAULT_ENSURE => self.handle_workspace_default_ensure().await,
-            METHOD_WORKSPACE_PROJECTS_ROOT_READ => self.handle_workspace_projects_root_read().await,
+            METHOD_AGENT_SESSION_READ => self.handle_session_read_impl(params).await,
+            METHOD_WORKSPACE_LIST => self.handle_workspace_list_impl().await,
+            METHOD_WORKSPACE_READ => self.handle_workspace_read_impl(params).await,
+            METHOD_WORKSPACE_ENSURE => self.handle_workspace_ensure_impl(params).await,
+            METHOD_WORKSPACE_BY_PATH_READ => self.handle_workspace_by_path_read_impl(params).await,
+            METHOD_WORKSPACE_DEFAULT_READ => self.handle_workspace_default_read_impl().await,
+            METHOD_WORKSPACE_DEFAULT_ENSURE => self.handle_workspace_default_ensure_impl().await,
+            METHOD_WORKSPACE_PROJECTS_ROOT_READ => self.handle_workspace_projects_root_read_impl().await,
             METHOD_WORKSPACE_PROJECT_PATH_RESOLVE => {
-                self.handle_workspace_project_path_resolve(params).await
+                self.handle_workspace_project_path_resolve_impl(params).await
             }
-            METHOD_WORKSPACE_ENSURE_READY => self.handle_workspace_ensure_ready(params).await,
+            METHOD_WORKSPACE_ENSURE_READY => self.handle_workspace_ensure_ready_impl(params).await,
             METHOD_SKILL_LIST => self.handle_skill_list_impl().await,
             METHOD_SKILL_READ => self.handle_skill_read_impl(params).await,
             METHOD_SKILL_MANAGEMENT_LIST => self.handle_skill_management_list_impl(params).await,
@@ -691,10 +681,10 @@ impl RequestProcessor {
                 self.handle_voice_model_test_transcribe_file(params).await
             }
             METHOD_WORKSPACE_SKILL_BINDINGS_LIST => {
-                self.handle_workspace_skill_bindings_list(params).await
+                self.handle_workspace_skill_bindings_list_impl(params).await
             }
             METHOD_WORKSPACE_REGISTERED_SKILLS_LIST => {
-                self.handle_workspace_registered_skills_list(params).await
+                self.handle_workspace_registered_skills_list_impl(params).await
             }
             METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT => {
                 self.handle_agent_app_local_package_inspect(params).await
@@ -1156,228 +1146,7 @@ impl RequestProcessor {
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)
     }
-
-    async fn handle_session_file_get_or_create(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SessionFileGetOrCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .get_or_create_session_file(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_file_update_meta(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SessionFileUpdateMetaParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .update_session_file_meta(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_file_save(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SessionFileSaveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .save_session_file(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_file_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SessionFileIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_session_file(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_file_resolve_path(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SessionFileIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .resolve_session_file_path(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_file_delete(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SessionFileIdParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .delete_session_file(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_file_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: SessionFileGetOrCreateParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_session_files(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_session_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_session_current(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .list_workspaces()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WorkspaceReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_workspace(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_by_path_read(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WorkspacePathReadParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_workspace_by_path(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_ensure(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WorkspaceEnsureProjectParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .ensure_project_workspace(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_default_read(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_default_workspace()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_default_ensure(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .ensure_default_workspace()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_projects_root_read(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_workspace_projects_root()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_project_path_resolve(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WorkspaceProjectPathResolveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .resolve_workspace_project_path(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_ensure_ready(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WorkspaceEnsureParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .ensure_workspace_ready(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // workspace + session_file handlers 已提取到 processor/workspace.rs
     // skill handlers 已提取到 processor/skill.rs
 
     async fn handle_gateway_channel_status(
@@ -2114,33 +1883,6 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    async fn handle_workspace_skill_bindings_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WorkspaceSkillBindingsListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_workspace_skill_bindings(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_workspace_registered_skills_list(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: WorkspaceRegisteredSkillsListParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .list_workspace_registered_skills(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
 
     async fn handle_agent_app_installed_list(&self) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
