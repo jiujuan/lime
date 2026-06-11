@@ -1,0 +1,168 @@
+# 结构重构执行计划（机制驱动版）
+
+> 状态：proposed（v2，2026-06-11 重写；v1 的行数驱动队列已废弃）
+> 上位规则：`AGENTS.md`、`internal/refactor/README.md`
+> 证据底座：`architecture-debt-analysis.md`（条目优先级争议先回去核对证据）
+
+每个条目独立可交付、可随时停。排序原则：**优先消除"新代码默认流向旧位置"的机制**，存量症状（拆大文件）作为各轴副产品偿还。
+
+## 完成度口径
+
+- **整体目标**：五个膨胀机制（轴 A-E）全部被机械守卫锁死 + 存量超线文件进入只减不增通道。
+- **Y% 计算**：轴 A/B/C 各 25%（机制消除），轴 D/E 各 10%，轴 F 护栏 5%。存量文件拆了多少**不计入主口径**（它是轴 B/C 的验收副产品），仅在进度日志记录。
+- **当前状态**：约 5%（R-01 基本完成）。
+
+---
+
+## P0 · R-01 锁文件统一到 pnpm
+
+**状态**：代码面完成（2026-06-11）
+**已完成**：
+- `package-lock.json` 已删除
+- `pnpm-lock.yaml`（lockfileVersion 9.0）保留
+- `packageManager` 已修正为 `"pnpm@9.15.9"`（与 CI `version: 9` + lockfile v9.0 对齐）
+
+**剩余收尾（待网络恢复后执行）**：
+1. `pnpm install` 验证（本地 pnpm 7.1.9 与 Node 23 存在兼容性问题，需 corepack/网络安装 pnpm 9）。
+2. `npm run verify:app-version` 通过后 commit `package.json`。
+3. CI / docs 中安装命令统一为 pnpm（如有 `npm ci` / `npm install` 残留）。
+
+---
+
+## 轴 A · 协议链路自动化（最高杠杆，1-2 轮）
+
+### R-10 protocol.ts 从 Rust schema 生成
+
+**状态**：proposed
+**消除的机制**：TS 侧 3600 行手抄协议 + 每方法 2 处手动同步；Rust/TS 协议漂移风险归零。
+
+**现状**：`app-server-protocol/src/schema_export.rs` 已能产出 JSON Schema bundle（`generate_json_schema_bundle()`），万事俱备只欠 TS codegen。
+
+**实现路线**（参照 codex 已验证形态，见 `codex-engineering-patterns.md` 轴 A）：
+1. 先做 spike 二选一：**ts-rs derive 直出 TS**（codex 路线，类型保真度高、一跳到位）vs 从既有 JSON Schema bundle 二跳生成；优先 ts-rs。
+2. 生成物落 `packages/app-server-client/src/generated/`，头部 `// @generated` 标记，棘轮按生成代码豁免；`protocol.ts` 收缩为 re-export generated + 少量手写 helper。
+3. 生成命令进 npm scripts；上守卫：CI 跑生成后 `git diff --exit-code`（漂移即红，这是 codex 没做、我们必须做的半步），挂入 `test:contracts` 链路。
+4. 同步 `internal/aiprompts/commands.md` 的协议同步说明（四侧同步中 TS 侧从"手抄"改为"跑生成"）。
+5. **二期（可选）**：参照 codex `client_request_definitions!` 宏，把 Rust 侧 4 处注册（`v0.rs`/`catalog.rs`/`method_names.rs`/`schema_export/registry.rs`）收敛为 1 处宏条目。
+
+**验证**：`npm run test:contracts` 全过；用本轮 `project_git` 4 方法对照生成结果与现手写版本一致。
+**退出条件**：新增 JSON-RPC 方法时 TS 侧零手写；CI 有漂移守卫。
+**风险**：中（schemars → TS 类型映射的边角，如 enum/untagged union；先对存量全量 diff 验证再切换）。
+
+---
+
+## 轴 B · App Server 方法注册去中心化（2-4 轮）
+
+### R-20 processor/runtime 按 domain 模块化注册
+
+**状态**：proposed
+**消除的机制**：238 个 `handle_*` 和 521 个 RuntimeCore fn 必须写进两个中心文件的强制路径。
+
+**方向**（复用仓库已有先例 `local_data_source/` 子模块模式）：
+1. 按协议 domain（与 `protocol/v0/*.rs` 模块一一对应：agent_session、project_git、knowledge…）建 `app-server/src/runtime/<domain>.rs` 与 `processor/<domain>.rs`，方法实现与 handler 下放。
+2. 中心文件收缩为：结构体定义 + dispatch 接线（match 或注册表）。第一阶段允许 dispatch 仍在中心文件（每方法 1 行），后续再评估宏/注册表。
+3. `runtime/tests.rs`（4428 行）随 domain 下放到各子模块 `#[cfg(test)]`（测试随代码迁移，硬规则 9 精神）。
+4. 切分节奏：每轮迁 1-2 个 domain，从最近活跃的开始（project_git、agent_session），每轮 `cargo test -p app-server --lib` + `npm run test:contracts` 收口。
+
+**退出条件**：新增方法的标准写集 = 新建/修改 `<domain>.rs` 一处 + 中心文件 1 行接线；`runtime.rs`、`processor.rs` 行数进入单调下降。
+**阻塞项**：建议 R-10 先行（codegen 落地后，domain 边界与 protocol 模块对齐更自然），但不强依赖。
+
+### R-21 aster `agents/agent.rs`（8206 行）按相同模式子模块化
+
+**状态**：proposed（排在 R-20 至少完成 2 个 domain 之后，套用同一手法）
+**前提确认**：aster-rust 已完全自有化（无上游同步顾虑，见证据底座轴 E），可放心动结构。
+**方向**：`agent/lifecycle.rs`、`agent/tool_dispatch.rs`、`agent/stream.rs` 等；`cargo test`（aster 子 workspace）收口。
+
+---
+
+## 轴 C · 前端分层矫正（守卫先行，N 轮）
+
+### R-30 import 边界守卫（先锁方向，半轮）
+
+**状态**：proposed
+**消除的机制**：lib → components/features 反向依赖无任何机械约束。
+
+**执行清单**：
+1. ESLint `no-restricted-imports`（或 boundaries 插件）定义分层规则：`lib/**` 禁止 import `components/**`、`features/**`、`pages/**`；`features/**` 禁止 import `components/**`（contracts 类型例外白名单）。
+2. 存量 6+ 处违例（清单见证据底座 C-1）先进白名单 baseline（复用 governance baseline 模式），**只许减不许增**。
+3. 挂入 `verify:local` 链路。
+
+**退出条件**：lint 生效、baseline 已 commit、新违例 CI 红。
+
+### R-31 偿还存量依赖违例（半轮-1 轮）
+
+**状态**：proposed，依赖 R-30
+**方向**：逐个把违例改为正向依赖——`lib/workspace/workbenchCanvas.ts` 的 re-export 移回 components 层或下沉真正的纯逻辑到 lib；`lib/api/agentApps.ts` 对 `features/agent-app/install` 的依赖改为参数注入或类型契约下沉。每修一处从 baseline 删除一行。
+
+### R-32 巨型组件状态分层拆分（N 轮，原 v1 的 R-03/R-06 在此归并）
+
+**状态**：proposed
+**消除的机制**：业务状态机/解析器默认写进组件体（52 个 useState 模式）。
+
+**正确样板**（仓库已有，直接复用，不发明新模式）：`packages/agent-runtime-projection` + `components/agent/chat/projection/` 的 projection/selector 分离。
+
+**执行节奏**（每轮 1 个目标，先抽逻辑后拆 UI）：
+1. `useWorkspaceSendActions.ts`（5117 行）：20+ 个 workbench 命令解析器是纯函数，先抽 `workspace/commands/` 模块 + `*.unit.test.ts`，hook 本体收缩为编排。**建议作为轴 C 第一刀**——纯函数抽取风险最低、立刻验证模式可行性。
+2. `AgentChatWorkspace.tsx`（7029 行）：按 8 个正交关注点逐个抽 View Model / 子 hook（媒体任务 runtime、数据同步、canvas 联动…），每轮抽 1-2 个；UI 子组件拆分放在状态抽完之后。
+3. 后续队列按"改动频率 × 行数"动态排（`agentChatHistory.ts` 3560、`capabilityDispatcher.ts` 4344、`DesignCanvas.tsx` 3802…），每个开工前补独立 R-3x 条目。
+
+**每轮验证**：新抽逻辑 `*.unit.test.ts` 覆盖；`npm run verify:gui-smoke`（硬规则 5）；棘轮基线行数下降。
+
+---
+
+## 轴 D · 网关收敛（与 CCD-012 协同，1-2 轮）
+
+### R-40 业务代码统一走 lib/api，dev-bridge 降为传输细节
+
+**状态**：proposed
+**消除的机制**：业务 hook 直接 import `@/lib/dev-bridge` 造成的多路径调用。
+
+**执行清单**：
+1. 盘点业务代码直接 import `dev-bridge` 的点（已知：`useWorkspaceImageTaskPreviewRuntime.ts`、`useWorkspaceAudioTaskPreviewRuntime.ts` 等 workspace 预览 runtime），为其在 `lib/api/` 补正式网关函数后改线。
+2. R-30 的 lint 规则追加一条：`components/**`、`features/**` 禁止 import `lib/dev-bridge/**`（lib/api 内部豁免）。
+3. `lib/agentRuntime` 与 `lib/api/agentRuntime/` 的关系核实后归并（证据底座显示前者仅 4 文件）。
+4. dev-bridge 内部的 commandPolicy/mock 退场**不在本条目范围**——那是 CCD-012 的主线，本条目只收"业务直连"这一个口。
+
+**退出条件**：dev-bridge 的非 lib/api 消费者归零且有 lint 守卫。
+
+### R-41 packages 收缩：下线零引用的 agent-app-runtime
+
+**状态**：proposed（低优先级，半轮）
+**证据**：`agent-app-runtime` 在 src/ 零引用（见证据底座 packages 表）。确认无外部发布/CI 引用后删除；`agent-runtime-ui`（1 处引用）评估是否并回 src。
+
+---
+
+## 轴 E · crate 抗膨胀（长期，规则先行）
+
+### R-50 core/services 抗膨胀规则 + 模型注册重复定义归并
+
+**状态**：proposed
+**执行清单**：
+1. `AGENTS.md` 补一条基础约束："新增 Rust 逻辑禁止默认落 `lime-core` / `services` 平铺层，必须先回答'为什么不是独立模块/既有 domain'"（参照 Codex "resist adding to core"，见 `codex-engineering-patterns.md` § 2）。
+2. 模型注册类型归并：`lime_core::models::model_registry` 与 `services/model_registry_service.rs` 的缓存类型二选一 owner，消除双写。
+3. `services/` 32 个 service 的目录分组（按 `lib.rs` 注释里已有的四类落成物理目录）延后到 R-20 完成后评估，不提前动。
+
+---
+
+## 轴 F · 体量护栏（支撑项，1 轮内）
+
+### R-60 文件体量棘轮守卫（原 v1 R-02，定位降级）
+
+**状态**：完成（2026-06-11）
+**定位**：止血护栏 + A/B/C 轴的验收仪表，**不是重构主线**。
+**已实现**：
+- 基线快照：`governance/file-size-baseline.json`（322 个超线文件：147 前端 + 175 Rust）
+- 守卫脚本：`scripts/check-file-size-governance.mjs`
+- npm script：`governance:file-size`
+- 排除模式：测试文件、`target/`、`node_modules/`、生成代码（`@generated` 标记）
+- 验证：当前代码通过、模拟 900 行新文件正确报错（exit 1）
+
+---
+
+## 执行协议
+
+1. **认领**：开工前改条目状态为 `in_progress` + `执行者`；多 Agent 并行时按 `internal/aiprompts/parallel-agent-collaboration.md` 声明写集。
+2. **进度日志**：每轮收尾在条目下补 `#### 进度日志`（实际方案、blocker、验证结果）。
+3. **完成度报告**：收尾给「本轮完成度 X%」+「整体目标完成度 Y%」（口径见顶部）。
+4. **中止**：用户喊停即停；守卫类成果（lint/棘轮/codegen 校验）一旦上线即锁住已有进展，断点可续。
+5. **回滚**：迁移类条目每个 commit 独立可 revert；失败补 `#### Blocker` 小节并降级为更小批次。

@@ -39,8 +39,21 @@ export type InputbarCoreCopyKey =
   | "agentChat.inputbar.core.projectContext.noProjectAction"
   | "agentChat.inputbar.core.projectContext.modeLabel"
   | "agentChat.inputbar.core.projectContext.localMode"
+  | "agentChat.inputbar.core.projectContext.modeMenuTitle"
+  | "agentChat.inputbar.core.projectContext.localProcessing"
+  | "agentChat.inputbar.core.projectContext.newWorktree"
+  | "agentChat.inputbar.core.projectContext.worktreeCreated"
+  | "agentChat.inputbar.core.projectContext.worktreeCreateFailed"
   | "agentChat.inputbar.core.projectContext.branchLabel"
   | "agentChat.inputbar.core.projectContext.branchFallback"
+  | "agentChat.inputbar.core.projectContext.branchSearchPlaceholder"
+  | "agentChat.inputbar.core.projectContext.branchCreateAction"
+  | "agentChat.inputbar.core.projectContext.branchCreateNamedAction"
+  | "agentChat.inputbar.core.projectContext.branchSwitched"
+  | "agentChat.inputbar.core.projectContext.branchSwitchFailed"
+  | "agentChat.inputbar.core.projectContext.branchCreated"
+  | "agentChat.inputbar.core.projectContext.branchCreateFailed"
+  | "agentChat.inputbar.core.projectContext.uncommittedFiles"
   | "agentChat.inputbar.core.suggestion.acceptTitle"
   | "agentChat.inputbar.core.suggestion.acceptKey"
   | "agentChat.inputbar.core.textarea.expand"
@@ -106,8 +119,21 @@ export interface InputbarCoreCopy {
     noProjectAction: string;
     modeLabel: string;
     localMode: string;
+    modeMenuTitle: string;
+    localProcessing: string;
+    newWorktree: string;
+    worktreeCreated: string;
+    worktreeCreateFailed: string;
     branchLabel: string;
     branchFallback: string;
+    branchSearchPlaceholder: string;
+    branchCreateAction: string;
+    branchCreateNamedAction: (branch: string) => string;
+    branchSwitched: string;
+    branchSwitchFailed: string;
+    branchCreated: string;
+    branchCreateFailed: string;
+    uncommittedFiles: (count: number) => string;
   };
   suggestion: {
     acceptTitle: string;
@@ -136,9 +162,7 @@ export function buildInputbarCoreCopy(
       recordingLabel: translate(
         "agentChat.inputbar.core.dictation.recordingLabel",
       ),
-      transcribing: translate(
-        "agentChat.inputbar.core.dictation.transcribing",
-      ),
+      transcribing: translate("agentChat.inputbar.core.dictation.transcribing"),
       polishing: translate("agentChat.inputbar.core.dictation.polishing"),
       liveTranscript: translate(
         "agentChat.inputbar.core.dictation.liveTranscript",
@@ -168,9 +192,7 @@ export function buildInputbarCoreCopy(
       add: translate("agentChat.inputbar.core.image.add"),
     },
     path: {
-      containerLabel: translate(
-        "agentChat.inputbar.core.path.containerLabel",
-      ),
+      containerLabel: translate("agentChat.inputbar.core.path.containerLabel"),
       localFolder: translate("agentChat.inputbar.core.path.localFolder"),
       localFile: translate("agentChat.inputbar.core.path.localFile"),
       importAsKnowledge: (name) =>
@@ -231,11 +253,22 @@ export function buildInputbarCoreCopy(
       noProjectAction: translate(
         "agentChat.inputbar.core.projectContext.noProjectAction",
       ),
-      modeLabel: translate(
-        "agentChat.inputbar.core.projectContext.modeLabel",
+      modeLabel: translate("agentChat.inputbar.core.projectContext.modeLabel"),
+      localMode: translate("agentChat.inputbar.core.projectContext.localMode"),
+      modeMenuTitle: translate(
+        "agentChat.inputbar.core.projectContext.modeMenuTitle",
       ),
-      localMode: translate(
-        "agentChat.inputbar.core.projectContext.localMode",
+      localProcessing: translate(
+        "agentChat.inputbar.core.projectContext.localProcessing",
+      ),
+      newWorktree: translate(
+        "agentChat.inputbar.core.projectContext.newWorktree",
+      ),
+      worktreeCreated: translate(
+        "agentChat.inputbar.core.projectContext.worktreeCreated",
+      ),
+      worktreeCreateFailed: translate(
+        "agentChat.inputbar.core.projectContext.worktreeCreateFailed",
       ),
       branchLabel: translate(
         "agentChat.inputbar.core.projectContext.branchLabel",
@@ -243,6 +276,33 @@ export function buildInputbarCoreCopy(
       branchFallback: translate(
         "agentChat.inputbar.core.projectContext.branchFallback",
       ),
+      branchSearchPlaceholder: translate(
+        "agentChat.inputbar.core.projectContext.branchSearchPlaceholder",
+      ),
+      branchCreateAction: translate(
+        "agentChat.inputbar.core.projectContext.branchCreateAction",
+      ),
+      branchCreateNamedAction: (branch) =>
+        translate(
+          "agentChat.inputbar.core.projectContext.branchCreateNamedAction",
+          { branch },
+        ),
+      branchSwitched: translate(
+        "agentChat.inputbar.core.projectContext.branchSwitched",
+      ),
+      branchSwitchFailed: translate(
+        "agentChat.inputbar.core.projectContext.branchSwitchFailed",
+      ),
+      branchCreated: translate(
+        "agentChat.inputbar.core.projectContext.branchCreated",
+      ),
+      branchCreateFailed: translate(
+        "agentChat.inputbar.core.projectContext.branchCreateFailed",
+      ),
+      uncommittedFiles: (count) =>
+        translate("agentChat.inputbar.core.projectContext.uncommittedFiles", {
+          count,
+        }),
     },
     suggestion: {
       acceptTitle: translate("agentChat.inputbar.core.suggestion.acceptTitle"),

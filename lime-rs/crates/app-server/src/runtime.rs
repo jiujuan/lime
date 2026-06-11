@@ -243,6 +243,14 @@ use app_server_protocol::ModelProviderUiStateWriteParams;
 use app_server_protocol::ModelProviderUpdateParams;
 use app_server_protocol::ModelProviderWriteResponse;
 use app_server_protocol::ModelSyncStateReadResponse;
+use app_server_protocol::ProjectGitBranchCheckoutParams;
+use app_server_protocol::ProjectGitBranchCheckoutResponse;
+use app_server_protocol::ProjectGitBranchCreateParams;
+use app_server_protocol::ProjectGitBranchCreateResponse;
+use app_server_protocol::ProjectGitStatusParams;
+use app_server_protocol::ProjectGitStatusResponse;
+use app_server_protocol::ProjectGitWorktreeCreateParams;
+use app_server_protocol::ProjectGitWorktreeCreateResponse;
 use app_server_protocol::ProjectMaterialContentResponse;
 use app_server_protocol::ProjectMaterialCountResponse;
 use app_server_protocol::ProjectMaterialDeleteResponse;
@@ -3230,6 +3238,29 @@ fn file_system_file_preview_from_service(
     }
 }
 
+fn project_git_status_from_service(
+    status: lime_services::project_git_service::ProjectGitStatus,
+) -> ProjectGitStatusResponse {
+    ProjectGitStatusResponse {
+        root_path: status.root_path,
+        repository_root: status.repository_root,
+        has_git_repository: status.has_git_repository,
+        current_branch: status.current_branch,
+        branches: status.branches,
+        uncommitted_file_count: status.uncommitted_file_count,
+    }
+}
+
+fn project_git_worktree_from_service(
+    worktree: lime_services::project_git_service::ProjectGitWorktree,
+) -> ProjectGitWorktreeCreateResponse {
+    ProjectGitWorktreeCreateResponse {
+        worktree_path: worktree.worktree_path,
+        branch: worktree.branch,
+        status: project_git_status_from_service(worktree.status),
+    }
+}
+
 fn file_system_required_path(
     path: String,
     method: &'static str,
@@ -4820,6 +4851,70 @@ impl RuntimeCore {
         .map_err(|error| RuntimeCoreError::Backend(format!("文件删除任务失败: {error}")))?
         .map_err(RuntimeCoreError::Backend)?;
         Ok(FileSystemMutationResponse::default())
+    }
+
+    pub async fn read_project_git_status(
+        &self,
+        params: ProjectGitStatusParams,
+    ) -> Result<ProjectGitStatusResponse, RuntimeCoreError> {
+        let root_path = params.root_path;
+        let status = tokio::task::spawn_blocking(move || {
+            lime_services::project_git_service::read_status(&root_path)
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("Git 状态读取任务失败: {error}")))?
+        .map_err(RuntimeCoreError::Backend)?;
+        Ok(project_git_status_from_service(status))
+    }
+
+    pub async fn checkout_project_git_branch(
+        &self,
+        params: ProjectGitBranchCheckoutParams,
+    ) -> Result<ProjectGitBranchCheckoutResponse, RuntimeCoreError> {
+        let root_path = params.root_path;
+        let branch = params.branch;
+        let status = tokio::task::spawn_blocking(move || {
+            lime_services::project_git_service::checkout_branch(&root_path, &branch)
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("Git 分支切换任务失败: {error}")))?
+        .map_err(RuntimeCoreError::Backend)?;
+        Ok(project_git_status_from_service(status))
+    }
+
+    pub async fn create_project_git_branch(
+        &self,
+        params: ProjectGitBranchCreateParams,
+    ) -> Result<ProjectGitBranchCreateResponse, RuntimeCoreError> {
+        let root_path = params.root_path;
+        let branch = params.branch;
+        let status = tokio::task::spawn_blocking(move || {
+            lime_services::project_git_service::create_branch(&root_path, &branch)
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("Git 分支创建任务失败: {error}")))?
+        .map_err(RuntimeCoreError::Backend)?;
+        Ok(project_git_status_from_service(status))
+    }
+
+    pub async fn create_project_git_worktree(
+        &self,
+        params: ProjectGitWorktreeCreateParams,
+    ) -> Result<ProjectGitWorktreeCreateResponse, RuntimeCoreError> {
+        let root_path = params.root_path;
+        let name = params.name;
+        let base_branch = params.base_branch;
+        let worktree = tokio::task::spawn_blocking(move || {
+            lime_services::project_git_service::create_worktree(
+                &root_path,
+                name.as_deref(),
+                base_branch.as_deref(),
+            )
+        })
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(format!("Git 工作树创建任务失败: {error}")))?
+        .map_err(RuntimeCoreError::Backend)?;
+        Ok(project_git_worktree_from_service(worktree))
     }
 
     pub async fn list_workspace_skill_bindings(

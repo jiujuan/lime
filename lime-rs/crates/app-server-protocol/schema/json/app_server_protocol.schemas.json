@@ -13534,6 +13534,183 @@
       "title": "PlatformInfo",
       "type": "object"
     },
+    "ProjectGitBranchCheckoutParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "branch",
+        "rootPath"
+      ],
+      "title": "ProjectGitBranchCheckoutParams",
+      "type": "object"
+    },
+    "ProjectGitBranchCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "branch",
+        "rootPath"
+      ],
+      "title": "ProjectGitBranchCreateParams",
+      "type": "object"
+    },
+    "ProjectGitStatusParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "ProjectGitStatusParams",
+      "type": "object"
+    },
+    "ProjectGitStatusResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "branches": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "currentBranch": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "hasGitRepository": {
+          "type": "boolean"
+        },
+        "repositoryRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "uncommittedFileCount": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "hasGitRepository",
+        "rootPath"
+      ],
+      "title": "ProjectGitStatusResponse",
+      "type": "object"
+    },
+    "ProjectGitWorktreeCreateParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "baseBranch": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "name": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "ProjectGitWorktreeCreateParams",
+      "type": "object"
+    },
+    "ProjectGitWorktreeCreateResponse": {
+      "$defs": {
+        "ProjectGitStatusResponse": {
+          "properties": {
+            "branches": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "currentBranch": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "hasGitRepository": {
+              "type": "boolean"
+            },
+            "repositoryRoot": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "rootPath": {
+              "type": "string"
+            },
+            "uncommittedFileCount": {
+              "default": 0,
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "hasGitRepository",
+            "rootPath"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ProjectGitStatusResponse"
+        },
+        "worktreePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "branch",
+        "status",
+        "worktreePath"
+      ],
+      "title": "ProjectGitWorktreeCreateResponse",
+      "type": "object"
+    },
     "ProjectMaterial": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -20167,6 +20344,10 @@
               "modelProviderUiState/read",
               "modelProviderUiState/write",
               "modelSyncState/read",
+              "projectGit/branch/checkout",
+              "projectGit/branch/create",
+              "projectGit/status",
+              "projectGit/worktree/create",
               "projectMaterial/content",
               "projectMaterial/count",
               "projectMaterial/delete",

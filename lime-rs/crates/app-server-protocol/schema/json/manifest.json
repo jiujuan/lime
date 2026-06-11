@@ -636,6 +636,22 @@
     },
     {
       "kind": "request",
+      "method": "projectGit/branch/checkout"
+    },
+    {
+      "kind": "request",
+      "method": "projectGit/branch/create"
+    },
+    {
+      "kind": "request",
+      "method": "projectGit/status"
+    },
+    {
+      "kind": "request",
+      "method": "projectGit/worktree/create"
+    },
+    {
+      "kind": "request",
       "method": "projectMaterial/content"
     },
     {
@@ -1250,6 +1266,12 @@
       "ModelSyncStateReadResponse",
       "OpenDeepLinkPayload",
       "PlatformInfo",
+      "ProjectGitBranchCheckoutParams",
+      "ProjectGitBranchCreateParams",
+      "ProjectGitStatusParams",
+      "ProjectGitStatusResponse",
+      "ProjectGitWorktreeCreateParams",
+      "ProjectGitWorktreeCreateResponse",
       "ProjectMaterial",
       "ProjectMaterialContentResponse",
       "ProjectMaterialCountResponse",

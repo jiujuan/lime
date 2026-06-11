@@ -21,9 +21,52 @@ import {
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "../utils/curatedTaskRecommendationSignals";
 
-const { mockGetConfig, mockProjectSelector } = vi.hoisted(() => ({
+const {
+  mockGetConfig,
+  mockProjectSelector,
+  mockReadProjectGitStatus,
+  mockCheckoutProjectGitBranch,
+  mockCreateProjectGitBranch,
+  mockCreateProjectGitWorktree,
+} = vi.hoisted(() => ({
   mockGetConfig: vi.fn(async () => ({})),
   mockProjectSelector: vi.fn(),
+  mockReadProjectGitStatus: vi.fn(async () => ({
+    rootPath: "/workspace/lime",
+    repositoryRoot: undefined,
+    hasGitRepository: false,
+    currentBranch: undefined,
+    branches: [],
+    uncommittedFileCount: 0,
+  })),
+  mockCheckoutProjectGitBranch: vi.fn(async () => ({
+    rootPath: "/workspace/lime",
+    repositoryRoot: "/workspace/lime",
+    hasGitRepository: true,
+    currentBranch: "main",
+    branches: ["feature/demo", "main"],
+    uncommittedFileCount: 0,
+  })),
+  mockCreateProjectGitBranch: vi.fn(async () => ({
+    rootPath: "/workspace/lime",
+    repositoryRoot: "/workspace/lime",
+    hasGitRepository: true,
+    currentBranch: "feature/new",
+    branches: ["feature/demo", "feature/new", "main"],
+    uncommittedFileCount: 0,
+  })),
+  mockCreateProjectGitWorktree: vi.fn(async () => ({
+    worktreePath: "/workspace/lime-worktree-test",
+    branch: "main",
+    status: {
+      rootPath: "/workspace/lime-worktree-test",
+      repositoryRoot: "/workspace/lime",
+      hasGitRepository: true,
+      currentBranch: "abcdef0",
+      branches: ["feature/demo", "main"],
+      uncommittedFileCount: 0,
+    },
+  })),
 }));
 
 const mockGetSkillCatalog = vi.hoisted(() =>
@@ -117,6 +160,13 @@ vi.mock("@/components/projects/ProjectSelector", () => ({
       </div>
     );
   },
+}));
+
+vi.mock("@/lib/api/projectGit", () => ({
+  readProjectGitStatus: mockReadProjectGitStatus,
+  checkoutProjectGitBranch: mockCheckoutProjectGitBranch,
+  createProjectGitBranch: mockCreateProjectGitBranch,
+  createProjectGitWorktree: mockCreateProjectGitWorktree,
 }));
 
 vi.mock("./ChatModelSelector", () => ({
@@ -271,6 +321,7 @@ vi.mock("@/components/ui/badge", () => ({
 
 vi.mock("sonner", () => ({
   toast: {
+    success: vi.fn(),
     error: vi.fn(),
   },
 }));
@@ -305,6 +356,42 @@ beforeEach(async () => {
     control_count: 0,
   });
   mockListUnifiedMemories.mockResolvedValue([]);
+  mockReadProjectGitStatus.mockResolvedValue({
+    rootPath: "/workspace/lime",
+    repositoryRoot: undefined,
+    hasGitRepository: false,
+    currentBranch: undefined,
+    branches: [],
+    uncommittedFileCount: 0,
+  });
+  mockCheckoutProjectGitBranch.mockResolvedValue({
+    rootPath: "/workspace/lime",
+    repositoryRoot: "/workspace/lime",
+    hasGitRepository: true,
+    currentBranch: "main",
+    branches: ["feature/demo", "main"],
+    uncommittedFileCount: 0,
+  });
+  mockCreateProjectGitBranch.mockResolvedValue({
+    rootPath: "/workspace/lime",
+    repositoryRoot: "/workspace/lime",
+    hasGitRepository: true,
+    currentBranch: "feature/new",
+    branches: ["feature/demo", "feature/new", "main"],
+    uncommittedFileCount: 0,
+  });
+  mockCreateProjectGitWorktree.mockResolvedValue({
+    worktreePath: "/workspace/lime-worktree-test",
+    branch: "main",
+    status: {
+      rootPath: "/workspace/lime-worktree-test",
+      repositoryRoot: "/workspace/lime",
+      hasGitRepository: true,
+      currentBranch: "abcdef0",
+      branches: ["feature/demo", "main"],
+      uncommittedFileCount: 0,
+    },
+  });
   window.localStorage.clear();
 });
 
@@ -344,6 +431,14 @@ function renderEmptyState(
 
   mountedRoots.push({ root, container });
   return container;
+}
+
+async function flushAsyncEffects(turns = 4): Promise<void> {
+  await act(async () => {
+    for (let index = 0; index < turns; index += 1) {
+      await Promise.resolve();
+    }
+  });
 }
 
 function expectEmptyStateSend(
@@ -532,7 +627,7 @@ describe("EmptyState", () => {
     expect(container.textContent).not.toContain("新建任务");
   });
 
-  it("通用首页应挂载轻量起手区与下滑第二屏", async () => {
+  it("通用首页应挂载轻量起手区与下滑第二屏，无 Git 仓库时不显示分支", async () => {
     const container = renderEmptyState({
       activeTheme: "general",
       onLaunchBrowserAssist: vi.fn(),
@@ -547,9 +642,7 @@ describe("EmptyState", () => {
       ],
     });
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await flushAsyncEffects();
 
     expect(
       container.querySelector('[data-testid="home-start-surface"]'),
@@ -580,24 +673,29 @@ describe("EmptyState", () => {
     expect(
       Boolean(
         inputbarCore &&
-          projectContextSlot &&
-          (inputbarCore.compareDocumentPosition(projectContextSlot) &
-            Node.DOCUMENT_POSITION_FOLLOWING) !==
-            0,
+        projectContextSlot &&
+        (inputbarCore.compareDocumentPosition(projectContextSlot) &
+          Node.DOCUMENT_POSITION_FOLLOWING) !==
+          0,
       ),
     ).toBe(true);
     expect(
       Boolean(
         projectContextSlot &&
-          homeStartSurface &&
-          (projectContextSlot.compareDocumentPosition(homeStartSurface) &
-            Node.DOCUMENT_POSITION_FOLLOWING) !==
-            0,
+        homeStartSurface &&
+        (projectContextSlot.compareDocumentPosition(homeStartSurface) &
+          Node.DOCUMENT_POSITION_FOLLOWING) !==
+          0,
       ),
     ).toBe(true);
     expect(projectContextBar?.textContent).toContain("lime");
     expect(projectContextBar?.textContent).toContain("本地模式");
-    expect(projectContextBar?.textContent).toContain("main");
+    expect(projectContextBar?.textContent).not.toContain("main");
+    expect(
+      projectContextBar?.querySelector(
+        '[data-testid="inputbar-project-context-branch"]',
+      ),
+    ).toBeNull();
     expect(container.textContent).toContain("引导帮助");
     expect(container.textContent).toContain("写作");
     expect(container.textContent).toContain("添加资料");
@@ -631,6 +729,167 @@ describe("EmptyState", () => {
     expect(
       container.querySelector('[data-testid^="entry-continuation-"]'),
     ).toBeNull();
+  });
+
+  it("通用首页项目包含 Git 目录时应显示启动模式和分支菜单", async () => {
+    mockReadProjectGitStatus.mockResolvedValue({
+      rootPath: "/workspace/lime",
+      repositoryRoot: "/workspace/lime",
+      hasGitRepository: true,
+      currentBranch: "main",
+      branches: ["feature/demo", "main"],
+      uncommittedFileCount: 1,
+    });
+
+    const container = renderEmptyState({
+      activeTheme: "general",
+      onLaunchBrowserAssist: vi.fn(),
+      onSelectServiceSkill: vi.fn(),
+      projectId: "lime",
+      openedProjects: [
+        {
+          id: "lime",
+          name: "lime",
+          rootPath: "/workspace/lime",
+        },
+      ],
+    });
+
+    await flushAsyncEffects(6);
+
+    const projectContextBar = container.querySelector(
+      '[data-testid="inputbar-project-context-bar"]',
+    );
+
+    expect(projectContextBar).toBeTruthy();
+    expect(
+      projectContextBar?.querySelector(
+        '[data-testid="inputbar-project-context-mode-menu"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      projectContextBar?.querySelector(
+        '[data-testid="inputbar-project-context-branch"]',
+      ),
+    ).toBeTruthy();
+    expect(projectContextBar?.textContent).toContain("启动模式");
+    expect(projectContextBar?.textContent).toContain("在本地处理");
+    expect(projectContextBar?.textContent).toContain("新工作树");
+    expect(projectContextBar?.textContent).toContain("未提交：1 个文件");
+    expect(projectContextBar?.textContent).toContain("main");
+    expect(projectContextBar?.textContent).toContain("feature/demo");
+  });
+
+  it("通用首页项目分支菜单应通过后端切换分支", async () => {
+    mockReadProjectGitStatus.mockResolvedValue({
+      rootPath: "/workspace/lime",
+      repositoryRoot: "/workspace/lime",
+      hasGitRepository: true,
+      currentBranch: "main",
+      branches: ["feature/demo", "main"],
+      uncommittedFileCount: 0,
+    });
+    mockCheckoutProjectGitBranch.mockResolvedValue({
+      rootPath: "/workspace/lime",
+      repositoryRoot: "/workspace/lime",
+      hasGitRepository: true,
+      currentBranch: "feature/demo",
+      branches: ["feature/demo", "main"],
+      uncommittedFileCount: 0,
+    });
+
+    const container = renderEmptyState({
+      activeTheme: "general",
+      onLaunchBrowserAssist: vi.fn(),
+      onSelectServiceSkill: vi.fn(),
+      projectId: "lime",
+      openedProjects: [
+        {
+          id: "lime",
+          name: "lime",
+          rootPath: "/workspace/lime",
+        },
+      ],
+    });
+
+    await flushAsyncEffects(6);
+
+    const featureBranch = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("feature/demo"),
+    );
+    expect(featureBranch).toBeTruthy();
+
+    await act(async () => {
+      featureBranch?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mockCheckoutProjectGitBranch).toHaveBeenCalledWith(
+      "/workspace/lime",
+      "feature/demo",
+    );
+    expect(
+      container.querySelector('[data-testid="inputbar-project-context-bar"]')
+        ?.textContent,
+    ).toContain("feature/demo");
+  });
+
+  it("通用首页项目分支搜索回车应通过后端创建并检出新分支", async () => {
+    mockReadProjectGitStatus.mockResolvedValue({
+      rootPath: "/workspace/lime",
+      repositoryRoot: "/workspace/lime",
+      hasGitRepository: true,
+      currentBranch: "main",
+      branches: ["feature/demo", "main"],
+      uncommittedFileCount: 0,
+    });
+    mockCreateProjectGitBranch.mockResolvedValue({
+      rootPath: "/workspace/lime",
+      repositoryRoot: "/workspace/lime",
+      hasGitRepository: true,
+      currentBranch: "feature/new",
+      branches: ["feature/demo", "feature/new", "main"],
+      uncommittedFileCount: 0,
+    });
+
+    const container = renderEmptyState({
+      activeTheme: "general",
+      onLaunchBrowserAssist: vi.fn(),
+      onSelectServiceSkill: vi.fn(),
+      projectId: "lime",
+      openedProjects: [
+        {
+          id: "lime",
+          name: "lime",
+          rootPath: "/workspace/lime",
+        },
+      ],
+    });
+
+    await flushAsyncEffects(6);
+
+    const branchSearch = container.querySelector(
+      'input[placeholder="搜索分支"]',
+    ) as HTMLInputElement | null;
+    updateFieldValue(branchSearch, "feature/new");
+
+    await act(async () => {
+      branchSearch?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockCreateProjectGitBranch).toHaveBeenCalledWith(
+      "/workspace/lime",
+      "feature/new",
+    );
+    expect(
+      container.querySelector('[data-testid="inputbar-project-context-bar"]')
+        ?.textContent,
+    ).toContain("feature/new");
   });
 
   it("第二屏向上回首屏应使用非 passive wheel listener", async () => {
@@ -2015,10 +2274,7 @@ describe("EmptyState", () => {
       await Promise.resolve();
     });
     act(() => {
-      updateFieldValue(
-        container.querySelector("textarea"),
-        "帮我设计封面",
-      );
+      updateFieldValue(container.querySelector("textarea"), "帮我设计封面");
     });
     await act(async () => {
       await Promise.resolve();

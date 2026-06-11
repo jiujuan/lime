@@ -38,6 +38,10 @@ import {
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_FILE_SYSTEM_RENAME_FILE,
+  METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
+  METHOD_PROJECT_GIT_BRANCH_CREATE,
+  METHOD_PROJECT_GIT_STATUS,
+  METHOD_PROJECT_GIT_WORKTREE_CREATE,
   METHOD_GALLERY_MATERIAL_GET,
   METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
   METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
@@ -213,6 +217,14 @@ import {
   type FileSystemMutationResponse,
   type FileSystemReadFilePreviewParams,
   type FileSystemRenameFileParams,
+  type ProjectGitBranchCheckoutParams,
+  type ProjectGitBranchCheckoutResponse,
+  type ProjectGitBranchCreateParams,
+  type ProjectGitBranchCreateResponse,
+  type ProjectGitStatusParams,
+  type ProjectGitStatusResponse,
+  type ProjectGitWorktreeCreateParams,
+  type ProjectGitWorktreeCreateResponse,
   type GalleryMaterialDeleteResponse,
   type GalleryMaterialFilterParams,
   type GalleryMaterialListResponse,
@@ -344,6 +356,13 @@ export const APP_SERVER_METHOD_FILE_SYSTEM_RENAME_FILE =
   METHOD_FILE_SYSTEM_RENAME_FILE;
 export const APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE =
   METHOD_FILE_SYSTEM_DELETE_FILE;
+export const APP_SERVER_METHOD_PROJECT_GIT_STATUS = METHOD_PROJECT_GIT_STATUS;
+export const APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CHECKOUT =
+  METHOD_PROJECT_GIT_BRANCH_CHECKOUT;
+export const APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CREATE =
+  METHOD_PROJECT_GIT_BRANCH_CREATE;
+export const APP_SERVER_METHOD_PROJECT_GIT_WORKTREE_CREATE =
+  METHOD_PROJECT_GIT_WORKTREE_CREATE;
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = METHOD_EVIDENCE_EXPORT;
 export const APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
   METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT;
@@ -586,6 +605,20 @@ export type AppServerFileSystemMutationResponse = FileSystemMutationResponse;
 export type AppServerFileSystemDirectoryListing = FileSystemDirectoryListing;
 export type AppServerFileSystemFileEntry = FileSystemFileEntry;
 export type AppServerFileSystemFilePreview = FileSystemFilePreview;
+export type AppServerProjectGitStatusParams = ProjectGitStatusParams;
+export type AppServerProjectGitBranchCheckoutParams =
+  ProjectGitBranchCheckoutParams;
+export type AppServerProjectGitBranchCheckoutResponse =
+  ProjectGitBranchCheckoutResponse;
+export type AppServerProjectGitBranchCreateParams =
+  ProjectGitBranchCreateParams;
+export type AppServerProjectGitBranchCreateResponse =
+  ProjectGitBranchCreateResponse;
+export type AppServerProjectGitStatusResponse = ProjectGitStatusResponse;
+export type AppServerProjectGitWorktreeCreateParams =
+  ProjectGitWorktreeCreateParams;
+export type AppServerProjectGitWorktreeCreateResponse =
+  ProjectGitWorktreeCreateResponse;
 export type AppServerEvidenceExportParams = EvidenceExportParams;
 export type AppServerEvidenceExportResponse = EvidenceExportResponse;
 export type AppServerEvidencePackSummary = EvidencePackSummary;
@@ -791,14 +824,12 @@ export type AppServerGalleryMaterialDeleteResponse =
   GalleryMaterialDeleteResponse;
 export type AppServerProjectMaterial = ProjectMaterial;
 export type AppServerProjectMaterialListParams = ProjectMaterialListParams;
-export type AppServerProjectMaterialLookupParams =
-  ProjectMaterialLookupParams;
+export type AppServerProjectMaterialLookupParams = ProjectMaterialLookupParams;
 export type AppServerProjectMaterialUploadParams = ProjectMaterialUploadParams;
 export type AppServerProjectMaterialImportFromUrlParams =
   ProjectMaterialImportFromUrlParams;
 export type AppServerProjectMaterialUpdateParams = ProjectMaterialUpdateParams;
-export type AppServerProjectMaterialListResponse =
-  ProjectMaterialListResponse;
+export type AppServerProjectMaterialListResponse = ProjectMaterialListResponse;
 export type AppServerProjectMaterialResponse = ProjectMaterialResponse;
 export type AppServerProjectMaterialCountResponse =
   ProjectMaterialCountResponse;
@@ -1055,6 +1086,46 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerFileSystemMutationResponse>> {
     return await this.request<AppServerFileSystemMutationResponse>(
       APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE,
+      params,
+    );
+  }
+
+  async readProjectGitStatus(
+    params: AppServerProjectGitStatusParams,
+  ): Promise<AppServerRequestResult<AppServerProjectGitStatusResponse>> {
+    return await this.request<AppServerProjectGitStatusResponse>(
+      APP_SERVER_METHOD_PROJECT_GIT_STATUS,
+      params,
+    );
+  }
+
+  async checkoutProjectGitBranch(
+    params: AppServerProjectGitBranchCheckoutParams,
+  ): Promise<
+    AppServerRequestResult<AppServerProjectGitBranchCheckoutResponse>
+  > {
+    return await this.request<AppServerProjectGitBranchCheckoutResponse>(
+      APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
+      params,
+    );
+  }
+
+  async createProjectGitBranch(
+    params: AppServerProjectGitBranchCreateParams,
+  ): Promise<AppServerRequestResult<AppServerProjectGitBranchCreateResponse>> {
+    return await this.request<AppServerProjectGitBranchCreateResponse>(
+      APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CREATE,
+      params,
+    );
+  }
+
+  async createProjectGitWorktree(
+    params: AppServerProjectGitWorktreeCreateParams,
+  ): Promise<
+    AppServerRequestResult<AppServerProjectGitWorktreeCreateResponse>
+  > {
+    return await this.request<AppServerProjectGitWorktreeCreateResponse>(
+      APP_SERVER_METHOD_PROJECT_GIT_WORKTREE_CREATE,
       params,
     );
   }

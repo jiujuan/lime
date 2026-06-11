@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "branch": {
+      "type": "string"
+    },
+    "rootPath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "branch",
+    "rootPath"
+  ],
+  "title": "ProjectGitBranchCheckoutParams",
+  "type": "object"
+}

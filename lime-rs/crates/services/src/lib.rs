@@ -41,6 +41,7 @@
 // 无外部依赖的服务
 pub mod context_memory_service;
 pub mod file_browser_service;
+pub mod project_git_service;
 pub mod sysinfo_service;
 pub mod update_check_service;
 pub mod voice_asr_service;

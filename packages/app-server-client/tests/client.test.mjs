@@ -105,6 +105,10 @@ const {
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_FILE_SYSTEM_RENAME_FILE,
+  METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
+  METHOD_PROJECT_GIT_BRANCH_CREATE,
+  METHOD_PROJECT_GIT_STATUS,
+  METHOD_PROJECT_GIT_WORKTREE_CREATE,
   METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
   METHOD_DIAGNOSTICS_SERVER_READ,
   METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
@@ -1555,6 +1559,22 @@ test("builds file system requests with current methods", () => {
     path: "/workspace/renamed.md",
     recursive: false,
   });
+  const gitStatus = client.readProjectGitStatus({
+    rootPath: "/workspace",
+  });
+  const gitCheckout = client.checkoutProjectGitBranch({
+    rootPath: "/workspace",
+    branch: "feature/demo",
+  });
+  const gitCreateBranch = client.createProjectGitBranch({
+    rootPath: "/workspace",
+    branch: "feature/new",
+  });
+  const gitCreateWorktree = client.createProjectGitWorktree({
+    rootPath: "/workspace",
+    name: "agent-demo",
+    baseBranch: "main",
+  });
 
   assert.equal(listing.id, 1);
   assert.equal(listing.method, METHOD_FILE_SYSTEM_LIST_DIRECTORY);
@@ -1588,6 +1608,30 @@ test("builds file system requests with current methods", () => {
   assert.deepEqual(deleteFile.params, {
     path: "/workspace/renamed.md",
     recursive: false,
+  });
+  assert.equal(gitStatus.id, 7);
+  assert.equal(gitStatus.method, METHOD_PROJECT_GIT_STATUS);
+  assert.deepEqual(gitStatus.params, {
+    rootPath: "/workspace",
+  });
+  assert.equal(gitCheckout.id, 8);
+  assert.equal(gitCheckout.method, METHOD_PROJECT_GIT_BRANCH_CHECKOUT);
+  assert.deepEqual(gitCheckout.params, {
+    rootPath: "/workspace",
+    branch: "feature/demo",
+  });
+  assert.equal(gitCreateBranch.id, 9);
+  assert.equal(gitCreateBranch.method, METHOD_PROJECT_GIT_BRANCH_CREATE);
+  assert.deepEqual(gitCreateBranch.params, {
+    rootPath: "/workspace",
+    branch: "feature/new",
+  });
+  assert.equal(gitCreateWorktree.id, 10);
+  assert.equal(gitCreateWorktree.method, METHOD_PROJECT_GIT_WORKTREE_CREATE);
+  assert.deepEqual(gitCreateWorktree.params, {
+    rootPath: "/workspace",
+    name: "agent-demo",
+    baseBranch: "main",
   });
 });
 
@@ -1748,6 +1792,10 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY, kind: "request" },
     { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
     { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
+    { method: METHOD_PROJECT_GIT_STATUS, kind: "request" },
+    { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
+    { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
+    { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
     { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
     { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
     { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
@@ -2004,6 +2052,19 @@ test("exports app-server method catalog with request and notification kinds", ()
   );
   assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_RENAME_FILE), true);
   assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_DELETE_FILE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_PROJECT_GIT_STATUS), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PROJECT_GIT_BRANCH_CHECKOUT),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PROJECT_GIT_BRANCH_CREATE),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PROJECT_GIT_WORKTREE_CREATE),
+    true,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_EVIDENCE_EXPORT), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT),
@@ -2792,6 +2853,54 @@ test("connection wraps file system responses", async () => {
       id: 6,
       result: {},
     },
+    {
+      id: 7,
+      result: {
+        rootPath: "/workspace",
+        repositoryRoot: "/workspace",
+        hasGitRepository: true,
+        currentBranch: "main",
+        branches: ["main"],
+        uncommittedFileCount: 0,
+      },
+    },
+    {
+      id: 8,
+      result: {
+        rootPath: "/workspace",
+        repositoryRoot: "/workspace",
+        hasGitRepository: true,
+        currentBranch: "feature/demo",
+        branches: ["feature/demo", "main"],
+        uncommittedFileCount: 0,
+      },
+    },
+    {
+      id: 9,
+      result: {
+        rootPath: "/workspace",
+        repositoryRoot: "/workspace",
+        hasGitRepository: true,
+        currentBranch: "feature/new",
+        branches: ["feature/new", "main"],
+        uncommittedFileCount: 0,
+      },
+    },
+    {
+      id: 10,
+      result: {
+        worktreePath: "/workspace-worktree",
+        branch: "main",
+        status: {
+          rootPath: "/workspace-worktree",
+          repositoryRoot: "/workspace",
+          hasGitRepository: true,
+          currentBranch: "abcdef0",
+          branches: ["main"],
+          uncommittedFileCount: 0,
+        },
+      },
+    },
   ];
   const connection = new AppServerConnection({
     send(message) {
@@ -2827,6 +2936,22 @@ test("connection wraps file system responses", async () => {
     path: "/workspace/renamed.md",
     recursive: false,
   });
+  const gitStatusResult = await connection.readProjectGitStatus({
+    rootPath: "/workspace",
+  });
+  const gitCheckoutResult = await connection.checkoutProjectGitBranch({
+    rootPath: "/workspace",
+    branch: "feature/demo",
+  });
+  const gitCreateBranchResult = await connection.createProjectGitBranch({
+    rootPath: "/workspace",
+    branch: "feature/new",
+  });
+  const gitCreateWorktreeResult = await connection.createProjectGitWorktree({
+    rootPath: "/workspace",
+    name: "agent-demo",
+    baseBranch: "main",
+  });
 
   assert.equal(sent[0].method, METHOD_FILE_SYSTEM_LIST_DIRECTORY);
   assert.deepEqual(sent[0].params, {
@@ -2855,12 +2980,39 @@ test("connection wraps file system responses", async () => {
     path: "/workspace/renamed.md",
     recursive: false,
   });
+  assert.equal(sent[6].method, METHOD_PROJECT_GIT_STATUS);
+  assert.deepEqual(sent[6].params, {
+    rootPath: "/workspace",
+  });
+  assert.equal(sent[7].method, METHOD_PROJECT_GIT_BRANCH_CHECKOUT);
+  assert.deepEqual(sent[7].params, {
+    rootPath: "/workspace",
+    branch: "feature/demo",
+  });
+  assert.equal(sent[8].method, METHOD_PROJECT_GIT_BRANCH_CREATE);
+  assert.deepEqual(sent[8].params, {
+    rootPath: "/workspace",
+    branch: "feature/new",
+  });
+  assert.equal(sent[9].method, METHOD_PROJECT_GIT_WORKTREE_CREATE);
+  assert.deepEqual(sent[9].params, {
+    rootPath: "/workspace",
+    name: "agent-demo",
+    baseBranch: "main",
+  });
   assert.equal(result.result.entries[0].name, "README.md");
   assert.equal(previewResult.result.content, "# Lime");
   assert.deepEqual(createFileResult.result, {});
   assert.deepEqual(createDirectoryResult.result, {});
   assert.deepEqual(renameFileResult.result, {});
   assert.deepEqual(deleteFileResult.result, {});
+  assert.equal(gitStatusResult.result.currentBranch, "main");
+  assert.equal(gitCheckoutResult.result.currentBranch, "feature/demo");
+  assert.equal(gitCreateBranchResult.result.currentBranch, "feature/new");
+  assert.equal(
+    gitCreateWorktreeResult.result.worktreePath,
+    "/workspace-worktree",
+  );
 });
 
 test("connection wraps evidence export response", async () => {

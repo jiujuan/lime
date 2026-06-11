@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "ProjectGitStatusResponse": {
+      "properties": {
+        "branches": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "currentBranch": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "hasGitRepository": {
+          "type": "boolean"
+        },
+        "repositoryRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "uncommittedFileCount": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "hasGitRepository",
+        "rootPath"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "branch": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ProjectGitStatusResponse"
+    },
+    "worktreePath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "branch",
+    "status",
+    "worktreePath"
+  ],
+  "title": "ProjectGitWorktreeCreateResponse",
+  "type": "object"
+}

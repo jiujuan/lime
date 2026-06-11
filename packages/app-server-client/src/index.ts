@@ -80,6 +80,10 @@ import {
   METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
   METHOD_FILE_SYSTEM_RENAME_FILE,
+  METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
+  METHOD_PROJECT_GIT_BRANCH_CREATE,
+  METHOD_PROJECT_GIT_STATUS,
+  METHOD_PROJECT_GIT_WORKTREE_CREATE,
   METHOD_GALLERY_MATERIAL_GET,
   METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
   METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
@@ -379,6 +383,14 @@ import {
   type FileSystemMutationResponse,
   type FileSystemReadFilePreviewParams,
   type FileSystemRenameFileParams,
+  type ProjectGitBranchCheckoutParams,
+  type ProjectGitBranchCheckoutResponse,
+  type ProjectGitBranchCreateParams,
+  type ProjectGitBranchCreateResponse,
+  type ProjectGitStatusParams,
+  type ProjectGitStatusResponse,
+  type ProjectGitWorktreeCreateParams,
+  type ProjectGitWorktreeCreateResponse,
   type GalleryMaterialDeleteResponse,
   type GalleryMaterialFilterParams,
   type GalleryMaterialListResponse,
@@ -944,9 +956,7 @@ export class AppServerClient {
     return this.request(METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, params);
   }
 
-  getOrCreateSessionFile(
-    params: SessionFileGetOrCreateParams,
-  ): JsonRpcRequest {
+  getOrCreateSessionFile(params: SessionFileGetOrCreateParams): JsonRpcRequest {
     return this.request(METHOD_SESSION_FILE_GET_OR_CREATE, params);
   }
 
@@ -1737,6 +1747,26 @@ export class AppServerClient {
 
   deleteFile(params: FileSystemDeleteFileParams): JsonRpcRequest {
     return this.request(METHOD_FILE_SYSTEM_DELETE_FILE, params);
+  }
+
+  readProjectGitStatus(params: ProjectGitStatusParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_GIT_STATUS, params);
+  }
+
+  checkoutProjectGitBranch(
+    params: ProjectGitBranchCheckoutParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_GIT_BRANCH_CHECKOUT, params);
+  }
+
+  createProjectGitBranch(params: ProjectGitBranchCreateParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_GIT_BRANCH_CREATE, params);
+  }
+
+  createProjectGitWorktree(
+    params: ProjectGitWorktreeCreateParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_GIT_WORKTREE_CREATE, params);
   }
 
   exportEvidence(params: EvidenceExportParams): JsonRpcRequest {
@@ -4049,6 +4079,50 @@ export class AppServerConnection {
     return await this.request<FileSystemMutationResponse>(
       this.client.deleteFile(params),
       METHOD_FILE_SYSTEM_DELETE_FILE,
+      options,
+    );
+  }
+
+  async readProjectGitStatus(
+    params: ProjectGitStatusParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectGitStatusResponse>> {
+    return await this.request<ProjectGitStatusResponse>(
+      this.client.readProjectGitStatus(params),
+      METHOD_PROJECT_GIT_STATUS,
+      options,
+    );
+  }
+
+  async checkoutProjectGitBranch(
+    params: ProjectGitBranchCheckoutParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectGitBranchCheckoutResponse>> {
+    return await this.request<ProjectGitBranchCheckoutResponse>(
+      this.client.checkoutProjectGitBranch(params),
+      METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
+      options,
+    );
+  }
+
+  async createProjectGitBranch(
+    params: ProjectGitBranchCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectGitBranchCreateResponse>> {
+    return await this.request<ProjectGitBranchCreateResponse>(
+      this.client.createProjectGitBranch(params),
+      METHOD_PROJECT_GIT_BRANCH_CREATE,
+      options,
+    );
+  }
+
+  async createProjectGitWorktree(
+    params: ProjectGitWorktreeCreateParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectGitWorktreeCreateResponse>> {
+    return await this.request<ProjectGitWorktreeCreateResponse>(
+      this.client.createProjectGitWorktree(params),
+      METHOD_PROJECT_GIT_WORKTREE_CREATE,
       options,
     );
   }

@@ -13,6 +13,10 @@ export const METHOD_FILE_SYSTEM_CREATE_FILE = "fileSystem/createFile";
 export const METHOD_FILE_SYSTEM_CREATE_DIRECTORY = "fileSystem/createDirectory";
 export const METHOD_FILE_SYSTEM_RENAME_FILE = "fileSystem/renameFile";
 export const METHOD_FILE_SYSTEM_DELETE_FILE = "fileSystem/deleteFile";
+export const METHOD_PROJECT_GIT_STATUS = "projectGit/status";
+export const METHOD_PROJECT_GIT_BRANCH_CHECKOUT = "projectGit/branch/checkout";
+export const METHOD_PROJECT_GIT_BRANCH_CREATE = "projectGit/branch/create";
+export const METHOD_PROJECT_GIT_WORKTREE_CREATE = "projectGit/worktree/create";
 export const METHOD_EVIDENCE_EXPORT = "evidence/export";
 export const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
   "agentSession/handoffBundle/export";
@@ -323,6 +327,10 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY, kind: "request" },
   { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
   { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
+  { method: METHOD_PROJECT_GIT_STATUS, kind: "request" },
+  { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
+  { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
+  { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
   { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
   { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
   { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
@@ -769,6 +777,44 @@ export type FileSystemFilePreview = {
   isBinary: boolean;
   size: number;
   error: string | null;
+};
+
+export type ProjectGitStatusParams = {
+  rootPath: string;
+};
+
+export type ProjectGitBranchCheckoutParams = {
+  rootPath: string;
+  branch: string;
+};
+
+export type ProjectGitBranchCreateParams = {
+  rootPath: string;
+  branch: string;
+};
+
+export type ProjectGitWorktreeCreateParams = {
+  rootPath: string;
+  name?: string;
+  baseBranch?: string;
+};
+
+export type ProjectGitStatusResponse = {
+  rootPath: string;
+  repositoryRoot?: string;
+  hasGitRepository: boolean;
+  currentBranch?: string;
+  branches: string[];
+  uncommittedFileCount: number;
+};
+
+export type ProjectGitBranchCheckoutResponse = ProjectGitStatusResponse;
+export type ProjectGitBranchCreateResponse = ProjectGitStatusResponse;
+
+export type ProjectGitWorktreeCreateResponse = {
+  worktreePath: string;
+  branch: string;
+  status: ProjectGitStatusResponse;
 };
 
 export type EvidenceExportParams = {
