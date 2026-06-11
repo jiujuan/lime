@@ -11,7 +11,10 @@ mod skill;
 mod gallery;
 mod project;
 mod unified;
+mod connect;
+mod diagnostics;
 mod file;
+mod log;
 mod wechat;
 mod voice;
 mod workspace;
@@ -695,17 +698,17 @@ impl RequestProcessor {
             METHOD_UNIFIED_MEMORY_HYBRID_SEARCH => {
                 self.handle_unified_memory_hybrid_search_impl(params).await
             }
-            METHOD_LOG_LIST => self.handle_log_list().await,
-            METHOD_LOG_PERSISTED_TAIL => self.handle_log_persisted_tail(params).await,
-            METHOD_LOG_CLEAR => self.handle_log_clear().await,
-            METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR => self.handle_log_diagnostic_history_clear().await,
-            METHOD_DIAGNOSTICS_LOG_STORAGE_READ => self.handle_diagnostics_log_storage_read().await,
+            METHOD_LOG_LIST => self.handle_log_list_impl().await,
+            METHOD_LOG_PERSISTED_TAIL => self.handle_log_persisted_tail_impl(params).await,
+            METHOD_LOG_CLEAR => self.handle_log_clear_impl().await,
+            METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR => self.handle_log_diagnostic_history_clear_impl().await,
+            METHOD_DIAGNOSTICS_LOG_STORAGE_READ => self.handle_diagnostics_log_storage_read_impl().await,
             METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT => {
-                self.handle_diagnostics_support_bundle_export().await
+                self.handle_diagnostics_support_bundle_export_impl().await
             }
-            METHOD_DIAGNOSTICS_SERVER_READ => self.handle_diagnostics_server_read().await,
+            METHOD_DIAGNOSTICS_SERVER_READ => self.handle_diagnostics_server_read_impl().await,
             METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ => {
-                self.handle_diagnostics_windows_startup_read().await
+                self.handle_diagnostics_windows_startup_read_impl().await
             }
             METHOD_USAGE_STATS_READ => self.handle_usage_stats_read(params).await,
             METHOD_USAGE_STATS_MODEL_RANKING_LIST => {
@@ -757,14 +760,14 @@ impl RequestProcessor {
             }
             METHOD_MODEL_PROVIDER_ALIAS_READ => self.handle_model_provider_alias_read_impl(params).await,
             METHOD_MODEL_PROVIDER_ALIAS_LIST => self.handle_model_provider_alias_list_impl().await,
-            METHOD_CONNECT_DEEP_LINK_RESOLVE => self.handle_connect_deep_link_resolve(params).await,
+            METHOD_CONNECT_DEEP_LINK_RESOLVE => self.handle_connect_deep_link_resolve_impl(params).await,
             METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE => {
-                self.handle_connect_open_deep_link_resolve(params).await
+                self.handle_connect_open_deep_link_resolve_impl(params).await
             }
             METHOD_CONNECT_RELAY_API_KEY_SAVE => {
-                self.handle_connect_relay_api_key_save(params).await
+                self.handle_connect_relay_api_key_save_impl(params).await
             }
-            METHOD_CONNECT_CALLBACK_SEND => self.handle_connect_callback_send(params).await,
+            METHOD_CONNECT_CALLBACK_SEND => self.handle_connect_callback_send_impl(params).await,
             METHOD_AGENT_SESSION_TURN_START => self.handle_turn_start(params, event_callback).await,
             METHOD_AGENT_SESSION_TURN_CANCEL => self.handle_turn_cancel(params).await,
             METHOD_AGENT_SESSION_ACTION_REPLAY => self.handle_action_replay(params).await,
@@ -882,84 +885,9 @@ impl RequestProcessor {
     // media handlers 已提取到 processor/media.rs
     // gallery handlers 已提取到 processor/gallery.rs
 
-    // project handlers 已提取到 processor/project.rs
-    // mcp handlers 已提取到 processor/mcp.rs
+    // log handlers 已提取到 processor/log.rs
 
-    async fn handle_log_list(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self.runtime.list_logs().await.map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_log_persisted_tail(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: LogPersistedTailParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .read_persisted_log_tail(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_log_clear(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self.runtime.clear_logs().await.map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_log_diagnostic_history_clear(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .clear_diagnostic_log_history()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_diagnostics_log_storage_read(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_log_storage_diagnostics()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_diagnostics_support_bundle_export(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .export_support_bundle()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_diagnostics_server_read(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_server_diagnostics()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_diagnostics_windows_startup_read(&self) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let response = self
-            .runtime
-            .read_windows_startup_diagnostics()
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // diagnostics handlers 已提取到 processor/diagnostics.rs
 
     async fn handle_usage_stats_read(
         &self,
@@ -1003,63 +931,7 @@ impl RequestProcessor {
         dispatch_result(response)
     }
 
-    async fn handle_connect_deep_link_resolve(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ConnectDeepLinkResolveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .resolve_connect_deep_link(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    // model handlers 已提取到 processor/model.rs
-
-    async fn handle_connect_open_deep_link_resolve(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ConnectOpenDeepLinkResolveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .resolve_connect_open_deep_link(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_connect_relay_api_key_save(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ConnectRelayApiKeySaveParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .save_connect_relay_api_key(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
-
-    async fn handle_connect_callback_send(
-        &self,
-        params: Option<serde_json::Value>,
-    ) -> Result<RpcDispatch, JsonRpcError> {
-        self.ensure_initialized()?;
-        let params: ConnectCallbackSendParams = parse_params(params)?;
-        let response = self
-            .runtime
-            .deliver_connect_callback(params)
-            .await
-            .map_err(to_jsonrpc_error)?;
-        dispatch_result(response)
-    }
+    // connect handlers 已提取到 processor/connect.rs
 
     fn handle_artifact_read(
         &self,
