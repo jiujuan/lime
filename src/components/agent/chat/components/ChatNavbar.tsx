@@ -101,12 +101,6 @@ const taskCenterWorkspaceTabCloseButtonClassName =
 const taskCenterWorkspaceTabCurveClassName =
   "pointer-events-none absolute bottom-0 h-[18px] w-[18px] bg-transparent";
 
-const taskCenterIconButtonClassName =
-  "h-7 w-7 rounded-[12px] border border-transparent bg-transparent text-[color:var(--lime-chrome-muted)] shadow-none transition-[background-color,color] hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)]";
-
-const taskCenterPillButtonClassName =
-  "h-7 rounded-[12px] border border-transparent bg-transparent px-2 text-[11px] font-medium text-[color:var(--lime-chrome-text)] shadow-none transition-[background-color,color] hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-text-strong)]";
-
 function normalizeProjectId(value?: string | null): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -475,98 +469,7 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
               </Button>
             </div>
           </div>
-
-          <div className="ml-auto flex h-9 shrink-0 items-center gap-1 pb-1">
-            {showContextCompactionAction ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className={taskCenterIconButtonClassName}
-                onClick={onCompactContext}
-                disabled={contextCompactionRunning}
-                aria-label={
-                  contextCompactionRunning
-                    ? navText(
-                        "agentChat.navbar.compactContextRunning",
-                        "正在压缩上下文",
-                      )
-                    : navText("agentChat.navbar.compactContext", "压缩上下文")
-                }
-                title={
-                  contextCompactionRunning
-                    ? navText(
-                        "agentChat.navbar.compactContextRunning",
-                        "正在压缩上下文",
-                      )
-                    : navText("agentChat.navbar.compactContext", "压缩上下文")
-                }
-              >
-                <Box size={15} />
-              </Button>
-            ) : null}
-
-            {showHarnessToggle ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  taskCenterPillButtonClassName,
-                  "gap-1 px-2.5",
-                  harnessPanelVisible &&
-                    "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
-                  harnessAttentionLevel === "warning" &&
-                    !harnessPanelVisible &&
-                    "bg-[color:var(--lime-warning-soft)] text-[color:var(--lime-warning)] hover:bg-[color:var(--lime-warning-soft)] hover:text-[color:var(--lime-warning)]",
-                )}
-                onClick={onToggleHarnessPanel}
-                aria-label={
-                  harnessPanelVisible
-                    ? navText(
-                        "agentChat.navbar.closeHarness",
-                        "关闭{{label}}",
-                        { label: harnessToggleLabel },
-                      )
-                    : navText("agentChat.navbar.openHarness", "打开{{label}}", {
-                        label: harnessToggleLabel,
-                      })
-                }
-                aria-expanded={harnessPanelVisible}
-                title={harnessToggleLabel}
-              >
-                <Sparkles size={12} />
-                <span>{harnessToggleLabel}</span>
-                {harnessPendingCount > 0 ? (
-                  <span className="rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[color:var(--lime-brand-strong)]">
-                    {harnessPendingCount > 99 ? "99+" : harnessPendingCount}
-                  </span>
-                ) : null}
-                <ChevronDown
-                  className={cn(
-                    "h-3 w-3 transition-transform",
-                    harnessPanelVisible && "rotate-180",
-                  )}
-                />
-              </Button>
-            ) : null}
-
-            {onToggleSettings ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className={taskCenterIconButtonClassName}
-                onClick={onToggleSettings}
-                aria-label={navText(
-                  "agentChat.navbar.openSettings",
-                  "打开设置",
-                )}
-                title={navText("agentChat.navbar.openSettings", "打开设置")}
-              >
-                <Settings size={16} />
-              </Button>
-            ) : null}
-          </div>
+          <div className="ml-auto h-9 shrink-0" aria-hidden="true" />
         </div>
       </Navbar>
     );
@@ -752,11 +655,22 @@ export const ChatNavbar: React.FC<ChatNavbarProps> = ({
                 )}
                 onClick={onCompactContext}
                 disabled={contextCompactionRunning}
-                aria-label={navText(
-                  "agentChat.navbar.compactContext",
-                  "压缩上下文",
-                )}
-                title={navText("agentChat.navbar.compactContext", "压缩上下文")}
+                aria-label={
+                  contextCompactionRunning
+                    ? navText(
+                        "agentChat.navbar.compactContextRunning",
+                        "正在压缩上下文",
+                      )
+                    : navText("agentChat.navbar.compactContext", "压缩上下文")
+                }
+                title={
+                  contextCompactionRunning
+                    ? navText(
+                        "agentChat.navbar.compactContextRunning",
+                        "正在压缩上下文",
+                      )
+                    : navText("agentChat.navbar.compactContext", "压缩上下文")
+                }
               >
                 <Box size={14} />
                 <span>

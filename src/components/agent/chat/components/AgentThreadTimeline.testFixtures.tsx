@@ -91,8 +91,11 @@ export const mockToolCallItem = vi.fn(
   ),
 );
 
-vi.mock("@/lib/workspace/a2ui", () => ({
+vi.mock("@/components/workspace/a2ui/parser", () => ({
   parseAIResponse: (...args: unknown[]) => parseAIResponseMock(...args),
+}));
+
+vi.mock("@/components/workspace/a2ui/taskCardPresets", () => ({
   CHAT_A2UI_TASK_CARD_PRESET: {},
   TIMELINE_A2UI_TASK_CARD_PRESET: {},
 }));
@@ -193,7 +196,9 @@ export function at(second: number): string {
   return `2026-03-15T09:10:${String(second).padStart(2, "0")}Z`;
 }
 
-export function createTurn(overrides?: Partial<AgentThreadTurn>): AgentThreadTurn {
+export function createTurn(
+  overrides?: Partial<AgentThreadTurn>,
+): AgentThreadTurn {
   return {
     id: "turn-1",
     thread_id: "thread-1",

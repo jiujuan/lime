@@ -44,6 +44,27 @@ export interface AgentRuntimeSessionClientDeps {
   appServerSessionClient?: AppServerSessionClient;
 }
 
+export const AGENT_RUNTIME_SESSIONS_CHANGED_EVENT =
+  "lime:agent-runtime-sessions-changed";
+
+export interface AgentRuntimeSessionsChangedDetail {
+  reason: "created" | "updated" | "archived" | "deleted" | "external";
+  sessionId?: string;
+  workspaceId?: string;
+}
+
+export function notifyAgentRuntimeSessionsChanged(
+  detail: AgentRuntimeSessionsChangedDetail,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, { detail }),
+  );
+}
+
 export function createSessionClient({
   appServerClient,
   appServerSessionClient = createAppServerSessionClient({ appServerClient }),
@@ -54,12 +75,18 @@ export function createSessionClient({
     executionStrategy?: AsterExecutionStrategy,
     options?: AgentRuntimeCreateSessionOptions,
   ): Promise<string> {
-    return await appServerSessionClient.createAgentRuntimeSession(
+    const sessionId = await appServerSessionClient.createAgentRuntimeSession(
       workspaceId,
       name,
       executionStrategy,
       options,
     );
+    notifyAgentRuntimeSessionsChanged({
+      reason: "created",
+      sessionId,
+      workspaceId,
+    });
+    return sessionId;
   }
 
   async function listAgentRuntimeSessions(
@@ -327,23 +354,31 @@ export function createSessionClient({
 
   async function updateAgentRuntimeSession(
     request: AgentRuntimeUpdateSessionRequest,
+    notificationReason: AgentRuntimeSessionsChangedDetail["reason"] = "updated",
   ): Promise<void> {
-    return await appServerSessionClient.updateAgentRuntimeSession(request);
+    await appServerSessionClient.updateAgentRuntimeSession(request);
+    notifyAgentRuntimeSessionsChanged({
+      reason: notificationReason,
+      sessionId: request.session_id,
+    });
   }
 
   async function archiveManyAgentRuntimeSessions(
     sessionIds: string[],
   ): Promise<AsterSessionInfo[]> {
-    return await appServerSessionClient.archiveManyAgentRuntimeSessions(
-      sessionIds,
-    );
+    const sessions =
+      await appServerSessionClient.archiveManyAgentRuntimeSessions(sessionIds);
+    notifyAgentRuntimeSessionsChanged({
+      reason: "archived",
+    });
+    return sessions;
   }
 
   async function deleteAgentRuntimeSession(sessionId: string): Promise<void> {
     return await updateAgentRuntimeSession({
       session_id: sessionId,
       archived: true,
-    });
+    }, "deleted");
   }
 
   return {

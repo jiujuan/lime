@@ -216,7 +216,7 @@ export function normalizeAgentRuntimeProcessTimelineItem(
       detail,
     };
   }
-  if (/completed|complete|done|final_done|turn_completed|turncompleted/.test(runtimeSurface.toLowerCase())) {
+  if (/completed|complete|done|turn_completed|turncompleted/.test(runtimeSurface.toLowerCase())) {
     const usage = extractUsageObject(runtimeEvent);
     return {
       kind: "completed",
@@ -492,7 +492,7 @@ function isTerminalProcess({
       event.eventType ?? event.type ?? readRuntimeEventType(event) ?? "",
     ).toLowerCase();
     const message = String(event.message ?? "").toLowerCase();
-    return /task:completed|task:error|task:cancelled|final_done|turn_completed|turn_failed|cancelled|已被中断|已完成/.test(
+    return /task:completed|task:error|task:cancelled|turn_completed|turn_failed|cancelled|已被中断|已完成/.test(
       `${type} ${message}`,
     );
   });
@@ -630,7 +630,7 @@ function estimateUsageFromProcess(
     ]
       .filter(Boolean)
       .join(" ");
-    return /model|routing|tool|skill|artifact|completed|final_done|turn/i.test(surface);
+    return /model|routing|tool|skill|artifact|completed|turn/i.test(surface);
   });
   if (!hasRuntimeSignal && !isTerminalProcess({ task, snapshot, events, contract: null })) {
     return null;

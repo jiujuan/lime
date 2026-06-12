@@ -40,8 +40,11 @@ const mockMarkdownRenderer = vi.fn(
   ),
 );
 
-vi.mock("@/lib/workspace/a2ui", () => ({
+vi.mock("@/components/workspace/a2ui/parser", () => ({
   parseAIResponse: (...args: unknown[]) => parseAIResponseMock(...args),
+}));
+
+vi.mock("@/components/workspace/a2ui/taskCardPresets", () => ({
   CHAT_A2UI_TASK_CARD_PRESET: {},
   TIMELINE_A2UI_TASK_CARD_PRESET: {},
 }));
@@ -2366,14 +2369,35 @@ describe("StreamingRenderer", () => {
       ],
     });
 
-    const text = container.textContent || "";
-    const introIndex = text.indexOf("先把内容工作台任务放在正确位置。");
-    const groupIndex = text.indexOf("已发起 2 个内容任务");
-    const finalIndex = text.indexOf("内容任务已发起，继续整理最终说明。");
+    const markdownNodes = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-testid="markdown-renderer"]'),
+    );
+    const introNode = markdownNodes.find((node) =>
+      node.textContent?.includes("先把内容工作台任务放在正确位置。"),
+    );
+    const finalNode = markdownNodes.find((node) =>
+      node.textContent?.includes("内容任务已发起，继续整理最终说明。"),
+    );
+    const processGroup = container.querySelector<HTMLElement>(
+      '[data-testid="streaming-process-group"]',
+    );
 
-    expect(introIndex).toBeGreaterThanOrEqual(0);
-    expect(groupIndex).toBeGreaterThan(introIndex);
-    expect(finalIndex).toBeGreaterThan(groupIndex);
+    expect(introNode).not.toBeNull();
+    expect(processGroup).not.toBeNull();
+    expect(finalNode).not.toBeNull();
+    expect(
+      introNode!.compareDocumentPosition(processGroup!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      processGroup!.compareDocumentPosition(finalNode!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const groupText = processGroup?.textContent || "";
+    expect(groupText).toContain("2");
+
+    const text = container.textContent || "";
     expect(text).not.toContain(".lime/tasks");
     expect(text).not.toContain("artifact_path");
     expect(text).not.toContain("lime_create_video_generation_task");

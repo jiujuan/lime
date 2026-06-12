@@ -372,7 +372,7 @@ vi.mock("@/lib/workspace/workbenchWorkflow", () => ({
   }),
 }));
 
-vi.mock("@/lib/workspace/workbenchUi", () => ({
+vi.mock("@/components/workspace/layout/LayoutTransition", () => ({
   LayoutTransition: ({
     mode,
     chatContent,
@@ -391,6 +391,9 @@ vi.mock("@/lib/workspace/workbenchUi", () => ({
       </div>
     </div>
   ),
+}));
+
+vi.mock("@/lib/workspace/workbenchUi", () => ({
   StepProgress: () => <div data-testid="step-progress" />,
 }));
 

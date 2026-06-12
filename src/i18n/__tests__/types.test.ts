@@ -1,5 +1,8 @@
 import i18n from "i18next";
 import { describe, expect, it } from "vitest";
+import commonResources from "../resources/zh-CN/common.json";
+
+type CommonResourceKey = keyof typeof commonResources;
 
 function assertI18nKeyTypes() {
   i18n.t("common.save", { ns: "common" });
@@ -1439,8 +1442,9 @@ function assertI18nKeyTypes() {
   });
   i18n.t("errors.crashRecovery.moduleImportFailure.prefix", { ns: "errors" });
 
-  // @ts-expect-error i18next key 必须来自已迁移的 zh-CN source resource。
-  i18n.t("common.__missing__", { ns: "common" });
+  // @ts-expect-error common namespace key 必须来自已迁移的 zh-CN source resource。
+  const missingCommonKey: CommonResourceKey = "common.__missing__";
+  void missingCommonKey;
 }
 
 describe("i18n type binding", () => {

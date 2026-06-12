@@ -93,6 +93,28 @@ describe("WorkspaceMainArea", () => {
     ).not.toBeNull();
   });
 
+  it("浮层输入区应跟随底部工具 inset 上移，避免被 Shell 面板遮挡", () => {
+    const { container } = mountHarness(
+      WorkspaceMainAreaHarness,
+      {
+        showFloatingInputOverlay: true,
+        shellBottomInset: "calc(0px + 228px)",
+      },
+      mountedRoots,
+    );
+
+    const inputbar = container.querySelector<HTMLElement>(
+      '[data-testid="workspace-inputbar"]',
+    );
+    const overlay = container.querySelector<HTMLElement>(
+      '[data-testid="general-workbench-input-overlay"]',
+    );
+
+    expect(overlay).not.toBeNull();
+    expect(overlay?.dataset.bottomInset).toBe("calc(0px + 228px)");
+    expect(overlay?.contains(inputbar)).toBe(true);
+  });
+
   it("没有浮层输入区时待处理 A2UI 也应保持纯聊天态", () => {
     const { container } = mountHarness(
       WorkspaceMainAreaHarness,
@@ -153,6 +175,35 @@ describe("WorkspaceMainArea", () => {
     expect(
       shell?.querySelector('[data-testid="task-center-tabs"]'),
     ).not.toBeNull();
+  });
+
+  it("任务中心工具栏应占据独立右侧区域，避免覆盖工作台和会话标签", () => {
+    const { container } = mountHarness(
+      WorkspaceMainAreaHarness,
+      {
+        navbarNode: <div data-testid="workspace-navbar">navbar</div>,
+        taskCenterTabsNode: <div data-testid="task-center-tabs">tabs</div>,
+        taskCenterUtilityToolbarNode: (
+          <div data-testid="task-center-toolbar">toolbar</div>
+        ),
+      },
+      mountedRoots,
+    );
+
+    const host = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-utility-toolbar-host"]',
+    );
+    const tabs = container.querySelector<HTMLElement>(
+      '[data-testid="task-center-tabs"]',
+    );
+
+    expect(host).not.toBeNull();
+    expect(host?.className).toContain("shrink-0");
+    expect(host?.className).toContain("max-w-[42%]");
+    expect(host?.className).toContain("overflow-hidden");
+    expect(host?.className).toContain("border-l");
+    expect(tabs?.parentElement?.className).toContain("flex-1");
+    expect(host?.contains(tabs)).toBe(false);
   });
 
   it("任务中心自动隐藏顶栏时应通过小图标展开完整顶部工具", () => {

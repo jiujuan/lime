@@ -67,7 +67,9 @@ function compact<T extends object>(input: T): T {
   ) as T;
 }
 
-function subagentThreadId(event: AgentRuntimeExecutionEvent): string | undefined {
+function subagentThreadId(
+  event: AgentRuntimeExecutionEvent,
+): string | undefined {
   return (
     event.subagentId ??
     event.workerId ??
@@ -99,10 +101,10 @@ function isSubagentEvent(event: AgentRuntimeExecutionEvent): boolean {
   const eventClass = event.eventClass ?? "";
   return Boolean(
     subagentThreadId(event) ||
-      eventClass.startsWith("subagent.") ||
-      eventClass.startsWith("handoff.") ||
-      eventClass === "agent.spawned" ||
-      eventClass === "agent.completed",
+    eventClass.startsWith("subagent.") ||
+    eventClass.startsWith("handoff.") ||
+    eventClass === "agent.spawned" ||
+    eventClass === "agent.completed",
   );
 }
 
@@ -117,7 +119,26 @@ function isDelegationEvent(event: AgentRuntimeExecutionEvent): boolean {
 }
 
 function isTerminalStatus(status: string): boolean {
-  return status === "completed" || status === "failed";
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "aborted" ||
+    status === "closed" ||
+    status === "not_found"
+  );
+}
+
+function isFailedTerminalStatus(status: string): boolean {
+  return (
+    status === "failed" ||
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "aborted" ||
+    status === "closed" ||
+    status === "not_found"
+  );
 }
 
 function activityKind(event: AgentRuntimeExecutionEvent): string {
@@ -155,14 +176,23 @@ function isolationForEvent(
   event: AgentRuntimeExecutionEvent,
 ): AgentUiSubagentIsolationView | undefined {
   const isolation = compact<AgentUiSubagentIsolationView>({
-    runtimeProfileId: payloadString(event, "runtimeProfileId", "runtime_profile_id"),
+    runtimeProfileId: payloadString(
+      event,
+      "runtimeProfileId",
+      "runtime_profile_id",
+    ),
     modelProfileId: payloadString(event, "modelProfileId", "model_profile_id"),
     isolationProfileId: payloadString(
       event,
       "isolationProfileId",
       "isolation_profile_id",
     ),
-    workspaceRef: payloadString(event, "workspaceRef", "workspace_ref", "cwdRef"),
+    workspaceRef: payloadString(
+      event,
+      "workspaceRef",
+      "workspace_ref",
+      "cwdRef",
+    ),
     permissionProfile: payloadString(
       event,
       "permissionProfile",
@@ -205,8 +235,7 @@ function mergeThread(
       current?.taskPath ??
       payloadString(event, "taskPath", "task_path", "agentPath", "agent_path"),
     role:
-      current?.role ??
-      payloadString(event, "role", "agentRole", "agent_role"),
+      current?.role ?? payloadString(event, "role", "agentRole", "agent_role"),
     nickname:
       current?.nickname ??
       payloadString(event, "nickname", "agentNickname", "agent_nickname"),
@@ -218,11 +247,20 @@ function mergeThread(
     promptPreview:
       current?.promptPreview ??
       safePreview(
-        payloadString(event, "promptPreview", "prompt_preview", "prompt", "input"),
+        payloadString(
+          event,
+          "promptPreview",
+          "prompt_preview",
+          "prompt",
+          "input",
+        ),
       ),
-    lastActivityAt: event.completedAt ?? event.createdAt ?? current?.lastActivityAt,
+    lastActivityAt:
+      event.completedAt ?? event.createdAt ?? current?.lastActivityAt,
     createdAt: current?.createdAt ?? event.createdAt,
-    completedAt: event.completedAt ?? (isTerminalStatus(event.status) ? event.createdAt : current?.completedAt),
+    completedAt:
+      event.completedAt ??
+      (isTerminalStatus(event.status) ? event.createdAt : current?.completedAt),
     artifactRefs: Array.from(artifactRefs),
     evidenceRefs: Array.from(evidenceRefs),
     sourceEventIds: Array.from(sourceEventIds),
@@ -247,7 +285,13 @@ function delegationForEvent(
     status: event.status,
     title: event.title,
     promptPreview: safePreview(
-      payloadString(event, "promptPreview", "prompt_preview", "prompt", "input"),
+      payloadString(
+        event,
+        "promptPreview",
+        "prompt_preview",
+        "prompt",
+        "input",
+      ),
     ),
     createdAt: event.createdAt,
     completedAt: event.completedAt,
@@ -272,38 +316,88 @@ function activityForEvent(
 export function buildAgentUiSubagentsModel(
   events: readonly AgentRuntimeExecutionEvent[] = [],
 ): AgentUiSubagentsModel {
+  const accumulator = createAgentUiSubagentsModelAccumulator();
+  for (const event of events) {
+    accumulator.apply(event);
+  }
+  return accumulator.getModel();
+}
+
+export interface AgentUiSubagentsModelAccumulator {
+  apply(event: AgentRuntimeExecutionEvent): AgentUiSubagentsModel;
+  getModel(): AgentUiSubagentsModel;
+  reset(): AgentUiSubagentsModel;
+}
+
+export function createAgentUiSubagentsModelAccumulator(): AgentUiSubagentsModelAccumulator {
   const threads = new Map<string, AgentUiSubagentThreadView>();
   const delegationCalls = new Map<string, AgentUiSubagentDelegationView>();
   const activities: AgentUiSubagentActivityView[] = [];
+  let model = buildModel();
 
-  events.forEach((event) => {
-    if (!isSubagentEvent(event)) return;
-    const threadId = subagentThreadId(event);
-    if (!threadId) return;
+  function buildModel(): AgentUiSubagentsModel {
+    const threadList = Array.from(threads.values());
+    return {
+      hasSubagents: threadList.length > 0,
+      threads: threadList.map((thread) => ({
+        ...thread,
+        artifactRefs: [...thread.artifactRefs],
+        evidenceRefs: [...thread.evidenceRefs],
+        sourceEventIds: [...thread.sourceEventIds],
+        isolation: thread.isolation ? { ...thread.isolation } : undefined,
+      })),
+      delegationCalls: Array.from(delegationCalls.values()).map(
+        (delegation) => ({
+          ...delegation,
+          targetThreadIds: [...delegation.targetThreadIds],
+        }),
+      ),
+      activities: activities.map((activity) => ({ ...activity })),
+      activeThreadIds: threadList
+        .filter(
+          (thread) =>
+            thread.status === "pending" ||
+            thread.status === "running" ||
+            thread.status === "blocked",
+        )
+        .map((thread) => thread.threadId),
+      completedThreadIds: threadList
+        .filter((thread) => thread.status === "completed")
+        .map((thread) => thread.threadId),
+      failedThreadIds: threadList
+        .filter((thread) => isFailedTerminalStatus(thread.status))
+        .map((thread) => thread.threadId),
+    };
+  }
 
-    threads.set(threadId, mergeThread(threads.get(threadId), event, threadId));
-    activities.push(activityForEvent(event, threadId));
-
-    if (isDelegationEvent(event)) {
-      const delegation = delegationForEvent(event, threadId);
-      delegationCalls.set(delegation.callId, delegation);
-    }
-  });
-
-  const threadList = Array.from(threads.values());
   return {
-    hasSubagents: threadList.length > 0,
-    threads: threadList,
-    delegationCalls: Array.from(delegationCalls.values()),
-    activities,
-    activeThreadIds: threadList
-      .filter((thread) => thread.status === "pending" || thread.status === "running" || thread.status === "blocked")
-      .map((thread) => thread.threadId),
-    completedThreadIds: threadList
-      .filter((thread) => thread.status === "completed")
-      .map((thread) => thread.threadId),
-    failedThreadIds: threadList
-      .filter((thread) => thread.status === "failed")
-      .map((thread) => thread.threadId),
+    apply(event) {
+      if (!isSubagentEvent(event)) return model;
+      const threadId = subagentThreadId(event);
+      if (!threadId) return model;
+
+      threads.set(
+        threadId,
+        mergeThread(threads.get(threadId), event, threadId),
+      );
+      activities.push(activityForEvent(event, threadId));
+
+      if (isDelegationEvent(event)) {
+        const delegation = delegationForEvent(event, threadId);
+        delegationCalls.set(delegation.callId, delegation);
+      }
+      model = buildModel();
+      return model;
+    },
+    getModel() {
+      return model;
+    },
+    reset() {
+      threads.clear();
+      delegationCalls.clear();
+      activities.length = 0;
+      model = buildModel();
+      return model;
+    },
   };
 }

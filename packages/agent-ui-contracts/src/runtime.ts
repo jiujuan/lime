@@ -19,6 +19,7 @@ export type AgentRuntimeExecutionEventStatus =
   | "running"
   | "completed"
   | "blocked"
+  | "canceled"
   | "failed"
   | string;
 
@@ -66,6 +67,7 @@ export type AgentRuntimePhase =
   | "tool_running"
   | "action_required"
   | "failed"
+  | "canceled"
   | "completed"
   | "blocked"
   | string;
@@ -108,6 +110,34 @@ export interface AgentRuntimeExecutionEvent {
   completedAt?: string;
 }
 
+export type AgentRuntimeJsonPatchOperation =
+  | {
+      op: "add" | "replace" | "test";
+      path: string;
+      value: unknown;
+    }
+  | {
+      op: "remove";
+      path: string;
+    }
+  | {
+      op: "move" | "copy";
+      path: string;
+      from: string;
+    };
+
+export interface AgentRuntimeStateDelta {
+  schemaVersion: "lime-runtime-state-delta/v0.1" | string;
+  runtimeId: string;
+  threadId?: string;
+  turnId?: string;
+  sequence: number;
+  baseEventId?: string;
+  target: "projection" | "readModel" | "runtime" | string;
+  patch: AgentRuntimeJsonPatchOperation[];
+  createdAt: string;
+}
+
 export type AgentRuntimeActionKind =
   | "add-input-source"
   | "configure-text-model"
@@ -130,6 +160,7 @@ export type AgentRuntimeDisplayStatusKey =
   | "agent.status.running"
   | "agent.status.completed"
   | "agent.status.blocked"
+  | "agent.status.canceled"
   | "agent.status.failed"
   | "agent.status.actionRequired"
   | "agent.status.actionResolved"

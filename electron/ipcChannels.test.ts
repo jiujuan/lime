@@ -129,6 +129,12 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("open_external_url")).toBe(true);
     expect(isElectronHostCommand("open_system_settings_url")).toBe(true);
     expect(isElectronHostCommand("open_with_default_app")).toBe(true);
+    expect(isElectronHostCommand("open_project_path_with_tool")).toBe(true);
+    expect(isElectronHostCommand("run_project_shell_command")).toBe(true);
+    expect(isElectronHostCommand("project_shell_session_start")).toBe(true);
+    expect(isElectronHostCommand("project_shell_session_write")).toBe(true);
+    expect(isElectronHostCommand("project_shell_session_resize")).toBe(true);
+    expect(isElectronHostCommand("project_shell_session_kill")).toBe(true);
     expect(isElectronHostCommand("reveal_in_finder")).toBe(true);
     expect(isElectronHostCommand("save_exported_document")).toBe(true);
     expect(isElectronHostCommand("save_layered_design_project_export")).toBe(

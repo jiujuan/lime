@@ -7229,6 +7229,8 @@ describe("MessageList", () => {
 
     expect(saveButton).not.toBeNull();
     expect(messageActions?.className).toContain("message-actions-persistent");
+    expect(saveButton?.getAttribute("title")).toBe("Save to project knowledge");
+    expect(saveButton?.textContent).not.toContain("Save to project knowledge");
 
     act(() => {
       saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

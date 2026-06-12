@@ -266,6 +266,11 @@ fn natural_language_news_turn_leaves_search_mode_to_model_tool_choice() {
 }
 
 #[test]
+fn final_done_raw_runtime_event_does_not_map_to_current_terminal_event() {
+    assert_eq!(runtime_event_type_from_raw("final_done"), "runtime.event");
+}
+
+#[test]
 fn explicit_web_search_false_keeps_search_disabled() {
     let request = request_for_test(
         "整理今天的国际新闻",

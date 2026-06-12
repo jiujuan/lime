@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from "lucide-react";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
@@ -9,6 +9,12 @@ import type {
 } from "@/components/workspace/a2ui/types";
 import { CanvasWorkbenchLayout } from "../components/CanvasWorkbenchLayout";
 import { ChatNavbar } from "../components/ChatNavbar";
+import {
+  TaskCenterShellPanel,
+  TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
+  TASK_CENTER_SHELL_PANEL_MAX_HEIGHT_RATIO,
+} from "../components/TaskCenterShellPanel";
+import { TaskCenterUtilityToolbar } from "../components/TaskCenterUtilityToolbar";
 import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurfaceBanner";
 import { EmptyState } from "../components/EmptyState";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
@@ -377,6 +383,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   >["onOpenProjectConversation"];
   projectId: string | null;
   openedProjects?: ComponentProps<typeof EmptyState>["openedProjects"];
+  projectRootPath?: string | null;
   sessionId?: ComponentProps<typeof EmptyState>["sessionId"];
   onProjectChange?: (projectId: string | null) => void;
   onCloseProject?: ComponentProps<typeof ChatNavbar>["onCloseProject"];
@@ -541,6 +548,7 @@ export function WorkspaceConversationScene({
   handleOpenProjectConversation,
   projectId,
   openedProjects,
+  projectRootPath,
   sessionId,
   onProjectChange,
   onCloseProject,
@@ -768,6 +776,64 @@ export function WorkspaceConversationScene({
         );
       })()
     : null;
+  const [shellPanelOpen, setShellPanelOpen] = useState(false);
+  const [shellPanelHeightPx, setShellPanelHeightPx] = useState(
+    TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
+  );
+  const [shellPanelMaximized, setShellPanelMaximized] = useState(false);
+  const shouldUseTaskCenterUtilityToolbar =
+    navbarContextVariant === "task-center" && Boolean(taskCenterTabsNode);
+  const effectiveShellPanelHeightPx =
+    shellPanelOpen && shouldUseTaskCenterUtilityToolbar
+      ? shellPanelMaximized && typeof window !== "undefined"
+        ? Math.max(
+            TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
+            Math.floor(
+              window.innerHeight * TASK_CENTER_SHELL_PANEL_MAX_HEIGHT_RATIO,
+            ),
+          )
+        : shellPanelHeightPx
+      : 0;
+  const effectiveShellBottomInset =
+    shellPanelOpen && shouldUseTaskCenterUtilityToolbar
+      ? `calc(${shellBottomInset} + ${effectiveShellPanelHeightPx}px)`
+      : shellBottomInset;
+  const taskCenterUtilityToolbarNode = shouldUseTaskCenterUtilityToolbar ? (
+    <TaskCenterUtilityToolbar
+      projectRootPath={projectRootPath}
+      showCanvasToggle={!isThemeWorkbench}
+      isCanvasOpen={layoutMode !== "chat"}
+      onToggleCanvas={onToggleCanvas}
+      showHarnessToggle={showHarnessToggle}
+      harnessPanelVisible={harnessPanelVisible}
+      onToggleHarnessPanel={onToggleHarnessPanel}
+      harnessPendingCount={harnessPendingCount}
+      harnessAttentionLevel={harnessAttentionLevel ?? "idle"}
+      harnessToggleLabel={harnessToggleLabel ?? "Harness"}
+      shellPanelOpen={shellPanelOpen}
+      onToggleShellPanel={() => {
+        setShellPanelOpen((current) => !current);
+      }}
+    />
+  ) : null;
+  const taskCenterShellPanelNode =
+    shellPanelOpen && shouldUseTaskCenterUtilityToolbar ? (
+      <TaskCenterShellPanel
+        heightPx={effectiveShellPanelHeightPx}
+        maximized={shellPanelMaximized}
+        projectRootPath={projectRootPath}
+        onClose={() => {
+          setShellPanelOpen(false);
+        }}
+        onHeightChange={(heightPx) => {
+          setShellPanelMaximized(false);
+          setShellPanelHeightPx(heightPx);
+        }}
+        onToggleMaximize={() => {
+          setShellPanelMaximized((current) => !current);
+        }}
+      />
+    ) : null;
   const canvasContent =
     !liveCanvasPreview ? null : currentImageWorkbenchActive ||
       shouldShowCanvasLoadingState ? (
@@ -780,23 +846,27 @@ export function WorkspaceConversationScene({
   );
 
   return (
-    <WorkspaceMainArea
-      compactChrome={compactChrome}
-      navbarNode={navbarNode}
-      taskCenterTabsNode={taskCenterTabsNode}
-      contentSyncNoticeNode={contentSyncNoticeNode}
-      shellBottomInset={shellBottomInset}
-      layoutMode={layoutMode}
-      forceCanvasMode={forceCanvasMode}
-      chatContent={chatContent}
-      canvasContent={canvasContent}
-      chatPanelWidth={chatPanelWidth}
-      chatPanelMinWidth={chatPanelMinWidth}
-      generalWorkbenchDialog={generalWorkbenchDialog}
-      generalWorkbenchHarnessDialog={generalWorkbenchHarnessDialog}
-      showFloatingInputOverlay={showFloatingInputOverlay}
-      hasPendingA2UIForm={hasPendingA2UIForm}
-      inputbarNode={inputbarNode}
-    />
+    <>
+      <WorkspaceMainArea
+        compactChrome={compactChrome}
+        navbarNode={navbarNode}
+        taskCenterUtilityToolbarNode={taskCenterUtilityToolbarNode}
+        taskCenterTabsNode={taskCenterTabsNode}
+        taskCenterShellPanelNode={taskCenterShellPanelNode}
+        contentSyncNoticeNode={contentSyncNoticeNode}
+        shellBottomInset={effectiveShellBottomInset}
+        layoutMode={layoutMode}
+        forceCanvasMode={forceCanvasMode}
+        chatContent={chatContent}
+        canvasContent={canvasContent}
+        chatPanelWidth={chatPanelWidth}
+        chatPanelMinWidth={chatPanelMinWidth}
+        generalWorkbenchDialog={generalWorkbenchDialog}
+        generalWorkbenchHarnessDialog={generalWorkbenchHarnessDialog}
+        showFloatingInputOverlay={showFloatingInputOverlay}
+        hasPendingA2UIForm={hasPendingA2UIForm}
+        inputbarNode={inputbarNode}
+      />
+    </>
   );
 }

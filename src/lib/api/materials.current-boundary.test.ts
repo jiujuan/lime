@@ -78,7 +78,8 @@ describe("Materials current App Server boundary", () => {
       readRepoFile(
         "lime-rs/crates/app-server-protocol/src/protocol/v0/project_materials.rs",
       ),
-      readRepoFile("lime-rs/crates/app-server/src/processor.rs"),
+      readRepoFile("lime-rs/crates/app-server/src/processor/mod.rs"),
+      readRepoFile("lime-rs/crates/app-server/src/processor/project.rs"),
       readRepoFile("lime-rs/crates/app-server/src/runtime.rs"),
       readRepoFile(
         "lime-rs/crates/app-server/src/local_data_source/project_materials.rs",

@@ -29,6 +29,7 @@ import {
 } from "./AppSidebar.testFixtures";
 import type { AgentPageParams } from "./AppSidebar.testFixtures";
 import { useAppSidebarProjectActions } from "@/components/app-sidebar/useAppSidebarProjectActions";
+import { AGENT_RUNTIME_SESSIONS_CHANGED_EVENT } from "@/lib/api/agentRuntime";
 
 describe("AppSidebar conversations", () => {
   beforeEach(resetAppSidebarTest);
@@ -580,6 +581,58 @@ describe("AppSidebar conversations", () => {
     });
   });
 
+  it("新任务首页空侧栏应短 idle 加载最近对话", async () => {
+    const scheduledTasks: Array<{
+      task: () => void;
+      options?: { minimumDelayMs?: number; idleTimeoutMs?: number };
+    }> = [];
+    mockScheduleMinimumDelayIdleTask.mockImplementation(
+      (
+        task: () => void,
+        options?: { minimumDelayMs?: number; idleTimeoutMs?: number },
+      ) => {
+        scheduledTasks.push({ task, options });
+        return () => undefined;
+      },
+    );
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-new-task",
+        name: "Claw fixture 会话",
+        created_at: 1714000000,
+        updated_at: 1714000600,
+        archived_at: null,
+        workspace_id: null,
+      },
+    ]);
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    const deferredSessionLoad = scheduledTasks.find(
+      (entry) =>
+        entry.options?.minimumDelayMs === 0 &&
+        entry.options?.idleTimeoutMs === 0,
+    );
+    expect(deferredSessionLoad).toBeDefined();
+
+    await act(async () => {
+      deferredSessionLoad?.task();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
+    expect(container.textContent).toContain("Claw fixture 会话");
+  });
+
   it("窗口重新聚焦时应低优先级刷新会话列表", async () => {
     localStorage.setItem("agent_last_project_id", JSON.stringify("project-1"));
     const cancelFocusRefresh = vi.fn();
@@ -612,6 +665,48 @@ describe("AppSidebar conversations", () => {
     expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
       limit: 11,
     });
+  });
+
+  it("会话列表变更事件应立即刷新最近对话", async () => {
+    mockListAgentRuntimeSessions
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "session-external",
+          name: "外部创建的会话",
+          created_at: 1714000000,
+          updated_at: 1714000600,
+          archived_at: null,
+          workspace_id: null,
+        },
+      ]);
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+    mockListAgentRuntimeSessions.mockClear();
+
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, {
+          detail: {
+            reason: "external",
+            sessionId: "session-external",
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
+    expect(container.textContent).toContain("外部创建的会话");
   });
 
   it("最近对话应限制初始渲染数量，并保留当前会话可见", async () => {

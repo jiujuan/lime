@@ -32,6 +32,7 @@ import {
 import { buildRoutingProjectionEvent } from "./routingProjection";
 import {
   buildModelChangeEvent,
+  buildRunCanceledEvent,
   buildRunFailedEvent,
   buildRunFinishedEvent,
   buildRuntimeStatusEvents,
@@ -123,9 +124,9 @@ export function buildAgentUiProjectionEvents(
       case "item_completed":
         return buildThreadItemEvents(event.type, event.item, context);
       case "turn_completed":
-      case "done":
-      case "final_done":
         return [buildRunFinishedEvent(event, context)];
+      case "turn_canceled":
+        return [buildRunCanceledEvent(event, context)];
       case "turn_failed":
       case "error":
         return [buildRunFailedEvent(event, context)];

@@ -54,8 +54,12 @@ export function normalizeServiceSkillUsageSlotValue(
 
 export function pickUsageSlotValues(
   record: Record<string, unknown>,
-  fieldKeys: readonly string[],
+  fieldKeys?: readonly string[],
 ): Record<string, string> | undefined {
+  if (!fieldKeys || fieldKeys.length === 0) {
+    return undefined;
+  }
+
   const nextValues = Object.fromEntries(
     fieldKeys
       .map((fieldKey) => [

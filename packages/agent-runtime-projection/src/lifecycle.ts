@@ -44,6 +44,10 @@ export interface AgentUiRunFailedProjectionInput {
   errorMessage?: string | null;
 }
 
+export interface AgentUiRunCanceledProjectionInput {
+  sourceType?: AgentUiProjectionSourceType | string;
+}
+
 export interface AgentUiRuntimeStatusProjectionInput {
   sourceType?: AgentUiProjectionSourceType | string;
   phase:
@@ -177,6 +181,24 @@ export function buildAgentUiRunFailedEvent(
     payload: {
       errorPreview: truncateText(input.errorMessage),
     },
+  };
+}
+
+export function buildAgentUiRunCanceledEvent(
+  input: AgentUiRunCanceledProjectionInput = {},
+  context: AgentUiProjectionContext = {},
+): AgentUiProjectionEvent {
+  return {
+    ...buildAgentUiProjectionBase(
+      { sourceType: input.sourceType ?? "turn_canceled" },
+      context,
+    ),
+    type: "run.canceled",
+    owner: "runtime",
+    scope: "run",
+    phase: "cancelled",
+    surface: "runtime_status",
+    persistence: "archive",
   };
 }
 

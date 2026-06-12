@@ -31,8 +31,8 @@ vi.mock("@/lib/api/project", () => ({
     rootPath: null,
   })),
   getWorkspaceProjectsRoot: vi.fn(async () => "/tmp/projects"),
-  resolveProjectRootPath: vi.fn(async (name: string, root: string) =>
-    `${root}/${name}`,
+  resolveProjectRootPath: vi.fn(
+    async (name: string, root: string) => `${root}/${name}`,
   ),
 }));
 
@@ -254,13 +254,17 @@ describe("ChatNavbar", () => {
     ).toContain("project-1");
     expect(mockProjectSelector).not.toHaveBeenCalled();
     expect(
-      document.body.querySelector('[data-testid="inputbar-project-context-menu"]'),
+      document.body.querySelector(
+        '[data-testid="inputbar-project-context-menu"]',
+      ),
     ).toBeNull();
     expect(
       container.querySelector('[data-testid="inputbar-project-context-mode"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="inputbar-project-context-branch"]'),
+      container.querySelector(
+        '[data-testid="inputbar-project-context-branch"]',
+      ),
     ).toBeNull();
     const menuTrigger = container.querySelector(
       'button[aria-label="展开工作区菜单"]',
@@ -269,8 +273,7 @@ describe("ChatNavbar", () => {
     const settingsButton = container.querySelector(
       '[aria-label="打开设置"]',
     ) as HTMLButtonElement | null;
-    expect(settingsButton).not.toBeNull();
-    expect(settingsButton?.querySelector(".lucide-settings")).not.toBeNull();
+    expect(settingsButton).toBeNull();
     expect(container.querySelector('[aria-label="切换历史"]')).toBeNull();
 
     await act(async () => {
@@ -280,7 +283,9 @@ describe("ChatNavbar", () => {
 
     expect(onBackToProjectManagement).not.toHaveBeenCalled();
     expect(
-      document.body.querySelector('[data-testid="inputbar-project-context-menu"]'),
+      document.body.querySelector(
+        '[data-testid="inputbar-project-context-menu"]',
+      ),
     ).not.toBeNull();
     expect(
       document.body.querySelector(
@@ -453,7 +458,7 @@ describe("ChatNavbar", () => {
     expect(onDismissWorkspaceHint).toHaveBeenCalledTimes(1);
   });
 
-  it("任务中心顶栏应保留 Harness 状态入口", () => {
+  it("任务中心顶栏不应重复渲染 Harness 状态入口，避免覆盖工具栏", () => {
     const container = renderChatNavbar({
       contextVariant: "task-center",
       showHarnessToggle: true,
@@ -464,9 +469,7 @@ describe("ChatNavbar", () => {
       'button[aria-label="打开Harness"]',
     ) as HTMLButtonElement | null;
 
-    expect(button).not.toBeNull();
-    expect(button?.textContent).toContain("Harness");
-    expect(button?.textContent).toContain("3");
+    expect(button).toBeNull();
   });
 
   it("点击顶栏按钮后应切换 Harness 面板显隐", () => {
@@ -541,7 +544,7 @@ describe("ChatNavbar", () => {
     });
 
     const button = container.querySelector(
-      'button[aria-label="压缩上下文"]',
+      'button[aria-label="正在压缩上下文"]',
     ) as HTMLButtonElement | null;
 
     expect(button).not.toBeNull();

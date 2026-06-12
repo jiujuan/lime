@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  getAgentUiFixture,
+} from "../../agent-ui-contracts/dist/index.js";
+import {
   buildAgentUiActionRequiredEvent,
   buildAgentUiActionResolvedEvent,
   buildAgentUiMessageSnapshotEvent,
@@ -152,34 +155,45 @@ test("projectAgentRuntimeReadModel projects multiple HITL controls as standard a
   );
 });
 
-test("projectAgentRuntimeReadModel marks resolved actions", () => {
-  const model = projectAgentRuntimeReadModel({
-    executionEvents: [
-      {
-        id: "evt-action",
-        kind: "action",
-        status: "pending",
-        eventClass: "action.required",
-        title: "需要配置模型",
-        actionId: "action-1",
-        payload: { actionKind: "configure-text-model" },
-        createdAt: "2026-06-07T00:00:00.000Z",
-      },
-      {
-        id: "evt-resolved",
-        kind: "action",
-        status: "completed",
-        eventClass: "action.resolved",
-        title: "已处理",
-        actionId: "action-1",
-        createdAt: "2026-06-07T00:00:01.000Z",
-      },
-    ],
-  });
+test("projectAgentRuntimeReadModel marks action terminal events as resolved", () => {
+  for (const eventClass of [
+    "action.resolved",
+    "action.cancelled",
+    "action.canceled",
+    "action.expired",
+  ]) {
+    const model = projectAgentRuntimeReadModel({
+      executionEvents: [
+        {
+          id: `evt-action-${eventClass}`,
+          kind: "action",
+          status: "pending",
+          eventClass: "action.required",
+          title: "需要配置模型",
+          actionId: "action-1",
+          payload: { actionKind: "configure-text-model" },
+          createdAt: "2026-06-07T00:00:00.000Z",
+        },
+        {
+          id: `evt-terminal-${eventClass}`,
+          kind: "action",
+          status: "completed",
+          eventClass,
+          title: "已处理",
+          actionId: "action-1",
+          createdAt: "2026-06-07T00:00:01.000Z",
+        },
+      ],
+    });
 
-  assert.equal(model.pendingActions.length, 0);
-  assert.equal(model.events[0].resolved, true);
-  assert.equal(model.events[0].displayStatusKey, "agent.status.actionResolved");
+    assert.equal(model.pendingActions.length, 0, eventClass);
+    assert.equal(model.events[0].resolved, true, eventClass);
+    assert.equal(
+      model.events[0].displayStatusKey,
+      "agent.status.actionResolved",
+      eventClass,
+    );
+  }
 });
 
 test("projectAgentUiState exposes standard message, timeline and graph projections", () => {
@@ -573,11 +587,419 @@ test("createAgentUiProjector applies events idempotently", () => {
   };
 
   projector.apply(event);
-  projector.apply(event);
+  const stateAfterFirstApply = projector.getState();
+  const stateAfterDuplicateApply = projector.apply(event);
 
+  assert.equal(stateAfterDuplicateApply, stateAfterFirstApply);
   assert.equal(projector.getState().hydration.eventCount, 1);
   assert.equal(projector.getState().messages.length, 1);
   assert.equal(projector.reset().hydration.status, "idle");
+});
+
+test("createAgentUiProjector incremental apply matches batch projection", () => {
+  const fixture = getAgentUiFixture("subagent-handoff");
+  const projector = createAgentUiProjector({ sourceCount: 3 });
+
+  for (const event of fixture.events) {
+    projector.apply(event);
+  }
+
+  assert.deepEqual(
+    projector.getState(),
+    projectAgentUiState({
+      executionEvents: fixture.events,
+      sourceCount: 3,
+    }),
+  );
+});
+
+test("createAgentUiProjector incremental apply updates resolved actions", () => {
+  const executionEvents = [
+    {
+      id: "evt-started",
+      kind: "state",
+      status: "running",
+      eventClass: "turn.started",
+      title: "开始执行",
+      turnId: "turn-1",
+      createdAt: "2026-06-07T00:00:00.000Z",
+    },
+    {
+      id: "evt-action",
+      kind: "action",
+      status: "pending",
+      eventClass: "action.required",
+      title: "需要确认",
+      actionId: "action-1",
+      payload: { controls: ["approve", "reject"] },
+      createdAt: "2026-06-07T00:00:01.000Z",
+    },
+    {
+      id: "evt-resolved",
+      kind: "action",
+      status: "completed",
+      eventClass: "action.resolved",
+      title: "已确认",
+      actionId: "action-1",
+      createdAt: "2026-06-07T00:00:02.000Z",
+    },
+    {
+      id: "evt-completed",
+      kind: "state",
+      status: "completed",
+      eventClass: "turn.completed",
+      title: "完成",
+      turnId: "turn-1",
+      createdAt: "2026-06-07T00:00:03.000Z",
+    },
+  ];
+  const projector = createAgentUiProjector();
+
+  for (const event of executionEvents) {
+    projector.apply(event);
+  }
+
+  const state = projector.getState();
+  assert.deepEqual(state, projectAgentUiState({ executionEvents }));
+  assert.equal(state.runtime.status, "completed");
+  assert.equal(state.readModel.pendingActions.length, 0);
+  assert.equal(state.readModel.events[1].resolved, true);
+  assert.equal(
+    state.readModel.events[1].displayStatusKey,
+    "agent.status.actionResolved",
+  );
+});
+
+test("createAgentUiProjector incremental apply updates canceled actions", () => {
+  const executionEvents = [
+    {
+      id: "evt-started",
+      kind: "state",
+      status: "running",
+      eventClass: "turn.started",
+      title: "开始执行",
+      turnId: "turn-1",
+      createdAt: "2026-06-07T00:00:00.000Z",
+    },
+    {
+      id: "evt-action",
+      kind: "action",
+      status: "pending",
+      eventClass: "action.required",
+      title: "需要确认",
+      actionId: "action-1",
+      payload: { controls: ["approve", "reject"] },
+      createdAt: "2026-06-07T00:00:01.000Z",
+    },
+    {
+      id: "evt-canceled",
+      kind: "action",
+      status: "completed",
+      eventClass: "action.canceled",
+      title: "已取消",
+      actionId: "action-1",
+      createdAt: "2026-06-07T00:00:02.000Z",
+    },
+  ];
+  const projector = createAgentUiProjector();
+
+  for (const event of executionEvents) {
+    projector.apply(event);
+  }
+
+  const state = projector.getState();
+  assert.deepEqual(state, projectAgentUiState({ executionEvents }));
+  assert.equal(state.readModel.pendingActions.length, 0);
+  assert.equal(state.readModel.events[1].resolved, true);
+  assert.equal(
+    state.readModel.events[1].displayStatusKey,
+    "agent.status.actionResolved",
+  );
+});
+
+test("state.delta patches projection and read model in batch and incremental paths", () => {
+  const executionEvents = [
+    {
+      id: "evt-subagent-start",
+      kind: "handoff",
+      status: "running",
+      eventClass: "agent.spawned",
+      title: "启动研究子代理",
+      runtimeId: "runtime-1",
+      threadId: "thread-parent",
+      subagentId: "subagent-1",
+      taskId: "task-1",
+      sequence: 1,
+      createdAt: "2026-06-12T00:00:00.000Z",
+    },
+    {
+      id: "evt-projection-delta",
+      kind: "state",
+      status: "completed",
+      eventClass: "state.delta",
+      title: "修复子代理派生状态",
+      runtimeId: "runtime-1",
+      threadId: "thread-parent",
+      sequence: 2,
+      payload: {
+        target: "projection.subagents",
+        ops: [
+          {
+            op: "replace",
+            path: "/threads/0/status",
+            value: "completed",
+          },
+          {
+            op: "add",
+            path: "/threads/0/summary",
+            value: "已完成资料整理",
+          },
+        ],
+      },
+      createdAt: "2026-06-12T00:00:01.000Z",
+    },
+    {
+      id: "evt-read-model-delta",
+      kind: "state",
+      status: "completed",
+      eventClass: "state.delta",
+      title: "修复 read model task refs",
+      runtimeId: "runtime-1",
+      threadId: "thread-parent",
+      sequence: 3,
+      payload: {
+        target: "readModel",
+        patch: [
+          {
+            op: "add",
+            path: "/taskRefs/-",
+            value: "repair-task-1",
+          },
+          {
+            op: "test",
+            path: "/taskRefs/1",
+            value: "repair-task-1",
+          },
+        ],
+      },
+      createdAt: "2026-06-12T00:00:02.000Z",
+    },
+    {
+      id: "evt-model-after-delta",
+      kind: "model",
+      status: "completed",
+      eventClass: "model.completed",
+      title: "完成输出",
+      payload: { messageId: "msg-1", text: "完成" },
+      sequence: 4,
+      createdAt: "2026-06-12T00:00:03.000Z",
+    },
+  ];
+  const projector = createAgentUiProjector();
+
+  for (const event of executionEvents) {
+    projector.apply(event);
+  }
+
+  const incrementalState = projector.getState();
+  const batchState = projectAgentUiState({ executionEvents });
+
+  assert.deepEqual(incrementalState, batchState);
+  assert.equal(batchState.subagents.threads[0].status, "completed");
+  assert.equal(batchState.subagents.threads[0].summary, "已完成资料整理");
+  assert.deepEqual(batchState.subagents.activeThreadIds, []);
+  assert.deepEqual(batchState.subagents.completedThreadIds, ["subagent-1"]);
+  assert.deepEqual(batchState.readModel.taskRefs, ["task-1", "repair-task-1"]);
+  assert.equal(batchState.hydration.status, "live");
+  assert.equal(batchState.hydration.eventCount, 4);
+});
+
+test("state.delta supports nested payload and item alias target", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-artifact",
+        kind: "draft",
+        status: "completed",
+        eventClass: "artifact.changed",
+        title: "生成草稿",
+        runtimeId: "runtime-1",
+        artifactRefs: ["artifact-1"],
+        sequence: 1,
+        createdAt: "2026-06-12T00:00:00.000Z",
+      },
+      {
+        id: "evt-delta",
+        kind: "state",
+        status: "completed",
+        eventClass: "state.delta",
+        title: "补 artifact preview",
+        runtimeId: "runtime-1",
+        sequence: 2,
+        payload: {
+          stateDelta: {
+            schemaVersion: "lime-runtime-state-delta/v0.1",
+            runtimeId: "runtime-1",
+            sequence: 2,
+            target: "projection.artifacts",
+            patch: [
+              {
+                op: "add",
+                path: "/items/0/preview",
+                value: "修复后的预览",
+              },
+            ],
+            createdAt: "2026-06-12T00:00:01.000Z",
+          },
+        },
+        createdAt: "2026-06-12T00:00:01.000Z",
+      },
+    ],
+  });
+
+  assert.equal(state.artifacts[0].preview, "修复后的预览");
+});
+
+test("state.delta failure marks projection stale without mutating target state", () => {
+  const executionEvents = [
+    {
+      id: "evt-model",
+      kind: "model",
+      status: "completed",
+      eventClass: "model.completed",
+      title: "完成",
+      payload: { messageId: "msg-1", text: "完成" },
+      sequence: 1,
+      createdAt: "2026-06-12T00:00:00.000Z",
+    },
+    {
+      id: "evt-bad-delta",
+      kind: "state",
+      status: "completed",
+      eventClass: "state.delta",
+      title: "非法 patch",
+      runtimeId: "runtime-1",
+      sequence: 2,
+      payload: {
+        target: "projection.messages",
+        patch: [
+          {
+            op: "replace",
+            path: "/9/text",
+            value: "不应写入",
+          },
+        ],
+      },
+      createdAt: "2026-06-12T00:00:01.000Z",
+    },
+  ];
+  const state = projectAgentUiState({ executionEvents });
+
+  assert.equal(state.messages[0].text, "完成");
+  assert.equal(state.hydration.status, "stale");
+  assert.equal(state.hydration.eventCount, 2);
+  assert.equal(state.diagnostics.at(-1).id, "state-delta:evt-bad-delta");
+  assert.equal(state.diagnostics.at(-1).status, "failed");
+  assert.match(state.diagnostics.at(-1).detail, /Array index out of range|Path does not exist/);
+});
+
+test("state.delta cannot patch runtime fact projections", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-action",
+        kind: "action",
+        status: "pending",
+        eventClass: "action.required",
+        title: "需要确认",
+        actionId: "action-1",
+        sequence: 1,
+        createdAt: "2026-06-12T00:00:00.000Z",
+      },
+      {
+        id: "evt-delta",
+        kind: "state",
+        status: "completed",
+        eventClass: "state.delta",
+        title: "非法修改 action fact",
+        runtimeId: "runtime-1",
+        sequence: 2,
+        payload: {
+          target: "readModel.pendingActions",
+          patch: [
+            {
+              op: "remove",
+              path: "/0",
+            },
+          ],
+        },
+        createdAt: "2026-06-12T00:00:01.000Z",
+      },
+    ],
+  });
+
+  assert.equal(state.readModel.pendingActions.length, 1);
+  assert.equal(state.hydration.status, "stale");
+  assert.equal(state.diagnostics.at(-1).id, "state-delta:evt-delta");
+  assert.match(state.diagnostics.at(-1).detail, /pending action facts/);
+});
+
+test("state.delta does not override newer runtime facts for the same projection area", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-subagent-start",
+        kind: "handoff",
+        status: "running",
+        eventClass: "agent.spawned",
+        title: "启动研究子代理",
+        runtimeId: "runtime-1",
+        threadId: "thread-parent",
+        subagentId: "subagent-1",
+        taskId: "task-1",
+        sequence: 1,
+        createdAt: "2026-06-12T00:00:00.000Z",
+      },
+      {
+        id: "evt-stale-delta",
+        kind: "state",
+        status: "completed",
+        eventClass: "state.delta",
+        title: "过期的子代理修复",
+        runtimeId: "runtime-1",
+        threadId: "thread-parent",
+        sequence: 2,
+        payload: {
+          target: "projection.subagents",
+          patch: [
+            {
+              op: "replace",
+              path: "/threads/0/status",
+              value: "completed",
+            },
+          ],
+        },
+        createdAt: "2026-06-12T00:00:01.000Z",
+      },
+      {
+        id: "evt-subagent-running-again",
+        kind: "handoff",
+        status: "running",
+        eventClass: "subagent.progress",
+        title: "子代理仍在运行",
+        runtimeId: "runtime-1",
+        threadId: "thread-parent",
+        subagentId: "subagent-1",
+        taskId: "task-1",
+        sequence: 3,
+        createdAt: "2026-06-12T00:00:02.000Z",
+      },
+    ],
+  });
+
+  assert.equal(state.subagents.threads[0].status, "running");
+  assert.deepEqual(state.subagents.activeThreadIds, ["subagent-1"]);
+  assert.deepEqual(state.subagents.completedThreadIds, []);
 });
 
 test("Agent UI projection event selectors index host-neutral events", () => {
@@ -1681,10 +2103,10 @@ test("runtime lifecycle helpers build standard run events", () => {
   });
 
   const finished = buildAgentUiRunFinishedEvent(
-    { sourceType: "final_done" },
+    { sourceType: "turn_completed" },
     context,
   );
-  assert.equal(finished.sourceType, "final_done");
+  assert.equal(finished.sourceType, "turn_completed");
   assert.equal(finished.type, "run.finished");
   assert.equal(finished.phase, "completed");
   assert.equal(finished.persistence, "archive");

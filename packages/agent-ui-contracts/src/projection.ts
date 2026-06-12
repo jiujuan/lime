@@ -24,6 +24,7 @@ export interface AgentUiRuntimeStatusView {
     | "waiting"
     | "blocked"
     | "completed"
+    | "canceled"
     | "failed"
     | "stale";
   activeTurnId?: string;

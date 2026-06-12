@@ -6,6 +6,8 @@ import { assertEmptyElectronHostResult } from "./electronHostResult";
 
 const FILE_SHELL_CURRENT_SURFACE = "真实文件壳 current 通道";
 
+export type ProjectPathOpenTool = "vscode" | "cursor" | "terminal" | "finder";
+
 export async function revealPathInFinder(path: string): Promise<void> {
   const result = await safeInvoke("reveal_in_finder", { path });
   assertNotDiagnosticFacade(
@@ -24,6 +26,22 @@ export async function openPathWithDefaultApp(path: string): Promise<void> {
     FILE_SHELL_CURRENT_SURFACE,
   );
   assertEmptyElectronHostResult("open_with_default_app", result);
+}
+
+export async function openProjectPathWithTool(
+  rootPath: string,
+  tool: ProjectPathOpenTool,
+): Promise<void> {
+  const result = await safeInvoke("open_project_path_with_tool", {
+    rootPath,
+    tool,
+  });
+  assertNotDiagnosticFacade(
+    "open_project_path_with_tool",
+    result,
+    FILE_SHELL_CURRENT_SURFACE,
+  );
+  assertEmptyElectronHostResult("open_project_path_with_tool", result);
 }
 
 export async function getHomeDirectory(): Promise<string> {

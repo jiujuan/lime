@@ -85,6 +85,11 @@ import {
   METHOD_PROJECT_GIT_BRANCH_CREATE,
   METHOD_PROJECT_GIT_STATUS,
   METHOD_PROJECT_GIT_WORKTREE_CREATE,
+  METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
+  METHOD_PROJECT_SHELL_SESSION_KILL,
+  METHOD_PROJECT_SHELL_SESSION_RESIZE,
+  METHOD_PROJECT_SHELL_SESSION_START,
+  METHOD_PROJECT_SHELL_SESSION_WRITE,
   METHOD_GALLERY_MATERIAL_GET,
   METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
   METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
@@ -396,6 +401,14 @@ import {
   type ProjectGitStatusResponse,
   type ProjectGitWorktreeCreateParams,
   type ProjectGitWorktreeCreateResponse,
+  type ProjectShellEmptyResponse,
+  type ProjectShellSessionDrainEventsParams,
+  type ProjectShellSessionDrainEventsResponse,
+  type ProjectShellSessionKillParams,
+  type ProjectShellSessionResizeParams,
+  type ProjectShellSessionStartParams,
+  type ProjectShellSessionStartResponse,
+  type ProjectShellSessionWriteParams,
   type GalleryMaterialDeleteResponse,
   type GalleryMaterialFilterParams,
   type GalleryMaterialListResponse,
@@ -1788,6 +1801,34 @@ export class AppServerClient {
     params: ProjectGitWorktreeCreateParams,
   ): JsonRpcRequest {
     return this.request(METHOD_PROJECT_GIT_WORKTREE_CREATE, params);
+  }
+
+  startProjectShellSession(
+    params: ProjectShellSessionStartParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_SHELL_SESSION_START, params);
+  }
+
+  writeProjectShellSession(
+    params: ProjectShellSessionWriteParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_SHELL_SESSION_WRITE, params);
+  }
+
+  resizeProjectShellSession(
+    params: ProjectShellSessionResizeParams,
+  ): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_SHELL_SESSION_RESIZE, params);
+  }
+
+  killProjectShellSession(params: ProjectShellSessionKillParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_SHELL_SESSION_KILL, params);
+  }
+
+  drainProjectShellSessionEvents(
+    params: ProjectShellSessionDrainEventsParams = {},
+  ): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS, params);
   }
 
   exportEvidence(params: EvidenceExportParams): JsonRpcRequest {
@@ -4177,6 +4218,61 @@ export class AppServerConnection {
     return await this.request<ProjectGitWorktreeCreateResponse>(
       this.client.createProjectGitWorktree(params),
       METHOD_PROJECT_GIT_WORKTREE_CREATE,
+      options,
+    );
+  }
+
+  async startProjectShellSession(
+    params: ProjectShellSessionStartParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectShellSessionStartResponse>> {
+    return await this.request<ProjectShellSessionStartResponse>(
+      this.client.startProjectShellSession(params),
+      METHOD_PROJECT_SHELL_SESSION_START,
+      options,
+    );
+  }
+
+  async writeProjectShellSession(
+    params: ProjectShellSessionWriteParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectShellEmptyResponse>> {
+    return await this.request<ProjectShellEmptyResponse>(
+      this.client.writeProjectShellSession(params),
+      METHOD_PROJECT_SHELL_SESSION_WRITE,
+      options,
+    );
+  }
+
+  async resizeProjectShellSession(
+    params: ProjectShellSessionResizeParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectShellEmptyResponse>> {
+    return await this.request<ProjectShellEmptyResponse>(
+      this.client.resizeProjectShellSession(params),
+      METHOD_PROJECT_SHELL_SESSION_RESIZE,
+      options,
+    );
+  }
+
+  async killProjectShellSession(
+    params: ProjectShellSessionKillParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectShellEmptyResponse>> {
+    return await this.request<ProjectShellEmptyResponse>(
+      this.client.killProjectShellSession(params),
+      METHOD_PROJECT_SHELL_SESSION_KILL,
+      options,
+    );
+  }
+
+  async drainProjectShellSessionEvents(
+    params: ProjectShellSessionDrainEventsParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectShellSessionDrainEventsResponse>> {
+    return await this.request<ProjectShellSessionDrainEventsResponse>(
+      this.client.drainProjectShellSessionEvents(params),
+      METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
       options,
     );
   }

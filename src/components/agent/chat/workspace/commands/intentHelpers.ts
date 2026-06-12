@@ -23,7 +23,7 @@ export function isPlainInputIntentAffirmativeReply(value: string): boolean {
     return false;
   }
 
-  return /^(y|yes|ok|okay|sure|goahead|generate|create|createit|start)$/.test(
+  return /^(y|yes|ok|okay|sure|goahead|generate|create|createit|start|生成|直接生成|开始|开始生成|确认|确定|可以|好|好的|行)$/.test(
     normalized,
   );
 }

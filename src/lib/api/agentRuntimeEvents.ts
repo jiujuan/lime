@@ -1,6 +1,7 @@
 import { safeListen } from "@/lib/dev-bridge";
 import type { UnlistenFn } from "@/lib/desktop-host/event";
 import type { AgentEvent } from "@/lib/api/agentProtocol";
+import { projectAgentRuntimeSequenceGatePayloads } from "./agentRuntime/eventSequenceGate";
 
 export type AgentRuntimeEventHandler<TPayload = AgentEvent | unknown> =
   (event: { payload: TPayload | unknown }) => void;
@@ -50,18 +51,41 @@ const localRuntimeEventListeners = new Map<
   string,
   Set<AgentRuntimeEventHandler>
 >();
+let bridgeSubscriptionSequence = 0;
 
 export function publishAgentRuntimeEvent<TPayload = AgentEvent | unknown>(
   eventName: string,
   payload: TPayload,
 ): void {
+  publishAgentRuntimeEventToLocalListeners(eventName, payload, true);
+}
+
+export function publishProcessedAgentRuntimeEvent<
+  TPayload = AgentEvent | unknown,
+>(eventName: string, payload: TPayload): void {
+  publishAgentRuntimeEventToLocalListeners(eventName, payload, false);
+}
+
+function publishAgentRuntimeEventToLocalListeners<
+  TPayload = AgentEvent | unknown,
+>(eventName: string, payload: TPayload, runSequenceGate: boolean): void {
   const listeners = localRuntimeEventListeners.get(eventName);
   if (!listeners?.size) {
     return;
   }
+  const projectedPayloads = runSequenceGate
+    ? projectAgentRuntimeSequenceGatePayloads(
+        eventName,
+        payload,
+        "fail-closed",
+        "published",
+      )
+    : [payload];
 
-  for (const handler of [...listeners]) {
-    handler({ payload });
+  for (const projectedPayload of projectedPayloads) {
+    for (const handler of [...listeners]) {
+      handler({ payload: projectedPayload });
+    }
   }
 }
 
@@ -90,12 +114,27 @@ export function createAgentRuntimeEventListener({
     eventName: string,
     handler: AgentRuntimeEventHandler<TPayload>,
   ): Promise<UnlistenFn> => {
+    const bridgeGateScope = `bridge:${++bridgeSubscriptionSequence}`;
+    const bridgeHandler: AgentRuntimeEventHandler<TPayload> = (event) => {
+      const projectedPayloads = projectAgentRuntimeSequenceGatePayloads(
+        eventName,
+        event.payload,
+        "fail-closed",
+        bridgeGateScope,
+      );
+      for (const projectedPayload of projectedPayloads) {
+        handler({ payload: projectedPayload } as Parameters<typeof handler>[0]);
+      }
+    };
     const unlistenLocal = listenLocalAgentRuntimeEvent(
       eventName,
       handler as AgentRuntimeEventHandler,
     );
     try {
-      const unlistenBridge = await listen<TPayload>(eventName, handler);
+      const unlistenBridge = await listen(
+        eventName,
+        bridgeHandler as (event: { payload: unknown }) => void,
+      );
       return () => {
         unlistenLocal();
         unlistenBridge();

@@ -39,10 +39,11 @@
     "build": "tsc --project tsconfig.json",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit --project tsconfig.json",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm --prefix ../app-server-client run build && npm --prefix ../agent-ui-contracts run build && npm run build && node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@limecloud/app-server-client": "1.66.0"
+    "@limecloud/agent-ui-contracts": "0.1.0",
+    "@limecloud/app-server-client": "1.67.0"
   },
   "sideEffects": false
 }

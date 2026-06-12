@@ -164,6 +164,7 @@ vi.mock("@/i18n/legacy-patch/I18nPatchProvider", () => ({
 }));
 
 vi.mock("@/lib/api/agentRuntime", () => ({
+  AGENT_RUNTIME_SESSIONS_CHANGED_EVENT: "lime:agent-runtime-sessions-changed",
   archiveManyAgentRuntimeSessions: mockArchiveManyAgentRuntimeSessions,
   deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,

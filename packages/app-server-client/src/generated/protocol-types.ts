@@ -666,6 +666,7 @@ export interface AgentSessionStartResponse {
 export type AgentSessionStatus = "canceled" | "completed" | "failed" | "idle" | "running" | "waitingAction";
 
 export interface AgentSessionThreadResumeParams {
+  resumeContract?: RuntimeResumeContract | null;
   sessionId: string;
 }
 
@@ -859,6 +860,7 @@ export interface CapabilityListParams {
 export interface CapabilityListResponse {
   capabilities?: (CapabilityDescriptor)[];
   nextCursor?: null | string;
+  runtimeCapabilityManifest?: RuntimeCapabilityManifest | null;
 }
 
 export interface ChannelProbeParams {
@@ -2095,6 +2097,85 @@ export interface ProjectMemoryReadResponse {
   memory: unknown;
 }
 
+export type ProjectShellEmptyResponse = Record<string, unknown>;
+
+export interface ProjectShellSessionDrainEventsParams {
+  limit?: number | null;
+  sessionId?: null | string;
+}
+
+export interface ProjectShellSessionDrainEventsResponse {
+  events?: (ProjectShellSessionEvent)[];
+}
+
+export type ProjectShellSessionEvent = {
+  data: string;
+  session_id: string;
+  stream: ProjectShellSessionStream;
+  type: "data";
+} | {
+  exit_code?: number | null;
+  session_id: string;
+  signal?: null | string;
+  type: "exit";
+} | {
+  message: string;
+  session_id: string;
+  type: "error";
+};
+
+export interface ProjectShellSessionKillParams {
+  sessionId: string;
+}
+
+export interface ProjectShellSessionResizeParams {
+  cols: number;
+  rows: number;
+  sessionId: string;
+}
+
+export interface ProjectShellSessionStartParams {
+  cols?: number | null;
+  rootPath: string;
+  rows?: number | null;
+}
+
+export interface ProjectShellSessionStartResponse {
+  cwd: string;
+  localEcho: boolean;
+  pid?: number | null;
+  sessionId: string;
+  shell: string;
+  title: string;
+  tty: boolean;
+}
+
+export type ProjectShellSessionStream = "stderr" | "stdout";
+
+export interface ProjectShellSessionWriteParams {
+  data: string;
+  sessionId: string;
+}
+
+export interface RuntimeCapabilityEntry {
+  detail?: null | string;
+  id: string;
+  metadata?: unknown;
+  scope: string;
+  status: string;
+  title: string;
+  version?: null | string;
+}
+
+export interface RuntimeCapabilityManifest {
+  capabilities?: (RuntimeCapabilityEntry)[];
+  generatedAt: string;
+  providerId?: null | string;
+  runtimeId: string;
+  schemaVersion: string;
+  sessionId?: null | string;
+}
+
 export interface RuntimeOptions {
   capabilityId?: null | string;
   eventName?: null | string;
@@ -2104,6 +2185,25 @@ export interface RuntimeOptions {
   providerPreference?: null | string;
   queuedTurnId?: null | string;
   stream?: boolean;
+}
+
+export interface RuntimeResumeActionDecision {
+  actionId: string;
+  decision: string;
+  metadata?: unknown;
+  response?: unknown;
+}
+
+export interface RuntimeResumeContract {
+  createdAt: string;
+  decisions?: (RuntimeResumeActionDecision)[];
+  expiresAt?: null | string;
+  openActionIds?: (string)[];
+  resumeMode: string;
+  runtimeId: string;
+  schemaVersion: string;
+  sessionId: string;
+  turnId: string;
 }
 
 export interface ServerCapabilities {

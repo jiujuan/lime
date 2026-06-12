@@ -163,7 +163,7 @@ impl RuntimeBackend {
         self.agent_state
             .mark_current_healthy(&db, Some(&provider_config.model_name));
         sink.emit(RuntimeEvent::new(
-            "turn.final_done",
+            "turn.completed",
             json!({
                 "backend": "runtime",
                 "model": provider_config.model_name,
@@ -737,8 +737,6 @@ fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
         "queue_removed" => "queue.removed",
         "queue_started" => "queue.started",
         "queue_cleared" => "queue.cleared",
-        "done" => "turn.done",
-        "final_done" => "turn.final_done",
         "error" => "turn.failed",
         "warning" => "runtime.warning",
         "message" => "message",

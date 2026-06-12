@@ -42,7 +42,7 @@ type HookValue = ReturnType<typeof useWorkspaceTeamSessionControlRuntime>;
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 const TEAM_CONTROL_UNAVAILABLE_MESSAGE =
-  "团队任务控制正在迁移到新的运行链路，暂时不能直接操作子任务";
+  "子任务控制正在迁移到新的运行链路，暂时不能直接操作子任务";
 
 function createSubagentSession(
   overrides: Partial<AsterSubagentSessionInfo> &

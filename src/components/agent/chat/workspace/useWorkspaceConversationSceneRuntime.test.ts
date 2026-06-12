@@ -353,6 +353,25 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(sceneProps.harnessToggleLabel).toBe("Harness");
   });
 
+  it("Task Center 隐藏旧顶栏动作时仍应保留 Harness 开关能力", () => {
+    const handleToggleHarnessPanel = vi.fn();
+    const params = createBaseParams({
+      navbarContextVariant: "task-center",
+      suppressNavbarUtilityActions: true,
+      showHarnessToggle: false,
+      navbarHarnessPanelVisible: false,
+      handleToggleHarnessPanel,
+      harnessToggleLabel: "Harness",
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+
+    expect(sceneProps.navbarContextVariant).toBe("task-center");
+    expect(sceneProps.showHarnessToggle).toBe(false);
+    expect(sceneProps.onToggleHarnessPanel).toBe(handleToggleHarnessPanel);
+    expect(sceneProps.harnessToggleLabel).toBe("Harness");
+  });
+
   it("首页空态应继续透传 service skills 与选择回调", () => {
     const onSelectServiceSkill = vi.fn();
     const serviceSkills = [

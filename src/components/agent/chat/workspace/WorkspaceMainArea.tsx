@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
 import {
@@ -17,7 +18,9 @@ interface WorkspaceMainAreaProps {
   compactChrome: boolean;
   navbarNode: ReactNode;
   autoHideTaskCenterNavbar?: boolean;
+  taskCenterUtilityToolbarNode?: ReactNode;
   taskCenterTabsNode?: ReactNode;
+  taskCenterShellPanelNode?: ReactNode;
   contentSyncNoticeNode: ReactNode;
   shellBottomInset: string;
   layoutMode: LayoutMode;
@@ -37,7 +40,9 @@ export function WorkspaceMainArea({
   compactChrome,
   navbarNode,
   autoHideTaskCenterNavbar = false,
+  taskCenterUtilityToolbarNode,
   taskCenterTabsNode,
+  taskCenterShellPanelNode,
   contentSyncNoticeNode,
   shellBottomInset,
   layoutMode,
@@ -52,6 +57,7 @@ export function WorkspaceMainArea({
   hasPendingA2UIForm,
   inputbarNode,
 }: WorkspaceMainAreaProps) {
+  const { t } = useTranslation("agent");
   const [navbarOpen, setNavbarOpen] = useState(false);
   const effectiveLayoutMode = hasPendingA2UIForm
     ? "chat"
@@ -73,7 +79,17 @@ export function WorkspaceMainArea({
         style={{ background: TASK_CENTER_CHROME_RAIL_SURFACE }}
       >
         {navbarNode}
-        {taskCenterTabsNode}
+        <div className="relative z-10 flex min-h-[42px] shrink-0 items-stretch overflow-hidden border-b border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-tab-active-surface)]">
+          <div className="min-w-0 flex-1">{taskCenterTabsNode}</div>
+          {taskCenterUtilityToolbarNode ? (
+            <div
+              className="flex min-w-0 max-w-[42%] shrink-0 items-center justify-end overflow-hidden border-l border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-tab-active-surface)] px-2"
+              data-testid="task-center-utility-toolbar-host"
+            >
+              {taskCenterUtilityToolbarNode}
+            </div>
+          ) : null}
+        </div>
       </div>
     ) : null;
 
@@ -88,7 +104,7 @@ export function WorkspaceMainArea({
           $visible={isAutoHideNavbarVisible}
           data-testid="workspace-navbar-backdrop"
           data-visible={isAutoHideNavbarVisible ? "true" : "false"}
-          aria-label="关闭顶部工具"
+          aria-label={t("agentChat.navbar.autoHide.closeTopTools")}
           onClick={() => {
             setNavbarOpen(false);
           }}
@@ -104,7 +120,7 @@ export function WorkspaceMainArea({
               type="button"
               $visible={isAutoHideNavbarVisible}
               data-testid="workspace-navbar-reveal-handle"
-              aria-label="展开顶部工具"
+              aria-label={t("agentChat.navbar.autoHide.expandTopTools")}
               aria-expanded={isAutoHideNavbarVisible}
               onClick={() => {
                 setNavbarOpen(true);
@@ -144,10 +160,15 @@ export function WorkspaceMainArea({
       {generalWorkbenchDialog}
       {generalWorkbenchHarnessDialog}
       {showFloatingInputOverlay ? (
-        <GeneralWorkbenchInputOverlay>
+        <GeneralWorkbenchInputOverlay
+          $bottomInset={shellBottomInset}
+          data-testid="general-workbench-input-overlay"
+          data-bottom-inset={shellBottomInset}
+        >
           {inputbarNode}
         </GeneralWorkbenchInputOverlay>
       ) : null}
+      {taskCenterShellPanelNode}
     </MainArea>
   );
 }

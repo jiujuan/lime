@@ -139,7 +139,8 @@ export function MessageActionButtons({
       {canSaveMessageAsKnowledge ? (
         <Button
           variant="ghost"
-          className="relative z-10 h-8 w-auto gap-1.5 rounded-full border border-sky-200/90 bg-sky-50/92 px-2.5 text-xs font-semibold text-sky-700 shadow-sm shadow-sky-950/5 hover:bg-sky-100 hover:text-sky-800"
+          size="icon"
+          className="relative z-10 h-8 w-8 rounded-full border border-sky-200/90 bg-sky-50/92 text-sky-700 shadow-sm shadow-sky-950/5 hover:bg-sky-100 hover:text-sky-800"
           onClick={() =>
             onSaveMessageAsKnowledge?.({
               messageId,
@@ -152,7 +153,6 @@ export function MessageActionButtons({
           title={t("agentChat.messageList.actions.saveToKnowledge")}
         >
           <FileText size={12} />
-          <span>{t("agentChat.messageList.actions.saveToKnowledge")}</span>
         </Button>
       ) : null}
     </MessageActions>

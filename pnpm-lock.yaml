@@ -371,8 +371,11 @@ importers:
 
   packages/agent-runtime-client:
     dependencies:
+      '@limecloud/agent-ui-contracts':
+        specifier: 0.1.0
+        version: link:../agent-ui-contracts
       '@limecloud/app-server-client':
-        specifier: 1.66.0
+        specifier: 1.67.0
         version: link:../app-server-client
 
   packages/agent-runtime-projection:

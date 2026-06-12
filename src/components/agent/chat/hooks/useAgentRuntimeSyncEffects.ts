@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
+import { isRuntimeSettledStatusValue } from "@limecloud/agent-ui-contracts";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
 import { hasDevBridgeEventListenerCapability } from "@/lib/api/bridgeEvents";
 import { parseAgentEvent } from "@/lib/api/agentProtocol";
@@ -74,19 +75,28 @@ function shouldRefreshReadModelForTurnEvent(payload: unknown): boolean {
     case "action_required":
     case "action_resolved":
     case "artifact_snapshot":
-    case "done":
     case "error":
-    case "final_done":
     case "queue_added":
     case "queue_cleared":
     case "queue_removed":
     case "queue_started":
     case "runtime_status":
+    case "turn_completed":
+    case "turn_canceled":
+    case "turn_failed":
     case "warning":
       return true;
     default:
       return false;
   }
+}
+
+function isTerminalRuntimeStatus(status?: string | null): boolean {
+  return isRuntimeSettledStatusValue(status);
+}
+
+function hasRunningTurn(threadTurns: AgentThreadTurn[]): boolean {
+  return threadTurns.some((turn) => turn.status === "running");
 }
 
 interface UseAgentRuntimeSyncEffectsOptions {
@@ -103,6 +113,7 @@ interface UseAgentRuntimeSyncEffectsOptions {
   queuedTurnCount: number;
   threadTurns: AgentThreadTurn[];
   refreshSessionDetail: (targetSessionId?: string) => Promise<unknown>;
+  settleActiveRuntimeStream?: (targetSessionId: string) => void;
 }
 
 export function useAgentRuntimeSyncEffects(
@@ -119,8 +130,10 @@ export function useAgentRuntimeSyncEffects(
     queuedTurnCount,
     threadTurns,
     refreshSessionDetail,
+    settleActiveRuntimeStream,
   } = options;
   const lastIsSendingRef = useRef(isSending);
+  const observedActiveRuntimeWorkRef = useRef(false);
   const normalizedParentSessionId = parentSessionId?.trim() || null;
   const normalizedCurrentTurnEventName = currentTurnEventName?.trim() || null;
   const hasDesktopRuntimeEventListenerCapability =
@@ -155,6 +168,42 @@ export function useAgentRuntimeSyncEffects(
 
     void refreshSessionDetail(sessionId);
   }, [isSending, refreshSessionDetail, sessionId]);
+
+  useEffect(() => {
+    if (!isSending) {
+      observedActiveRuntimeWorkRef.current = false;
+      return;
+    }
+
+    if (hasActiveRuntimeWork) {
+      observedActiveRuntimeWorkRef.current = true;
+    }
+  }, [hasActiveRuntimeWork, isSending]);
+
+  useEffect(() => {
+    if (!sessionId || !isSending || !settleActiveRuntimeStream) {
+      return;
+    }
+    if (!observedActiveRuntimeWorkRef.current) {
+      return;
+    }
+    if (queuedTurnCount > 0 || hasRunningTurn(threadTurns)) {
+      return;
+    }
+    if (!isTerminalRuntimeStatus(threadReadStatus)) {
+      return;
+    }
+
+    observedActiveRuntimeWorkRef.current = false;
+    settleActiveRuntimeStream(sessionId);
+  }, [
+    isSending,
+    queuedTurnCount,
+    sessionId,
+    settleActiveRuntimeStream,
+    threadReadStatus,
+    threadTurns,
+  ]);
 
   useEffect(() => {
     if (!sessionId || isSending) {
@@ -201,11 +250,7 @@ export function useAgentRuntimeSyncEffects(
     return () => {
       window.clearInterval(timer);
     };
-  }, [
-    refreshSessionDetail,
-    sessionId,
-    shouldUseAppServerBridgeRuntimePolling,
-  ]);
+  }, [refreshSessionDetail, sessionId, shouldUseAppServerBridgeRuntimePolling]);
 
   useEffect(() => {
     if (!sessionId || !normalizedCurrentTurnEventName) {

@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://limecloud.dev/schemas/agent-ui-projection-state.v0.1.schema.json",
+  "title": "AgentUiProjectionState",
+  "type": "object",
+  "required": [
+    "runtime",
+    "messages",
+    "timeline",
+    "graph",
+    "tools",
+    "actions",
+    "artifacts",
+    "evidence",
+    "diagnostics",
+    "subagents",
+    "readModel",
+    "hydration",
+    "ephemeralUi"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "runtime": {
+      "type": "object"
+    },
+    "messages": {
+      "type": "array"
+    },
+    "timeline": {
+      "type": "array"
+    },
+    "graph": {
+      "type": "array"
+    },
+    "tools": {
+      "type": "array"
+    },
+    "actions": {
+      "type": "array"
+    },
+    "artifacts": {
+      "type": "array"
+    },
+    "evidence": {
+      "type": "array"
+    },
+    "diagnostics": {
+      "type": "array"
+    },
+    "subagents": {
+      "type": "object",
+      "required": [
+        "hasSubagents",
+        "threads",
+        "delegationCalls",
+        "activities",
+        "activeThreadIds",
+        "completedThreadIds",
+        "failedThreadIds"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "hasSubagents": {
+          "type": "boolean"
+        },
+        "threads": {
+          "type": "array"
+        },
+        "delegationCalls": {
+          "type": "array"
+        },
+        "activities": {
+          "type": "array"
+        },
+        "activeThreadIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "completedThreadIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failedThreadIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "readModel": {
+      "type": "object"
+    },
+    "hydration": {
+      "type": "object",
+      "required": [
+        "status",
+        "eventCount"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "eventCount": {
+          "type": "number"
+        }
+      }
+    },
+    "ephemeralUi": {
+      "type": "object"
+    }
+  }
+}

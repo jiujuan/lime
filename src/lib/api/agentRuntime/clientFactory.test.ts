@@ -353,6 +353,24 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
+    listCapabilities: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        capabilities: [],
+        runtimeCapabilityManifest: {
+          schemaVersion: "lime-runtime-capability-manifest/v0.1",
+          runtimeId: "app-server",
+          generatedAt: "2026-06-12T00:00:00.000Z",
+          capabilities: [],
+        },
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     readAgentSessionObjective: vi.fn().mockResolvedValue({
       id: 1,
       result: {
@@ -711,6 +729,10 @@ describe("agentRuntime clientFactory", () => {
 
     expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
       sessionId: "session-1",
+      resumeContract: expect.objectContaining({
+        schemaVersion: "lime-runtime-resume-contract/v0.1",
+        sessionId: "session-1",
+      }),
     });
     expect(invoke).not.toHaveBeenCalled();
   });
@@ -728,6 +750,10 @@ describe("agentRuntime clientFactory", () => {
 
     expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
       sessionId: "session-1",
+      resumeContract: expect.objectContaining({
+        schemaVersion: "lime-runtime-resume-contract/v0.1",
+        sessionId: "session-1",
+      }),
     });
     expect(bridgeInvoke).not.toHaveBeenCalled();
   });

@@ -25,6 +25,11 @@ import {
   METHOD_MODEL_LIST,
   METHOD_MODEL_PROVIDER_LIST,
   METHOD_PROJECT_MEMORY_READ,
+  METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
+  METHOD_PROJECT_SHELL_SESSION_KILL,
+  METHOD_PROJECT_SHELL_SESSION_RESIZE,
+  METHOD_PROJECT_SHELL_SESSION_START,
+  METHOD_PROJECT_SHELL_SESSION_WRITE,
   METHOD_SKILL_LIST,
   METHOD_WORKSPACE_BY_PATH_READ,
   METHOD_WORKSPACE_DEFAULT_ENSURE,
@@ -82,6 +87,12 @@ import {
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import type { ElectronAppServerHost } from "./appServerHost";
+import {
+  normalizeProjectShellTimeout,
+  openProjectPathWithLocalTool,
+  runProjectShellCommand,
+  type ProjectPathOpenTool,
+} from "./projectToolsHost";
 
 type HostArgs = Record<string, unknown> | null | undefined;
 type AppServerParams = Record<string, unknown>;
@@ -191,6 +202,36 @@ type DownloadProgressCallback = (
   downloadedBytes: number,
   totalBytes: number | null,
 ) => void;
+type ProjectShellSessionStartResult = {
+  sessionId: string;
+  cwd: string;
+  shell: string;
+  title: string;
+  localEcho: boolean;
+  tty: boolean;
+  pid: number | null;
+};
+type ProjectShellSessionEvent =
+  | {
+      type: "data";
+      sessionId: string;
+      stream: "stdout" | "stderr";
+      data: string;
+    }
+  | {
+      type: "exit";
+      sessionId: string;
+      exitCode: number | null;
+      signal: string | null;
+    }
+  | {
+      type: "error";
+      sessionId: string;
+      message: string;
+    };
+type ProjectShellSessionDrainEventsResponse = {
+  events: ProjectShellSessionEvent[];
+};
 
 const CONFIG_FILE = "config.json";
 const LAYERED_DESIGN_EXPORT_ROOT = ".lime/layered-designs";
@@ -254,6 +295,9 @@ const SPECIAL_SHORTCUT_KEYS = new Set([
   "right",
 ]);
 const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT = "oem-cloud-oauth-callback";
+const PROJECT_SHELL_SESSION_EVENT = "project-shell-session-event";
+const PROJECT_SHELL_EVENT_POLL_INTERVAL_MS = 80;
+const PROJECT_SHELL_EVENT_DRAIN_LIMIT = 200;
 const OEM_CLOUD_OAUTH_CALLBACK_PATH = "/oauth/callback";
 const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_TTL_MS = 10 * 60 * 1000;
 const OEM_CLOUD_OAUTH_CALLBACK_HTML = `<!doctype html>
@@ -284,6 +328,9 @@ export class ElectronHostCommands {
   readonly #appServerHost: ElectronAppServerHost;
   readonly #userDataDir: string;
   readonly #emit: HostEventEmitter;
+  readonly #projectShellSessions = new Set<string>();
+  #projectShellEventPoller: ReturnType<typeof setInterval> | null = null;
+  #projectShellEventDrainInFlight = false;
   #oauthCallbackBridgeServer: Server | null = null;
   #oauthCallbackBridgeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -315,6 +362,18 @@ export class ElectronHostCommands {
         return this.#revealInFinder(args);
       case "open_with_default_app":
         return await this.#openWithDefaultApp(args);
+      case "open_project_path_with_tool":
+        return await this.#openProjectPathWithTool(args);
+      case "run_project_shell_command":
+        return await this.#runProjectShellCommand(args);
+      case "project_shell_session_start":
+        return await this.#startProjectShellSession(args);
+      case "project_shell_session_write":
+        return await this.#writeProjectShellSession(args);
+      case "project_shell_session_resize":
+        return await this.#resizeProjectShellSession(args);
+      case "project_shell_session_kill":
+        return await this.#killProjectShellSession(args);
       case "save_exported_document":
         return await this.#saveExportedDocument(args);
       case "save_layered_design_project_export":
@@ -482,6 +541,149 @@ export class ElectronHostCommands {
       throw new Error(errorMessage);
     }
     return {};
+  }
+
+  async #openProjectPathWithTool(
+    args: HostArgs,
+  ): Promise<Record<string, never>> {
+    const request = readRequest(args);
+    const rootPath = readRequiredAbsolutePath(request, "rootPath");
+    const tool = readProjectPathOpenTool(request);
+    if (tool === "finder") {
+      const errorMessage = await shell.openPath(rootPath);
+      if (errorMessage) {
+        throw new Error(errorMessage);
+      }
+      return {};
+    }
+    await openProjectPathWithLocalTool(rootPath, tool);
+    return {};
+  }
+
+  async #runProjectShellCommand(
+    args: HostArgs,
+  ): Promise<Awaited<ReturnType<typeof runProjectShellCommand>>> {
+    const request = readRequest(args);
+    const rootPath = readRequiredAbsolutePath(request, "rootPath");
+    const command = readRequiredRawString(request, "command").trim();
+    if (!command) {
+      throw new Error("Shell 命令不能为空");
+    }
+    return await runProjectShellCommand({
+      cwd: rootPath,
+      command,
+      timeoutMs: normalizeProjectShellTimeout(readNumber(request, "timeoutMs")),
+    });
+  }
+
+  async #startProjectShellSession(
+    args: HostArgs,
+  ): Promise<ProjectShellSessionStartResult> {
+    const request = readRequest(args);
+    const response =
+      await this.#appServerRequest<ProjectShellSessionStartResult>(
+        METHOD_PROJECT_SHELL_SESSION_START,
+        {
+          rootPath: readRequiredAbsolutePath(request, "rootPath"),
+          cols: readNumber(request, "cols") ?? 120,
+          rows: readNumber(request, "rows") ?? 16,
+        },
+      );
+    this.#projectShellSessions.add(response.sessionId);
+    this.#ensureProjectShellEventPoller();
+    void this.#drainProjectShellEvents();
+    return response;
+  }
+
+  async #writeProjectShellSession(
+    args: HostArgs,
+  ): Promise<Record<string, never>> {
+    const request = readRequest(args);
+    await this.#appServerRequest(METHOD_PROJECT_SHELL_SESSION_WRITE, {
+      sessionId: readRequiredString(request, "sessionId"),
+      data: readRequiredRawString(request, "data"),
+    });
+    void this.#drainProjectShellEvents();
+    setTimeout(() => {
+      void this.#drainProjectShellEvents();
+    }, 30);
+    setTimeout(() => {
+      void this.#drainProjectShellEvents();
+    }, 120);
+    return {};
+  }
+
+  async #resizeProjectShellSession(
+    args: HostArgs,
+  ): Promise<Record<string, never>> {
+    const request = readRequest(args);
+    await this.#appServerRequest(METHOD_PROJECT_SHELL_SESSION_RESIZE, {
+      sessionId: readRequiredString(request, "sessionId"),
+      cols: readNumber(request, "cols") ?? 120,
+      rows: readNumber(request, "rows") ?? 16,
+    });
+    return {};
+  }
+
+  async #killProjectShellSession(
+    args: HostArgs,
+  ): Promise<Record<string, never>> {
+    const request = readRequest(args);
+    const sessionId = readRequiredString(request, "sessionId");
+    await this.#appServerRequest(METHOD_PROJECT_SHELL_SESSION_KILL, {
+      sessionId,
+    });
+    this.#projectShellSessions.delete(sessionId);
+    this.#stopProjectShellEventPollerIfIdle();
+    return {};
+  }
+
+  #ensureProjectShellEventPoller(): void {
+    if (this.#projectShellEventPoller) {
+      return;
+    }
+    this.#projectShellEventPoller = setInterval(() => {
+      void this.#drainProjectShellEvents();
+    }, PROJECT_SHELL_EVENT_POLL_INTERVAL_MS);
+  }
+
+  #stopProjectShellEventPollerIfIdle(): void {
+    if (this.#projectShellSessions.size > 0 || !this.#projectShellEventPoller) {
+      return;
+    }
+    clearInterval(this.#projectShellEventPoller);
+    this.#projectShellEventPoller = null;
+  }
+
+  async #drainProjectShellEvents(): Promise<void> {
+    if (this.#projectShellEventDrainInFlight) {
+      return;
+    }
+    if (this.#projectShellSessions.size === 0) {
+      this.#stopProjectShellEventPollerIfIdle();
+      return;
+    }
+    this.#projectShellEventDrainInFlight = true;
+    try {
+      for (const sessionId of Array.from(this.#projectShellSessions)) {
+        const response =
+          await this.#appServerRequest<ProjectShellSessionDrainEventsResponse>(
+            METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
+            { sessionId, limit: PROJECT_SHELL_EVENT_DRAIN_LIMIT },
+          );
+        for (const event of response.events ?? []) {
+          if (event.type === "exit" || event.type === "error") {
+            this.#projectShellSessions.delete(event.sessionId);
+          }
+          this.#emit(PROJECT_SHELL_SESSION_EVENT, event);
+        }
+      }
+    } catch (error) {
+      console.warn("[electron-host] project shell event drain failed", error);
+    } finally {
+      this.#projectShellEventDrainInFlight = false;
+      this.#stopProjectShellEventPollerIfIdle();
+    }
   }
 
   async #saveExportedDocument(args: HostArgs): Promise<null> {
@@ -2356,6 +2558,20 @@ export class ElectronHostCommands {
   #configPath(): string {
     return path.join(this.#userDataDir, CONFIG_FILE);
   }
+
+  disposeProjectShellSessionsForShutdown(): void {
+    if (this.#projectShellEventPoller) {
+      clearInterval(this.#projectShellEventPoller);
+      this.#projectShellEventPoller = null;
+    }
+    const sessionIds = Array.from(this.#projectShellSessions);
+    this.#projectShellSessions.clear();
+    for (const sessionId of sessionIds) {
+      void this.#appServerRequest(METHOD_PROJECT_SHELL_SESSION_KILL, {
+        sessionId,
+      }).catch(() => undefined);
+    }
+  }
 }
 
 function readRecord(
@@ -2800,6 +3016,21 @@ function readRequiredAbsolutePath(value: unknown, key: string): string {
     throw new Error(`${key} 必须是绝对路径`);
   }
   return next;
+}
+
+function readProjectPathOpenTool(
+  value: Record<string, unknown>,
+): ProjectPathOpenTool {
+  const tool = readRequiredString(value, "tool");
+  if (
+    tool === "vscode" ||
+    tool === "cursor" ||
+    tool === "terminal" ||
+    tool === "finder"
+  ) {
+    return tool;
+  }
+  throw new Error(`不支持的项目打开工具: ${tool}`);
 }
 
 function readLayeredDesignExportFiles(

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
   listAgentRuntimeSessions,
   type AsterSessionInfo,
 } from "@/lib/api/agentRuntime";
@@ -335,6 +336,28 @@ export function useAppSidebarSessions({
   }, [refreshSidebarSessions, shouldLoadSidebarConversations]);
 
   useEffect(() => {
+    if (!shouldLoadSidebarConversations || typeof window === "undefined") {
+      return;
+    }
+
+    const handleSessionsChanged = () => {
+      void refreshSidebarSessions();
+    };
+
+    window.addEventListener(
+      AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
+      handleSessionsChanged,
+    );
+
+    return () => {
+      window.removeEventListener(
+        AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
+        handleSessionsChanged,
+      );
+    };
+  }, [refreshSidebarSessions, shouldLoadSidebarConversations]);
+
+  useEffect(() => {
     if (!shouldLoadSidebarConversations || !sidebarSessionsHasMore) {
       return;
     }
@@ -361,7 +384,7 @@ export function useAppSidebarSessions({
         sessions: recentSidebarSessions,
         currentSessionId,
         limit: recentSessionsVisibleCount,
-    }),
+      }),
     [currentSessionId, recentSessionsVisibleCount, recentSidebarSessions],
   );
   const hasMoreRecentSidebarSessions =
@@ -464,11 +487,14 @@ export function useAppSidebarSessions({
     [],
   );
 
-  const removeSidebarSessionOptimistically = useCallback((sessionId: string) => {
-    setSidebarSessions((current) =>
-      current.filter((item) => item.id !== sessionId),
-    );
-  }, []);
+  const removeSidebarSessionOptimistically = useCallback(
+    (sessionId: string) => {
+      setSidebarSessions((current) =>
+        current.filter((item) => item.id !== sessionId),
+      );
+    },
+    [],
+  );
 
   return {
     beginSidebarSessionAction,

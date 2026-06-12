@@ -13,12 +13,14 @@ mod media;
 mod model;
 mod project;
 mod project_git;
+mod project_shell;
 mod skill;
 mod unified;
 mod voice;
 mod wechat;
 mod workspace;
 
+use crate::project_shell::ProjectShellManager;
 use crate::AppServerError;
 use crate::RuntimeCore;
 use crate::RuntimeCoreError;
@@ -37,17 +39,7 @@ use app_server_protocol::ArtifactReadParams;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::ChannelProbeParams;
 use app_server_protocol::ClientInfo;
-use app_server_protocol::ConnectCallbackSendParams;
-use app_server_protocol::ConnectDeepLinkResolveParams;
-use app_server_protocol::ConnectOpenDeepLinkResolveParams;
-use app_server_protocol::ConnectRelayApiKeySaveParams;
 use app_server_protocol::EvidenceExportParams;
-use app_server_protocol::FileSystemCreateDirectoryParams;
-use app_server_protocol::FileSystemCreateFileParams;
-use app_server_protocol::FileSystemDeleteFileParams;
-use app_server_protocol::FileSystemListDirectoryParams;
-use app_server_protocol::FileSystemReadFilePreviewParams;
-use app_server_protocol::FileSystemRenameFileParams;
 use app_server_protocol::InitializeParams;
 use app_server_protocol::InitializeResponse;
 use app_server_protocol::JsonRpcError;
@@ -56,16 +48,11 @@ use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::JsonRpcResponse;
-use app_server_protocol::LogPersistedTailParams;
 use app_server_protocol::PlatformInfo;
 // ProjectGit* 类型已移至 processor/project_git.rs
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
 use app_server_protocol::UsageStatsRangeParams;
-use app_server_protocol::WechatChannelAccountRemoveParams;
-use app_server_protocol::WechatLoginStartParams;
-use app_server_protocol::WechatLoginWaitParams;
-use app_server_protocol::WechatRuntimeModelSetParams;
 use app_server_protocol::METHOD_AGENT_APP_INSTALLED_DISABLED_SET;
 use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
 use app_server_protocol::METHOD_AGENT_APP_INSTALLED_SAVE;
@@ -236,6 +223,11 @@ use app_server_protocol::METHOD_PROJECT_MATERIAL_LIST;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_UPDATE;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_UPLOAD;
 use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
+use app_server_protocol::METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS;
+use app_server_protocol::METHOD_PROJECT_SHELL_SESSION_KILL;
+use app_server_protocol::METHOD_PROJECT_SHELL_SESSION_RESIZE;
+use app_server_protocol::METHOD_PROJECT_SHELL_SESSION_START;
+use app_server_protocol::METHOD_PROJECT_SHELL_SESSION_WRITE;
 use app_server_protocol::METHOD_SESSION_FILE_DELETE;
 use app_server_protocol::METHOD_SESSION_FILE_GET_OR_CREATE;
 use app_server_protocol::METHOD_SESSION_FILE_LIST;
@@ -299,6 +291,7 @@ use app_server_protocol::METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET;
 use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
+use app_server_protocol::METHOD_WORKSPACE_DELETE;
 use app_server_protocol::METHOD_WORKSPACE_ENSURE;
 use app_server_protocol::METHOD_WORKSPACE_ENSURE_READY;
 use app_server_protocol::METHOD_WORKSPACE_LIST;
@@ -307,6 +300,7 @@ use app_server_protocol::METHOD_WORKSPACE_PROJECT_PATH_RESOLVE;
 use app_server_protocol::METHOD_WORKSPACE_READ;
 use app_server_protocol::METHOD_WORKSPACE_REGISTERED_SKILLS_LIST;
 use app_server_protocol::METHOD_WORKSPACE_SKILL_BINDINGS_LIST;
+use app_server_protocol::METHOD_WORKSPACE_UPDATE;
 use app_server_protocol::PROTOCOL_VERSION;
 use app_server_protocol::SERVER_NAME;
 use serde::de::DeserializeOwned;
@@ -318,6 +312,7 @@ use std::sync::Mutex;
 pub struct RequestProcessor {
     state: Arc<Mutex<ProcessorState>>,
     runtime: RuntimeCore,
+    project_shell: ProjectShellManager,
 }
 
 #[derive(Debug, Default)]
@@ -332,6 +327,7 @@ impl RequestProcessor {
         Self {
             state: Arc::new(Mutex::new(ProcessorState::default())),
             runtime,
+            project_shell: ProjectShellManager::default(),
         }
     }
 
@@ -392,6 +388,22 @@ impl RequestProcessor {
             }
             METHOD_PROJECT_GIT_WORKTREE_CREATE => {
                 self.handle_project_git_worktree_create_impl(params).await
+            }
+            METHOD_PROJECT_SHELL_SESSION_START => {
+                self.handle_project_shell_session_start_impl(params).await
+            }
+            METHOD_PROJECT_SHELL_SESSION_WRITE => {
+                self.handle_project_shell_session_write_impl(params).await
+            }
+            METHOD_PROJECT_SHELL_SESSION_RESIZE => {
+                self.handle_project_shell_session_resize_impl(params).await
+            }
+            METHOD_PROJECT_SHELL_SESSION_KILL => {
+                self.handle_project_shell_session_kill_impl(params).await
+            }
+            METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS => {
+                self.handle_project_shell_session_drain_events_impl(params)
+                    .await
             }
             METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params).await,
             METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT => {
@@ -461,6 +473,8 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_READ => self.handle_session_read_impl(params).await,
             METHOD_WORKSPACE_LIST => self.handle_workspace_list_impl().await,
             METHOD_WORKSPACE_READ => self.handle_workspace_read_impl(params).await,
+            METHOD_WORKSPACE_UPDATE => self.handle_workspace_update_impl(params).await,
+            METHOD_WORKSPACE_DELETE => self.handle_workspace_delete_impl(params).await,
             METHOD_WORKSPACE_ENSURE => self.handle_workspace_ensure_impl(params).await,
             METHOD_WORKSPACE_BY_PATH_READ => self.handle_workspace_by_path_read_impl(params).await,
             METHOD_WORKSPACE_DEFAULT_READ => self.handle_workspace_default_read_impl().await,

@@ -904,6 +904,21 @@ async function createFixtureSession(page, workspaceId, requestLog) {
     requestLog,
   );
 
+  await page.evaluate(
+    ({ sessionId, workspaceId }) => {
+      window.dispatchEvent(
+        new CustomEvent("lime:agent-runtime-sessions-changed", {
+          detail: {
+            reason: "external",
+            sessionId,
+            workspaceId,
+          },
+        }),
+      );
+    },
+    { sessionId: SESSION_ID, workspaceId },
+  );
+
   return {
     session: session.result,
     update: update.result,

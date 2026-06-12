@@ -368,7 +368,7 @@ describe("useTeamWorkspaceRuntime", () => {
     ).toBe("completed");
   });
 
-  it("收到 final_done 且没有后续状态事件时，也应结束 running 状态", async () => {
+  it("收到 turn_completed 且没有后续状态事件时，也应结束 running 状态", async () => {
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
     mockSafeListen.mockImplementation(
       async (
@@ -401,7 +401,17 @@ describe("useTeamWorkspaceRuntime", () => {
     await act(async () => {
       listeners.get("agent_subagent_stream:child-1")?.({
         payload: {
-          type: "final_done",
+          type: "turn_completed",
+          turn: {
+            id: "turn-1",
+            thread_id: "child-1",
+            prompt_text: "整理竞品与数据来源",
+            status: "completed",
+            started_at: "2026-06-12T00:00:00.000Z",
+            completed_at: "2026-06-12T00:00:01.000Z",
+            created_at: "2026-06-12T00:00:00.000Z",
+            updated_at: "2026-06-12T00:00:01.000Z",
+          },
         },
       });
       await Promise.resolve();

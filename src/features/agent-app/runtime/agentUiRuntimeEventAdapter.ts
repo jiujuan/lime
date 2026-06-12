@@ -94,6 +94,7 @@ function runtimeEventClassForProjection(event: AgentUiProjectionEvent): AgentRun
   if (event.type === "evidence.changed") return "evidence.changed";
   if (event.type === "run.finished") return "turn.completed";
   if (event.type === "run.failed") return "turn.failed";
+  if (event.type === "state.delta") return "state.delta";
   if (event.type === "action.required" || event.type === "action.resolved") return event.type;
   if (event.type === "metric.changed") return "snapshot.updated";
   if (event.type === "diagnostic.changed") return "runtime.error";

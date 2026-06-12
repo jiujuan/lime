@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "RuntimeCapabilityEntry": {
+      "properties": {
+        "detail": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "metadata": true,
+        "scope": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "status",
+        "title"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "capabilities": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RuntimeCapabilityEntry"
+      },
+      "type": "array"
+    },
+    "generatedAt": {
+      "type": "string"
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "runtimeId": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "generatedAt",
+    "runtimeId",
+    "schemaVersion"
+  ],
+  "title": "RuntimeCapabilityManifest",
+  "type": "object"
+}

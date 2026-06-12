@@ -156,7 +156,9 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       );
       const runtimeProviderType =
         status?.provider_configured === true
-          ? status.provider_selector?.trim() || status.provider_name?.trim() || ""
+          ? status.provider_selector?.trim() ||
+            status.provider_name?.trim() ||
+            ""
           : "";
       const runtimeModel = status?.model_name?.trim() || "";
       const currentProviderMatchesRuntime =
@@ -170,12 +172,14 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         !currentProviderMatchesRuntime
       ) {
         try {
-          const retainedSelection = await resolveClawWorkspaceProviderSelection({
-            currentProviderType,
-            currentModel,
-            theme: "general",
-            allowProviderFallback: false,
-          });
+          const retainedSelection = await resolveClawWorkspaceProviderSelection(
+            {
+              currentProviderType,
+              currentModel,
+              theme: "general",
+              allowProviderFallback: false,
+            },
+          );
           if (!isCurrentWorkspace()) {
             return;
           }
@@ -217,8 +221,8 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       try {
         const defaultProvider =
           !hasPersistedWorkspacePreference && !runtimeProviderType
-          ? (await getDefaultProvider()).trim()
-          : "";
+            ? (await getDefaultProvider()).trim()
+            : "";
         if (!isCurrentWorkspace()) {
           return;
         }
@@ -384,6 +388,22 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
   const rawSendMessage = stream.sendMessage;
   const compactCurrentSession = stream.compactSession;
   const isStreamSending = stream.isSending;
+  const detachStreamBindings = stream.detachStreamBindings;
+
+  const settleActiveRuntimeStream = useCallback(
+    (targetSessionId: string) => {
+      const activeStreamingSessionId =
+        currentStreamingSessionIdRef.current?.trim() || null;
+      if (
+        activeStreamingSessionId &&
+        activeStreamingSessionId !== targetSessionId
+      ) {
+        return;
+      }
+      detachStreamBindings();
+    },
+    [detachStreamBindings],
+  );
 
   const appendLocalAssistantMessage = useCallback(
     (content: string) => {
@@ -474,6 +494,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     queuedTurnCount: session.queuedTurns.length,
     threadTurns: session.threadTurns,
     refreshSessionDetail: session.refreshSessionDetail,
+    settleActiveRuntimeStream,
   });
 
   useAgentTopicSnapshot({

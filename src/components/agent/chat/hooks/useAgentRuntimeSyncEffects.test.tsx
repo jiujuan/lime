@@ -282,6 +282,24 @@ function createAppServerThreadClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
+    listCapabilities: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        capabilities: [],
+        runtimeCapabilityManifest: {
+          schemaVersion: "lime-runtime-capability-manifest/v0.1",
+          runtimeId: "app-server",
+          generatedAt: "2026-06-12T00:00:00.000Z",
+          capabilities: [],
+        },
+      },
+      response: {
+        id: 1,
+        result: {},
+      },
+      messages: [],
+      notifications: [],
+    }),
     drainEvents: vi.fn().mockResolvedValue([]),
   };
 }
@@ -562,6 +580,132 @@ describe("useAgentRuntimeSyncEffects", () => {
 
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
       expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+
+      await act(async () => {
+        listeners.get("aster_stream_assistant-1")?.({
+          payload: {
+            type: "turn.completed",
+            turn: {
+              id: "turn-1",
+              thread_id: "thread-1",
+              prompt_text: "继续",
+              status: "completed",
+              started_at: "2026-03-29T00:05:00.000Z",
+              completed_at: "2026-03-29T00:05:01.000Z",
+              created_at: "2026-03-29T00:05:00.000Z",
+              updated_at: "2026-03-29T00:05:01.000Z",
+            },
+          },
+        });
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(2);
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith("session-1");
+
+      await act(async () => {
+        listeners.get("aster_stream_assistant-1")?.({
+          payload: {
+            type: "turn.failed",
+            turn: {
+              id: "turn-2",
+              thread_id: "thread-1",
+              prompt_text: "失败",
+              status: "failed",
+              started_at: "2026-03-29T00:06:00.000Z",
+              completed_at: "2026-03-29T00:06:01.000Z",
+              created_at: "2026-03-29T00:06:00.000Z",
+              updated_at: "2026-03-29T00:06:01.000Z",
+              error_message: "失败",
+            },
+          },
+        });
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(3);
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith("session-1");
+
+      await act(async () => {
+        listeners.get("aster_stream_assistant-1")?.({
+          payload: {
+            type: "turn.canceled",
+            turn: {
+              id: "turn-3",
+              thread_id: "thread-1",
+              prompt_text: "停止",
+              status: "canceled",
+              started_at: "2026-03-29T00:05:02.000Z",
+              completed_at: "2026-03-29T00:05:03.000Z",
+              created_at: "2026-03-29T00:05:02.000Z",
+              updated_at: "2026-03-29T00:05:03.000Z",
+              error_message: "已停止",
+            },
+          },
+        });
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(4);
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("发送态 read model repair 到终态时应收起当前 runtime stream", async () => {
+    const settleActiveRuntimeStream = vi.fn();
+    const harness = await mountHook({
+      isSending: true,
+      threadReadStatus: "running",
+      threadTurns: [
+        createThreadTurn({
+          status: "running",
+          started_at: "2026-03-29T00:04:55.000Z",
+          updated_at: "2026-03-29T00:04:58.000Z",
+        }),
+      ],
+      settleActiveRuntimeStream,
+    });
+
+    try {
+      expect(settleActiveRuntimeStream).not.toHaveBeenCalled();
+
+      await harness.render({
+        isSending: true,
+        threadReadStatus: "completed",
+        threadTurns: [
+          createThreadTurn({
+            status: "completed",
+            started_at: "2026-03-29T00:04:55.000Z",
+            completed_at: "2026-03-29T00:05:01.000Z",
+            updated_at: "2026-03-29T00:05:01.000Z",
+          }),
+        ],
+      });
+
+      expect(settleActiveRuntimeStream).toHaveBeenCalledTimes(1);
+      expect(settleActiveRuntimeStream).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("未观察到活跃 read model 前不应因 idle 快照误停新请求", async () => {
+    const settleActiveRuntimeStream = vi.fn();
+    const harness = await mountHook({
+      isSending: true,
+      threadReadStatus: "idle",
+      threadTurns: [],
+      settleActiveRuntimeStream,
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(settleActiveRuntimeStream).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -637,12 +781,12 @@ describe("useAgentRuntimeSyncEffects", () => {
           method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
           params: {
             event: {
-              eventId: "evt-done-1",
+              eventId: "evt-completed-1",
               sequence: 1,
               sessionId: "session-1",
               threadId: "thread-1",
               turnId: "turn-1",
-              type: "turn.done",
+              type: "turn.completed",
               timestamp: "2026-06-06T00:00:01.000Z",
               payload: {},
             },
@@ -695,6 +839,55 @@ describe("useAgentRuntimeSyncEffects", () => {
           }),
         }),
       );
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
+      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("收到当前 turn 的取消终态后应刷新 read model", async () => {
+    const refreshSessionDetail = vi.fn(async () => true);
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    const runtime = {
+      listenToTeamEvents: vi.fn(async () => () => {}),
+      listenToTurnEvents: vi.fn(async (eventName, handler) => {
+        listeners.set(
+          eventName,
+          handler as (event: { payload: unknown }) => void,
+        );
+        return () => {
+          listeners.delete(eventName);
+        };
+      }),
+    };
+    const harness = await mountHook({
+      runtime,
+      currentTurnEventName: "aster_stream_assistant-cancel",
+      isSending: true,
+      refreshSessionDetail,
+    });
+
+    try {
+      await act(async () => {
+        listeners.get("aster_stream_assistant-cancel")?.({
+          payload: {
+            type: "turn.canceled",
+            turn: {
+              id: "turn-canceled",
+              thread_id: "thread-1",
+              prompt_text: "停止",
+              status: "canceled",
+              started_at: "2026-03-29T00:05:00.000Z",
+              completed_at: "2026-03-29T00:05:01.000Z",
+              created_at: "2026-03-29T00:05:00.000Z",
+              updated_at: "2026-03-29T00:05:01.000Z",
+            },
+          },
+        });
+        await Promise.resolve();
+      });
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
       expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
     } finally {

@@ -692,6 +692,26 @@
     },
     {
       "kind": "request",
+      "method": "projectShell/session/drainEvents"
+    },
+    {
+      "kind": "request",
+      "method": "projectShell/session/kill"
+    },
+    {
+      "kind": "request",
+      "method": "projectShell/session/resize"
+    },
+    {
+      "kind": "request",
+      "method": "projectShell/session/start"
+    },
+    {
+      "kind": "request",
+      "method": "projectShell/session/write"
+    },
+    {
+      "kind": "request",
       "method": "sessionFile/delete"
     },
     {
@@ -1303,7 +1323,21 @@
       "ProjectMaterialUploadParams",
       "ProjectMemoryReadParams",
       "ProjectMemoryReadResponse",
+      "ProjectShellEmptyResponse",
+      "ProjectShellSessionDrainEventsParams",
+      "ProjectShellSessionDrainEventsResponse",
+      "ProjectShellSessionEvent",
+      "ProjectShellSessionKillParams",
+      "ProjectShellSessionResizeParams",
+      "ProjectShellSessionStartParams",
+      "ProjectShellSessionStartResponse",
+      "ProjectShellSessionStream",
+      "ProjectShellSessionWriteParams",
+      "RuntimeCapabilityEntry",
+      "RuntimeCapabilityManifest",
       "RuntimeOptions",
+      "RuntimeResumeActionDecision",
+      "RuntimeResumeContract",
       "ServerCapabilities",
       "ServerDiagnosticsResponse",
       "ServerInfo",

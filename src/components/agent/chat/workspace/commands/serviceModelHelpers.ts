@@ -61,6 +61,20 @@ export function resolveServiceModelSendOverrides(params: {
     if (sceneModel) {
       return { modelOverride: sceneModel };
     }
+    const preferredProviderId =
+      typeof serviceSceneRun.preferred_provider_id === "string"
+        ? serviceSceneRun.preferred_provider_id.trim()
+        : "";
+    const preferredModelId =
+      typeof serviceSceneRun.preferred_model_id === "string"
+        ? serviceSceneRun.preferred_model_id.trim()
+        : "";
+    if (preferredProviderId && preferredModelId) {
+      return {
+        providerOverride: preferredProviderId,
+        modelOverride: preferredModelId,
+      };
+    }
   }
 
   if (!preference) {

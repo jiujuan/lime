@@ -962,6 +962,72 @@ describe("http-client", () => {
     taskUnlisten();
   });
 
+  it("事件连接建立中新增监听时应重建 SSE 并包含新增事件", async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+
+      onopen: (() => void) | null = null;
+      onerror: ((error: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      readyState = 0;
+      readonly close = vi.fn(() => {
+        this.readyState = 2;
+      });
+
+      constructor(readonly url: string) {
+        MockEventSource.instances.push(this);
+      }
+
+      emitOpen() {
+        this.readyState = 1;
+        this.onopen?.();
+      }
+    }
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(electronHostHealthResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal(
+      "EventSource",
+      MockEventSource as unknown as typeof EventSource,
+    );
+
+    const voiceUnlistenPromise = listenViaHttpEvent(
+      "lime-open-voice-model-settings",
+      vi.fn(),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    const shellUnlistenPromise = listenViaHttpEvent(
+      "project-shell-session-event",
+      vi.fn(),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    MockEventSource.instances[0]?.emitOpen();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[0]?.close).toHaveBeenCalledTimes(1);
+    const nextUrl = new URL(MockEventSource.instances[1]!.url);
+    expect(JSON.parse(nextUrl.searchParams.get("events") ?? "[]")).toEqual([
+      "lime-open-voice-model-settings",
+      "project-shell-session-event",
+    ]);
+
+    MockEventSource.instances[1]?.emitOpen();
+    const [voiceUnlisten, shellUnlisten] = await Promise.all([
+      voiceUnlistenPromise,
+      shellUnlistenPromise,
+    ]);
+
+    voiceUnlisten();
+    shellUnlisten();
+  });
+
   it("事件流如果在绑定 onopen 前已经打开，也应立即完成监听注册", async () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];

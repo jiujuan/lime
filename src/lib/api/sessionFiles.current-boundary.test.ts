@@ -108,9 +108,10 @@ describe("Session files frontend boundary", () => {
         "lime-rs/crates/app-server-protocol/src/protocol/v0/session_files.rs",
       ),
     ].join("\n");
-    const processorSource = readRepoFile(
-      "lime-rs/crates/app-server/src/processor.rs",
-    );
+    const processorSource = [
+      readRepoFile("lime-rs/crates/app-server/src/processor/mod.rs"),
+      readRepoFile("lime-rs/crates/app-server/src/processor/workspace.rs"),
+    ].join("\n");
     const clientProtocolSource = readRepoFile(
       "packages/app-server-client/src/protocol.ts",
     );

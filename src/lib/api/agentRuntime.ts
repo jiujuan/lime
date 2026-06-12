@@ -6,3 +6,7 @@
 
 export * from "./agentRuntime/types";
 export * from "./agentRuntime/index";
+export {
+  AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
+  notifyAgentRuntimeSessionsChanged,
+} from "./agentRuntime/sessionClient";

@@ -73,7 +73,7 @@ export interface AgentTokenUsage {
     cached_input_tokens?: number;
     cache_creation_input_tokens?: number;
 }
-export type AgentThreadTurnStatus = "running" | "completed" | "failed" | "aborted";
+export type AgentThreadTurnStatus = "running" | "completed" | "failed" | "canceled" | "aborted" | "cancelled" | "interrupted";
 export type AgentThreadItemStatus = "in_progress" | "completed" | "failed";
 export interface AgentThreadTurn {
     id: string;
@@ -269,6 +269,10 @@ export interface AgentEventTurnCompleted {
 }
 export interface AgentEventTurnFailed {
     type: "turn_failed";
+    turn: AgentThreadTurn;
+}
+export interface AgentEventTurnCanceled {
+    type: "turn_canceled";
     turn: AgentThreadTurn;
 }
 export interface AgentEventThinkingDelta {
@@ -546,14 +550,6 @@ export interface AgentEventSubagentStatusChanged {
     tool_count?: number;
     result_ref?: string;
 }
-export interface AgentEventDone {
-    type: "done";
-    usage?: AgentTokenUsage;
-}
-export interface AgentEventFinalDone {
-    type: "final_done";
-    usage?: AgentTokenUsage;
-}
 export interface AgentEventMessage {
     type: "message";
     message: AgentMessage;
@@ -567,7 +563,7 @@ export interface AgentEventError {
     type: "error";
     message: string;
 }
-export type AgentEvent = AgentEventThreadStarted | AgentEventTurnStarted | AgentEventItemStarted | AgentEventItemUpdated | AgentEventItemCompleted | AgentEventTurnCompleted | AgentEventTurnFailed | AgentEventTextDelta | AgentEventTextDeltaBatch | AgentEventThinkingDelta | AgentEventToolStart | AgentEventToolEnd | AgentEventToolProgress | AgentEventToolOutputDelta | AgentEventToolInputDelta | AgentEventArtifactSnapshot | AgentEventActionRequired | AgentEventActionResolved | AgentEventTurnContext | AgentEventModelChange | AgentEventContextTrace | AgentEventRuntimeStatus | AgentEventTaskProfileResolved | AgentEventCandidateSetResolved | AgentEventRoutingDecisionMade | AgentEventRoutingFallbackApplied | AgentEventRoutingNotPossible | AgentEventLimitStateUpdated | AgentEventSingleCandidateOnly | AgentEventSingleCandidateCapabilityGap | AgentEventCostEstimated | AgentEventCostRecorded | AgentEventRateLimitHit | AgentEventQuotaLow | AgentEventQuotaBlocked | AgentEventQueueAdded | AgentEventQueueRemoved | AgentEventQueueStarted | AgentEventQueueCleared | AgentEventSubagentStatusChanged | AgentEventDone | AgentEventFinalDone | AgentEventMessage | AgentEventWarning | AgentEventError;
+export type AgentEvent = AgentEventThreadStarted | AgentEventTurnStarted | AgentEventItemStarted | AgentEventItemUpdated | AgentEventItemCompleted | AgentEventTurnCompleted | AgentEventTurnFailed | AgentEventTurnCanceled | AgentEventTextDelta | AgentEventTextDeltaBatch | AgentEventThinkingDelta | AgentEventToolStart | AgentEventToolEnd | AgentEventToolProgress | AgentEventToolOutputDelta | AgentEventToolInputDelta | AgentEventArtifactSnapshot | AgentEventActionRequired | AgentEventActionResolved | AgentEventTurnContext | AgentEventModelChange | AgentEventContextTrace | AgentEventRuntimeStatus | AgentEventTaskProfileResolved | AgentEventCandidateSetResolved | AgentEventRoutingDecisionMade | AgentEventRoutingFallbackApplied | AgentEventRoutingNotPossible | AgentEventLimitStateUpdated | AgentEventSingleCandidateOnly | AgentEventSingleCandidateCapabilityGap | AgentEventCostEstimated | AgentEventCostRecorded | AgentEventRateLimitHit | AgentEventQuotaLow | AgentEventQuotaBlocked | AgentEventQueueAdded | AgentEventQueueRemoved | AgentEventQueueStarted | AgentEventQueueCleared | AgentEventSubagentStatusChanged | AgentEventMessage | AgentEventWarning | AgentEventError;
 export interface AgentUserPreferences {
     providerConfig?: AsterProviderConfig;
     providerPreference?: string;

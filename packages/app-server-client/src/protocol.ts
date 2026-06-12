@@ -1,6 +1,6 @@
 // @generated types re-export — 从 Rust JSON Schema 自动生成的类型定义
 // 新代码优先从这里导入类型；手写类型逐步迁移后将删除
-export * from "./generated/protocol-types";
+export * from "./generated/protocol-types.js";
 
 export const JSONRPC_VERSION = "2.0";
 export const PROTOCOL_VERSION = "appserver.v0";
@@ -21,6 +21,13 @@ export const METHOD_PROJECT_GIT_STATUS = "projectGit/status";
 export const METHOD_PROJECT_GIT_BRANCH_CHECKOUT = "projectGit/branch/checkout";
 export const METHOD_PROJECT_GIT_BRANCH_CREATE = "projectGit/branch/create";
 export const METHOD_PROJECT_GIT_WORKTREE_CREATE = "projectGit/worktree/create";
+export const METHOD_PROJECT_SHELL_SESSION_START = "projectShell/session/start";
+export const METHOD_PROJECT_SHELL_SESSION_WRITE = "projectShell/session/write";
+export const METHOD_PROJECT_SHELL_SESSION_RESIZE =
+  "projectShell/session/resize";
+export const METHOD_PROJECT_SHELL_SESSION_KILL = "projectShell/session/kill";
+export const METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS =
+  "projectShell/session/drainEvents";
 export const METHOD_EVIDENCE_EXPORT = "evidence/export";
 export const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
   "agentSession/handoffBundle/export";
@@ -338,6 +345,11 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
   { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
   { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
+  { method: METHOD_PROJECT_SHELL_SESSION_START, kind: "request" },
+  { method: METHOD_PROJECT_SHELL_SESSION_WRITE, kind: "request" },
+  { method: METHOD_PROJECT_SHELL_SESSION_RESIZE, kind: "request" },
+  { method: METHOD_PROJECT_SHELL_SESSION_KILL, kind: "request" },
+  { method: METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS, kind: "request" },
   { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
   { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
   { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
@@ -693,7 +705,27 @@ export type CapabilityDescriptor = {
 
 export type CapabilityListResponse = {
   capabilities: CapabilityDescriptor[];
+  runtimeCapabilityManifest?: RuntimeCapabilityManifest;
   nextCursor?: string;
+};
+
+export type RuntimeCapabilityManifest = {
+  schemaVersion: string;
+  runtimeId: string;
+  providerId?: string;
+  sessionId?: string;
+  generatedAt: string;
+  capabilities: RuntimeCapabilityEntry[];
+};
+
+export type RuntimeCapabilityEntry = {
+  id: string;
+  status: string;
+  scope: string;
+  title: string;
+  detail?: string;
+  version?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type ArtifactReadParams = {
@@ -1324,6 +1356,26 @@ export type AgentSessionCompactResponse = {
 
 export type AgentSessionThreadResumeParams = {
   sessionId: string;
+  resumeContract?: RuntimeResumeContract;
+};
+
+export type RuntimeResumeContract = {
+  schemaVersion: string;
+  runtimeId: string;
+  sessionId: string;
+  turnId: string;
+  resumeMode: string;
+  openActionIds: string[];
+  decisions: RuntimeResumeActionDecision[];
+  expiresAt?: string;
+  createdAt: string;
+};
+
+export type RuntimeResumeActionDecision = {
+  actionId: string;
+  decision: string;
+  response?: unknown;
+  metadata?: Record<string, unknown>;
 };
 
 export type AgentSessionThreadResumeResponse = {

@@ -45,7 +45,7 @@ function appServerClientMock() {
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         params: {
           event: {
-            type: "turn.final_done",
+            type: "turn.completed",
             turnId: params.turnId,
             payload: {
               attempts: "web search completed",

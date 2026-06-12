@@ -20,6 +20,7 @@ import { shouldDisallowMockEventFallbackInBrowser } from "./mockPriorityCommands
 import {
   getElectronHostBridge,
   isElectronHostCommandAvailable,
+  isElectronDevBridgeFallbackAvailable,
 } from "@/lib/electron-host";
 
 export interface InvokeErrorBufferEntry {
@@ -486,7 +487,7 @@ export async function safeListen<T = any>(
   handler: (event: { payload: T }) => void,
 ): Promise<UnlistenFn> {
   const electronHost = getElectronHostBridge();
-  if (electronHost) {
+  if (electronHost && !isElectronDevBridgeFallbackAvailable()) {
     try {
       const listen = electronHost.listen ?? electronHost.on;
       if (listen) {

@@ -138,6 +138,46 @@ describe("agentRunProjectionState", () => {
     ]);
   });
 
+  it("Lime Agent App state 通过共享 projection 消费 state.delta", () => {
+    const state = buildAgentRunStandardProjectionStateFromState(
+      {
+        taskId: "task-delta",
+        sessionId: "session-delta",
+        agentUiEvents: [
+          {
+            id: "direct-artifact",
+            type: "artifact.created",
+            artifactId: "artifact-delta",
+            payload: {
+              preview: "旧预览",
+            },
+          },
+          {
+            id: "direct-delta",
+            type: "state.delta",
+            payload: {
+              target: "projection.artifacts",
+              patch: [
+                {
+                  op: "replace",
+                  path: "/0/preview",
+                  value: "修复后的预览",
+                },
+              ],
+            },
+          },
+        ],
+      },
+      { startSequence: 30 },
+    );
+
+    expect(state.artifacts[0]).toMatchObject({
+      id: "artifact-delta",
+      preview: "修复后的预览",
+    });
+    expect(state.hydration.status).toBe("live");
+  });
+
   it("展开 task:runtimeEvent.taskEvents 并继承 wrapper 上的 session/thread/task 上下文", () => {
     const view = buildAgentRunProjectionViewModelFromState({
       taskId: "task-wrapper",
@@ -223,6 +263,29 @@ describe("agentRunProjectionState", () => {
     expect(view.answerText).toBe("第一段文案。");
     expect(view.reasoningText).toBe("先确认项目资料。");
     expect(view.task.toolCallCount).toBe(2);
+  });
+
+  it("legacy final_done 不应作为 Agent App runtime 完成终态", () => {
+    const view = buildAgentRunProjectionViewModelFromState({
+      taskId: "task-legacy-final-done",
+      sessionId: "session-legacy-final-done",
+      events: [
+        {
+          id: "legacy-final-done",
+          eventType: "final_done",
+          message: "legacy final_done",
+        },
+      ],
+    });
+
+    expect(view.task.terminal).not.toBe(true);
+    expect(view.orderedParts).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({
+          runtimeStatus: "completed",
+        }),
+      ]),
+    );
   });
 
   it("从 runtimeFacts / runtimeProcess 补齐模型、Token 和费用摘要", () => {

@@ -11,7 +11,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "1.66.0"
+version = "1.67.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"
@@ -123,6 +123,7 @@ hex = "0.4.3"
 scopeguard = "1"
 sysinfo = "0.32"
 whoami = "1"
+jsonschema = "0.30.0"
 
 # 音频
 cpal = "0.15"

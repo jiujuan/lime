@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://limecloud.dev/schemas/agent-runtime-event.v0.1.schema.json",
+  "title": "AgentRuntimeExecutionEvent",
+  "type": "object",
+  "required": [
+    "id",
+    "schemaVersion",
+    "runtimeId",
+    "kind",
+    "status",
+    "sequence",
+    "title",
+    "createdAt"
+  ],
+  "additionalProperties": true,
+  "not": {
+    "properties": {
+      "eventClass": {
+        "enum": [
+          "done",
+          "final_done",
+          "cancelled",
+          "turn.done",
+          "turn.final_done",
+          "turn.cancelled"
+        ]
+      }
+    },
+    "required": [
+      "eventClass"
+    ]
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "const": "lime-runtime-event/v0.1"
+    },
+    "runtimeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventClass": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "subagentId": {
+      "type": "string"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "stepId": {
+      "type": "string"
+    },
+    "toolCallId": {
+      "type": "string"
+    },
+    "actionId": {
+      "type": "string"
+    },
+    "workerId": {
+      "type": "string"
+    },
+    "channelId": {
+      "type": "string"
+    },
+    "handoffId": {
+      "type": "string"
+    },
+    "reviewId": {
+      "type": "string"
+    },
+    "traceId": {
+      "type": "string"
+    },
+    "spanId": {
+      "type": "string"
+    },
+    "attemptId": {
+      "type": "string"
+    },
+    "artifactId": {
+      "type": "string"
+    },
+    "evidenceId": {
+      "type": "string"
+    },
+    "phase": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "detail": {
+      "type": "string"
+    },
+    "refIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifactRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "payload": {
+      "type": "object"
+    },
+    "model": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "completedAt": {
+      "type": "string"
+    }
+  }
+}

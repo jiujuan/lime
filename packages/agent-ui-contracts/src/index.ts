@@ -1,8 +1,12 @@
+export type * from "./capabilities";
 export type * from "./events";
 export * from "./fixtures.js";
 export type * from "./graph";
 export type * from "./messages";
 export type * from "./projection";
 export type * from "./runtime";
+export * from "./runtimeTerminal.js";
+export * from "./schemas.js";
+export * from "./sequenceVerifier.js";
 export type * from "./timeline";
 export * from "./validation.js";

@@ -51,6 +51,7 @@ interface AgentStreamCompletionRequestLogPayload {
 interface AgentStreamCompletionErrorRequestLogPayload {
   eventType: "chat_request_error";
   status: "error";
+  description?: string;
   error: string;
 }
 

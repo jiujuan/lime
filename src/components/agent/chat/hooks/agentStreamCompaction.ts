@@ -29,6 +29,7 @@ interface RunAgentStreamCompactionOptions {
     nextUnlisten: (() => void) | null | undefined,
   ) => void;
   removeStreamListener: (eventName: string) => boolean;
+  setIsSending: Dispatch<SetStateAction<boolean>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setThreadItems: Dispatch<SetStateAction<AgentThreadItem[]>>;
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
@@ -80,6 +81,7 @@ export async function runAgentStreamCompaction(
     clearActiveStreamIfMatch,
     replaceStreamListener,
     removeStreamListener,
+    setIsSending,
     setCurrentTurnId,
     setThreadItems,
     setThreadTurns,
@@ -123,9 +125,13 @@ export async function runAgentStreamCompaction(
           setThreadItems((prev) => upsertThreadItemState(prev, data.item));
           break;
         case "turn_completed":
+        case "turn_canceled":
         case "turn_failed":
           setCurrentTurnId(data.turn.id);
           setThreadTurns((prev) => upsertThreadTurnState(prev, data.turn));
+          clearActiveStreamIfMatch(eventName);
+          setIsSending(false);
+          disposeListener();
           break;
         case "warning": {
           const warningKey = `${sessionId}:${data.code || data.message}`;
@@ -158,10 +164,6 @@ export async function runAgentStreamCompaction(
           notifiedErrorMessage =
             String(data.message ?? "").trim() || "未知错误";
           notify.error(`压缩上下文失败: ${notifiedErrorMessage}`);
-          clearActiveStreamIfMatch(eventName);
-          disposeListener();
-          break;
-        case "final_done":
           clearActiveStreamIfMatch(eventName);
           disposeListener();
           break;

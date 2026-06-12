@@ -5,6 +5,8 @@ use super::*;
 
 pub const PROTOCOL_VERSION: &str = "appserver.v0";
 pub const SERVER_NAME: &str = "app-server";
+pub const RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION: &str =
+    "lime-runtime-capability-manifest/v0.1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -81,11 +83,13 @@ pub struct CapabilityListParams {
     pub limit: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityListResponse {
     #[serde(default)]
     pub capabilities: Vec<CapabilityDescriptor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_capability_manifest: Option<RuntimeCapabilityManifest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
 }
@@ -99,6 +103,35 @@ pub struct CapabilityDescriptor {
     pub description: Option<String>,
     #[serde(default)]
     pub methods: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeCapabilityManifest {
+    pub schema_version: String,
+    pub runtime_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    pub generated_at: String,
+    #[serde(default)]
+    pub capabilities: Vec<RuntimeCapabilityEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeCapabilityEntry {
+    pub id: String,
+    pub status: String,
+    pub scope: String,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

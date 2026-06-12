@@ -1,3 +1,5 @@
+mod agent_ui_event_schema;
+mod agent_ui_sequence_verifier;
 #[cfg(feature = "aster-backend")]
 mod aster_backend;
 mod backend_event;
@@ -10,6 +12,7 @@ mod local_data_source;
 mod media_task;
 mod objective;
 mod processor;
+mod project_shell;
 mod runtime;
 mod runtime_backend;
 mod runtime_factory;
@@ -637,21 +640,79 @@ mod tests {
     #[tokio::test]
     async fn business_methods_require_initialized_notification() {
         let server = AppServer::new();
-        let response = server
-            .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
-                RequestId::Integer(1),
-                METHOD_AGENT_SESSION_START,
-                Some(json!({ "appId": "content-studio" })),
-            )))
-            .await
-            .expect("handle")
-            .remove(0);
 
-        match response {
-            JsonRpcMessage::Error(error) => {
-                assert_eq!(error.error.code, error_codes::NOT_INITIALIZED);
+        let blocked_cases = [
+            (
+                1,
+                METHOD_AGENT_SESSION_START,
+                json!({ "appId": "content-studio" }),
+            ),
+            (
+                2,
+                app_server_protocol::METHOD_WORKSPACE_UPDATE,
+                json!({ "id": "workspace-main", "name": "Main" }),
+            ),
+            (
+                3,
+                app_server_protocol::METHOD_WORKSPACE_DELETE,
+                json!({ "id": "workspace-main", "deleteDirectory": false }),
+            ),
+        ];
+
+        for (id, method, params) in blocked_cases {
+            let response = server
+                .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
+                    RequestId::Integer(id),
+                    method,
+                    Some(params),
+                )))
+                .await
+                .expect("handle")
+                .remove(0);
+
+            match response {
+                JsonRpcMessage::Error(error) => {
+                    assert_eq!(error.error.code, error_codes::NOT_INITIALIZED);
+                }
+                other => panic!("expected error for {method}, got {other:?}"),
             }
-            other => panic!("expected error, got {other:?}"),
+        }
+
+        initialize(&server).await;
+
+        let workspace_cases = [
+            (
+                4,
+                app_server_protocol::METHOD_WORKSPACE_UPDATE,
+                json!({ "id": "workspace-main", "name": "Main" }),
+                "workspace/update is not available without an app data source",
+            ),
+            (
+                5,
+                app_server_protocol::METHOD_WORKSPACE_DELETE,
+                json!({ "id": "workspace-main", "deleteDirectory": false }),
+                "workspace/delete is not available without an app data source",
+            ),
+        ];
+
+        for (id, method, params, message) in workspace_cases {
+            let response = server
+                .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
+                    RequestId::Integer(id),
+                    method,
+                    Some(params),
+                )))
+                .await
+                .expect("handle")
+                .remove(0);
+
+            match response {
+                JsonRpcMessage::Error(error) => {
+                    assert_eq!(error.error.code, error_codes::RUNTIME_ERROR);
+                    assert_eq!(error.error.message, message);
+                }
+                other => panic!("expected runtime error for {method}, got {other:?}"),
+            }
         }
     }
 

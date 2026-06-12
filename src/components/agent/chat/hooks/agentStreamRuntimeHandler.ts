@@ -37,6 +37,7 @@ import {
   buildAgentStreamCompletedAssistantMessagePatch,
   buildAgentStreamEmptyFinalErrorPlan,
   buildAgentStreamFinalDonePlan,
+  buildAgentStreamMissingFinalReplyFailurePlan,
   buildAgentStreamMissingFinalReplyFailureSideEffectPlan,
   type AgentStreamMissingFinalReplyPlan,
   isAgentStreamEmptyFinalReplyError,
@@ -298,15 +299,6 @@ function hasRetainedSkillInlineProcess(message: Message): boolean {
           (part) => part.type === "thinking" && part.text.trim().length > 0,
         ),
       ))
-  );
-}
-
-function isInterruptedTurnStatus(status: AgentThreadTurn["status"]): boolean {
-  return (
-    status === "aborted" ||
-    status === "canceled" ||
-    status === "cancelled" ||
-    status === "interrupted"
   );
 }
 
@@ -1069,10 +1061,6 @@ export function handleTurnStreamEvent({
         ),
       );
       setCurrentTurnId(data.turn.id);
-      if (isInterruptedTurnStatus(data.turn.status)) {
-        completeInterruptedTurn(data.turn);
-        break;
-      }
       if (data.text?.trim() && !shouldPreserveAssistantContent) {
         requestState.accumulatedContent = data.text;
         requestState.renderedContent = data.text;
@@ -1098,15 +1086,37 @@ export function handleTurnStreamEvent({
       break;
     }
 
-    case "turn_failed": {
+    case "turn_canceled": {
       clearQueuedDraftCleanupTimer();
-      activateStream();
+      flushPendingTextRender();
       bindAssistantMessageToRuntimeTurn(
         setMessages,
         assistantMsgId,
         data.turn.id,
       );
       clearOptimisticItem();
+      clearOptimisticTurn();
+      setThreadTurns((prev) =>
+        upsertThreadTurnState(
+          removeThreadTurnState(prev, pendingTurnKey),
+          data.turn,
+        ),
+      );
+      completeInterruptedTurn(data.turn);
+      break;
+    }
+
+    case "turn_failed": {
+      clearQueuedDraftCleanupTimer();
+      activateStream();
+      flushPendingTextRender();
+      bindAssistantMessageToRuntimeTurn(
+        setMessages,
+        assistantMsgId,
+        data.turn.id,
+      );
+      clearOptimisticItem();
+      clearOptimisticTurn();
       setThreadTurns((prev) =>
         upsertThreadTurnState(
           removeThreadTurnState(prev, pendingTurnKey),
@@ -1114,6 +1124,12 @@ export function handleTurnStreamEvent({
         ),
       );
       setCurrentTurnId(data.turn.id);
+      finalizeMissingFinalReplyFailure(
+        buildAgentStreamMissingFinalReplyFailurePlan({
+        errorMessage: data.turn.error_message || "当前处理失败",
+          queuedTurnId: requestState.queuedTurnId,
+        }),
+      );
       break;
     }
 
@@ -1515,33 +1531,6 @@ export function handleTurnStreamEvent({
         setMessages,
       });
       break;
-
-    case "done":
-    case "final_done": {
-      clearQueuedDraftCleanupTimer();
-      flushPendingTextRender();
-      clearOptimisticItem();
-      clearOptimisticTurn();
-      const finalDonePlan = buildAgentStreamFinalDonePlan({
-        accumulatedContent: requestState.accumulatedContent,
-        fallbackContent: assistantFallbackContent,
-        hasMeaningfulCompletionSignal:
-          requestState.hasMeaningfulCompletionSignal,
-        queuedTurnId: requestState.queuedTurnId,
-        toolCallCount: toolLogIdByToolId.size,
-        usage: data.usage,
-      });
-      if (finalDonePlan.type === "missing_final_reply_failure") {
-        finalizeMissingFinalReplyFailure(finalDonePlan);
-        break;
-      }
-
-      completeAssistantStreamMessageFromCompletionPlan({
-        ...finalDonePlan,
-        usage: data.usage,
-      });
-      break;
-    }
 
     case "error": {
       clearQueuedDraftCleanupTimer();

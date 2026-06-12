@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://limecloud.dev/schemas/agent-runtime-capability-manifest.v0.1.schema.json",
+  "title": "AgentRuntimeCapabilityManifest",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "runtimeId",
+    "generatedAt",
+    "capabilities"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "lime-runtime-capability-manifest/v0.1"
+    },
+    "runtimeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "providerId": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "scope",
+          "title"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "detail": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

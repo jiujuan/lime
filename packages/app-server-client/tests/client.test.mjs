@@ -110,6 +110,11 @@ const {
   METHOD_PROJECT_GIT_BRANCH_CREATE,
   METHOD_PROJECT_GIT_STATUS,
   METHOD_PROJECT_GIT_WORKTREE_CREATE,
+  METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
+  METHOD_PROJECT_SHELL_SESSION_KILL,
+  METHOD_PROJECT_SHELL_SESSION_RESIZE,
+  METHOD_PROJECT_SHELL_SESSION_START,
+  METHOD_PROJECT_SHELL_SESSION_WRITE,
   METHOD_DIAGNOSTICS_LOG_STORAGE_READ,
   METHOD_DIAGNOSTICS_SERVER_READ,
   METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
@@ -589,6 +594,16 @@ test("builds agent session file checkpoint requests with current App Server meth
   });
   const resume = client.resumeAgentSessionThread({
     sessionId: "sess_1",
+    resumeContract: {
+      schemaVersion: "lime-runtime-resume-contract/v0.1",
+      runtimeId: "app-server",
+      sessionId: "sess_1",
+      turnId: "thread",
+      resumeMode: "all-open-actions",
+      openActionIds: [],
+      decisions: [],
+      createdAt: "2026-06-12T00:00:00.000Z",
+    },
   });
   const remove = client.removeAgentSessionQueuedTurn({
     sessionId: "sess_1",
@@ -609,6 +624,16 @@ test("builds agent session file checkpoint requests with current App Server meth
   assert.equal(resume.method, METHOD_AGENT_SESSION_THREAD_RESUME);
   assert.deepEqual(resume.params, {
     sessionId: "sess_1",
+    resumeContract: {
+      schemaVersion: "lime-runtime-resume-contract/v0.1",
+      runtimeId: "app-server",
+      sessionId: "sess_1",
+      turnId: "thread",
+      resumeMode: "all-open-actions",
+      openActionIds: [],
+      decisions: [],
+      createdAt: "2026-06-12T00:00:00.000Z",
+    },
   });
   assert.equal(remove.id, 3);
   assert.equal(remove.method, METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE);
@@ -1585,6 +1610,27 @@ test("builds file system requests with current methods", () => {
     name: "agent-demo",
     baseBranch: "main",
   });
+  const shellStart = client.startProjectShellSession({
+    rootPath: "/workspace",
+    cols: 120,
+    rows: 16,
+  });
+  const shellWrite = client.writeProjectShellSession({
+    sessionId: "project-shell-1",
+    data: "pwd\r",
+  });
+  const shellResize = client.resizeProjectShellSession({
+    sessionId: "project-shell-1",
+    cols: 100,
+    rows: 24,
+  });
+  const shellKill = client.killProjectShellSession({
+    sessionId: "project-shell-1",
+  });
+  const shellDrain = client.drainProjectShellSessionEvents({
+    sessionId: "project-shell-1",
+    limit: 20,
+  });
 
   assert.equal(listing.id, 1);
   assert.equal(listing.method, METHOD_FILE_SYSTEM_LIST_DIRECTORY);
@@ -1642,6 +1688,37 @@ test("builds file system requests with current methods", () => {
     rootPath: "/workspace",
     name: "agent-demo",
     baseBranch: "main",
+  });
+  assert.equal(shellStart.id, 11);
+  assert.equal(shellStart.method, METHOD_PROJECT_SHELL_SESSION_START);
+  assert.deepEqual(shellStart.params, {
+    rootPath: "/workspace",
+    cols: 120,
+    rows: 16,
+  });
+  assert.equal(shellWrite.id, 12);
+  assert.equal(shellWrite.method, METHOD_PROJECT_SHELL_SESSION_WRITE);
+  assert.deepEqual(shellWrite.params, {
+    sessionId: "project-shell-1",
+    data: "pwd\r",
+  });
+  assert.equal(shellResize.id, 13);
+  assert.equal(shellResize.method, METHOD_PROJECT_SHELL_SESSION_RESIZE);
+  assert.deepEqual(shellResize.params, {
+    sessionId: "project-shell-1",
+    cols: 100,
+    rows: 24,
+  });
+  assert.equal(shellKill.id, 14);
+  assert.equal(shellKill.method, METHOD_PROJECT_SHELL_SESSION_KILL);
+  assert.deepEqual(shellKill.params, {
+    sessionId: "project-shell-1",
+  });
+  assert.equal(shellDrain.id, 15);
+  assert.equal(shellDrain.method, METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS);
+  assert.deepEqual(shellDrain.params, {
+    sessionId: "project-shell-1",
+    limit: 20,
   });
 });
 
@@ -1806,6 +1883,11 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
     { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
     { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
+    { method: METHOD_PROJECT_SHELL_SESSION_START, kind: "request" },
+    { method: METHOD_PROJECT_SHELL_SESSION_WRITE, kind: "request" },
+    { method: METHOD_PROJECT_SHELL_SESSION_RESIZE, kind: "request" },
+    { method: METHOD_PROJECT_SHELL_SESSION_KILL, kind: "request" },
+    { method: METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS, kind: "request" },
     { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
     { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
     { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
@@ -2076,6 +2158,26 @@ test("exports app-server method catalog with request and notification kinds", ()
   );
   assert.equal(
     isAppServerRequestMethod(METHOD_PROJECT_GIT_WORKTREE_CREATE),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_START),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_WRITE),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_RESIZE),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_KILL),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS),
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_EVIDENCE_EXPORT), true);
@@ -2718,6 +2820,20 @@ test("connection wraps capability list response", async () => {
             ],
           },
         ],
+        runtimeCapabilityManifest: {
+          schemaVersion: "lime-runtime-capability-manifest/v0.1",
+          runtimeId: "app-server",
+          sessionId: "sess_external",
+          generatedAt: "2026-06-12T00:00:00.000Z",
+          capabilities: [
+            {
+              id: "transport.jsonrpc",
+              status: "supported",
+              scope: "runtime",
+              title: "Agent Session",
+            },
+          ],
+        },
         nextCursor: "1",
       },
     },
@@ -2750,6 +2866,10 @@ test("connection wraps capability list response", async () => {
     limit: 1,
   });
   assert.equal(result.result.capabilities[0].id, "agent.session");
+  assert.equal(
+    result.result.runtimeCapabilityManifest.capabilities[0].id,
+    "transport.jsonrpc",
+  );
   assert.equal(
     result.result.capabilities[0].methods[0],
     METHOD_AGENT_SESSION_START,

@@ -38,8 +38,6 @@ pub fn runtime_event_type_from_backend_type(event_type: &str) -> String {
         "queue_started" => "queue.started",
         "queue_removed" => "queue.removed",
         "queue_cleared" => "queue.cleared",
-        "done" => "turn.done",
-        "final_done" => "turn.final_done",
         "error" => "runtime.error",
         "warning" => "runtime.warning",
         other => return other.replace('_', "."),

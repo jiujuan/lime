@@ -4,6 +4,12 @@ import type {
   AgentRuntimeExecutionEventStatus,
   AgentUiProjectionState,
 } from "@limecloud/agent-ui-contracts";
+import {
+  normalizeRuntimeStatusValue,
+  normalizeRuntimeTurnTerminalEventClass,
+  runtimeStatusForTerminalEventClass,
+  runtimeTurnTerminalProjectionFromStatus,
+} from "@limecloud/agent-ui-contracts";
 
 import {
   compactProjectionFields,
@@ -214,6 +220,11 @@ function projectAppServerEventToExecutionEvent(
   event: AppServerAgentEventFact,
 ): AgentRuntimeExecutionEvent {
   const payload = readRecord(event.payload) ?? {};
+  const payloadStatus = readStringField(payload, [
+    "status",
+    "runtime_status",
+    "state",
+  ]);
   const eventClass = normalizeEventClass(event.type);
   const text = readText(payload);
   const actionId = readStringField(payload, [
@@ -241,11 +252,16 @@ function projectAppServerEventToExecutionEvent(
     readStringField(payload, ["evidenceId", "evidence_id"]),
   ]);
 
+  const projectedStatus =
+    runtimeTurnTerminalProjectionFromStatus(payloadStatus)?.status ??
+    statusFromDomainPayloadStatus(payloadStatus) ??
+    statusForEventClass(eventClass);
+
   return compactProjectionFields({
     id: `appserver:${event.eventId}`,
     schemaVersion: "lime-runtime-event/v0.1",
     kind: kindForEventClass(eventClass),
-    status: statusForEventClass(eventClass),
+    status: projectedStatus,
     eventClass,
     runtimeId: "app-server",
     threadId: event.threadId ?? event.sessionId,
@@ -289,18 +305,23 @@ function projectAppServerTurnToExecutionEvent(
   session: AppServerAgentSessionFact,
   index: number,
 ): AgentRuntimeExecutionEvent {
-  const eventClass = eventClassForTurnStatus(turn.status);
+  const eventClass = eventClassForTurnSnapshotStatus(turn.status);
+  const terminalProjection = runtimeTurnTerminalProjectionFromStatus(
+    turn.status,
+  );
   return compactProjectionFields({
     id: `appserver:turn:${turn.turnId}:status:${turn.status ?? "unknown"}`,
     schemaVersion: "lime-runtime-event/v0.1",
     kind: "state",
-    status: statusFromTurnStatus(turn.status),
+    status:
+      terminalProjection?.status ??
+      statusFromTurnSnapshotStatus(turn.status),
     eventClass,
     runtimeId: "app-server",
     threadId: turn.threadId ?? session.threadId,
     turnId: turn.turnId,
     sequence: index + 1,
-    phase: phaseForEventClass(eventClass),
+    phase: terminalProjection?.phase ?? phaseForEventClass(eventClass),
     title: titleForTurnStatus(turn.status),
     detail: turn.status,
     payload: compactProjectionFields({
@@ -398,6 +419,8 @@ function projectAppServerEvidencePackToExecutionEvents(
 }
 
 function normalizeEventClass(type: string): string {
+  const terminalEventClass = normalizeRuntimeTurnTerminalEventClass(type);
+  if (terminalEventClass) return terminalEventClass;
   if (type === "message.delta_batch" || type === "message.batch") {
     return "model.delta";
   }
@@ -412,16 +435,44 @@ function normalizeEventClass(type: string): string {
   if (type === "thinking.delta") return "reasoning.delta";
   if (type === "artifact.snapshot") return "artifact.changed";
   if (type === "runtime.status") return "run.status";
-  if (type === "turn.done" || type === "turn.final_done") {
-    return "turn.completed";
-  }
-  if (type === "turn.cancelled") return "turn.canceled";
   return type;
 }
 
-function kindForEventClass(
-  eventClass: string,
-): AgentRuntimeExecutionEventKind {
+function normalizeStatus(value: string | undefined): string | undefined {
+  return normalizeRuntimeStatusValue(value);
+}
+
+function statusFromDomainPayloadStatus(
+  status: string | undefined,
+): AgentRuntimeExecutionEventStatus | undefined {
+  const normalized = normalizeStatus(status);
+  switch (normalized) {
+    case "failed":
+    case "error":
+    case "expired":
+    case "closed":
+    case "aborted":
+    case "cancelled":
+    case "not_found":
+      return "failed";
+    case "completed":
+    case "done":
+    case "success":
+      return "completed";
+    case "blocked":
+    case "waiting":
+    case "needs_input":
+      return "blocked";
+    case "running":
+    case "queued":
+    case "pending":
+      return "running";
+    default:
+      return undefined;
+  }
+}
+
+function kindForEventClass(eventClass: string): AgentRuntimeExecutionEventKind {
   if (eventClass.startsWith("model.")) return "model";
   if (eventClass.startsWith("reasoning.")) return "note";
   if (eventClass.startsWith("tool.")) return "tool";
@@ -442,7 +493,12 @@ function kindForEventClass(
 function statusForEventClass(
   eventClass: string,
 ): AgentRuntimeExecutionEventStatus {
-  if (eventClass.endsWith(".failed") || eventClass === "runtime.error") {
+  const terminalStatus = runtimeStatusForTerminalEventClass(eventClass);
+  if (terminalStatus) return terminalStatus;
+  if (
+    eventClass.endsWith(".failed") ||
+    eventClass === "runtime.error"
+  ) {
     return "failed";
   }
   if (eventClass === "action.required" || eventClass === "handoff.requested") {
@@ -457,40 +513,54 @@ function statusForEventClass(
   ) {
     return "completed";
   }
-  if (eventClass === "turn.canceled") return "failed";
   return "running";
 }
 
 function statusFromSessionStatus(
   status: string | undefined,
 ): AgentRuntimeExecutionEventStatus {
-  if (status === "completed" || status === "idle") return "completed";
-  if (status === "failed" || status === "canceled") return "failed";
+  const normalized = normalizeStatus(status);
+  const terminalStatus = runtimeTurnTerminalProjectionFromStatus(
+    normalized,
+  )?.status;
+  if (terminalStatus) return terminalStatus;
+  if (normalized === "completed" || normalized === "idle") return "completed";
   if (status === "waitingAction") return "blocked";
-  if (status === "running") return "running";
+  if (normalized === "running") return "running";
   return "pending";
 }
 
-function statusFromTurnStatus(
+function statusFromTurnSnapshotStatus(
   status: string | undefined,
 ): AgentRuntimeExecutionEventStatus {
-  if (status === "completed") return "completed";
-  if (status === "failed" || status === "canceled") return "failed";
+  const normalized = normalizeStatus(status);
+  const terminalStatus = runtimeTurnTerminalProjectionFromStatus(
+    normalized,
+  )?.status;
+  if (terminalStatus) return terminalStatus;
   if (status === "waitingAction") return "pending";
-  if (status === "running" || status === "accepted") return "running";
+  if (normalized === "running" || normalized === "accepted") return "running";
   return "pending";
 }
 
-function eventClassForTurnStatus(status: string | undefined): string {
-  if (status === "completed") return "turn.completed";
-  if (status === "failed") return "turn.failed";
-  if (status === "canceled") return "turn.canceled";
+function eventClassForTurnSnapshotStatus(status: string | undefined): string {
+  const terminalEventClass =
+    runtimeTurnTerminalProjectionFromStatus(status)?.eventClass;
+  if (terminalEventClass) return terminalEventClass;
+  const normalized = normalizeStatus(status);
   if (status === "waitingAction") return "action.required";
-  if (status === "running" || status === "accepted") return "turn.started";
+  if (normalized === "running" || normalized === "accepted") {
+    return "turn.started";
+  }
   return "turn.submitted";
 }
 
 function phaseForEventClass(eventClass: string): string {
+  const terminalPhase =
+    runtimeTurnTerminalProjectionFromStatus(
+      runtimeStatusForTerminalEventClass(eventClass),
+    )?.phase;
+  if (terminalPhase) return terminalPhase;
   if (eventClass === "action.required") return "action_required";
   if (eventClass.endsWith(".failed") || eventClass === "runtime.error") {
     return "failed";
@@ -595,10 +665,8 @@ function isActionEvent(eventClass: string): boolean {
 }
 
 function isCompletedEvent(eventClass: string): boolean {
-  return (
-    statusForEventClass(eventClass) === "completed" ||
-    statusForEventClass(eventClass) === "failed"
-  );
+  const status = statusForEventClass(eventClass);
+  return status === "completed" || status === "failed" || status === "canceled";
 }
 
 function normalizeRefs(values: Array<string | undefined>): string[] {
@@ -625,11 +693,12 @@ function compareEvents(
   left: AgentRuntimeExecutionEvent,
   right: AgentRuntimeExecutionEvent,
 ): number {
-  const leftSequence = readNumberField({ sequence: left.sequence }, ["sequence"]);
-  const rightSequence = readNumberField(
-    { sequence: right.sequence },
-    ["sequence"],
-  );
+  const leftSequence = readNumberField({ sequence: left.sequence }, [
+    "sequence",
+  ]);
+  const rightSequence = readNumberField({ sequence: right.sequence }, [
+    "sequence",
+  ]);
   if (leftSequence !== undefined && rightSequence !== undefined) {
     return leftSequence - rightSequence;
   }

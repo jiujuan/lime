@@ -12,12 +12,23 @@ function createStateSetter<T>(getValue: () => T, setValue: (value: T) => void) {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("runAgentStreamCompaction", () => {
   it("应监听 compaction 事件并同步 turn/item 状态", async () => {
     let activeStream: ActiveStreamState | null = null;
     let currentTurnId: string | null = null;
     let threadItems: AgentThreadItem[] = [];
     let threadTurns: AgentThreadTurn[] = [];
+    const setIsSending = vi.fn();
     const listeners = new Map<string, () => void>();
     const notify = {
       info: vi.fn(),
@@ -25,6 +36,7 @@ describe("runAgentStreamCompaction", () => {
       error: vi.fn(),
     };
     let handler: ((event: { payload: unknown }) => void) | null = null;
+    const deferredCompaction = createDeferred<void>();
 
     const runtime: AgentRuntimeAdapter = {
       init: vi.fn(),
@@ -38,7 +50,7 @@ describe("runAgentStreamCompaction", () => {
       setSessionExecutionStrategy: vi.fn(),
       setSessionProviderSelection: vi.fn(),
       submitOp: vi.fn(),
-      compactSession: vi.fn(async () => undefined),
+      compactSession: vi.fn(() => deferredCompaction.promise),
       interruptTurn: vi.fn(),
       resumeThread: vi.fn(),
       promoteQueuedTurn: vi.fn(),
@@ -51,7 +63,7 @@ describe("runAgentStreamCompaction", () => {
       listenToTeamEvents: vi.fn(),
     };
 
-    await runAgentStreamCompaction({
+    const compactionPromise = runAgentStreamCompaction({
       runtime,
       sessionId: "session-1",
       warnedKeysRef: { current: new Set() },
@@ -71,6 +83,7 @@ describe("runAgentStreamCompaction", () => {
         }
       },
       removeStreamListener: (eventName) => listeners.delete(eventName),
+      setIsSending,
       setCurrentTurnId: createStateSetter(
         () => currentTurnId,
         (value) => {
@@ -93,6 +106,7 @@ describe("runAgentStreamCompaction", () => {
       createEventName: () => "compaction-event-1",
       createAssistantMessageId: () => "context_compaction:test",
     });
+    await Promise.resolve();
 
     expect(runtime.compactSession).toHaveBeenCalledWith(
       "session-1",
@@ -150,7 +164,17 @@ describe("runAgentStreamCompaction", () => {
     });
     emit({
       payload: {
-        type: "final_done",
+        type: "turn_completed",
+        turn: {
+          id: "turn-1",
+          thread_id: "session-1",
+          prompt_text: "压缩上下文",
+          status: "completed",
+          started_at: "2026-03-29T00:00:00.000Z",
+          completed_at: "2026-03-29T00:00:03.000Z",
+          created_at: "2026-03-29T00:00:00.000Z",
+          updated_at: "2026-03-29T00:00:03.000Z",
+        },
       },
     });
 
@@ -158,7 +182,7 @@ describe("runAgentStreamCompaction", () => {
     expect(threadTurns).toEqual([
       expect.objectContaining({
         id: "turn-1",
-        status: "running",
+        status: "completed",
       }),
     ]);
     expect(threadItems).toEqual([
@@ -170,11 +194,16 @@ describe("runAgentStreamCompaction", () => {
     ]);
     expect(notify.warning).toHaveBeenCalledWith("注意摘要精度");
     expect(activeStream).toBeNull();
+    expect(setIsSending).toHaveBeenCalledWith(false);
+
+    deferredCompaction.resolve();
+    await compactionPromise;
     expect(listeners.has("compaction-event-1")).toBe(false);
   });
 
   it("收到 error 事件时应报错并清理 active stream", async () => {
     let activeStream: ActiveStreamState | null = null;
+    const setIsSending = vi.fn();
     const notify = {
       info: vi.fn(),
       warning: vi.fn(),
@@ -211,6 +240,7 @@ describe("runAgentStreamCompaction", () => {
         }
       },
       removeStreamListener: (eventName) => listeners.delete(eventName),
+      setIsSending,
       setCurrentTurnId: vi.fn(),
       setThreadItems: vi.fn(),
       setThreadTurns: vi.fn(),

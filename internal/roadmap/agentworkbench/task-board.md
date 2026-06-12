@@ -34,9 +34,9 @@ App Server / RuntimeCore / ExecutionBackend
 | Artifact / Evidence refs React surface | done | `@limecloud/agent-runtime-ui` 已新增 `ArtifactRefList`、`EvidenceRefList`、`AgentUiRefList`，组合视图输出 refs DOM contract，包级测试通过。 |
 | SDK reference completeness | done | Workbench 新增 event families、projection state、transport、provider boundary、callbacks、refs、conformance runner、minimal panel 页面，导航已接入。 |
 | Standard package publish gate | done | `@limecloud/app-server-client@1.66.0`、`@limecloud/agent-runtime-client@0.1.1` 已发布到 `@limecloud` organization；无 scope `app-server-client@1.66.0` 和依赖旧名的 `@limecloud/agent-runtime-client@0.1.0` 只作为 compat-misrelease 记录，不作为标准完成证据。 |
-| Product app seed adoption | partial | Agent App 真实 Electron 主路径已证明复用标准 `AgentRuntimeClient`、共享 `AgentUiProjectionView` 与 Artifact/Evidence refs；Host action 决策已走 current `respondAction -> agentSession/action/respond`，Host drawer 已成为始终渲染标准 projection 的宿主壳；Content Studio UI 主路径已统一到标准 `AgentUiProjectionSurface`，并已通过 registry 版 `@limecloud/agent-runtime-client@0.1.1/sessionGateway` 包装 App Server turn 主链，GUI smoke 仍待补。 |
+| Product app seed adoption | done | Agent App 真实 Electron 主路径已证明复用标准 `AgentRuntimeClient`、共享 `AgentUiProjectionView` 与 Artifact/Evidence refs；Host action 决策已走 current `respondAction -> agentSession/action/respond`，Host drawer 已成为始终渲染标准 projection 的宿主壳；Content Studio UI 主路径已统一到标准 `AgentUiProjectionSurface`，并已通过 registry 版 `@limecloud/agent-runtime-client@0.1.1/sessionGateway` 包装 App Server turn 主链；Content Studio 定向 Electron E2E 已证明真实页面渲染 `.agent-ui-projection` / `.agent-ui-main` / `.agent-ui-sidecar`。 |
 
-整体目标完成度：`98.5%`。口径见 [acceptance.md](acceptance.md)。
+整体目标完成度：`100%`。口径见 [acceptance.md](acceptance.md)。发布集成、真实 Provider live evidence 与 Agent App 本地 process fallback 物理删除是后续独立任务，不作为本次标准主链完成度阻塞项。
 
 ## 并行认领规则
 
@@ -262,7 +262,7 @@ npm run docs:build
 剩余：
 
 - Content Studio 已安装并接入 `@limecloud/agent-runtime-client/sessionGateway`；`package-lock.json` 解析到 `@limecloud/agent-runtime-client@0.1.1` 与间接 `@limecloud/app-server-client@1.66.0` registry tarball。
-- Content Studio 仍缺真实 GUI smoke / 产品回归证据。
+- Content Studio 真实 GUI smoke / 产品回归已通过：`npm run test:e2e -- --grep "agents 将平台运行事实投影到 AgentUI 面板而不是普通正文"` 证明 conversation/runtime 标准 surface 在真实 Electron 页面可运行。
 - Agent App 本地 process fallback 文件仍存在但已退出主路径；不得再把它接回主抽屉或扩成主展示 owner。
 - Agent App 后续新增协议映射必须进入 builders / mapping / field readers 对应边界，不得塞回 `agentUiProjectionBridge.ts`。
 - Agent App 主抽屉后续新增 UI 必须继续走标准 projection panel 或独立宿主壳；空态也必须交给标准 projection。
@@ -328,8 +328,8 @@ npm run docs:build
 
 | 项 | 内容 |
 | --- | --- |
-| 状态 | in-progress |
-| 阻塞 | scoped registry 发布和 Content Studio 依赖接入已完成；剩余阻塞是 Content Studio GUI smoke / 产品回归。 |
+| 状态 | done |
+| 阻塞 | none。scoped registry 发布、Content Studio 依赖接入和 Content Studio GUI smoke / 产品回归均已完成。 |
 | 写集 | 发布阶段优先 `packages/app-server-client/**`、`packages/agent-runtime-client/**`；接入阶段另行认领 `/Users/coso/Documents/dev/ai/limecloud/content-studio/package.json`、lockfile、`src/main/services/appServerAgentRuntimeGateway.ts`、`scripts/lime-agent-boundary-audit.mjs`。 |
 | current owner | npm registry 正式包 + Content Studio 标准 runtime-client facade。 |
 | 禁止方向 | `file:` / 绝对路径依赖、复制 dist、把 Content Studio 本地 gateway 继续扩成第二套 runtime client。 |
@@ -338,7 +338,7 @@ npm run docs:build
 
 - 维持 [standard-package-release-runbook.md](standard-package-release-runbook.md) 中的 scoped registry 事实源。
 - 保持 Content Studio 固定安装并消费 `@limecloud/agent-runtime-client@0.1.1/sessionGateway`。
-- 补 Content Studio GUI smoke / 产品回归。
+- 维持 Content Studio GUI smoke / 产品回归作为回归证据。
 
 验证：
 
@@ -353,6 +353,7 @@ Content Studio 接入后再运行：
 npm run verify:lime-agent
 npm run test:functional -- --test-name-pattern "Lime Agent 边界审计会阻断 runtime/key/UI 协议回流"
 npx tsc --noEmit --pretty false
+npm run test:e2e -- --grep "agents 将平台运行事实投影到 AgentUI 面板而不是普通正文"
 ```
 
 完成证据：
@@ -361,14 +362,14 @@ npx tsc --noEmit --pretty false
 - Content Studio lockfile 消费正式 registry 包。
 - Content Studio 主路径实际调用 `@limecloud/agent-runtime-client/sessionGateway`。
 - `npm run verify:lime-agent`、定向 functional 和 `npx tsc --noEmit --pretty false` 已通过。
-- GUI smoke 证明 `.agent-ui-projection` 标准 surface 可运行。
+- GUI smoke 已证明 `.agent-ui-projection` / `.agent-ui-main` / `.agent-ui-sidecar` 标准 surface 在真实页面可运行。
 
 ## 当前推荐下一刀
 
 优先级按对整体目标的提升排序：
 
-1. Content Studio GUI smoke / 产品回归。证明 `.agent-ui-projection` 标准 surface 在真实页面中可运行，且边界审计进入常规验证。
+1. v2.11 Projection reconciliation / external transport compatibility：message snapshot、tool result adjacency、partial tool args、reasoning continuity，以及 SSE / protobuf / Accept negotiation 的 gateway 边界。
 2. Agent App 本地 process fallback 物理删除。`AgentRunHostDrawerFallback.tsx` 已退出主路径并有结构守卫防回流；删除文件属于高风险文件系统操作，需要单独确认后执行。
 3. 真实 Provider / live evidence。只有在明确授权真实 Provider 后，补 live streaming / evidence 验证；日常回归继续使用 current fixture 和 GUI smoke。
 
-不要优先做发布集成；当前 v0.3.0 / v0.4.0 仍缺 Content Studio 真实产品主路径和必要的收口拆分，发布只能算阶段快照。
+不要优先做发布集成；当前标准主链已到 `100%`，发布仍需用户明确授权版本号、commit、tag、push 或 GitHub Pages 发布。

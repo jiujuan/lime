@@ -636,6 +636,8 @@ export function useWorkspaceConversationSceneRuntime({
   };
 
   const navbarUtilityActionsVisible = !suppressNavbarUtilityActions;
+  const taskCenterUtilityActionsVisible =
+    navbarUtilityActionsVisible || navbarContextVariant === "task-center";
   const shouldSyncCanvasWorkbenchLayoutMode =
     !isThemeWorkbench &&
     activeTheme === "general" &&
@@ -860,6 +862,7 @@ export function useWorkspaceConversationSceneRuntime({
           : handleOpenProjectConversation,
       projectId,
       openedProjects,
+      projectRootPath,
       deferWorkspaceListLoad,
       workspaceHintMessage,
       workspaceHintVisible,
@@ -902,19 +905,19 @@ export function useWorkspaceConversationSceneRuntime({
       layoutMode,
       onToggleCanvas: handleToggleCanvas,
       onBackHome: handleBackHome,
-      showHarnessToggle: navbarUtilityActionsVisible && showHarnessToggle,
+      showHarnessToggle: taskCenterUtilityActionsVisible && showHarnessToggle,
       harnessPanelVisible:
-        navbarUtilityActionsVisible && navbarHarnessPanelVisible,
-      onToggleHarnessPanel: navbarUtilityActionsVisible
+        taskCenterUtilityActionsVisible && navbarHarnessPanelVisible,
+      onToggleHarnessPanel: taskCenterUtilityActionsVisible
         ? handleToggleHarnessPanel
         : undefined,
-      harnessPendingCount: navbarUtilityActionsVisible
+      harnessPendingCount: taskCenterUtilityActionsVisible
         ? harnessPendingCount
         : 0,
-      harnessAttentionLevel: navbarUtilityActionsVisible
+      harnessAttentionLevel: taskCenterUtilityActionsVisible
         ? harnessAttentionLevel
         : "idle",
-      harnessToggleLabel: navbarUtilityActionsVisible
+      harnessToggleLabel: taskCenterUtilityActionsVisible
         ? harnessToggleLabel
         : undefined,
       showContextCompactionAction:

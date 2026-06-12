@@ -14,7 +14,14 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AppServerRequestError } from "@limecloud/app-server-client";
+import {
+  AppServerRequestError,
+  METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
+  METHOD_PROJECT_SHELL_SESSION_KILL,
+  METHOD_PROJECT_SHELL_SESSION_RESIZE,
+  METHOD_PROJECT_SHELL_SESSION_START,
+  METHOD_PROJECT_SHELL_SESSION_WRITE,
+} from "@limecloud/app-server-client";
 import { ElectronHostCommands } from "./hostCommands";
 import type { ElectronAppServerHost } from "./appServerHost";
 
@@ -33,6 +40,8 @@ const {
   globalShortcutIsRegisteredMock,
   showOpenDialogMock,
   showItemInFolderMock,
+  openProjectPathWithLocalToolMock,
+  runProjectShellCommandMock,
 } = vi.hoisted(() => {
   const loadUrlMock = vi.fn();
   const showWindowMock = vi.fn();
@@ -63,6 +72,8 @@ const {
     focusWindowMock,
     showOpenDialogMock: vi.fn(),
     showItemInFolderMock: vi.fn(),
+    openProjectPathWithLocalToolMock: vi.fn(),
+    runProjectShellCommandMock: vi.fn(),
   };
 });
 const tempDirs: string[] = [];
@@ -95,6 +106,16 @@ vi.mock("./electronRuntime", () => ({
     showItemInFolder: showItemInFolderMock,
   },
 }));
+
+vi.mock("./projectToolsHost", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./projectToolsHost")>();
+  return {
+    ...actual,
+    openProjectPathWithLocalTool: openProjectPathWithLocalToolMock,
+    runProjectShellCommand: runProjectShellCommandMock,
+  };
+});
 
 function createHost(
   userDataDir: string,
@@ -236,6 +257,7 @@ function buildAgentAppShellDescriptor(): Record<string, unknown> {
 }
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.clearAllMocks();
   browserWindowGetAllWindowsMock.mockReturnValue([]);
   globalShortcutIsRegisteredMock.mockReturnValue(false);
@@ -900,6 +922,268 @@ describe("ElectronHostCommands local file shell facade", () => {
     await expect(
       host.invoke("open_with_default_app", { path: "/tmp/missing.txt" }),
     ).rejects.toThrow("Cannot open file");
+  });
+
+  it("open_project_path_with_tool 应按工具类型走 Electron shell 或本地工具封装", async () => {
+    openPathMock.mockResolvedValueOnce("");
+    openProjectPathWithLocalToolMock.mockResolvedValue(undefined);
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("open_project_path_with_tool", {
+        rootPath: "/tmp/project",
+        tool: "finder",
+      }),
+    ).resolves.toEqual({});
+    await expect(
+      host.invoke("open_project_path_with_tool", {
+        rootPath: "/tmp/project",
+        tool: "terminal",
+      }),
+    ).resolves.toEqual({});
+
+    expect(openPathMock).toHaveBeenCalledWith("/tmp/project");
+    expect(openProjectPathWithLocalToolMock).toHaveBeenCalledWith(
+      "/tmp/project",
+      "terminal",
+    );
+  });
+
+  it("run_project_shell_command 应走项目 Shell current 封装并归一化 timeout", async () => {
+    runProjectShellCommandMock.mockResolvedValueOnce({
+      command: "pwd",
+      cwd: "/tmp/project",
+      exitCode: 0,
+      stdout: "/tmp/project\n",
+      stderr: "",
+      durationMs: 10,
+      timedOut: false,
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("run_project_shell_command", {
+        rootPath: "/tmp/project",
+        command: " pwd ",
+        timeoutMs: 10,
+      }),
+    ).resolves.toMatchObject({ command: "pwd", exitCode: 0 });
+
+    expect(runProjectShellCommandMock).toHaveBeenCalledWith({
+      cwd: "/tmp/project",
+      command: "pwd",
+      timeoutMs: 1000,
+    });
+  });
+
+  it("project_shell_session_* 应委托 App Server PTY current 通道", async () => {
+    const emit = vi.fn();
+    const request = vi.fn(async (method: string) => {
+      if (method === METHOD_PROJECT_SHELL_SESSION_START) {
+        return {
+          sessionId: "project-shell-1",
+          cwd: "/tmp/project",
+          shell: "/bin/zsh",
+          title: "Shell: project",
+          localEcho: false,
+          tty: true,
+          pid: 123,
+        };
+      }
+      return {};
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir, emit, request);
+
+    await expect(
+      host.invoke("project_shell_session_start", {
+        rootPath: "/tmp/project",
+        cols: 120,
+        rows: 14,
+      }),
+    ).resolves.toMatchObject({
+      sessionId: "project-shell-1",
+      tty: true,
+    });
+    await expect(
+      host.invoke("project_shell_session_write", {
+        sessionId: "project-shell-1",
+        data: "ls\r",
+      }),
+    ).resolves.toEqual({});
+    await expect(
+      host.invoke("project_shell_session_resize", {
+        sessionId: "project-shell-1",
+        cols: 100,
+        rows: 20,
+      }),
+    ).resolves.toEqual({});
+    await expect(
+      host.invoke("project_shell_session_kill", {
+        sessionId: "project-shell-1",
+      }),
+    ).resolves.toEqual({});
+
+    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_START, {
+      rootPath: "/tmp/project",
+      cols: 120,
+      rows: 14,
+    });
+    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_WRITE, {
+      sessionId: "project-shell-1",
+      data: "ls\r",
+    });
+    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_RESIZE, {
+      sessionId: "project-shell-1",
+      cols: 100,
+      rows: 20,
+    });
+    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_KILL, {
+      sessionId: "project-shell-1",
+    });
+  });
+
+  it("project shell event drain 应转发到前端事件通道", async () => {
+    vi.useFakeTimers();
+    const emit = vi.fn();
+    const request = vi.fn(async (method: string) => {
+      if (method === METHOD_PROJECT_SHELL_SESSION_START) {
+        return {
+          sessionId: "project-shell-1",
+          cwd: "/tmp/project",
+          shell: "/bin/zsh",
+          title: "Shell: project",
+          localEcho: false,
+          tty: true,
+          pid: 123,
+        };
+      }
+      if (method === METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS) {
+        return {
+          events: [
+            {
+              type: "data",
+              sessionId: "project-shell-1",
+              stream: "stdout",
+              data: "hello",
+            },
+            {
+              type: "exit",
+              sessionId: "project-shell-1",
+              exitCode: 0,
+              signal: null,
+            },
+          ],
+        };
+      }
+      return {};
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir, emit, request);
+
+    await host.invoke("project_shell_session_start", {
+      rootPath: "/tmp/project",
+      cols: 120,
+      rows: 14,
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    vi.useRealTimers();
+
+    expect(request).toHaveBeenCalledWith(
+      METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
+      { sessionId: "project-shell-1", limit: 200 },
+    );
+    expect(emit).toHaveBeenCalledWith("project-shell-session-event", {
+      type: "data",
+      sessionId: "project-shell-1",
+      stream: "stdout",
+      data: "hello",
+    });
+  });
+
+  it("project shell 写入后应主动 drain 并转发输出", async () => {
+    const emit = vi.fn();
+    const request = vi.fn(async (method: string) => {
+      if (method === METHOD_PROJECT_SHELL_SESSION_START) {
+        return {
+          sessionId: "project-shell-1",
+          cwd: "/tmp/project",
+          shell: "/bin/zsh",
+          title: "coso@host: project",
+          localEcho: false,
+          tty: true,
+          pid: 123,
+        };
+      }
+      if (method === METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS) {
+        return {
+          events: [
+            {
+              type: "data",
+              sessionId: "project-shell-1",
+              stream: "stdout",
+              data: "__lime_shell_e2e__\n",
+            },
+          ],
+        };
+      }
+      return {};
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir, emit, request);
+
+    await host.invoke("project_shell_session_start", {
+      rootPath: "/tmp/project",
+      cols: 120,
+      rows: 14,
+    });
+    await host.invoke("project_shell_session_write", {
+      sessionId: "project-shell-1",
+      data: "printf '__lime_shell_e2e__\\n'\r",
+    });
+
+    expect(request).toHaveBeenCalledWith(
+      METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
+      { sessionId: "project-shell-1", limit: 200 },
+    );
+    expect(emit).toHaveBeenCalledWith("project-shell-session-event", {
+      type: "data",
+      sessionId: "project-shell-1",
+      stream: "stdout",
+      data: "__lime_shell_e2e__\n",
+    });
+  });
+
+  it("disposeProjectShellSessionsForShutdown 应结束 App Server PTY 会话", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === METHOD_PROJECT_SHELL_SESSION_START) {
+        return {
+          sessionId: "project-shell-1",
+          cwd: "/tmp/project",
+          shell: "/bin/zsh",
+          title: "Shell: project",
+          localEcho: false,
+          tty: true,
+          pid: 123,
+        };
+      }
+      return {};
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir, vi.fn(), request);
+
+    await host.invoke("project_shell_session_start", {
+      rootPath: "/tmp/project",
+      cols: 120,
+      rows: 14,
+    });
+    host.disposeProjectShellSessionsForShutdown();
+
+    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_KILL, {
+      sessionId: "project-shell-1",
+    });
   });
 
   it("get_file_icon_data_url 应通过 Electron 读取系统文件图标", async () => {

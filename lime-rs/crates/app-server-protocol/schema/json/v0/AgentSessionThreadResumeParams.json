@@ -1,6 +1,86 @@
 {
+  "$defs": {
+    "RuntimeResumeActionDecision": {
+      "properties": {
+        "actionId": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string"
+        },
+        "metadata": true,
+        "response": true
+      },
+      "required": [
+        "actionId",
+        "decision"
+      ],
+      "type": "object"
+    },
+    "RuntimeResumeContract": {
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "decisions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuntimeResumeActionDecision"
+          },
+          "type": "array"
+        },
+        "expiresAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "openActionIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resumeMode": {
+          "type": "string"
+        },
+        "runtimeId": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "createdAt",
+        "resumeMode",
+        "runtimeId",
+        "schemaVersion",
+        "sessionId",
+        "turnId"
+      ],
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "resumeContract": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimeResumeContract"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "sessionId": {
       "type": "string"
     }

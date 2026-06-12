@@ -7,6 +7,7 @@ import {
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
 import { safeListen } from "@/lib/dev-bridge";
 import { listenAgentRuntimeEvent } from "../agentRuntimeEvents";
+import { resetAgentRuntimeEventSequenceGatesForTests } from "./eventSequenceGate";
 import {
   appServerActionRespondParamsFromRequest,
   appServerTurnStartParamsFromRequest,
@@ -206,6 +207,35 @@ function appServerClientMock(): AgentRuntimeAppServerClient {
       messages: [],
       notifications: [],
     }),
+    listCapabilities: vi.fn().mockResolvedValue({
+      id: 1,
+      result: {
+        capabilities: [
+          {
+            id: "agent.session",
+            title: "Agent Session",
+            methods: ["agentSession/start", "agentSession/turn/start"],
+          },
+        ],
+        runtimeCapabilityManifest: {
+          schemaVersion: "lime-runtime-capability-manifest/v0.1",
+          runtimeId: "app-server",
+          sessionId: "session-1",
+          generatedAt: "2026-06-12T00:00:00.000Z",
+          capabilities: [
+            {
+              id: "transport.jsonrpc",
+              status: "supported",
+              scope: "runtime",
+              title: "Agent Session",
+            },
+          ],
+        },
+      },
+      response: { id: 1, result: {} },
+      messages: [],
+      notifications: [],
+    }),
   };
 }
 
@@ -392,6 +422,7 @@ function malformedAppServerResult<T>(
 describe("agentRuntime threadClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAgentRuntimeEventSequenceGatesForTests();
     vi.mocked(isAppServerBridgeAvailable).mockReturnValue(false);
     vi.mocked(safeListen).mockResolvedValue(vi.fn());
   });
@@ -465,6 +496,15 @@ describe("agentRuntime threadClient", () => {
     });
     expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
       sessionId: "session-1",
+      resumeContract: expect.objectContaining({
+        schemaVersion: "lime-runtime-resume-contract/v0.1",
+        runtimeId: "app-server",
+        sessionId: "session-1",
+        turnId: "thread",
+        resumeMode: "all-open-actions",
+        openActionIds: [],
+        decisions: [],
+      }),
     });
     expect(appServerClient.removeAgentSessionQueuedTurn).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -475,6 +515,58 @@ describe("agentRuntime threadClient", () => {
       queuedTurnId: "queued-1",
     });
     expect(invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("capability manifest 应消费 App Server current capability/list 合同", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createThreadClient({
+      appServerClient,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.getAgentRuntimeCapabilityManifest({
+        app_id: "agent-chat",
+        workspace_id: "workspace-1",
+        session_id: "session-1",
+        limit: 10,
+      }),
+    ).resolves.toMatchObject({
+      schemaVersion: "lime-runtime-capability-manifest/v0.1",
+      runtimeId: "app-server",
+      sessionId: "session-1",
+      capabilities: [
+        {
+          id: "transport.jsonrpc",
+          status: "supported",
+          scope: "runtime",
+        },
+      ],
+    });
+    expect(appServerClient.listCapabilities).toHaveBeenCalledWith({
+      appId: "agent-chat",
+      workspaceId: "workspace-1",
+      sessionId: "session-1",
+      limit: 10,
+    });
+  });
+
+  it("resume contract 未覆盖 open actions 时应在前端 current gateway fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createThreadClient({
+      appServerClient,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.resumeAgentRuntimeThread({
+        session_id: "session-1",
+        turn_id: "turn-1",
+        open_action_ids: ["action-1"],
+        decisions: [],
+      }),
+    ).rejects.toThrow("Invalid Agent Runtime resume contract");
+    expect(appServerClient.resumeAgentSessionThread).not.toHaveBeenCalled();
   });
 
   it("replay current 收到假成功或缺字段结果时应 fail closed", async () => {
@@ -1036,6 +1128,148 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server submit 返回未配对 tool.result 时不应投递到前端 stream event", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-orphan-tool-result",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "tool.result",
+              timestamp: "2026-06-06T00:00:00.000Z",
+              payload: {
+                toolCallId: "tool-orphan",
+                output: "should be blocked",
+              },
+            },
+          },
+        },
+      ],
+    });
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_message-orphan",
+      listener,
+    );
+
+    await client.submitAgentRuntimeTurn({
+      message: "生成草稿",
+      session_id: "session-1",
+      event_name: "aster_stream_message-orphan",
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+    unlisten();
+  });
+
+  it("App Server submit 应消费 runtime-client pipeline fan-out 后投递多个前端 stream event", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-1",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [
+        {
+          method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+          params: {
+            event: {
+              eventId: "evt-tool-completed",
+              sequence: 1,
+              sessionId: "session-1",
+              threadId: "thread-1",
+              turnId: "turn-1",
+              type: "tool.completed",
+              timestamp: "2026-06-06T00:00:00.000Z",
+              payload: {
+                toolCallId: "tool-fanout",
+                toolName: "search",
+                output: "done",
+              },
+            },
+          },
+        },
+      ],
+    });
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_message-fanout",
+      listener,
+    );
+
+    await client.submitAgentRuntimeTurn({
+      message: "生成草稿",
+      session_id: "session-1",
+      event_name: "aster_stream_message-fanout",
+    });
+
+    expect(listener.mock.calls.map(([event]) => event.payload.type)).toEqual([
+      "tool_start",
+      "tool_end",
+    ]);
+    expect(listener.mock.calls.map(([event]) => event.payload.tool_id)).toEqual([
+      "tool-fanout",
+      "tool-fanout",
+    ]);
+    unlisten();
+  });
+
   it("App Server submit 响应缺少 turn 时应使用请求 turn_id 注册事件路由", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
@@ -1148,7 +1382,7 @@ describe("agentRuntime threadClient", () => {
             sessionId: "session-1",
             threadId: "thread-1",
             turnId: "turn-1",
-            type: "turn.done",
+              type: "turn.completed",
             timestamp: "2026-06-06T00:00:02.000Z",
             payload: {},
           },
@@ -1186,7 +1420,7 @@ describe("agentRuntime threadClient", () => {
       });
       expect(listener).toHaveBeenCalledWith({
         payload: expect.objectContaining({
-          type: "done",
+          type: "turn_completed",
           event_id: "evt-drain-2",
           session_id: "session-1",
           turn_id: "turn-1",
@@ -1310,7 +1544,7 @@ describe("agentRuntime threadClient", () => {
               sessionId: "session-1",
               threadId: "thread-1",
               turnId: "turn-pending",
-              type: "turn.final_done",
+              type: "turn.completed",
               timestamp: "2026-06-06T00:00:01.000Z",
               payload: {},
             },
@@ -1447,6 +1681,103 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server drain 收到 legacy turn.final_done 不应关闭 current 路由", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-legacy",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+      response: {
+        id: 1,
+        result: {
+          turn: {
+            turnId: "turn-legacy",
+            sessionId: "session-1",
+            threadId: "thread-1",
+            status: "accepted",
+          },
+        },
+      },
+      messages: [],
+      notifications: [],
+    });
+    vi.mocked(appServerClient.drainEvents).mockResolvedValueOnce([
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-drain-legacy-final-done",
+            sequence: 2,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-legacy",
+            type: "turn.final_done",
+            timestamp: "2026-06-06T00:00:01.000Z",
+            payload: {},
+          },
+        },
+      },
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-drain-delta-after-legacy-final-done",
+            sequence: 3,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-legacy",
+            type: "message.delta",
+            timestamp: "2026-06-06T00:00:02.000Z",
+            payload: {
+              text: "仍应投递",
+            },
+          },
+        },
+      },
+    ]);
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+      enableAppServerEventDrain: true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "aster_stream_message-drain-legacy-final-done",
+      listener,
+    );
+
+    await client.submitAgentRuntimeTurn({
+      message: "生成草稿",
+      session_id: "session-1",
+      event_name: "aster_stream_message-drain-legacy-final-done",
+    });
+
+    await vi.waitFor(() => {
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "text_delta",
+          text: "仍应投递",
+          event_id: "evt-drain-delta-after-legacy-final-done",
+        }),
+      });
+    });
+    expect(listener).not.toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        event_id: "evt-drain-legacy-final-done",
+      }),
+    });
+
+    unlisten();
+  });
+
   it("App Server submit error 前的 notification 应先投递到当前前端 stream event", async () => {
     const appServerClient = appServerClientMock();
     const notifications = [
@@ -1530,8 +1861,12 @@ describe("agentRuntime threadClient", () => {
     });
     expect(listener).toHaveBeenCalledWith({
       payload: expect.objectContaining({
-        type: "error",
-        message: "external backend crashed after partial output",
+        type: "turn_failed",
+        turn: expect.objectContaining({
+          id: "turn-1",
+          status: "failed",
+          error_message: "external backend crashed after partial output",
+        }),
         event_id: "evt-error-failed",
         session_id: "session-1",
         turn_id: "turn-1",
@@ -1637,15 +1972,14 @@ describe("agentRuntime threadClient", () => {
 
     expect(listener).toHaveBeenCalledWith({
       payload: expect.objectContaining({
-        type: "turn_completed",
-        message: "user_cancelled",
+        type: "turn_canceled",
         event_id: "evt-canceled",
         session_id: "session-1",
         turn_id: "turn-1",
         turn: expect.objectContaining({
           id: "turn-1",
           status: "canceled",
-          error_message: "user_cancelled",
+          error_message: "本轮已中止",
         }),
       }),
     });
@@ -2066,11 +2400,16 @@ describe("agentRuntime threadClient", () => {
         },
       }),
     ).toMatchObject({
-      type: "error",
-      message: "standalone app-server backend is not configured",
+      type: "turn_failed",
       event_id: "evt-failed",
       session_id: "session-1",
       turn_id: "turn-1",
+      turn: {
+        id: "turn-1",
+        thread_id: "session-1",
+        status: "failed",
+        error_message: "standalone app-server backend is not configured",
+      },
     });
 
     expect(
@@ -2130,14 +2469,13 @@ describe("agentRuntime threadClient", () => {
         },
       }),
     ).toMatchObject({
-      type: "turn_completed",
-      message: "user_cancelled",
+      type: "turn_canceled",
       turn: {
         id: "turn-1",
         thread_id: "session-1",
         prompt_text: "",
         status: "canceled",
-        error_message: "user_cancelled",
+        error_message: "本轮已中止",
       },
       event_id: "evt-canceled",
       session_id: "session-1",

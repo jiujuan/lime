@@ -155,6 +155,14 @@ export const MENTION_USAGE_REQUEST_FIELDS: Readonly<
     "usage",
     "count",
   ],
+  resource_search_task: [
+    "prompt",
+    "query",
+    "usage",
+    "count",
+    "resource_type",
+    "title",
+  ],
   transcription_task: [
     "prompt",
     "source_url",

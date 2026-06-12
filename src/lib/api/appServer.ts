@@ -204,6 +204,8 @@ import {
   type CapabilityDescriptor,
   type CapabilityListParams,
   type CapabilityListResponse,
+  type RuntimeCapabilityManifest,
+  type RuntimeResumeContract,
   type ClientCapabilities,
   type ClientInfo,
   type EvidenceExportParams,
@@ -593,6 +595,8 @@ export type AppServerBusinessObjectRef = BusinessObjectRef;
 export type AppServerCapabilityListParams = CapabilityListParams;
 export type AppServerCapabilityDescriptor = CapabilityDescriptor;
 export type AppServerCapabilityListResponse = CapabilityListResponse;
+export type AppServerRuntimeCapabilityManifest = RuntimeCapabilityManifest;
+export type AppServerRuntimeResumeContract = RuntimeResumeContract;
 export type AppServerArtifactReadParams = ArtifactReadParams;
 export type AppServerArtifactContentStatus = ArtifactContentStatus;
 export type AppServerArtifactSummary = ArtifactSummary;

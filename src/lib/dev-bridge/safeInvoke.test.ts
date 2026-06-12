@@ -332,6 +332,33 @@ describe("safeListen / safeEmit", () => {
     expect(unlisten).toHaveBeenCalledTimes(1);
   });
 
+  it("devBridgeFallback Electron bridge 下事件监听应走 HTTP 事件通道", async () => {
+    const unlisten = vi.fn();
+    const listen = vi.fn();
+    mocks.hasDevBridgeEventListenerCapability.mockReturnValue(true);
+    mocks.listenViaHttpEvent.mockResolvedValueOnce(unlisten);
+    (window as any).electronAPI = {
+      devBridgeFallback: true,
+      invoke: vi.fn(),
+      listen,
+      emit: vi.fn(),
+    };
+
+    const safeUnlisten = await safeListen(
+      "project-shell-session-event",
+      vi.fn(),
+    );
+
+    safeUnlisten();
+
+    expect(listen).not.toHaveBeenCalled();
+    expect(mocks.listenViaHttpEvent).toHaveBeenCalledWith(
+      "project-shell-session-event",
+      expect.any(Function),
+    );
+    expect(unlisten).toHaveBeenCalledTimes(1);
+  });
+
   it("HTTP event bridge 失败时直接抛错，不回退 mock event", async () => {
     mocks.hasDevBridgeEventListenerCapability.mockReturnValue(true);
     mocks.listenViaHttpEvent.mockRejectedValueOnce(

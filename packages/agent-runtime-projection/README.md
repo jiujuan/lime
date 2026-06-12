@@ -263,6 +263,7 @@ hydrate(read model / fixture / App Server facts)
 | Sequence | projection 按输入顺序保留 timeline，fixture validation 负责发现非法 sequence gap。 |
 | Stream merge | `model.delta` / `reasoning.*` 合并为稳定 `UIMessagePart`，final text 不重复追加。 |
 | Snapshot repair | snapshot / read model 只能修复可见状态，不能让 UI 猜测 tool/action/artifact 终态。 |
+| State delta | `state.delta` 按 RFC 6902 patch 修复 projection / readModel 子树；batch 与 incremental apply 等价，失败进入 stale diagnostics，后续同子树 runtime facts 优先。 |
 | Subagents model | `subagents` 由 projection 构建；React 和产品应用不能再私有过滤 graph/read model。 |
 | Reset | `reset()` 清空 events、read model 和 ephemeral UI。 |
 

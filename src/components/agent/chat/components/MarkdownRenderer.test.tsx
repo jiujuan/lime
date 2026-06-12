@@ -490,9 +490,7 @@ describe("MarkdownRenderer", () => {
   });
 
   it("http/https 图片点击应交给系统浏览器 current 网关", async () => {
-    const originalWindowOpen = window.open;
-    const windowOpen = vi.fn();
-    window.open = windowOpen as unknown as typeof window.open;
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
 
     try {
       const container = render("![远程图](https://cdn.example.com/hero.png)");
@@ -516,18 +514,16 @@ describe("MarkdownRenderer", () => {
       );
       expect(windowOpen).not.toHaveBeenCalled();
     } finally {
-      window.open = originalWindowOpen;
+      windowOpen.mockRestore();
     }
   });
 
   it("Desktop Host 下 base64 图片点击不应回退 window.open", () => {
     vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(true);
-    const originalWindowOpen = window.open;
-    const windowOpen = vi.fn();
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    window.open = windowOpen as unknown as typeof window.open;
 
     try {
       const container = render("![示例图](data:image/png;base64,ZmFrZQ==)");
@@ -543,19 +539,17 @@ describe("MarkdownRenderer", () => {
         "data:image/png;base64,ZmFrZQ==",
       );
     } finally {
-      window.open = originalWindowOpen;
+      windowOpen.mockRestore();
       consoleError.mockRestore();
     }
   });
 
   it("Desktop Host 下本地图片点击不应回退 window.open", () => {
     vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(true);
-    const originalWindowOpen = window.open;
-    const windowOpen = vi.fn();
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    window.open = windowOpen as unknown as typeof window.open;
 
     try {
       const container = render("![配图](images/hero.png)", {
@@ -579,19 +573,17 @@ describe("MarkdownRenderer", () => {
         "asset:///Users/coso/.proxycast/projects/default/exports/x-article/google/images/hero.png",
       );
     } finally {
-      window.open = originalWindowOpen;
+      windowOpen.mockRestore();
       consoleError.mockRestore();
     }
   });
 
   it("Desktop Host 下绝对路径图片点击不应回退 window.open", () => {
     vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(true);
-    const originalWindowOpen = window.open;
-    const windowOpen = vi.fn();
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    window.open = windowOpen as unknown as typeof window.open;
 
     try {
       const container = render("![配图](/tmp/project/assets/cover.png)");
@@ -612,15 +604,13 @@ describe("MarkdownRenderer", () => {
         "asset:///tmp/project/assets/cover.png",
       );
     } finally {
-      window.open = originalWindowOpen;
+      windowOpen.mockRestore();
       consoleError.mockRestore();
     }
   });
 
   it("非 Desktop Host 下本地图片点击保留浏览器预览", () => {
-    const originalWindowOpen = window.open;
-    const windowOpen = vi.fn();
-    window.open = windowOpen as unknown as typeof window.open;
+    const windowOpen = vi.spyOn(window, "open").mockImplementation(() => null);
 
     try {
       const container = render("![配图](images/hero.png)", {
@@ -643,7 +633,7 @@ describe("MarkdownRenderer", () => {
         "_blank",
       );
     } finally {
-      window.open = originalWindowOpen;
+      windowOpen.mockRestore();
     }
   });
 

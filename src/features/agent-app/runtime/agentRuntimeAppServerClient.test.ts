@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type {
+  AppServerAgentEvent,
   AppServerAgentSessionActionRespondParams,
   AppServerAgentSessionActionRespondResponse,
   AppServerAgentSessionReadParams,
@@ -13,6 +14,7 @@ import type {
   AppServerAgentSessionTurnStartResponse,
   AppServerRequestResult,
 } from "@/lib/api/appServer";
+import { withEvent } from "@limecloud/agent-runtime-client/sessionGateway";
 import {
   createAgentAppRuntimeClientFromAppServer,
   createAgentAppRuntimeSessionResolver,
@@ -124,10 +126,73 @@ describe("agentRuntimeAppServerClient", () => {
     });
   });
 
+  it("允许 Agent App current runtime client 透传 event pipeline options", async () => {
+    const appServerClient = buildAppServerClient();
+    const runtimeClient = createAgentAppRuntimeClientFromAppServer(
+      appServerClient,
+      {
+        sequenceVerifierMode: "off",
+        adapters: [
+          ({ notification, event }) => {
+            if (event.type !== "agent_app.synthetic") {
+              return;
+            }
+            return [
+              withEvent(notification, {
+                ...(event as AppServerAgentEvent),
+                eventId: "evt-agent-app-a",
+                type: "message.delta",
+                payload: { text: "A" },
+              }),
+              withEvent(notification, {
+                ...(event as AppServerAgentEvent),
+                eventId: "evt-agent-app-b",
+                sequence: event.sequence + 1,
+                type: "message.delta",
+                payload: { text: "B" },
+              }),
+            ];
+          },
+        ],
+      },
+    ) as ReturnType<typeof createAgentAppRuntimeClientFromAppServer> & {
+      dispatchEvent(message: unknown): Promise<boolean>;
+      subscribeEvents(listener: (event: AppServerAgentEvent) => void): {
+        unsubscribe(): void;
+      };
+    };
+    const received: string[] = [];
+    const subscription = runtimeClient.subscribeEvents((event) => {
+      const payload =
+        event.payload && typeof event.payload === "object"
+          ? (event.payload as Record<string, unknown>)
+          : {};
+      received.push(String(payload.text ?? ""));
+    });
+
+    await expect(
+      runtimeClient.dispatchEvent({
+        method: "agentSession/event",
+        params: {
+          event: {
+            eventId: "evt-agent-app-synthetic",
+            sequence: 1,
+            sessionId: "session-app-server",
+            type: "agent_app.synthetic",
+            timestamp: "2026-06-06T00:00:00.000Z",
+            payload: {},
+          },
+        },
+      }),
+    ).resolves.toBe(true);
+
+    expect(received).toEqual(["A", "B"]);
+    subscription.unsubscribe();
+  });
+
   it("通过 agentSession/start 为 Agent App 默认宿主创建 current session", async () => {
     const appServerClient = buildAppServerClient();
-    const ensureSession =
-      createAgentAppRuntimeSessionResolver(appServerClient);
+    const ensureSession = createAgentAppRuntimeSessionResolver(appServerClient);
 
     const sessionId = await ensureSession({
       appId: "content-factory-app",

@@ -1,5 +1,6 @@
 import {
   createAgentRuntimeClientFromSessionGateway,
+  type AgentRuntimeClientFromGatewayOptions,
   type AgentRuntimeLifecycleClient,
   type AgentRuntimeSessionGateway,
 } from "@limecloud/agent-runtime-client/sessionGateway";
@@ -25,13 +26,16 @@ export interface AgentAppRuntimeHostOptions {
 const createAgentRuntimeClientFromAgentAppGateway =
   createAgentRuntimeClientFromSessionGateway as (
     appServerClient: AgentRuntimeSessionGateway,
+    options?: AgentRuntimeClientFromGatewayOptions,
   ) => AgentRuntimeLifecycleClient;
 
 export function createAgentAppRuntimeClientFromAppServer(
   appServerClient: AgentAppRuntimeAppServerClient,
+  options?: AgentRuntimeClientFromGatewayOptions,
 ): AgentRuntimeLifecycleClient {
   return createAgentRuntimeClientFromAgentAppGateway(
     createAgentAppRuntimeSessionGateway(appServerClient),
+    options,
   );
 }
 

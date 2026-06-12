@@ -205,6 +205,30 @@ test("App Server event adapter keeps projection package runtime-client free", ()
   assert.equal(events[0].detail, "boom");
 });
 
+test("App Server facts preserve canceled turn terminal instead of completing it", () => {
+  const events = projectAppServerEventsToExecutionEvents([
+    appServerEvent("evt-cancel", 1, "turn.canceled", {
+      status: "canceled",
+      message: "stopped by user",
+    }),
+  ]);
+
+  assert.equal(events[0].eventClass, "turn.canceled");
+  assert.equal(events[0].status, "canceled");
+  assert.equal(events[0].phase, "canceled");
+  assert.equal(events[0].completedAt, timestamp);
+});
+
+test("App Server facts do not promote legacy final_done to current terminal", () => {
+  const events = projectAppServerEventsToExecutionEvents([
+    appServerEvent("evt-legacy-final", 1, "turn.final_done"),
+  ]);
+
+  assert.equal(events[0].eventClass, "turn.final_done");
+  assert.equal(events[0].status, "running");
+  assert.equal(events[0].completedAt, undefined);
+});
+
 function appServerEvent(eventId, sequence, type, payload = {}) {
   return {
     eventId,

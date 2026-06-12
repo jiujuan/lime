@@ -1,14 +1,20 @@
 import type { AgentUiFixture } from "./fixtures";
 import type { AgentUiProjectionState } from "./projection";
 import type {
+  AgentRuntimeCapabilityManifest,
+  AgentRuntimeResumeContract,
+} from "./capabilities";
+import type {
   AgentRuntimeExecutionEvent,
   AgentRuntimeReadModel,
 } from "./runtime";
+import { verifyRuntimeEventSequence } from "./sequenceVerifier.js";
 
 export type AgentUiContractValidationCode =
   | "schema_mismatch"
   | "missing_scope_id"
   | "sequence_gap"
+  | "sequence_violation"
   | "secret_leak_risk"
   | "large_payload_inline"
   | "unknown_event_type";
@@ -59,6 +65,22 @@ export function validateAgentUiFixture(input: unknown): AgentUiFixture {
   return input as AgentUiFixture;
 }
 
+export function validateRuntimeCapabilityManifest(
+  input: unknown,
+): AgentRuntimeCapabilityManifest {
+  const issues = collectRuntimeCapabilityManifestValidationIssues(input);
+  throwIfIssues(issues);
+  return input as AgentRuntimeCapabilityManifest;
+}
+
+export function validateRuntimeResumeContract(
+  input: unknown,
+): AgentRuntimeResumeContract {
+  const issues = collectRuntimeResumeContractValidationIssues(input);
+  throwIfIssues(issues);
+  return input as AgentRuntimeResumeContract;
+}
+
 export function collectRuntimeEventValidationIssues(
   input: unknown,
   path = "$",
@@ -90,6 +112,7 @@ export function collectRuntimeEventValidationIssues(
   }
 
   if (typeof input.eventClass === "string") {
+    collectLegacyTurnTerminalIssues(input.eventClass, `${path}.eventClass`, issues);
     collectScopeIssues(input, path, issues);
   }
 
@@ -256,6 +279,72 @@ export function collectProjectionStateValidationIssues(
   return issues;
 }
 
+export function collectRuntimeCapabilityManifestValidationIssues(
+  input: unknown,
+  path = "$",
+): AgentUiContractValidationIssue[] {
+  const issues: AgentUiContractValidationIssue[] = [];
+
+  if (!isRecord(input)) {
+    return [
+      issue("schema_mismatch", path, "Capability manifest must be an object."),
+    ];
+  }
+
+  requireString(input, "schemaVersion", path, issues);
+  requireString(input, "runtimeId", path, issues);
+  requireString(input, "generatedAt", path, issues);
+  optionalString(input, "providerId", path, issues);
+  optionalString(input, "sessionId", path, issues);
+  requireArray(input, "capabilities", path, issues);
+  if (Array.isArray(input.capabilities)) {
+    input.capabilities.forEach((capability, index) => {
+      collectCapabilityEntryValidationIssues(
+        capability,
+        `${path}.capabilities[${index}]`,
+        issues,
+      );
+    });
+  }
+
+  return issues;
+}
+
+export function collectRuntimeResumeContractValidationIssues(
+  input: unknown,
+  path = "$",
+): AgentUiContractValidationIssue[] {
+  const issues: AgentUiContractValidationIssue[] = [];
+
+  if (!isRecord(input)) {
+    return [
+      issue("schema_mismatch", path, "Resume contract must be an object."),
+    ];
+  }
+
+  requireString(input, "schemaVersion", path, issues);
+  requireString(input, "runtimeId", path, issues);
+  requireString(input, "sessionId", path, issues);
+  requireString(input, "turnId", path, issues);
+  requireString(input, "resumeMode", path, issues);
+  requireString(input, "createdAt", path, issues);
+  optionalString(input, "expiresAt", path, issues);
+  requireStringArray(input, "openActionIds", path, issues);
+  requireArray(input, "decisions", path, issues);
+  if (Array.isArray(input.decisions)) {
+    input.decisions.forEach((decision, index) => {
+      collectResumeDecisionValidationIssues(
+        decision,
+        `${path}.decisions[${index}]`,
+        issues,
+      );
+    });
+  }
+
+  collectResumeCoverageIssues(input, path, issues);
+  return issues;
+}
+
 function collectMessagePartValidationIssues(
   input: unknown,
   path: string,
@@ -278,6 +367,82 @@ function collectMessagePartValidationIssues(
   optionalString(input, "diagnosticId", path, issues);
   optionalString(input, "createdAt", path, issues);
   requireStringArray(input, "refs", path, issues);
+}
+
+function collectCapabilityEntryValidationIssues(
+  input: unknown,
+  path: string,
+  issues: AgentUiContractValidationIssue[],
+): void {
+  if (!isRecord(input)) {
+    issues.push(issue("schema_mismatch", path, "Capability entry must be an object."));
+    return;
+  }
+  requireString(input, "id", path, issues);
+  requireString(input, "status", path, issues);
+  requireString(input, "scope", path, issues);
+  requireString(input, "title", path, issues);
+  optionalString(input, "detail", path, issues);
+  optionalString(input, "version", path, issues);
+  if ("metadata" in input && input.metadata !== undefined) {
+    requireRecord(input, "metadata", path, issues);
+    collectPayloadIssues(input.metadata, `${path}.metadata`, issues);
+  }
+}
+
+function collectResumeDecisionValidationIssues(
+  input: unknown,
+  path: string,
+  issues: AgentUiContractValidationIssue[],
+): void {
+  if (!isRecord(input)) {
+    issues.push(issue("schema_mismatch", path, "Resume decision must be an object."));
+    return;
+  }
+  requireString(input, "actionId", path, issues);
+  requireString(input, "decision", path, issues);
+  if ("metadata" in input && input.metadata !== undefined) {
+    requireRecord(input, "metadata", path, issues);
+    collectPayloadIssues(input.metadata, `${path}.metadata`, issues);
+  }
+}
+
+function collectResumeCoverageIssues(
+  input: Record<string, unknown>,
+  path: string,
+  issues: AgentUiContractValidationIssue[],
+): void {
+  if (!Array.isArray(input.openActionIds) || !Array.isArray(input.decisions)) {
+    return;
+  }
+  const openActionIds = input.openActionIds.filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+  const decisionIds = new Set(
+    input.decisions
+      .filter(isRecord)
+      .map((decision) => decision.actionId)
+      .filter((value): value is string => typeof value === "string" && value.length > 0),
+  );
+  const resumeMode =
+    typeof input.resumeMode === "string" ? input.resumeMode : undefined;
+  if (
+    resumeMode !== "all-open-actions" &&
+    resumeMode !== "selected-actions"
+  ) {
+    return;
+  }
+  const missing = openActionIds.filter((actionId) => !decisionIds.has(actionId));
+  if (missing.length === 0) {
+    return;
+  }
+  issues.push(
+    issue(
+      "schema_mismatch",
+      `${path}.decisions`,
+      `Resume contract must cover open actions: ${missing.join(", ")}.`,
+    ),
+  );
 }
 
 function collectTimelineEntryValidationIssues(
@@ -569,6 +734,7 @@ export function collectAgentUiFixtureValidationIssues(
       );
     });
     issues.push(...collectSequenceIssues(input, path));
+    issues.push(...collectSequenceViolationIssues(input, path));
   }
 
   if ("initialReadModel" in input && input.initialReadModel !== undefined) {
@@ -677,6 +843,59 @@ function collectSequenceIssues(
   return issues;
 }
 
+/**
+ * 把流式 sequence verifier 的 violation 转成 fixture 校验 issue。
+ *
+ * fixture 可在 `expected.diagnostics` 中声明某个 violation code 来豁免该项，
+ * 以便后续故意构造坏流 fixture（语义与 `sequence_gap` 豁免一致）。
+ */
+function collectSequenceViolationIssues(
+  fixture: Record<string, unknown>,
+  path: string,
+): AgentUiContractValidationIssue[] {
+  if (!Array.isArray(fixture.events)) {
+    return [];
+  }
+
+  const eventIndexById = new Map<string, number>();
+  fixture.events.forEach((event, index) => {
+    if (isRecord(event) && typeof event.id === "string") {
+      eventIndexById.set(event.id, index);
+    }
+  });
+  const events = fixture.events.filter(isRecord) as unknown as AgentRuntimeExecutionEvent[];
+  const violations = verifyRuntimeEventSequence(events);
+  if (violations.length === 0) {
+    return [];
+  }
+
+  const expectedDiagnostics = isRecord(fixture.expected)
+    && Array.isArray(fixture.expected.diagnostics)
+    ? fixture.expected.diagnostics
+    : [];
+
+  return violations
+    .filter((violation) => !expectedDiagnostics.includes(violation.code))
+    .map((violation) =>
+      issue(
+        "sequence_violation",
+        sequenceViolationPath(path, violation.eventId, eventIndexById),
+        violation.message,
+      ),
+    );
+}
+
+function sequenceViolationPath(
+  fixturePath: string,
+  eventId: string,
+  eventIndexById: Map<string, number>,
+): string {
+  const eventIndex = eventIndexById.get(eventId);
+  return eventIndex === undefined
+    ? `${fixturePath}.events`
+    : `${fixturePath}.events[${eventIndex}]`;
+}
+
 function collectScopeIssues(
   event: Record<string, unknown>,
   path: string,
@@ -731,6 +950,31 @@ function collectScopeIssues(
         "missing_scope_id",
         `${path}.evidenceId`,
         "Evidence and review events must include evidenceId or evidenceRefs.",
+      ),
+    );
+  }
+}
+
+function collectLegacyTurnTerminalIssues(
+  eventClass: string,
+  path: string,
+  issues: AgentUiContractValidationIssue[],
+): void {
+  if (
+    [
+      "done",
+      "final_done",
+      "cancelled",
+      "turn.done",
+      "turn.final_done",
+      "turn.cancelled",
+    ].includes(eventClass.trim())
+  ) {
+    issues.push(
+      issue(
+        "schema_mismatch",
+        path,
+        "Legacy turn terminal event is not allowed; use turn.completed, turn.failed, or turn.canceled.",
       ),
     );
   }

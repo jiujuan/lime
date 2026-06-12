@@ -1,6 +1,8 @@
 mod agent_apps;
 mod exports;
 
+use crate::agent_ui_event_schema;
+use crate::agent_ui_sequence_verifier;
 use crate::capability::capability_descriptor_allows_agent_turn_start;
 use crate::CapabilityInventorySource;
 use crate::CapabilityListContext;
@@ -265,6 +267,9 @@ use app_server_protocol::ProjectMaterialUpdateParams;
 use app_server_protocol::ProjectMaterialUploadParams;
 use app_server_protocol::ProjectMemoryReadParams;
 use app_server_protocol::ProjectMemoryReadResponse;
+use app_server_protocol::RuntimeCapabilityEntry;
+use app_server_protocol::RuntimeCapabilityManifest;
+use app_server_protocol::RuntimeResumeContract;
 use app_server_protocol::ServerDiagnosticsResponse;
 use app_server_protocol::SessionFileEntryResponse;
 use app_server_protocol::SessionFileGetOrCreateParams;
@@ -375,6 +380,8 @@ use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::WorkspaceSkillBindingsListResponse;
 use app_server_protocol::WorkspaceUpdateParams;
 use app_server_protocol::WorkspaceUpdateResponse;
+use app_server_protocol::RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION;
+use app_server_protocol::RUNTIME_RESUME_CONTRACT_SCHEMA_VERSION;
 use async_trait::async_trait;
 use chrono::SecondsFormat;
 use chrono::Utc;
@@ -3739,8 +3746,13 @@ impl RuntimeCore {
         let context = self.capability_list_context(params)?;
         let capabilities = self.capability_source.list_capabilities(&context);
         let (capabilities, next_cursor) = paginate_capabilities(capabilities, cursor, limit);
+        let runtime_capability_manifest = Some(runtime_capability_manifest_from_descriptors(
+            &capabilities,
+            &context,
+        ));
         Ok(CapabilityListResponse {
             capabilities,
+            runtime_capability_manifest,
             next_cursor,
         })
     }
@@ -4240,6 +4252,7 @@ impl RuntimeCore {
             &params.session_id,
             "sessionId is required for agentSession/thread/resume",
         )?;
+        validate_runtime_resume_contract(params.resume_contract.as_ref(), &session_id)?;
         self.ensure_current_timeline_session_hydrated(&session_id)
             .await?;
         let queued = {
@@ -7298,7 +7311,6 @@ fn append_runtime_events_to_state(
         if should_ignore_runtime_event_for_terminal_turn(stored, turn_id) {
             continue;
         }
-        apply_runtime_event_state_transition(stored, turn_id, &runtime_event);
         let event = AgentEvent {
             event_id: new_id("evt"),
             sequence: stored.events.len() as u64 + 1,
@@ -7309,6 +7321,10 @@ fn append_runtime_events_to_state(
             timestamp: timestamp(),
             payload: runtime_event.payload,
         };
+        agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?;
+        agent_ui_sequence_verifier::validate_agent_event_sequence(&stored.events, &event)
+            .map_err(RuntimeCoreError::Backend)?;
+        apply_runtime_event_state_transition(stored, turn_id, event.event_type.as_str());
         stored.events.push(event.clone());
         events.push(event);
     }
@@ -7371,13 +7387,12 @@ fn should_ignore_runtime_event_for_terminal_turn(
 fn apply_runtime_event_state_transition(
     stored: &mut StoredSession,
     turn_id: Option<&str>,
-    runtime_event: &RuntimeEvent,
+    event_type: &str,
 ) {
     let Some(turn_id) = turn_id else {
         return;
     };
-    let Some(next_status) = turn_status_from_runtime_event(runtime_event.event_type.as_str())
-    else {
+    let Some(next_status) = turn_status_from_runtime_event(event_type) else {
         return;
     };
     let completed_at = matches!(
@@ -7400,11 +7415,13 @@ fn apply_runtime_event_state_transition(
 fn turn_status_from_runtime_event(event_type: &str) -> Option<AgentTurnStatus> {
     match event_type {
         "turn.started" => Some(AgentTurnStatus::Running),
-        "turn.done" | "turn.final_done" | "turn.completed" => Some(AgentTurnStatus::Completed),
+        "turn.completed" => Some(AgentTurnStatus::Completed),
         "turn.failed" | "runtime.error" => Some(AgentTurnStatus::Failed),
-        "turn.canceled" | "turn.cancelled" => Some(AgentTurnStatus::Canceled),
+        "turn.canceled" => Some(AgentTurnStatus::Canceled),
         "action.required" => Some(AgentTurnStatus::WaitingAction),
-        "action.resolved" => Some(AgentTurnStatus::Running),
+        "action.resolved" | "action.cancelled" | "action.canceled" | "action.expired" => {
+            Some(AgentTurnStatus::Running)
+        }
         _ => None,
     }
 }
@@ -7554,6 +7571,131 @@ fn paginate_capabilities(
             .collect(),
         next_cursor,
     )
+}
+
+fn runtime_capability_manifest_from_descriptors(
+    capabilities: &[app_server_protocol::CapabilityDescriptor],
+    context: &CapabilityListContext,
+) -> RuntimeCapabilityManifest {
+    RuntimeCapabilityManifest {
+        schema_version: RUNTIME_CAPABILITY_MANIFEST_SCHEMA_VERSION.to_string(),
+        runtime_id: "app-server".to_string(),
+        provider_id: None,
+        session_id: context.session_id.clone(),
+        generated_at: timestamp(),
+        capabilities: capabilities
+            .iter()
+            .map(runtime_capability_entry_from_descriptor)
+            .collect(),
+    }
+}
+
+fn runtime_capability_entry_from_descriptor(
+    descriptor: &app_server_protocol::CapabilityDescriptor,
+) -> RuntimeCapabilityEntry {
+    RuntimeCapabilityEntry {
+        id: runtime_capability_id_from_descriptor_id(&descriptor.id),
+        status: "supported".to_string(),
+        scope: runtime_capability_scope_from_descriptor_id(&descriptor.id).to_string(),
+        title: descriptor.title.clone(),
+        detail: descriptor.description.clone(),
+        version: None,
+        metadata: Some(json!({
+            "appServerCapabilityId": descriptor.id,
+            "methods": descriptor.methods,
+        })),
+    }
+}
+
+fn runtime_capability_id_from_descriptor_id(id: &str) -> String {
+    if id == "agent.session" {
+        return "transport.jsonrpc".to_string();
+    }
+    if id.contains("state.delta") {
+        return "state.delta".to_string();
+    }
+    if id.contains("snapshot") || id.contains("session") {
+        return "state.snapshot".to_string();
+    }
+    if id.contains("action") || id.contains("hitl") {
+        return "hitl.actions".to_string();
+    }
+    if id.contains("resume") {
+        return "hitl.resume".to_string();
+    }
+    if id.contains("subagent") {
+        return "subagents.handoff".to_string();
+    }
+    if id.contains("evidence") {
+        return "evidence.export".to_string();
+    }
+    if id.contains("tool") {
+        return "tools.native".to_string();
+    }
+    id.to_string()
+}
+
+fn runtime_capability_scope_from_descriptor_id(id: &str) -> &'static str {
+    if id.starts_with("session.") || id.contains(".session") {
+        return "session";
+    }
+    if id.starts_with("turn.") || id.contains(".turn") {
+        return "turn";
+    }
+    if id.starts_with("tool.") || id.contains(".tool") {
+        return "tool";
+    }
+    if id.starts_with("provider.") || id.contains(".provider") {
+        return "provider";
+    }
+    "runtime"
+}
+
+fn validate_runtime_resume_contract(
+    contract: Option<&RuntimeResumeContract>,
+    session_id: &str,
+) -> Result<(), RuntimeCoreError> {
+    let Some(contract) = contract else {
+        return Ok(());
+    };
+    if contract.schema_version != RUNTIME_RESUME_CONTRACT_SCHEMA_VERSION {
+        return Err(RuntimeCoreError::CapabilityDenied(
+            "runtime.resume_contract.schema_version".to_string(),
+        ));
+    }
+    if contract.runtime_id.trim().is_empty()
+        || contract.session_id.trim().is_empty()
+        || contract.turn_id.trim().is_empty()
+        || contract.resume_mode.trim().is_empty()
+        || contract.created_at.trim().is_empty()
+    {
+        return Err(RuntimeCoreError::CapabilityDenied(
+            "runtime.resume_contract.required_fields".to_string(),
+        ));
+    }
+    if contract.session_id != session_id {
+        return Err(RuntimeCoreError::CapabilityDenied(
+            "runtime.resume_contract.session_mismatch".to_string(),
+        ));
+    }
+    if contract.resume_mode == "all-open-actions" || contract.resume_mode == "selected-actions" {
+        let decision_ids: HashSet<&str> = contract
+            .decisions
+            .iter()
+            .map(|decision| decision.action_id.as_str())
+            .filter(|action_id| !action_id.trim().is_empty())
+            .collect();
+        if contract
+            .open_action_ids
+            .iter()
+            .any(|action_id| !decision_ids.contains(action_id.as_str()))
+        {
+            return Err(RuntimeCoreError::CapabilityDenied(
+                "runtime.resume_contract.open_action_coverage".to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn paginate_artifact_summaries(

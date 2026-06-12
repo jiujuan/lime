@@ -5502,8 +5502,88 @@
       "type": "string"
     },
     "AgentSessionThreadResumeParams": {
+      "$defs": {
+        "RuntimeResumeActionDecision": {
+          "properties": {
+            "actionId": {
+              "type": "string"
+            },
+            "decision": {
+              "type": "string"
+            },
+            "metadata": true,
+            "response": true
+          },
+          "required": [
+            "actionId",
+            "decision"
+          ],
+          "type": "object"
+        },
+        "RuntimeResumeContract": {
+          "properties": {
+            "createdAt": {
+              "type": "string"
+            },
+            "decisions": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/RuntimeResumeActionDecision"
+              },
+              "type": "array"
+            },
+            "expiresAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "openActionIds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "resumeMode": {
+              "type": "string"
+            },
+            "runtimeId": {
+              "type": "string"
+            },
+            "schemaVersion": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "createdAt",
+            "resumeMode",
+            "runtimeId",
+            "schemaVersion",
+            "sessionId",
+            "turnId"
+          ],
+          "type": "object"
+        }
+      },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "resumeContract": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeResumeContract"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "sessionId": {
           "type": "string"
         }
@@ -6673,6 +6753,80 @@
             "title"
           ],
           "type": "object"
+        },
+        "RuntimeCapabilityEntry": {
+          "properties": {
+            "detail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "metadata": true,
+            "scope": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "version": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "scope",
+            "status",
+            "title"
+          ],
+          "type": "object"
+        },
+        "RuntimeCapabilityManifest": {
+          "properties": {
+            "capabilities": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/RuntimeCapabilityEntry"
+              },
+              "type": "array"
+            },
+            "generatedAt": {
+              "type": "string"
+            },
+            "providerId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "runtimeId": {
+              "type": "string"
+            },
+            "schemaVersion": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "generatedAt",
+            "runtimeId",
+            "schemaVersion"
+          ],
+          "type": "object"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6688,6 +6842,16 @@
           "type": [
             "null",
             "string"
+          ]
+        },
+        "runtimeCapabilityManifest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeCapabilityManifest"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       },
@@ -14389,6 +14553,359 @@
       "title": "ProjectMemoryReadResponse",
       "type": "object"
     },
+    "ProjectShellEmptyResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProjectShellEmptyResponse",
+      "type": "object"
+    },
+    "ProjectShellSessionDrainEventsParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "limit": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "title": "ProjectShellSessionDrainEventsParams",
+      "type": "object"
+    },
+    "ProjectShellSessionDrainEventsResponse": {
+      "$defs": {
+        "ProjectShellSessionEvent": {
+          "oneOf": [
+            {
+              "properties": {
+                "data": {
+                  "type": "string"
+                },
+                "session_id": {
+                  "type": "string"
+                },
+                "stream": {
+                  "$ref": "#/$defs/ProjectShellSessionStream"
+                },
+                "type": {
+                  "const": "data",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "data",
+                "session_id",
+                "stream",
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "exit_code": {
+                  "format": "int32",
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "session_id": {
+                  "type": "string"
+                },
+                "signal": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "type": {
+                  "const": "exit",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "session_id",
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "session_id": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "error",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message",
+                "session_id",
+                "type"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "ProjectShellSessionStream": {
+          "enum": [
+            "stderr",
+            "stdout"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "events": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProjectShellSessionEvent"
+          },
+          "type": "array"
+        }
+      },
+      "title": "ProjectShellSessionDrainEventsResponse",
+      "type": "object"
+    },
+    "ProjectShellSessionEvent": {
+      "$defs": {
+        "ProjectShellSessionStream": {
+          "enum": [
+            "stderr",
+            "stdout"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "stream": {
+              "$ref": "#/$defs/ProjectShellSessionStream"
+            },
+            "type": {
+              "const": "data",
+              "type": "string"
+            }
+          },
+          "required": [
+            "data",
+            "session_id",
+            "stream",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "exit_code": {
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "signal": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "type": {
+              "const": "exit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "session_id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "error",
+              "type": "string"
+            }
+          },
+          "required": [
+            "message",
+            "session_id",
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "title": "ProjectShellSessionEvent"
+    },
+    "ProjectShellSessionKillParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "ProjectShellSessionKillParams",
+      "type": "object"
+    },
+    "ProjectShellSessionResizeParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cols": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rows": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cols",
+        "rows",
+        "sessionId"
+      ],
+      "title": "ProjectShellSessionResizeParams",
+      "type": "object"
+    },
+    "ProjectShellSessionStartParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cols": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "rows": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "ProjectShellSessionStartParams",
+      "type": "object"
+    },
+    "ProjectShellSessionStartResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "localEcho": {
+          "type": "boolean"
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "shell": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "tty": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cwd",
+        "localEcho",
+        "sessionId",
+        "shell",
+        "title",
+        "tty"
+      ],
+      "title": "ProjectShellSessionStartResponse",
+      "type": "object"
+    },
+    "ProjectShellSessionStream": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "stderr",
+        "stdout"
+      ],
+      "title": "ProjectShellSessionStream",
+      "type": "string"
+    },
+    "ProjectShellSessionWriteParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "data": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "data",
+        "sessionId"
+      ],
+      "title": "ProjectShellSessionWriteParams",
+      "type": "object"
+    },
     "RequestId": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "anyOf": [
@@ -14401,6 +14918,122 @@
         }
       ],
       "title": "RequestId"
+    },
+    "RuntimeCapabilityEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "detail": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "metadata": true,
+        "scope": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "status",
+        "title"
+      ],
+      "title": "RuntimeCapabilityEntry",
+      "type": "object"
+    },
+    "RuntimeCapabilityManifest": {
+      "$defs": {
+        "RuntimeCapabilityEntry": {
+          "properties": {
+            "detail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "metadata": true,
+            "scope": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "version": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "scope",
+            "status",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "capabilities": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuntimeCapabilityEntry"
+          },
+          "type": "array"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "runtimeId": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "generatedAt",
+        "runtimeId",
+        "schemaVersion"
+      ],
+      "title": "RuntimeCapabilityManifest",
+      "type": "object"
     },
     "RuntimeOptions": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -14443,6 +15076,97 @@
         }
       },
       "title": "RuntimeOptions",
+      "type": "object"
+    },
+    "RuntimeResumeActionDecision": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "actionId": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string"
+        },
+        "metadata": true,
+        "response": true
+      },
+      "required": [
+        "actionId",
+        "decision"
+      ],
+      "title": "RuntimeResumeActionDecision",
+      "type": "object"
+    },
+    "RuntimeResumeContract": {
+      "$defs": {
+        "RuntimeResumeActionDecision": {
+          "properties": {
+            "actionId": {
+              "type": "string"
+            },
+            "decision": {
+              "type": "string"
+            },
+            "metadata": true,
+            "response": true
+          },
+          "required": [
+            "actionId",
+            "decision"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "decisions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RuntimeResumeActionDecision"
+          },
+          "type": "array"
+        },
+        "expiresAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "openActionIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resumeMode": {
+          "type": "string"
+        },
+        "runtimeId": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "createdAt",
+        "resumeMode",
+        "runtimeId",
+        "schemaVersion",
+        "sessionId",
+        "turnId"
+      ],
+      "title": "RuntimeResumeContract",
       "type": "object"
     },
     "ServerCapabilities": {
@@ -20599,6 +21323,11 @@
               "projectMaterial/update",
               "projectMaterial/upload",
               "projectMemory/read",
+              "projectShell/session/drainEvents",
+              "projectShell/session/kill",
+              "projectShell/session/resize",
+              "projectShell/session/start",
+              "projectShell/session/write",
               "sessionFile/delete",
               "sessionFile/getOrCreate",
               "sessionFile/list",

@@ -2,6 +2,7 @@ import type {
   AgentEvent,
   AgentEventRuntimeStatus,
   AgentEventTaskProfileResolved,
+  AgentEventTurnCanceled,
   AgentEventTurnCompleted,
   AgentEventTurnFailed,
   AgentEventTurnStarted,
@@ -12,6 +13,7 @@ import type {
 } from "@limecloud/agent-ui-contracts";
 import {
   buildAgentUiModelChangeEvent,
+  buildAgentUiRunCanceledEvent,
   buildAgentUiRunFailedEvent,
   buildAgentUiRunFinishedEvent,
   buildAgentUiRunStartedEvent,
@@ -52,12 +54,17 @@ export function buildTurnStartedEvent(
 }
 
 export function buildRunFinishedEvent(
-  event:
-    | AgentEventTurnCompleted
-    | Extract<AgentEvent, { type: "done" | "final_done" }>,
+  event: AgentEventTurnCompleted,
   context: AgentUiProjectionContext,
 ): AgentUiProjectionEvent {
   return buildAgentUiRunFinishedEvent({ sourceType: event.type }, context);
+}
+
+export function buildRunCanceledEvent(
+  event: AgentEventTurnCanceled,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent {
+  return buildAgentUiRunCanceledEvent({ sourceType: event.type }, context);
 }
 
 export function buildRunFailedEvent(

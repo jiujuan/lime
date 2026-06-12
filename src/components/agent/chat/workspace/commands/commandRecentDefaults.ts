@@ -206,8 +206,9 @@ export function resolvePreferredComplianceCommandText(params: {
   fallback?: string | null;
   defaultValue: string;
 }): string {
+  const current = normalizeOptionalText(params.current);
   return (
-    normalizeOptionalText(params.current) ||
+    (current && current !== params.defaultValue ? current : undefined) ||
     normalizeOptionalText(params.fallback) ||
     params.defaultValue
   );
@@ -347,7 +348,7 @@ export function mergeTypesettingCommandRecentDefaults(params: {
     ...params.parsedCommand,
     targetPlatform: resolvePreferredRecentCommandText(
       params.parsedCommand.targetPlatform,
-      slotValues.style,
+      slotValues.target_platform,
     ),
   };
 }
@@ -377,6 +378,10 @@ export function mergePresentationCommandRecentDefaults(params: {
       params.parsedCommand.style,
       slotValues.style,
     ),
+    audience: resolvePreferredRecentCommandText(
+      params.parsedCommand.audience,
+      slotValues.audience,
+    ),
   };
 }
 
@@ -405,6 +410,10 @@ export function mergeFormCommandRecentDefaults(params: {
       params.parsedCommand.style,
       slotValues.style,
     ),
+    audience: resolvePreferredRecentCommandText(
+      params.parsedCommand.audience,
+      slotValues.audience,
+    ),
   };
 }
 
@@ -425,10 +434,16 @@ export function mergeWebpageCommandRecentDefaults(params: {
     ) ?? params.parsedCommand.prompt,
     pageType:
       params.parsedCommand.pageType ??
-      normalizeRecentWebpageType(slotValues.webpage_type),
+      normalizeRecentWebpageType(
+        slotValues.page_type ?? slotValues.webpage_type,
+      ),
     style: resolvePreferredRecentCommandText(
       params.parsedCommand.style,
       slotValues.style,
+    ),
+    techStack: resolvePreferredRecentCommandText(
+      params.parsedCommand.techStack,
+      slotValues.tech_stack,
     ),
   };
 }
@@ -443,12 +458,24 @@ export function normalizeRecentPublishPlatform(params: {
   const normalized = normalizeContentPostPlatform(
     params.platformType ?? undefined,
   );
+  const normalizedFromLabel =
+    normalized.platformType || normalized.platformLabel
+      ? {}
+      : normalizeContentPostPlatform(params.platformLabel ?? undefined);
   if (normalized.platformType || normalized.platformLabel) {
     return {
       platformType: normalized.platformType,
       platformLabel:
         normalizeOptionalText(params.platformLabel) ??
         normalized.platformLabel,
+    };
+  }
+  if (normalizedFromLabel.platformType || normalizedFromLabel.platformLabel) {
+    return {
+      platformType: normalizedFromLabel.platformType,
+      platformLabel:
+        normalizeOptionalText(params.platformLabel) ??
+        normalizedFromLabel.platformLabel,
     };
   }
   return {

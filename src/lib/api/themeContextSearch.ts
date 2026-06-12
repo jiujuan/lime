@@ -259,7 +259,7 @@ function extractAttemptsSummary(
     const event = eventFromNotification(notifications[index]);
     if (
       event?.turnId !== turnId ||
-      (event.type !== "turn.final_done" && event.type !== "turn.completed")
+      event.type !== "turn.completed"
     ) {
       continue;
     }

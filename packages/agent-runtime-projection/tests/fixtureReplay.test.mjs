@@ -59,8 +59,31 @@ test("replayAgentUiFixture proves key projection surfaces", () => {
   );
   assert.deepEqual(
     handoffState.subagents.activities.map((activity) => activity.kind),
-    ["started", "interacted", "handoff", "completed"],
+    ["started", "started", "interacted", "handoff", "completed"],
   );
+});
+
+test("replayAgentUiFixture fails closed on a malformed event stream", () => {
+  const base = getAgentUiFixture("tool-success");
+  // 删掉 tool.started，只留 tool.result，制造一条孤立的收口事件（坏流）。
+  const broken = {
+    ...base,
+    events: base.events.filter(
+      (event) => event.eventClass !== "tool.started",
+    ),
+  };
+
+  const result = replayAgentUiFixture(broken);
+  assert.equal(result.failedClosed, true);
+  assert.equal(result.passed, false);
+  assert.deepEqual(
+    result.sequenceViolations.map((violation) => violation.code),
+    ["tool_result_without_start"],
+  );
+  // fail closed：坏流不投影，state 退化为合法空 state。
+  assert.equal(result.state.hydration.eventCount, 0);
+  assert.equal(result.state.tools.length, 0);
+  assert.equal(result.state.timeline.length, 0);
 });
 
 test("projector apply remains idempotent for fixture replay", () => {

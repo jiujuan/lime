@@ -68,6 +68,7 @@ interface TaskCenterTabStripProps {
   showWorkbenchToggle?: boolean;
   workbenchVisible?: boolean;
   onWorkbenchToggle?: () => void;
+  embedded?: boolean;
 }
 
 function formatTaskTabTitle(
@@ -119,28 +120,38 @@ export function TaskCenterTabStrip({
   showWorkbenchToggle = false,
   workbenchVisible = false,
   onWorkbenchToggle,
+  embedded = false,
 }: TaskCenterTabStripProps) {
-  const { t } = useTranslation("navigation");
+  const { t: tNavigation } = useTranslation("navigation");
+  const { t: tAgent } = useTranslation("agent");
   const showToolbarActions = showWorkbenchToggle;
-  const renameActionLabel = t("navigation.sidebar.conversations.menu.rename");
-  const createConversationLabel = t(
+  const renameActionLabel = tNavigation(
+    "navigation.sidebar.conversations.menu.rename",
+  );
+  const createConversationLabel = tNavigation(
     "navigation.sidebar.conversations.newConversation",
   );
   const closeTabLabel = (label: string) =>
-    t("navigation.sidebar.conversations.closeTab", {
+    tNavigation("navigation.sidebar.conversations.closeTab", {
       label,
       defaultValue: "关闭 {{label}}",
     });
-  const workbenchLabel = t("navigation.sidebar.conversations.workbench.label");
+  const workbenchLabel = tNavigation(
+    "navigation.sidebar.conversations.workbench.label",
+  );
   const workbenchToggleLabel = workbenchVisible
-    ? t("navigation.sidebar.conversations.workbench.collapse")
-    : t("navigation.sidebar.conversations.workbench.expand");
+    ? tNavigation("navigation.sidebar.conversations.workbench.collapse")
+    : tNavigation("navigation.sidebar.conversations.workbench.expand");
+  const openChatLabel = tAgent("agentChat.navbar.openChat");
 
   return (
     <section
-      className="relative z-10 min-h-[42px] shrink-0 border-b border-[color:var(--lime-chrome-divider)] bg-[color:var(--lime-chrome-tab-active-surface)] px-4 pb-2 pt-1.5"
+      className={cn(
+        "relative z-10 min-h-[42px] shrink-0 bg-[color:var(--lime-chrome-tab-active-surface)] px-4 pb-2 pt-1.5",
+        !embedded && "border-b border-[color:var(--lime-chrome-divider)]",
+      )}
       data-testid="task-center-tab-strip"
-      style={taskCenterTabStripStyle}
+      style={embedded ? undefined : taskCenterTabStripStyle}
     >
       <div className="flex items-center gap-1">
         <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
@@ -149,7 +160,8 @@ export function TaskCenterTabStrip({
               const statusMeta =
                 TASK_CENTER_TAB_STATUS_META[item.status] ??
                 TASK_CENTER_TAB_STATUS_META.done;
-              const displayTitle = resolveFileNameTabLabel(item.title);
+              const displayTitle =
+                resolveFileNameTabLabel(item.title) || openChatLabel;
               const tabTitle = formatTaskTabTitle(item, displayTitle);
               const closeLabel = closeTabLabel(displayTitle);
 

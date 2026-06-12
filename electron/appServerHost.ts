@@ -29,7 +29,10 @@ const DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS = 30_000;
 const APP_SERVER_BACKEND_TIMEOUT_GRACE_MS = 30_000;
 const APP_SERVER_TURN_START_METHOD = "agentSession/turn/start";
 const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD = "agentAppUiRuntime/start";
+const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_METHOD =
+  "projectShell/session/drainEvents";
 const APP_SERVER_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS = 60_000;
+const APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_TIMEOUT_MS = 3_000;
 const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 
@@ -460,6 +463,9 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
 function resolveAppServerRequestTimeoutMs(method: string): number {
   if (method === APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD) {
     return APP_SERVER_AGENT_APP_UI_RUNTIME_START_TIMEOUT_MS;
+  }
+  if (method === APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_METHOD) {
+    return APP_SERVER_PROJECT_SHELL_DRAIN_EVENTS_TIMEOUT_MS;
   }
   if (method !== APP_SERVER_TURN_START_METHOD) {
     return DEFAULT_APP_SERVER_REQUEST_TIMEOUT_MS;

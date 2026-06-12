@@ -248,11 +248,11 @@ export const ChatInputSlot = styled.div`
   margin: 0 auto;
 `;
 
-export const GeneralWorkbenchInputOverlay = styled.div`
+export const GeneralWorkbenchInputOverlay = styled.div<{ $bottomInset: string }>`
   position: absolute;
   left: 24px;
   right: 24px;
-  bottom: 20px;
+  bottom: calc(20px + ${({ $bottomInset }) => $bottomInset});
   z-index: 25;
   pointer-events: none;
   display: flex;

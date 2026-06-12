@@ -35,18 +35,29 @@ export {
   updateAgentRuntimeObjectiveStatus,
 } from "./objectiveClient";
 export {
+  AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
   archiveManyAgentRuntimeSessions,
   createSessionClient,
   createAgentRuntimeSession,
   deleteAgentRuntimeSession,
   getAgentRuntimeSession,
   listAgentRuntimeSessions,
+  notifyAgentRuntimeSessionsChanged,
   updateAgentRuntimeSession,
+  type AgentRuntimeSessionsChangedDetail,
 } from "./sessionClient";
+export {
+  agentRuntimeCapabilityManifestFromAppServerResponse,
+  assertAgentRuntimeCapabilityManifest,
+  assertAgentRuntimeResumeContract,
+  buildAgentRuntimeCapabilityManifest,
+  buildAgentRuntimeResumeContract,
+} from "./capabilityContract";
 export {
   compactAgentRuntimeSession,
   createThreadClient,
   diffAgentRuntimeFileCheckpoint,
+  getAgentRuntimeCapabilityManifest,
   getAgentRuntimeFileCheckpoint,
   getAgentRuntimeThreadRead,
   interruptAgentRuntimeTurn,

@@ -18,6 +18,36 @@ import type {
   JsonRpcMessage,
   JsonRpcNotification,
 } from "@limecloud/app-server-client";
+import {
+  AgentRuntimeEventPipeline,
+  type AgentRuntimeEventAdapter,
+  type AgentRuntimeEventPipelineResult,
+  type AgentRuntimeEventPipelineMiddleware,
+} from "./eventPipeline.js";
+import {
+  type AgentRuntimeSequenceViolationError,
+  type AgentRuntimeSequenceVerifierLike,
+  type AgentRuntimeSequenceVerifierMode,
+} from "./eventVerifier.js";
+
+export {
+  AgentRuntimeEventSequenceGate,
+  AgentRuntimeSequenceViolationError,
+  runtimeExecutionEventFromAgentEvent,
+  type AgentRuntimeSequenceVerifierLike,
+  type AgentRuntimeSequenceVerifierMode,
+} from "./eventVerifier.js";
+export {
+  AgentRuntimeEventPipeline,
+  createSchemaVersionCompatibilityMiddleware,
+  withEvent,
+  type AgentRuntimeEventAdapter,
+  type AgentRuntimeEventMiddleware,
+  type AgentRuntimeEventMiddlewareFunction,
+  type AgentRuntimeEventPipelineContext,
+  type AgentRuntimeEventPipelineMiddleware,
+  type AgentRuntimeEventPipelineOptions,
+} from "./eventPipeline.js";
 
 const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
 
@@ -56,10 +86,18 @@ export type AgentRuntimeSessionGateway = {
   drainEvents?(limit?: number): Promise<JsonRpcMessage[]>;
 };
 
+export interface AgentRuntimeClientFromGatewayOptions {
+  sequenceVerifier?: AgentRuntimeSequenceVerifierLike;
+  sequenceVerifierMode?: AgentRuntimeSequenceVerifierMode;
+  adapters?: readonly AgentRuntimeEventAdapter[];
+  middlewares?: readonly AgentRuntimeEventPipelineMiddleware[];
+}
+
 export function createAgentRuntimeClientFromSessionGateway(
   gateway: AgentRuntimeSessionGateway,
+  options: AgentRuntimeClientFromGatewayOptions = {},
 ): AgentRuntimeClient {
-  const eventRouter = new AgentRuntimeGatewayEventRouter();
+  const eventRouter = new AgentRuntimeGatewayEventRouter(options);
   return {
     startTurn: (params, options) =>
       callAgentRuntimeSessionGateway(gateway.startTurn, params, options),
@@ -80,13 +118,27 @@ export function createAgentRuntimeClientFromSessionGateway(
       return eventRouter.subscribe(listener);
     },
     async dispatchEvent(message) {
-      return await eventRouter.dispatch(message);
+      const result = await eventRouter.dispatch(message);
+      return result.accepted;
     },
     async nextEvent(timeoutMs) {
+      const pending = eventRouter.takePendingNextEvent();
+      if (pending) {
+        return pending;
+      }
       if (gateway.nextEvent) {
-        const notification = await gateway.nextEvent(timeoutMs);
-        await eventRouter.dispatch(notification);
-        return notification;
+        for (;;) {
+          const notification = await gateway.nextEvent(timeoutMs);
+          const result = await eventRouter.dispatch(notification);
+          if (result.accepted) {
+            const [next, ...rest] = result.notifications;
+            eventRouter.queuePendingNextEvents(rest);
+            return next;
+          }
+          if (result.reason === "sequence_violation") {
+            throw eventRouter.sequenceViolationError();
+          }
+        }
       }
       if (gateway.drainEvents) {
         return await nextDrainedAgentRuntimeEvent(
@@ -135,12 +187,23 @@ async function nextDrainedAgentRuntimeEvent(
   eventRouter: AgentRuntimeGatewayEventRouter,
   timeoutMs?: number,
 ): Promise<AgentSessionEventNotification> {
+  const pending = eventRouter.takePendingNextEvent();
+  if (pending) {
+    return pending;
+  }
   const messages = await gateway.drainEvents?.(1);
   for (const message of messages ?? []) {
     const notification = agentSessionEventNotificationFromMessage(message);
     if (notification) {
-      await eventRouter.dispatch(notification);
-      return notification;
+      const result = await eventRouter.dispatch(notification);
+      if (result.accepted) {
+        const [next, ...rest] = result.notifications;
+        eventRouter.queuePendingNextEvents(rest);
+        return next;
+      }
+      if (result.reason === "sequence_violation") {
+        throw eventRouter.sequenceViolationError();
+      }
     }
   }
   throw new Error(
@@ -152,6 +215,17 @@ async function nextDrainedAgentRuntimeEvent(
 
 class AgentRuntimeGatewayEventRouter {
   readonly #listeners = new Set<AgentRuntimeEventListener>();
+  readonly #eventPipeline: AgentRuntimeEventPipeline;
+  readonly #pendingNextEvents: AgentSessionEventNotification[] = [];
+
+  constructor(options: AgentRuntimeClientFromGatewayOptions = {}) {
+    this.#eventPipeline = new AgentRuntimeEventPipeline({
+      sequenceVerifier: options.sequenceVerifier,
+      sequenceVerifierMode: options.sequenceVerifierMode,
+      adapters: options.adapters,
+      middlewares: options.middlewares,
+    });
+  }
 
   subscribe(listener: AgentRuntimeEventListener): AgentRuntimeClientSubscription {
     this.#listeners.add(listener);
@@ -162,15 +236,35 @@ class AgentRuntimeGatewayEventRouter {
     };
   }
 
-  async dispatch(message: JsonRpcMessage): Promise<boolean> {
+  async dispatch(
+    message: JsonRpcMessage,
+  ): Promise<AgentRuntimeEventPipelineResult> {
     const notification = agentSessionEventNotificationFromMessage(message);
     if (!notification) {
-      return false;
+      return { accepted: false, reason: "dropped" };
     }
-    for (const listener of this.#listeners) {
-      await listener(notification.params.event, notification);
+    const pipelineResult = await this.#eventPipeline.process(notification);
+    if (!pipelineResult.accepted) {
+      return pipelineResult;
     }
-    return true;
+    for (const notification of pipelineResult.notifications) {
+      for (const listener of this.#listeners) {
+        await listener(notification.params.event, notification);
+      }
+    }
+    return pipelineResult;
+  }
+
+  takePendingNextEvent(): AgentSessionEventNotification | undefined {
+    return this.#pendingNextEvents.shift();
+  }
+
+  queuePendingNextEvents(notifications: readonly AgentSessionEventNotification[]): void {
+    this.#pendingNextEvents.push(...notifications);
+  }
+
+  sequenceViolationError(): AgentRuntimeSequenceViolationError {
+    return this.#eventPipeline.sequenceViolationError();
   }
 }
 

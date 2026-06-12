@@ -116,7 +116,17 @@ describe("agentStreamRuntimeHandler storage", () => {
     handleTurnStreamEvent({
       ...baseOptions,
       data: {
-        type: "final_done",
+        type: "turn_completed",
+        turn: {
+          id: "turn-1",
+          thread_id: "session-1",
+          prompt_text: "",
+          status: "completed",
+          started_at: "2026-06-12T00:00:00.000Z",
+          completed_at: "2026-06-12T00:00:01.000Z",
+          created_at: "2026-06-12T00:00:00.000Z",
+          updated_at: "2026-06-12T00:00:01.000Z",
+        },
       } as AgentEvent,
     });
 

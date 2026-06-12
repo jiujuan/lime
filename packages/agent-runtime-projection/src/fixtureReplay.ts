@@ -1,9 +1,11 @@
 import {
   collectAgentUiFixtureValidationIssues,
+  verifyRuntimeEventSequence,
   type AgentUiContractValidationIssue,
   type AgentUiFixture,
   type AgentUiProjectionState,
   type AgentRuntimeExecutionEvent,
+  type RuntimeSequenceViolation,
 } from "@limecloud/agent-ui-contracts";
 import { projectAgentUiState } from "./uiState.js";
 
@@ -13,7 +15,14 @@ export interface AgentUiFixtureReplayResult<
   fixtureId: string;
   state: AgentUiProjectionState<TEvent>;
   validationIssues: AgentUiContractValidationIssue[];
+  /** 流式 sequence verifier 报告的、未被 fixture 豁免的协议序列违规。 */
+  sequenceViolations: RuntimeSequenceViolation[];
   diagnostics: string[];
+  /**
+   * 坏流是否被拦截：存在未豁免的 sequence violation 时为 true，
+   * 此时不把坏流投影成 state（state 为合法空 state）。
+   */
+  failedClosed: boolean;
   passed: boolean;
 }
 
@@ -23,18 +32,48 @@ export function replayAgentUiFixture<
   fixture: AgentUiFixture<TEvent>,
 ): AgentUiFixtureReplayResult<TEvent> {
   const validationIssues = collectAgentUiFixtureValidationIssues(fixture);
-  const state = projectAgentUiState<TEvent>({
-    executionEvents: fixture.events,
-  });
-  const diagnostics = collectReplayDiagnostics(fixture, state, validationIssues);
+  const sequenceViolations = collectUnexpectedSequenceViolations(fixture);
+  const failedClosed = sequenceViolations.length > 0;
+
+  // fail closed：坏流不进入 projector，避免把违反协议的事件流投影成「看起来正常」的 state。
+  const state = failedClosed
+    ? projectAgentUiState<TEvent>()
+    : projectAgentUiState<TEvent>({ executionEvents: fixture.events });
+
+  const diagnostics = failedClosed
+    ? sequenceViolations.map((violation) => violation.code)
+    : collectReplayDiagnostics(fixture, state, validationIssues);
 
   return {
     fixtureId: fixture.id,
     state,
     validationIssues,
+    sequenceViolations,
+    failedClosed,
     diagnostics,
-    passed: validationIssues.length === 0 && diagnostics.length === 0,
+    passed:
+      !failedClosed
+      && validationIssues.length === 0
+      && diagnostics.length === 0,
   };
+}
+
+/**
+ * 跑 sequence verifier，过滤掉 fixture 在 `expected.diagnostics` 中显式声明（豁免）的 violation。
+ *
+ * 语义与 contracts 包 `collectSequenceViolationIssues` 一致：未声明的 violation 才算坏流。
+ */
+function collectUnexpectedSequenceViolations<
+  TEvent extends AgentRuntimeExecutionEvent,
+>(fixture: AgentUiFixture<TEvent>): RuntimeSequenceViolation[] {
+  const violations = verifyRuntimeEventSequence(fixture.events);
+  if (violations.length === 0) {
+    return [];
+  }
+  const expectedDiagnostics = fixture.expected?.diagnostics ?? [];
+  return violations.filter(
+    (violation) => !expectedDiagnostics.includes(violation.code),
+  );
 }
 
 function collectReplayDiagnostics<

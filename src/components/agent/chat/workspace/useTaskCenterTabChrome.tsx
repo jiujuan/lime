@@ -61,7 +61,7 @@ export function useTaskCenterTabChrome({
   newConversationLabel,
   newChatAt,
   homeMountedAt,
-  isThemeWorkbench,
+  isThemeWorkbench: _isThemeWorkbench,
   layoutMode,
   onSwitchTaskTopic,
   onRenameTaskTopic,
@@ -136,13 +136,13 @@ export function useTaskCenterTabChrome({
           void onCloseTaskCenterTab(topicId);
         }}
         onCreateTask={onOpenTaskCenterNewTaskPage}
-        showWorkbenchToggle={!isThemeWorkbench}
+        showWorkbenchToggle={false}
         workbenchVisible={layoutMode !== "chat"}
         onWorkbenchToggle={onToggleWorkbench}
+        embedded
       />
     );
   }, [
-    isThemeWorkbench,
     layoutMode,
     onCloseTaskCenterTab,
     onOpenTaskCenterNewTaskPage,

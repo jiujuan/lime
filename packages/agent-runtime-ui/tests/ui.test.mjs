@@ -392,7 +392,7 @@ test("SubagentsView renders threads, delegations, and activities from projection
   assert.match(markup, /活动记录/);
   assert.match(markup, /data-subagent-count="1"/);
   assert.match(markup, /data-delegation-count="2"/);
-  assert.match(markup, /data-activity-count="4"/);
+  assert.match(markup, /data-activity-count="5"/);
   assert.match(markup, /data-thread-id="subagent_fixture_researcher"/);
   assert.match(markup, /data-delegation-action="spawn"/);
   assert.match(markup, /data-delegation-action="handoff"/);

@@ -28,6 +28,7 @@ import type {
 } from "../agentExecutionRuntime";
 import type { QueuedTurnSnapshot } from "../queuedTurn";
 import type { ModelCapabilities } from "@/lib/types/modelRegistry";
+import type { AgentRuntimeResumeActionDecision } from "@limecloud/agent-ui-contracts";
 
 export type { QueuedTurnSnapshot } from "../queuedTurn";
 export type {
@@ -1203,6 +1204,17 @@ export interface AgentRuntimeCompactSessionRequest {
 
 export interface AgentRuntimeResumeThreadRequest {
   session_id: string;
+  turn_id?: string;
+  open_action_ids?: string[];
+  decisions?: AgentRuntimeResumeActionDecision[];
+}
+
+export interface AgentRuntimeCapabilityManifestRequest {
+  app_id?: string;
+  workspace_id?: string;
+  session_id?: string;
+  cursor?: string;
+  limit?: number;
 }
 
 export interface AgentRuntimeGetSessionOptions {

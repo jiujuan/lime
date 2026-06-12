@@ -122,9 +122,9 @@ export type AgentThreadTurnStatus =
   | "completed"
   | "failed"
   | "canceled"
+  | "aborted"
   | "cancelled"
-  | "interrupted"
-  | "aborted";
+  | "interrupted";
 
 export type AgentThreadItemStatus = "in_progress" | "completed" | "failed";
 
@@ -377,6 +377,11 @@ export interface AgentEventTurnCompleted {
 
 export interface AgentEventTurnFailed {
   type: "turn_failed";
+  turn: AgentThreadTurn;
+}
+
+export interface AgentEventTurnCanceled {
+  type: "turn_canceled";
   turn: AgentThreadTurn;
 }
 
@@ -703,16 +708,6 @@ export interface AgentEventSubagentStatusChanged {
   result_ref?: string;
 }
 
-export interface AgentEventDone {
-  type: "done";
-  usage?: AgentTokenUsage;
-}
-
-export interface AgentEventFinalDone {
-  type: "final_done";
-  usage?: AgentTokenUsage;
-}
-
 export interface AgentEventMessage {
   type: "message";
   message: AgentMessage;
@@ -737,6 +732,7 @@ export type AgentEvent =
   | AgentEventItemCompleted
   | AgentEventTurnCompleted
   | AgentEventTurnFailed
+  | AgentEventTurnCanceled
   | AgentEventTextDelta
   | AgentEventTextDeltaBatch
   | AgentEventThinkingDelta
@@ -770,8 +766,6 @@ export type AgentEvent =
   | AgentEventQueueStarted
   | AgentEventQueueCleared
   | AgentEventSubagentStatusChanged
-  | AgentEventDone
-  | AgentEventFinalDone
   | AgentEventMessage
   | AgentEventWarning
   | AgentEventError;
@@ -988,6 +982,7 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         item: normalizeLegacyThreadItem(event.item as AgentThreadItem),
       };
     case "turn_completed":
+    case "turn.completed":
       return {
         type: "turn_completed",
         turn: event.turn as AgentThreadTurn,
@@ -995,8 +990,15 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         usage: event.usage as AgentTokenUsage | undefined,
       };
     case "turn_failed":
+    case "turn.failed":
       return {
         type: "turn_failed",
+        turn: event.turn as AgentThreadTurn,
+      };
+    case "turn_canceled":
+    case "turn.canceled":
+      return {
+        type: "turn_canceled",
         turn: event.turn as AgentThreadTurn,
       };
     case "text_delta":
@@ -1231,11 +1233,6 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         type: "model_change",
         model: (event.model as string) || "",
         mode: (event.mode as string) || "",
-      };
-    case "done":
-      return {
-        type: "done",
-        usage: event.usage as AgentTokenUsage | undefined,
       };
     case "context_trace":
       return {
@@ -1583,11 +1580,6 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
             : typeof event.resultRef === "string"
               ? event.resultRef
               : undefined,
-      };
-    case "final_done":
-      return {
-        type: "final_done",
-        usage: event.usage as AgentTokenUsage | undefined,
       };
     case "message":
       return {

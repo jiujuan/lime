@@ -19,6 +19,62 @@ vi.mock("../components/ChatNavbar", () => ({
   ChatNavbar: () => <div data-testid="chat-navbar-stub" />,
 }));
 
+vi.mock("../components/TaskCenterUtilityToolbar", () => ({
+  TaskCenterUtilityToolbar: ({
+    onToggleShellPanel,
+  }: {
+    onToggleShellPanel?: () => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="task-center-utility-toolbar-stub"
+      onClick={onToggleShellPanel}
+    >
+      toolbar
+    </button>
+  ),
+}));
+
+vi.mock("../components/TaskCenterShellPanel", () => ({
+  TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX: 236,
+  TASK_CENTER_SHELL_PANEL_MAX_HEIGHT_RATIO: 0.82,
+  TaskCenterShellPanel: ({
+    heightPx,
+    maximized,
+    projectRootPath,
+    onHeightChange,
+    onToggleMaximize,
+  }: {
+    heightPx: number;
+    maximized: boolean;
+    projectRootPath?: string | null;
+    onHeightChange?: (heightPx: number) => void;
+    onToggleMaximize?: () => void;
+  }) => (
+    <div
+      data-testid="task-center-shell-panel-stub"
+      data-height={heightPx}
+      data-maximized={maximized ? "true" : "false"}
+    >
+      <span>{projectRootPath}</span>
+      <button
+        type="button"
+        data-testid="task-center-shell-height-stub"
+        onClick={() => onHeightChange?.(360)}
+      >
+        height
+      </button>
+      <button
+        type="button"
+        data-testid="task-center-shell-maximize-stub"
+        onClick={onToggleMaximize}
+      >
+        maximize
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock("../components/EmptyState", () => ({
   EmptyState: () => <div data-testid="empty-state-stub" />,
 }));
@@ -58,13 +114,17 @@ vi.mock("./WorkspacePendingA2UIPanel", () => ({
 vi.mock("./WorkspaceMainArea", () => ({
   WorkspaceMainArea: ({
     navbarNode,
+    taskCenterUtilityToolbarNode,
     taskCenterTabsNode,
+    taskCenterShellPanelNode,
     chatContent,
     canvasContent,
     ...rest
   }: {
     navbarNode?: React.ReactNode;
+    taskCenterUtilityToolbarNode?: React.ReactNode;
     taskCenterTabsNode?: React.ReactNode;
+    taskCenterShellPanelNode?: React.ReactNode;
     chatContent?: React.ReactNode;
     canvasContent?: React.ReactNode;
     [key: string]: unknown;
@@ -74,7 +134,9 @@ vi.mock("./WorkspaceMainArea", () => ({
       ref={() => {
         mockWorkspaceMainArea({
           navbarNode,
+          taskCenterUtilityToolbarNode,
           taskCenterTabsNode,
+          taskCenterShellPanelNode,
           chatContent,
           canvasContent,
           ...rest,
@@ -82,9 +144,11 @@ vi.mock("./WorkspaceMainArea", () => ({
       }}
     >
       {navbarNode}
+      {taskCenterUtilityToolbarNode}
       {taskCenterTabsNode}
       {chatContent}
       {canvasContent}
+      {taskCenterShellPanelNode}
     </div>
   ),
 }));
@@ -279,6 +343,79 @@ describe("WorkspaceConversationScene", () => {
     expect(
       mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.autoHideTaskCenterNavbar,
     ).toBeUndefined();
+  });
+
+  it("任务中心场景应使用统一工具栏承接 Shell 和工作台入口", () => {
+    const container = renderScene({
+      navbarVisible: true,
+      navbarChrome: "workspace-compact",
+      navbarContextVariant: "task-center",
+      taskCenterTabsNode: <div data-testid="task-center-tabs-stub">tabs</div>,
+      projectRootPath: "/tmp/project",
+      showHarnessToggle: true,
+    });
+
+    const toolbar = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-utility-toolbar-stub"]',
+    );
+    expect(toolbar).not.toBeNull();
+    expect(
+      mockWorkspaceMainArea.mock.calls.at(-1)?.[0]
+        ?.taskCenterUtilityToolbarNode,
+    ).toBeTruthy();
+
+    act(() => {
+      toolbar?.click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="task-center-shell-panel-stub"]')
+        ?.textContent,
+    ).toContain("/tmp/project");
+    expect(mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.shellBottomInset).toBe(
+      "calc(0px + 236px)",
+    );
+  });
+
+  it("任务中心 Shell 调整高度后应同步避让工作台内容", () => {
+    const container = renderScene({
+      navbarVisible: true,
+      navbarChrome: "workspace-compact",
+      navbarContextVariant: "task-center",
+      taskCenterTabsNode: <div data-testid="task-center-tabs-stub">tabs</div>,
+      projectRootPath: "/tmp/project",
+      shellBottomInset: "12px",
+      showHarnessToggle: true,
+    });
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="task-center-utility-toolbar-stub"]',
+        )
+        ?.click();
+    });
+
+    expect(mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.shellBottomInset).toBe(
+      "calc(12px + 236px)",
+    );
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="task-center-shell-height-stub"]',
+        )
+        ?.click();
+    });
+
+    const panel = container.querySelector(
+      '[data-testid="task-center-shell-panel-stub"]',
+    );
+    expect(panel?.getAttribute("data-height")).toBe("360");
+    expect(panel?.getAttribute("data-maximized")).toBe("false");
+    expect(mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.shellBottomInset).toBe(
+      "calc(12px + 360px)",
+    );
   });
 
   it("有消息来源的 pending A2UI 不应再渲染底部补参面板", () => {

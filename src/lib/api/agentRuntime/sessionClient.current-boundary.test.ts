@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AppServerSessionRpcClient } from "./appServerSessionClient";
-import { createSessionClient } from "./sessionClient";
+import {
+  AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
+  createSessionClient,
+} from "./sessionClient";
 
 function appServerClientMock(): AppServerSessionRpcClient {
   return {
@@ -122,5 +125,54 @@ describe("agentRuntime sessionClient current App Server boundary", () => {
       archived: true,
     });
     expect(appServerClient.request).not.toHaveBeenCalled();
+  });
+
+  it("session mutation should notify current GUI session-list subscribers", async () => {
+    const appServerClient = appServerClientMock();
+    const sessionStartResult = {
+      session: {
+        sessionId: "session-created",
+        threadId: "thread-created",
+        appId: "desktop",
+        workspaceId: "workspace-1",
+        status: "idle" as const,
+        createdAt: "2026-06-07T00:00:00.000Z",
+        updatedAt: "2026-06-07T00:00:00.000Z",
+      },
+    };
+    vi.mocked(appServerClient.startSession).mockResolvedValueOnce({
+      id: 1,
+      result: sessionStartResult,
+      response: { id: 1, result: sessionStartResult },
+      notifications: [],
+      messages: [],
+    });
+    const client = createSessionClient({
+      appServerClient,
+    });
+    const listener = vi.fn();
+    window.addEventListener(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, listener);
+
+    try {
+      await client.createAgentRuntimeSession("workspace-1", "新会话");
+      await client.updateAgentRuntimeSession({
+        session_id: "session-created",
+        name: "已更新",
+      });
+      await client.archiveManyAgentRuntimeSessions(["session-created"]);
+      await client.deleteAgentRuntimeSession("session-created");
+    } finally {
+      window.removeEventListener(
+        AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
+        listener,
+      );
+    }
+
+    expect(listener).toHaveBeenCalledTimes(4);
+    expect(
+      listener.mock.calls.map(([event]) =>
+        event instanceof CustomEvent ? event.detail.reason : null,
+      ),
+    ).toEqual(["created", "updated", "archived", "deleted"]);
   });
 });

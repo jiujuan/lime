@@ -1,10 +1,7 @@
 export {
-  AppServerAgentRuntimeClient,
   AppServerConnection,
-  createAgentRuntimeClient,
   type AgentEvent,
   type AgentRuntimeClient,
-  type AgentRuntimeClientOptions,
   type AgentRuntimeClientSubscription,
   type AgentRuntimeEventListener,
   type AgentSessionActionRespondParams,
@@ -24,7 +21,34 @@ export {
 } from "@limecloud/app-server-client";
 
 export {
+  AppServerAgentRuntimeClient,
+  createAgentRuntimeClient,
+  type AgentRuntimeClientOptions,
+} from "./runtimeClient.js";
+
+export {
+  AgentRuntimeEventSequenceGate,
+  AgentRuntimeSequenceViolationError,
+  runtimeExecutionEventFromAgentEvent,
+  type AgentRuntimeSequenceVerifierLike,
+  type AgentRuntimeSequenceVerifierMode,
+} from "./eventVerifier.js";
+
+export {
+  AgentRuntimeEventPipeline,
+  createSchemaVersionCompatibilityMiddleware,
+  withEvent,
+  type AgentRuntimeEventAdapter,
+  type AgentRuntimeEventMiddleware,
+  type AgentRuntimeEventMiddlewareFunction,
+  type AgentRuntimeEventPipelineContext,
+  type AgentRuntimeEventPipelineMiddleware,
+  type AgentRuntimeEventPipelineOptions,
+} from "./eventPipeline.js";
+
+export {
   createAgentRuntimeClientFromSessionGateway,
+  type AgentRuntimeClientFromGatewayOptions,
   type AgentRuntimeLifecycleClient,
   type AgentRuntimeSessionGateway,
 } from "./sessionGateway.js";

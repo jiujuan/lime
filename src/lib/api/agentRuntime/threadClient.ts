@@ -13,6 +13,7 @@ import {
   type AppServerAgentSessionFileCheckpointSummary,
   type AppServerAgentSessionActionRespondParams,
   type AppServerAgentSessionActionScope,
+  type AppServerCapabilityListParams,
   type AppServerAgentSessionReadParams,
   type AppServerAgentSessionTurnCancelParams,
   type AppServerAgentSessionTurnStartParams,
@@ -20,13 +21,19 @@ import {
 } from "@/lib/api/appServer";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
 import type { AgentRuntimeClient as StandardAgentRuntimeClient } from "@limecloud/agent-runtime-client";
-import { publishAgentRuntimeEvent } from "../agentRuntimeEvents";
+import { publishProcessedAgentRuntimeEvent } from "../agentRuntimeEvents";
+import { projectAgentRuntimeSequenceGateNotifications } from "./eventSequenceGate";
 import { projectAppServerSessionReadResult } from "./appServerReadModelClient";
 import {
   invokeAgentRuntimeCommand,
   type AgentRuntimeCommandInvoke,
 } from "./transport";
+import {
+  agentRuntimeCapabilityManifestFromAppServerResponse,
+  buildAgentRuntimeResumeContract,
+} from "./capabilityContract";
 import type {
+  AgentRuntimeCapabilityManifestRequest,
   AgentRuntimeCompactSessionRequest,
   AgentRuntimeDiffFileCheckpointRequest,
   AgentRuntimeFileCheckpointDetail,
@@ -47,6 +54,7 @@ import type {
   AgentRuntimeSubmitTurnRequest,
   AgentRuntimeThreadReadModel,
 } from "./types";
+import type { AgentRuntimeCapabilityManifest } from "@limecloud/agent-ui-contracts";
 
 const APP_SERVER_EVENT_DRAIN_LIMIT = 50;
 const APP_SERVER_EVENT_DRAIN_INTERVAL_MS = 250;
@@ -68,6 +76,7 @@ export type AgentRuntimeAppServerClient = Pick<
   | "getAgentSessionFileCheckpoint"
   | "diffAgentSessionFileCheckpoint"
   | "restoreAgentSessionFileCheckpoint"
+  | "listCapabilities"
 >;
 
 export type AgentRuntimeLifecycleClient = Pick<
@@ -176,14 +185,41 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
   async function resumeAgentRuntimeThread(
     request: AgentRuntimeResumeThreadRequest,
   ): Promise<boolean> {
+    const resumeContract = buildAgentRuntimeResumeContract({
+      sessionId: request.session_id,
+      turnId: request.turn_id,
+      openActionIds: request.open_action_ids,
+      decisions: request.decisions,
+    });
     const result = await appServerClient.resumeAgentSessionThread({
       sessionId: request.session_id,
+      resumeContract,
     });
     publishAppServerAgentSessionNotifications(
       `agentSession/event/${request.session_id}`,
       result.notifications,
     );
     return result.result.resumed === true;
+  }
+
+  async function getAgentRuntimeCapabilityManifest(
+    request: AgentRuntimeCapabilityManifestRequest = {},
+  ): Promise<AgentRuntimeCapabilityManifest> {
+    const params: AppServerCapabilityListParams = {
+      ...(request.app_id ? { appId: request.app_id } : {}),
+      ...(request.workspace_id ? { workspaceId: request.workspace_id } : {}),
+      ...(request.session_id ? { sessionId: request.session_id } : {}),
+      ...(request.cursor ? { cursor: request.cursor } : {}),
+      ...(typeof request.limit === "number" ? { limit: request.limit } : {}),
+    };
+    const result = await appServerClient.listCapabilities(params);
+    return agentRuntimeCapabilityManifestFromAppServerResponse(
+      result.result.capabilities ?? [],
+      result.result.runtimeCapabilityManifest,
+      {
+        sessionId: request.session_id,
+      },
+    );
   }
 
   async function replayAgentRuntimeRequest(
@@ -324,6 +360,7 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
     compactAgentRuntimeSession,
     diffAgentRuntimeFileCheckpoint,
     getAgentRuntimeFileCheckpoint,
+    getAgentRuntimeCapabilityManifest,
     getAgentRuntimeThreadRead,
     interruptAgentRuntimeTurn,
     listAgentRuntimeFileCheckpoints,
@@ -458,13 +495,14 @@ function isOptionalString(value: unknown): value is string | undefined {
 
 function isOptionalFiniteNumber(value: unknown): value is number | undefined {
   return (
-    value === undefined ||
-    (typeof value === "number" && Number.isFinite(value))
+    value === undefined || (typeof value === "number" && Number.isFinite(value))
   );
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isFileCheckpointSummary(
@@ -589,8 +627,11 @@ function isAppServerFileCheckpointSummary(
     isOptionalString(readField(value, "status")) &&
     isOptionalString(readField(value, "previewText", "preview_text")) &&
     isOptionalString(readField(value, "snapshotPath", "snapshot_path")) &&
-    typeof readField(value, "validationIssueCount", "validation_issue_count") ===
-      "number" &&
+    typeof readField(
+      value,
+      "validationIssueCount",
+      "validation_issue_count",
+    ) === "number" &&
     Number.isFinite(
       readField(value, "validationIssueCount", "validation_issue_count"),
     )
@@ -645,8 +686,12 @@ function isAppServerFileCheckpointDiffResponse(
     isRequiredString(readField(value, "sessionId", "session_id")) &&
     isRequiredString(readField(value, "threadId", "thread_id")) &&
     isAppServerFileCheckpointSummary(readField(value, "checkpoint")) &&
-    isOptionalString(readField(value, "currentVersionId", "current_version_id")) &&
-    isOptionalString(readField(value, "previousVersionId", "previous_version_id"))
+    isOptionalString(
+      readField(value, "currentVersionId", "current_version_id"),
+    ) &&
+    isOptionalString(
+      readField(value, "previousVersionId", "previous_version_id"),
+    )
   );
 }
 
@@ -778,7 +823,8 @@ function projectAppServerFileCheckpointListResult(
       "checkpoint_count",
     ) as number,
     checkpoints: (readField(record, "checkpoints") as unknown[]).map(
-      (checkpoint) => projectAppServerFileCheckpointSummary(command, checkpoint),
+      (checkpoint) =>
+        projectAppServerFileCheckpointSummary(command, checkpoint),
     ),
   };
   assertFileCheckpointListResult(command, result);
@@ -1134,11 +1180,8 @@ class AppServerAgentSessionEventDrainRouter {
 function isTerminalAppServerAgentEvent(event: AppServerAgentEvent): boolean {
   return (
     event.type === "turn.completed" ||
-    event.type === "turn.done" ||
-    event.type === "turn.final_done" ||
     event.type === "turn.failed" ||
-    event.type === "turn.canceled" ||
-    event.type === "turn.cancelled"
+    event.type === "turn.canceled"
   );
 }
 
@@ -1165,9 +1208,30 @@ export function publishAppServerAgentSessionNotifications(
   }
 
   for (const notification of notifications) {
-    const payload = projectAppServerAgentEventPayload(notification);
-    if (payload) {
-      publishAgentRuntimeEvent(eventName, payload);
+    publishAppServerAgentSessionNotificationsFromPipeline(eventName, [
+      notification,
+    ]);
+  }
+}
+
+export function publishAppServerAgentSessionNotificationsFromPipeline(
+  eventName: string | undefined,
+  notifications: AppServerJsonRpcNotification[] | undefined,
+): void {
+  if (!eventName || !notifications?.length) {
+    return;
+  }
+
+  for (const notification of notifications) {
+    const processedNotifications = projectAgentRuntimeSequenceGateNotifications(
+      eventName,
+      notification,
+    );
+    for (const processedNotification of processedNotifications) {
+      const payload = projectAppServerAgentEventPayload(processedNotification);
+      if (payload) {
+        publishProcessedAgentRuntimeEvent(eventName, payload);
+      }
     }
   }
 }
@@ -1181,6 +1245,9 @@ export function projectAppServerAgentEventPayload(
 
   const event = readAppServerAgentEvent(notification.params);
   if (!event) {
+    return null;
+  }
+  if (isLegacyTurnTerminalAppServerEventType(event.type)) {
     return null;
   }
 
@@ -1236,6 +1303,42 @@ export function projectAppServerAgentEventPayload(
         type: "thinking_delta",
         text: readString(payload, "text", "delta", "message") ?? "",
       };
+    case "tool.started":
+      return {
+        ...basePayload,
+        type: "tool_start",
+        tool_name: readString(payload, "tool_name", "toolName", "name") ?? "",
+        tool_id:
+          readString(
+            payload,
+            "toolCallId",
+            "tool_call_id",
+            "toolId",
+            "tool_id",
+            "id",
+          ) ?? "",
+        arguments: normalizeToolArguments(
+          payload.arguments ??
+            payload.args ??
+            payload.input ??
+            payload.parameters,
+        ),
+      };
+    case "tool.result":
+      return {
+        ...basePayload,
+        type: "tool_end",
+        tool_id:
+          readString(
+            payload,
+            "toolCallId",
+            "tool_call_id",
+            "toolId",
+            "tool_id",
+            "id",
+          ) ?? "",
+        result: normalizeToolExecutionResult(payload),
+      };
     case "artifact.snapshot":
       return {
         ...basePayload,
@@ -1283,31 +1386,29 @@ export function projectAppServerAgentEventPayload(
           updated_at: event.timestamp,
         },
       };
-    case "turn.done":
-      return {
-        ...basePayload,
-        type: "done",
-        usage: payload.usage,
-      };
-    case "turn.final_done":
-      return {
-        ...basePayload,
-        type: "final_done",
-        usage: payload.usage,
-      };
     case "turn.failed":
       return {
         ...basePayload,
-        type: "error",
-        message:
-          readString(payload, "message", "error", "reason") ??
-          "App Server turn failed",
+        type: "turn_failed",
+        turn: normalizeRecord(payload.turn) ?? {
+          id: event.turnId ?? "",
+          thread_id: event.threadId ?? event.sessionId,
+          prompt_text:
+            readString(payload, "prompt_text", "promptText", "prompt") ?? "",
+          status: "failed",
+          started_at: event.timestamp,
+          completed_at: event.timestamp,
+          created_at: event.timestamp,
+          updated_at: event.timestamp,
+          error_message:
+            readString(payload, "message", "error", "reason") ??
+            "App Server turn failed",
+        },
       };
     case "turn.canceled":
-    case "turn.cancelled":
       return {
         ...basePayload,
-        type: "turn_completed",
+        type: "turn_canceled",
         text: readString(payload, "text", "delta", "message", "content"),
         usage: payload.usage,
         turn: normalizeRecord(payload.turn) ?? {
@@ -1320,11 +1421,8 @@ export function projectAppServerAgentEventPayload(
           completed_at: event.timestamp,
           created_at: event.timestamp,
           updated_at: event.timestamp,
-          error_message:
-            readString(payload, "message", "error", "reason") ?? "本轮已中止",
+          error_message: "本轮已中止",
         },
-        message:
-          readString(payload, "message", "error", "reason") ?? "本轮已中止",
       };
     default:
       return {
@@ -1332,6 +1430,17 @@ export function projectAppServerAgentEventPayload(
         type: event.type.split(".").join("_"),
       };
   }
+}
+
+function isLegacyTurnTerminalAppServerEventType(type: string): boolean {
+  return (
+    type === "done" ||
+    type === "final_done" ||
+    type === "cancelled" ||
+    type === "turn.done" ||
+    type === "turn.final_done" ||
+    type === "turn.cancelled"
+  );
 }
 
 function readAppServerAgentEvent(params: unknown): AppServerAgentEvent | null {
@@ -1399,6 +1508,55 @@ function readStringArray(
     }
   }
   return undefined;
+}
+
+function normalizeToolArguments(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeToolResultOutput(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === undefined || value === null) {
+    return "";
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeToolExecutionResult(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const rawResult = normalizeRecord(payload.result);
+  const source = rawResult ?? payload;
+  const error = readString(source, "error", "message");
+  const metadata = normalizeRecord(source.metadata);
+  const success =
+    typeof source.success === "boolean" ? source.success : error ? false : true;
+
+  return {
+    success,
+    output: normalizeToolResultOutput(
+      source.output ?? source.text ?? source.content,
+    ),
+    ...(error ? { error } : {}),
+    ...(Array.isArray(source.images) ? { images: source.images } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
 }
 
 function projectTextDeltaBatchPayload(
@@ -1655,6 +1813,7 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): T {
 export const {
   compactAgentRuntimeSession,
   diffAgentRuntimeFileCheckpoint,
+  getAgentRuntimeCapabilityManifest,
   getAgentRuntimeFileCheckpoint,
   getAgentRuntimeThreadRead,
   interruptAgentRuntimeTurn,

@@ -748,7 +748,10 @@ function resolveQueueDrainedRuntimeStatus(
 function resolveFinalRuntimeStatus(params: {
   session: TeamWorkspaceRuntimeSessionSnapshot;
   current?: TeamWorkspaceLiveRuntimeState;
-  terminalStatus?: Extract<TeamWorkspaceRuntimeStatus, "completed" | "failed">;
+  terminalStatus?: Extract<
+    TeamWorkspaceRuntimeStatus,
+    "completed" | "failed" | "aborted"
+  >;
   queuedTurnCount?: number;
 }): TeamWorkspaceRuntimeStatus {
   const queuedTurnCount =
@@ -1095,17 +1098,17 @@ export function projectRuntimeStreamEvent(params: {
         refreshPreview: true,
       };
     }
-    case "done":
-      return null;
-    case "final_done": {
+    case "turn_canceled": {
       const queuedTurnCount = getQueuedTurnCount(session, currentRuntime);
       return {
         liveRuntimePatch: {
           runtimeStatus: resolveFinalRuntimeStatus({
             session,
             current: currentRuntime,
+            terminalStatus: "aborted",
             queuedTurnCount,
           }),
+          latestTurnStatus: "aborted",
           queuedTurnCount,
         },
         clearEntryIds: [

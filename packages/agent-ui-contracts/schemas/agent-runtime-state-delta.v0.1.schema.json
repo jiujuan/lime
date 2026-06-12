@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://limecloud.dev/schemas/agent-runtime-state-delta.v0.1.schema.json",
+  "title": "AgentRuntimeStateDelta",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "runtimeId",
+    "sequence",
+    "target",
+    "patch",
+    "createdAt"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "lime-runtime-state-delta/v0.1"
+    },
+    "runtimeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "baseEventId": {
+      "type": "string"
+    },
+    "target": {
+      "type": "string"
+    },
+    "patch": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "op",
+              "path",
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "enum": [
+                  "add",
+                  "replace",
+                  "test"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "value": true
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "op",
+              "path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "const": "remove"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "op",
+              "path",
+              "from"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {
+                "enum": [
+                  "move",
+                  "copy"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "from": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    "createdAt": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

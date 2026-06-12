@@ -79,6 +79,7 @@ const bridgeEventListeners = new Map<
 >();
 let bridgeEventConnection: DevBridgeEventConnection | null = null;
 let bridgeEventConnectionPromise: Promise<void> | null = null;
+let bridgeEventConnectionQueued = false;
 let bridgeLastHealthyAt = 0;
 let bridgeConnectionBackoffUntil = 0;
 let bridgeHealthProbePromise: Promise<boolean> | null = null;
@@ -617,8 +618,14 @@ async function createBridgeEventConnection(
 }
 
 async function ensureBridgeEventConnection(): Promise<void> {
-  if (!bridgeEventConnectionPromise) {
-    bridgeEventConnectionPromise = (async () => {
+  if (bridgeEventConnectionPromise) {
+    bridgeEventConnectionQueued = true;
+    return bridgeEventConnectionPromise;
+  }
+
+  bridgeEventConnectionPromise = (async () => {
+    do {
+      bridgeEventConnectionQueued = false;
       while (true) {
         const snapshot = getBridgeEventSubscriptionSnapshot();
         if (snapshot.events.length === 0) {
@@ -639,13 +646,15 @@ async function ensureBridgeEventConnection(): Promise<void> {
           bridgeEventConnection?.eventsKey ===
           getBridgeEventSubscriptionSnapshot().eventsKey
         ) {
-          return;
+          break;
         }
       }
-    })().finally(() => {
-      bridgeEventConnectionPromise = null;
-    });
-  }
+    } while (bridgeEventConnectionQueued);
+  })().finally(() => {
+    bridgeEventConnectionPromise = null;
+    bridgeEventConnectionQueued = false;
+  });
+
   return bridgeEventConnectionPromise;
 }
 
@@ -790,6 +799,7 @@ export function __resetDevBridgeHttpStateForTests(): void {
   bridgeConnectionBackoffUntil = 0;
   bridgeHealthProbePromise = null;
   bridgeEventConnectionPromise = null;
+  bridgeEventConnectionQueued = false;
   closeBridgeEventConnection();
   bridgeEventListeners.clear();
 }

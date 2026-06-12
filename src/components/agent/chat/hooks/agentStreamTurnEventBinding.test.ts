@@ -907,7 +907,7 @@ describe("agentStreamTurnEventBinding", () => {
           sessionId: "session-app-server",
           threadId: "thread-app-server",
           turnId: "turn-app-server",
-          type: "turn.done",
+          type: "turn.completed",
           timestamp: "2026-06-06T00:00:01.000Z",
           payload: {},
         },

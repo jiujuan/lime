@@ -79,6 +79,7 @@ export function defaultEventStatusLabel(event: AgentRuntimeEventProjection): Rea
   if (event.displayStatusKey === "agent.status.completed") return "Completed";
   if (event.displayStatusKey === "agent.status.running") return "Running";
   if (event.displayStatusKey === "agent.status.blocked") return "Blocked";
+  if (event.displayStatusKey === "agent.status.canceled") return "Canceled";
   if (event.displayStatusKey === "agent.status.failed") return "Failed";
   if (event.displayStatusKey === "agent.status.actionRequired") return "Action required";
   if (event.displayStatusKey === "agent.status.actionResolved") return "Resolved";

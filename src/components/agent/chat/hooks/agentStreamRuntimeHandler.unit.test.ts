@@ -303,7 +303,7 @@ describe("agentStreamRuntimeHandler", () => {
     ]);
   });
 
-  it("收到 final_done 时应把 usage 写回 assistant 消息", () => {
+  it("收到 turn_completed 时应把 usage 写回 assistant 消息", () => {
     let messages: Message[] = [
       {
         id: "assistant-1",
@@ -322,7 +322,7 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       data: {
-        type: "final_done",
+        type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" },
         usage: {
           input_tokens: 12_000,
           output_tokens: 19_000,
@@ -386,7 +386,7 @@ describe("agentStreamRuntimeHandler", () => {
     });
   });
 
-  it("收到 turn_completed 时不等待 final_done 也应完成 assistant 消息", () => {
+  it("收到 turn_completed 时不等待 turn_completed 也应完成 assistant 消息", () => {
     let messages: Message[] = [
       {
         id: "assistant-turn-completed",
@@ -587,7 +587,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(mockToast.error).toHaveBeenCalledWith("模型未输出最终答复，请重试");
   });
 
-  it("收到空 turn_completed 但已有真实产物信号时应软完成而不是等待 final_done", () => {
+  it("收到空 turn_completed 但已有真实产物信号时应软完成而不是等待 turn_completed", () => {
     let messages: Message[] = [
       {
         id: "assistant-artifact-turn-completed",
@@ -682,7 +682,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(mockToast.error).not.toHaveBeenCalled();
   });
 
-  it("首个事件就是 final_done 时也应收起发送态", () => {
+  it("首个事件就是 turn_completed 时也应收起发送态", () => {
     let messages: Message[] = [
       {
         id: "assistant-final-first",
@@ -701,7 +701,7 @@ describe("agentStreamRuntimeHandler", () => {
     const disposeListener = vi.fn();
 
     handleTurnStreamEvent({
-      data: { type: "final_done" } as AgentEvent,
+      data: { type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" } } as AgentEvent,
       requestState: {
         accumulatedContent: "整理完成",
         queuedTurnId: null,
@@ -755,7 +755,91 @@ describe("agentStreamRuntimeHandler", () => {
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
 
-  it("陈旧 stream 的 final_done 不应误停新的发送态", () => {
+  it("收到 turn_canceled 时应收起发送态并保留已输出内容", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-canceled",
+        role: "assistant",
+        content: "已经输出的内容",
+        timestamp: new Date("2026-06-07T10:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setIsSending = vi.fn();
+    const disposeListener = vi.fn();
+
+    handleTurnStreamEvent({
+      data: {
+        type: "turn_canceled",
+        turn: {
+          id: "turn-canceled",
+          thread_id: "thread-news",
+          prompt_text: "停止",
+          status: "canceled",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
+      } as AgentEvent,
+      requestState: {
+        accumulatedContent: "已经输出的内容",
+        queuedTurnId: "queued-canceled",
+        requestLogId: null,
+        requestStartedAt: 0,
+        requestFinished: false,
+      },
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => false,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => false,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: vi.fn(),
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      eventName: "agent-runtime-turn-canceled",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-canceled",
+      activeSessionId: "session-news",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "停止",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending,
+    });
+
+    expect(messages[0]).toMatchObject({
+      content: "已经输出的内容",
+      isThinking: false,
+    });
+    expect(setIsSending).toHaveBeenCalledWith(false);
+    expect(disposeListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("陈旧 stream 的 turn_completed 不应误停新的发送态", () => {
     let messages: Message[] = [
       {
         id: "assistant-stale",
@@ -774,7 +858,7 @@ describe("agentStreamRuntimeHandler", () => {
     const disposeListener = vi.fn();
 
     handleTurnStreamEvent({
-      data: { type: "final_done" } as AgentEvent,
+      data: { type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" } } as AgentEvent,
       requestState: {
         accumulatedContent: "旧请求完成",
         queuedTurnId: null,
@@ -1410,7 +1494,7 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       ...baseOptions,
-      data: { type: "final_done" } as AgentEvent,
+      data: { type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" } } as AgentEvent,
     });
 
     expect(messages[0]?.content).toBe("我来为你生成这张照片。");
@@ -1419,7 +1503,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(messages[0]?.isThinking).toBe(false);
   });
 
-  it("text_delta_batch 应先写入 overlay，并在 final_done 时一次性 reconcile 回消息", () => {
+  it("text_delta_batch 应先写入 overlay，并在 turn_completed 时一次性 reconcile 回消息", () => {
     vi.useFakeTimers();
     let messages: Message[] = [
       {
@@ -1501,7 +1585,7 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       ...baseOptions,
-      data: { type: "final_done" } as AgentEvent,
+      data: { type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" } } as AgentEvent,
     });
 
     expect(messages[0]).toMatchObject({
@@ -1687,7 +1771,7 @@ describe("agentStreamRuntimeHandler", () => {
     ]);
   });
 
-  it("收到 final_done 时应剥离 assistant 正文中的工具协议残留", () => {
+  it("收到 turn_completed 时应剥离 assistant 正文中的工具协议残留", () => {
     let messages: Message[] = [
       {
         id: "assistant-2",
@@ -1706,7 +1790,7 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       data: {
-        type: "final_done",
+        type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" },
       } as AgentEvent,
       requestState: {
         accumulatedContent:
@@ -1759,7 +1843,7 @@ describe("agentStreamRuntimeHandler", () => {
     ]);
   });
 
-  it("收到空 final_done 且没有真实产物信号时应落成失败态", () => {
+  it("收到空 turn_completed 且没有真实产物信号时应落成失败态", () => {
     let messages: Message[] = [
       {
         id: "assistant-3",
@@ -1778,7 +1862,7 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       data: {
-        type: "final_done",
+        type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" },
       } as AgentEvent,
       requestState: {
         accumulatedContent: "",
@@ -1833,7 +1917,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(mockToast.error).toHaveBeenCalledWith("模型未输出最终答复，请重试");
   });
 
-  it("站点导出在 tool_end 已登记结果时，空 final_done 不应误报缺少最终答复", () => {
+  it("站点导出在 tool_end 已登记结果时，空 turn_completed 不应误报缺少最终答复", () => {
     let messages: Message[] = [
       {
         id: "assistant-site-export",
@@ -1932,7 +2016,7 @@ describe("agentStreamRuntimeHandler", () => {
 
     handleTurnStreamEvent({
       data: {
-        type: "final_done",
+        type: "turn_completed", turn: { id: "turn-test", thread_id: "thread-test", prompt_text: "test", status: "completed", started_at: "2026-06-07T10:00:00.000Z", completed_at: "2026-06-07T10:00:01.000Z", created_at: "2026-06-07T10:00:00.000Z", updated_at: "2026-06-07T10:00:01.000Z" },
       } as AgentEvent,
       requestState,
       callbacks,

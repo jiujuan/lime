@@ -61,6 +61,39 @@ export function createEmptyAgentSessionSnapshot(options?: {
   };
 }
 
+function resolveCurrentTurnIdFromTimeline(params: {
+  turns: AgentThreadTurn[];
+  items: AgentThreadItem[];
+  preferredTurns?: AgentThreadTurn[];
+  preferredItems?: AgentThreadItem[];
+}): string | null {
+  for (let index = (params.preferredTurns?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const turnId = params.preferredTurns?.[index]?.id;
+    if (typeof turnId === "string" && turnId.trim().length > 0) {
+      return turnId;
+    }
+  }
+  for (let index = (params.preferredItems?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const turnId = params.preferredItems?.[index]?.turn_id;
+    if (typeof turnId === "string" && turnId.trim().length > 0) {
+      return turnId;
+    }
+  }
+  for (let index = params.items.length - 1; index >= 0; index -= 1) {
+    const turnId = params.items[index]?.turn_id;
+    if (typeof turnId === "string" && turnId.trim().length > 0) {
+      return turnId;
+    }
+  }
+  for (let index = params.turns.length - 1; index >= 0; index -= 1) {
+    const turnId = params.turns[index]?.id;
+    if (typeof turnId === "string" && turnId.trim().length > 0) {
+      return turnId;
+    }
+  }
+  return null;
+}
+
 function normalizeConversationText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -396,6 +429,8 @@ export function buildHydratedAgentSessionSnapshot(
         mergeThreadItems(effectiveCurrentThreadItems, incomingItems),
       )
     : filterConversationThreadItems(incomingItems);
+  const visibleIncomingTurns = mergeThreadTurns(incomingTurns);
+  const visibleIncomingItems = mergeThreadItems(incomingItems);
   const nextMessages =
     shouldPreserveExistingTimeline && hydratedMessages.length === 0
       ? effectiveCurrentMessages
@@ -413,10 +448,12 @@ export function buildHydratedAgentSessionSnapshot(
       messages: nextMessages,
       threadTurns: nextThreadTurns,
       threadItems: nextThreadItems,
-      currentTurnId:
-        nextThreadTurns.length > 0
-          ? nextThreadTurns[nextThreadTurns.length - 1]?.id || null
-          : null,
+      currentTurnId: resolveCurrentTurnIdFromTimeline({
+        turns: nextThreadTurns,
+        items: nextThreadItems,
+        preferredTurns: visibleIncomingTurns,
+        preferredItems: visibleIncomingItems,
+      }),
       queuedTurns: normalizeQueuedTurnSnapshots(detail.queued_turns),
       threadRead: detail.thread_read ?? null,
       executionRuntime:
