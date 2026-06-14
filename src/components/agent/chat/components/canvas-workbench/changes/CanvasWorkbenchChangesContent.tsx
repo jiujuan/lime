@@ -9,7 +9,7 @@ import type { CanvasWorkbenchTranslation } from "./CanvasWorkbenchChangesTypes";
 
 interface CanvasWorkbenchChangesContentProps {
   filesPanelOpen: boolean;
-  filesPanelGridStyle: CSSProperties;
+  filesPanelGridStyle: CSSProperties | undefined;
   filesPanelResizeHandle: ReactNode;
   detail: ReactNode;
   fileTree: CanvasWorkbenchChangeTreeNode[];
@@ -17,8 +17,8 @@ interface CanvasWorkbenchChangesContentProps {
   fileFilter: string;
   fileListDisabled?: boolean;
   translateWorkbench: CanvasWorkbenchTranslation;
-  onFileFilterChange: (value: string) => void;
-  onSelectChangeItem: (item: CanvasWorkbenchChangeItem) => void;
+  onFileFilterChange?: (value: string) => void;
+  onSelectChangeItem?: (item: CanvasWorkbenchChangeItem) => void;
 }
 
 export function CanvasWorkbenchChangesContent({

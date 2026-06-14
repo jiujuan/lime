@@ -1,6 +1,74 @@
 use super::support::*;
 use super::*;
 
+struct RoutingDecisionReadModelBackend;
+
+#[async_trait]
+impl ExecutionBackend for RoutingDecisionReadModelBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new(
+            "routing.decision.made",
+            json!({
+                "backend": "runtime",
+                "routingDecision": {
+                    "routingMode": "profile_slot",
+                    "decisionSource": "profile_model_slot",
+                    "decisionReason": "profile_slot_selected",
+                    "settingsSource": "workspace_profile",
+                    "serviceModelSlot": "coding",
+                    "selectedProvider": "custom-coding",
+                    "selectedModel": "coder-large",
+                    "requestedProvider": "custom-coding",
+                    "requestedModel": "coder-large",
+                    "fallbackChain": []
+                },
+                "modelSlot": {
+                    "serviceModelSlot": "coding",
+                    "slots": [
+                        {
+                            "slot": "coding",
+                            "provider": "custom-coding",
+                            "model": "coder-large"
+                        },
+                        {
+                            "slot": "review",
+                            "provider": "custom-review",
+                            "model": "review-small"
+                        }
+                    ]
+                },
+                "providerReadiness": {
+                    "ready": true,
+                    "status": "ready",
+                    "source": "provider_store",
+                    "enabledKeyCount": 1
+                }
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 #[tokio::test]
 async fn read_session_projects_runtime_turns_into_gui_messages() {
     let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
@@ -139,6 +207,82 @@ async fn read_session_projects_failed_runtime_event_into_diagnostics_and_error_i
     assert_eq!(
         items[0]["message"].as_str(),
         Some(expected_error_message.as_str())
+    );
+}
+
+#[tokio::test]
+async fn read_session_projects_model_routing_into_thread_read() {
+    let core = RuntimeCore::with_backend(Arc::new(RoutingDecisionReadModelBackend));
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_routing_read".to_string()),
+        thread_id: Some("thread_routing_read".to_string()),
+        app_id: "desktop".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: "sess_routing_read".to_string(),
+            title: Some("Routing Read".to_string()),
+            uri: None,
+            metadata: None,
+        }),
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_routing_read".to_string(),
+            turn_id: Some("turn_routing_read".to_string()),
+            input: AgentInput {
+                text: "帮我修改代码".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_routing_read".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("session detail");
+    let routing = &detail["thread_read"]["model_routing"];
+
+    assert_eq!(
+        detail["thread_read"]["service_model_slot"].as_str(),
+        Some("coding")
+    );
+    assert_eq!(
+        routing["decisionSource"].as_str(),
+        Some("profile_model_slot")
+    );
+    assert_eq!(
+        routing["decisionReason"].as_str(),
+        Some("profile_slot_selected")
+    );
+    assert_eq!(routing["serviceModelSlot"].as_str(), Some("coding"));
+    assert_eq!(routing["selectedProvider"].as_str(), Some("custom-coding"));
+    assert_eq!(routing["selectedModel"].as_str(), Some("coder-large"));
+    assert_eq!(
+        routing["providerReadiness"]["status"].as_str(),
+        Some("ready")
+    );
+    assert_eq!(
+        routing["modelSlot"]["slots"][1]["slot"].as_str(),
+        Some("review")
+    );
+    assert_eq!(
+        detail["thread_read"]["runtime_summary"]["decisionSource"].as_str(),
+        Some("profile_model_slot")
     );
 }
 

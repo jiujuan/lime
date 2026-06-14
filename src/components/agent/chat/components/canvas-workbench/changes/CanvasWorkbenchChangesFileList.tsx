@@ -20,7 +20,7 @@ type CanvasWorkbenchTranslation = (
 interface RenderChangeTreeNodeOptions {
   nodes: CanvasWorkbenchChangeTreeNode[];
   selectedChangeItem: CanvasWorkbenchChangeItem | undefined;
-  onSelectChangeItem: (item: CanvasWorkbenchChangeItem) => void;
+  onSelectChangeItem?: (item: CanvasWorkbenchChangeItem) => void;
 }
 
 function resolveFileIcon(path: string) {
@@ -83,7 +83,8 @@ function renderChangeTreeNodes({
             : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
         )}
         style={{ paddingLeft }}
-        onClick={() => onSelectChangeItem(item)}
+        onClick={() => onSelectChangeItem?.(item)}
+        disabled={!onSelectChangeItem}
         data-testid="canvas-workbench-change-item"
         data-change-id={item.id}
         title={item.path}
@@ -114,9 +115,11 @@ export function CanvasWorkbenchChangesFileList({
   fileFilter: string;
   disabled?: boolean;
   translateWorkbench: CanvasWorkbenchTranslation;
-  onFileFilterChange: (value: string) => void;
-  onSelectChangeItem: (item: CanvasWorkbenchChangeItem) => void;
+  onFileFilterChange?: (value: string) => void;
+  onSelectChangeItem?: (item: CanvasWorkbenchChangeItem) => void;
 }) {
+  const filterDisabled = Boolean(disabled || !onFileFilterChange);
+
   return (
     <aside
       className="flex min-h-0 flex-col border-l border-slate-200 bg-slate-50"
@@ -127,8 +130,8 @@ export function CanvasWorkbenchChangesFileList({
           <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
           <input
             value={fileFilter}
-            disabled={disabled}
-            onChange={(event) => onFileFilterChange(event.target.value)}
+            disabled={filterDisabled}
+            onChange={(event) => onFileFilterChange?.(event.target.value)}
             placeholder={translateWorkbench(
               "agentChat.canvasWorkbench.coding.changes.filterFiles",
             )}

@@ -2019,6 +2019,8 @@ export interface ProjectGitDiffParams {
 }
 
 export interface ProjectGitDiffResponse {
+  comparisonBaseRef?: null | string;
+  currentRef?: null | string;
   hasGitRepository: boolean;
   patch: string;
   repositoryRoot?: null | string;

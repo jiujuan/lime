@@ -7,8 +7,10 @@ type CanvasWorkbenchTranslation = (
 ) => string;
 
 export function CanvasWorkbenchEmptyDiffPanel({
+  messageKey = "agentChat.canvasWorkbench.coding.changes.empty",
   translateWorkbench,
 }: {
+  messageKey?: string;
   translateWorkbench: CanvasWorkbenchTranslation;
 }) {
   return (
@@ -36,9 +38,7 @@ export function CanvasWorkbenchEmptyDiffPanel({
               {" "}
             </span>
             <span className="px-3 py-1.5">
-              {translateWorkbench(
-                "agentChat.canvasWorkbench.coding.changes.empty",
-              )}
+              {translateWorkbench(messageKey)}
             </span>
           </div>
         </div>

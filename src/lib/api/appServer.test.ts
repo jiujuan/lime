@@ -646,6 +646,8 @@ describe("App Server API", () => {
             rootPath: "/workspace",
             repositoryRoot: "/workspace",
             hasGitRepository: true,
+            currentRef: "main",
+            comparisonBaseRef: "origin/main",
             patch: "diff --git a/README.md b/README.md\n+hello",
             uncommittedFileCount: 1,
           },
@@ -661,6 +663,8 @@ describe("App Server API", () => {
     });
 
     expect(diff.result.patch).toContain("diff --git");
+    expect(diff.result.currentRef).toBe("main");
+    expect(diff.result.comparisonBaseRef).toBe("origin/main");
     expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
       request: {
         lines: [

@@ -1,4 +1,5 @@
 mod coding_events;
+mod model_routing;
 mod tool_events;
 mod tool_inventory;
 
@@ -17,13 +18,9 @@ use lime_agent::{
     AgentEvent as RuntimeAgentEvent, AsterAgentState, ProviderConfig,
 };
 use lime_core::config::{load_config, ToolExecutionPolicyConfig, WorkspaceSandboxConfig};
-use lime_core::database::dao::api_key_provider::{ApiProviderType, ProviderWithKeys};
 use lime_core::database::{self, DbConnection};
-use lime_core::models::provider_type::is_custom_provider_id;
-use lime_core::models::RuntimeProviderType;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use serde_json::{json, Value};
-use std::str::FromStr;
 use std::sync::Arc;
 
 mod request_context;
@@ -31,7 +28,7 @@ mod request_context;
 use request_context::{
     aster_chat_request_from_request, direct_provider_config_from_request,
     request_tool_policy_from_request, resolve_runtime_model_selection, session_config_from_request,
-    session_scope_from_request, RuntimeModelSelection,
+    session_scope_from_request,
 };
 
 #[derive(Default)]
@@ -67,27 +64,43 @@ impl RuntimeBackend {
         let host_request = aster_chat_request_from_request(&request);
         let db = initialize_runtime_database(self.db.as_ref())?;
         let selection = resolve_runtime_model_selection(&request)?;
+        let model_routing = model_routing::resolve_model_routing(&request, &selection);
         let direct_provider_config = direct_provider_config_from_request(
             host_request.as_ref(),
             &selection,
             selection.reasoning_effort.clone(),
         );
-        ensure_selection_provider_is_configured(
+        let provider_readiness = model_routing::resolve_provider_readiness(
             &db,
             &self.api_key_provider_service,
             &selection,
             direct_provider_config.as_ref(),
-        )?;
+        )
+        .map_err(backend_error)?;
 
         sink.emit(RuntimeEvent::new(
             "routing.decision.made",
-            json!({
-                "backend": "runtime",
-                "provider": selection.provider,
-                "model": selection.model,
-                "source": selection.source,
-            }),
+            model_routing::routing_decision_payload(
+                &selection,
+                &model_routing,
+                &provider_readiness,
+            ),
         ))?;
+        if !provider_readiness.ready {
+            sink.emit(RuntimeEvent::new(
+                "routing.not_possible",
+                model_routing::routing_not_possible_payload(
+                    &selection,
+                    &model_routing,
+                    &provider_readiness,
+                ),
+            ))?;
+            return Err(RuntimeCoreError::Backend(format!(
+                "App Server runtime backend provider '{}' is not ready for coding model slot '{}'",
+                selection.provider,
+                model_routing.service_model_slot()
+            )));
+        }
 
         let provider_config = if let Some(provider_config) = direct_provider_config {
             self.agent_state
@@ -365,39 +378,6 @@ fn initialize_runtime_database(
     Ok(db)
 }
 
-fn ensure_selection_provider_is_configured(
-    db: &DbConnection,
-    api_key_provider_service: &ApiKeyProviderService,
-    selection: &RuntimeModelSelection,
-    direct_provider_config: Option<&ProviderConfig>,
-) -> Result<(), RuntimeCoreError> {
-    if direct_provider_config.is_some() {
-        return Ok(());
-    }
-
-    let providers = api_key_provider_service
-        .get_all_providers(db)
-        .map_err(backend_error)?;
-    if providers.iter().any(|provider| {
-        provider.provider.id == selection.provider && enabled_chat_provider_with_key(provider)
-    }) {
-        return Ok(());
-    }
-
-    if is_supported_builtin_runtime_provider(&selection.provider) {
-        return Ok(());
-    }
-
-    Err(RuntimeCoreError::Backend(format!(
-        "App Server runtime backend provider '{}' is not configured as an enabled API Key Provider and is not a supported runtime provider type",
-        selection.provider
-    )))
-}
-
-fn is_supported_builtin_runtime_provider(provider: &str) -> bool {
-    !is_custom_provider_id(provider) && RuntimeProviderType::from_str(provider).is_ok()
-}
-
 async fn provider_config_from_pool(
     agent_state: &AsterAgentState,
     db: &DbConnection,
@@ -421,16 +401,6 @@ async fn provider_config_from_pool(
         toolshim: aster_config.toolshim,
         toolshim_model: aster_config.toolshim_model,
     })
-}
-
-fn enabled_chat_provider_with_key(provider: &ProviderWithKeys) -> bool {
-    provider.provider.enabled
-        && !provider.api_keys.iter().all(|key| !key.enabled)
-        && !provider_looks_non_chat_candidate(provider)
-}
-
-fn provider_looks_non_chat_candidate(provider: &ProviderWithKeys) -> bool {
-    matches!(provider.provider.provider_type, ApiProviderType::Fal)
 }
 
 fn emit_runtime_agent_event_with_coding_mirror(

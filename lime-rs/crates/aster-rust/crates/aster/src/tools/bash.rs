@@ -22,8 +22,8 @@ use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use tracing::{debug, warn};
 
-use crate::subprocess::{decode_process_output, summarize_decoded_with};
 use crate::sandbox::{execute_in_sandbox_with_options, ExecutorOptions, ExecutorResult};
+use crate::subprocess::{decode_process_output, summarize_decoded_with};
 
 use super::base::{PermissionCheckResult, Tool};
 use super::command_semantics::interpret_bash_command_result;
@@ -1189,8 +1189,12 @@ impl BashTool {
         let stderr = executor_result.stderr;
         let exit_code = executor_result.exit_code;
         let interpretation = interpret_bash_command_result(command, exit_code, &stdout, &stderr);
-        let combined_output =
-            self.format_output_with_message(&stdout, &stderr, exit_code, interpretation.message.as_deref());
+        let combined_output = self.format_output_with_message(
+            &stdout,
+            &stderr,
+            exit_code,
+            interpretation.message.as_deref(),
+        );
         let truncated_output = self.truncate_output(&combined_output);
         let mut result = if interpretation.is_error {
             ToolResult::error(truncated_output)
@@ -1308,7 +1312,12 @@ fn resolved_shell_program() -> &'static str {
 fn resolved_shell_args(command: &str) -> Vec<String> {
     #[cfg(target_os = "windows")]
     {
-        vec!["/D".to_string(), "/S".to_string(), "/C".to_string(), command.to_string()]
+        vec![
+            "/D".to_string(),
+            "/S".to_string(),
+            "/C".to_string(),
+            command.to_string(),
+        ]
     }
 
     #[cfg(not(target_os = "windows"))]

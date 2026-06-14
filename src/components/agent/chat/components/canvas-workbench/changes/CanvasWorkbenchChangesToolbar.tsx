@@ -6,6 +6,7 @@ import {
   FolderOpen,
   ListChecks,
   MoreHorizontal,
+  GitBranch,
 } from "lucide-react";
 import type { CanvasWorkbenchChangeDiffStats } from "./CanvasWorkbenchChangesPanelViewModel";
 import { DiffStats } from "./CanvasWorkbenchChangeStats";
@@ -20,13 +21,14 @@ import {
   type CanvasWorkbenchTranslation,
 } from "./CanvasWorkbenchChangesTypes";
 
-interface CanvasWorkbenchChangesToolbarProps extends CanvasWorkbenchReviewMenuModel {
+export interface CanvasWorkbenchChangesToolbarProps extends CanvasWorkbenchReviewMenuModel {
   translateWorkbench: CanvasWorkbenchTranslation;
   diffStats: CanvasWorkbenchChangeDiffStats;
   checkpointCount?: number;
   reviewMenuOpen: boolean;
   baseMenuOpen: boolean;
   selectedBase: CanvasWorkbenchReviewBase;
+  branchCompareLabel?: string | null;
   filesPanelOpen?: boolean;
   showFilesToggle?: boolean;
   actionsDisabled?: boolean;
@@ -47,7 +49,7 @@ interface CanvasWorkbenchChangesToolbarProps extends CanvasWorkbenchReviewMenuMo
   onSelectCommit?: (commit: CanvasWorkbenchReviewCommitOption) => void;
   onRefreshChanges?: () => void | Promise<void>;
   onCopyGitApply?: () => void | Promise<void>;
-  onToggleDiffVariant: () => void;
+  onToggleDiffVariant?: () => void;
   onToggleFilesPanel?: () => void;
 }
 
@@ -58,6 +60,7 @@ export function CanvasWorkbenchChangesToolbar({
   reviewMenuOpen,
   baseMenuOpen,
   selectedBase,
+  branchCompareLabel,
   filesPanelOpen = true,
   showFilesToggle = true,
   actionsDisabled = false,
@@ -111,10 +114,11 @@ export function CanvasWorkbenchChangesToolbar({
   );
   const isBaseSelectorDisabled = baseSelectorDisabled ?? actionsDisabled;
   const isReviewMenuDisabled = reviewMenuDisabled ?? actionsDisabled;
-  const isDiffViewToggleDisabled = diffViewToggleDisabled ?? actionsDisabled;
+  const isDiffViewToggleDisabled =
+    diffViewToggleDisabled ?? (actionsDisabled || !onToggleDiffVariant);
 
   return (
-    <div className="flex min-h-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2">
+    <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 border-b border-slate-200 bg-white px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
         <div className="relative">
           <button
@@ -280,7 +284,9 @@ export function CanvasWorkbenchChangesToolbar({
               onCopyGitApply={onCopyGitApply}
               onToggleAutoExecute={onToggleAutoExecute}
               onToggleCollapseContext={onToggleCollapseContext}
-              onToggleLoadFullFile={onToggleLoadFullFile}
+              onToggleLoadFullFile={
+                loadFullFileDisabled ? undefined : onToggleLoadFullFile
+              }
               onToggleRichPreview={onToggleRichPreview}
               onToggleTextDiff={onToggleTextDiff}
               onToggleWhitespace={onToggleWhitespace}
@@ -312,6 +318,15 @@ export function CanvasWorkbenchChangesToolbar({
           </button>
         ) : null}
       </div>
+      {selectedBase === "branch" && branchCompareLabel ? (
+        <div
+          className="col-span-2 flex min-w-0 items-center gap-1.5 pl-1 font-mono text-[12px] text-slate-500"
+          data-testid="canvas-workbench-changes-branch-compare"
+        >
+          <GitBranch className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <span className="min-w-0 truncate">{branchCompareLabel}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

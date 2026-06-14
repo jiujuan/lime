@@ -2358,6 +2358,7 @@ const checks = [
     files: [
       "lime-rs/crates/agent/src/agent_tools/mod.rs",
       "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs",
+      "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/tests.rs",
     ],
     snippets: [
       "pub mod tool_orchestrator;",

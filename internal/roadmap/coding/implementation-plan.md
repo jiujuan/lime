@@ -251,16 +251,18 @@ turn start
 - 窄屏和宽屏下按钮文字不溢出，右侧对话不遮挡主画布。
 - `*.test.tsx` / view model 单测覆盖 tab 默认选择、blocked、failed、waiting action、changes ready。
 
-当前状态：`in_progress / change-output-log-action current projection connected`。现有 `CanvasWorkbenchLayout` coding mode 仍是承载壳，但 `WorkspaceConversationSceneRuntime` 已把 `changeView`、`outputView`、`logView` 从 `CodingWorkbenchView` 派生：变更面板消费 projection change facts 与 file checkpoint summary，输出面板消费 commands/tests/actions/diagnostics，日志面板消费同一 projection 的文件、命令、测试、确认和诊断条目。`CodingWorkbenchOutputPanel` 已拆出 `CodingWorkbenchActionPanel`、`CodingWorkbenchDiagnosticPanel` 与共享状态 badge，主面板只做组合；action submit 通过 `handlePermissionResponse` 走 existing runtime action response 主链，不直连 App Server、不新增命令、不依赖 mock。诊断面板已展示 fail-closed policy 与 source event evidence 基础信息。仍未完成：完整诊断抽屉 policy/provider/evidence 聚合、GUI smoke 覆盖提交编程需求 / 查看输出 / 继续修复。
+当前状态：`in_progress / change-output-log-action-recovery current projection connected / runtime hook split`。现有 `CanvasWorkbenchLayout` coding mode 仍是承载壳，但 `WorkspaceConversationSceneRuntime` 已把 `changeView`、`outputView`、`logView` 从 `CodingWorkbenchView` 派生：变更面板消费 projection change facts 与 file checkpoint summary，输出面板消费 commands/tests/actions/diagnostics/recovery，日志面板消费同一 projection 的文件、命令、测试、确认和诊断条目。coding workbench 视图组装已下沉到 `workspaceConversationCodingViews.tsx`，中心 hook 只保留投影延迟、场景参数和 runtime callback 接线；`CodingWorkbenchOutputPanel` 已拆出 `CodingWorkbenchActionPanel`、`CodingWorkbenchDiagnosticPanel`、`CodingWorkbenchRecoveryPanel` 与共享状态 badge，主面板只做组合；action submit 通过 `handlePermissionResponse` 走 existing runtime action response 主链，失败继续修复通过 `handleSendFromEmptyState({ textOverride })` 走 existing send 主链，不直连 App Server、不新增命令、不依赖 mock。诊断面板已展示 fail-closed policy 与 source event evidence 基础信息。仍未完成：完整诊断抽屉 policy/provider/evidence 聚合、GUI smoke 覆盖提交编程需求 / 查看输出 / 继续修复。
 
 2026-06-14 P4 增量：
 
 - `CodingWorkbenchActionPanel` 已从 `CodingWorkbenchView.actions` 渲染待确认动作，支持 command approval 的允许 / 拒绝按钮，并通过 `onRespondToAction` 复用现有 runtime callback；`submittedActionsInFlight` 会禁用按钮并显示提交中，避免重复提交。
 - 无法安全映射为 current `tool_confirmation` 的 action 只展示提示与请求 id，不伪造提交按钮，符合 fail-closed 交互。
 - `CodingWorkbenchDiagnosticPanel` 已从 `CodingWorkbenchView.diagnostics` 展示诊断标题、详情、状态、fail-closed 策略与 source event evidence id，作为后续诊断抽屉聚合的基础 surface。
-- 五语言 `zh-CN / zh-TW / en-US / ja-JP / ko-KR` 已补齐 coding action / diagnostics presentation 文案。
-- `useWorkspaceConversationSceneRuntime.tsx` 现仍超过 1000 行；本轮只做 output view callback 接线，没有继续追加业务状态机。下一刀拆分入口：把 coding workbench utility views 组装抽到 `workspaceConversationCodingViews.tsx` 或同级 presentation helper，中心 hook 只保留参数传递。
-- 验证证据：`npx vitest run "src/components/agent/chat/workspace/CodingWorkbenchOutputPanel.test.tsx" "src/components/agent/chat/workspace/CodingWorkbenchLogPanel.test.tsx" "src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.test.ts" --silent=passed-only --disableConsoleIntercept` 覆盖命令 / 测试 / action submit / submitted 状态 / 诊断 evidence / hook callback 接线；`npx prettier --check ...` 覆盖 touched frontend 与五语言资源。
+- `codingWorkbenchRecovery.ts` 已从 `CodingWorkbenchView.commands/tests/patches/diagnostics` 聚合失败命令、失败测试、失败补丁和失败诊断，并带入相关文件与最近 file checkpoint 生成继续修复 prompt；`CodingWorkbenchRecoveryPanel` 只负责展示失败摘要和主按钮。
+- 继续修复按钮已通过 `workspaceConversationCodingViews.tsx -> useWorkspaceConversationSceneRuntime.tsx` 复用 `handleSendFromEmptyState({ textOverride })`，不新增 App Server method、Desktop Host command 或 mock fallback。
+- 五语言 `zh-CN / zh-TW / en-US / ja-JP / ko-KR` 已补齐 coding action / diagnostics / recovery presentation 文案。
+- `workspaceConversationCodingViews.tsx` 已成为 coding workbench presentation helper，集中构造 `CodingWorkbenchView`、session counters、session/output/log/change view 与 `handlePermissionResponse` callback 传递；`useWorkspaceConversationSceneRuntime.tsx` 从 1000 行以上收回到 1000 行以下，后续不得再向该 hook 追加 coding UI 业务逻辑。
+- 验证证据：`npx vitest run "src/components/agent/chat/workspace/CodingWorkbenchOutputPanel.test.tsx" "src/components/agent/chat/workspace/codingWorkbenchRecovery.unit.test.ts" "src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.test.ts" --silent=passed-only --disableConsoleIntercept` 覆盖 projection-driven output/action/recovery、submitted 状态与 hook callback 接线；`npx eslint ... --max-warnings 0` 覆盖 touched coding workbench 文件；`npx prettier --check ...` 与 `git diff --check -- ...` 覆盖 touched frontend/i18n/roadmap 文件；`npm run verify:gui-smoke` 覆盖 renderer build、Electron host typecheck/build、App Server sidecar、Claw workbench shell ready；`npm run smoke:code-artifact-workbench-electron-fixture` 覆盖代码 artifact 会话创建、历史打开、hydrate 与 workbench 打开。全量 `tsc --noEmit` 本地仍长时间无输出，本轮不计为通过。
 
 ## P5：多模型 Routing 与 Profile Slot
 
@@ -285,7 +287,26 @@ turn start
 - 自定义兼容端点作为 Provider Store entry 参与 registry，不写入 Coding Workbench 本地设置。
 - UI diagnostics 可解释当前使用哪个槽位、为什么 fallback、下一步如何配置。
 
-当前状态：`pending`。
+当前状态：`in_progress / App Server routing facts and read-model projection connected`。
+
+2026-06-14 增量：
+
+- `lime-rs/crates/app-server/src/runtime_backend/model_routing.rs` 已成为 coding profile model slot diagnostics owner：解析 `harness.coding_model_slots / codingModelSlots / modelSlots` 中的 `base/coding/review/fast/local` 槽位；`coding` 槽位优先作为主 turn selection，`base` 作为 fallback，`review/fast/local` 只进入 diagnostics slots，不抢占主 coding turn owner。
+- `RuntimeBackend` 的 turn start 已输出增强 `routing.decision.made` payload：包含 `routingDecision / routing_decision`、`modelSlot / model_slot`、`providerReadiness / provider_readiness`、`serviceModelSlot`、requested/selected provider/model、fallback chain、required coding capabilities。未 ready provider 会先写 `routing.not_possible`，再 fail-closed 返回 backend error，不降级 mock、不从 Workbench 持有 key。
+- Provider readiness 先接入 App Server current Provider Store 事实：直传 fixture provider config 标记 `direct_provider_config`；已配置 Provider Store entry 记录 enabled/key count/provider type；非聊天 Provider、disabled provider、missing enabled key、未知 custom provider 都输出 `needs_setup / blocked` reason code。内置 runtime provider 仍按现有运行时兼容标记为 `builtin_runtime_provider`，后续 Provider Store 完整接管时再收紧。
+- `runtime/read_model.rs` 已把最新 `routing.decision.made / routing.fallback.applied / routing.not_possible` 聚合到 `thread_read.model_routing`，并提升 `thread_read.service_model_slot` 与 `runtime_summary.decisionSource/serviceModelSlot`，让现有 `runtimeRoutingEvidence.ts` 与 Workbench diagnostics 能消费同一事实源。
+
+验证证据：
+
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server --check`
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend:: -- --nocapture`
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime::tests::read_model -- --nocapture`
+
+剩余风险：
+
+- Provider Store 的 stable model id、alias、真实 capability tags 仍未接入 model registry metadata；当前 required/effective capabilities 先作为 routing diagnostics 输出，不做强约束假 catalog。
+- UI diagnostics 尚未为 provider readiness reason code 做专门分组展示；当前可通过 `thread_read.model_routing` 被现有 routing evidence/diagnostics 读取。
+- `model_slot.resolved` 目前以 `routing.decision.made` 内的 `modelSlot/model_slot` 等价 diagnostics fact 表达，后续如果 evidence join 需要独立事件，再补专门事件并纳入 P7 conformance。
 
 ## P6：External Harness Compat Adapter
 

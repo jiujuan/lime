@@ -13,11 +13,11 @@ use super::path_guard::{
 };
 use super::shell_runtime::detect_powershell_executable;
 use super::task::{TaskManager, TaskShell};
+use crate::sandbox::{execute_in_sandbox_with_options, ExecutorOptions, ExecutorResult};
 use crate::subprocess::{
     configure_command_for_gui, decode_process_output, summarize_decoded_with,
     wrap_powershell_command_for_utf8,
 };
-use crate::sandbox::{execute_in_sandbox_with_options, ExecutorOptions, ExecutorResult};
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use regex::Regex;

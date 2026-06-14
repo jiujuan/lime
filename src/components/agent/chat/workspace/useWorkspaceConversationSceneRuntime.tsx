@@ -6,20 +6,12 @@ import type {
 } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { formatNumber } from "@/i18n/format";
 import { StepProgress } from "@/components/workspace/layout/StepProgress";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceCanvasSceneRuntime } from "./useWorkspaceCanvasSceneRuntime";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
-import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
 import { MessageList } from "../components/MessageList";
-import { CodingWorkbenchOutputPanel } from "./CodingWorkbenchOutputPanel";
-import { CodingWorkbenchLogPanel } from "./CodingWorkbenchLogPanel";
-import type {
-  CanvasWorkbenchSessionView,
-  CanvasWorkbenchUtilityView,
-} from "../components/CanvasWorkbenchLayout";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { CreationMode } from "../components/types";
 import type { WriteArtifactContext } from "../types";
@@ -37,19 +29,14 @@ import { buildAgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
 import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface";
 import { buildStepProgressProps } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
+import { buildWorkspaceConversationCodingViews } from "./workspaceConversationCodingViews";
 import {
-  buildCanvasWorkbenchChangeViewFromCodingProjection,
-  buildCodingWorkbenchProjectionFromThreadItems,
-  buildOutputHeaderViewModel,
   buildQuotedReplyText,
-  buildSessionHeaderViewModel,
-  buildSessionRuntimeCountersFromCodingProjection,
   buildSessionRuntimeProjectionIdentity,
   buildSessionRuntimeProjectionState,
   buildWorkspaceHeaderView,
   resolveNextSessionRuntimeProjectionState,
   resolveSessionRuntimeProjectionStatus,
-  resolveSessionStatusBadge,
   shouldConsiderSessionRuntimeProjectionDeferral,
 } from "./workspaceConversationSceneViewModel";
 
@@ -649,14 +636,6 @@ export function useWorkspaceConversationSceneRuntime({
     !isThemeWorkbench &&
     activeTheme === "general" &&
     layoutMode === "chat-canvas";
-  const currentSessionTurn =
-    projectedTurns.find((turn) => turn.id === projectedCurrentTurnId) ||
-    projectedTurns.at(-1) ||
-    null;
-  const currentSessionStatus = resolveSessionStatusBadge(
-    isSending ? "running" : currentSessionTurn?.status,
-    t,
-  );
   const runtimeTaskCard = useMemo(
     () =>
       buildAgentTaskRuntimeCardModel({
@@ -684,101 +663,46 @@ export function useWorkspaceConversationSceneRuntime({
       projectedTurns,
     ],
   );
-  const fileCheckpointSummary =
-    projectedThreadRead?.file_checkpoint_summary || null;
-  const codingWorkbenchView = useMemo(
+  const codingWorkbenchViews = useMemo(
     () =>
-      buildCodingWorkbenchProjectionFromThreadItems({
+      buildWorkspaceConversationCodingViews({
+        t,
+        locale,
+        turns: projectedTurns,
         threadItems: projectedThreadItems,
-        fileCheckpointSummary,
+        currentTurnId: projectedCurrentTurnId,
         threadRead: projectedThreadRead,
+        pendingActions: projectedPendingActions,
+        submittedActionsInFlight: projectedSubmittedActionsInFlight,
+        queuedTurns: projectedQueuedTurns,
+        isSending,
+        focusedTimelineItemId,
+        onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
+        onRespondToAction: handlePermissionResponse,
+        onSubmitRecoveryPrompt: (prompt) =>
+          handleSendFromEmptyState({ textOverride: prompt }),
       }),
-    [fileCheckpointSummary, projectedThreadItems, projectedThreadRead],
+    [
+      canvasScene.handleOpenCanvasWorkbenchPath,
+      focusedTimelineItemId,
+      handleSendFromEmptyState,
+      handlePermissionResponse,
+      isSending,
+      locale,
+      projectedCurrentTurnId,
+      projectedPendingActions,
+      projectedQueuedTurns,
+      projectedSubmittedActionsInFlight,
+      projectedThreadItems,
+      projectedThreadRead,
+      projectedTurns,
+      t,
+    ],
   );
-  const sessionRuntimeCounters =
-    buildSessionRuntimeCountersFromCodingProjection({
-      codingView: codingWorkbenchView,
-      fileCheckpointSummary,
-      queuedTurns: projectedQueuedTurns,
-    });
+  const sessionRuntimeCounters = codingWorkbenchViews.counters;
   const shouldUseCodingWorkbenchChrome =
     sessionRuntimeCounters.shouldUseRuntimeWorkbench ||
     navbarContextVariant === "task-center";
-  const sessionRuntimeCountLabels = {
-    inProgressItemCountLabel: formatNumber(
-      sessionRuntimeCounters.inProgressItemCount,
-      { locale },
-    ),
-    generatedFileCountLabel: formatNumber(
-      sessionRuntimeCounters.generatedFileCount,
-      { locale },
-    ),
-    pendingActionCountLabel: formatNumber(codingWorkbenchView.actions.length, {
-      locale,
-    }),
-    queuedTurnCountLabel: formatNumber(projectedQueuedTurns.length, {
-      locale,
-    }),
-  };
-  const changeView = useMemo(() => {
-    return buildCanvasWorkbenchChangeViewFromCodingProjection({
-      codingView: codingWorkbenchView,
-      fileCheckpointSummary,
-      onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
-    });
-  }, [
-    canvasScene.handleOpenCanvasWorkbenchPath,
-    codingWorkbenchView,
-    fileCheckpointSummary,
-  ]);
-  const sessionHeaderView = buildSessionHeaderViewModel({
-    t,
-    currentSessionTurn,
-    currentSessionStatus,
-    counters: sessionRuntimeCounters,
-    labels: sessionRuntimeCountLabels,
-    pendingActionCount: codingWorkbenchView.actions.length,
-    queuedTurnCount: projectedQueuedTurns.length,
-  });
-  const sessionView: CanvasWorkbenchSessionView | null = sessionHeaderView
-    ? {
-        ...sessionHeaderView,
-        renderPanel: () => (
-          <CanvasSessionOverviewPanel
-            turns={projectedTurns}
-            threadItems={projectedThreadItems}
-            currentTurnId={projectedCurrentTurnId}
-            pendingActions={projectedPendingActions}
-            queuedTurns={projectedQueuedTurns}
-            isSending={isSending}
-            focusedItemId={focusedTimelineItemId}
-          />
-        ),
-      }
-    : null;
-  const outputHeaderView = buildOutputHeaderViewModel({
-    t,
-    counters: sessionRuntimeCounters,
-  });
-  const outputView: CanvasWorkbenchUtilityView = {
-    ...outputHeaderView,
-    renderPanel: () => (
-      <CodingWorkbenchOutputPanel
-        codingView={codingWorkbenchView}
-        submittedActionsInFlight={projectedSubmittedActionsInFlight}
-        onRespondToAction={handlePermissionResponse}
-      />
-    ),
-  };
-  const logView: CanvasWorkbenchUtilityView = {
-    ...outputHeaderView,
-    tabLabel: t("agentChat.workspaceSession.logView.tabLabel"),
-    title: t("agentChat.workspaceSession.logView.title"),
-    subtitle: t("agentChat.workspaceSession.logView.subtitle"),
-    renderPanel: () => (
-      <CodingWorkbenchLogPanel codingView={codingWorkbenchView} />
-    ),
-  };
   const effectiveCanvasWorkbenchRootPath =
     canvasWorkbenchRootPath?.trim() || projectRootPath;
   const workspaceView = buildWorkspaceHeaderView({
@@ -912,7 +836,8 @@ export function useWorkspaceConversationSceneRuntime({
         navigationActions.handleOpenRuntimeMemoryWorkbench({
           sessionId,
           workingDir: projectRootPath,
-          userMessage: currentSessionTurn?.prompt_text || null,
+          userMessage:
+            codingWorkbenchViews.currentSessionTurn?.prompt_text || null,
         }),
       onOpenChannels: navigationActions.handleOpenChannels,
       onOpenChromeRelay: navigationActions.handleOpenChromeRelay,
@@ -1037,16 +962,10 @@ export function useWorkspaceConversationSceneRuntime({
       onClose: canvasScene.handleCloseCanvasWorkbench,
       workbenchMode: shouldUseCodingWorkbenchChrome ? "coding" : "default",
       workspaceView,
-      sessionView,
-      outputView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
-        ? outputView
-        : null,
-      logView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
-        ? logView
-        : null,
-      changeView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
-        ? changeView
-        : null,
+      sessionView: codingWorkbenchViews.sessionView,
+      outputView: codingWorkbenchViews.outputView,
+      logView: codingWorkbenchViews.logView,
+      changeView: codingWorkbenchViews.changeView,
       onLayoutModeChange: shouldSyncCanvasWorkbenchLayoutMode
         ? setCanvasWorkbenchLayoutMode
         : undefined,

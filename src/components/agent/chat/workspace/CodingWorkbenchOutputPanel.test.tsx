@@ -133,14 +133,22 @@ function renderPanel(codingView = createCodingView()) {
 
 function renderPanelWithProps({
   codingView = createCodingView(),
+  fileCheckpointSummary,
   submittedActionsInFlight = [],
   onRespondToAction,
+  onSubmitRecoveryPrompt,
 }: {
   codingView?: CodingWorkbenchView;
+  fileCheckpointSummary?: Parameters<
+    typeof CodingWorkbenchOutputPanel
+  >[0]["fileCheckpointSummary"];
   submittedActionsInFlight?: Parameters<
     typeof CodingWorkbenchOutputPanel
   >[0]["submittedActionsInFlight"];
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
+  onSubmitRecoveryPrompt?: Parameters<
+    typeof CodingWorkbenchOutputPanel
+  >[0]["onSubmitRecoveryPrompt"];
 }) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -150,8 +158,10 @@ function renderPanelWithProps({
     root.render(
       <CodingWorkbenchOutputPanel
         codingView={codingView}
+        fileCheckpointSummary={fileCheckpointSummary}
         submittedActionsInFlight={submittedActionsInFlight}
         onRespondToAction={onRespondToAction}
+        onSubmitRecoveryPrompt={onSubmitRecoveryPrompt}
       />,
     );
   });
@@ -289,6 +299,158 @@ describe("CodingWorkbenchOutputPanel", () => {
       "请在对话里的待处理请求中继续处理。",
     );
     expect(onRespondToAction).not.toHaveBeenCalled();
+  });
+
+  it("失败输出应显示继续修复入口并提交包含失败事实的 prompt", async () => {
+    const onSubmitRecoveryPrompt = vi.fn();
+    const codingView = createCodingView({
+      changes: [
+        {
+          id: "change-1",
+          path: "src/App.tsx",
+          status: "completed",
+          changeKind: "modified",
+          artifactRefs: [],
+          checkpointRef: "checkpoint-app",
+          preview: "render app",
+          sourceEventId: "event-change-1",
+        },
+      ],
+      patches: [
+        {
+          patchId: "patch-1",
+          status: "failed",
+          title: "apply patch",
+          path: "src/App.tsx",
+          toolCallId: "tool-patch-1",
+          diffRef: "diff://patch-1",
+          failureCategory: "patch_failed",
+          sourceEventIds: ["event-patch-1"],
+        },
+      ],
+      commands: [
+        {
+          commandId: "command-1",
+          status: "failed",
+          title: "npm test",
+          command: "npm test",
+          cwd: "app",
+          exitCode: 1,
+          outputRefs: ["output://command-1"],
+          preview: "App.test.tsx failed",
+          sourceEventIds: ["event-command-1"],
+        },
+      ],
+      tests: [
+        {
+          testRunId: "test-1",
+          status: "failed",
+          title: "unit",
+          suite: "unit",
+          commandId: "command-1",
+          result: "failed",
+          passed: 3,
+          failed: 1,
+          outputRefs: [],
+          failureCategory: "assertion_failed",
+          sourceEventIds: ["event-test-1"],
+        },
+      ],
+      actions: [],
+      diagnostics: [
+        {
+          id: "diagnostic-1",
+          sourceEventId: "event-command-1",
+          title: "命令失败",
+          detail: "exit=1",
+          status: "failed",
+        },
+      ],
+    });
+
+    const container = renderPanelWithProps({
+      codingView,
+      fileCheckpointSummary: {
+        count: 1,
+        latest_checkpoint: {
+          checkpoint_id: "checkpoint-1",
+          turn_id: "turn-1",
+          path: "src/App.tsx",
+          source: "runtime",
+          updated_at: "2026-06-14T00:00:00.000Z",
+          validation_issue_count: 0,
+        },
+      },
+      onSubmitRecoveryPrompt,
+    });
+
+    expect(
+      container.querySelector('[data-testid="coding-workbench-recovery"]')
+        ?.textContent,
+    ).toContain("需要继续修复");
+    expect(container.textContent).toContain("失败命令");
+    expect(container.textContent).toContain("失败测试");
+    expect(container.textContent).toContain("失败补丁");
+    expect(container.textContent).toContain("src/App.tsx");
+
+    const recoveryButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("继续修复"));
+    await act(async () => {
+      recoveryButton?.click();
+    });
+
+    expect(onSubmitRecoveryPrompt).toHaveBeenCalledWith(
+      expect.stringContaining("请继续修复本轮编程任务中的失败输出。"),
+    );
+    const prompt = onSubmitRecoveryPrompt.mock.calls[0]?.[0] as string;
+    expect(prompt).toContain("npm test");
+    expect(prompt).toContain("unit");
+    expect(prompt).toContain("命令失败");
+    expect(prompt).toContain("App.test.tsx failed");
+    expect(prompt).toContain("相关文件: src/App.tsx");
+    expect(prompt).toContain("最近文件快照: src/App.tsx");
+  });
+
+  it("没有失败事实时不应显示继续修复入口", () => {
+    const container = renderPanel(
+      createCodingView({
+        patches: [],
+        commands: [
+          {
+            commandId: "command-1",
+            status: "completed",
+            title: "npm test",
+            command: "npm test",
+            cwd: "app",
+            exitCode: 0,
+            outputRefs: [],
+            preview: "passed",
+            sourceEventIds: ["event-command-1"],
+          },
+        ],
+        tests: [
+          {
+            testRunId: "test-1",
+            status: "completed",
+            title: "unit",
+            suite: "unit",
+            commandId: "command-1",
+            result: "passed",
+            passed: 4,
+            failed: 0,
+            outputRefs: [],
+            sourceEventIds: ["event-test-1"],
+          },
+        ],
+        actions: [],
+        diagnostics: [],
+      }),
+    );
+
+    expect(
+      container.querySelector('[data-testid="coding-workbench-recovery"]'),
+    ).toBeNull();
   });
 
   it("没有 projection 输出时应渲染稳定空态", () => {

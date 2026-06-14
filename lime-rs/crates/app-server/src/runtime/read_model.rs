@@ -195,6 +195,10 @@ fn latest_turn_error_message(stored: &StoredSession, turn_id: Option<&str>) -> O
 
 fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json::Value {
     let coding_activity = coding_activity_projection::coding_activity_from_events(stored);
+    let model_routing = latest_model_routing_from_events(&stored.events);
+    let service_model_slot = model_routing
+        .as_ref()
+        .and_then(|routing| string_field(routing, &["serviceModelSlot", "service_model_slot"]));
     let latest_turn_status = stored
         .turns
         .last()
@@ -228,6 +232,8 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
         "tool_calls": tool_calls_from_events(&stored.events),
         "commands": coding_activity.commands,
         "tests": coding_activity.tests,
+        "model_routing": model_routing.clone(),
+        "service_model_slot": service_model_slot.clone(),
         "artifacts": artifact_projection::stored_artifact_summaries_for_turn(stored, None),
         "outputs": output_refs::read_model_outputs(stored.output_blobs.values(), None),
         "diagnostics": {
@@ -240,8 +246,89 @@ fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json
         "runtime_summary": {
             "latestTurnStatus": latest_turn_status,
             "latestTurnErrorMessage": latest_turn_error_message,
+            "decisionSource": model_routing
+                .as_ref()
+                .and_then(|routing| string_field(routing, &["decisionSource", "decision_source"])),
+            "serviceModelSlot": service_model_slot,
         },
     })
+}
+
+fn latest_model_routing_from_events(events: &[AgentEvent]) -> Option<serde_json::Value> {
+    events
+        .iter()
+        .rev()
+        .find(|event| {
+            matches!(
+                event.event_type.as_str(),
+                "routing.decision.made" | "routing.fallback.applied" | "routing.not_possible"
+            )
+        })
+        .map(model_routing_from_event)
+}
+
+fn model_routing_from_event(event: &AgentEvent) -> serde_json::Value {
+    let mut routing = event
+        .payload
+        .get("routingDecision")
+        .or_else(|| event.payload.get("routing_decision"))
+        .and_then(|value| value.as_object())
+        .cloned()
+        .unwrap_or_else(|| event.payload.as_object().cloned().unwrap_or_default());
+
+    merge_optional_payload_value(&mut routing, &event.payload, "modelSlot", "modelSlot");
+    merge_optional_payload_value(&mut routing, &event.payload, "model_slot", "model_slot");
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "providerReadiness",
+        "providerReadiness",
+    );
+    merge_optional_payload_value(
+        &mut routing,
+        &event.payload,
+        "provider_readiness",
+        "provider_readiness",
+    );
+    routing.insert(
+        "sourceEventId".to_string(),
+        serde_json::Value::String(event.event_id.clone()),
+    );
+    routing.insert(
+        "source_event_id".to_string(),
+        serde_json::Value::String(event.event_id.clone()),
+    );
+    routing.insert(
+        "sourceEventType".to_string(),
+        serde_json::Value::String(event.event_type.clone()),
+    );
+    routing.insert(
+        "source_event_type".to_string(),
+        serde_json::Value::String(event.event_type.clone()),
+    );
+    routing.insert(
+        "timestamp".to_string(),
+        serde_json::Value::String(event.timestamp.clone()),
+    );
+    if event.event_type == "routing.not_possible" {
+        routing.insert(
+            "status".to_string(),
+            serde_json::Value::String("blocked".to_string()),
+        );
+    }
+
+    serde_json::Value::Object(routing)
+}
+
+fn merge_optional_payload_value(
+    routing: &mut serde_json::Map<String, serde_json::Value>,
+    payload: &serde_json::Value,
+    output_key: &str,
+    payload_key: &str,
+) {
+    if let Some(value) = payload.get(payload_key) {
+        routing.insert(output_key.to_string(), value.clone());
+    }
 }
 
 pub(super) fn replayed_action_required_from_stored_session(

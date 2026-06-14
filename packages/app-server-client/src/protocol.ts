@@ -883,6 +883,8 @@ export type ProjectGitDiffResponse = {
   rootPath: string;
   repositoryRoot?: string;
   hasGitRepository: boolean;
+  currentRef?: string | null;
+  comparisonBaseRef?: string | null;
   patch: string;
   uncommittedFileCount: number;
 };

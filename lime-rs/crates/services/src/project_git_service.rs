@@ -48,6 +48,8 @@ pub struct ProjectGitDiff {
     pub root_path: String,
     pub repository_root: Option<String>,
     pub has_git_repository: bool,
+    pub current_ref: Option<String>,
+    pub comparison_base_ref: Option<String>,
     pub patch: String,
     pub uncommitted_file_count: u32,
 }
@@ -107,6 +109,8 @@ pub fn read_diff(
             root_path: status.root_path,
             repository_root: status.repository_root,
             has_git_repository: false,
+            current_ref: None,
+            comparison_base_ref: None,
             patch: String::new(),
             uncommitted_file_count: 0,
         });
@@ -115,8 +119,10 @@ pub fn read_diff(
     let root = required_root_path(root_path)?;
     let unified_arg = format!("--unified={}", context_lines.unwrap_or(3).min(100));
     let base = base.unwrap_or_default();
-    let patch = match base {
-        ProjectGitDiffBase::Unstaged => read_unstaged_patch(&root, unified_arg.as_str())?,
+    let diff_result = match base {
+        ProjectGitDiffBase::Unstaged => {
+            ProjectGitPatchResult::new(read_unstaged_patch(&root, unified_arg.as_str())?)
+        }
         ProjectGitDiffBase::Staged => git_diff_output(
             &root,
             &[
@@ -129,10 +135,15 @@ pub fn read_diff(
                 "--no-color",
                 unified_arg.as_str(),
             ],
-        )?,
+        )
+        .map(ProjectGitPatchResult::new)?,
         ProjectGitDiffBase::Commit => {
             let commit_sha = validate_commit_sha(commit_sha)?;
-            read_commit_patch(&root, commit_sha, unified_arg.as_str())?
+            ProjectGitPatchResult {
+                patch: read_commit_patch(&root, commit_sha, unified_arg.as_str())?,
+                current_ref: status.current_branch.clone(),
+                comparison_base_ref: Some(commit_sha.to_string()),
+            }
         }
         ProjectGitDiffBase::Branch => read_branch_patch(&root, &status, unified_arg.as_str())?,
         ProjectGitDiffBase::PreviousConversation => {
@@ -144,7 +155,9 @@ pub fn read_diff(
         root_path: status.root_path,
         repository_root: status.repository_root,
         has_git_repository: true,
-        patch,
+        current_ref: diff_result.current_ref,
+        comparison_base_ref: diff_result.comparison_base_ref,
+        patch: diff_result.patch,
         uncommitted_file_count: status.uncommitted_file_count,
     })
 }
@@ -273,18 +286,18 @@ fn read_branch_patch(
     root: &Path,
     status: &ProjectGitStatus,
     unified_arg: &str,
-) -> Result<String, String> {
-    let Some(base_branch) = resolve_default_base_branch(status) else {
-        return Ok(String::new());
+) -> Result<ProjectGitPatchResult, String> {
+    let preferred_ref = resolve_current_upstream_ref(root, status)?
+        .or_else(|| resolve_default_base_branch(status).map(ToString::to_string));
+    let Some(preferred_ref) = preferred_ref else {
+        return Ok(ProjectGitPatchResult::new(String::new()));
     };
-    let preferred_ref = resolve_upstream_if_remote_ahead(root, &base_branch)?
-        .unwrap_or_else(|| base_branch.to_string());
     let Some(merge_base) = git_output_optional(root, &["merge-base", "HEAD", &preferred_ref])?
     else {
-        return Ok(String::new());
+        return Ok(ProjectGitPatchResult::new(String::new()));
     };
 
-    git_diff_output(
+    let patch = git_diff_output(
         root,
         &[
             "diff",
@@ -296,7 +309,13 @@ fn read_branch_patch(
             unified_arg,
             &merge_base,
         ],
-    )
+    )?;
+
+    Ok(ProjectGitPatchResult {
+        patch,
+        current_ref: status.current_branch.clone(),
+        comparison_base_ref: Some(preferred_ref),
+    })
 }
 
 fn parse_commit_log_record(record: &str) -> Option<ProjectGitCommit> {
@@ -340,36 +359,22 @@ fn resolve_default_base_branch(status: &ProjectGitStatus) -> Option<&str> {
         })
 }
 
-fn resolve_upstream_if_remote_ahead(root: &Path, branch: &str) -> Result<Option<String>, String> {
-    let Some(upstream) = git_output_optional(
+fn resolve_current_upstream_ref(
+    root: &Path,
+    status: &ProjectGitStatus,
+) -> Result<Option<String>, String> {
+    let Some(current_branch) = status.current_branch.as_deref() else {
+        return Ok(None);
+    };
+    git_output_optional(
         root,
         &[
             "rev-parse",
             "--abbrev-ref",
             "--symbolic-full-name",
-            &format!("{branch}@{{upstream}}"),
+            &format!("{current_branch}@{{upstream}}"),
         ],
-    )?
-    else {
-        return Ok(None);
-    };
-    let Some(counts) = git_output_optional(
-        root,
-        &[
-            "rev-list",
-            "--left-right",
-            "--count",
-            &format!("{branch}...{upstream}"),
-        ],
-    )?
-    else {
-        return Ok(None);
-    };
-    let mut parts = counts.split_whitespace();
-    let _left: i64 = parts.next().unwrap_or("0").parse().unwrap_or(0);
-    let right: i64 = parts.next().unwrap_or("0").parse().unwrap_or(0);
-
-    Ok((right > 0).then_some(upstream))
+    )
 }
 
 fn validate_commit_sha(commit_sha: Option<&str>) -> Result<&str, String> {
@@ -479,14 +484,32 @@ fn read_branches(root: &Path) -> Result<Vec<String>, String> {
             "--sort=refname",
             "--format=%(refname:short)",
             "refs/heads",
+            "refs/remotes",
         ],
     )?;
     Ok(output
         .lines()
         .map(str::trim)
-        .filter(|branch| !branch.is_empty())
+        .filter(|branch| !branch.is_empty() && !branch.ends_with("/HEAD"))
         .map(ToString::to_string)
         .collect())
+}
+
+#[derive(Debug, Clone, Default)]
+struct ProjectGitPatchResult {
+    patch: String,
+    current_ref: Option<String>,
+    comparison_base_ref: Option<String>,
+}
+
+impl ProjectGitPatchResult {
+    fn new(patch: String) -> Self {
+        Self {
+            patch,
+            current_ref: None,
+            comparison_base_ref: None,
+        }
+    }
 }
 
 fn read_uncommitted_file_count(root: &Path) -> Result<u32, String> {
@@ -687,6 +710,25 @@ mod tests {
     }
 
     #[test]
+    fn status_reads_remote_tracking_branches() {
+        let Some((temp, repo)) = init_repo() else {
+            return;
+        };
+        let remote = temp.path().join("remote.git");
+        run_git(temp.path(), &["init", "--bare", "remote.git"]);
+        run_git(
+            &repo,
+            &["remote", "add", "origin", &remote.to_string_lossy()],
+        );
+        run_git(&repo, &["push", "-u", "origin", "main"]);
+
+        let status = read_status(&repo.to_string_lossy()).expect("status");
+
+        assert!(status.branches.iter().any(|branch| branch == "main"));
+        assert!(status.branches.iter().any(|branch| branch == "origin/main"));
+    }
+
+    #[test]
     fn diff_reads_unstaged_patch() {
         let Some((_temp, repo)) = init_repo() else {
             return;
@@ -741,8 +783,41 @@ mod tests {
         .expect("diff");
 
         assert!(diff.has_git_repository);
+        assert_eq!(diff.current_ref.as_deref(), Some("feature/review"));
+        assert_eq!(diff.comparison_base_ref.as_deref(), Some("main"));
         assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
         assert!(diff.patch.contains("+branch"));
+    }
+
+    #[test]
+    fn diff_reads_current_branch_upstream_patch() {
+        let Some((temp, repo)) = init_repo() else {
+            return;
+        };
+        let remote = temp.path().join("remote.git");
+        run_git(temp.path(), &["init", "--bare", "remote.git"]);
+        run_git(
+            &repo,
+            &["remote", "add", "origin", &remote.to_string_lossy()],
+        );
+        run_git(&repo, &["push", "-u", "origin", "main"]);
+        fs::write(repo.join("README.md"), "hello\nupstream diff\n").expect("write readme");
+        run_git(&repo, &["add", "README.md"]);
+        run_git(&repo, &["commit", "-m", "local branch change"]);
+
+        let diff = read_diff(
+            &repo.to_string_lossy(),
+            Some(3),
+            Some(ProjectGitDiffBase::Branch),
+            None,
+        )
+        .expect("diff");
+
+        assert!(diff.has_git_repository);
+        assert_eq!(diff.current_ref.as_deref(), Some("main"));
+        assert_eq!(diff.comparison_base_ref.as_deref(), Some("origin/main"));
+        assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
+        assert!(diff.patch.contains("+upstream diff"));
     }
 
     #[test]

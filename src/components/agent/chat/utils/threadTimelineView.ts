@@ -148,12 +148,15 @@ function shouldHideConversationThreadItem(item: AgentThreadItem): boolean {
 }
 
 export function filterConversationThreadItems(
-  items: AgentThreadItem[],
+  items: readonly AgentThreadItem[],
 ): AgentThreadItem[] {
   return items.filter((item) => !shouldHideConversationThreadItem(item));
 }
 
-function isSortedBy<T>(items: T[], compare: (left: T, right: T) => number) {
+function isSortedBy<T>(
+  items: readonly T[],
+  compare: (left: T, right: T) => number,
+) {
   for (let index = 1; index < items.length; index += 1) {
     if (compare(items[index - 1]!, items[index]!) > 0) {
       return false;
@@ -163,15 +166,19 @@ function isSortedBy<T>(items: T[], compare: (left: T, right: T) => number) {
   return true;
 }
 
-export function sortThreadItems(items: AgentThreadItem[]): AgentThreadItem[] {
+export function sortThreadItems(
+  items: readonly AgentThreadItem[],
+): AgentThreadItem[] {
   return [...filterConversationThreadItems(items)].sort(compareThreadItems);
 }
 
-function resolveSortedThreadTurns(turns: AgentThreadTurn[]): AgentThreadTurn[] {
+function resolveSortedThreadTurns(
+  turns: readonly AgentThreadTurn[],
+): AgentThreadTurn[] {
   const hasHiddenTurns = turns.some(shouldHideConversationThreadTurn);
   const visibleTurns = hasHiddenTurns
     ? turns.filter((turn) => !shouldHideConversationThreadTurn(turn))
-    : turns;
+    : [...turns];
 
   return isSortedBy(visibleTurns, compareThreadTurns)
     ? visibleTurns

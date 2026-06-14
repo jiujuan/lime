@@ -92,6 +92,10 @@ pub struct ProjectGitDiffResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository_root: Option<String>,
     pub has_git_repository: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison_base_ref: Option<String>,
     pub patch: String,
     #[serde(default)]
     pub uncommitted_file_count: u32,

@@ -20,6 +20,9 @@ pub(super) fn resolve_runtime_model_selection(
     if let Some(selection) = selection_from_host_provider_config(request) {
         return Ok(selection);
     }
+    if let Some(selection) = super::model_routing::selection_from_profile_model_slot(request) {
+        return Ok(selection);
+    }
     if let Some(selection) = selection_from_session_default(request) {
         return Ok(selection);
     }
@@ -129,7 +132,7 @@ fn session_default_model(metadata: &Value) -> Option<String> {
     )
 }
 
-fn reasoning_effort_from_request(request: &ExecutionRequest) -> Option<String> {
+pub(super) fn reasoning_effort_from_request(request: &ExecutionRequest) -> Option<String> {
     if let Some(reasoning_effort) =
         aster_chat_request_from_request(request).and_then(|host| host_reasoning_effort(&host))
     {

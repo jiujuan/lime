@@ -17,12 +17,12 @@ import type {
   CanvasWorkbenchChangeView,
 } from "./CanvasWorkbenchChangesPanelViewModel";
 import { CanvasWorkbenchChangeDetailPanel } from "./CanvasWorkbenchChangeDetailPanel";
-import { CanvasWorkbenchChangesToolbar } from "./CanvasWorkbenchChangesToolbar";
+import type { CanvasWorkbenchChangesToolbarProps } from "./CanvasWorkbenchChangesToolbar";
 import { CanvasWorkbenchEmptyDiffPanel } from "./CanvasWorkbenchEmptyDiffPanel";
+import { CanvasWorkbenchReviewSurface } from "./CanvasWorkbenchReviewSurface";
 import { useCanvasWorkbenchChangesFilesPanelResize } from "./useCanvasWorkbenchChangesFilesPanelResize";
 import { useCanvasWorkbenchReviewState } from "./useCanvasWorkbenchReviewState";
 import type { CanvasWorkbenchTranslation } from "./CanvasWorkbenchChangesTypes";
-import { CanvasWorkbenchChangesContent } from "./CanvasWorkbenchChangesContent";
 
 interface CanvasWorkbenchChangesPanelProps {
   changeView: CanvasWorkbenchChangeView | null | undefined;
@@ -91,7 +91,9 @@ export function CanvasWorkbenchChangesPanel({
     handleFilesPanelResizeKeyDown,
   } = useCanvasWorkbenchChangesFilesPanelResize(filesPanelOpen);
   const {
+    backendHasGitRepository,
     backendPatch,
+    branchCompareLabel,
     changeItems,
     commitOptions,
     commitsLoading,
@@ -134,6 +136,10 @@ export function CanvasWorkbenchChangesPanel({
   const selectedLoadFullFile = Boolean(
     loadFullFile && selectedLoadedContent != null,
   );
+  const emptyDiffMessageKey =
+    selectedBaseUsesGit && backendHasGitRepository === false
+      ? "agentChat.canvasWorkbench.coding.changes.notGitRepository"
+      : "agentChat.canvasWorkbench.coding.changes.empty";
 
   useEffect(() => {
     if (
@@ -158,6 +164,69 @@ export function CanvasWorkbenchChangesPanel({
     selectCommit(commit);
     setBaseMenuOpen(false);
   };
+  const handleToggleReviewMenu = () => {
+    setBaseMenuOpen(false);
+    setReviewMenuOpen((open) => !open);
+  };
+  const handleToggleBaseMenu = () => {
+    setReviewMenuOpen(false);
+    setBaseMenuOpen((open) => !open);
+  };
+  const handleToggleDiffVariant = () => {
+    setBaseMenuOpen(false);
+    setReviewMenuOpen(false);
+    setDiffVariant((variant) => (variant === "inline" ? "split" : "inline"));
+  };
+  const handleToggleFilesPanel = () => {
+    setBaseMenuOpen(false);
+    setReviewMenuOpen(false);
+    onToggleFilesPanel?.();
+  };
+  const buildToolbarProps = (
+    props: Pick<
+      CanvasWorkbenchChangesToolbarProps,
+      | "diffStats"
+      | "checkpointCount"
+      | "copyGitApplyDisabled"
+      | "diffViewToggleDisabled"
+      | "loadFullFile"
+      | "loadFullFileDisabled"
+      | "onCopyGitApply"
+      | "onToggleDiffVariant"
+      | "onToggleLoadFullFile"
+    >,
+  ): CanvasWorkbenchChangesToolbarProps => ({
+    translateWorkbench,
+    reviewMenuOpen,
+    baseMenuOpen,
+    selectedBase,
+    branchCompareLabel,
+    filesPanelOpen,
+    reviewActionBusy,
+    autoExecuteEnabled,
+    commitOptions,
+    commitsLoading,
+    selectedCommitSha,
+    collapseDiffContext,
+    richPreviewEnabled,
+    textDiffEnabled,
+    showWhitespace,
+    diffVariant,
+    onToggleReviewMenu: handleToggleReviewMenu,
+    onToggleBaseMenu: handleToggleBaseMenu,
+    onSelectBase: handleSelectBase,
+    onOpenCommitMenu: openCommitMenu,
+    onSelectCommit: handleSelectCommit,
+    onRefreshChanges: refreshChanges,
+    onToggleAutoExecute: () => setAutoExecuteEnabled((enabled) => !enabled),
+    onToggleCollapseContext: () =>
+      setCollapseDiffContext((enabled) => !enabled),
+    onToggleRichPreview: () => setRichPreviewEnabled((enabled) => !enabled),
+    onToggleTextDiff: () => setTextDiffEnabled((enabled) => !enabled),
+    onToggleWhitespace: () => setShowWhitespace((enabled) => !enabled),
+    onToggleFilesPanel: handleToggleFilesPanel,
+    ...props,
+  });
 
   const filesPanelResizeHandle = filesPanelOpen ? (
     <div
@@ -208,168 +277,71 @@ export function CanvasWorkbenchChangesPanel({
       }
     };
     return (
-      <section
-        data-testid="canvas-workbench-panel-changes"
-        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-white"
-      >
-        <CanvasWorkbenchChangesToolbar
-          translateWorkbench={translateWorkbench}
-          diffStats={diffStats}
-          checkpointCount={changeView?.checkpointCount}
-          reviewMenuOpen={reviewMenuOpen}
-          baseMenuOpen={baseMenuOpen}
-          selectedBase={selectedBase}
-          filesPanelOpen={filesPanelOpen}
-          reviewActionBusy={reviewActionBusy}
-          copyGitApplyDisabled={!backendPatch?.trim() && !fallbackPatch.trim()}
-          loadFullFileDisabled={!loadFilePreview || !selectedChangeItem}
-          autoExecuteEnabled={autoExecuteEnabled}
-          commitOptions={commitOptions}
-          commitsLoading={commitsLoading}
-          selectedCommitSha={selectedCommitSha}
-          collapseDiffContext={collapseDiffContext}
-          loadFullFile={selectedLoadFullFile}
-          richPreviewEnabled={richPreviewEnabled}
-          textDiffEnabled={textDiffEnabled}
-          showWhitespace={showWhitespace}
-          diffVariant={diffVariant}
-          onToggleReviewMenu={() => {
-            setBaseMenuOpen(false);
-            setReviewMenuOpen((open) => !open);
-          }}
-          onToggleBaseMenu={() => {
-            setReviewMenuOpen(false);
-            setBaseMenuOpen((open) => !open);
-          }}
-          onSelectBase={handleSelectBase}
-          onOpenCommitMenu={openCommitMenu}
-          onSelectCommit={handleSelectCommit}
-          onRefreshChanges={refreshChanges}
-          onCopyGitApply={copyGitApply}
-          onToggleAutoExecute={() =>
-            setAutoExecuteEnabled((enabled) => !enabled)
-          }
-          onToggleCollapseContext={() =>
-            setCollapseDiffContext((enabled) => !enabled)
-          }
-          onToggleLoadFullFile={() => {
+      <CanvasWorkbenchReviewSurface
+        toolbar={buildToolbarProps({
+          diffStats,
+          checkpointCount: changeView?.checkpointCount,
+          copyGitApplyDisabled: !backendPatch?.trim() && !fallbackPatch.trim(),
+          loadFullFileDisabled: !loadFilePreview || !selectedChangeItem,
+          loadFullFile: selectedLoadFullFile,
+          onCopyGitApply: copyGitApply,
+          onToggleLoadFullFile: () => {
             void toggleLoadFullFile(selectedChangeItemRef.current);
-          }}
-          onToggleRichPreview={() =>
-            setRichPreviewEnabled((enabled) => !enabled)
-          }
-          onToggleTextDiff={() => setTextDiffEnabled((enabled) => !enabled)}
-          onToggleWhitespace={() => setShowWhitespace((enabled) => !enabled)}
-          onToggleDiffVariant={() =>
-            setDiffVariant((variant) =>
-              variant === "inline" ? "split" : "inline",
-            )
-          }
-          onToggleFilesPanel={onToggleFilesPanel}
-        />
-
-        <CanvasWorkbenchChangesContent
-          filesPanelOpen={filesPanelOpen}
-          filesPanelGridStyle={filesPanelGridStyle}
-          filesPanelResizeHandle={filesPanelResizeHandle}
-          fileTree={filteredFileTree}
-          selectedChangeItem={selectedChangeItem}
-          fileFilter={fileFilter}
-          translateWorkbench={translateWorkbench}
-          onFileFilterChange={setFileFilter}
-          onSelectChangeItem={handleSelectChangeItem}
-          detail={
-            <CanvasWorkbenchChangeDetailPanel
-              selectedChangeItem={selectedChangeItem}
-              selectedItemStats={selectedItemStats}
-              latestCheckpointPath={latestCheckpointPath}
-              visibleDiffLines={visibleDiffLines}
-              selectedDiffLines={selectedDiffLines}
-              panelClassName={panelClassName}
-              mutedPanelClassName={mutedPanelClassName}
-              diffVariant={diffVariant}
-              showWhitespace={showWhitespace}
-              wordWrapEnabled={wordWrapEnabled}
-              translateWorkbench={translateWorkbench}
-            />
-          }
-        />
-      </section>
+          },
+          onToggleDiffVariant: handleToggleDiffVariant,
+        })}
+        filesPanelOpen={filesPanelOpen}
+        filesPanelGridStyle={filesPanelGridStyle}
+        filesPanelResizeHandle={filesPanelResizeHandle}
+        fileTree={filteredFileTree}
+        selectedChangeItem={selectedChangeItem}
+        fileFilter={fileFilter}
+        translateWorkbench={translateWorkbench}
+        onFileFilterChange={setFileFilter}
+        onSelectChangeItem={handleSelectChangeItem}
+        detail={
+          <CanvasWorkbenchChangeDetailPanel
+            selectedChangeItem={selectedChangeItem}
+            selectedItemStats={selectedItemStats}
+            latestCheckpointPath={latestCheckpointPath}
+            visibleDiffLines={visibleDiffLines}
+            selectedDiffLines={selectedDiffLines}
+            panelClassName={panelClassName}
+            mutedPanelClassName={mutedPanelClassName}
+            diffVariant={diffVariant}
+            showWhitespace={showWhitespace}
+            wordWrapEnabled={wordWrapEnabled}
+            translateWorkbench={translateWorkbench}
+          />
+        }
+      />
     );
   }
 
   if ((changeView || selectedBaseUsesGit) && changeItemCount === 0) {
     return (
-      <section
-        data-testid="canvas-workbench-panel-changes"
-        className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-white"
-      >
-        <CanvasWorkbenchChangesToolbar
-          translateWorkbench={translateWorkbench}
-          diffStats={{ additions: 0, removals: 0 }}
-          reviewMenuOpen={reviewMenuOpen}
-          baseMenuOpen={baseMenuOpen}
-          selectedBase={selectedBase}
-          filesPanelOpen={filesPanelOpen}
-          copyGitApplyDisabled={!backendPatch?.trim()}
-          diffViewToggleDisabled
-          loadFullFileDisabled
-          autoExecuteEnabled={autoExecuteEnabled}
-          commitOptions={commitOptions}
-          commitsLoading={commitsLoading}
-          selectedCommitSha={selectedCommitSha}
-          collapseDiffContext={collapseDiffContext}
-          loadFullFile={loadFullFile}
-          richPreviewEnabled={richPreviewEnabled}
-          textDiffEnabled={textDiffEnabled}
-          showWhitespace={showWhitespace}
-          diffVariant={diffVariant}
-          onToggleReviewMenu={() => {
-            setBaseMenuOpen(false);
-            setReviewMenuOpen((open) => !open);
-          }}
-          onToggleBaseMenu={() => {
-            setReviewMenuOpen(false);
-            setBaseMenuOpen((open) => !open);
-          }}
-          onSelectBase={handleSelectBase}
-          onOpenCommitMenu={openCommitMenu}
-          onSelectCommit={handleSelectCommit}
-          onRefreshChanges={refreshChanges}
-          onToggleAutoExecute={() =>
-            setAutoExecuteEnabled((enabled) => !enabled)
-          }
-          onToggleCollapseContext={() =>
-            setCollapseDiffContext((enabled) => !enabled)
-          }
-          onToggleLoadFullFile={() => undefined}
-          onToggleRichPreview={() =>
-            setRichPreviewEnabled((enabled) => !enabled)
-          }
-          onToggleTextDiff={() => setTextDiffEnabled((enabled) => !enabled)}
-          onToggleWhitespace={() => setShowWhitespace((enabled) => !enabled)}
-          onToggleDiffVariant={() => undefined}
-          onToggleFilesPanel={onToggleFilesPanel}
-        />
-
-        <CanvasWorkbenchChangesContent
-          filesPanelOpen={filesPanelOpen}
-          filesPanelGridStyle={filesPanelGridStyle}
-          filesPanelResizeHandle={filesPanelResizeHandle}
-          fileTree={[]}
-          selectedChangeItem={undefined}
-          fileFilter=""
-          fileListDisabled
-          translateWorkbench={translateWorkbench}
-          onFileFilterChange={() => undefined}
-          onSelectChangeItem={() => undefined}
-          detail={
-            <CanvasWorkbenchEmptyDiffPanel
-              translateWorkbench={translateWorkbench}
-            />
-          }
-        />
-      </section>
+      <CanvasWorkbenchReviewSurface
+        toolbar={buildToolbarProps({
+          diffStats: { additions: 0, removals: 0 },
+          copyGitApplyDisabled: !backendPatch?.trim(),
+          diffViewToggleDisabled: true,
+          loadFullFileDisabled: true,
+          loadFullFile,
+        })}
+        filesPanelOpen={filesPanelOpen}
+        filesPanelGridStyle={filesPanelGridStyle}
+        filesPanelResizeHandle={filesPanelResizeHandle}
+        fileTree={[]}
+        fileFilter=""
+        fileListDisabled
+        translateWorkbench={translateWorkbench}
+        detail={
+          <CanvasWorkbenchEmptyDiffPanel
+            messageKey={emptyDiffMessageKey}
+            translateWorkbench={translateWorkbench}
+          />
+        }
+      />
     );
   }
 
@@ -421,84 +393,37 @@ export function CanvasWorkbenchChangesPanel({
   );
 
   return (
-    <section
-      data-testid="canvas-workbench-panel-changes"
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-white"
-    >
-      <CanvasWorkbenchChangesToolbar
-        translateWorkbench={translateWorkbench}
-        diffStats={documentDiffStats}
-        reviewMenuOpen={reviewMenuOpen}
-        baseMenuOpen={baseMenuOpen}
-        selectedBase={selectedBase}
-        filesPanelOpen={filesPanelOpen}
-        reviewActionBusy={reviewActionBusy}
-        copyGitApplyDisabled
-        loadFullFileDisabled
-        autoExecuteEnabled={autoExecuteEnabled}
-        commitOptions={commitOptions}
-        commitsLoading={commitsLoading}
-        selectedCommitSha={selectedCommitSha}
-        collapseDiffContext={collapseDiffContext}
-        loadFullFile={false}
-        richPreviewEnabled={richPreviewEnabled}
-        textDiffEnabled={textDiffEnabled}
-        showWhitespace={showWhitespace}
-        diffVariant={diffVariant}
-        onToggleReviewMenu={() => {
-          setBaseMenuOpen(false);
-          setReviewMenuOpen((open) => !open);
-        }}
-        onToggleBaseMenu={() => {
-          setReviewMenuOpen(false);
-          setBaseMenuOpen((open) => !open);
-        }}
-        onSelectBase={handleSelectBase}
-        onOpenCommitMenu={openCommitMenu}
-        onSelectCommit={handleSelectCommit}
-        onRefreshChanges={refreshChanges}
-        onToggleAutoExecute={() => setAutoExecuteEnabled((enabled) => !enabled)}
-        onToggleCollapseContext={() =>
-          setCollapseDiffContext((enabled) => !enabled)
-        }
-        onToggleLoadFullFile={() => undefined}
-        onToggleRichPreview={() => setRichPreviewEnabled((enabled) => !enabled)}
-        onToggleTextDiff={() => setTextDiffEnabled((enabled) => !enabled)}
-        onToggleWhitespace={() => setShowWhitespace((enabled) => !enabled)}
-        onToggleDiffVariant={() =>
-          setDiffVariant((variant) =>
-            variant === "inline" ? "split" : "inline",
-          )
-        }
-        onToggleFilesPanel={onToggleFilesPanel}
-      />
-
-      <CanvasWorkbenchChangesContent
-        filesPanelOpen={filesPanelOpen}
-        filesPanelGridStyle={filesPanelGridStyle}
-        filesPanelResizeHandle={filesPanelResizeHandle}
-        fileTree={filteredDocumentFileTree}
-        selectedChangeItem={documentChangeItem}
-        fileFilter={fileFilter}
-        translateWorkbench={translateWorkbench}
-        onFileFilterChange={setFileFilter}
-        onSelectChangeItem={() => undefined}
-        detail={
-          <CanvasWorkbenchChangeDetailPanel
-            selectedChangeItem={documentChangeItem}
-            selectedItemStats={documentDiffStats}
-            latestCheckpointPath={null}
-            visibleDiffLines={visibleDocumentDiffLines}
-            selectedDiffLines={documentDiffLines}
-            panelClassName={panelClassName}
-            mutedPanelClassName={mutedPanelClassName}
-            diffVariant={diffVariant}
-            showWhitespace={showWhitespace}
-            wordWrapEnabled={wordWrapEnabled}
-            translateWorkbench={translateWorkbench}
-          />
-        }
-      />
-    </section>
+    <CanvasWorkbenchReviewSurface
+      toolbar={buildToolbarProps({
+        diffStats: documentDiffStats,
+        copyGitApplyDisabled: true,
+        loadFullFileDisabled: true,
+        loadFullFile: false,
+        onToggleDiffVariant: handleToggleDiffVariant,
+      })}
+      filesPanelOpen={filesPanelOpen}
+      filesPanelGridStyle={filesPanelGridStyle}
+      filesPanelResizeHandle={filesPanelResizeHandle}
+      fileTree={filteredDocumentFileTree}
+      selectedChangeItem={documentChangeItem}
+      fileFilter={fileFilter}
+      translateWorkbench={translateWorkbench}
+      onFileFilterChange={setFileFilter}
+      detail={
+        <CanvasWorkbenchChangeDetailPanel
+          selectedChangeItem={documentChangeItem}
+          selectedItemStats={documentDiffStats}
+          latestCheckpointPath={null}
+          visibleDiffLines={visibleDocumentDiffLines}
+          selectedDiffLines={documentDiffLines}
+          panelClassName={panelClassName}
+          mutedPanelClassName={mutedPanelClassName}
+          diffVariant={diffVariant}
+          showWhitespace={showWhitespace}
+          wordWrapEnabled={wordWrapEnabled}
+          translateWorkbench={translateWorkbench}
+        />
+      }
+    />
   );
 }

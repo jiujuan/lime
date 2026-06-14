@@ -14041,6 +14041,18 @@
     "ProjectGitDiffResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "comparisonBaseRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "currentRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
         "hasGitRepository": {
           "type": "boolean"
         },

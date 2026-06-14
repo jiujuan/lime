@@ -1,7 +1,7 @@
 use super::request_context::{
     host_reasoning_effort, host_thinking_enabled, request_workspace_scope,
     selection_from_explicit_preferences, selection_from_host_provider_config,
-    selection_from_session_default, turn_context_from_request,
+    selection_from_session_default, turn_context_from_request, RuntimeModelSelection,
 };
 use super::*;
 use crate::RuntimeHostContext;
@@ -29,7 +29,7 @@ impl RuntimeEventSink for TestRuntimeEventSink {
     }
 }
 
-fn request_for_test(
+pub(super) fn request_for_test(
     message: &str,
     host_options: Option<Value>,
     metadata: Option<Value>,

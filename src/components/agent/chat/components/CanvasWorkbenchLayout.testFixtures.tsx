@@ -21,6 +21,7 @@ const hoisted = vi.hoisted(() => ({
   mockListDirectory: vi.fn(),
   mockListProjectGitCommits: vi.fn(),
   mockReadProjectGitDiff: vi.fn(),
+  mockReadProjectGitStatus: vi.fn(),
   mockDestroyEmbeddedBrowserView: vi.fn(),
   mockGoBackEmbeddedBrowserView: vi.fn(),
   mockGoForwardEmbeddedBrowserView: vi.fn(),
@@ -59,6 +60,7 @@ const hoisted = vi.hoisted(() => ({
 export const mockListDirectory = hoisted.mockListDirectory;
 export const mockListProjectGitCommits = hoisted.mockListProjectGitCommits;
 export const mockReadProjectGitDiff = hoisted.mockReadProjectGitDiff;
+export const mockReadProjectGitStatus = hoisted.mockReadProjectGitStatus;
 export const mockDestroyEmbeddedBrowserView =
   hoisted.mockDestroyEmbeddedBrowserView;
 export const mockGoBackEmbeddedBrowserView =
@@ -279,6 +281,8 @@ vi.mock("react-i18next", () => ({
         "agentChat.canvasWorkbench.coding.changes.noDiff":
           "当前变更只有文件摘要，暂时没有上一版 diff。",
         "agentChat.canvasWorkbench.coding.changes.status.completed": "已写入",
+        "agentChat.canvasWorkbench.coding.changes.notGitRepository":
+          "当前目录不是 Git 仓库，无法读取文件变更。",
         "agentChat.canvasWorkbench.coding.changes.status.inProgress": "写入中",
         "agentChat.canvasWorkbench.coding.changes.status.failed": "失败",
         "agentChat.canvasWorkbench.coding.changes.more": "更多审查操作",
@@ -364,6 +368,7 @@ vi.mock("@/lib/api/fileBrowser", () => ({
 vi.mock("@/lib/api/projectGit", () => ({
   listProjectGitCommits: hoisted.mockListProjectGitCommits,
   readProjectGitDiff: hoisted.mockReadProjectGitDiff,
+  readProjectGitStatus: hoisted.mockReadProjectGitStatus,
 }));
 
 vi.mock("@/lib/api/embeddedBrowser", () => ({
@@ -657,8 +662,18 @@ beforeEach(() => {
     rootPath: "/workspace",
     repositoryRoot: "/workspace",
     hasGitRepository: true,
+    currentRef: "main",
+    comparisonBaseRef: "origin/main",
     patch:
       "diff --git a/src/App.tsx b/src/App.tsx\n--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -0,0 +1 @@\n+export function App() {}",
+    uncommittedFileCount: 1,
+  });
+  mockReadProjectGitStatus.mockResolvedValue({
+    rootPath: "/workspace",
+    repositoryRoot: "/workspace",
+    hasGitRepository: true,
+    currentBranch: "main",
+    branches: ["main", "origin/main"],
     uncommittedFileCount: 1,
   });
   mockListProjectGitCommits.mockResolvedValue({

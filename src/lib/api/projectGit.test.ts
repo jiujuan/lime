@@ -59,6 +59,8 @@ describe("projectGit API", () => {
         rootPath: "/workspace",
         repositoryRoot: "/workspace",
         hasGitRepository: true,
+        currentRef: "main",
+        comparisonBaseRef: "origin/main",
         patch: "diff --git a/README.md b/README.md\n+hello",
         uncommittedFileCount: 1,
       }),
@@ -66,6 +68,8 @@ describe("projectGit API", () => {
 
     await expect(readProjectGitDiff("/workspace", 5, client)).resolves.toEqual(
       expect.objectContaining({
+        currentRef: "main",
+        comparisonBaseRef: "origin/main",
         patch: expect.stringContaining("diff --git"),
         uncommittedFileCount: 1,
       }),

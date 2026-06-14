@@ -1,29 +1,73 @@
 import { useTranslation } from "react-i18next";
 import type { CodingWorkbenchView } from "@limecloud/agent-runtime-projection";
+import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
 import type { ActionRequired, ConfirmResponse } from "../types";
 import { CodingWorkbenchActionPanel } from "./CodingWorkbenchActionPanel";
 import { CodingWorkbenchDiagnosticPanel } from "./CodingWorkbenchDiagnosticPanel";
+import { CodingWorkbenchRecoveryPanel } from "./CodingWorkbenchRecoveryPanel";
+import { buildCodingWorkbenchRecoveryView } from "./codingWorkbenchRecovery";
 import { CodingStatusBadge } from "./codingWorkbenchStatus";
 import { statusLabelKey } from "./codingWorkbenchStatusModel";
 
 interface CodingWorkbenchOutputPanelProps {
   codingView: CodingWorkbenchView;
+  fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
   submittedActionsInFlight?: readonly ActionRequired[];
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
+  onSubmitRecoveryPrompt?: (
+    prompt: string,
+  ) => void | Promise<boolean> | boolean;
 }
 
 export function CodingWorkbenchOutputPanel({
   codingView,
+  fileCheckpointSummary,
   submittedActionsInFlight,
   onRespondToAction,
+  onSubmitRecoveryPrompt,
 }: CodingWorkbenchOutputPanelProps) {
   const { t } = useTranslation("agent");
+  const recoveryView = buildCodingWorkbenchRecoveryView({
+    codingView,
+    fileCheckpointSummary,
+    copy: {
+      intro: t("agentChat.canvasWorkbench.coding.recovery.prompt.intro"),
+      requirements: t(
+        "agentChat.canvasWorkbench.coding.recovery.prompt.requirements",
+      ),
+      failedCommand: t(
+        "agentChat.canvasWorkbench.coding.recovery.prompt.failedCommand",
+      ),
+      failedTest: t(
+        "agentChat.canvasWorkbench.coding.recovery.prompt.failedTest",
+      ),
+      failedPatch: t(
+        "agentChat.canvasWorkbench.coding.recovery.prompt.failedPatch",
+      ),
+      diagnostic: t(
+        "agentChat.canvasWorkbench.coding.recovery.prompt.diagnostic",
+      ),
+      preview: t("agentChat.canvasWorkbench.coding.recovery.prompt.preview"),
+      relatedFiles: t(
+        "agentChat.canvasWorkbench.coding.recovery.prompt.relatedFiles",
+      ),
+      latestCheckpoint: t(
+        "agentChat.canvasWorkbench.coding.recovery.prompt.latestCheckpoint",
+      ),
+    },
+  });
   const hasCommands = codingView.commands.length > 0;
   const hasTests = codingView.tests.length > 0;
   const hasActions = codingView.actions.length > 0;
   const hasDiagnostics = codingView.diagnostics.length > 0;
 
-  if (!hasCommands && !hasTests && !hasActions && !hasDiagnostics) {
+  if (
+    !recoveryView &&
+    !hasCommands &&
+    !hasTests &&
+    !hasActions &&
+    !hasDiagnostics
+  ) {
     return (
       <div
         data-testid="coding-workbench-output-projection"
@@ -39,6 +83,13 @@ export function CodingWorkbenchOutputPanel({
       data-testid="coding-workbench-output-projection"
       className="flex h-full min-h-0 flex-col gap-4 overflow-auto bg-white p-4"
     >
+      {recoveryView ? (
+        <CodingWorkbenchRecoveryPanel
+          recoveryView={recoveryView}
+          onSubmitRecoveryPrompt={onSubmitRecoveryPrompt}
+        />
+      ) : null}
+
       {hasCommands ? (
         <section className="space-y-2" data-testid="coding-workbench-commands">
           <h3 className="text-xs font-semibold text-slate-500">

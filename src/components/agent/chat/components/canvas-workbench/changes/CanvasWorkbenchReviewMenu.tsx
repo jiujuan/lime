@@ -31,7 +31,7 @@ export interface CanvasWorkbenchReviewMenuModel {
   onCopyGitApply?: () => void | Promise<void>;
   onToggleAutoExecute: () => void;
   onToggleCollapseContext: () => void;
-  onToggleLoadFullFile: () => void;
+  onToggleLoadFullFile?: () => void;
   onToggleRichPreview: () => void;
   onToggleTextDiff: () => void;
   onToggleWhitespace: () => void;
@@ -151,7 +151,9 @@ export function CanvasWorkbenchReviewMenu({
           "agentChat.canvasWorkbench.coding.changes.menu.unloadFullFile",
         )}
         active={!loadFullFile}
-        disabled={reviewActionBusy || loadFullFileDisabled}
+        disabled={
+          reviewActionBusy || loadFullFileDisabled || !onToggleLoadFullFile
+        }
         onClick={() => runAction(onToggleLoadFullFile)}
       />
       <ReviewMenuItem
@@ -185,7 +187,7 @@ export function CanvasWorkbenchReviewMenu({
         label={translateWorkbench(
           "agentChat.canvasWorkbench.coding.changes.menu.copyGitApply",
         )}
-        disabled={reviewActionBusy || copyGitApplyDisabled}
+        disabled={reviewActionBusy || copyGitApplyDisabled || !onCopyGitApply}
         onClick={() => runAction(onCopyGitApply)}
       />
     </div>

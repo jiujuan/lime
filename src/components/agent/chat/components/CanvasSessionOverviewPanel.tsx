@@ -27,11 +27,11 @@ import { extractFileNameFromPath } from "../workspace/workspacePath";
 import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 
 interface CanvasSessionOverviewPanelProps {
-  turns: AgentThreadTurn[];
-  threadItems: AgentThreadItem[];
+  turns: readonly AgentThreadTurn[];
+  threadItems: readonly AgentThreadItem[];
   currentTurnId?: string | null;
-  pendingActions?: ActionRequired[];
-  queuedTurns?: QueuedTurnSnapshot[];
+  pendingActions?: readonly ActionRequired[];
+  queuedTurns?: readonly QueuedTurnSnapshot[];
   isSending?: boolean;
   focusedItemId?: string | null;
 }

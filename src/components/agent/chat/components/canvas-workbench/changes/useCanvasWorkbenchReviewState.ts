@@ -67,6 +67,15 @@ export function useCanvasWorkbenchReviewState({
   const [backendChangeItems, setBackendChangeItems] = useState<
     CanvasWorkbenchChangeItem[]
   >([]);
+  const [backendHasGitRepository, setBackendHasGitRepository] = useState<
+    boolean | null
+  >(null);
+  const [backendRepositoryRoot, setBackendRepositoryRoot] = useState<
+    string | null
+  >(null);
+  const [branchCompareLabel, setBranchCompareLabel] = useState<string | null>(
+    null,
+  );
   const [commitOptions, setCommitOptions] = useState<
     CanvasWorkbenchReviewCommitOption[]
   >([]);
@@ -95,6 +104,9 @@ export function useCanvasWorkbenchReviewState({
       if (base === "previousConversation") {
         setBackendPatch(null);
         setBackendChangeItems([]);
+        setBackendHasGitRepository(null);
+        setBackendRepositoryRoot(null);
+        setBranchCompareLabel(null);
         setSelectedBase(base);
         setSelectedCommitSha(null);
         return true;
@@ -117,6 +129,13 @@ export function useCanvasWorkbenchReviewState({
           commitSha,
         );
         setBackendPatch(diff.patch);
+        setBackendHasGitRepository(diff.hasGitRepository);
+        setBackendRepositoryRoot(diff.repositoryRoot ?? null);
+        setBranchCompareLabel(
+          base === "branch" && diff.currentRef && diff.comparisonBaseRef
+            ? `${diff.currentRef} -> ${diff.comparisonBaseRef}`
+            : null,
+        );
         setBackendChangeItems(
           parseCanvasWorkbenchGitPatchToChangeItems(diff.patch),
         );
@@ -133,6 +152,9 @@ export function useCanvasWorkbenchReviewState({
       } catch (error) {
         setBackendPatch(null);
         setBackendChangeItems([]);
+        setBackendHasGitRepository(null);
+        setBackendRepositoryRoot(null);
+        setBranchCompareLabel(null);
         toast.error(
           error instanceof Error
             ? error.message
@@ -227,6 +249,8 @@ export function useCanvasWorkbenchReviewState({
     try {
       const diff = await readProjectGitDiff(workspaceRoot, 3);
       setBackendPatch(diff.patch);
+      setBackendHasGitRepository(diff.hasGitRepository);
+      setBackendRepositoryRoot(diff.repositoryRoot ?? null);
       toast.success(
         translateWorkbench(
           "agentChat.canvasWorkbench.coding.changes.toast.refreshed",
@@ -373,7 +397,10 @@ export function useCanvasWorkbenchReviewState({
   );
 
   return {
+    backendHasGitRepository,
     backendPatch,
+    backendRepositoryRoot,
+    branchCompareLabel,
     changeItems,
     commitOptions,
     commitsLoading,

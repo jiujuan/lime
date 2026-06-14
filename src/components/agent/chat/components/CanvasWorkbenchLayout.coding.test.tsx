@@ -602,6 +602,68 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     ).not.toBeNull();
   });
 
+  it("coding 模式选择 Git 基准时应展示非 Git 目录诊断", async () => {
+    mockReadProjectGitDiff.mockResolvedValueOnce({
+      rootPath: "/workspace/non-git",
+      hasGitRepository: false,
+      patch: "",
+      uncommittedFileCount: 0,
+    });
+
+    const container = mount({
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [
+        createTaskFile("task-current", "scratch.md", "# 当前草稿", 30),
+      ],
+      selectedFileId: "task-current",
+      workspaceRoot: "/workspace/non-git",
+      workspaceUnavailable: false,
+      defaultPreview: {
+        selectionKey: "task:task-current",
+        title: "当前草稿",
+        content: "# 当前草稿",
+        filePath: "scratch.md",
+        absolutePath: "/workspace/non-git/scratch.md",
+      } satisfies CanvasWorkbenchDefaultPreview,
+      loadFilePreview: vi.fn(async (path: string) => ({
+        path,
+        content: "",
+        isBinary: false,
+        size: 0,
+        error: null,
+      })),
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+      workbenchMode: "coding",
+    });
+
+    await flushEffects();
+
+    expect(container.textContent).toContain("还没有可对比的文件变更。");
+    clickByAriaLabel(container, "选择审查基准");
+    await flushEffects();
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="canvas-workbench-changes-base-option-unstaged"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flushEffects();
+
+    expect(mockReadProjectGitDiff).toHaveBeenCalledWith(
+      "/workspace/non-git",
+      3,
+      "unstaged",
+      undefined,
+    );
+    expect(container.textContent).toContain(
+      "当前目录不是 Git 仓库，无法读取文件变更。",
+    );
+    expect(container.textContent).not.toContain("还没有可对比的文件变更。");
+  });
+
   it("coding 模式应响应对话侧浏览器打开请求并激活右侧浏览器标签", async () => {
     const handleBrowserRequestHandled = vi.fn();
     const harnessProps = {
@@ -881,6 +943,36 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     expect(
       container.querySelector('button[aria-label="选择审查基准"]')?.textContent,
     ).toContain("未暂存");
+    expect(mockReadProjectGitDiff).toHaveBeenCalledWith(
+      "/workspace",
+      3,
+      "unstaged",
+      undefined,
+    );
+    clickByAriaLabel(container, "选择审查基准");
+    await flushEffects();
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="canvas-workbench-changes-base-option-branch"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flushEffects();
+    expect(mockReadProjectGitDiff).toHaveBeenCalledWith(
+      "/workspace",
+      3,
+      "branch",
+      undefined,
+    );
+    expect(
+      container.querySelector('button[aria-label="选择审查基准"]')?.textContent,
+    ).toContain("分支");
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-changes-branch-compare"]',
+      )?.textContent,
+    ).toContain("main -> origin/main");
     expect(
       container.querySelectorAll(
         '[data-testid="canvas-workbench-split-diff-before"]',

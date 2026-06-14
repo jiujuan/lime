@@ -64,7 +64,12 @@ function assertProjectGitDiff(
     typeof value.rootPath !== "string" ||
     typeof value.hasGitRepository !== "boolean" ||
     typeof value.patch !== "string" ||
-    typeof value.uncommittedFileCount !== "number"
+    typeof value.uncommittedFileCount !== "number" ||
+    !(value.currentRef == null || typeof value.currentRef === "string") ||
+    !(
+      value.comparisonBaseRef == null ||
+      typeof value.comparisonBaseRef === "string"
+    )
   ) {
     throw new Error(`${method} did not return project Git diff`);
   }

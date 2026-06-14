@@ -939,9 +939,15 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(canvasProps.outputView?.leadContent).toBeUndefined();
     const outputPanel = canvasProps.outputView?.renderPanel?.() as any;
     expect(outputPanel.props.onRespondToAction).toBe(handlePermissionResponse);
+    expect(typeof outputPanel.props.onSubmitRecoveryPrompt).toBe("function");
     expect(outputPanel.props.submittedActionsInFlight).toEqual([
       expect.objectContaining({ requestId: "approval-other" }),
     ]);
+    expect(handleSendFromEmptyState).not.toHaveBeenCalled();
+    await outputPanel.props.onSubmitRecoveryPrompt("请继续修复失败测试");
+    expect(handleSendFromEmptyState).toHaveBeenCalledWith({
+      textOverride: "请继续修复失败测试",
+    });
     expect(canvasProps.logView).not.toBe(canvasProps.sessionView);
     expect(canvasProps.logView?.tabLabel).toBe("日志");
     expect(canvasProps.logView?.title).toBe("运行日志");
@@ -973,7 +979,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     canvasProps.changeView?.onOpenFile?.("/tmp/demo/index.html");
     expect(openChangedFile).toHaveBeenCalledWith("/tmp/demo/index.html");
 
-    expect(handleSendFromEmptyState).not.toHaveBeenCalled();
+    expect(handleSendFromEmptyState).toHaveBeenCalledTimes(1);
   });
 
   it("无运行时输出和文件信号时应保持默认画布工作台模式", () => {

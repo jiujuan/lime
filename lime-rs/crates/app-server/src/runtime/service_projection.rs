@@ -74,6 +74,8 @@ pub(super) fn project_git_diff_from_service(
         root_path: diff.root_path,
         repository_root: diff.repository_root,
         has_git_repository: diff.has_git_repository,
+        current_ref: diff.current_ref,
+        comparison_base_ref: diff.comparison_base_ref,
         patch: diff.patch,
         uncommitted_file_count: diff.uncommitted_file_count,
     }

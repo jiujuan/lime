@@ -138,16 +138,13 @@ async fn execute_unsandboxed(
     let mut cmd = Command::new(&options.command);
     configure_command(&mut cmd, options, config);
 
-    let timeout = options
-        .timeout
-        .map(Duration::from_millis)
-        .or_else(|| {
-            config
-        .resource_limits
-        .as_ref()
-        .and_then(|l| l.max_execution_time)
-                .map(Duration::from_millis)
-        });
+    let timeout = options.timeout.map(Duration::from_millis).or_else(|| {
+        config
+            .resource_limits
+            .as_ref()
+            .and_then(|l| l.max_execution_time)
+            .map(Duration::from_millis)
+    });
 
     let output = if let Some(timeout) = timeout {
         tokio::time::timeout(timeout, cmd.output()).await??
