@@ -289,9 +289,30 @@ jobs:
         run: |
           set -euxo pipefail
           npm run electron:build
-          npx electron-forge package \
-            --platform "${{ matrix.host_platform }}" \
-            --arch "${{ matrix.arch }}"
+          FORGE_PACKAGE_LOG="$RUNNER_TEMP/electron-forge-package-${{ matrix.host_platform }}-${{ matrix.arch }}.log"
+          run_forge_package() {
+            set +e
+            npx electron-forge package \
+              --platform "${{ matrix.host_platform }}" \
+              --arch "${{ matrix.arch }}" 2>&1 | tee "$FORGE_PACKAGE_LOG"
+            package_status=${PIPESTATUS[0]}
+            set -e
+          }
+          is_notarytool_network_error() {
+            [ "${{ matrix.host_platform }}" = "darwin" ] || return 1
+            grep -Eq "NSURLErrorDomain|The Internet connection appears to be offline|No network route|HTTPError\\(statusCode: nil|_NSURLErrorNWPathKey=unsatisfied" "$FORGE_PACKAGE_LOG"
+          }
+          package_attempt=1
+          run_forge_package
+          while [ "$package_status" -ne 0 ] && [ "$package_attempt" -lt 3 ] && is_notarytool_network_error; do
+            package_attempt=$((package_attempt + 1))
+            echo "Electron Forge package hit a transient macOS notarization network error; retrying package attempt $package_attempt/3 after 60 seconds."
+            sleep 60
+            run_forge_package
+          done
+          if [ "$package_status" -ne 0 ]; then
+            exit "$package_status"
+          fi
           FORGE_MAKE_LOG="$RUNNER_TEMP/electron-forge-make-${{ matrix.host_platform }}-${{ matrix.arch }}.log"
           run_forge_make() {
             set +e

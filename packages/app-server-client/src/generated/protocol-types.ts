@@ -1988,10 +1988,32 @@ export interface ProjectGitBranchCreateParams {
   rootPath: string;
 }
 
-export type ProjectGitDiffBase = "branch" | "previousConversation" | "staged" | "unstaged";
+export interface ProjectGitCommit {
+  authorEmail: string;
+  authorName: string;
+  committedAt: string;
+  sha: string;
+  shortSha: string;
+  subject: string;
+}
+
+export interface ProjectGitCommitListParams {
+  limit?: number | null;
+  rootPath: string;
+}
+
+export interface ProjectGitCommitListResponse {
+  commits?: (ProjectGitCommit)[];
+  hasGitRepository: boolean;
+  repositoryRoot?: null | string;
+  rootPath: string;
+}
+
+export type ProjectGitDiffBase = "branch" | "commit" | "previousConversation" | "staged" | "unstaged";
 
 export interface ProjectGitDiffParams {
   base?: ProjectGitDiffBase | null;
+  commitSha?: null | string;
   contextLines?: number | null;
   rootPath: string;
 }

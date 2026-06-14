@@ -4,6 +4,7 @@ use crate::agent_tools::execution::{
     ToolExecutionDecisionKind, ToolExecutionResolverInput,
 };
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
+use aster::sandbox::{SandboxConfig, SandboxType};
 use aster::session::TurnContextOverride;
 use aster::tools::{ToolContext, ToolError, ToolRegistry};
 use futures::{stream, StreamExt};
@@ -191,6 +192,12 @@ async fn execute_planned_tool(
     if let Some(token) = input.cancel_token {
         context = context.with_cancellation_token(token);
     }
+    if should_attach_workspace_sandbox(&policy_decision) {
+        context = context.with_workspace_sandbox(workspace_sandbox_config(
+            &policy_decision,
+            &input.working_directory,
+        ));
+    }
 
     let result = aster::session_context::with_turn_context(input.turn_context.clone(), async {
         let registry = input.registry.read().await;
@@ -201,18 +208,22 @@ async fn execute_planned_tool(
     .await;
 
     match result {
-        Ok(tool_result) => ToolExecutionOutcome {
-            tool_name: planned.tool_name,
-            tool_id: planned.tool_id,
-            success: tool_result.success,
-            output: tool_result.output.unwrap_or_default(),
-            error: tool_result.error,
-            metadata: if tool_result.metadata.is_empty() {
-                None
-            } else {
-                Some(tool_result.metadata)
-            },
-        },
+        Ok(tool_result) => {
+            let mut metadata = policy_decision.metadata;
+            metadata.extend(tool_result.metadata);
+            ToolExecutionOutcome {
+                tool_name: planned.tool_name,
+                tool_id: planned.tool_id,
+                success: tool_result.success,
+                output: tool_result.output.unwrap_or_default(),
+                error: tool_result.error,
+                metadata: if metadata.is_empty() {
+                    None
+                } else {
+                    Some(metadata)
+                },
+            }
+        }
         Err(error) => {
             let metadata = policy_error_metadata(
                 &planned,
@@ -231,6 +242,46 @@ async fn execute_planned_tool(
             }
         }
     }
+}
+
+fn should_attach_workspace_sandbox(decision: &ToolExecutionDecision) -> bool {
+    decision
+        .metadata
+        .get("sandboxBackendEnforced")
+        .and_then(Value::as_bool)
+        == Some(true)
+}
+
+fn workspace_sandbox_config(
+    decision: &ToolExecutionDecision,
+    working_directory: &PathBuf,
+) -> SandboxConfig {
+    let sandbox_type = match decision
+        .metadata
+        .get("sandboxBackend")
+        .and_then(Value::as_str)
+    {
+        Some("seatbelt") => SandboxType::Seatbelt,
+        Some("linux_sandbox") => SandboxType::Bubblewrap,
+        _ => SandboxType::None,
+    };
+    let requested_policy = decision
+        .metadata
+        .get("requestedSandboxPolicy")
+        .and_then(Value::as_str)
+        .unwrap_or("workspace-write");
+    let mut config = SandboxConfig::default();
+    config.enabled = sandbox_type != SandboxType::None;
+    config.sandbox_type = sandbox_type;
+    config.network_access = true;
+    if requested_policy != "read-only" {
+        config.writable_paths.push(working_directory.clone());
+    }
+    config.read_only_paths.push(working_directory.clone());
+    config
+        .environment_variables
+        .insert("ASTER_WORKSPACE_SANDBOX".to_string(), "1".to_string());
+    config
 }
 
 fn preflight_tool_execution_decision(
@@ -438,562 +489,4 @@ fn turn_context_metadata_value(turn_context: Option<&TurnContextOverride>) -> Op
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aster::tools::{PermissionCheckResult, Tool, ToolResult};
-    use async_trait::async_trait;
-    use lime_core::config::{
-        ToolExecutionOverrideConfig as ConfigToolExecutionOverrideConfig,
-        ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig,
-        ToolExecutionSandboxProfileConfig as ConfigToolExecutionSandboxProfileConfig,
-        ToolExecutionWarningPolicyConfig as ConfigToolExecutionWarningPolicyConfig,
-    };
-    use serde_json::json;
-    use tokio::time::Duration;
-
-    struct EchoTool;
-
-    #[async_trait]
-    impl Tool for EchoTool {
-        fn name(&self) -> &str {
-            "Echo"
-        }
-
-        fn description(&self) -> &str {
-            "测试工具"
-        }
-
-        fn input_schema(&self) -> Value {
-            json!({
-                "type": "object",
-                "properties": {
-                    "text": { "type": "string" }
-                }
-            })
-        }
-
-        async fn execute(
-            &self,
-            params: Value,
-            context: &ToolContext,
-        ) -> Result<ToolResult, ToolError> {
-            let text = params
-                .get("text")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            Ok(ToolResult::success(format!(
-                "{}:{}",
-                context.session_id, text
-            )))
-        }
-    }
-
-    struct DeniedShellTool;
-
-    #[async_trait]
-    impl Tool for DeniedShellTool {
-        fn name(&self) -> &str {
-            "Bash"
-        }
-
-        fn description(&self) -> &str {
-            "拒绝执行命令"
-        }
-
-        fn input_schema(&self) -> Value {
-            json!({
-                "type": "object",
-                "properties": {
-                    "command": { "type": "string" }
-                }
-            })
-        }
-
-        async fn check_permissions(
-            &self,
-            _params: &Value,
-            _context: &ToolContext,
-        ) -> PermissionCheckResult {
-            PermissionCheckResult::deny("policy denied this command")
-        }
-
-        async fn execute(
-            &self,
-            _params: Value,
-            _context: &ToolContext,
-        ) -> Result<ToolResult, ToolError> {
-            Ok(ToolResult::success("should not execute"))
-        }
-    }
-
-    struct AllowShellTool;
-
-    #[async_trait]
-    impl Tool for AllowShellTool {
-        fn name(&self) -> &str {
-            "Bash"
-        }
-
-        fn description(&self) -> &str {
-            "测试 shell 工具"
-        }
-
-        fn input_schema(&self) -> Value {
-            json!({
-                "type": "object",
-                "properties": {
-                    "command": { "type": "string" }
-                }
-            })
-        }
-
-        async fn execute(
-            &self,
-            params: Value,
-            context: &ToolContext,
-        ) -> Result<ToolResult, ToolError> {
-            let command = params
-                .get("command")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            Ok(ToolResult::success(format!(
-                "{}:{}",
-                context.session_id, command
-            )))
-        }
-    }
-
-    struct DelayEchoTool;
-
-    #[async_trait]
-    impl Tool for DelayEchoTool {
-        fn name(&self) -> &str {
-            "DelayEcho"
-        }
-
-        fn description(&self) -> &str {
-            "按参数延迟后回显"
-        }
-
-        fn input_schema(&self) -> Value {
-            json!({
-                "type": "object",
-                "properties": {
-                    "text": { "type": "string" },
-                    "delayMs": { "type": "integer" }
-                }
-            })
-        }
-
-        async fn execute(
-            &self,
-            params: Value,
-            _context: &ToolContext,
-        ) -> Result<ToolResult, ToolError> {
-            let delay_ms = params
-                .get("delayMs")
-                .and_then(Value::as_u64)
-                .unwrap_or_default();
-            if delay_ms > 0 {
-                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-            }
-            let text = params
-                .get("text")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            Ok(ToolResult::success(text.to_string()))
-        }
-    }
-
-    #[tokio::test]
-    async fn execute_planned_tool_batch_emits_tool_start_and_terminal_events() {
-        let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-        {
-            let mut registry = registry.write().await;
-            registry.register(Box::new(EchoTool));
-        }
-
-        let batch = execute_planned_tool_batch(
-            ToolExecutionBatchInput {
-                registry,
-                session_id: "session-tool-batch".to_string(),
-                working_directory: std::env::current_dir().unwrap_or_default(),
-                cancel_token: None,
-                turn_context: None,
-                persisted_execution_policy: None,
-                parallelism: 2,
-                auto_mode: false,
-                bypass_restrictions: false,
-            },
-            vec![PlannedToolExecution {
-                tool_name: "Echo".to_string(),
-                tool_id: "tool-1".to_string(),
-                arguments: Some(r#"{"text":"hello"}"#.to_string()),
-                params: json!({ "text": "hello" }),
-            }],
-        )
-        .await;
-
-        assert_eq!(batch.outcomes.len(), 1);
-        assert!(batch.outcomes[0].success);
-        assert_eq!(batch.outcomes[0].output, "session-tool-batch:hello");
-        assert!(matches!(
-            batch.events.first(),
-            Some(RuntimeAgentEvent::ToolStart { tool_id, arguments, .. })
-                if tool_id == "tool-1" && arguments.as_deref() == Some(r#"{"text":"hello"}"#)
-        ));
-        assert!(matches!(
-            batch.events.last(),
-            Some(RuntimeAgentEvent::ToolEnd { tool_id, result })
-                if tool_id == "tool-1" && result.success
-        ));
-    }
-
-    #[tokio::test]
-    async fn execute_planned_tool_batch_preserves_input_order_when_parallel() {
-        let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-        {
-            let mut registry = registry.write().await;
-            registry.register(Box::new(DelayEchoTool));
-        }
-
-        let batch = execute_planned_tool_batch(
-            ToolExecutionBatchInput {
-                registry,
-                session_id: "session-tool-order".to_string(),
-                working_directory: std::env::current_dir().unwrap_or_default(),
-                cancel_token: None,
-                turn_context: None,
-                persisted_execution_policy: None,
-                parallelism: 2,
-                auto_mode: false,
-                bypass_restrictions: false,
-            },
-            vec![
-                PlannedToolExecution {
-                    tool_name: "DelayEcho".to_string(),
-                    tool_id: "tool-slow".to_string(),
-                    arguments: Some(r#"{"text":"slow","delayMs":20}"#.to_string()),
-                    params: json!({ "text": "slow", "delayMs": 20 }),
-                },
-                PlannedToolExecution {
-                    tool_name: "DelayEcho".to_string(),
-                    tool_id: "tool-fast".to_string(),
-                    arguments: Some(r#"{"text":"fast","delayMs":0}"#.to_string()),
-                    params: json!({ "text": "fast", "delayMs": 0 }),
-                },
-            ],
-        )
-        .await;
-
-        let event_tool_ids = batch
-            .events
-            .iter()
-            .map(|event| match event {
-                RuntimeAgentEvent::ToolStart { tool_id, .. }
-                | RuntimeAgentEvent::ToolEnd { tool_id, .. } => tool_id.as_str(),
-                _ => "",
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            event_tool_ids,
-            vec!["tool-slow", "tool-fast", "tool-slow", "tool-fast"]
-        );
-        assert_eq!(
-            batch
-                .outcomes
-                .iter()
-                .map(|outcome| outcome.tool_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["tool-slow", "tool-fast"]
-        );
-        assert_eq!(batch.outcomes[0].output, "slow");
-        assert_eq!(batch.outcomes[1].output, "fast");
-    }
-
-    #[tokio::test]
-    async fn execute_planned_tool_batch_attaches_policy_metadata_to_permission_denial() {
-        let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-        {
-            let mut registry = registry.write().await;
-            registry.register(Box::new(DeniedShellTool));
-        }
-
-        let working_directory = std::env::current_dir().unwrap_or_default();
-        let batch = execute_planned_tool_batch(
-            ToolExecutionBatchInput {
-                registry,
-                session_id: "session-policy-denied".to_string(),
-                working_directory: working_directory.clone(),
-                cancel_token: None,
-                turn_context: Some(TurnContextOverride {
-                    sandbox_policy: Some("workspace-write".to_string()),
-                    approval_policy: Some("never".to_string()),
-                    ..TurnContextOverride::default()
-                }),
-                persisted_execution_policy: None,
-                parallelism: 1,
-                auto_mode: false,
-                bypass_restrictions: false,
-            },
-            vec![PlannedToolExecution {
-                tool_name: "Bash".to_string(),
-                tool_id: "tool-denied".to_string(),
-                arguments: Some(r#"{"command":"rm -rf /tmp/outside"}"#.to_string()),
-                params: json!({ "command": "rm -rf /tmp/outside" }),
-            }],
-        )
-        .await;
-
-        let outcome = batch.outcomes.first().expect("tool outcome");
-        assert!(!outcome.success);
-        let metadata = outcome.metadata.as_ref().expect("policy metadata");
-        assert_eq!(
-            metadata.get("eventClass"),
-            Some(&json!("permission.denied"))
-        );
-        assert_eq!(
-            metadata.get("failureCategory"),
-            Some(&json!("permission_denied"))
-        );
-        assert_eq!(
-            metadata.get("policyName"),
-            Some(&json!("workspace_tool_execution"))
-        );
-        assert_eq!(metadata.get("policyProfile"), Some(&json!("workspace")));
-        assert_eq!(metadata.get("toolSurface"), Some(&json!("runtime_tool")));
-        assert_eq!(
-            metadata.get("restrictionProfile"),
-            Some(&json!("workspace_shell_command"))
-        );
-        assert_eq!(
-            metadata.get("sandboxPolicy"),
-            Some(&json!("workspace_command"))
-        );
-        assert_eq!(metadata.get("command"), Some(&json!("rm -rf /tmp/outside")));
-        assert_eq!(
-            metadata.get("cwd"),
-            Some(&json!(working_directory.to_string_lossy().to_string()))
-        );
-        assert_eq!(
-            metadata.get("requestedSandboxPolicy"),
-            Some(&json!("workspace-write"))
-        );
-        assert_eq!(metadata.get("approvalPolicy"), Some(&json!("never")));
-    }
-
-    #[tokio::test]
-    async fn execute_planned_tool_batch_emits_action_required_for_shell_approval_policy() {
-        let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-        {
-            let mut registry = registry.write().await;
-            registry.register(Box::new(AllowShellTool));
-        }
-
-        let working_directory = std::env::current_dir().unwrap_or_default();
-        let batch = execute_planned_tool_batch(
-            ToolExecutionBatchInput {
-                registry,
-                session_id: "session-action-required".to_string(),
-                working_directory: working_directory.clone(),
-                cancel_token: None,
-                turn_context: Some(TurnContextOverride {
-                    sandbox_policy: Some("workspace-write".to_string()),
-                    approval_policy: Some("on_request".to_string()),
-                    ..TurnContextOverride::default()
-                }),
-                persisted_execution_policy: None,
-                parallelism: 1,
-                auto_mode: false,
-                bypass_restrictions: false,
-            },
-            vec![PlannedToolExecution {
-                tool_name: "Bash".to_string(),
-                tool_id: "tool-approval".to_string(),
-                arguments: Some(r#"{"command":"cargo test"}"#.to_string()),
-                params: json!({ "command": "cargo test" }),
-            }],
-        )
-        .await;
-
-        assert_eq!(batch.outcomes.len(), 1);
-        assert!(!batch.outcomes[0].success);
-        let metadata = batch.outcomes[0].metadata.as_ref().expect("metadata");
-        assert_eq!(metadata.get("eventClass"), Some(&json!("action.required")));
-        assert_eq!(
-            metadata.get("reasonCode"),
-            Some(&json!("shell_command_requires_approval"))
-        );
-        assert!(batch.events.iter().any(|event| matches!(
-            event,
-            RuntimeAgentEvent::ActionRequired {
-                request_id,
-                action_type,
-                data,
-                ..
-            } if request_id == "tool-approval"
-                && action_type == "tool_confirmation"
-                && data.get("command") == Some(&json!("cargo test"))
-        )));
-        assert!(matches!(
-            batch.events.last(),
-            Some(RuntimeAgentEvent::ToolEnd { tool_id, result })
-                if tool_id == "tool-approval"
-                    && !result.success
-                    && result.metadata.as_ref().and_then(|metadata| metadata.get("eventClass"))
-                        == Some(&json!("action.required"))
-        ));
-    }
-
-    #[tokio::test]
-    async fn execute_planned_tool_batch_emits_sandbox_blocked_for_read_only_shell_write() {
-        let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-        {
-            let mut registry = registry.write().await;
-            registry.register(Box::new(EchoTool));
-        }
-
-        let working_directory = std::env::current_dir().unwrap_or_default();
-        let batch = execute_planned_tool_batch(
-            ToolExecutionBatchInput {
-                registry,
-                session_id: "session-sandbox-blocked".to_string(),
-                working_directory: working_directory.clone(),
-                cancel_token: None,
-                turn_context: Some(TurnContextOverride {
-                    sandbox_policy: Some("read-only".to_string()),
-                    approval_policy: Some("never".to_string()),
-                    ..TurnContextOverride::default()
-                }),
-                persisted_execution_policy: None,
-                parallelism: 1,
-                auto_mode: false,
-                bypass_restrictions: false,
-            },
-            vec![PlannedToolExecution {
-                tool_name: "Bash".to_string(),
-                tool_id: "tool-sandbox".to_string(),
-                arguments: Some(r#"{"command":"cargo test"}"#.to_string()),
-                params: json!({ "command": "cargo test" }),
-            }],
-        )
-        .await;
-
-        assert_eq!(batch.outcomes.len(), 1);
-        assert!(!batch.outcomes[0].success);
-        let metadata = batch.outcomes[0].metadata.as_ref().expect("metadata");
-        assert_eq!(metadata.get("eventClass"), Some(&json!("sandbox.blocked")));
-        assert_eq!(
-            metadata.get("failureCategory"),
-            Some(&json!("sandbox_blocked"))
-        );
-        assert_eq!(
-            metadata.get("reasonCode"),
-            Some(&json!("read_only_sandbox_blocks_shell_command"))
-        );
-        assert_eq!(metadata.get("sandboxPolicy"), Some(&json!("read-only")));
-        assert_eq!(metadata.get("command"), Some(&json!("cargo test")));
-        assert!(matches!(
-            batch.events.last(),
-            Some(RuntimeAgentEvent::ToolEnd { tool_id, result })
-                if tool_id == "tool-sandbox"
-                    && !result.success
-                    && result.metadata.as_ref().and_then(|metadata| metadata.get("eventClass"))
-                        == Some(&json!("sandbox.blocked"))
-        ));
-    }
-
-    #[tokio::test]
-    async fn execute_planned_tool_batch_respects_persisted_execution_policy() {
-        let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-        {
-            let mut registry = registry.write().await;
-            registry.register(Box::new(AllowShellTool));
-        }
-
-        let batch = execute_planned_tool_batch(
-            ToolExecutionBatchInput {
-                registry,
-                session_id: "session-persisted-policy".to_string(),
-                working_directory: std::env::current_dir().unwrap_or_default(),
-                cancel_token: None,
-                turn_context: Some(TurnContextOverride {
-                    sandbox_policy: Some("workspace-write".to_string()),
-                    approval_policy: Some("on_request".to_string()),
-                    ..TurnContextOverride::default()
-                }),
-                persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
-                    tool_overrides: HashMap::from([(
-                        "Bash".to_string(),
-                        ConfigToolExecutionOverrideConfig {
-                            warning_policy: Some(ConfigToolExecutionWarningPolicyConfig::None),
-                            restriction_profile: None,
-                            sandbox_profile: Some(ConfigToolExecutionSandboxProfileConfig::None),
-                        },
-                    )]),
-                    ..Default::default()
-                }),
-                parallelism: 1,
-                auto_mode: false,
-                bypass_restrictions: false,
-            },
-            vec![PlannedToolExecution {
-                tool_name: "Bash".to_string(),
-                tool_id: "tool-persisted-policy".to_string(),
-                arguments: Some(r#"{"command":"cargo test"}"#.to_string()),
-                params: json!({ "command": "cargo test" }),
-            }],
-        )
-        .await;
-
-        assert_eq!(batch.outcomes.len(), 1);
-        assert!(batch.outcomes[0].success);
-        assert_eq!(
-            batch.outcomes[0].output,
-            "session-persisted-policy:cargo test"
-        );
-        assert!(!batch
-            .events
-            .iter()
-            .any(|event| matches!(event, RuntimeAgentEvent::ActionRequired { .. })));
-    }
-
-    #[test]
-    fn rewrite_tool_terminal_event_updates_matching_terminal_event() {
-        let mut events = vec![RuntimeAgentEvent::ToolEnd {
-            tool_id: "tool-1".to_string(),
-            result: AgentToolResult {
-                success: true,
-                output: "old".to_string(),
-                error: None,
-                images: None,
-                metadata: None,
-            },
-        }];
-        let mut metadata = HashMap::new();
-        metadata.insert("kind".to_string(), json!("preflight"));
-
-        let rewritten = rewrite_tool_terminal_event(
-            &mut events,
-            &ToolTerminalEventUpdate {
-                tool_id: "tool-1".to_string(),
-                success: false,
-                output: "new".to_string(),
-                error: Some("missing usable link".to_string()),
-                metadata: Some(metadata),
-            },
-        );
-
-        assert!(rewritten);
-        assert!(matches!(
-            events.first(),
-            Some(RuntimeAgentEvent::ToolEnd { result, .. })
-                if !result.success
-                    && result.output == "new"
-                    && result.error.as_deref() == Some("missing usable link")
-                    && result.metadata.as_ref().and_then(|item| item.get("kind"))
-                        == Some(&json!("preflight"))
-        ));
-    }
-}
+mod tests;

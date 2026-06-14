@@ -10,6 +10,7 @@ import {
   expectNewWorkbenchToolInMenu,
   expectWorkbenchTabNotInNewMenu,
   flushEffects,
+  mockListProjectGitCommits,
   mount,
   mockDestroyEmbeddedBrowserView,
   mockListenEmbeddedBrowserViewLoadFailed,
@@ -156,6 +157,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
       "/workspace",
       3,
       "unstaged",
+      undefined,
     );
     expect(
       container.querySelector(
@@ -823,10 +825,43 @@ describe("CanvasWorkbenchLayout coding mode", () => {
         '[data-testid="canvas-workbench-changes-base-commit-submenu"]',
       )?.textContent,
     ).toContain("分支上暂无提交记录。");
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="canvas-workbench-changes-base-option-commit"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flushEffects();
+    expect(mockListProjectGitCommits).toHaveBeenCalledWith("/workspace", 30);
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-changes-base-commit-submenu"]',
+      )?.textContent,
+    ).toContain("整理右侧审查面板");
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="canvas-workbench-changes-base-commit-option-abc1234"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flushEffects();
+    expect(mockReadProjectGitDiff).toHaveBeenCalledWith(
+      "/workspace",
+      3,
+      "commit",
+      "abc1234567890",
+    );
+    expect(
+      container.querySelector('button[aria-label="选择审查基准"]')?.textContent,
+    ).toContain("提交");
+    clickByAriaLabel(container, "选择审查基准");
+    await flushEffects();
     expect(
       container
         .querySelector(
-          '[data-testid="canvas-workbench-changes-base-option-previousConversation"]',
+          '[data-testid="canvas-workbench-changes-base-option-commit"]',
         )
         ?.getAttribute("aria-checked"),
     ).toBe("true");
@@ -898,6 +933,7 @@ describe("CanvasWorkbenchLayout coding mode", () => {
       "/workspace",
       3,
       "unstaged",
+      undefined,
     );
     expect(mockToast.success).toHaveBeenCalledWith("已刷新变更");
     expect(

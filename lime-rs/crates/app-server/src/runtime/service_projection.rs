@@ -2,6 +2,8 @@ use super::RuntimeCoreError;
 use app_server_protocol::FileSystemDirectoryListing;
 use app_server_protocol::FileSystemFileEntry;
 use app_server_protocol::FileSystemFilePreview;
+use app_server_protocol::ProjectGitCommit;
+use app_server_protocol::ProjectGitCommitListResponse;
 use app_server_protocol::ProjectGitDiffResponse;
 use app_server_protocol::ProjectGitStatusResponse;
 use app_server_protocol::ProjectGitWorktreeCreateResponse;
@@ -74,6 +76,34 @@ pub(super) fn project_git_diff_from_service(
         has_git_repository: diff.has_git_repository,
         patch: diff.patch,
         uncommitted_file_count: diff.uncommitted_file_count,
+    }
+}
+
+pub(super) fn project_git_commit_list_from_service(
+    list: lime_services::project_git_service::ProjectGitCommitList,
+) -> ProjectGitCommitListResponse {
+    ProjectGitCommitListResponse {
+        root_path: list.root_path,
+        repository_root: list.repository_root,
+        has_git_repository: list.has_git_repository,
+        commits: list
+            .commits
+            .into_iter()
+            .map(project_git_commit_from_service)
+            .collect(),
+    }
+}
+
+fn project_git_commit_from_service(
+    commit: lime_services::project_git_service::ProjectGitCommit,
+) -> ProjectGitCommit {
+    ProjectGitCommit {
+        sha: commit.sha,
+        short_sha: commit.short_sha,
+        subject: commit.subject,
+        author_name: commit.author_name,
+        author_email: commit.author_email,
+        committed_at: commit.committed_at,
     }
 }
 

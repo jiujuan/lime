@@ -38,6 +38,7 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     method!(METHOD_FILE_SYSTEM_DELETE_FILE, Request),
     method!(METHOD_PROJECT_GIT_STATUS, Request),
     method!(METHOD_PROJECT_GIT_DIFF, Request),
+    method!(METHOD_PROJECT_GIT_COMMITS_LIST, Request),
     method!(METHOD_PROJECT_GIT_BRANCH_CHECKOUT, Request),
     method!(METHOD_PROJECT_GIT_BRANCH_CREATE, Request),
     method!(METHOD_PROJECT_GIT_WORKTREE_CREATE, Request),

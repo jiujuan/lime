@@ -3,6 +3,7 @@
     "ProjectGitDiffBase": {
       "enum": [
         "branch",
+        "commit",
         "previousConversation",
         "staged",
         "unstaged"
@@ -20,6 +21,12 @@
         {
           "type": "null"
         }
+      ]
+    },
+    "commitSha": {
+      "type": [
+        "null",
+        "string"
       ]
     },
     "contextLines": {

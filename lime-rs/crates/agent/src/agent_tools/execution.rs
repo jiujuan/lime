@@ -12,4 +12,6 @@ pub use service::*;
 #[cfg(test)]
 mod network_tests;
 #[cfg(test)]
+mod sandbox_backend_tests;
+#[cfg(test)]
 mod tests;

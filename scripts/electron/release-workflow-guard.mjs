@@ -317,6 +317,13 @@ function assertBuildSteps(buildJob) {
   for (const required of [
     "npm run electron:build",
     "npx electron-forge package",
+    "FORGE_PACKAGE_LOG",
+    "run_forge_package",
+    "is_notarytool_network_error",
+    "NSURLErrorDomain",
+    "The Internet connection appears to be offline",
+    "No network route",
+    "retrying package attempt",
     "npx electron-forge make",
     "FORGE_MAKE_LOG",
     "run_forge_make",

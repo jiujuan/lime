@@ -19,6 +19,7 @@ type MockResizeObserverCallback = (
 
 const hoisted = vi.hoisted(() => ({
   mockListDirectory: vi.fn(),
+  mockListProjectGitCommits: vi.fn(),
   mockReadProjectGitDiff: vi.fn(),
   mockDestroyEmbeddedBrowserView: vi.fn(),
   mockGoBackEmbeddedBrowserView: vi.fn(),
@@ -56,6 +57,7 @@ const hoisted = vi.hoisted(() => ({
 }));
 
 export const mockListDirectory = hoisted.mockListDirectory;
+export const mockListProjectGitCommits = hoisted.mockListProjectGitCommits;
 export const mockReadProjectGitDiff = hoisted.mockReadProjectGitDiff;
 export const mockDestroyEmbeddedBrowserView =
   hoisted.mockDestroyEmbeddedBrowserView;
@@ -237,11 +239,15 @@ vi.mock("react-i18next", () => ({
         "agentChat.canvasWorkbench.coding.changes.base.commit": "提交",
         "agentChat.canvasWorkbench.coding.changes.base.emptyCommits":
           "分支上暂无提交记录。",
+        "agentChat.canvasWorkbench.coding.changes.base.loadingCommits":
+          "正在读取提交...",
         "agentChat.canvasWorkbench.coding.changes.base.previousConversation":
           "上轮对话",
         "agentChat.canvasWorkbench.coding.changes.base.selectorAria":
           "选择审查基准",
         "agentChat.canvasWorkbench.coding.changes.base.staged": "已暂存",
+        "agentChat.canvasWorkbench.coding.changes.base.untitledCommit":
+          "未命名提交",
         "agentChat.canvasWorkbench.coding.changes.base.unstaged": "未暂存",
         "agentChat.canvasWorkbench.coding.changes.beforeLabel": "上一版",
         "agentChat.canvasWorkbench.coding.changes.filterEmpty":
@@ -356,6 +362,7 @@ vi.mock("@/lib/api/fileBrowser", () => ({
 }));
 
 vi.mock("@/lib/api/projectGit", () => ({
+  listProjectGitCommits: hoisted.mockListProjectGitCommits,
   readProjectGitDiff: hoisted.mockReadProjectGitDiff,
 }));
 
@@ -653,6 +660,21 @@ beforeEach(() => {
     patch:
       "diff --git a/src/App.tsx b/src/App.tsx\n--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -0,0 +1 @@\n+export function App() {}",
     uncommittedFileCount: 1,
+  });
+  mockListProjectGitCommits.mockResolvedValue({
+    rootPath: "/workspace",
+    repositoryRoot: "/workspace",
+    hasGitRepository: true,
+    commits: [
+      {
+        sha: "abc1234567890",
+        shortSha: "abc1234",
+        subject: "整理右侧审查面板",
+        authorName: "Test User",
+        authorEmail: "test@example.com",
+        committedAt: "2026-06-14T10:00:00Z",
+      },
+    ],
   });
   const embeddedBrowserState = {
     viewId: "canvas-workbench-browser-test",

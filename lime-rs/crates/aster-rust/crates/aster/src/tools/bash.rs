@@ -23,6 +23,7 @@ use tokio::process::Command;
 use tracing::{debug, warn};
 
 use crate::subprocess::{decode_process_output, summarize_decoded_with};
+use crate::sandbox::{execute_in_sandbox_with_options, ExecutorOptions, ExecutorResult};
 
 use super::base::{PermissionCheckResult, Tool};
 use super::command_semantics::interpret_bash_command_result;
@@ -1054,10 +1055,31 @@ impl BashTool {
             effective_timeout, command
         );
 
-        // Build the command based on platform
-        let mut cmd = self.build_platform_command(command, context);
+        if let Some(sandbox_config) = context.workspace_sandbox.as_ref() {
+            let result = execute_in_sandbox_with_options(
+                ExecutorOptions {
+                    command: resolved_shell_program().to_string(),
+                    args: resolved_shell_args(command),
+                    timeout: Some(effective_timeout.as_millis() as u64),
+                    env: context.environment.clone(),
+                    working_dir: Some(context.working_directory.display().to_string()),
+                },
+                sandbox_config,
+            )
+            .await
+            .map_err(|error| {
+                ToolError::execution_failed(format!("Failed to execute sandboxed command: {error}"))
+            })?;
 
-        // Execute with timeout
+            return self.tool_result_from_executor_result(
+                command,
+                &context.working_directory,
+                result,
+                Some("workspace"),
+            );
+        }
+
+        let mut cmd = self.build_platform_command(command, context);
         let result = tokio::time::timeout(effective_timeout, async {
             cmd.stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -1156,6 +1178,58 @@ impl BashTool {
         }
     }
 
+    fn tool_result_from_executor_result(
+        &self,
+        command: &str,
+        working_directory: &Path,
+        executor_result: ExecutorResult,
+        sandbox_scope: Option<&str>,
+    ) -> Result<ToolResult, ToolError> {
+        let stdout = executor_result.stdout;
+        let stderr = executor_result.stderr;
+        let exit_code = executor_result.exit_code;
+        let interpretation = interpret_bash_command_result(command, exit_code, &stdout, &stderr);
+        let combined_output =
+            self.format_output_with_message(&stdout, &stderr, exit_code, interpretation.message.as_deref());
+        let truncated_output = self.truncate_output(&combined_output);
+        let mut result = if interpretation.is_error {
+            ToolResult::error(truncated_output)
+        } else {
+            ToolResult::success(truncated_output)
+        }
+        .with_metadata("exit_code", serde_json::json!(exit_code))
+        .with_metadata("stdout_length", serde_json::json!(stdout.len()))
+        .with_metadata("stderr_length", serde_json::json!(stderr.len()))
+        .with_metadata("stdout_bytes", serde_json::json!(stdout.len()))
+        .with_metadata("stderr_bytes", serde_json::json!(stderr.len()))
+        .with_metadata("stdout", serde_json::json!(self.truncate_output(&stdout)))
+        .with_metadata("stderr", serde_json::json!(self.truncate_output(&stderr)))
+        .with_metadata("shell", serde_json::json!(resolved_shell_name()))
+        .with_metadata("command", serde_json::json!(command))
+        .with_metadata(
+            "cwd",
+            serde_json::json!(working_directory.display().to_string()),
+        )
+        .with_metadata("execution_surface", serde_json::json!("embedded"))
+        .with_metadata("sandboxed", serde_json::json!(executor_result.sandboxed))
+        .with_metadata(
+            "sandbox_type",
+            serde_json::json!(format!("{:?}", executor_result.sandbox_type).to_ascii_lowercase()),
+        );
+
+        if let Some(scope) = sandbox_scope {
+            result = result.with_metadata("sandbox_scope", serde_json::json!(scope));
+        }
+        if let Some(duration) = executor_result.duration {
+            result = result.with_metadata("duration_ms", serde_json::json!(duration));
+        }
+        if exit_code != 0 && result.success {
+            result = result.with_metadata("reported_success", serde_json::json!(true));
+        }
+
+        Ok(result)
+    }
+
     /// Build a platform-specific command
     fn build_platform_command(&self, command: &str, context: &ToolContext) -> Command {
         let mut cmd = build_platform_shell_command(command);
@@ -1216,6 +1290,30 @@ impl BashTool {
         }
 
         output
+    }
+}
+
+fn resolved_shell_program() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "cmd.exe"
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        "sh"
+    }
+}
+
+fn resolved_shell_args(command: &str) -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        vec!["/D".to_string(), "/S".to_string(), "/C".to_string(), command.to_string()]
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec!["-c".to_string(), command.to_string()]
     }
 }
 

@@ -10,6 +10,7 @@ pub const METHOD_FILE_SYSTEM_RENAME_FILE: &str = "fileSystem/renameFile";
 pub const METHOD_FILE_SYSTEM_DELETE_FILE: &str = "fileSystem/deleteFile";
 pub const METHOD_PROJECT_GIT_STATUS: &str = "projectGit/status";
 pub const METHOD_PROJECT_GIT_DIFF: &str = "projectGit/diff";
+pub const METHOD_PROJECT_GIT_COMMITS_LIST: &str = "projectGit/commits/list";
 pub const METHOD_PROJECT_GIT_BRANCH_CHECKOUT: &str = "projectGit/branch/checkout";
 pub const METHOD_PROJECT_GIT_BRANCH_CREATE: &str = "projectGit/branch/create";
 pub const METHOD_PROJECT_GIT_WORKTREE_CREATE: &str = "projectGit/worktree/create";

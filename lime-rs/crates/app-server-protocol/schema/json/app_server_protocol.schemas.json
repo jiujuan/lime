@@ -13860,10 +13860,128 @@
       "title": "ProjectGitBranchCreateParams",
       "type": "object"
     },
+    "ProjectGitCommit": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "authorEmail": {
+          "type": "string"
+        },
+        "authorName": {
+          "type": "string"
+        },
+        "committedAt": {
+          "type": "string"
+        },
+        "sha": {
+          "type": "string"
+        },
+        "shortSha": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "authorEmail",
+        "authorName",
+        "committedAt",
+        "sha",
+        "shortSha",
+        "subject"
+      ],
+      "title": "ProjectGitCommit",
+      "type": "object"
+    },
+    "ProjectGitCommitListParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "ProjectGitCommitListParams",
+      "type": "object"
+    },
+    "ProjectGitCommitListResponse": {
+      "$defs": {
+        "ProjectGitCommit": {
+          "properties": {
+            "authorEmail": {
+              "type": "string"
+            },
+            "authorName": {
+              "type": "string"
+            },
+            "committedAt": {
+              "type": "string"
+            },
+            "sha": {
+              "type": "string"
+            },
+            "shortSha": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "authorEmail",
+            "authorName",
+            "committedAt",
+            "sha",
+            "shortSha",
+            "subject"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "commits": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProjectGitCommit"
+          },
+          "type": "array"
+        },
+        "hasGitRepository": {
+          "type": "boolean"
+        },
+        "repositoryRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "hasGitRepository",
+        "rootPath"
+      ],
+      "title": "ProjectGitCommitListResponse",
+      "type": "object"
+    },
     "ProjectGitDiffBase": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "enum": [
         "branch",
+        "commit",
         "previousConversation",
         "staged",
         "unstaged"
@@ -13876,6 +13994,7 @@
         "ProjectGitDiffBase": {
           "enum": [
             "branch",
+            "commit",
             "previousConversation",
             "staged",
             "unstaged"
@@ -13893,6 +14012,12 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "commitSha": {
+          "type": [
+            "null",
+            "string"
           ]
         },
         "contextLines": {
@@ -21432,6 +21557,7 @@
               "modelSyncState/read",
               "projectGit/branch/checkout",
               "projectGit/branch/create",
+              "projectGit/commits/list",
               "projectGit/diff",
               "projectGit/status",
               "projectGit/worktree/create",

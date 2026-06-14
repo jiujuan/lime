@@ -26,31 +26,31 @@ turn start
 
 ## 阶段依赖
 
-| 阶段 | 依赖 | 交付物 | 不能替代它的事项 |
-| --- | --- | --- | --- |
-| P0 标准与盘点 | Agent Workbench 标准、现有 Workspace coding surface | current/compat/deprecated/dead 分类和退出条件 | 继续修旧 `code_orchestrated` 局部行为。 |
-| P1 RuntimeEvent | P0 | schema、sequence、fixture、Rust emission contract | 只在前端 adapter 合成事件。 |
-| P2 ExecutionBackend | P1 | file/patch/command/test/search/browser/MCP tool owner | 模型直接输出 shell 或 patch 文本。 |
-| P3 Projection | P1 | `CodingWorkbenchView` 与 replay/hydration guard | React 组件自建状态机。 |
-| P4 UI | P3，部分依赖 P2 fixture | 完整 Coding Workbench surfaces 和 GUI smoke | 只迁 change view 或只显示正文。 |
-| P5 多模型 | P1 | profile slot、routing diagnostics、provider readiness | 产品页直连 key 或固定供应商。 |
-| P6 外部 harness | P1/P3 | compat event adapter 和 degraded UI | 让外部 CLI 成为生产必需主链。 |
-| P7 Conformance | P1-P6 持续输入 | fixture、contract、projection、GUI、evidence 验收矩阵 | 单一 `verify:local` 结果。 |
-| P8 清理守卫 | P1-P7 current 闭环成立后 | 删除/限制旧入口和回流守卫 | 口头约定旧入口不再用。 |
+| 阶段                | 依赖                                                | 交付物                                                | 不能替代它的事项                        |
+| ------------------- | --------------------------------------------------- | ----------------------------------------------------- | --------------------------------------- |
+| P0 标准与盘点       | Agent Workbench 标准、现有 Workspace coding surface | current/compat/deprecated/dead 分类和退出条件         | 继续修旧 `code_orchestrated` 局部行为。 |
+| P1 RuntimeEvent     | P0                                                  | schema、sequence、fixture、Rust emission contract     | 只在前端 adapter 合成事件。             |
+| P2 ExecutionBackend | P1                                                  | file/patch/command/test/search/browser/MCP tool owner | 模型直接输出 shell 或 patch 文本。      |
+| P3 Projection       | P1                                                  | `CodingWorkbenchView` 与 replay/hydration guard       | React 组件自建状态机。                  |
+| P4 UI               | P3，部分依赖 P2 fixture                             | 完整 Coding Workbench surfaces 和 GUI smoke           | 只迁 change view 或只显示正文。         |
+| P5 多模型           | P1                                                  | profile slot、routing diagnostics、provider readiness | 产品页直连 key 或固定供应商。           |
+| P6 外部 harness     | P1/P3                                               | compat event adapter 和 degraded UI                   | 让外部 CLI 成为生产必需主链。           |
+| P7 Conformance      | P1-P6 持续输入                                      | fixture、contract、projection、GUI、evidence 验收矩阵 | 单一 `verify:local` 结果。              |
+| P8 清理守卫         | P1-P7 current 闭环成立后                            | 删除/限制旧入口和回流守卫                             | 口头约定旧入口不再用。                  |
 
 ## 实现 owner 矩阵
 
-| 能力 | Rust owner | TS / UI owner | 必需测试 |
-| --- | --- | --- | --- |
-| coding profile resolve | `lime-rs/crates/app-server` + `lime-rs/crates/agent` | runtime client request builder | Rust profile unit + client contract。 |
-| model slot routing | Provider Store / Model Registry crates | settings / diagnostics projection | provider readiness unit + UI diagnostics test。 |
-| file read/write | ExecutionBackend file module + artifact/checkpoint owner | `CodingWorkbenchView.files/changes` | Rust file tool + projection fixture。 |
-| patch apply | `patch-apply` crate + ExecutionBackend patch module | `PatchView` / change tab | patch parser/apply unit + failure fixture。 |
-| command execution | ExecutionBackend command module + Project Shell bridge | output/log tab | command lifecycle Rust test + GUI fixture。 |
-| test execution | ExecutionBackend test module | test result / continue fix action | test lifecycle unit + projection fixture。 |
-| approval / policy | Policy service + RuntimeCore action owner | action card callbacks | action required/resolved contract + hydrate test。 |
-| sandbox blocked | sandbox manager + policy service | blocked state / diagnostics | platform policy unit + UI blocked fixture。 |
-| evidence export | evidence owner + read model | evidence lane / diagnostics drawer | evidence join test + replay fixture。 |
+| 能力                   | Rust owner                                               | TS / UI owner                       | 必需测试                                           |
+| ---------------------- | -------------------------------------------------------- | ----------------------------------- | -------------------------------------------------- |
+| coding profile resolve | `lime-rs/crates/app-server` + `lime-rs/crates/agent`     | runtime client request builder      | Rust profile unit + client contract。              |
+| model slot routing     | Provider Store / Model Registry crates                   | settings / diagnostics projection   | provider readiness unit + UI diagnostics test。    |
+| file read/write        | ExecutionBackend file module + artifact/checkpoint owner | `CodingWorkbenchView.files/changes` | Rust file tool + projection fixture。              |
+| patch apply            | `patch-apply` crate + ExecutionBackend patch module      | `PatchView` / change tab            | patch parser/apply unit + failure fixture。        |
+| command execution      | ExecutionBackend command module + Project Shell bridge   | output/log tab                      | command lifecycle Rust test + GUI fixture。        |
+| test execution         | ExecutionBackend test module                             | test result / continue fix action   | test lifecycle unit + projection fixture。         |
+| approval / policy      | Policy service + RuntimeCore action owner                | action card callbacks               | action required/resolved contract + hydrate test。 |
+| sandbox blocked        | sandbox manager + policy service                         | blocked state / diagnostics         | platform policy unit + UI blocked fixture。        |
+| evidence export        | evidence owner + read model                              | evidence lane / diagnostics drawer  | evidence join test + replay fixture。              |
 
 ## P0：标准与现状盘点
 
@@ -117,7 +117,7 @@ turn start
 - `turn.completed / failed / canceled` 后同 turn 不能再追加 file/patch/command/test/action 执行流事件。
 - App Server fixture backend 产出的 events 能通过 `@limecloud/agent-ui-contracts` 校验。
 
-当前状态：`completed for P1 spine / backend read-model enrichment completed / P3 read-model adapter connected`。已完成 App Server Rust 侧 schema gate、patch/command/test sequence gate、backend emission fail-closed 测试；RuntimeCore 会拒绝孤立 `command.exited`、缺 artifact 的 `file.changed` 和 turn 终态后的 execution stream。active command/test/action 后端 read model 与 current timeline hydrate 已完成；`@limecloud/agent-runtime-projection` 已能从 `thread_read.commands/tests/pending_requests` 合并出 `CodingWorkbenchView.commands/tests/actions` 和 active ids，Workspace coding adapter 已把 `threadRead` 传入 selector，输出 tab 已直接渲染 `CodingWorkbenchView.commands/tests/actions/diagnostics`。剩余是把 log/action-submit 面板继续改为直接消费 `CodingWorkbenchView`，并补 GUI smoke evidence。
+当前状态：`completed for P1 spine / backend read-model enrichment completed / P3 read-model adapter connected`。已完成 App Server Rust 侧 schema gate、patch/command/test sequence gate、backend emission fail-closed 测试；RuntimeCore 会拒绝孤立 `command.exited`、缺 artifact 的 `file.changed` 和 turn 终态后的 execution stream。active command/test/action 后端 read model 与 current timeline hydrate 已完成；`@limecloud/agent-runtime-projection` 已能从 `thread_read.commands/tests/pending_requests` 合并出 `CodingWorkbenchView.commands/tests/actions` 和 active ids，Workspace coding adapter 已把 `threadRead` 传入 selector，输出 tab 已直接渲染 `CodingWorkbenchView.commands/tests/actions/diagnostics`，日志 tab 与 action-submit view 也已改为从同一 `CodingWorkbenchView` 派生。剩余是补 GUI smoke evidence，并继续扩诊断抽屉里的 provider / policy / evidence 聚合细节。
 
 ## P2：ExecutionBackend Coding Tools
 
@@ -167,7 +167,7 @@ turn start
 - 命令、测试和 patch 的失败分类可被 projection 直接消费。
 - Windows / macOS / Linux 平台差异进入 policy/sandbox diagnostics，不隐藏为普通失败。
 
-当前状态：`in_progress`。已在 `lime-rs/crates/app-server/src/runtime_backend/coding_events.rs` 接入 runtime tool event mirror：`Read` 派生 `file.read`，`Write/Edit` 成功结果派生 `file.changed + artifactId/artifactRefs`，`Bash/PowerShell` 派生 `command.started/output/exited` 和测试命令的 `test.started/completed`，明确的 `apply_patch` 工具或 shell 命令派生 `patch.started/applied/failed`；`patch-apply` crate 已从 parser-only 推进到真实 workdir apply service，并通过 agent `apply_patch` current tool 入口委托执行，可结构化返回 add/update/delete/move report/error，多文件 patch metadata 会投影为多条 `file.changed`。`apply_patch` tool metadata 现已为每个文件变更生成稳定 `checkpointRef/contentRef/diffRef`、工作区相对路径、内容预览、旧内容字段和受控结构化 diff 预览；RuntimeBackend mirror 会把 per-file refs 与 diff 提升到 `file.changed` 顶层，继续复用 RuntimeCore artifact / checkpoint / evidence owner。tool policy/sandbox 类失败会在 raw `tool.failed` 前派生 `permission.denied` / `sandbox.blocked`，并透传 `policyName/profile/decisionId/sandboxPolicy/platform/command/cwd/diagnostics` 基础诊断 facts；`agent_tools::execution` 生成的 current `ToolPermission` 已写入 `policyName=workspace_tool_execution`、`policyProfile`、`toolSurface`、`restrictionProfile`、`sandboxPolicy` 与字段来源 metadata，`agent_tools::tool_orchestrator` 已在 `ToolRegistry::execute` 返回 `PermissionDenied` / `SafetyCheckFailed` / 沙箱类 `ExecutionFailed` 时合成 `eventClass/failureCategory/reasonCode/reason/command/cwd/platform/arch/approvalPolicy/requestedSandboxPolicy` metadata，使真实拒绝结果能直接进入结构化诊断而不是只靠错误文本。RuntimeBackend action response 已调用 Aster tool confirmation / elicitation owner 并发出标准 `action.resolved`；RuntimeCore 会从历史 `action.required` 回填 `toolCallId`，确保审批后工具生命周期能继续通过 guard。backend metadata 中已有的 `outputRef/refIds/artifactRefs/checkpointRef/contentRef/diffRef` 已会进入 coding facts，且 `file.changed.artifactRefs` 已接入 RuntimeCore artifact read / evidence export 聚合；`tool.result/tool.failed` 的大输出 payload 会在入库前规整为 `outputPreview + outputRef/refIds`，避免 raw tool terminal 违反 AgentUI large payload contract，并可由 `FilesystemOutputSnapshotStore` 持久化到会话文件系统 snapshot，RuntimeCore 只保留 preview/ref，`artifact/read(include_content=true)` 可回读完整输出。`file.changed.change.previousContent` 会由 `FilesystemFileCheckpointSnapshotStore` 持久化到会话文件系统 snapshot，事件/read model 只保留 `checkpointSnapshotFile / previousContentSnapshotFile` refs；`agentSession/fileCheckpoint/list|get|diff|restore` 可从 RuntimeCore read model 读取 checkpointId、contentRef、diffRef、preview、结构化 diff 与 snapshot content，并可创建恢复前备份。`runtime/session_hydration.rs` 已从 current timeline persisted `detail.events / detail.outputs / detail.items` 恢复 output snapshot refs 与 file checkpoint snapshot refs 到 RuntimeCore state，并可把 persisted `thread_read.commands/tests/pending_requests` 反推为标准 `command.* / test.* / action.required` 事件；`read_session.thread_read` 现已输出 `commands/tests/pending_requests` 以及 `active_command_id / active_test_run_id / active_action_id`，刷新或恢复后不会丢 active coding 状态。Basic Evidence Pack 已把 `outputSnapshotFile` 和 `checkpointSnapshotFile` 输出为 `tool_output_snapshot / file_checkpoint_snapshot` evidence artifacts。`agent_tools::execution::sandbox` 已承接基础 sandbox label、命令文本抽取和只读 shell 分类，App Server tool inventory 已补配置来源优先级测试。下一刀补完整 Policy service / 分平台 sandbox backend 和 P3/P4 projection/UI evidence。
+当前状态：`in_progress`。已在 `lime-rs/crates/app-server/src/runtime_backend/coding_events.rs` 接入 runtime tool event mirror：`Read` 派生 `file.read`，`Write/Edit` 成功结果派生 `file.changed + artifactId/artifactRefs`，`Bash/PowerShell` 派生 `command.started/output/exited` 和测试命令的 `test.started/completed`，明确的 `apply_patch` 工具或 shell 命令派生 `patch.started/applied/failed`；`patch-apply` crate 已从 parser-only 推进到真实 workdir apply service，并通过 agent `apply_patch` current tool 入口委托执行，可结构化返回 add/update/delete/move report/error，多文件 patch metadata 会投影为多条 `file.changed`。`apply_patch` tool metadata 现已为每个文件变更生成稳定 `checkpointRef/contentRef/diffRef`、工作区相对路径、内容预览、旧内容字段和受控结构化 diff 预览；RuntimeBackend mirror 会把 per-file refs 与 diff 提升到 `file.changed` 顶层，继续复用 RuntimeCore artifact / checkpoint / evidence owner。tool policy/sandbox 类失败会在 raw `tool.failed` 前派生 `permission.denied` / `sandbox.blocked`，并透传 `policyName/profile/decisionId/sandboxPolicy/platform/command/cwd/diagnostics` 基础诊断 facts；`agent_tools::execution` 生成的 current `ToolPermission` 已写入 `policyName=workspace_tool_execution`、`policyProfile`、`toolSurface`、`restrictionProfile`、`sandboxPolicy` 与字段来源 metadata，`agent_tools::tool_orchestrator` 已在 `ToolRegistry::execute` 返回 `PermissionDenied` / `SafetyCheckFailed` / 沙箱类 `ExecutionFailed` 时合成 `eventClass/failureCategory/reasonCode/reason/command/cwd/platform/arch/approvalPolicy/requestedSandboxPolicy` metadata，使真实拒绝结果能直接进入结构化诊断而不是只靠错误文本。RuntimeBackend action response 已调用 Aster tool confirmation / elicitation owner 并发出标准 `action.resolved`；RuntimeCore 会从历史 `action.required` 回填 `toolCallId`，确保审批后工具生命周期能继续通过 guard。backend metadata 中已有的 `outputRef/refIds/artifactRefs/checkpointRef/contentRef/diffRef` 已会进入 coding facts，且 `file.changed.artifactRefs` 已接入 RuntimeCore artifact read / evidence export 聚合；`tool.result/tool.failed` 的大输出 payload 会在入库前规整为 `outputPreview + outputRef/refIds`，避免 raw tool terminal 违反 AgentUI large payload contract，并可由 `FilesystemOutputSnapshotStore` 持久化到会话文件系统 snapshot，RuntimeCore 只保留 preview/ref，`artifact/read(include_content=true)` 可回读完整输出。`file.changed.change.previousContent` 会由 `FilesystemFileCheckpointSnapshotStore` 持久化到会话文件系统 snapshot，事件/read model 只保留 `checkpointSnapshotFile / previousContentSnapshotFile` refs；`agentSession/fileCheckpoint/list|get|diff|restore` 可从 RuntimeCore read model 读取 checkpointId、contentRef、diffRef、preview、结构化 diff 与 snapshot content，并可创建恢复前备份。`runtime/session_hydration.rs` 已从 current timeline persisted `detail.events / detail.outputs / detail.items` 恢复 output snapshot refs 与 file checkpoint snapshot refs 到 RuntimeCore state，并可把 persisted `thread_read.commands/tests/pending_requests` 反推为标准 `command.* / test.* / action.required` 事件；`read_session.thread_read` 现已输出 `commands/tests/pending_requests` 以及 `active_command_id / active_test_run_id / active_action_id`，刷新或恢复后不会丢 active coding 状态。Basic Evidence Pack 已把 `outputSnapshotFile` 和 `checkpointSnapshotFile` 输出为 `tool_output_snapshot / file_checkpoint_snapshot` evidence artifacts。`agent_tools::execution::sandbox` 已承接基础 sandbox label、命令文本抽取、只读 shell 分类和 workspace sandbox backend plan；Aster 前台 `Bash/PowerShell` 已能消费 workspace sandbox context，macOS seatbelt 与 Linux bubblewrap 在可用时进入 `ready/enforced=true` current runner，Windows restricted token 仍按 `planned/enforced=false` fail-closed。下一刀补 Windows runner、network rule 冲突解释和 P3/P4 projection/UI evidence。
 
 2026-06-14 增量：
 
@@ -181,8 +181,11 @@ turn start
 - `execution/service.rs` 已支持多来源 runtime policy layer：`organizationExecutionPolicy`、`userExecutionPolicy`、`executionPolicy`、`requestExecutionPolicy` 按 `organization -> user -> runtime -> request` 合并，`ToolExecutionPolicySource` 与 `commandRuleSource` 会分别输出 `organization/user/runtime/request`，用于后续 UI / evidence 解释策略来源。
 - `ToolExecutionCommandRuleConfig.matchType` 已支持 `regex / prefix / exact`，默认仍为 `regex` 保持兼容；组织 / 用户 / 请求级策略可用 prefix/exact rule 表达稳定命令前缀或精确命令，不必把所有规则写成正则。
 - `ToolExecutionPolicyConfig` 已拆出 `config/tool_execution.rs`，避免继续膨胀 `config/types.rs`；`networkRules` 已接入 persisted / organization / user / runtime / request 同一 policy layer，支持 `target=url|host` 与 `matchType=regex|prefix|exact`，可为 `WebFetch` URL 和 `curl/wget` shell 命令中的 URL 输出 `networkRuleId/networkRuleSource/networkRiskLevel/networkRiskReasonCode/networkRiskReason/networkRuleTarget/networkUrl/networkHost` metadata。
+- `agent_tools::execution::sandbox` 已补分平台 sandbox backend plan owner：按 macOS / Linux / Windows / unsupported 映射 `seatbelt / linux_sandbox / restricted_token / none`，输出 `sandboxBackend/sandboxBackendStatus/sandboxBackendEnforced/sandboxBackendReasonCode/sandboxBackendPlatform/workspaceSandbox*` diagnostics；macOS `sandbox-exec` 与 Linux `bwrap` 可用时标记 `ready/enforced=true`，并通过 `ToolContext.workspace_sandbox` 接入 Aster 前台 `Bash/PowerShell` runner；Windows restricted token 尚未接入，保持 `planned/enforced=false`，strict fallback 会阻断而不是静默降级。
+- `WorkspaceSandboxConfig` 已进入 App Server runtime turn context metadata：非默认 `agent.workspaceSandbox` 会与 `agent.toolExecution` 一起注入 `config.agent`，execution decision 可从 persisted / organization / user / runtime / request 多路径解析 workspace sandbox 配置；显式 `enabled=true, strict=true` 且 backend 未 enforce 时会在执行前返回 `SandboxBlocked`，`danger-full-access` 不要求 workspace sandbox backend。
 - `ToolExecutionBatchInput` 已显式携带 `auto_mode` 与 `bypass_restrictions`，让执行器使用同一份 workspace tool policy，而不是由模型或调用点隐式决定。
 - `NativeAgentConfig.agent.tool_execution` 已进入 App Server runtime turn context：`RuntimeBackend` 在 turn start 边界读取当前配置，并把非默认 `agent.toolExecution` 注入 `TurnContextOverride.metadata.config`；`agent_tools::execution`、`tool_orchestrator`、`WorkspaceToolPolicyInspector` 与 App Server tool inventory 均可从同一 metadata / persisted policy 输入解析 effective policy。运行时 `harness.executionPolicy` 仍高于持久化配置。
+- `agent_tools/tool_orchestrator.rs` 已按仓库体量规则拆出 `agent_tools/tool_orchestrator/tests.rs`，中心文件从 1000 行以上收回到约 500 行，只保留 production orchestration；后续 policy/sandbox 测试继续进子模块，避免中心 owner 再次膨胀。
 - 验证证据：`cargo fmt --manifest-path "lime-rs/Cargo.toml" -p lime-agent --check`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::execution -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::tool_orchestrator -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::tool_policy_inspector -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::tool_events -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::coding_events -- --nocapture`。
 - 追加验证证据：`cargo fmt --manifest-path "lime-rs/Cargo.toml" -p lime-agent -p app-server --check`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::tests -- --nocapture`。
 - 本轮追加验证证据：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::tool_inventory -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::execution -- --nocapture`。
@@ -190,7 +193,8 @@ turn start
 - 本轮追加验证证据：`cargo fmt --manifest-path "lime-rs/Cargo.toml" -p lime-core -p lime-agent --check`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core tool_execution_policy_config -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-coding-policy-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::execution -- --nocapture`、`git diff --check` 窄范围检查，证明 `shellCommandRules` config、runtime override metadata 与 classifier 回归稳定。
 - 本轮快速落地验证证据：`cargo fmt --manifest-path "lime-rs/Cargo.toml" -p lime-agent --check`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::execution::tests -- --nocapture`、`git diff --check` 窄范围检查，证明组织 / 用户 / runtime / 请求策略层级合并和请求级 shell rule 覆盖稳定。
 - 本轮 prefix catalog 验证证据：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core tool_execution_policy_config -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::execution::tests -- --nocapture` 证明 `matchType=prefix/exact` 配置解析、roundtrip 与 shell classifier 命中稳定。
-- 未完成：分平台 sandbox backend、network rule 冲突解释 / UI evidence、P3/P4 UI evidence、Provider slot diagnostics 仍按后续主线推进。
+- 本轮 sandbox backend 验证证据：`CARGO_TARGET_DIR="/tmp/lime-coding-sandbox-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::execution::sandbox_backend_tests -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-coding-sandbox-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::execution -- --nocapture`、`CARGO_TARGET_DIR="/tmp/lime-coding-sandbox-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::tests::injected_workspace_sandbox_config_flows_to_turn_context_metadata -- --nocapture`，证明 backend plan、strict fallback、danger-full-access 例外、request 覆盖 persisted sandbox 配置与 App Server 配置注入稳定。
+- 未完成：Windows restricted token runner、network rule 冲突解释 / UI evidence、P3/P4 UI evidence、Provider slot diagnostics 仍按后续主线推进。
 
 ## P3：AgentUI Coding Projection
 
@@ -217,7 +221,7 @@ turn start
 - `coding-command-approval` resolved 后不要求 pending actions 数量保留历史 required/resolved 两条；生命周期历史应由 timeline/diagnostics 或 raw events 表达。
 - `expected.coding` fixture 能证明每类 coding fact 都被投影到对应 view。
 
-当前状态：`in_progress / read-model coding facts connected / output-actions-diagnostics tab projection-driven`。`@limecloud/agent-runtime-projection` 已提供 `CodingWorkbenchView` selector，并可从 RuntimeEvent 与 App Server `thread_read` 双路径合并 `commands/tests/actions`；`active_command_id / active_test_run_id` 会进入 `mainObject`，`pending_requests` 会投影为标准 action projection；Workspace adapter 已将 `threadRead` 传入 selector，输出 tab 已直接渲染 `CodingWorkbenchView.commands/tests/actions/diagnostics`，runtime workbench 计数也从同一 projection 推导。下一步需要把 Coding Workbench 的 log/action-submit view 全部从 `CodingWorkbenchView` 派生，并加入 GUI smoke evidence，不再让 React 组件维护 command/test/action 状态机。
+当前状态：`in_progress / read-model coding facts connected / output-log-action-submit-diagnostics projection-driven`。`@limecloud/agent-runtime-projection` 已提供 `CodingWorkbenchView` selector，并可从 RuntimeEvent 与 App Server `thread_read` 双路径合并 `commands/tests/actions`；`active_command_id / active_test_run_id` 会进入 `mainObject`，`pending_requests` 会投影为标准 action projection；Workspace adapter 已将 `threadRead` 传入 selector，输出 tab 已直接渲染 `CodingWorkbenchView.commands/tests/actions/diagnostics`，日志 tab 已通过 `CodingWorkbenchLogPanel` 从同一 `CodingWorkbenchView` 渲染文件、命令、测试、确认和诊断日志，runtime workbench 计数也从同一 projection 推导。`CodingWorkbenchActionPanel` 已从 `CodingWorkbenchView.actions` 生成待确认卡，可对可映射为 `tool_confirmation` 的 current action 调用既有 runtime callback 提交允许 / 拒绝；无法映射的 action 只显示恢复路径，不伪造提交。`CodingWorkbenchDiagnosticPanel` 已展示 fail-closed 策略和 source event evidence 基础事实。下一步补 GUI smoke evidence 与 provider / policy / evidence 聚合细节，不再让 React 组件维护 command/test/action 状态机。
 
 ## P4：前端 Coding Workbench
 
@@ -247,7 +251,16 @@ turn start
 - 窄屏和宽屏下按钮文字不溢出，右侧对话不遮挡主画布。
 - `*.test.tsx` / view model 单测覆盖 tab 默认选择、blocked、failed、waiting action、changes ready。
 
-当前状态：`in_progress`。现有 `CanvasWorkbenchLayout` coding mode 是 compat UI surface；保留展示结构，但事实解释必须迁到 `CodingWorkbenchView` adapter。
+当前状态：`in_progress / change-output-log-action current projection connected`。现有 `CanvasWorkbenchLayout` coding mode 仍是承载壳，但 `WorkspaceConversationSceneRuntime` 已把 `changeView`、`outputView`、`logView` 从 `CodingWorkbenchView` 派生：变更面板消费 projection change facts 与 file checkpoint summary，输出面板消费 commands/tests/actions/diagnostics，日志面板消费同一 projection 的文件、命令、测试、确认和诊断条目。`CodingWorkbenchOutputPanel` 已拆出 `CodingWorkbenchActionPanel`、`CodingWorkbenchDiagnosticPanel` 与共享状态 badge，主面板只做组合；action submit 通过 `handlePermissionResponse` 走 existing runtime action response 主链，不直连 App Server、不新增命令、不依赖 mock。诊断面板已展示 fail-closed policy 与 source event evidence 基础信息。仍未完成：完整诊断抽屉 policy/provider/evidence 聚合、GUI smoke 覆盖提交编程需求 / 查看输出 / 继续修复。
+
+2026-06-14 P4 增量：
+
+- `CodingWorkbenchActionPanel` 已从 `CodingWorkbenchView.actions` 渲染待确认动作，支持 command approval 的允许 / 拒绝按钮，并通过 `onRespondToAction` 复用现有 runtime callback；`submittedActionsInFlight` 会禁用按钮并显示提交中，避免重复提交。
+- 无法安全映射为 current `tool_confirmation` 的 action 只展示提示与请求 id，不伪造提交按钮，符合 fail-closed 交互。
+- `CodingWorkbenchDiagnosticPanel` 已从 `CodingWorkbenchView.diagnostics` 展示诊断标题、详情、状态、fail-closed 策略与 source event evidence id，作为后续诊断抽屉聚合的基础 surface。
+- 五语言 `zh-CN / zh-TW / en-US / ja-JP / ko-KR` 已补齐 coding action / diagnostics presentation 文案。
+- `useWorkspaceConversationSceneRuntime.tsx` 现仍超过 1000 行；本轮只做 output view callback 接线，没有继续追加业务状态机。下一刀拆分入口：把 coding workbench utility views 组装抽到 `workspaceConversationCodingViews.tsx` 或同级 presentation helper，中心 hook 只保留参数传递。
+- 验证证据：`npx vitest run "src/components/agent/chat/workspace/CodingWorkbenchOutputPanel.test.tsx" "src/components/agent/chat/workspace/CodingWorkbenchLogPanel.test.tsx" "src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.test.ts" --silent=passed-only --disableConsoleIntercept` 覆盖命令 / 测试 / action submit / submitted 状态 / 诊断 evidence / hook callback 接线；`npx prettier --check ...` 覆盖 touched frontend 与五语言资源。
 
 ## P5：多模型 Routing 与 Profile Slot
 
@@ -303,26 +316,26 @@ turn start
 
 Fixture 矩阵：
 
-| Fixture | 覆盖 |
-| --- | --- |
-| `coding-text-basic` | 文本 turn、delta/final reconciliation。 |
-| `coding-file-change` | 文件写入、checkpoint、diff。 |
-| `coding-patch-failure` | patch failed、recovery hint。 |
-| `coding-command-approval` | action required/resolved。 |
-| `coding-sandbox-blocked` | sandbox blocked、UI blocked state。 |
-| `coding-test-failure-fix` | 测试失败、继续修复 turn。 |
-| `coding-hydration-repair` | sequence gap、read model repair。 |
+| Fixture                   | 覆盖                                    |
+| ------------------------- | --------------------------------------- |
+| `coding-text-basic`       | 文本 turn、delta/final reconciliation。 |
+| `coding-file-change`      | 文件写入、checkpoint、diff。            |
+| `coding-patch-failure`    | patch failed、recovery hint。           |
+| `coding-command-approval` | action required/resolved。              |
+| `coding-sandbox-blocked`  | sandbox blocked、UI blocked state。     |
+| `coding-test-failure-fix` | 测试失败、继续修复 turn。               |
+| `coding-hydration-repair` | sequence gap、read model repair。       |
 
 验证矩阵：
 
-| 验证层 | 必跑条件 | 命令 / 入口 | 证明内容 |
-| --- | --- | --- | --- |
-| Contract | 改 RuntimeEvent、fixture、schema、sequence | `npm --prefix packages/agent-ui-contracts run test` 或 `npm run test:contracts` | event shape 和配对规则。 |
-| Projection | 改 selector、fixture replay、UI adapter | `npm --prefix packages/agent-runtime-projection run test` | `CodingWorkbenchView` 可 replay。 |
-| Workspace VM | 改 Workspace adapter / view model | 定向 vitest 覆盖 workspace view model / runtime tests | 旧 thread item 只能 adapter 成 RuntimeEvent。 |
-| Rust runtime | 改 App Server / RuntimeCore / ExecutionBackend | `cargo test --manifest-path "lime-rs/Cargo.toml" -p <crate> <filter>` | current crates 能产生同构 events。P2 tool mirror 入口至少覆盖 `runtime_backend::coding_events`、`runtime::tool_lifecycle`、`agent_ui_event_schema`、`coding_events`、`evidence_exports`、`read_model`、`runtime_agent_tool_events_are_mirrored_to_coding_facts`、`runtime_agent_read_tool_result_is_mirrored_to_file_read`、`runtime_agent_shell_apply_patch_is_mirrored_to_patch_lifecycle`、`runtime_agent_permission_denied_fact_precedes_tool_failed_terminal`、`append_external_runtime_events_infers_action_resolved_tool_from_pending_action`、`read_model_projects_active_coding_activity_and_pending_action`、`read_model_clears_resolved_coding_activity`、`start_turn_hydrates_persisted_coding_snapshot_refs_into_runtime_state`、`start_turn_hydrates_persisted_active_coding_read_model_facts`、`export_evidence_pack_includes_coding_snapshot_artifacts`。 |
-| GUI smoke | 改 Coding Workbench 可见主路径 | `npm run verify:gui-smoke` 或 coding fixture smoke | GUI 能查看变更、输出、审批、失败继续。 |
-| Governance | 改旧入口分类 / mock / bridge | `npm run governance:legacy-report` + `npm run test:contracts` | 旧路未回流，生产不 mock。 |
+| 验证层       | 必跑条件                                       | 命令 / 入口                                                                     | 证明内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | ---------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contract     | 改 RuntimeEvent、fixture、schema、sequence     | `npm --prefix packages/agent-ui-contracts run test` 或 `npm run test:contracts` | event shape 和配对规则。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Projection   | 改 selector、fixture replay、UI adapter        | `npm --prefix packages/agent-runtime-projection run test`                       | `CodingWorkbenchView` 可 replay。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Workspace VM | 改 Workspace adapter / view model              | 定向 vitest 覆盖 workspace view model / runtime tests                           | 旧 thread item 只能 adapter 成 RuntimeEvent。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Rust runtime | 改 App Server / RuntimeCore / ExecutionBackend | `cargo test --manifest-path "lime-rs/Cargo.toml" -p <crate> <filter>`           | current crates 能产生同构 events。P2 tool mirror 入口至少覆盖 `runtime_backend::coding_events`、`runtime::tool_lifecycle`、`agent_ui_event_schema`、`coding_events`、`evidence_exports`、`read_model`、`runtime_agent_tool_events_are_mirrored_to_coding_facts`、`runtime_agent_read_tool_result_is_mirrored_to_file_read`、`runtime_agent_shell_apply_patch_is_mirrored_to_patch_lifecycle`、`runtime_agent_permission_denied_fact_precedes_tool_failed_terminal`、`append_external_runtime_events_infers_action_resolved_tool_from_pending_action`、`read_model_projects_active_coding_activity_and_pending_action`、`read_model_clears_resolved_coding_activity`、`start_turn_hydrates_persisted_coding_snapshot_refs_into_runtime_state`、`start_turn_hydrates_persisted_active_coding_read_model_facts`、`export_evidence_pack_includes_coding_snapshot_artifacts`。 |
+| GUI smoke    | 改 Coding Workbench 可见主路径                 | `npm run verify:gui-smoke` 或 coding fixture smoke                              | GUI 能查看变更、输出、审批、失败继续。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Governance   | 改旧入口分类 / mock / bridge                   | `npm run governance:legacy-report` + `npm run test:contracts`                   | 旧路未回流，生产不 mock。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 建议验证：
 
@@ -366,16 +379,16 @@ cargo test --manifest-path "lime-rs/Cargo.toml"
 
 ## 风险
 
-| 风险 | 缓解 |
-| --- | --- |
-| 复制外部 runtime 后形成第二套事实源 | 先落 RuntimeEvent / ReadModel adapter，禁止 UI 直连。 |
-| 多模型能力被单 Provider 假设污染 | Provider slot 和 routing decision 作为 profile facts。 |
-| UI 继续从正文猜状态 | Projection tests 和 conformance fixture fail closed。 |
-| 大输出拖慢流式 UI | output spill refs + timeline 摘要。 |
-| 外部 CLI adapter 变成主链 | 标记 compat，生产默认不依赖。 |
-| 文档完成被误当实现完成 | 每阶段必须写 owner、测试入口和退出条件；最终汇报区分本轮/整体完成度。 |
-| 只迁 change view，输出/审批/诊断仍走旧状态 | P4 把五个 view 全部列为退出条件。 |
-| UI 技术词外露 | 普通主流程使用业务动作词，技术状态只进诊断抽屉。 |
+| 风险                                       | 缓解                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| 复制外部 runtime 后形成第二套事实源        | 先落 RuntimeEvent / ReadModel adapter，禁止 UI 直连。                 |
+| 多模型能力被单 Provider 假设污染           | Provider slot 和 routing decision 作为 profile facts。                |
+| UI 继续从正文猜状态                        | Projection tests 和 conformance fixture fail closed。                 |
+| 大输出拖慢流式 UI                          | output spill refs + timeline 摘要。                                   |
+| 外部 CLI adapter 变成主链                  | 标记 compat，生产默认不依赖。                                         |
+| 文档完成被误当实现完成                     | 每阶段必须写 owner、测试入口和退出条件；最终汇报区分本轮/整体完成度。 |
+| 只迁 change view，输出/审批/诊断仍走旧状态 | P4 把五个 view 全部列为退出条件。                                     |
+| UI 技术词外露                              | 普通主流程使用业务动作词，技术状态只进诊断抽屉。                      |
 
 ## 当前实施入口
 

@@ -8,11 +8,12 @@ mod filesystem;
 mod resource_limits;
 
 pub use config::{
-    ResourceLimits, SandboxConfig, SandboxConfigManager, SandboxPreset, SANDBOX_PRESETS,
+    ResourceLimits, SandboxConfig, SandboxConfigManager, SandboxPreset, SandboxType,
+    SANDBOX_PRESETS,
 };
 pub use executor::{
-    detect_best_sandbox, execute_in_sandbox, get_sandbox_capabilities, ExecutorOptions,
-    ExecutorResult, SandboxExecutor,
+    detect_best_sandbox, execute_in_sandbox, execute_in_sandbox_with_options,
+    get_sandbox_capabilities, ExecutorOptions, ExecutorResult, SandboxExecutor,
 };
 pub use filesystem::{FilesystemPolicy, FilesystemSandbox, PathRule};
 pub use resource_limits::{ResourceLimiter, ResourceUsage};

@@ -84,6 +84,7 @@ import {
   METHOD_FILE_SYSTEM_RENAME_FILE,
   METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
   METHOD_PROJECT_GIT_BRANCH_CREATE,
+  METHOD_PROJECT_GIT_COMMITS_LIST,
   METHOD_PROJECT_GIT_DIFF,
   METHOD_PROJECT_GIT_STATUS,
   METHOD_PROJECT_GIT_WORKTREE_CREATE,
@@ -401,6 +402,8 @@ import {
   type ProjectGitBranchCheckoutResponse,
   type ProjectGitBranchCreateParams,
   type ProjectGitBranchCreateResponse,
+  type ProjectGitCommitListParams,
+  type ProjectGitCommitListResponse,
   type ProjectGitDiffParams,
   type ProjectGitDiffResponse,
   type ProjectGitStatusParams,
@@ -1799,6 +1802,10 @@ export class AppServerClient {
 
   readProjectGitDiff(params: ProjectGitDiffParams): JsonRpcRequest {
     return this.request(METHOD_PROJECT_GIT_DIFF, params);
+  }
+
+  listProjectGitCommits(params: ProjectGitCommitListParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_GIT_COMMITS_LIST, params);
   }
 
   checkoutProjectGitBranch(
@@ -4218,6 +4225,17 @@ export class AppServerConnection {
     return await this.request<ProjectGitDiffResponse>(
       this.client.readProjectGitDiff(params),
       METHOD_PROJECT_GIT_DIFF,
+      options,
+    );
+  }
+
+  async listProjectGitCommits(
+    params: ProjectGitCommitListParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectGitCommitListResponse>> {
+    return await this.request<ProjectGitCommitListResponse>(
+      this.client.listProjectGitCommits(params),
+      METHOD_PROJECT_GIT_COMMITS_LIST,
       options,
     );
   }

@@ -15,6 +15,7 @@ import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayId
 import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
 import { MessageList } from "../components/MessageList";
 import { CodingWorkbenchOutputPanel } from "./CodingWorkbenchOutputPanel";
+import { CodingWorkbenchLogPanel } from "./CodingWorkbenchLogPanel";
 import type {
   CanvasWorkbenchSessionView,
   CanvasWorkbenchUtilityView,
@@ -762,7 +763,20 @@ export function useWorkspaceConversationSceneRuntime({
   const outputView: CanvasWorkbenchUtilityView = {
     ...outputHeaderView,
     renderPanel: () => (
-      <CodingWorkbenchOutputPanel codingView={codingWorkbenchView} />
+      <CodingWorkbenchOutputPanel
+        codingView={codingWorkbenchView}
+        submittedActionsInFlight={projectedSubmittedActionsInFlight}
+        onRespondToAction={handlePermissionResponse}
+      />
+    ),
+  };
+  const logView: CanvasWorkbenchUtilityView = {
+    ...outputHeaderView,
+    tabLabel: t("agentChat.workspaceSession.logView.tabLabel"),
+    title: t("agentChat.workspaceSession.logView.title"),
+    subtitle: t("agentChat.workspaceSession.logView.subtitle"),
+    renderPanel: () => (
+      <CodingWorkbenchLogPanel codingView={codingWorkbenchView} />
     ),
   };
   const effectiveCanvasWorkbenchRootPath =
@@ -1028,7 +1042,7 @@ export function useWorkspaceConversationSceneRuntime({
         ? outputView
         : null,
       logView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
-        ? sessionView
+        ? logView
         : null,
       changeView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
         ? changeView

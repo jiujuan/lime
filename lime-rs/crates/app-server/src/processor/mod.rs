@@ -213,6 +213,7 @@ use app_server_protocol::METHOD_MODEL_PROVIDER_UPDATE;
 use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
 use app_server_protocol::METHOD_PROJECT_GIT_BRANCH_CHECKOUT;
 use app_server_protocol::METHOD_PROJECT_GIT_BRANCH_CREATE;
+use app_server_protocol::METHOD_PROJECT_GIT_COMMITS_LIST;
 use app_server_protocol::METHOD_PROJECT_GIT_DIFF;
 use app_server_protocol::METHOD_PROJECT_GIT_STATUS;
 use app_server_protocol::METHOD_PROJECT_GIT_WORKTREE_CREATE;
@@ -387,6 +388,9 @@ impl RequestProcessor {
             }
             METHOD_PROJECT_GIT_STATUS => self.handle_project_git_status_impl(params).await,
             METHOD_PROJECT_GIT_DIFF => self.handle_project_git_diff_impl(params).await,
+            METHOD_PROJECT_GIT_COMMITS_LIST => {
+                self.handle_project_git_commits_list_impl(params).await
+            }
             METHOD_PROJECT_GIT_BRANCH_CHECKOUT => {
                 self.handle_project_git_branch_checkout_impl(params).await
             }

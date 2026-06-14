@@ -16,7 +16,7 @@ use lime_agent::{
     initialize_aster_runtime, stream_reply_with_policy, AgentActionRequiredScope,
     AgentEvent as RuntimeAgentEvent, AsterAgentState, ProviderConfig,
 };
-use lime_core::config::{load_config, ToolExecutionPolicyConfig};
+use lime_core::config::{load_config, ToolExecutionPolicyConfig, WorkspaceSandboxConfig};
 use lime_core::database::dao::api_key_provider::{ApiProviderType, ProviderWithKeys};
 use lime_core::database::{self, DbConnection};
 use lime_core::models::provider_type::is_custom_provider_id;
@@ -108,7 +108,7 @@ impl RuntimeBackend {
             .map_err(backend_error)?
         };
         let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
-        let config_metadata = current_tool_execution_config_metadata();
+        let config_metadata = current_agent_runtime_config_metadata();
         let session_config = session_config_from_request(
             &request,
             host_request.as_ref(),
@@ -250,7 +250,7 @@ impl ExecutionBackend for RuntimeBackend {
         tool_inventory::read_tool_inventory(
             &self.agent_state,
             request,
-            current_tool_execution_config_metadata(),
+            current_agent_runtime_config_metadata(),
         )
         .await
     }
@@ -312,7 +312,7 @@ fn agent_action_required_scope_from_protocol(
     }
 }
 
-fn current_tool_execution_config_metadata() -> Option<Value> {
+fn current_agent_runtime_config_metadata() -> Option<Value> {
     let config = match load_config() {
         Ok(config) => config,
         Err(error) => {
@@ -325,14 +325,25 @@ fn current_tool_execution_config_metadata() -> Option<Value> {
             }));
         }
     };
-    if ToolExecutionPolicyConfig::is_default(&config.agent.tool_execution) {
+    let mut agent_config = serde_json::Map::new();
+    if !WorkspaceSandboxConfig::is_default(&config.agent.workspace_sandbox) {
+        agent_config.insert(
+            "workspaceSandbox".to_string(),
+            json!(config.agent.workspace_sandbox),
+        );
+    }
+    if !ToolExecutionPolicyConfig::is_default(&config.agent.tool_execution) {
+        agent_config.insert(
+            "toolExecution".to_string(),
+            json!(config.agent.tool_execution),
+        );
+    }
+    if agent_config.is_empty() {
         return None;
     }
 
     Some(json!({
-        "agent": {
-            "toolExecution": config.agent.tool_execution,
-        }
+        "agent": agent_config,
     }))
 }
 

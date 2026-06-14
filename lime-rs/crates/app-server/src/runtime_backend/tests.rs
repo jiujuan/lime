@@ -346,6 +346,50 @@ fn injected_tool_execution_config_flows_to_turn_context_metadata() {
 }
 
 #[test]
+fn injected_workspace_sandbox_config_flows_to_turn_context_metadata() {
+    let mut request = request_for_test("hello", None, None);
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1-mini".to_string());
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let scope = session_scope_from_request(&request).expect("scope");
+
+    let turn_context = turn_context_from_request(
+        &request,
+        None,
+        &scope,
+        &selection,
+        Some(json!({
+            "agent": {
+                "workspaceSandbox": {
+                    "enabled": true,
+                    "strict": true,
+                    "notifyOnFallback": false
+                }
+            }
+        })),
+    )
+    .expect("turn context");
+
+    assert_eq!(
+        turn_context
+            .metadata
+            .get("config")
+            .and_then(|value| value.pointer("/agent/workspaceSandbox/enabled"))
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        turn_context
+            .metadata
+            .get("config")
+            .and_then(|value| value.pointer("/agent/workspaceSandbox/strict"))
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+}
+
+#[test]
 fn top_level_request_metadata_reasoning_is_used_when_runtime_metadata_omits_it() {
     let mut request = request_for_test("hello", None, Some(json!({ "trace": "runtime-only" })));
     request.metadata = Some(json!({

@@ -252,10 +252,6 @@ impl AppServer {
         self.processor.runtime()
     }
 
-    fn runtime_arc(&self) -> Arc<RuntimeCore> {
-        self.processor.runtime_arc()
-    }
-
     pub async fn handle_json_line(&self, line: &str) -> Result<Vec<String>, AppServerError> {
         let message = decode_message(line)?;
         self.handle_message(message)

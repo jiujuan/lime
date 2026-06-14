@@ -391,7 +391,9 @@ describe("useWorkspaceConversationSceneRuntime", () => {
   });
 
   it("需要用户关注时才向画布壳透传会话进展面板", () => {
+    const handlePermissionResponse = vi.fn();
     const params = createBaseParams({
+      handlePermissionResponse,
       turns: [
         {
           id: "turn-1",
@@ -727,6 +729,30 @@ describe("useWorkspaceConversationSceneRuntime", () => {
           position: 1,
         },
       ],
+      threadRead: {
+        thread_id: "thread-1",
+        active_turn_id: "turn-1",
+        pending_requests: [
+          {
+            id: "approval-command-1",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            request_type: "tool_confirmation",
+            status: "pending",
+            title: "确认执行命令",
+            payload: {
+              command: "npm test",
+            },
+          },
+        ],
+      },
+      submittedActionsInFlight: [
+        {
+          requestId: "approval-other",
+          actionType: "tool_confirmation",
+          status: "submitted",
+        },
+      ],
     });
 
     const sceneProps = getRenderedSceneProps(params);
@@ -787,15 +813,18 @@ describe("useWorkspaceConversationSceneRuntime", () => {
   it("运行时输出和文件信号应启用工作台模式并透出输出/日志入口", async () => {
     const openChangedFile = vi.fn(async () => undefined);
     const handleSendFromEmptyState = vi.fn();
+    const handlePermissionResponse = vi.fn();
     const params = createBaseParams({
       executionStrategy: "react",
       handleSendFromEmptyState,
+      handlePermissionResponse,
       canvasScene: {
         ...createBaseParams().canvasScene,
         handleOpenCanvasWorkbenchPath: openChangedFile,
       },
       threadRead: {
         thread_id: "thread-1",
+        active_turn_id: "turn-1",
         file_checkpoint_summary: {
           count: 2,
           latest_checkpoint: {
@@ -813,7 +842,27 @@ describe("useWorkspaceConversationSceneRuntime", () => {
             validation_issue_count: 0,
           },
         },
+        pending_requests: [
+          {
+            id: "approval-command-1",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            request_type: "tool_confirmation",
+            status: "pending",
+            title: "确认执行命令",
+            payload: {
+              command: "npm test",
+            },
+          },
+        ],
       },
+      submittedActionsInFlight: [
+        {
+          requestId: "approval-other",
+          actionType: "tool_confirmation",
+          status: "submitted",
+        },
+      ],
       effectiveThreadItems: [
         {
           id: "item-command",
@@ -884,11 +933,19 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     const canvasProps = sceneProps.canvasWorkbenchLayoutProps;
 
     expect(canvasProps.workbenchMode).toBe("coding");
-    expect(canvasProps.outputView?.tabBadge).toBe("2");
+    expect(canvasProps.outputView?.tabBadge).toBe("3");
     expect(canvasProps.outputView?.tabBadgeTone).toBe("rose");
     expect(typeof canvasProps.outputView?.renderPanel).toBe("function");
     expect(canvasProps.outputView?.leadContent).toBeUndefined();
-    expect(canvasProps.logView).toBe(canvasProps.sessionView);
+    const outputPanel = canvasProps.outputView?.renderPanel?.() as any;
+    expect(outputPanel.props.onRespondToAction).toBe(handlePermissionResponse);
+    expect(outputPanel.props.submittedActionsInFlight).toEqual([
+      expect.objectContaining({ requestId: "approval-other" }),
+    ]);
+    expect(canvasProps.logView).not.toBe(canvasProps.sessionView);
+    expect(canvasProps.logView?.tabLabel).toBe("日志");
+    expect(canvasProps.logView?.title).toBe("运行日志");
+    expect(typeof canvasProps.logView?.renderPanel).toBe("function");
     expect(canvasProps.changeView?.checkpointCount).toBe(2);
     expect(canvasProps.changeView?.latestCheckpointPath).toBe(
       ".lime/artifacts/thread-1/index.v2.html",

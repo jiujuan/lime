@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "authorEmail": {
+      "type": "string"
+    },
+    "authorName": {
+      "type": "string"
+    },
+    "committedAt": {
+      "type": "string"
+    },
+    "sha": {
+      "type": "string"
+    },
+    "shortSha": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "authorEmail",
+    "authorName",
+    "committedAt",
+    "sha",
+    "shortSha",
+    "subject"
+  ],
+  "title": "ProjectGitCommit",
+  "type": "object"
+}

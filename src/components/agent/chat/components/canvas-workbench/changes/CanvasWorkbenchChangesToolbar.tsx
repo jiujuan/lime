@@ -13,18 +13,12 @@ import {
   CanvasWorkbenchReviewMenu,
   type CanvasWorkbenchReviewMenuModel,
 } from "./CanvasWorkbenchReviewMenu";
-
-type CanvasWorkbenchTranslation = (
-  key: string,
-  options?: Record<string, unknown>,
-) => string;
-
-export type CanvasWorkbenchReviewBase =
-  | "unstaged"
-  | "staged"
-  | "commit"
-  | "branch"
-  | "previousConversation";
+import {
+  CANVAS_WORKBENCH_REVIEW_BASE_OPTIONS,
+  type CanvasWorkbenchReviewBase,
+  type CanvasWorkbenchReviewCommitOption,
+  type CanvasWorkbenchTranslation,
+} from "./CanvasWorkbenchChangesTypes";
 
 interface CanvasWorkbenchChangesToolbarProps extends CanvasWorkbenchReviewMenuModel {
   translateWorkbench: CanvasWorkbenchTranslation;
@@ -42,42 +36,20 @@ interface CanvasWorkbenchChangesToolbarProps extends CanvasWorkbenchReviewMenuMo
   reviewActionBusy?: boolean;
   copyGitApplyDisabled?: boolean;
   loadFullFileDisabled?: boolean;
+  commitOptions?: CanvasWorkbenchReviewCommitOption[];
+  commitsLoading?: boolean;
+  selectedCommitSha?: string | null;
   diffVariant: "inline" | "split";
   onToggleReviewMenu: () => void;
   onToggleBaseMenu: () => void;
   onSelectBase: (base: CanvasWorkbenchReviewBase) => void;
+  onOpenCommitMenu?: () => void | Promise<void>;
+  onSelectCommit?: (commit: CanvasWorkbenchReviewCommitOption) => void;
   onRefreshChanges?: () => void | Promise<void>;
   onCopyGitApply?: () => void | Promise<void>;
   onToggleDiffVariant: () => void;
   onToggleFilesPanel?: () => void;
 }
-
-const REVIEW_BASE_OPTIONS: Array<{
-  key: CanvasWorkbenchReviewBase;
-  labelKey: string;
-}> = [
-  {
-    key: "unstaged",
-    labelKey: "agentChat.canvasWorkbench.coding.changes.base.unstaged",
-  },
-  {
-    key: "staged",
-    labelKey: "agentChat.canvasWorkbench.coding.changes.base.staged",
-  },
-  {
-    key: "commit",
-    labelKey: "agentChat.canvasWorkbench.coding.changes.base.commit",
-  },
-  {
-    key: "branch",
-    labelKey: "agentChat.canvasWorkbench.coding.changes.base.branch",
-  },
-  {
-    key: "previousConversation",
-    labelKey:
-      "agentChat.canvasWorkbench.coding.changes.base.previousConversation",
-  },
-];
 
 export function CanvasWorkbenchChangesToolbar({
   translateWorkbench,
@@ -95,6 +67,9 @@ export function CanvasWorkbenchChangesToolbar({
   reviewActionBusy = false,
   copyGitApplyDisabled = false,
   loadFullFileDisabled = false,
+  commitOptions = [],
+  commitsLoading = false,
+  selectedCommitSha = null,
   autoExecuteEnabled,
   collapseDiffContext,
   loadFullFile,
@@ -105,6 +80,8 @@ export function CanvasWorkbenchChangesToolbar({
   onToggleReviewMenu,
   onToggleBaseMenu,
   onSelectBase,
+  onOpenCommitMenu,
+  onSelectCommit,
   onRefreshChanges,
   onCopyGitApply,
   onToggleAutoExecute,
@@ -127,8 +104,9 @@ export function CanvasWorkbenchChangesToolbar({
       : "agentChat.canvasWorkbench.coding.changes.switchToInlineDiff",
   );
   const selectedBaseLabel = translateWorkbench(
-    REVIEW_BASE_OPTIONS.find((option) => option.key === selectedBase)
-      ?.labelKey ||
+    CANVAS_WORKBENCH_REVIEW_BASE_OPTIONS.find(
+      (option) => option.key === selectedBase,
+    )?.labelKey ||
       "agentChat.canvasWorkbench.coding.changes.base.previousConversation",
   );
   const isBaseSelectorDisabled = baseSelectorDisabled ?? actionsDisabled;
@@ -159,9 +137,12 @@ export function CanvasWorkbenchChangesToolbar({
               data-testid="canvas-workbench-changes-base-menu"
               className="absolute left-0 top-[calc(100%+6px)] z-[80] w-[202px] rounded-[12px] border border-slate-200/90 bg-white p-1.5 shadow-xl shadow-slate-950/10"
             >
-              {REVIEW_BASE_OPTIONS.map((option) => {
+              {CANVAS_WORKBENCH_REVIEW_BASE_OPTIONS.map((option) => {
                 const active = option.key === selectedBase;
                 const isCommit = option.key === "commit";
+                const selectedCommit = commitOptions.find(
+                  (commit) => commit.sha === selectedCommitSha,
+                );
                 return (
                   <div key={option.key} className="relative">
                     <button
@@ -170,7 +151,9 @@ export function CanvasWorkbenchChangesToolbar({
                       aria-checked={active}
                       data-testid={`canvas-workbench-changes-base-option-${option.key}`}
                       onClick={() => {
-                        if (!isCommit) {
+                        if (isCommit) {
+                          void onOpenCommitMenu?.();
+                        } else {
                           onSelectBase(option.key);
                         }
                       }}
@@ -191,10 +174,51 @@ export function CanvasWorkbenchChangesToolbar({
                       <div
                         role="menu"
                         data-testid="canvas-workbench-changes-base-commit-submenu"
-                        className="absolute left-[calc(100%+6px)] top-0 z-[90] w-[220px] rounded-[10px] border border-slate-200/90 bg-white px-3 py-2 text-[13px] font-medium text-slate-400 shadow-xl shadow-slate-950/10"
+                        className="absolute left-[calc(100%+6px)] top-0 z-[90] max-h-[320px] w-[280px] overflow-y-auto rounded-[10px] border border-slate-200/90 bg-white p-1.5 shadow-xl shadow-slate-950/10"
                       >
-                        {translateWorkbench(
-                          "agentChat.canvasWorkbench.coding.changes.base.emptyCommits",
+                        {commitsLoading ? (
+                          <div className="px-2 py-2 text-[13px] font-medium text-slate-400">
+                            {translateWorkbench(
+                              "agentChat.canvasWorkbench.coding.changes.base.loadingCommits",
+                            )}
+                          </div>
+                        ) : commitOptions.length > 0 ? (
+                          commitOptions.map((commit) => {
+                            const commitActive =
+                              commit.sha === selectedCommit?.sha;
+                            return (
+                              <button
+                                key={commit.sha}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={commitActive}
+                                data-testid={`canvas-workbench-changes-base-commit-option-${commit.shortSha}`}
+                                onClick={() => onSelectCommit?.(commit)}
+                                className="flex w-full items-start justify-between gap-2 rounded-[7px] px-2 py-1.5 text-left transition-colors hover:bg-slate-50"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[13px] font-medium text-slate-800">
+                                    {commit.subject ||
+                                      translateWorkbench(
+                                        "agentChat.canvasWorkbench.coding.changes.base.untitledCommit",
+                                      )}
+                                  </span>
+                                  <span className="block truncate font-mono text-[11px] text-slate-400">
+                                    {commit.shortSha}
+                                  </span>
+                                </span>
+                                {commitActive ? (
+                                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-600" />
+                                ) : null}
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="px-2 py-2 text-[13px] font-medium text-slate-400">
+                            {translateWorkbench(
+                              "agentChat.canvasWorkbench.coding.changes.base.emptyCommits",
+                            )}
+                          </div>
                         )}
                       </div>
                     ) : null}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "limit": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "rootPath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "rootPath"
+  ],
+  "title": "ProjectGitCommitListParams",
+  "type": "object"
+}

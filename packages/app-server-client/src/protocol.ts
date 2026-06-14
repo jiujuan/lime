@@ -19,6 +19,7 @@ export const METHOD_FILE_SYSTEM_RENAME_FILE = "fileSystem/renameFile";
 export const METHOD_FILE_SYSTEM_DELETE_FILE = "fileSystem/deleteFile";
 export const METHOD_PROJECT_GIT_STATUS = "projectGit/status";
 export const METHOD_PROJECT_GIT_DIFF = "projectGit/diff";
+export const METHOD_PROJECT_GIT_COMMITS_LIST = "projectGit/commits/list";
 export const METHOD_PROJECT_GIT_BRANCH_CHECKOUT = "projectGit/branch/checkout";
 export const METHOD_PROJECT_GIT_BRANCH_CREATE = "projectGit/branch/create";
 export const METHOD_PROJECT_GIT_WORKTREE_CREATE = "projectGit/worktree/create";
@@ -346,6 +347,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
   { method: METHOD_PROJECT_GIT_STATUS, kind: "request" },
   { method: METHOD_PROJECT_GIT_DIFF, kind: "request" },
+  { method: METHOD_PROJECT_GIT_COMMITS_LIST, kind: "request" },
   { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
   { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
   { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
@@ -834,13 +836,20 @@ export type ProjectGitDiffParams = {
   rootPath: string;
   contextLines?: number;
   base?: ProjectGitDiffBase;
+  commitSha?: string;
 };
 
 export type ProjectGitDiffBase =
   | "unstaged"
   | "staged"
+  | "commit"
   | "branch"
   | "previousConversation";
+
+export type ProjectGitCommitListParams = {
+  rootPath: string;
+  limit?: number;
+};
 
 export type ProjectGitBranchCheckoutParams = {
   rootPath: string;
@@ -876,6 +885,22 @@ export type ProjectGitDiffResponse = {
   hasGitRepository: boolean;
   patch: string;
   uncommittedFileCount: number;
+};
+
+export type ProjectGitCommitListResponse = {
+  rootPath: string;
+  repositoryRoot?: string;
+  hasGitRepository: boolean;
+  commits: ProjectGitCommit[];
+};
+
+export type ProjectGitCommit = {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  authorName: string;
+  authorEmail: string;
+  committedAt: string;
 };
 
 export type ProjectGitWorktreeCreateResponse = {

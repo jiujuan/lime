@@ -652,6 +652,10 @@
     },
     {
       "kind": "request",
+      "method": "projectGit/commits/list"
+    },
+    {
+      "kind": "request",
       "method": "projectGit/diff"
     },
     {
@@ -1312,6 +1316,9 @@
       "PlatformInfo",
       "ProjectGitBranchCheckoutParams",
       "ProjectGitBranchCreateParams",
+      "ProjectGitCommit",
+      "ProjectGitCommitListParams",
+      "ProjectGitCommitListResponse",
       "ProjectGitDiffBase",
       "ProjectGitDiffParams",
       "ProjectGitDiffResponse",

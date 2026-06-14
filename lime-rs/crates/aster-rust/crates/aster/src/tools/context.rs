@@ -16,6 +16,7 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 use crate::providers::base::Provider;
+use crate::sandbox::SandboxConfig;
 
 /// Tool execution context
 ///
@@ -40,6 +41,9 @@ pub struct ToolContext {
 
     /// Optional model provider associated with the current session
     pub provider: Option<Arc<dyn Provider>>,
+
+    /// Optional process sandbox configuration for shell-like tools.
+    pub workspace_sandbox: Option<SandboxConfig>,
 }
 
 impl std::fmt::Debug for ToolContext {
@@ -54,6 +58,7 @@ impl std::fmt::Debug for ToolContext {
             .field("environment", &self.environment)
             .field("has_cancellation_token", &has_cancellation_token)
             .field("provider", &provider_name)
+            .field("has_workspace_sandbox", &self.workspace_sandbox.is_some())
             .finish()
     }
 }
@@ -67,6 +72,7 @@ impl Default for ToolContext {
             environment: HashMap::new(),
             cancellation_token: None,
             provider: None,
+            workspace_sandbox: None,
         }
     }
 }
@@ -113,6 +119,12 @@ impl ToolContext {
     /// Set the provider associated with the current session
     pub fn with_provider(mut self, provider: Arc<dyn Provider>) -> Self {
         self.provider = Some(provider);
+        self
+    }
+
+    /// Set process sandbox configuration for shell-like tools.
+    pub fn with_workspace_sandbox(mut self, config: SandboxConfig) -> Self {
+        self.workspace_sandbox = Some(config);
         self
     }
 

@@ -2,7 +2,11 @@ use super::policy::{
     ToolExecutionPolicyResolution, ToolExecutionResolverInput, ToolExecutionSandboxProfile,
     ToolExecutionWarningPolicy,
 };
-use super::sandbox::{command_text, evaluate_sandbox, SandboxEvaluation, SandboxEvaluationInput};
+use super::sandbox::{
+    command_text, evaluate_sandbox, plan_sandbox_backend, requested_sandbox_policy_label,
+    SandboxBackendPlan, SandboxBackendPlanInput, SandboxBackendPlatform, SandboxEvaluation,
+    SandboxEvaluationInput,
+};
 use super::service::ToolExecutionPolicyService;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
@@ -121,12 +125,40 @@ pub fn decide_tool_execution(input: ToolExecutionDecisionInput<'_>) -> ToolExecu
     if let Some(sandbox_policy) = input.requested_sandbox_policy {
         metadata.insert("requestedSandboxPolicy".to_string(), json!(sandbox_policy));
     }
+    let sandbox_backend_plan = plan_sandbox_backend(SandboxBackendPlanInput {
+        sandbox_profile: resolution.policy.sandbox_profile,
+        requested_policy: input.requested_sandbox_policy,
+        request_metadata: input.resolver_input.request_metadata,
+        bypass_restrictions: input.bypass_restrictions,
+        platform: SandboxBackendPlatform::current(),
+    });
+    insert_sandbox_backend_metadata(&mut metadata, sandbox_backend_plan);
 
     if input.bypass_restrictions {
         return build_decision(
             ToolExecutionDecisionKind::Allow,
             "full_access_allowed",
             "full-access 允许工具执行",
+            resolution,
+            metadata,
+        );
+    }
+
+    if sandbox_backend_plan.strict_fallback_blocks_execution() {
+        metadata.insert(
+            "sandboxPolicy".to_string(),
+            json!(requested_sandbox_policy_label(
+                input.requested_sandbox_policy
+            )),
+        );
+        metadata.insert(
+            "sandboxReason".to_string(),
+            json!(sandbox_backend_plan.reason),
+        );
+        return build_decision(
+            ToolExecutionDecisionKind::SandboxBlocked,
+            "workspace_sandbox_strict_backend_unavailable",
+            "workspace sandbox 严格模式要求可执行的沙箱后端",
             resolution,
             metadata,
         );
@@ -175,6 +207,44 @@ pub fn decide_tool_execution(input: ToolExecutionDecisionInput<'_>) -> ToolExecu
         resolution,
         metadata,
     )
+}
+
+fn insert_sandbox_backend_metadata(
+    metadata: &mut HashMap<String, JsonValue>,
+    plan: SandboxBackendPlan,
+) {
+    metadata.insert("sandboxBackend".to_string(), json!(plan.backend.label()));
+    metadata.insert(
+        "sandboxBackendStatus".to_string(),
+        json!(plan.status.label()),
+    );
+    metadata.insert("sandboxBackendEnforced".to_string(), json!(plan.enforced));
+    metadata.insert("sandboxBackendRequired".to_string(), json!(plan.required));
+    metadata.insert(
+        "sandboxBackendReasonCode".to_string(),
+        json!(plan.reason_code),
+    );
+    metadata.insert("sandboxBackendReason".to_string(), json!(plan.reason));
+    metadata.insert(
+        "sandboxBackendPlatform".to_string(),
+        json!(plan.platform.label()),
+    );
+    metadata.insert(
+        "workspaceSandboxEnabled".to_string(),
+        json!(plan.config.enabled),
+    );
+    metadata.insert(
+        "workspaceSandboxStrict".to_string(),
+        json!(plan.config.strict),
+    );
+    metadata.insert(
+        "workspaceSandboxNotifyOnFallback".to_string(),
+        json!(plan.config.notify_on_fallback),
+    );
+    metadata.insert(
+        "workspaceSandboxConfigSource".to_string(),
+        json!(plan.config.source.label()),
+    );
 }
 
 fn build_decision(

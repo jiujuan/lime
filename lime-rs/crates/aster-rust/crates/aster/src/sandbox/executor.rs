@@ -60,50 +60,68 @@ pub async fn execute_in_sandbox(
     args: &[String],
     config: &SandboxConfig,
 ) -> anyhow::Result<ExecutorResult> {
+    execute_in_sandbox_with_options(
+        ExecutorOptions {
+            command: command.to_string(),
+            args: args.to_vec(),
+            timeout: None,
+            env: HashMap::new(),
+            working_dir: None,
+        },
+        config,
+    )
+    .await
+}
+
+/// 在沙箱中按完整执行选项运行命令
+pub async fn execute_in_sandbox_with_options(
+    options: ExecutorOptions,
+    config: &SandboxConfig,
+) -> anyhow::Result<ExecutorResult> {
     let start_time = std::time::Instant::now();
 
     // 禁用沙箱或类型为 None
     if !config.enabled || config.sandbox_type == SandboxType::None {
-        return execute_unsandboxed(command, args, config).await;
+        return execute_unsandboxed(&options, config).await;
     }
 
     // 根据沙箱类型执行
     let result = match config.sandbox_type {
-        SandboxType::Docker => execute_in_docker(command, args, config).await,
+        SandboxType::Docker => execute_in_docker(&options, config).await,
         SandboxType::Bubblewrap => {
             #[cfg(target_os = "linux")]
             {
-                execute_in_bubblewrap(command, args, config).await
+                execute_in_bubblewrap(&options, config).await
             }
             #[cfg(not(target_os = "linux"))]
             {
                 tracing::warn!("Bubblewrap 仅在 Linux 上可用，回退到无沙箱执行");
-                execute_unsandboxed(command, args, config).await
+                execute_unsandboxed(&options, config).await
             }
         }
         SandboxType::Seatbelt => {
             #[cfg(target_os = "macos")]
             {
-                execute_in_seatbelt(command, args, config).await
+                execute_in_seatbelt(&options, config).await
             }
             #[cfg(not(target_os = "macos"))]
             {
                 tracing::warn!("Seatbelt 仅在 macOS 上可用，回退到无沙箱执行");
-                execute_unsandboxed(command, args, config).await
+                execute_unsandboxed(&options, config).await
             }
         }
         SandboxType::Firejail => {
             #[cfg(target_os = "linux")]
             {
-                execute_in_firejail(command, args, config).await
+                execute_in_firejail(&options, config).await
             }
             #[cfg(not(target_os = "linux"))]
             {
                 tracing::warn!("Firejail 仅在 Linux 上可用，回退到无沙箱执行");
-                execute_unsandboxed(command, args, config).await
+                execute_unsandboxed(&options, config).await
             }
         }
-        SandboxType::None => execute_unsandboxed(command, args, config).await,
+        SandboxType::None => execute_unsandboxed(&options, config).await,
     };
 
     result.map(|mut r| {
@@ -114,23 +132,22 @@ pub async fn execute_in_sandbox(
 
 /// 无沙箱执行
 async fn execute_unsandboxed(
-    command: &str,
-    args: &[String],
+    options: &ExecutorOptions,
     config: &SandboxConfig,
 ) -> anyhow::Result<ExecutorResult> {
-    let mut cmd = Command::new(command);
-    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut cmd = Command::new(&options.command);
+    configure_command(&mut cmd, options, config);
 
-    // 设置环境变量
-    for (key, value) in &config.environment_variables {
-        cmd.env(key, value);
-    }
-
-    let timeout = config
+    let timeout = options
+        .timeout
+        .map(Duration::from_millis)
+        .or_else(|| {
+            config
         .resource_limits
         .as_ref()
         .and_then(|l| l.max_execution_time)
-        .map(Duration::from_millis);
+                .map(Duration::from_millis)
+        });
 
     let output = if let Some(timeout) = timeout {
         tokio::time::timeout(timeout, cmd.output()).await??
@@ -150,8 +167,7 @@ async fn execute_unsandboxed(
 
 /// Docker 沙箱执行
 async fn execute_in_docker(
-    command: &str,
-    args: &[String],
+    options: &ExecutorOptions,
     config: &SandboxConfig,
 ) -> anyhow::Result<ExecutorResult> {
     let docker_config = config.docker.as_ref();
@@ -177,15 +193,14 @@ async fn execute_in_docker(
     }
 
     docker_args.push(image);
-    docker_args.push(command);
-    for arg in args {
+    docker_args.push(&options.command);
+    for arg in &options.args {
         docker_args.push(arg);
     }
 
     let mut cmd = Command::new("docker");
-    cmd.args(&docker_args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(&docker_args);
+    configure_process_stdio_and_env(&mut cmd, options, config);
 
     let output = cmd.output().await?;
 
@@ -202,8 +217,7 @@ async fn execute_in_docker(
 /// Bubblewrap 沙箱执行 (Linux)
 #[cfg(target_os = "linux")]
 async fn execute_in_bubblewrap(
-    command: &str,
-    args: &[String],
+    options: &ExecutorOptions,
     config: &SandboxConfig,
 ) -> anyhow::Result<ExecutorResult> {
     let mut bwrap_args = vec!["--unshare-all".to_string()];
@@ -245,13 +259,12 @@ async fn execute_in_bubblewrap(
     }
 
     bwrap_args.push("--".to_string());
-    bwrap_args.push(command.to_string());
-    bwrap_args.extend(args.iter().cloned());
+    bwrap_args.push(options.command.clone());
+    bwrap_args.extend(options.args.iter().cloned());
 
     let mut cmd = Command::new("bwrap");
-    cmd.args(&bwrap_args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(&bwrap_args);
+    configure_process_stdio_and_env(&mut cmd, options, config);
 
     let output = cmd.output().await?;
 
@@ -268,8 +281,7 @@ async fn execute_in_bubblewrap(
 /// Seatbelt 沙箱执行 (macOS)
 #[cfg(target_os = "macos")]
 async fn execute_in_seatbelt(
-    command: &str,
-    args: &[String],
+    options: &ExecutorOptions,
     config: &SandboxConfig,
 ) -> anyhow::Result<ExecutorResult> {
     // 构建 sandbox profile
@@ -300,10 +312,9 @@ async fn execute_in_seatbelt(
     }
 
     let mut cmd = Command::new("sandbox-exec");
-    cmd.args(["-p", &profile, command])
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(["-p", &profile, &options.command])
+        .args(&options.args);
+    configure_process_stdio_and_env(&mut cmd, options, config);
 
     let output = cmd.output().await?;
 
@@ -320,8 +331,7 @@ async fn execute_in_seatbelt(
 /// Firejail 沙箱执行 (Linux)
 #[cfg(target_os = "linux")]
 async fn execute_in_firejail(
-    command: &str,
-    args: &[String],
+    options: &ExecutorOptions,
     config: &SandboxConfig,
 ) -> anyhow::Result<ExecutorResult> {
     let mut firejail_args = vec!["--quiet".to_string()];
@@ -340,13 +350,12 @@ async fn execute_in_firejail(
     }
 
     firejail_args.push("--".to_string());
-    firejail_args.push(command.to_string());
-    firejail_args.extend(args.iter().cloned());
+    firejail_args.push(options.command.clone());
+    firejail_args.extend(options.args.iter().cloned());
 
     let mut cmd = Command::new("firejail");
-    cmd.args(&firejail_args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(&firejail_args);
+    configure_process_stdio_and_env(&mut cmd, options, config);
 
     let output = cmd.output().await?;
 
@@ -358,6 +367,31 @@ async fn execute_in_firejail(
         sandbox_type: SandboxType::Firejail,
         duration: None,
     })
+}
+
+fn configure_command(cmd: &mut Command, options: &ExecutorOptions, config: &SandboxConfig) {
+    cmd.args(&options.args);
+    configure_process_stdio_and_env(cmd, options, config);
+}
+
+fn configure_process_stdio_and_env(
+    cmd: &mut Command,
+    options: &ExecutorOptions,
+    config: &SandboxConfig,
+) {
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
+    if let Some(working_dir) = options.working_dir.as_deref() {
+        cmd.current_dir(working_dir);
+    }
+    for (key, value) in &config.environment_variables {
+        cmd.env(key, value);
+    }
+    for (key, value) in &options.env {
+        cmd.env(key, value);
+    }
 }
 
 /// 检测最佳沙箱类型

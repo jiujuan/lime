@@ -45,6 +45,7 @@
 
 pub mod dao;
 pub mod scheduler;
+#[cfg(test)]
 mod task_context;
 pub mod types;
 

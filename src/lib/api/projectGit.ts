@@ -2,10 +2,12 @@ import {
   AppServerClient,
   APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
   APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CREATE,
+  APP_SERVER_METHOD_PROJECT_GIT_COMMITS_LIST,
   APP_SERVER_METHOD_PROJECT_GIT_DIFF,
   APP_SERVER_METHOD_PROJECT_GIT_STATUS,
   APP_SERVER_METHOD_PROJECT_GIT_WORKTREE_CREATE,
   type AppServerProjectGitDiffBase,
+  type AppServerProjectGitCommitListResponse,
   type AppServerProjectGitBranchCheckoutResponse,
   type AppServerProjectGitBranchCreateResponse,
   type AppServerProjectGitDiffResponse,
@@ -16,12 +18,14 @@ import {
 export type ProjectGitStatus = AppServerProjectGitStatusResponse;
 export type ProjectGitDiff = AppServerProjectGitDiffResponse;
 export type ProjectGitDiffBase = AppServerProjectGitDiffBase;
+export type ProjectGitCommitList = AppServerProjectGitCommitListResponse;
 export type ProjectGitWorktree = AppServerProjectGitWorktreeCreateResponse;
 
 export type ProjectGitAppServerClient = Pick<
   AppServerClient,
   | "readProjectGitStatus"
   | "readProjectGitDiff"
+  | "listProjectGitCommits"
   | "checkoutProjectGitBranch"
   | "createProjectGitBranch"
   | "createProjectGitWorktree"
@@ -89,34 +93,66 @@ export async function readProjectGitStatus(
   return response.result;
 }
 
-export function readProjectGitDiff(
-  rootPath: string,
-  contextLines?: number,
-  client?: ProjectGitAppServerClient,
-): Promise<ProjectGitDiff>;
-export function readProjectGitDiff(
-  rootPath: string,
-  contextLines: number | undefined,
-  base: ProjectGitDiffBase,
-  client?: ProjectGitAppServerClient,
-): Promise<ProjectGitDiff>;
 export async function readProjectGitDiff(
   rootPath: string,
   contextLines = 3,
   baseOrClient?: ProjectGitDiffBase | ProjectGitAppServerClient,
+  commitShaOrClient?: string | ProjectGitAppServerClient,
   maybeClient?: ProjectGitAppServerClient,
 ): Promise<ProjectGitDiff> {
   const base = typeof baseOrClient === "string" ? baseOrClient : undefined;
+  const commitSha =
+    typeof commitShaOrClient === "string" ? commitShaOrClient : undefined;
   const client =
     typeof baseOrClient === "string"
-      ? maybeClient || createProjectGitAppServerClient()
+      ? (typeof commitShaOrClient === "object" && commitShaOrClient) ||
+        maybeClient ||
+        createProjectGitAppServerClient()
       : baseOrClient || createProjectGitAppServerClient();
   const response = await client.readProjectGitDiff({
     rootPath,
     contextLines,
     ...(base ? { base } : {}),
+    ...(commitSha ? { commitSha } : {}),
   });
   assertProjectGitDiff(APP_SERVER_METHOD_PROJECT_GIT_DIFF, response.result);
+  return response.result;
+}
+
+function assertProjectGitCommitList(
+  method: string,
+  value: unknown,
+): asserts value is ProjectGitCommitList {
+  if (
+    !isRecord(value) ||
+    typeof value.rootPath !== "string" ||
+    typeof value.hasGitRepository !== "boolean" ||
+    !Array.isArray(value.commits) ||
+    !value.commits.every(
+      (commit) =>
+        isRecord(commit) &&
+        typeof commit.sha === "string" &&
+        typeof commit.shortSha === "string" &&
+        typeof commit.subject === "string" &&
+        typeof commit.authorName === "string" &&
+        typeof commit.authorEmail === "string" &&
+        typeof commit.committedAt === "string",
+    )
+  ) {
+    throw new Error(`${method} did not return project Git commits`);
+  }
+}
+
+export async function listProjectGitCommits(
+  rootPath: string,
+  limit = 30,
+  client: ProjectGitAppServerClient = createProjectGitAppServerClient(),
+): Promise<ProjectGitCommitList> {
+  const response = await client.listProjectGitCommits({ rootPath, limit });
+  assertProjectGitCommitList(
+    APP_SERVER_METHOD_PROJECT_GIT_COMMITS_LIST,
+    response.result,
+  );
   return response.result;
 }
 

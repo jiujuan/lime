@@ -24,6 +24,26 @@ pub struct ProjectGitWorktree {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectGitCommitList {
+    pub root_path: String,
+    pub repository_root: Option<String>,
+    pub has_git_repository: bool,
+    pub commits: Vec<ProjectGitCommit>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGitCommit {
+    pub sha: String,
+    pub short_sha: String,
+    pub subject: String,
+    pub author_name: String,
+    pub author_email: String,
+    pub committed_at: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectGitDiff {
     pub root_path: String,
     pub repository_root: Option<String>,
@@ -38,6 +58,7 @@ pub enum ProjectGitDiffBase {
     #[default]
     Unstaged,
     Staged,
+    Commit,
     Branch,
     PreviousConversation,
 }
@@ -78,6 +99,7 @@ pub fn read_diff(
     root_path: &str,
     context_lines: Option<u32>,
     base: Option<ProjectGitDiffBase>,
+    commit_sha: Option<&str>,
 ) -> Result<ProjectGitDiff, String> {
     let status = read_status(root_path)?;
     if !status.has_git_repository {
@@ -108,6 +130,10 @@ pub fn read_diff(
                 unified_arg.as_str(),
             ],
         )?,
+        ProjectGitDiffBase::Commit => {
+            let commit_sha = validate_commit_sha(commit_sha)?;
+            read_commit_patch(&root, commit_sha, unified_arg.as_str())?
+        }
         ProjectGitDiffBase::Branch => read_branch_patch(&root, &status, unified_arg.as_str())?,
         ProjectGitDiffBase::PreviousConversation => {
             return Err("上轮对话基准不由 Git 后端读取".to_string());
@@ -120,6 +146,42 @@ pub fn read_diff(
         has_git_repository: true,
         patch,
         uncommitted_file_count: status.uncommitted_file_count,
+    })
+}
+
+pub fn list_commits(root_path: &str, limit: Option<u32>) -> Result<ProjectGitCommitList, String> {
+    let status = read_status(root_path)?;
+    if !status.has_git_repository {
+        return Ok(ProjectGitCommitList {
+            root_path: status.root_path,
+            repository_root: status.repository_root,
+            has_git_repository: false,
+            commits: Vec::new(),
+        });
+    }
+
+    let root = required_root_path(root_path)?;
+    let limit = limit.unwrap_or(30).clamp(1, 100).to_string();
+    let output = git_output(
+        &root,
+        &[
+            "log",
+            "--date=iso-strict",
+            "--format=%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%aI%x1e",
+            "-n",
+            &limit,
+        ],
+    )?;
+    let commits = output
+        .split('\x1e')
+        .filter_map(parse_commit_log_record)
+        .collect();
+
+    Ok(ProjectGitCommitList {
+        root_path: status.root_path,
+        repository_root: status.repository_root,
+        has_git_repository: true,
+        commits,
     })
 }
 
@@ -190,6 +252,23 @@ fn append_patch_section(patch: &mut String, section: &str) {
     patch.push_str(section.trim());
 }
 
+fn read_commit_patch(root: &Path, commit_sha: &str, unified_arg: &str) -> Result<String, String> {
+    git_diff_output(
+        root,
+        &[
+            "show",
+            "--format=",
+            "--no-textconv",
+            "--no-ext-diff",
+            "--submodule=short",
+            "--ignore-submodules=dirty",
+            "--no-color",
+            unified_arg,
+            commit_sha,
+        ],
+    )
+}
+
 fn read_branch_patch(
     root: &Path,
     status: &ProjectGitStatus,
@@ -218,6 +297,31 @@ fn read_branch_patch(
             &merge_base,
         ],
     )
+}
+
+fn parse_commit_log_record(record: &str) -> Option<ProjectGitCommit> {
+    let trimmed = record.trim_matches('\n');
+    if trimmed.trim().is_empty() {
+        return None;
+    }
+    let mut parts = trimmed.split('\x1f');
+    let sha = parts.next()?.trim().to_string();
+    let short_sha = parts.next()?.trim().to_string();
+    let subject = parts.next()?.trim().to_string();
+    let author_name = parts.next()?.trim().to_string();
+    let author_email = parts.next()?.trim().to_string();
+    let committed_at = parts.next()?.trim().to_string();
+    if sha.is_empty() || short_sha.is_empty() {
+        return None;
+    }
+    Some(ProjectGitCommit {
+        sha,
+        short_sha,
+        subject,
+        author_name,
+        author_email,
+        committed_at,
+    })
 }
 
 fn resolve_default_base_branch(status: &ProjectGitStatus) -> Option<&str> {
@@ -266,6 +370,20 @@ fn resolve_upstream_if_remote_ahead(root: &Path, branch: &str) -> Result<Option<
     let right: i64 = parts.next().unwrap_or("0").parse().unwrap_or(0);
 
     Ok((right > 0).then_some(upstream))
+}
+
+fn validate_commit_sha(commit_sha: Option<&str>) -> Result<&str, String> {
+    let commit_sha = commit_sha
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "提交基准需要 commitSha".to_string())?;
+    if commit_sha.len() > 64 {
+        return Err("commitSha 过长".to_string());
+    }
+    if !commit_sha.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err("commitSha 格式无效".to_string());
+    }
+    Ok(commit_sha)
 }
 
 pub fn checkout_branch(root_path: &str, branch: &str) -> Result<ProjectGitStatus, String> {
@@ -575,7 +693,7 @@ mod tests {
         };
         fs::write(repo.join("README.md"), "hello\nworld\n").expect("write readme");
 
-        let diff = read_diff(&repo.to_string_lossy(), Some(1), None).expect("diff");
+        let diff = read_diff(&repo.to_string_lossy(), Some(1), None, None).expect("diff");
 
         assert!(diff.has_git_repository);
         assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
@@ -595,6 +713,7 @@ mod tests {
             &repo.to_string_lossy(),
             Some(1),
             Some(ProjectGitDiffBase::Staged),
+            None,
         )
         .expect("diff");
 
@@ -617,6 +736,7 @@ mod tests {
             &repo.to_string_lossy(),
             Some(3),
             Some(ProjectGitDiffBase::Branch),
+            None,
         )
         .expect("diff");
 
@@ -628,9 +748,67 @@ mod tests {
     #[test]
     fn diff_returns_empty_patch_for_plain_directory() {
         let temp = TempDir::new().expect("temp dir");
-        let diff = read_diff(&temp.path().to_string_lossy(), Some(3), None).expect("diff");
+        let diff = read_diff(&temp.path().to_string_lossy(), Some(3), None, None).expect("diff");
         assert!(!diff.has_git_repository);
         assert!(diff.patch.is_empty());
+    }
+
+    #[test]
+    fn commits_list_reads_recent_commits() {
+        let Some((_temp, repo)) = init_repo() else {
+            return;
+        };
+        fs::write(repo.join("README.md"), "hello\nsecond\n").expect("write readme");
+        run_git(&repo, &["add", "README.md"]);
+        run_git(&repo, &["commit", "-m", "second change"]);
+
+        let list = list_commits(&repo.to_string_lossy(), Some(5)).expect("commits");
+
+        assert!(list.has_git_repository);
+        assert!(list.commits.len() >= 2);
+        assert_eq!(list.commits[0].subject, "second change");
+        assert!(!list.commits[0].sha.is_empty());
+        assert!(!list.commits[0].short_sha.is_empty());
+    }
+
+    #[test]
+    fn diff_reads_commit_patch() {
+        let Some((_temp, repo)) = init_repo() else {
+            return;
+        };
+        fs::write(repo.join("README.md"), "hello\ncommitted\n").expect("write readme");
+        run_git(&repo, &["add", "README.md"]);
+        run_git(&repo, &["commit", "-m", "committed change"]);
+        let commit_sha = git_output(&repo, &["rev-parse", "HEAD"]).expect("head");
+
+        let diff = read_diff(
+            &repo.to_string_lossy(),
+            Some(3),
+            Some(ProjectGitDiffBase::Commit),
+            Some(commit_sha.trim()),
+        )
+        .expect("diff");
+
+        assert!(diff.has_git_repository);
+        assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
+        assert!(diff.patch.contains("+committed"));
+    }
+
+    #[test]
+    fn diff_commit_requires_sha() {
+        let Some((_temp, repo)) = init_repo() else {
+            return;
+        };
+
+        let error = read_diff(
+            &repo.to_string_lossy(),
+            Some(3),
+            Some(ProjectGitDiffBase::Commit),
+            None,
+        )
+        .expect_err("commit sha required");
+
+        assert!(error.contains("commitSha"));
     }
 
     #[test]

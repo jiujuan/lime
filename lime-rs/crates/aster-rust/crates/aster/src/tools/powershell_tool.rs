@@ -17,6 +17,7 @@ use crate::subprocess::{
     configure_command_for_gui, decode_process_output, summarize_decoded_with,
     wrap_powershell_command_for_utf8,
 };
+use crate::sandbox::{execute_in_sandbox_with_options, ExecutorOptions, ExecutorResult};
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -290,13 +291,46 @@ impl PowerShellTool {
             );
         }
         let effective_timeout = Duration::from_millis(effective_timeout_ms);
-        let mut cmd = self.build_command(command, context)?;
+        let executable_path = self.executable_path()?.to_path_buf();
 
         debug!(
             "Executing PowerShell command with timeout {:?}: {}",
             effective_timeout, command
         );
 
+        if let Some(sandbox_config) = context.workspace_sandbox.as_ref() {
+            let command = wrap_powershell_command_for_utf8(command);
+            let result = execute_in_sandbox_with_options(
+                ExecutorOptions {
+                    command: executable_path.display().to_string(),
+                    args: vec![
+                        "-NoProfile".to_string(),
+                        "-NonInteractive".to_string(),
+                        "-Command".to_string(),
+                        command.clone(),
+                    ],
+                    timeout: Some(effective_timeout.as_millis() as u64),
+                    env: context.environment.clone(),
+                    working_dir: Some(context.working_directory.display().to_string()),
+                },
+                sandbox_config,
+            )
+            .await
+            .map_err(|error| {
+                ToolError::execution_failed(format!(
+                    "Failed to execute sandboxed PowerShell command: {error}"
+                ))
+            })?;
+
+            return self.tool_result_from_executor_result(
+                &command,
+                &context.working_directory,
+                result,
+                Some("workspace"),
+            );
+        }
+
+        let mut cmd = self.build_command(command, context)?;
         let result = tokio::time::timeout(effective_timeout, async {
             cmd.stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -376,6 +410,59 @@ impl PowerShellTool {
             ))),
             Err(_) => Err(ToolError::timeout(effective_timeout)),
         }
+    }
+
+    fn tool_result_from_executor_result(
+        &self,
+        command: &str,
+        working_directory: &Path,
+        executor_result: ExecutorResult,
+        sandbox_scope: Option<&str>,
+    ) -> Result<ToolResult, ToolError> {
+        let stdout = executor_result.stdout;
+        let stderr = executor_result.stderr;
+        let exit_code = executor_result.exit_code;
+        let interpretation =
+            interpret_powershell_command_result(command, exit_code, &stdout, &stderr);
+        let formatted = self.truncate_output(&self.format_output_with_message(
+            &stdout,
+            &stderr,
+            exit_code,
+            interpretation.message.as_deref(),
+        ));
+        let mut result = if interpretation.is_error {
+            ToolResult::error(formatted)
+        } else {
+            ToolResult::success(formatted)
+        }
+        .with_metadata("exit_code", json!(exit_code))
+        .with_metadata("stdout_length", json!(stdout.len()))
+        .with_metadata("stderr_length", json!(stderr.len()))
+        .with_metadata("stdout_bytes", json!(stdout.len()))
+        .with_metadata("stderr_bytes", json!(stderr.len()))
+        .with_metadata("stdout", json!(self.truncate_output(&stdout)))
+        .with_metadata("stderr", json!(self.truncate_output(&stderr)))
+        .with_metadata("shell", json!("powershell"))
+        .with_metadata("command", json!(command))
+        .with_metadata("cwd", json!(working_directory.display().to_string()))
+        .with_metadata("execution_surface", json!("embedded"))
+        .with_metadata("sandboxed", json!(executor_result.sandboxed))
+        .with_metadata(
+            "sandbox_type",
+            json!(format!("{:?}", executor_result.sandbox_type).to_ascii_lowercase()),
+        );
+
+        if let Some(scope) = sandbox_scope {
+            result = result.with_metadata("sandbox_scope", json!(scope));
+        }
+        if let Some(duration) = executor_result.duration {
+            result = result.with_metadata("duration_ms", json!(duration));
+        }
+        if exit_code != 0 && result.success {
+            result = result.with_metadata("reported_success", json!(true));
+        }
+
+        Ok(result)
     }
 
     async fn execute_background(

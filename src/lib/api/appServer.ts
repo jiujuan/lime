@@ -42,6 +42,7 @@ import {
   METHOD_FILE_SYSTEM_RENAME_FILE,
   METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
   METHOD_PROJECT_GIT_BRANCH_CREATE,
+  METHOD_PROJECT_GIT_COMMITS_LIST,
   METHOD_PROJECT_GIT_DIFF,
   METHOD_PROJECT_GIT_STATUS,
   METHOD_PROJECT_GIT_WORKTREE_CREATE,
@@ -230,6 +231,8 @@ import {
   type ProjectGitBranchCheckoutResponse,
   type ProjectGitBranchCreateParams,
   type ProjectGitBranchCreateResponse,
+  type ProjectGitCommitListParams,
+  type ProjectGitCommitListResponse,
   type ProjectGitDiffBase,
   type ProjectGitDiffParams,
   type ProjectGitDiffResponse,
@@ -370,6 +373,8 @@ export const APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE =
   METHOD_FILE_SYSTEM_DELETE_FILE;
 export const APP_SERVER_METHOD_PROJECT_GIT_STATUS = METHOD_PROJECT_GIT_STATUS;
 export const APP_SERVER_METHOD_PROJECT_GIT_DIFF = METHOD_PROJECT_GIT_DIFF;
+export const APP_SERVER_METHOD_PROJECT_GIT_COMMITS_LIST =
+  METHOD_PROJECT_GIT_COMMITS_LIST;
 export const APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CHECKOUT =
   METHOD_PROJECT_GIT_BRANCH_CHECKOUT;
 export const APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CREATE =
@@ -628,6 +633,9 @@ export type AppServerProjectGitStatusParams = ProjectGitStatusParams;
 export type AppServerProjectGitDiffBase = ProjectGitDiffBase;
 export type AppServerProjectGitDiffParams = ProjectGitDiffParams;
 export type AppServerProjectGitDiffResponse = ProjectGitDiffResponse;
+export type AppServerProjectGitCommitListParams = ProjectGitCommitListParams;
+export type AppServerProjectGitCommitListResponse =
+  ProjectGitCommitListResponse;
 export type AppServerProjectGitBranchCheckoutParams =
   ProjectGitBranchCheckoutParams;
 export type AppServerProjectGitBranchCheckoutResponse =
@@ -1134,6 +1142,15 @@ export class AppServerClient {
   ): Promise<AppServerRequestResult<AppServerProjectGitDiffResponse>> {
     return await this.request<AppServerProjectGitDiffResponse>(
       APP_SERVER_METHOD_PROJECT_GIT_DIFF,
+      params,
+    );
+  }
+
+  async listProjectGitCommits(
+    params: AppServerProjectGitCommitListParams,
+  ): Promise<AppServerRequestResult<AppServerProjectGitCommitListResponse>> {
+    return await this.request<AppServerProjectGitCommitListResponse>(
+      APP_SERVER_METHOD_PROJECT_GIT_COMMITS_LIST,
       params,
     );
   }

@@ -108,13 +108,24 @@ describe("Electron release workflow guard", () => {
     const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
     const workflowPath = tempWorkflowPath(
       current.replace(
-        /          npx electron-forge package \\\n            --platform "\$\{\{ matrix\.host_platform \}\}" \\\n            --arch "\$\{\{ matrix\.arch \}\}"\n/,
+        /            npx electron-forge package \\\n              --platform "\$\{\{ matrix\.host_platform \}\}" \\\n              --arch "\$\{\{ matrix\.arch \}\}" 2>&1 \| tee "\$FORGE_PACKAGE_LOG"\n/,
         "",
       ),
     );
 
     expect(() => validateReleaseWorkflow({ workflowPath })).toThrow(
       /Electron Forge make step must include npx electron-forge package/,
+    );
+  });
+
+  it("rejects missing macOS notarization network retry in Forge package step", () => {
+    const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
+    const workflowPath = tempWorkflowPath(
+      current.replaceAll("is_notarytool_network_error", "is_package_error"),
+    );
+
+    expect(() => validateReleaseWorkflow({ workflowPath })).toThrow(
+      /Electron Forge make step must include is_notarytool_network_error/,
     );
   });
 
