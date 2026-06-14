@@ -169,8 +169,6 @@ export function CanvasWorkbenchChangesToolbar({
                       role="menuitemradio"
                       aria-checked={active}
                       data-testid={`canvas-workbench-changes-base-option-${option.key}`}
-                      onMouseEnter={() => undefined}
-                      onFocus={() => undefined}
                       onClick={() => {
                         if (!isCommit) {
                           onSelectBase(option.key);

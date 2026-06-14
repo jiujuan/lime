@@ -6,6 +6,7 @@ import {
   inferCanvasWorkbenchChangeKind,
   findChangeItemForSelection,
   isPendingChangeItem,
+  parseCanvasWorkbenchGitPatchToChangeItems,
   resolveChangeDisplayMeta,
   resolveChangeItemDisplayName,
   resolveChangeStatusClassName,
@@ -194,5 +195,42 @@ describe("CanvasWorkbenchChangesPanelViewModel", () => {
     expect(patch).toContain("deleted file mode 100644");
     expect(patch).toContain("--- a/src/old.ts");
     expect(patch).toContain("+++ /dev/null");
+  });
+
+  it("应把后端 Git patch 解析为可渲染的文件变更项", () => {
+    const items = parseCanvasWorkbenchGitPatchToChangeItems(
+      [
+        "diff --git a/src/App.tsx b/src/App.tsx",
+        "--- a/src/App.tsx",
+        "+++ b/src/App.tsx",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/docs/new.md b/docs/new.md",
+        "new file mode 100644",
+        "--- /dev/null",
+        "+++ b/docs/new.md",
+        "@@ -0,0 +1 @@",
+        "+hello",
+      ].join("\n"),
+    );
+
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      path: "src/App.tsx",
+      displayName: "App.tsx",
+      source: "git",
+      changeKind: "modified",
+    });
+    expect(items[0].diffLines).toEqual([
+      { type: "remove", value: "old" },
+      { type: "add", value: "new" },
+    ]);
+    expect(items[1]).toMatchObject({
+      path: "docs/new.md",
+      displayName: "new.md",
+      changeKind: "added",
+    });
+    expect(items[1].diffLines).toEqual([{ type: "add", value: "hello" }]);
   });
 });

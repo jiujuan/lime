@@ -69,8 +69,9 @@ pub fn decide_tool_execution(input: ToolExecutionDecisionInput<'_>) -> ToolExecu
         json!(input.working_directory.to_string_lossy().to_string()),
     );
 
-    if let Some(command) = command_text(input.params) {
-        if let Some(command_rule) = policy_service.classify_shell_command(&command) {
+    let command = command_text(input.params);
+    if let Some(command) = command.as_deref() {
+        if let Some(command_rule) = policy_service.classify_shell_command(command) {
             metadata.insert("commandRuleId".to_string(), json!(command_rule.rule_id));
             metadata.insert(
                 "commandRuleSource".to_string(),
@@ -87,6 +88,32 @@ pub fn decide_tool_execution(input: ToolExecutionDecisionInput<'_>) -> ToolExecu
             metadata.insert("commandRiskReason".to_string(), json!(command_rule.reason));
         }
         metadata.insert("command".to_string(), json!(command));
+    }
+    if let Some(network_rule) =
+        policy_service.classify_network_access(input.tool_name, input.params, command.as_deref())
+    {
+        metadata.insert("networkRuleId".to_string(), json!(network_rule.rule_id));
+        metadata.insert(
+            "networkRuleSource".to_string(),
+            json!(network_rule.source.label()),
+        );
+        metadata.insert(
+            "networkRiskLevel".to_string(),
+            json!(network_rule.risk_level.label()),
+        );
+        metadata.insert(
+            "networkRiskReasonCode".to_string(),
+            json!(network_rule.reason_code),
+        );
+        metadata.insert("networkRiskReason".to_string(), json!(network_rule.reason));
+        metadata.insert(
+            "networkRuleTarget".to_string(),
+            json!(network_rule.target.label()),
+        );
+        metadata.insert("networkUrl".to_string(), json!(network_rule.url));
+        if let Some(host) = network_rule.host {
+            metadata.insert("networkHost".to_string(), json!(host));
+        }
     }
     if let Some(approval_policy) = input.approval_policy {
         metadata.insert("approvalPolicy".to_string(), json!(approval_policy));

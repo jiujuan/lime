@@ -3,14 +3,17 @@ use super::policy::{
     ToolExecutionRestrictionProfile, ToolExecutionSandboxProfile, ToolExecutionWarningPolicy,
 };
 use super::rules::{
-    classify_shell_command_with_rules, default_tool_execution_policy, ShellCommandRiskLevel,
-    ShellCommandRule, ShellCommandRuleMatch, ShellCommandRuleMatchType, ShellCommandRuleSource,
+    classify_network_access, classify_shell_command_with_rules, default_tool_execution_policy,
+    NetworkRule, NetworkRuleMatch, NetworkRuleTarget, ShellCommandRiskLevel, ShellCommandRule,
+    ShellCommandRuleMatch, ShellCommandRuleMatchType, ShellCommandRuleSource,
 };
 use crate::agent_tools::catalog::tool_catalog_names_match;
 use lime_core::config::{
     ToolExecutionCommandRiskLevelConfig as ConfigToolExecutionCommandRiskLevelConfig,
     ToolExecutionCommandRuleConfig as ConfigToolExecutionCommandRuleConfig,
     ToolExecutionCommandRuleMatchTypeConfig as ConfigToolExecutionCommandRuleMatchTypeConfig,
+    ToolExecutionNetworkRuleConfig as ConfigToolExecutionNetworkRuleConfig,
+    ToolExecutionNetworkRuleTargetConfig as ConfigToolExecutionNetworkRuleTargetConfig,
     ToolExecutionOverrideConfig as ConfigToolExecutionOverrideConfig,
     ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig,
     ToolExecutionRestrictionProfileConfig as ConfigToolExecutionRestrictionProfileConfig,
@@ -36,7 +39,7 @@ struct ToolExecutionPolicyOverride {
 struct RuntimeExecutionPolicyLayer<'a> {
     policy: &'a JsonMap<String, JsonValue>,
     policy_source: ToolExecutionPolicySource,
-    shell_rule_source: ShellCommandRuleSource,
+    rule_source: ShellCommandRuleSource,
 }
 
 impl<'a> ToolExecutionPolicyService<'a> {
@@ -80,6 +83,16 @@ impl<'a> ToolExecutionPolicyService<'a> {
         classify_shell_command_with_rules(command, &configured_rules)
     }
 
+    pub fn classify_network_access(
+        &self,
+        tool_name: &str,
+        params: &JsonValue,
+        command: Option<&str>,
+    ) -> Option<NetworkRuleMatch> {
+        let configured_rules = self.network_rules();
+        classify_network_access(tool_name, params, command, &configured_rules)
+    }
+
     pub fn shell_command_rules(&self) -> Vec<ShellCommandRule> {
         let persisted_rules = self
             .input
@@ -92,10 +105,23 @@ impl<'a> ToolExecutionPolicyService<'a> {
             convert_shell_command_rules(persisted_rules, ShellCommandRuleSource::Persisted);
         for layer in runtime_layers {
             let layer_rules = extract_runtime_shell_command_rules(layer.policy);
-            rules.extend(convert_shell_command_rules(
-                &layer_rules,
-                layer.shell_rule_source,
-            ));
+            rules.extend(convert_shell_command_rules(&layer_rules, layer.rule_source));
+        }
+        rules
+    }
+
+    pub fn network_rules(&self) -> Vec<NetworkRule> {
+        let persisted_rules = self
+            .input
+            .persisted_policy
+            .map(|policy| policy.network_rules.as_slice())
+            .unwrap_or_default();
+        let runtime_layers = extract_runtime_execution_policy_layers(self.input.request_metadata);
+
+        let mut rules = convert_network_rules(persisted_rules, ShellCommandRuleSource::Persisted);
+        for layer in runtime_layers {
+            let layer_rules = extract_runtime_network_rules(layer.policy);
+            rules.extend(convert_network_rules(&layer_rules, layer.rule_source));
         }
         rules
     }
@@ -216,6 +242,24 @@ fn extract_runtime_shell_command_rules(
         .iter()
         .filter_map(|value| {
             serde_json::from_value::<ConfigToolExecutionCommandRuleConfig>(value.clone()).ok()
+        })
+        .collect()
+}
+
+fn extract_runtime_network_rules(
+    execution_policy: &JsonMap<String, JsonValue>,
+) -> Vec<ConfigToolExecutionNetworkRuleConfig> {
+    let Some(rules) = find_named_array(
+        execution_policy,
+        &["network_rules", "networkRules", "url_rules", "urlRules"],
+    ) else {
+        return Vec::new();
+    };
+
+    rules
+        .iter()
+        .filter_map(|value| {
+            serde_json::from_value::<ConfigToolExecutionNetworkRuleConfig>(value.clone()).ok()
         })
         .collect()
 }
@@ -343,14 +387,14 @@ fn push_named_policy_layer<'a>(
     object: &'a JsonMap<String, JsonValue>,
     keys: &[&str],
     policy_source: ToolExecutionPolicySource,
-    shell_rule_source: ShellCommandRuleSource,
+    rule_source: ShellCommandRuleSource,
     layers: &mut Vec<RuntimeExecutionPolicyLayer<'a>>,
 ) {
     if let Some(policy) = find_named_object(object, keys) {
         layers.push(RuntimeExecutionPolicyLayer {
             policy,
             policy_source,
-            shell_rule_source,
+            rule_source,
         });
     }
 }
@@ -539,6 +583,33 @@ fn convert_shell_command_rules(
         .collect()
 }
 
+fn convert_network_rules(
+    configs: &[ConfigToolExecutionNetworkRuleConfig],
+    source: ShellCommandRuleSource,
+) -> Vec<NetworkRule> {
+    configs
+        .iter()
+        .filter_map(|config| {
+            let rule_id = config.rule_id.trim();
+            let pattern = config.pattern.trim();
+            if rule_id.is_empty() || pattern.is_empty() {
+                return None;
+            }
+
+            Some(NetworkRule {
+                rule_id: rule_id.to_string(),
+                match_type: convert_command_rule_match_type_config(config.match_type),
+                target: convert_network_rule_target_config(config.target),
+                pattern: pattern.to_string(),
+                risk_level: convert_command_risk_level_config(config.risk_level),
+                reason_code: config.reason_code.trim().to_string(),
+                reason: config.reason.trim().to_string(),
+                source,
+            })
+        })
+        .collect()
+}
+
 fn convert_command_rule_match_type_config(
     value: ConfigToolExecutionCommandRuleMatchTypeConfig,
 ) -> ShellCommandRuleMatchType {
@@ -546,6 +617,15 @@ fn convert_command_rule_match_type_config(
         ConfigToolExecutionCommandRuleMatchTypeConfig::Regex => ShellCommandRuleMatchType::Regex,
         ConfigToolExecutionCommandRuleMatchTypeConfig::Prefix => ShellCommandRuleMatchType::Prefix,
         ConfigToolExecutionCommandRuleMatchTypeConfig::Exact => ShellCommandRuleMatchType::Exact,
+    }
+}
+
+fn convert_network_rule_target_config(
+    value: ConfigToolExecutionNetworkRuleTargetConfig,
+) -> NetworkRuleTarget {
+    match value {
+        ConfigToolExecutionNetworkRuleTargetConfig::Url => NetworkRuleTarget::Url,
+        ConfigToolExecutionNetworkRuleTargetConfig::Host => NetworkRuleTarget::Host,
     }
 }
 

@@ -26,6 +26,7 @@ export interface CanvasWorkbenchChangeItem {
   status?: "in_progress" | "completed" | "failed";
   changeKind?: CanvasWorkbenchChangeKind | string | null;
   preview?: string;
+  diffLines?: CanvasWorkbenchDiffLine[];
   currentContent?: string | null;
   previousContent?: string | null;
   checkpointPath?: string | null;
@@ -292,6 +293,9 @@ export function countCanvasWorkbenchDiffStats(
 export function countCanvasWorkbenchChangeItemStats(
   item: CanvasWorkbenchChangeItem,
 ): CanvasWorkbenchChangeDiffStats {
+  if (item.diffLines?.length) {
+    return countCanvasWorkbenchDiffStats(item.diffLines);
+  }
   if (item.previousContent != null && item.currentContent != null) {
     return countCanvasWorkbenchDiffStats(
       item.previousContent === item.currentContent
@@ -312,6 +316,149 @@ export function countCanvasWorkbenchChangeItemStats(
     };
   }
   return { additions: 0, removals: 0 };
+}
+
+export function parseCanvasWorkbenchGitPatchToChangeItems(
+  patch: string,
+): CanvasWorkbenchChangeItem[] {
+  const sections = splitGitPatchSections(patch);
+  return sections.flatMap((section, index) => {
+    const item = parseGitPatchSection(section, index);
+    return item ? [item] : [];
+  });
+}
+
+function splitGitPatchSections(patch: string): string[][] {
+  const sections: string[][] = [];
+  let current: string[] = [];
+
+  patch
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .forEach((line) => {
+      if (line.startsWith("diff --git ")) {
+        if (current.length > 0) {
+          sections.push(current);
+        }
+        current = [line];
+        return;
+      }
+      if (current.length > 0) {
+        current.push(line);
+      }
+    });
+
+  if (current.length > 0) {
+    sections.push(current);
+  }
+  return sections;
+}
+
+function parseGitPatchSection(
+  lines: string[],
+  index: number,
+): CanvasWorkbenchChangeItem | null {
+  const diffHeader = lines.find((line) => line.startsWith("diff --git "));
+  if (!diffHeader) {
+    return null;
+  }
+
+  const oldPath = parseDiffHeaderPath(diffHeader, "a/");
+  const newPath = parseDiffHeaderPath(diffHeader, "b/");
+  const minusPath = lines
+    .find((line) => line.startsWith("--- "))
+    ?.slice(4)
+    .trim();
+  const plusPath = lines
+    .find((line) => line.startsWith("+++ "))
+    ?.slice(4)
+    .trim();
+  const path =
+    normalizeGitPatchPath(plusPath) ||
+    normalizeGitPatchPath(newPath) ||
+    normalizeGitPatchPath(minusPath) ||
+    normalizeGitPatchPath(oldPath);
+  if (!path) {
+    return null;
+  }
+
+  const diffLines = parseGitPatchDiffLines(lines);
+  const preview = diffLines.find((line) => line.type !== "context")?.value;
+  const changeKind = inferGitPatchChangeKind(lines);
+
+  return {
+    id: `git:${index}:${path}`,
+    path,
+    displayName: extractFileNameFromPath(path),
+    source: "git",
+    status: "completed",
+    changeKind,
+    preview,
+    diffLines,
+  };
+}
+
+function parseDiffHeaderPath(header: string, prefix: "a/" | "b/"): string {
+  const marker = ` ${prefix}`;
+  const index = header.indexOf(marker);
+  if (index < 0) {
+    return "";
+  }
+  return header.slice(index + 1).split(/\s+/)[0] || "";
+}
+
+function normalizeGitPatchPath(value: string | null | undefined): string {
+  const trimmed = (value || "").trim();
+  if (!trimmed || trimmed === "/dev/null" || trimmed === "NUL") {
+    return "";
+  }
+  return normalizeCanvasWorkbenchPath(
+    trimmed.replace(/^"|"$/g, "").replace(/^[ab]\//, ""),
+  ).replace(/^\/+/, "");
+}
+
+function parseGitPatchDiffLines(lines: string[]): CanvasWorkbenchDiffLine[] {
+  const diffLines: CanvasWorkbenchDiffLine[] = [];
+  let inHunk = false;
+
+  lines.forEach((line) => {
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      return;
+    }
+    if (!inHunk || line.startsWith("\\ No newline")) {
+      return;
+    }
+    if (line.startsWith("+") && !line.startsWith("+++ ")) {
+      diffLines.push({ type: "add", value: line.slice(1) });
+      return;
+    }
+    if (line.startsWith("-") && !line.startsWith("--- ")) {
+      diffLines.push({ type: "remove", value: line.slice(1) });
+      return;
+    }
+    if (line.startsWith(" ")) {
+      diffLines.push({ type: "context", value: line.slice(1) });
+    }
+  });
+
+  return diffLines;
+}
+
+function inferGitPatchChangeKind(lines: string[]): CanvasWorkbenchChangeKind {
+  if (lines.some((line) => line.startsWith("new file mode "))) {
+    return "added";
+  }
+  if (lines.some((line) => line.startsWith("deleted file mode "))) {
+    return "deleted";
+  }
+  if (lines.some((line) => line.startsWith("rename from "))) {
+    return "renamed";
+  }
+  if (lines.some((line) => line.startsWith("copy from "))) {
+    return "copied";
+  }
+  return "modified";
 }
 
 export function buildCanvasWorkbenchGitApplyPatch(

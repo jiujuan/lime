@@ -4,6 +4,7 @@ use super::policy::{
 };
 use crate::agent_tools::catalog::{tool_catalog_entry, APPLY_PATCH_TOOL_NAME};
 use regex::Regex;
+use url::Url;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ToolPolicyRule {
@@ -76,6 +77,36 @@ pub struct ShellCommandRuleMatch {
     pub reason_code: String,
     pub reason: String,
     pub source: ShellCommandRuleSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetworkRuleTarget {
+    Url,
+    Host,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetworkRule {
+    pub rule_id: String,
+    pub match_type: ShellCommandRuleMatchType,
+    pub target: NetworkRuleTarget,
+    pub pattern: String,
+    pub risk_level: ShellCommandRiskLevel,
+    pub reason_code: String,
+    pub reason: String,
+    pub source: ShellCommandRuleSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetworkRuleMatch {
+    pub rule_id: String,
+    pub risk_level: ShellCommandRiskLevel,
+    pub reason_code: String,
+    pub reason: String,
+    pub source: ShellCommandRuleSource,
+    pub target: NetworkRuleTarget,
+    pub url: String,
+    pub host: Option<String>,
 }
 
 const DEFAULT_POLICY: ToolExecutionPolicy = ToolExecutionPolicy {
@@ -173,6 +204,23 @@ pub fn classify_shell_command_with_rules(
                 .iter()
                 .filter_map(|rule| classify_configured_shell_rule(command, rule)),
         )
+        .max_by_key(|rule_match| {
+            (
+                shell_command_risk_rank(rule_match.risk_level),
+                shell_command_source_rank(rule_match.source),
+            )
+        })
+}
+
+pub fn classify_network_access(
+    tool_name: &str,
+    params: &serde_json::Value,
+    command: Option<&str>,
+    configured_rules: &[NetworkRule],
+) -> Option<NetworkRuleMatch> {
+    extract_network_urls(tool_name, params, command)
+        .into_iter()
+        .flat_map(|url| classify_network_url(&url, configured_rules))
         .max_by_key(|rule_match| {
             (
                 shell_command_risk_rank(rule_match.risk_level),
@@ -325,6 +373,130 @@ fn configured_rule_matches(command: &str, rule: &ShellCommandRule) -> bool {
     }
 }
 
+fn classify_network_url(url: &str, configured_rules: &[NetworkRule]) -> Vec<NetworkRuleMatch> {
+    let parsed = Url::parse(url).ok();
+    let host = parsed
+        .as_ref()
+        .and_then(Url::host_str)
+        .map(|value| value.to_ascii_lowercase());
+    configured_rules
+        .iter()
+        .filter_map(|rule| classify_configured_network_rule(url, host.as_deref(), rule))
+        .collect()
+}
+
+fn classify_configured_network_rule(
+    url: &str,
+    host: Option<&str>,
+    rule: &NetworkRule,
+) -> Option<NetworkRuleMatch> {
+    if rule.rule_id.trim().is_empty() || rule.pattern.trim().is_empty() {
+        return None;
+    }
+
+    let target_value = match rule.target {
+        NetworkRuleTarget::Url => url,
+        NetworkRuleTarget::Host => host?,
+    };
+    if !configured_network_rule_matches(target_value, rule) {
+        return None;
+    }
+
+    Some(NetworkRuleMatch {
+        rule_id: rule.rule_id.trim().to_string(),
+        risk_level: rule.risk_level,
+        reason_code: if rule.reason_code.trim().is_empty() {
+            rule.rule_id.trim().to_string()
+        } else {
+            rule.reason_code.trim().to_string()
+        },
+        reason: if rule.reason.trim().is_empty() {
+            "网络请求匹配自定义策略规则".to_string()
+        } else {
+            rule.reason.trim().to_string()
+        },
+        source: rule.source,
+        target: rule.target,
+        url: url.to_string(),
+        host: host.map(str::to_string),
+    })
+}
+
+fn configured_network_rule_matches(value: &str, rule: &NetworkRule) -> bool {
+    let pattern = rule.pattern.trim();
+    match rule.match_type {
+        ShellCommandRuleMatchType::Regex => {
+            Regex::new(pattern).is_ok_and(|regex| regex.is_match(value))
+        }
+        ShellCommandRuleMatchType::Prefix => value.trim_start().starts_with(pattern),
+        ShellCommandRuleMatchType::Exact => value.trim() == pattern,
+    }
+}
+
+fn extract_network_urls(
+    tool_name: &str,
+    params: &serde_json::Value,
+    command: Option<&str>,
+) -> Vec<String> {
+    let mut urls = Vec::new();
+    if tool_catalog_entry(tool_name)
+        .is_some_and(|entry| entry.name == "WebFetch" || entry.name == "WebSearch")
+    {
+        extract_string_params(
+            params,
+            &["url", "query", "search_url", "searchUrl"],
+            &mut urls,
+        );
+    }
+    if let Some(command) = command {
+        urls.extend(extract_urls_from_command(command));
+    }
+    urls.sort();
+    urls.dedup();
+    urls
+}
+
+fn extract_string_params(params: &serde_json::Value, keys: &[&str], urls: &mut Vec<String>) {
+    let Some(object) = params.as_object() else {
+        return;
+    };
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .filter_map(serde_json::Value::as_str)
+        .for_each(|value| {
+            urls.extend(extract_urls_from_text(value));
+        });
+}
+
+fn extract_urls_from_command(command: &str) -> Vec<String> {
+    split_shell_segments(command)
+        .into_iter()
+        .filter(|segment| {
+            let command_name = segment
+                .split_whitespace()
+                .next()
+                .map(|value| value.trim_matches(|char| char == '\'' || char == '"'));
+            matches!(command_name, Some("curl" | "wget"))
+        })
+        .flat_map(extract_urls_from_text)
+        .collect()
+}
+
+fn extract_urls_from_text(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(|value| {
+            value.trim_matches(|char| {
+                matches!(
+                    char,
+                    '\'' | '"' | ',' | ')' | '(' | '[' | ']' | '{' | '}' | '<' | '>' | ';'
+                )
+            })
+        })
+        .filter(|value| value.starts_with("http://") || value.starts_with("https://"))
+        .map(str::to_string)
+        .collect()
+}
+
 fn shell_rule(
     rule_id: &'static str,
     risk_level: ShellCommandRiskLevel,
@@ -356,6 +528,15 @@ fn shell_command_source_rank(source: ShellCommandRuleSource) -> u8 {
         ShellCommandRuleSource::User => 3,
         ShellCommandRuleSource::Runtime => 4,
         ShellCommandRuleSource::Request => 5,
+    }
+}
+
+impl NetworkRuleTarget {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Url => "url",
+            Self::Host => "host",
+        }
     }
 }
 

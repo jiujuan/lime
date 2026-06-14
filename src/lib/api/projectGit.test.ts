@@ -74,6 +74,31 @@ describe("projectGit API", () => {
     });
   });
 
+  it("读取 Git diff 时应透传审查基准", async () => {
+    vi.mocked(client.readProjectGitDiff).mockResolvedValueOnce(
+      appServerResult({
+        rootPath: "/workspace",
+        repositoryRoot: "/workspace",
+        hasGitRepository: true,
+        patch: "diff --git a/README.md b/README.md\n+hello",
+        uncommittedFileCount: 1,
+      }),
+    );
+
+    await expect(
+      readProjectGitDiff("/workspace", 5, "staged", client),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        patch: expect.stringContaining("diff --git"),
+      }),
+    );
+    expect(client.readProjectGitDiff).toHaveBeenCalledWith({
+      rootPath: "/workspace",
+      contextLines: 5,
+      base: "staged",
+    });
+  });
+
   it("Git diff 响应形状异常时应 fail closed", async () => {
     vi.mocked(client.readProjectGitDiff).mockResolvedValueOnce(
       appServerResult({

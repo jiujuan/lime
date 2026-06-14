@@ -16,6 +16,7 @@ import {
   countCanvasWorkbenchChangeItemStats,
   countCanvasWorkbenchDiffStats,
   findChangeItemForSelection,
+  parseCanvasWorkbenchGitPatchToChangeItems,
 } from "./CanvasWorkbenchChangesPanelViewModel";
 import type {
   CanvasWorkbenchChangeItem,
@@ -54,6 +55,9 @@ function buildSelectedChangeDiffLines(
   if (!item) {
     return [];
   }
+  if (item.diffLines?.length) {
+    return item.diffLines;
+  }
   const currentContent = loadedContent ?? item.currentContent;
   if (item.previousContent != null && currentContent != null) {
     return buildCanvasWorkbenchDiff(item.previousContent, currentContent);
@@ -71,6 +75,16 @@ function buildGitApplyCommand(patch: string): string {
   return `git apply <<'PATCH'\n${patch.trimEnd()}\nPATCH\n`;
 }
 
+function resolveBackendPatchForCopy(
+  selectedBase: CanvasWorkbenchReviewBase,
+  backendPatch: string | null,
+  fallbackPatch: string,
+): string {
+  return selectedBase === "previousConversation"
+    ? fallbackPatch
+    : backendPatch || "";
+}
+
 export function CanvasWorkbenchChangesPanel({
   changeView,
   documentContext,
@@ -83,7 +97,6 @@ export function CanvasWorkbenchChangesPanel({
   filesPanelOpen = true,
   onToggleFilesPanel,
 }: CanvasWorkbenchChangesPanelProps) {
-  const changeItems = useMemo(() => changeView?.items ?? [], [changeView]);
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
   const [reviewMenuOpen, setReviewMenuOpen] = useState(false);
   const [baseMenuOpen, setBaseMenuOpen] = useState(false);
@@ -101,6 +114,9 @@ export function CanvasWorkbenchChangesPanel({
   const [fileFilter, setFileFilter] = useState("");
   const [reviewActionBusy, setReviewActionBusy] = useState(false);
   const [backendPatch, setBackendPatch] = useState<string | null>(null);
+  const [backendChangeItems, setBackendChangeItems] = useState<
+    CanvasWorkbenchChangeItem[]
+  >([]);
   const {
     filesPanelGridStyle,
     handleFilesPanelResizeStart,
@@ -111,6 +127,12 @@ export function CanvasWorkbenchChangesPanel({
   const [fullFileContentById, setFullFileContentById] = useState<
     Record<string, string>
   >({});
+  const selectedBaseUsesGit = selectedBase !== "previousConversation";
+  const changeItems = useMemo(
+    () =>
+      selectedBaseUsesGit ? backendChangeItems : (changeView?.items ?? []),
+    [backendChangeItems, changeView, selectedBaseUsesGit],
+  );
   const changeItemCount = changeItems.length;
   const fallbackPatch = useMemo(
     () => buildCanvasWorkbenchGitApplyPatch(changeItems),
@@ -141,7 +163,70 @@ export function CanvasWorkbenchChangesPanel({
     }
   }, [changeItems, selectedChangeId]);
 
+  const loadGitDiffBase = useCallback(
+    async (base: Exclude<CanvasWorkbenchReviewBase, "commit">) => {
+      if (base === "previousConversation") {
+        setBackendPatch(null);
+        setBackendChangeItems([]);
+        setSelectedBase(base);
+        setBaseMenuOpen(false);
+        return;
+      }
+      if (!workspaceRoot) {
+        toast.error(
+          translateWorkbench(
+            "agentChat.canvasWorkbench.coding.changes.toast.missingWorkspaceRoot",
+          ),
+        );
+        return;
+      }
+
+      setReviewActionBusy(true);
+      try {
+        const diff = await readProjectGitDiff(workspaceRoot, 3, base);
+        setBackendPatch(diff.patch);
+        setBackendChangeItems(
+          parseCanvasWorkbenchGitPatchToChangeItems(diff.patch),
+        );
+        setSelectedBase(base);
+        setBaseMenuOpen(false);
+        toast.success(
+          translateWorkbench(
+            "agentChat.canvasWorkbench.coding.changes.toast.refreshed",
+          ),
+        );
+      } catch (error) {
+        setBackendPatch(null);
+        setBackendChangeItems([]);
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : translateWorkbench(
+                "agentChat.canvasWorkbench.coding.changes.toast.refreshFailed",
+              ),
+        );
+      } finally {
+        setReviewActionBusy(false);
+      }
+    },
+    [translateWorkbench, workspaceRoot],
+  );
+
+  const handleSelectBase = useCallback(
+    (base: CanvasWorkbenchReviewBase) => {
+      if (base === "commit") {
+        return;
+      }
+      void loadGitDiffBase(base);
+    },
+    [loadGitDiffBase],
+  );
+
   const handleRefreshChanges = useCallback(async () => {
+    if (selectedBaseUsesGit && selectedBase !== "commit") {
+      await loadGitDiffBase(selectedBase);
+      return;
+    }
     if (!workspaceRoot) {
       toast.error(
         translateWorkbench(
@@ -171,10 +256,20 @@ export function CanvasWorkbenchChangesPanel({
     } finally {
       setReviewActionBusy(false);
     }
-  }, [translateWorkbench, workspaceRoot]);
+  }, [
+    loadGitDiffBase,
+    selectedBase,
+    selectedBaseUsesGit,
+    translateWorkbench,
+    workspaceRoot,
+  ]);
 
   const handleCopyGitApply = useCallback(async () => {
-    const patch = backendPatch?.trim() || fallbackPatch;
+    const patch = resolveBackendPatchForCopy(
+      selectedBase,
+      backendPatch,
+      fallbackPatch,
+    );
     if (!patch.trim()) {
       toast.error(
         translateWorkbench(
@@ -209,7 +304,7 @@ export function CanvasWorkbenchChangesPanel({
     } finally {
       setReviewActionBusy(false);
     }
-  }, [backendPatch, fallbackPatch, translateWorkbench]);
+  }, [backendPatch, fallbackPatch, selectedBase, translateWorkbench]);
 
   const handleToggleLoadFullFile = useCallback(async () => {
     if (selectedLoadFullFile) {
@@ -361,10 +456,7 @@ export function CanvasWorkbenchChangesPanel({
             setReviewMenuOpen(false);
             setBaseMenuOpen((open) => !open);
           }}
-          onSelectBase={(base) => {
-            setSelectedBase(base);
-            setBaseMenuOpen(false);
-          }}
+          onSelectBase={handleSelectBase}
           onRefreshChanges={handleRefreshChanges}
           onCopyGitApply={handleCopyGitApply}
           onToggleAutoExecute={() =>
@@ -428,7 +520,7 @@ export function CanvasWorkbenchChangesPanel({
     );
   }
 
-  if (changeView && changeItemCount === 0) {
+  if ((changeView || selectedBaseUsesGit) && changeItemCount === 0) {
     return (
       <section
         data-testid="canvas-workbench-panel-changes"
@@ -441,8 +533,7 @@ export function CanvasWorkbenchChangesPanel({
           baseMenuOpen={baseMenuOpen}
           selectedBase={selectedBase}
           filesPanelOpen={filesPanelOpen}
-          baseSelectorDisabled
-          copyGitApplyDisabled
+          copyGitApplyDisabled={!backendPatch?.trim()}
           diffViewToggleDisabled
           loadFullFileDisabled
           autoExecuteEnabled={autoExecuteEnabled}
@@ -456,8 +547,11 @@ export function CanvasWorkbenchChangesPanel({
             setBaseMenuOpen(false);
             setReviewMenuOpen((open) => !open);
           }}
-          onToggleBaseMenu={() => undefined}
-          onSelectBase={() => undefined}
+          onToggleBaseMenu={() => {
+            setReviewMenuOpen(false);
+            setBaseMenuOpen((open) => !open);
+          }}
+          onSelectBase={handleSelectBase}
           onRefreshChanges={handleRefreshChanges}
           onToggleAutoExecute={() =>
             setAutoExecuteEnabled((enabled) => !enabled)
@@ -582,10 +676,7 @@ export function CanvasWorkbenchChangesPanel({
           setReviewMenuOpen(false);
           setBaseMenuOpen((open) => !open);
         }}
-        onSelectBase={(base) => {
-          setSelectedBase(base);
-          setBaseMenuOpen(false);
-        }}
+        onSelectBase={handleSelectBase}
         onRefreshChanges={handleRefreshChanges}
         onToggleAutoExecute={() => setAutoExecuteEnabled((enabled) => !enabled)}
         onToggleCollapseContext={() =>

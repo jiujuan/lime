@@ -13860,9 +13860,41 @@
       "title": "ProjectGitBranchCreateParams",
       "type": "object"
     },
+    "ProjectGitDiffBase": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": [
+        "branch",
+        "previousConversation",
+        "staged",
+        "unstaged"
+      ],
+      "title": "ProjectGitDiffBase",
+      "type": "string"
+    },
     "ProjectGitDiffParams": {
+      "$defs": {
+        "ProjectGitDiffBase": {
+          "enum": [
+            "branch",
+            "previousConversation",
+            "staged",
+            "unstaged"
+          ],
+          "type": "string"
+        }
+      },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "base": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectGitDiffBase"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "contextLines": {
           "format": "uint32",
           "minimum": 0,

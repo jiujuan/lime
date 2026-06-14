@@ -10,4 +10,6 @@ pub use sandbox::*;
 pub use service::*;
 
 #[cfg(test)]
+mod network_tests;
+#[cfg(test)]
 mod tests;

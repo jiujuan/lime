@@ -18,10 +18,10 @@ importers:
         specifier: 0.1.1
         version: link:packages/agent-runtime-client
       '@limecloud/agent-runtime-projection':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:packages/agent-runtime-projection
       '@limecloud/agent-runtime-ui':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:packages/agent-runtime-ui
       '@limecloud/agent-ui-contracts':
         specifier: 0.1.0
@@ -375,7 +375,7 @@ importers:
         specifier: 0.1.0
         version: link:../agent-ui-contracts
       '@limecloud/app-server-client':
-        specifier: 1.67.0
+        specifier: 1.68.0
         version: link:../app-server-client
 
   packages/agent-runtime-projection:
@@ -397,7 +397,7 @@ importers:
         version: 18.3.1(react@18.3.1)
     devDependencies:
       '@limecloud/agent-runtime-projection':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../agent-runtime-projection
 
   packages/agent-ui-contracts: {}

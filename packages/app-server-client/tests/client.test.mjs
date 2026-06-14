@@ -1602,6 +1602,7 @@ test("builds file system requests with current methods", () => {
   const gitDiff = client.readProjectGitDiff({
     rootPath: "/workspace",
     contextLines: 5,
+    base: "staged",
   });
   const gitCheckout = client.checkoutProjectGitBranch({
     rootPath: "/workspace",
@@ -1681,6 +1682,7 @@ test("builds file system requests with current methods", () => {
   assert.deepEqual(gitDiff.params, {
     rootPath: "/workspace",
     contextLines: 5,
+    base: "staged",
   });
   assert.equal(gitCheckout.id, 9);
   assert.equal(gitCheckout.method, METHOD_PROJECT_GIT_BRANCH_CHECKOUT);
@@ -3104,6 +3106,7 @@ test("connection wraps file system responses", async () => {
   const gitDiffResult = await connection.readProjectGitDiff({
     rootPath: "/workspace",
     contextLines: 5,
+    base: "branch",
   });
   const gitCheckoutResult = await connection.checkoutProjectGitBranch({
     rootPath: "/workspace",
@@ -3154,6 +3157,7 @@ test("connection wraps file system responses", async () => {
   assert.deepEqual(sent[7].params, {
     rootPath: "/workspace",
     contextLines: 5,
+    base: "branch",
   });
   assert.equal(sent[8].method, METHOD_PROJECT_GIT_BRANCH_CHECKOUT);
   assert.deepEqual(sent[8].params, {

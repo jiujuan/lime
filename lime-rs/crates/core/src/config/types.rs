@@ -3,6 +3,7 @@
 //! 定义 Lime 的配置结构，支持 YAML 和 JSON 序列化/反序列化
 //! 保持与旧版 JSON 配置的向后兼容性
 
+use super::tool_execution::ToolExecutionPolicyConfig;
 use crate::models::injection_types::{InjectionMode, InjectionRule};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -538,132 +539,6 @@ impl Default for WorkspaceSandboxConfig {
             strict: default_workspace_sandbox_strict(),
             notify_on_fallback: default_workspace_sandbox_notify_on_fallback(),
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionWarningPolicyConfig {
-    #[default]
-    None,
-    ShellCommandRisk,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionRestrictionProfileConfig {
-    #[default]
-    None,
-    WorkspacePathRequired,
-    WorkspacePathOptional,
-    WorkspaceAbsolutePathRequired,
-    WorkspaceShellCommand,
-    AnalyzeImageInput,
-    SafeHttpsUrlRequired,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionSandboxProfileConfig {
-    #[default]
-    None,
-    WorkspaceCommand,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionCommandRiskLevelConfig {
-    Low,
-    #[default]
-    Medium,
-    High,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionCommandRuleMatchTypeConfig {
-    #[default]
-    Regex,
-    Prefix,
-    Exact,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct ToolExecutionCommandRuleConfig {
-    #[serde(default, alias = "ruleId", alias = "id")]
-    pub rule_id: String,
-    #[serde(default, alias = "matchType")]
-    pub match_type: ToolExecutionCommandRuleMatchTypeConfig,
-    #[serde(default)]
-    pub pattern: String,
-    #[serde(default, alias = "riskLevel")]
-    pub risk_level: ToolExecutionCommandRiskLevelConfig,
-    #[serde(default, alias = "reasonCode")]
-    pub reason_code: String,
-    #[serde(default)]
-    pub reason: String,
-}
-
-impl ToolExecutionCommandRuleConfig {
-    pub fn is_default(value: &Self) -> bool {
-        value.rule_id.is_empty()
-            && value.pattern.is_empty()
-            && value.match_type == ToolExecutionCommandRuleMatchTypeConfig::Regex
-            && value.risk_level == ToolExecutionCommandRiskLevelConfig::Medium
-            && value.reason_code.is_empty()
-            && value.reason.is_empty()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct ToolExecutionOverrideConfig {
-    #[serde(
-        default,
-        alias = "warningPolicy",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub warning_policy: Option<ToolExecutionWarningPolicyConfig>,
-    #[serde(
-        default,
-        alias = "restrictionProfile",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub restriction_profile: Option<ToolExecutionRestrictionProfileConfig>,
-    #[serde(
-        default,
-        alias = "sandboxProfile",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub sandbox_profile: Option<ToolExecutionSandboxProfileConfig>,
-}
-
-impl ToolExecutionOverrideConfig {
-    pub fn is_default(value: &Self) -> bool {
-        value.warning_policy.is_none()
-            && value.restriction_profile.is_none()
-            && value.sandbox_profile.is_none()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct ToolExecutionPolicyConfig {
-    #[serde(
-        default,
-        alias = "toolOverrides",
-        skip_serializing_if = "HashMap::is_empty"
-    )]
-    pub tool_overrides: HashMap<String, ToolExecutionOverrideConfig>,
-    #[serde(
-        default,
-        alias = "shellCommandRules",
-        skip_serializing_if = "Vec::is_empty"
-    )]
-    pub shell_command_rules: Vec<ToolExecutionCommandRuleConfig>,
-}
-
-impl ToolExecutionPolicyConfig {
-    pub fn is_default(value: &Self) -> bool {
-        value.tool_overrides.is_empty() && value.shell_command_rules.is_empty()
     }
 }
 
@@ -2869,6 +2744,13 @@ pub struct UserProfile {
 
 #[cfg(test)]
 mod unit_tests {
+    use super::super::tool_execution::{
+        ToolExecutionCommandRiskLevelConfig, ToolExecutionCommandRuleConfig,
+        ToolExecutionCommandRuleMatchTypeConfig, ToolExecutionNetworkRuleConfig,
+        ToolExecutionNetworkRuleTargetConfig, ToolExecutionOverrideConfig,
+        ToolExecutionRestrictionProfileConfig, ToolExecutionSandboxProfileConfig,
+        ToolExecutionWarningPolicyConfig,
+    };
     use super::*;
 
     #[test]
@@ -2934,6 +2816,17 @@ mod unit_tests {
                     "reasonCode": "release_publish_command",
                     "reason": "命令会发布 crate"
                 }
+            ],
+            "networkRules": [
+                {
+                    "ruleId": "block_internal_download",
+                    "matchType": "prefix",
+                    "target": "host",
+                    "pattern": "internal.",
+                    "riskLevel": "high",
+                    "reasonCode": "internal_network_target",
+                    "reason": "请求访问内部网络域名"
+                }
             ]
         });
 
@@ -2974,6 +2867,16 @@ mod unit_tests {
             parsed.shell_command_rules[0].risk_level,
             ToolExecutionCommandRiskLevelConfig::High
         );
+        assert_eq!(parsed.network_rules.len(), 1);
+        assert_eq!(parsed.network_rules[0].rule_id, "block_internal_download");
+        assert_eq!(
+            parsed.network_rules[0].target,
+            ToolExecutionNetworkRuleTargetConfig::Host
+        );
+        assert_eq!(
+            parsed.network_rules[0].match_type,
+            ToolExecutionCommandRuleMatchTypeConfig::Prefix
+        );
     }
 
     #[test]
@@ -2996,6 +2899,15 @@ mod unit_tests {
                 risk_level: ToolExecutionCommandRiskLevelConfig::High,
                 reason_code: "release_publish_command".to_string(),
                 reason: "命令会发布 crate".to_string(),
+            }],
+            network_rules: vec![ToolExecutionNetworkRuleConfig {
+                rule_id: "block_internal_download".to_string(),
+                match_type: ToolExecutionCommandRuleMatchTypeConfig::Prefix,
+                target: ToolExecutionNetworkRuleTargetConfig::Host,
+                pattern: "internal.".to_string(),
+                risk_level: ToolExecutionCommandRiskLevelConfig::High,
+                reason_code: "internal_network_target".to_string(),
+                reason: "请求访问内部网络域名".to_string(),
             }],
         };
 

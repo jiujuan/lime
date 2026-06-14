@@ -146,8 +146,7 @@ vi.mock("react-i18next", () => ({
         "agentChat.canvasWorkbench.projectFiles.openTitle": "打开文件",
         "agentChat.canvasWorkbench.projectFiles.openHint":
           "从右侧项目目录树中选择文件进行预览。",
-        "agentChat.canvasWorkbench.projectFiles.resizeTree":
-          "调整项目文件宽度",
+        "agentChat.canvasWorkbench.projectFiles.resizeTree": "调整项目文件宽度",
         "agentChat.canvasWorkbench.browser.refresh": "刷新浏览器标签",
         "agentChat.canvasWorkbench.browser.back": "后退",
         "agentChat.canvasWorkbench.browser.forward": "前进",
@@ -651,7 +650,8 @@ beforeEach(() => {
     rootPath: "/workspace",
     repositoryRoot: "/workspace",
     hasGitRepository: true,
-    patch: "diff --git a/src/App.tsx b/src/App.tsx\n+export function App() {}",
+    patch:
+      "diff --git a/src/App.tsx b/src/App.tsx\n--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -0,0 +1 @@\n+export function App() {}",
     uncommittedFileCount: 1,
   });
   const embeddedBrowserState = {

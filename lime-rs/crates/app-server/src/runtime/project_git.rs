@@ -91,9 +91,15 @@ fn project_git_diff_base_to_service(
     base: ProjectGitDiffBase,
 ) -> lime_services::project_git_service::ProjectGitDiffBase {
     match base {
-        ProjectGitDiffBase::Unstaged => lime_services::project_git_service::ProjectGitDiffBase::Unstaged,
-        ProjectGitDiffBase::Staged => lime_services::project_git_service::ProjectGitDiffBase::Staged,
-        ProjectGitDiffBase::Branch => lime_services::project_git_service::ProjectGitDiffBase::Branch,
+        ProjectGitDiffBase::Unstaged => {
+            lime_services::project_git_service::ProjectGitDiffBase::Unstaged
+        }
+        ProjectGitDiffBase::Staged => {
+            lime_services::project_git_service::ProjectGitDiffBase::Staged
+        }
+        ProjectGitDiffBase::Branch => {
+            lime_services::project_git_service::ProjectGitDiffBase::Branch
+        }
         ProjectGitDiffBase::PreviousConversation => {
             lime_services::project_git_service::ProjectGitDiffBase::PreviousConversation
         }

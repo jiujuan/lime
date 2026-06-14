@@ -129,6 +129,59 @@ describe("CanvasWorkbenchLayout coding mode", () => {
     expectWorkbenchTabNotInNewMenu(container, "HTML");
     expectWorkbenchTabNotInNewMenu(container, "Code");
     expectWorkbenchTabNotInNewMenu(container, "审查");
+    mockReadProjectGitDiff.mockResolvedValueOnce({
+      rootPath: "/workspace",
+      repositoryRoot: "/workspace",
+      hasGitRepository: true,
+      patch:
+        "diff --git a/src/App.tsx b/src/App.tsx\n--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -1 +1 @@\n-old\n+new",
+      uncommittedFileCount: 1,
+    });
+    clickByAriaLabel(container, "选择审查基准");
+    await flushEffects();
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-changes-base-menu"]',
+      ),
+    ).not.toBeNull();
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="canvas-workbench-changes-base-option-unstaged"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flushEffects();
+    expect(mockReadProjectGitDiff).toHaveBeenCalledWith(
+      "/workspace",
+      3,
+      "unstaged",
+    );
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-changes-base-menu"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector('button[aria-label="选择审查基准"]')?.textContent,
+    ).toContain("未暂存");
+    expect(container.textContent).toContain("App.tsx");
+    expect(container.textContent).toContain("+1");
+    expect(container.textContent).toContain("-1");
+    clickByAriaLabel(container, "选择审查基准");
+    await flushEffects();
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="canvas-workbench-changes-base-option-previousConversation"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flushEffects();
+    expect(
+      container.querySelector('button[aria-label="选择审查基准"]')?.textContent,
+    ).toContain("上轮对话");
+    expect(container.textContent).toContain("还没有可对比的文件变更。");
     clickByAriaLabel(container, "更多审查操作");
     await flushEffects();
     expect(
@@ -841,7 +894,11 @@ describe("CanvasWorkbenchLayout coding mode", () => {
       (refreshButton as HTMLButtonElement).click();
     });
     await flushEffects();
-    expect(mockReadProjectGitDiff).toHaveBeenCalledWith("/workspace", 3);
+    expect(mockReadProjectGitDiff).toHaveBeenCalledWith(
+      "/workspace",
+      3,
+      "unstaged",
+    );
     expect(mockToast.success).toHaveBeenCalledWith("已刷新变更");
     expect(
       container.querySelector(
@@ -867,6 +924,20 @@ describe("CanvasWorkbenchLayout coding mode", () => {
       expect.stringContaining("diff --git a/src/App.tsx b/src/App.tsx"),
     );
     expect(mockToast.success).toHaveBeenCalledWith("已复制 git apply 命令");
+
+    clickByAriaLabel(container, "选择审查基准");
+    await flushEffects();
+    act(() => {
+      (
+        container.querySelector(
+          '[data-testid="canvas-workbench-changes-base-option-previousConversation"]',
+        ) as HTMLButtonElement
+      ).click();
+    });
+    await flushEffects();
+    expect(
+      container.querySelector('button[aria-label="选择审查基准"]')?.textContent,
+    ).toContain("上轮对话");
 
     clickByAriaLabel(container, "更多审查操作");
     await flushEffects();

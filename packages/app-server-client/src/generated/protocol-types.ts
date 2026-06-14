@@ -1988,7 +1988,10 @@ export interface ProjectGitBranchCreateParams {
   rootPath: string;
 }
 
+export type ProjectGitDiffBase = "branch" | "previousConversation" | "staged" | "unstaged";
+
 export interface ProjectGitDiffParams {
+  base?: ProjectGitDiffBase | null;
   contextLines?: number | null;
   rootPath: string;
 }

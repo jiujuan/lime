@@ -5,6 +5,7 @@ import {
   APP_SERVER_METHOD_PROJECT_GIT_DIFF,
   APP_SERVER_METHOD_PROJECT_GIT_STATUS,
   APP_SERVER_METHOD_PROJECT_GIT_WORKTREE_CREATE,
+  type AppServerProjectGitDiffBase,
   type AppServerProjectGitBranchCheckoutResponse,
   type AppServerProjectGitBranchCreateResponse,
   type AppServerProjectGitDiffResponse,
@@ -14,6 +15,7 @@ import {
 
 export type ProjectGitStatus = AppServerProjectGitStatusResponse;
 export type ProjectGitDiff = AppServerProjectGitDiffResponse;
+export type ProjectGitDiffBase = AppServerProjectGitDiffBase;
 export type ProjectGitWorktree = AppServerProjectGitWorktreeCreateResponse;
 
 export type ProjectGitAppServerClient = Pick<
@@ -87,14 +89,32 @@ export async function readProjectGitStatus(
   return response.result;
 }
 
+export function readProjectGitDiff(
+  rootPath: string,
+  contextLines?: number,
+  client?: ProjectGitAppServerClient,
+): Promise<ProjectGitDiff>;
+export function readProjectGitDiff(
+  rootPath: string,
+  contextLines: number | undefined,
+  base: ProjectGitDiffBase,
+  client?: ProjectGitAppServerClient,
+): Promise<ProjectGitDiff>;
 export async function readProjectGitDiff(
   rootPath: string,
   contextLines = 3,
-  client: ProjectGitAppServerClient = createProjectGitAppServerClient(),
+  baseOrClient?: ProjectGitDiffBase | ProjectGitAppServerClient,
+  maybeClient?: ProjectGitAppServerClient,
 ): Promise<ProjectGitDiff> {
+  const base = typeof baseOrClient === "string" ? baseOrClient : undefined;
+  const client =
+    typeof baseOrClient === "string"
+      ? maybeClient || createProjectGitAppServerClient()
+      : baseOrClient || createProjectGitAppServerClient();
   const response = await client.readProjectGitDiff({
     rootPath,
     contextLines,
+    ...(base ? { base } : {}),
   });
   assertProjectGitDiff(APP_SERVER_METHOD_PROJECT_GIT_DIFF, response.result);
   return response.result;

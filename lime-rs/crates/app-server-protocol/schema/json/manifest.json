@@ -1312,6 +1312,7 @@
       "PlatformInfo",
       "ProjectGitBranchCheckoutParams",
       "ProjectGitBranchCreateParams",
+      "ProjectGitDiffBase",
       "ProjectGitDiffParams",
       "ProjectGitDiffResponse",
       "ProjectGitStatusParams",

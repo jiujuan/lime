@@ -657,6 +657,7 @@ describe("App Server API", () => {
     const diff = await client.readProjectGitDiff({
       rootPath: "/workspace",
       contextLines: 5,
+      base: "branch",
     });
 
     expect(diff.result.patch).toContain("diff --git");
@@ -669,6 +670,7 @@ describe("App Server API", () => {
             params: {
               rootPath: "/workspace",
               contextLines: 5,
+              base: "branch",
             },
           }),
         ],

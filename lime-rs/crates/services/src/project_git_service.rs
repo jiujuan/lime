@@ -137,7 +137,7 @@ fn read_unstaged_patch(root: &Path, unified_arg: &str) -> Result<String, String>
         ],
     )?;
     let untracked_patch = read_untracked_patch(root, unified_arg)?;
-    Ok(format!("{tracked_patch}{untracked_patch}"))
+    Ok(join_patch_sections([tracked_patch, untracked_patch]))
 }
 
 fn read_untracked_patch(root: &Path, unified_arg: &str) -> Result<String, String> {
@@ -145,7 +145,11 @@ fn read_untracked_patch(root: &Path, unified_arg: &str) -> Result<String, String
     let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
     let mut patch = String::new();
 
-    for file in output.lines().map(str::trim).filter(|file| !file.is_empty()) {
+    for file in output
+        .lines()
+        .map(str::trim)
+        .filter(|file| !file.is_empty())
+    {
         let diff = git_diff_output(
             root,
             &[
@@ -162,10 +166,28 @@ fn read_untracked_patch(root: &Path, unified_arg: &str) -> Result<String, String
                 file,
             ],
         )?;
-        patch.push_str(&diff);
+        append_patch_section(&mut patch, &diff);
     }
 
     Ok(patch)
+}
+
+fn join_patch_sections(sections: impl IntoIterator<Item = String>) -> String {
+    let mut patch = String::new();
+    for section in sections {
+        append_patch_section(&mut patch, &section);
+    }
+    patch
+}
+
+fn append_patch_section(patch: &mut String, section: &str) {
+    if section.trim().is_empty() {
+        return;
+    }
+    if !patch.is_empty() {
+        patch.push('\n');
+    }
+    patch.push_str(section.trim());
 }
 
 fn read_branch_patch(
@@ -202,7 +224,9 @@ fn resolve_default_base_branch(status: &ProjectGitStatus) -> Option<&str> {
     let current = status.current_branch.as_deref();
     ["main", "master", "trunk", "develop"]
         .into_iter()
-        .find(|branch| current != Some(*branch) && status.branches.iter().any(|item| item == branch))
+        .find(|branch| {
+            current != Some(*branch) && status.branches.iter().any(|item| item == branch)
+        })
         .or_else(|| {
             status
                 .branches
@@ -225,7 +249,16 @@ fn resolve_upstream_if_remote_ahead(root: &Path, branch: &str) -> Result<Option<
     else {
         return Ok(None);
     };
-    let Some(counts) = git_output_optional(root, &["rev-list", "--left-right", "--count", &format!("{branch}...{upstream}")])? else {
+    let Some(counts) = git_output_optional(
+        root,
+        &[
+            "rev-list",
+            "--left-right",
+            "--count",
+            &format!("{branch}...{upstream}"),
+        ],
+    )?
+    else {
         return Ok(None);
     };
     let mut parts = counts.split_whitespace();
