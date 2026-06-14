@@ -1,6 +1,9 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { CanvasWorkbenchDiffLine } from "../../../utils/canvasWorkbenchDiff";
+import type {
+  CanvasWorkbenchDiffLine,
+  CanvasWorkbenchDisplayedDiffLine,
+} from "../../../utils/canvasWorkbenchDiff";
 import { CanvasWorkbenchDiffState } from "./CanvasWorkbenchDiffState";
 import { DiffStats } from "./CanvasWorkbenchChangeStats";
 import type {
@@ -18,7 +21,7 @@ interface CanvasWorkbenchChangeDetailPanelProps {
   selectedChangeItem: CanvasWorkbenchChangeItem | undefined;
   selectedItemStats: CanvasWorkbenchChangeDiffStats;
   latestCheckpointPath: string | null;
-  visibleDiffLines: CanvasWorkbenchDiffLine[];
+  visibleDiffLines: CanvasWorkbenchDisplayedDiffLine[];
   selectedDiffLines: CanvasWorkbenchDiffLine[];
   panelClassName: string;
   mutedPanelClassName: string;
