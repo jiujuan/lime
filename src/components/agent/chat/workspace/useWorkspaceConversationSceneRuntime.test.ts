@@ -413,9 +413,22 @@ describe("useWorkspaceConversationSceneRuntime", () => {
           status: "in_progress",
           started_at: "2026-04-09T10:00:00.000Z",
           updated_at: "2026-04-09T10:00:01.000Z",
-          type: "tool_call",
-          tool_name: "Skill(url_parse)",
-          arguments: { url: "https://example.com" },
+          type: "command_execution",
+          command: "lime task create url-parse --json",
+          cwd: "/tmp/project-1",
+        },
+        {
+          id: "action-1",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 2,
+          status: "in_progress",
+          started_at: "2026-04-09T10:00:01.000Z",
+          updated_at: "2026-04-09T10:00:02.000Z",
+          type: "request_user_input",
+          request_id: "req-1",
+          action_type: "elicitation",
+          prompt: "请补充导出目录",
         },
       ],
       pendingActions: [
@@ -754,6 +767,23 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     );
   });
 
+  it("右侧工作台应优先使用会话 working dir，保留左侧项目根不变", () => {
+    const params = createBaseParams({
+      projectRootPath: "/tmp/project-record-root",
+      canvasWorkbenchRootPath: "/tmp/session-working-dir",
+    });
+
+    const sceneProps = getRenderedSceneProps(params);
+
+    expect(sceneProps.projectRootPath).toBe("/tmp/project-record-root");
+    expect(sceneProps.canvasWorkbenchLayoutProps.workspaceRoot).toBe(
+      "/tmp/session-working-dir",
+    );
+    expect(sceneProps.canvasWorkbenchLayoutProps.workspaceView.tabBadge).toBe(
+      "session-working-dir",
+    );
+  });
+
   it("运行时输出和文件信号应启用工作台模式并透出输出/日志入口", async () => {
     const openChangedFile = vi.fn(async () => undefined);
     const handleSendFromEmptyState = vi.fn();
@@ -866,18 +896,20 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(canvasProps.changeView?.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "item-file-index",
+          id: "coding_thread_item_item-file-index",
           path: "index.html",
           displayName: "index.html",
           status: "completed",
+          changeKind: "modified",
           checkpointPath: "index.html",
-          checkpointLabel: "v2",
+          checkpointLabel: "snapshot",
         }),
         expect.objectContaining({
-          id: "item-file-app",
+          id: "coding_thread_item_item-file-app",
           path: "src/App.tsx",
           displayName: "App.tsx",
           status: "in_progress",
+          changeKind: "modified",
         }),
       ]),
     );
@@ -897,6 +929,21 @@ describe("useWorkspaceConversationSceneRuntime", () => {
 
     expect(canvasProps.workbenchMode).toBe("default");
     expect(canvasProps.sessionView).toBeNull();
+    expect(canvasProps.outputView).toBeNull();
+    expect(canvasProps.logView).toBeNull();
+    expect(canvasProps.changeView).toBeNull();
+  });
+
+  it("任务中心无运行时输出时仍应使用 coding 工作台 chrome 暴露审查入口", () => {
+    const sceneProps = getRenderedSceneProps(
+      createBaseParams({
+        executionStrategy: "react",
+        navbarContextVariant: "task-center",
+      }),
+    );
+    const canvasProps = sceneProps.canvasWorkbenchLayoutProps;
+
+    expect(canvasProps.workbenchMode).toBe("coding");
     expect(canvasProps.outputView).toBeNull();
     expect(canvasProps.logView).toBeNull();
     expect(canvasProps.changeView).toBeNull();

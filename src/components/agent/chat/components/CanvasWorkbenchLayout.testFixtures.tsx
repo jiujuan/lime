@@ -1,16 +1,10 @@
-/* eslint-disable react-refresh/only-export-components */
 import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
-import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { Artifact } from "@/lib/artifact/types";
 import type { TaskFile } from "./TaskFiles";
-import {
-  CanvasWorkbenchLayout,
-  type CanvasWorkbenchPreviewTarget,
-} from "./CanvasWorkbenchLayout";
-import type { ArtifactWorkbenchDocumentController } from "../workspace/artifactWorkbenchDocument";
+import { CanvasWorkbenchLayout } from "./CanvasWorkbenchLayout";
 
 type MockResizeObserverCallback = (
   entries: Array<{
@@ -23,25 +17,81 @@ type MockResizeObserverCallback = (
   observer: unknown,
 ) => void;
 
-const hoisted = vi.hoisted(
-  () => ({
-    mockListDirectory: vi.fn(),
-    mockToast: {
-      success: vi.fn(),
-      error: vi.fn(),
-      info: vi.fn(),
-    },
-    resizeObserverState: {
-      width: 1280,
-      observers: [] as Array<{
-        callback: MockResizeObserverCallback;
-        target: Element | null;
-      }>,
-    },
-  }),
-);
+const hoisted = vi.hoisted(() => ({
+  mockListDirectory: vi.fn(),
+  mockReadProjectGitDiff: vi.fn(),
+  mockDestroyEmbeddedBrowserView: vi.fn(),
+  mockGoBackEmbeddedBrowserView: vi.fn(),
+  mockGoForwardEmbeddedBrowserView: vi.fn(),
+  mockListenEmbeddedBrowserViewLoadFailed: vi.fn(),
+  mockListenEmbeddedBrowserViewState: vi.fn(),
+  mockMountEmbeddedBrowserView: vi.fn(),
+  mockNavigateEmbeddedBrowserView: vi.fn(),
+  mockIsEmbeddedBrowserHostAvailable: vi.fn(),
+  mockReloadEmbeddedBrowserView: vi.fn(),
+  mockSetEmbeddedBrowserViewBounds: vi.fn(),
+  mockOpenExternalUrlWithSystemBrowser: vi.fn(),
+  mockKillProjectShellSession: vi.fn(),
+  mockListenProjectShellSessionEvents: vi.fn(),
+  mockResizeProjectShellSession: vi.fn(),
+  mockStartProjectShellSession: vi.fn(),
+  mockWriteProjectShellSession: vi.fn(),
+  mockFitAddonFit: vi.fn(),
+  mockXtermDisposeInput: vi.fn(),
+  mockXtermOnDataHandlers: [] as Array<(data: string) => void>,
+  mockXtermLoadAddon: vi.fn(),
+  mockXtermTerminalOptions: [] as Array<Record<string, unknown>>,
+  mockToast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
+  resizeObserverState: {
+    width: 1280,
+    observers: [] as Array<{
+      callback: MockResizeObserverCallback;
+      target: Element | null;
+    }>,
+  },
+}));
 
 export const mockListDirectory = hoisted.mockListDirectory;
+export const mockReadProjectGitDiff = hoisted.mockReadProjectGitDiff;
+export const mockDestroyEmbeddedBrowserView =
+  hoisted.mockDestroyEmbeddedBrowserView;
+export const mockGoBackEmbeddedBrowserView =
+  hoisted.mockGoBackEmbeddedBrowserView;
+export const mockGoForwardEmbeddedBrowserView =
+  hoisted.mockGoForwardEmbeddedBrowserView;
+export const mockListenEmbeddedBrowserViewLoadFailed =
+  hoisted.mockListenEmbeddedBrowserViewLoadFailed;
+export const mockListenEmbeddedBrowserViewState =
+  hoisted.mockListenEmbeddedBrowserViewState;
+export const mockMountEmbeddedBrowserView =
+  hoisted.mockMountEmbeddedBrowserView;
+export const mockNavigateEmbeddedBrowserView =
+  hoisted.mockNavigateEmbeddedBrowserView;
+export const mockIsEmbeddedBrowserHostAvailable =
+  hoisted.mockIsEmbeddedBrowserHostAvailable;
+export const mockReloadEmbeddedBrowserView =
+  hoisted.mockReloadEmbeddedBrowserView;
+export const mockSetEmbeddedBrowserViewBounds =
+  hoisted.mockSetEmbeddedBrowserViewBounds;
+export const mockOpenExternalUrlWithSystemBrowser =
+  hoisted.mockOpenExternalUrlWithSystemBrowser;
+export const mockKillProjectShellSession = hoisted.mockKillProjectShellSession;
+export const mockListenProjectShellSessionEvents =
+  hoisted.mockListenProjectShellSessionEvents;
+export const mockResizeProjectShellSession =
+  hoisted.mockResizeProjectShellSession;
+export const mockStartProjectShellSession =
+  hoisted.mockStartProjectShellSession;
+export const mockWriteProjectShellSession =
+  hoisted.mockWriteProjectShellSession;
+export const mockFitAddonFit = hoisted.mockFitAddonFit;
+export const mockXtermOnDataHandlers = hoisted.mockXtermOnDataHandlers;
+export const mockXtermLoadAddon = hoisted.mockXtermLoadAddon;
+export const mockXtermTerminalOptions = hoisted.mockXtermTerminalOptions;
 export const mockToast = hoisted.mockToast;
 const resizeObserverState = hoisted.resizeObserverState;
 
@@ -72,12 +122,60 @@ vi.mock("react-i18next", () => ({
         "agentChat.canvasWorkbench.tabs.generated": "生成",
         "agentChat.canvasWorkbench.tabs.tasks": "任务",
         "agentChat.canvasWorkbench.tabs.sessionMain": "结果",
+        "agentChat.canvasWorkbench.tabs.newTabAria": "打开工作台切换菜单",
         "agentChat.canvasWorkbench.tabs.switchAria": `切换画布标签-${String(
           options?.label ?? "",
         )}`,
-        "agentChat.canvasWorkbench.tabs.closeFileAria": `关闭文件标签-${String(
+        "agentChat.canvasWorkbench.tabs.newToolAria": `新建工作台标签-${String(
           options?.label ?? "",
         )}`,
+        "agentChat.canvasWorkbench.tabs.closeAria": `关闭工作台标签-${String(
+          options?.label ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.newTabs.terminal": "终端",
+        "agentChat.canvasWorkbench.newTabs.browser": "浏览器",
+        "agentChat.canvasWorkbench.newTabs.files": "文件",
+        "agentChat.canvasWorkbench.newTabs.terminalTab": "终端",
+        "agentChat.canvasWorkbench.newTabs.browserTab": "新选项卡",
+        "agentChat.canvasWorkbench.newTabs.filesTab": "打开文件",
+        "agentChat.canvasWorkbench.projectFiles.treeTitle": "项目文件",
+        "agentChat.canvasWorkbench.projectFiles.empty":
+          "当前没有绑定可浏览的项目目录。",
+        "agentChat.canvasWorkbench.projectFiles.unavailable":
+          "当前项目目录不可用，暂时无法浏览文件。",
+        "agentChat.canvasWorkbench.projectFiles.openTitle": "打开文件",
+        "agentChat.canvasWorkbench.projectFiles.openHint":
+          "从右侧项目目录树中选择文件进行预览。",
+        "agentChat.canvasWorkbench.projectFiles.resizeTree":
+          "调整项目文件宽度",
+        "agentChat.canvasWorkbench.browser.refresh": "刷新浏览器标签",
+        "agentChat.canvasWorkbench.browser.back": "后退",
+        "agentChat.canvasWorkbench.browser.forward": "前进",
+        "agentChat.canvasWorkbench.browser.address": "输入网址或搜索",
+        "agentChat.canvasWorkbench.browser.addressPlaceholder":
+          "输入网址或搜索",
+        "agentChat.canvasWorkbench.browser.title": "新选项卡",
+        "agentChat.canvasWorkbench.browser.loading": "正在打开网页...",
+        "agentChat.canvasWorkbench.browser.empty":
+          "浏览器标签已打开。接入网页预览后将在这里显示页面内容。",
+        "agentChat.canvasWorkbench.browser.openExternal": "在系统浏览器打开",
+        "agentChat.canvasWorkbench.browser.openExternalFailed": `系统浏览器打开失败：${String(
+          options?.message ?? "",
+        )}`,
+        "agentChat.canvasWorkbench.browser.loadFailedTitle": "网页加载失败",
+        "agentChat.canvasWorkbench.browser.hostUnavailableTitle":
+          "需要桌面宿主",
+        "agentChat.canvasWorkbench.browser.hostUnavailableBody":
+          "内嵌网页通过 Electron 原生浏览器视图加载。请在桌面应用或最新开发宿主中打开，普通浏览器预览不会伪造网页内容。",
+        "agentChat.canvasWorkbench.title.fallback": "工作台",
+        "agentChat.canvasWorkbench.tools.columns": "切换列布局",
+        "agentChat.canvasWorkbench.tools.editor": "编辑器",
+        "agentChat.canvasWorkbench.tools.more": "更多工具",
+        "agentChat.canvasWorkbench.tools.outline": "大纲",
+        "agentChat.canvasWorkbench.tools.search": "搜索文件",
+        "agentChat.canvasWorkbench.window.fullscreen": "进入全屏",
+        "agentChat.canvasWorkbench.window.minimize": "最小化",
+        "agentChat.canvasWorkbench.window.sidebar": "显示/隐藏侧边栏 ⌥⌘B",
         "agentChat.canvasWorkbench.workspaceFile.binaryUnsupported":
           "该文件为二进制内容，暂不支持画布文本预览。",
         "agentChat.canvasWorkbench.workspaceFile.readFailed": "读取文件失败",
@@ -113,27 +211,44 @@ vi.mock("react-i18next", () => ({
         "agentChat.canvasWorkbench.actions.revealPath": "显示位置",
         "agentChat.canvasWorkbench.actions.openPath": "打开",
         "agentChat.canvasWorkbench.actions.download": "下载",
-        "agentChat.canvasWorkbench.coding.tabs.preview": "预览",
         "agentChat.canvasWorkbench.coding.tabs.files": "文件",
-        "agentChat.canvasWorkbench.coding.tabs.changes": "变更",
+        "agentChat.canvasWorkbench.coding.tabs.changes": "审查",
+        "agentChat.canvasWorkbench.coding.tabs.markdown": "Markdown",
+        "agentChat.canvasWorkbench.coding.tabs.html": "HTML",
+        "agentChat.canvasWorkbench.coding.tabs.code": "Code",
         "agentChat.canvasWorkbench.coding.tabs.outputs": "输出",
         "agentChat.canvasWorkbench.coding.tabs.logs": "日志",
         "agentChat.canvasWorkbench.coding.preview.htmlBadge": "HTML",
-        "agentChat.canvasWorkbench.coding.preview.empty":
-          "还没有可预览的编程结果。",
-        "agentChat.canvasWorkbench.coding.preview.staticHtmlHint":
-          "当前展示静态 HTML 预览。",
-        "agentChat.canvasWorkbench.coding.preview.toolbar.refresh": "刷新预览",
-        "agentChat.canvasWorkbench.coding.preview.toolbar.address": "预览地址",
-        "agentChat.canvasWorkbench.coding.preview.toolbar.staticHtml":
-          "静态 HTML",
-        "agentChat.canvasWorkbench.coding.preview.toolbar.ready": "预览就绪",
-        "agentChat.canvasWorkbench.coding.preview.toolbar.enterFullscreen":
-          "全屏预览",
-        "agentChat.canvasWorkbench.coding.preview.toolbar.exitFullscreen":
-          "退出全屏",
+        "agentChat.canvasWorkbench.coding.preview.mode.empty":
+          "还没有可预览的文件内容。",
+        "agentChat.canvasWorkbench.coding.preview.mode.loading":
+          "正在读取文件预览...",
+        "agentChat.canvasWorkbench.coding.preview.mode.htmlTitle": "HTML 预览",
+        "agentChat.canvasWorkbench.coding.preview.mode.markdownAria":
+          "切换到 Markdown 预览",
+        "agentChat.canvasWorkbench.coding.preview.mode.htmlAria":
+          "切换到 HTML 预览",
+        "agentChat.canvasWorkbench.coding.preview.mode.codeAria":
+          "切换到 Code 预览",
         "agentChat.canvasWorkbench.coding.changes.empty":
           "还没有可对比的文件变更。",
+        "agentChat.canvasWorkbench.coding.changes.afterLabel": "当前",
+        "agentChat.canvasWorkbench.coding.changes.baseConversation": "上轮对话",
+        "agentChat.canvasWorkbench.coding.changes.base.branch": "分支",
+        "agentChat.canvasWorkbench.coding.changes.base.commit": "提交",
+        "agentChat.canvasWorkbench.coding.changes.base.emptyCommits":
+          "分支上暂无提交记录。",
+        "agentChat.canvasWorkbench.coding.changes.base.previousConversation":
+          "上轮对话",
+        "agentChat.canvasWorkbench.coding.changes.base.selectorAria":
+          "选择审查基准",
+        "agentChat.canvasWorkbench.coding.changes.base.staged": "已暂存",
+        "agentChat.canvasWorkbench.coding.changes.base.unstaged": "未暂存",
+        "agentChat.canvasWorkbench.coding.changes.beforeLabel": "上一版",
+        "agentChat.canvasWorkbench.coding.changes.filterEmpty":
+          "没有匹配的文件。",
+        "agentChat.canvasWorkbench.coding.changes.filterFiles": "筛选文件...",
+        "agentChat.canvasWorkbench.coding.changes.hideFiles": "隐藏文件",
         "agentChat.canvasWorkbench.coding.changes.noBaseline":
           "当前文件还没有上一版本可对比。",
         "agentChat.canvasWorkbench.coding.changes.title": "当前文件变更",
@@ -147,6 +262,7 @@ vi.mock("react-i18next", () => ({
         "agentChat.canvasWorkbench.coding.changes.checkpointBadge": `快照 ${String(
           options?.count ?? 0,
         )}`,
+        "agentChat.canvasWorkbench.coding.changes.showFiles": "显示文件",
         "agentChat.canvasWorkbench.coding.changes.source": `来源：${String(
           options?.source ?? "",
         )}`,
@@ -160,34 +276,76 @@ vi.mock("react-i18next", () => ({
         "agentChat.canvasWorkbench.coding.changes.status.completed": "已写入",
         "agentChat.canvasWorkbench.coding.changes.status.inProgress": "写入中",
         "agentChat.canvasWorkbench.coding.changes.status.failed": "失败",
+        "agentChat.canvasWorkbench.coding.changes.more": "更多审查操作",
+        "agentChat.canvasWorkbench.coding.changes.resizeFilesPanel":
+          "调整文件列表宽度",
+        "agentChat.canvasWorkbench.coding.changes.refresh": "刷新",
+        "agentChat.canvasWorkbench.coding.changes.reviewTitle": "审查",
+        "agentChat.canvasWorkbench.coding.changes.menu.hideWhitespace":
+          "隐藏空白字符",
+        "agentChat.canvasWorkbench.coding.changes.menu.showWhitespace":
+          "显示空白字符",
+        "agentChat.canvasWorkbench.coding.changes.menu.enableWrap":
+          "启用自动换行",
+        "agentChat.canvasWorkbench.coding.changes.menu.disableWrap":
+          "关闭自动换行",
+        "agentChat.canvasWorkbench.coding.changes.menu.loadFullFile":
+          "加载完整文件",
+        "agentChat.canvasWorkbench.coding.changes.menu.unloadFullFile":
+          "不加载完整文件",
+        "agentChat.canvasWorkbench.coding.changes.menu.enableRichPreview":
+          "启用富文本预览",
+        "agentChat.canvasWorkbench.coding.changes.menu.disableRichPreview":
+          "关闭富文本预览",
+        "agentChat.canvasWorkbench.coding.changes.menu.enableTextDiff":
+          "启用文字差异",
+        "agentChat.canvasWorkbench.coding.changes.menu.disableTextDiff":
+          "关闭文字差异",
+        "agentChat.canvasWorkbench.coding.changes.menu.copyGitApply":
+          "复制 git apply 命令",
+        "agentChat.canvasWorkbench.coding.changes.menu.enableAutoExecute":
+          "启用自动执行",
+        "agentChat.canvasWorkbench.coding.changes.menu.collapseContext":
+          "折叠全部差异",
+        "agentChat.canvasWorkbench.coding.changes.menu.expandContext":
+          "展开未变更上下文",
+        "agentChat.canvasWorkbench.coding.changes.switchToInlineDiff":
+          "切换到行内差异视图",
+        "agentChat.canvasWorkbench.coding.changes.switchToSplitDiff":
+          "切换到拆分差异视图",
+        "agentChat.canvasWorkbench.coding.changes.omittedLines": `已隐藏 ${String(
+          options?.count ?? 0,
+        )} 行未变更内容`,
+        "agentChat.canvasWorkbench.coding.changes.kind.added": "新增",
+        "agentChat.canvasWorkbench.coding.changes.kind.modified": "修改",
+        "agentChat.canvasWorkbench.coding.changes.kind.deleted": "删除",
+        "agentChat.canvasWorkbench.coding.changes.kind.renamed": "重命名",
+        "agentChat.canvasWorkbench.coding.changes.kind.copied": "复制",
+        "agentChat.canvasWorkbench.coding.changes.kind.unknown": "变更",
+        "agentChat.canvasWorkbench.coding.changes.kindShort.added": "A",
+        "agentChat.canvasWorkbench.coding.changes.kindShort.modified": "M",
+        "agentChat.canvasWorkbench.coding.changes.kindShort.deleted": "D",
+        "agentChat.canvasWorkbench.coding.changes.kindShort.renamed": "R",
+        "agentChat.canvasWorkbench.coding.changes.kindShort.copied": "C",
+        "agentChat.canvasWorkbench.coding.changes.kindShort.unknown": "?",
+        "agentChat.canvasWorkbench.coding.changes.toast.fullFileLoadFailed":
+          "加载完整文件失败",
+        "agentChat.canvasWorkbench.coding.changes.toast.gitApplyCopied":
+          "已复制 git apply 命令",
+        "agentChat.canvasWorkbench.coding.changes.toast.gitApplyCopyFailed":
+          "复制 git apply 命令失败",
+        "agentChat.canvasWorkbench.coding.changes.toast.missingWorkspaceRoot":
+          "缺少工作区路径",
+        "agentChat.canvasWorkbench.coding.changes.toast.noPatch":
+          "没有可复制的 patch",
+        "agentChat.canvasWorkbench.coding.changes.toast.refreshed":
+          "已刷新变更",
+        "agentChat.canvasWorkbench.coding.changes.toast.refreshFailed":
+          "刷新变更失败",
         "agentChat.canvasWorkbench.coding.outputs.empty":
           "本轮还没有可展示的输出。",
         "agentChat.canvasWorkbench.coding.logs.empty":
           "本轮还没有可展示的日志。",
-        "agentChat.canvasWorkbench.documentInspector.title": "当前文稿",
-        "agentChat.canvasWorkbench.documentInspector.summaryFallback":
-          "当前结构化文稿已接入文档检查器，可继续查看概览、来源、版本与编辑状态。",
-        "agentChat.canvasWorkbench.documentInspector.expand":
-          "展开当前文稿检查器",
-        "agentChat.canvasWorkbench.documentInspector.collapse":
-          "折叠当前文稿检查器",
-        "agentChat.canvasWorkbench.documentInspector.expandShort": "展开",
-        "agentChat.canvasWorkbench.documentInspector.collapseShort": "收起",
-        "agentChat.canvasWorkbench.documentInspector.sourceCount": `来源 ${String(
-          options?.count ?? 0,
-        )}`,
-        "agentChat.canvasWorkbench.documentInspector.versionCount": `版本 ${String(
-          options?.count ?? 0,
-        )}`,
-        "agentChat.canvasWorkbench.documentInspector.diffCount": `差异 ${String(
-          options?.count ?? 0,
-        )}`,
-        "agentChat.canvasWorkbench.document.view.preview": "正文",
-        "agentChat.canvasWorkbench.document.view.previewAria":
-          "切换文档视图-正文",
-        "agentChat.canvasWorkbench.document.view.changes": "变更",
-        "agentChat.canvasWorkbench.document.view.changesAria":
-          "切换文档视图-变更",
       };
       return translations[key] ?? key;
     },
@@ -196,6 +354,65 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("@/lib/api/fileBrowser", () => ({
   listDirectory: hoisted.mockListDirectory,
+}));
+
+vi.mock("@/lib/api/projectGit", () => ({
+  readProjectGitDiff: hoisted.mockReadProjectGitDiff,
+}));
+
+vi.mock("@/lib/api/embeddedBrowser", () => ({
+  destroyEmbeddedBrowserView: hoisted.mockDestroyEmbeddedBrowserView,
+  goBackEmbeddedBrowserView: hoisted.mockGoBackEmbeddedBrowserView,
+  goForwardEmbeddedBrowserView: hoisted.mockGoForwardEmbeddedBrowserView,
+  listenEmbeddedBrowserViewLoadFailed:
+    hoisted.mockListenEmbeddedBrowserViewLoadFailed,
+  listenEmbeddedBrowserViewState: hoisted.mockListenEmbeddedBrowserViewState,
+  mountEmbeddedBrowserView: hoisted.mockMountEmbeddedBrowserView,
+  navigateEmbeddedBrowserView: hoisted.mockNavigateEmbeddedBrowserView,
+  isEmbeddedBrowserHostAvailable: hoisted.mockIsEmbeddedBrowserHostAvailable,
+  reloadEmbeddedBrowserView: hoisted.mockReloadEmbeddedBrowserView,
+  setEmbeddedBrowserViewBounds: hoisted.mockSetEmbeddedBrowserViewBounds,
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser:
+    hoisted.mockOpenExternalUrlWithSystemBrowser,
+}));
+
+vi.mock("@/lib/api/projectShell", () => ({
+  killProjectShellSession: hoisted.mockKillProjectShellSession,
+  listenProjectShellSessionEvents: hoisted.mockListenProjectShellSessionEvents,
+  resizeProjectShellSession: hoisted.mockResizeProjectShellSession,
+  startProjectShellSession: hoisted.mockStartProjectShellSession,
+  writeProjectShellSession: hoisted.mockWriteProjectShellSession,
+}));
+
+vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
+
+vi.mock("@xterm/xterm", () => ({
+  Terminal: vi.fn().mockImplementation((options: Record<string, unknown>) => {
+    hoisted.mockXtermTerminalOptions.push(options);
+    return {
+      cols: 120,
+      rows: 14,
+      dispose: vi.fn(),
+      focus: vi.fn(),
+      loadAddon: hoisted.mockXtermLoadAddon,
+      onData: vi.fn((handler: (data: string) => void) => {
+        hoisted.mockXtermOnDataHandlers.push(handler);
+        return { dispose: hoisted.mockXtermDisposeInput };
+      }),
+      open: vi.fn(),
+      write: vi.fn(),
+      writeln: vi.fn(),
+    };
+  }),
+}));
+
+vi.mock("@xterm/addon-fit", () => ({
+  FitAddon: vi.fn().mockImplementation(() => ({
+    fit: hoisted.mockFitAddonFit,
+  })),
 }));
 
 export interface MountedHarness {
@@ -250,173 +467,6 @@ export function createTaskFile(
   };
 }
 
-export function createMockArtifactDocumentController(
-  overrides: Partial<ArtifactWorkbenchDocumentController> = {},
-): ArtifactWorkbenchDocumentController {
-  const versionHistory = [
-    {
-      id: "artifact-document:demo:v1",
-      artifactId: "artifact-document:demo",
-      versionNo: 1,
-      title: "董事会季度复盘",
-      summary: "第一版摘要",
-      status: "ready" as const,
-      createdAt: "2026-03-25T10:00:00Z",
-    },
-    {
-      id: "artifact-document:demo:v2",
-      artifactId: "artifact-document:demo",
-      versionNo: 2,
-      title: "董事会季度复盘",
-      summary: "补齐来源与版本信息",
-      status: "ready" as const,
-      createdAt: "2026-03-26T10:00:00Z",
-    },
-  ];
-  const currentVersionDiff = {
-    baseVersionId: "artifact-document:demo:v1",
-    baseVersionNo: 1,
-    targetVersionId: "artifact-document:demo:v2",
-    targetVersionNo: 2,
-    updatedCount: 1,
-    addedCount: 0,
-    removedCount: 0,
-    movedCount: 0,
-    changedBlocks: [
-      {
-        blockId: "body-1",
-        changeType: "updated" as const,
-        beforeText: "旧正文",
-        afterText: "正文内容",
-        summary: "更新 block 内容",
-      },
-    ],
-  };
-  const editableDraft = {
-    editorKind: "rich_text" as const,
-    markdown: "正文内容",
-  };
-  const selectedEditableBlock = {
-    blockId: "body-1",
-    label: "正文块 1",
-    detail: "正文",
-    editorKind: "rich_text" as const,
-    draft: editableDraft,
-  };
-  const document: ArtifactDocumentV1 = {
-    schemaVersion: "artifact_document.v1",
-    artifactId: "artifact-document:demo",
-    kind: "analysis" as const,
-    title: "董事会季度复盘",
-    status: "ready" as const,
-    language: "zh-CN",
-    summary: "需要优先补齐来源与版本线索。",
-    blocks: [
-      {
-        id: "body-1",
-        type: "rich_text" as const,
-        contentFormat: "markdown" as const,
-        content: "正文内容",
-        markdown: "正文内容",
-      },
-    ],
-    sources: [
-      {
-        id: "source-1",
-        type: "web" as const,
-        label: "OpenAI Blog",
-        locator: {
-          url: "https://openai.com",
-        },
-      },
-    ],
-    metadata: {
-      currentVersionId: "artifact-document:demo:v2",
-      currentVersionNo: 2,
-      currentVersionDiff,
-      versionHistory,
-    },
-  };
-
-  return {
-    artifact: createArtifact(
-      "artifact-doc",
-      ".lime/artifacts/thread-1/board-review.artifact.json",
-      JSON.stringify(document),
-      40,
-    ),
-    document,
-    currentVersion: versionHistory[1],
-    currentVersionDiff,
-    versionHistory,
-    sourceLinks: [
-      {
-        artifactId: "artifact-document:demo",
-        blockId: "body-1",
-        sourceId: "source-1",
-        sourceType: "web",
-        sourceRef: "https://openai.com",
-        label: "OpenAI Blog",
-      },
-    ],
-    timelineLinksByBlockId: {},
-    recoveryPresentation: null,
-    canEditDocument: true,
-    canMarkAsReady: false,
-    inspectorTab: "overview",
-    setInspectorTab: vi.fn(),
-    editableBlocks: [selectedEditableBlock],
-    draftByBlockId: {
-      "body-1": editableDraft,
-    },
-    selectedEditableBlock,
-    selectedEditableDraft: editableDraft,
-    selectedTimelineLink: null,
-    isSavingEdit: false,
-    isUpdatingRecoveryState: false,
-    editSaveError: null,
-    recoveryActionError: null,
-    lastSavedAt: null,
-    rendererViewportRef: { current: null },
-    focusBlock: vi.fn(),
-    selectEditableBlock: vi.fn(),
-    handleEditDraftChange: vi.fn(),
-    handleEditCancel: vi.fn(),
-    handleEditSave: vi.fn(async () => undefined),
-    handleContinueEditing: vi.fn(),
-    handleMarkAsReady: vi.fn(async () => undefined),
-    onJumpToTimelineItem: vi.fn(),
-    ...overrides,
-  };
-}
-
-export function MockArtifactDocumentPreview({
-  controller,
-  target,
-  onArtifactDocumentControllerChange,
-}: {
-  controller: ArtifactWorkbenchDocumentController | null;
-  target: CanvasWorkbenchPreviewTarget;
-  onArtifactDocumentControllerChange?: (
-    controller: ArtifactWorkbenchDocumentController | null,
-  ) => void;
-}) {
-  React.useEffect(() => {
-    onArtifactDocumentControllerChange?.(
-      target.kind === "artifact" ? controller : null,
-    );
-    return () => {
-      onArtifactDocumentControllerChange?.(null);
-    };
-  }, [controller, onArtifactDocumentControllerChange, target.kind]);
-
-  return (
-    <div data-testid="preview-panel">
-      {target.kind}:{target.title}
-    </div>
-  );
-}
-
 export function mountHarness(
   props: CanvasWorkbenchLayoutProps,
 ): MountedHarness {
@@ -444,9 +494,7 @@ export function mountHarness(
   return harness;
 }
 
-export function mount(
-  props: CanvasWorkbenchLayoutProps,
-): HTMLDivElement {
+export function mount(props: CanvasWorkbenchLayoutProps): HTMLDivElement {
   return mountHarness(props).container;
 }
 
@@ -495,6 +543,100 @@ export function clickByAriaLabel(container: HTMLElement, ariaLabel: string) {
   });
 }
 
+export function clickWorkbenchTab(container: HTMLElement, label: string) {
+  const ariaLabel = `切换画布标签-${label}`;
+  const directElement = container.querySelector(
+    `[aria-label="${ariaLabel}"]`,
+  ) as HTMLElement | null;
+  if (
+    directElement &&
+    !directElement.closest('[data-testid="canvas-workbench-tab-menu"]')
+  ) {
+    act(() => {
+      directElement.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    return;
+  }
+
+  clickByAriaLabel(container, "打开工作台切换菜单");
+  const menuElement = container.querySelector(
+    `[data-testid="canvas-workbench-tab-menu"] [aria-label="${ariaLabel}"]`,
+  ) as HTMLElement | null;
+  if (!menuElement) {
+    throw new Error(`未找到工作台标签: ${label}`);
+  }
+
+  act(() => {
+    menuElement.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+export function clickPreviewMode(container: HTMLElement, label: string) {
+  const ariaLabel =
+    label === "Markdown"
+      ? "切换到 Markdown 预览"
+      : label === "HTML"
+        ? "切换到 HTML 预览"
+        : "切换到 Code 预览";
+  clickByAriaLabel(container, ariaLabel);
+}
+
+export function expectWorkbenchTabInMenu(
+  container: HTMLElement,
+  label: string,
+) {
+  clickByAriaLabel(container, "打开工作台切换菜单");
+  const menuElement = container.querySelector(
+    `[data-testid="canvas-workbench-tab-menu"] [aria-label="切换画布标签-${label}"]`,
+  );
+  if (!menuElement) {
+    throw new Error(`未找到工作台菜单标签: ${label}`);
+  }
+  clickByAriaLabel(container, "打开工作台切换菜单");
+}
+
+export function clickNewWorkbenchTool(container: HTMLElement, label: string) {
+  clickByAriaLabel(container, "打开工作台切换菜单");
+  const menuElement = container.querySelector(
+    `[data-testid="canvas-workbench-tab-menu"] [aria-label="新建工作台标签-${label}"]`,
+  ) as HTMLElement | null;
+  if (!menuElement) {
+    throw new Error(`未找到新增工作台工具: ${label}`);
+  }
+
+  act(() => {
+    menuElement.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+export function expectNewWorkbenchToolInMenu(
+  container: HTMLElement,
+  label: string,
+) {
+  clickByAriaLabel(container, "打开工作台切换菜单");
+  const menuElement = container.querySelector(
+    `[data-testid="canvas-workbench-tab-menu"] [aria-label="新建工作台标签-${label}"]`,
+  );
+  if (!menuElement) {
+    throw new Error(`未找到新增工作台工具: ${label}`);
+  }
+  clickByAriaLabel(container, "打开工作台切换菜单");
+}
+
+export function expectWorkbenchTabNotInNewMenu(
+  container: HTMLElement,
+  label: string,
+) {
+  clickByAriaLabel(container, "打开工作台切换菜单");
+  const menuElement = container.querySelector(
+    `[data-testid="canvas-workbench-tab-menu"] [aria-label="切换画布标签-${label}"]`,
+  );
+  if (menuElement) {
+    throw new Error(`新增菜单不应包含旧工作台标签: ${label}`);
+  }
+  clickByAriaLabel(container, "打开工作台切换菜单");
+}
+
 beforeEach(() => {
   (
     globalThis as typeof globalThis & {
@@ -505,6 +647,53 @@ beforeEach(() => {
   vi.clearAllMocks();
   resizeObserverState.width = 1280;
   resizeObserverState.observers = [];
+  mockReadProjectGitDiff.mockResolvedValue({
+    rootPath: "/workspace",
+    repositoryRoot: "/workspace",
+    hasGitRepository: true,
+    patch: "diff --git a/src/App.tsx b/src/App.tsx\n+export function App() {}",
+    uncommittedFileCount: 1,
+  });
+  const embeddedBrowserState = {
+    viewId: "canvas-workbench-browser-test",
+    url: "https://www.google.com/",
+    title: "Google",
+    canGoBack: false,
+    canGoForward: false,
+    isLoading: false,
+  };
+  mockDestroyEmbeddedBrowserView.mockResolvedValue(undefined);
+  mockGoBackEmbeddedBrowserView.mockResolvedValue(embeddedBrowserState);
+  mockGoForwardEmbeddedBrowserView.mockResolvedValue(embeddedBrowserState);
+  mockListenEmbeddedBrowserViewLoadFailed.mockResolvedValue(vi.fn());
+  mockListenEmbeddedBrowserViewState.mockResolvedValue(vi.fn());
+  mockIsEmbeddedBrowserHostAvailable.mockReturnValue(true);
+  mockMountEmbeddedBrowserView.mockResolvedValue(embeddedBrowserState);
+  mockNavigateEmbeddedBrowserView.mockImplementation(
+    async ({ viewId, url }) => ({
+      ...embeddedBrowserState,
+      viewId,
+      url,
+    }),
+  );
+  mockReloadEmbeddedBrowserView.mockResolvedValue(embeddedBrowserState);
+  mockSetEmbeddedBrowserViewBounds.mockResolvedValue(embeddedBrowserState);
+  mockOpenExternalUrlWithSystemBrowser.mockResolvedValue(undefined);
+  mockKillProjectShellSession.mockResolvedValue(undefined);
+  mockListenProjectShellSessionEvents.mockResolvedValue(vi.fn());
+  mockResizeProjectShellSession.mockResolvedValue(undefined);
+  mockStartProjectShellSession.mockResolvedValue({
+    sessionId: "canvas-workbench-shell-1",
+    cwd: "/workspace",
+    shell: "/bin/zsh",
+    title: "coso@host: workspace",
+    localEcho: true,
+    tty: false,
+    pid: 321,
+  });
+  mockWriteProjectShellSession.mockResolvedValue(undefined);
+  mockXtermOnDataHandlers.length = 0;
+  mockXtermTerminalOptions.length = 0;
 
   vi.stubGlobal(
     "ResizeObserver",

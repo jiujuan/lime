@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildCanvasWorkbenchDiff } from "./canvasWorkbenchDiff";
+import {
+  buildCanvasWorkbenchDiff,
+  collapseCanvasWorkbenchDiffContext,
+} from "./canvasWorkbenchDiff";
 
 describe("buildCanvasWorkbenchDiff", () => {
   it("应标记新增、删除与上下文行", () => {
@@ -25,6 +28,31 @@ describe("buildCanvasWorkbenchDiff", () => {
 
     expect(buildCanvasWorkbenchDiff("仅一行", "")).toEqual([
       { type: "remove", value: "仅一行" },
+    ]);
+  });
+
+  it("应折叠远离变更的上下文行", () => {
+    expect(
+      collapseCanvasWorkbenchDiffContext(
+        [
+          { type: "context", value: "1" },
+          { type: "context", value: "2" },
+          { type: "context", value: "3" },
+          { type: "remove", value: "old" },
+          { type: "add", value: "new" },
+          { type: "context", value: "4" },
+          { type: "context", value: "5" },
+          { type: "context", value: "6" },
+        ],
+        1,
+      ),
+    ).toEqual([
+      { type: "omitted", count: 2 },
+      { type: "context", value: "3" },
+      { type: "remove", value: "old" },
+      { type: "add", value: "new" },
+      { type: "context", value: "4" },
+      { type: "omitted", count: 2 },
     ]);
   });
 });

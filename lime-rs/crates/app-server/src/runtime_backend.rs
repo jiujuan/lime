@@ -1,3 +1,8 @@
+mod coding_events;
+mod tool_events;
+mod tool_inventory;
+
+use crate::runtime::ToolInventoryReadRequest;
 use crate::ActionRespondRequest;
 use crate::CancelExecutionRequest;
 use crate::ExecutionBackend;
@@ -5,24 +10,29 @@ use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use crate::RuntimeEventSink;
-use aster::session::TurnContextOverride;
+use app_server_protocol::AgentSessionActionType;
 use async_trait::async_trait;
 use lime_agent::{
-    initialize_aster_runtime, merge_system_prompt_with_request_tool_policy,
-    resolve_request_tool_policy_with_mode, stream_reply_with_policy,
-    AgentEvent as RuntimeAgentEvent, AsterAgentState, ProviderConfig, RequestToolPolicy,
-    RequestToolPolicyMode, SessionConfigBuilder,
+    initialize_aster_runtime, stream_reply_with_policy, AgentActionRequiredScope,
+    AgentEvent as RuntimeAgentEvent, AsterAgentState, ProviderConfig,
 };
+use lime_core::config::{load_config, ToolExecutionPolicyConfig};
 use lime_core::database::dao::api_key_provider::{ApiProviderType, ProviderWithKeys};
 use lime_core::database::{self, DbConnection};
 use lime_core::models::provider_type::is_custom_provider_id;
 use lime_core::models::RuntimeProviderType;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
+
+mod request_context;
+
+use request_context::{
+    aster_chat_request_from_request, direct_provider_config_from_request,
+    request_tool_policy_from_request, resolve_runtime_model_selection, session_config_from_request,
+    session_scope_from_request, RuntimeModelSelection,
+};
 
 #[derive(Default)]
 pub struct RuntimeBackend {
@@ -98,12 +108,14 @@ impl RuntimeBackend {
             .map_err(backend_error)?
         };
         let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
+        let config_metadata = current_tool_execution_config_metadata();
         let session_config = session_config_from_request(
             &request,
             host_request.as_ref(),
             &session_scope,
             &selection,
             &request_tool_policy,
+            config_metadata,
         );
         let agent_arc = self.agent_state.get_agent_arc();
         let agent_guard = agent_arc.read().await;
@@ -117,6 +129,7 @@ impl RuntimeBackend {
             .create_cancel_token(&session_scope.session_id)
             .await;
         let mut emit_error = None;
+        let mut coding_event_mirror = coding_events::CodingEventMirror::default();
         let execution_result = stream_reply_with_policy(
             agent,
             &request.input.text,
@@ -128,7 +141,11 @@ impl RuntimeBackend {
                 if emit_error.is_some() {
                     return;
                 }
-                if let Err(error) = emit_runtime_agent_event(event, sink) {
+                if let Err(error) = emit_runtime_agent_event_with_coding_mirror(
+                    event,
+                    sink,
+                    &mut coding_event_mirror,
+                ) {
                     emit_error = Some(error);
                 }
             },
@@ -206,14 +223,117 @@ impl ExecutionBackend for RuntimeBackend {
 
     async fn respond_action(
         &self,
-        _request: ActionRespondRequest,
+        request: ActionRespondRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
+        self.handle_action_response(&request).await?;
         sink.emit(RuntimeEvent::new(
             "action.resolved",
-            json!({ "backend": "runtime" }),
+            json!({
+                "backend": "runtime",
+                "requestId": request.request_id,
+                "actionId": request.request_id,
+                "actionType": request.action_type,
+                "confirmed": request.confirmed,
+                "decision": if request.confirmed { "approve" } else { "deny" },
+                "response": request.response,
+                "userData": request.user_data,
+                "scope": request.action_scope,
+            }),
         ))
     }
+
+    async fn read_tool_inventory(
+        &self,
+        request: ToolInventoryReadRequest,
+    ) -> Result<Value, RuntimeCoreError> {
+        tool_inventory::read_tool_inventory(
+            &self.agent_state,
+            request,
+            current_tool_execution_config_metadata(),
+        )
+        .await
+    }
+}
+
+impl RuntimeBackend {
+    async fn handle_action_response(
+        &self,
+        request: &ActionRespondRequest,
+    ) -> Result<(), RuntimeCoreError> {
+        match request.action_type {
+            AgentSessionActionType::ToolConfirmation => self
+                .agent_state
+                .confirm_tool_action(&request.request_id, request.confirmed)
+                .await
+                .map_err(backend_error),
+            AgentSessionActionType::AskUser | AgentSessionActionType::Elicitation => {
+                if !request.confirmed {
+                    return Ok(());
+                }
+                let user_data = action_response_user_data(request);
+                self.agent_state
+                    .submit_elicitation_response(
+                        &request.session.session_id,
+                        &request.request_id,
+                        user_data,
+                        request
+                            .action_scope
+                            .clone()
+                            .map(agent_action_required_scope_from_protocol),
+                    )
+                    .await
+                    .map_err(backend_error)
+            }
+        }
+    }
+}
+
+fn action_response_user_data(request: &ActionRespondRequest) -> Value {
+    request
+        .user_data
+        .clone()
+        .or_else(|| {
+            request
+                .response
+                .as_ref()
+                .map(|response| json!({ "answer": response }))
+        })
+        .unwrap_or_else(|| json!({}))
+}
+
+fn agent_action_required_scope_from_protocol(
+    scope: app_server_protocol::AgentSessionActionScope,
+) -> AgentActionRequiredScope {
+    AgentActionRequiredScope {
+        session_id: scope.session_id,
+        thread_id: scope.thread_id,
+        turn_id: scope.turn_id,
+    }
+}
+
+fn current_tool_execution_config_metadata() -> Option<Value> {
+    let config = match load_config() {
+        Ok(config) => config,
+        Err(error) => {
+            return Some(json!({
+                "agent": {
+                    "toolExecution": {
+                        "loadError": error.to_string(),
+                    }
+                }
+            }));
+        }
+    };
+    if ToolExecutionPolicyConfig::is_default(&config.agent.tool_execution) {
+        return None;
+    }
+
+    Some(json!({
+        "agent": {
+            "toolExecution": config.agent.tool_execution,
+        }
+    }))
 }
 
 fn initialize_runtime_database(
@@ -232,24 +352,6 @@ fn initialize_runtime_database(
         ))
     })?;
     Ok(db)
-}
-
-fn resolve_runtime_model_selection(
-    request: &ExecutionRequest,
-) -> Result<RuntimeModelSelection, RuntimeCoreError> {
-    if let Some(selection) = selection_from_explicit_preferences(request) {
-        return Ok(selection);
-    }
-    if let Some(selection) = selection_from_host_provider_config(request) {
-        return Ok(selection);
-    }
-    if let Some(selection) = selection_from_session_default(request) {
-        return Ok(selection);
-    }
-
-    Err(RuntimeCoreError::Backend(
-        "App Server runtime backend requires provider/model selection. Submit runtimeOptions.providerPreference and runtimeOptions.modelPreference, hostOptions.asterChatRequest.provider_config, or persist a complete session provider/model default.".to_string(),
-    ))
 }
 
 fn ensure_selection_provider_is_configured(
@@ -310,104 +412,6 @@ async fn provider_config_from_pool(
     })
 }
 
-fn selection_from_explicit_preferences(
-    request: &ExecutionRequest,
-) -> Option<RuntimeModelSelection> {
-    let provider = non_empty(request.provider_preference.as_deref().or_else(|| {
-        request
-            .runtime_options
-            .as_ref()?
-            .provider_preference
-            .as_deref()
-    }))?;
-    let model = non_empty(request.model_preference.as_deref().or_else(|| {
-        request
-            .runtime_options
-            .as_ref()?
-            .model_preference
-            .as_deref()
-    }))?;
-    Some(RuntimeModelSelection {
-        provider,
-        model,
-        source: "runtime_options",
-        reasoning_effort: reasoning_effort_from_request(request),
-    })
-}
-
-fn selection_from_host_provider_config(
-    request: &ExecutionRequest,
-) -> Option<RuntimeModelSelection> {
-    let host_request = aster_chat_request_from_request(request)?;
-    let provider_config = host_provider_config(&host_request);
-    let provider = non_empty(
-        host_provider_preference(&host_request)
-            .as_deref()
-            .or_else(|| provider_config.and_then(|config| config.provider_id.as_deref()))
-            .or_else(|| provider_config.and_then(|config| config.provider_name.as_deref())),
-    )?;
-    let model = non_empty(
-        host_model_preference(&host_request)
-            .as_deref()
-            .or_else(|| provider_config.and_then(|config| config.model_name.as_deref())),
-    )?;
-    Some(RuntimeModelSelection {
-        provider,
-        model,
-        source: "host_options_provider_config",
-        reasoning_effort: host_reasoning_effort(&host_request)
-            .or_else(|| reasoning_effort_from_request(request)),
-    })
-}
-
-fn selection_from_session_default(request: &ExecutionRequest) -> Option<RuntimeModelSelection> {
-    let metadata = request
-        .session
-        .business_object_ref
-        .as_ref()?
-        .metadata
-        .as_ref()?;
-    let provider = session_default_provider(metadata)?;
-    let model = session_default_model(metadata)?;
-    Some(RuntimeModelSelection {
-        provider,
-        model,
-        source: "session_default",
-        reasoning_effort: reasoning_effort_from_request(request),
-    })
-}
-
-fn session_default_provider(metadata: &Value) -> Option<String> {
-    json_pointer_string(
-        metadata,
-        &[
-            "/providerSelector",
-            "/provider_selector",
-            "/executionRuntime/providerSelector",
-            "/execution_runtime/provider_selector",
-            "/extensionData/lime_provider_routing.v0/providerSelector",
-            "/extensionData/lime_provider_routing.v0/provider_selector",
-            "/providerName",
-            "/provider_name",
-            "/executionRuntime/providerName",
-            "/execution_runtime/provider_name",
-        ],
-    )
-}
-
-fn session_default_model(metadata: &Value) -> Option<String> {
-    json_pointer_string(
-        metadata,
-        &[
-            "/modelName",
-            "/model_name",
-            "/model",
-            "/executionRuntime/modelName",
-            "/execution_runtime/model_name",
-        ],
-    )
-}
-
 fn enabled_chat_provider_with_key(provider: &ProviderWithKeys) -> bool {
     provider.provider.enabled
         && !provider.api_keys.iter().all(|key| !key.enabled)
@@ -418,470 +422,24 @@ fn provider_looks_non_chat_candidate(provider: &ProviderWithKeys) -> bool {
     matches!(provider.provider.provider_type, ApiProviderType::Fal)
 }
 
-fn reasoning_effort_from_request(request: &ExecutionRequest) -> Option<String> {
-    if let Some(reasoning_effort) =
-        aster_chat_request_from_request(request).and_then(|host| host_reasoning_effort(&host))
-    {
-        return Some(reasoning_effort);
-    }
-    request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.as_ref())
-        .or(request.metadata.as_ref())
-        .and_then(|metadata| {
-            json_pointer_string(
-                metadata,
-                &[
-                    "/turn_config/reasoning_effort",
-                    "/turnConfig/reasoningEffort",
-                    "/harness/reasoning_effort",
-                    "/harness/reasoningEffort",
-                ],
-            )
-        })
-}
-
-fn request_system_prompt(request: &ExecutionRequest) -> String {
-    aster_chat_request_from_request(request)
-        .and_then(|host| host_system_prompt(&host))
-        .or_else(|| {
-            request
-                .runtime_options
-                .as_ref()
-                .and_then(|options| options.host_options.as_ref())
-                .and_then(|host_options| host_options.get("asterChatRequest"))
-                .and_then(|value| value.get("turn_config").or_else(|| value.get("turnConfig")))
-                .and_then(|turn_config| {
-                    turn_config
-                        .get("system_prompt")
-                        .or_else(|| turn_config.get("systemPrompt"))
-                })
-                .and_then(Value::as_str)
-                .and_then(|value| non_empty(Some(value)))
-        })
-        .unwrap_or_else(|| {
-            "你是 Lime 桌面端里的 AI 助手。请直接完成用户请求，保持回答清晰、准确、可执行。"
-                .to_string()
-        })
-}
-
-fn session_scope_from_request(
-    request: &ExecutionRequest,
-) -> Result<RuntimeSessionScope, RuntimeCoreError> {
-    let session_id = non_empty(Some(&request.session.session_id)).ok_or_else(|| {
-        RuntimeCoreError::Backend(
-            "App Server runtime backend session.sessionId is empty".to_string(),
-        )
-    })?;
-    let thread_id = non_empty(Some(&request.turn.thread_id))
-        .or_else(|| non_empty(Some(&request.session.thread_id)))
-        .ok_or_else(|| {
-            RuntimeCoreError::Backend(
-                "App Server runtime backend session.threadId is empty".to_string(),
-            )
-        })?;
-    let turn_id = non_empty(Some(&request.turn.turn_id))
-        .or_else(|| {
-            aster_chat_request_from_request(request)
-                .and_then(|host| non_empty(host.turn_id.as_deref()))
-        })
-        .ok_or_else(|| {
-            RuntimeCoreError::Backend("App Server runtime backend turn.turnId is empty".to_string())
-        })?;
-    if let Some(turn_session_id) = non_empty(Some(&request.turn.session_id)) {
-        if turn_session_id != session_id {
-            return Err(RuntimeCoreError::Backend(format!(
-                "App Server runtime backend turn session '{}' does not match session '{}'",
-                turn_session_id, session_id
-            )));
-        }
-    }
-    Ok(RuntimeSessionScope {
-        session_id,
-        thread_id,
-        turn_id,
-        workspace_id: non_empty(request.session.workspace_id.as_deref()).or_else(|| {
-            aster_chat_request_from_request(request)
-                .and_then(|host| non_empty(host.workspace_id.as_deref()))
-        }),
-    })
-}
-
-fn aster_chat_request_from_request(request: &ExecutionRequest) -> Option<AsterChatRequestSnapshot> {
-    request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.host_options.as_ref())
-        .and_then(|host_options| host_options.get("asterChatRequest"))
-        .and_then(|value| serde_json::from_value::<AsterChatRequestSnapshot>(value.clone()).ok())
-}
-
-fn host_turn_config(host: &AsterChatRequestSnapshot) -> Option<&AgentTurnConfigSnapshot> {
-    host.turn_config.as_ref()
-}
-
-fn host_provider_config(host: &AsterChatRequestSnapshot) -> Option<&ConfigureProviderRequest> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.provider_config.as_ref())
-        .or(host.provider_config.as_ref())
-}
-
-fn direct_provider_config_from_request(
-    host_request: Option<&AsterChatRequestSnapshot>,
-    selection: &RuntimeModelSelection,
-    reasoning_effort: Option<String>,
-) -> Option<ProviderConfig> {
-    let request = host_request.and_then(host_provider_config)?;
-    if request.api_key.is_none() && request.base_url.is_none() {
-        return None;
-    }
-
-    let provider_name =
-        non_empty(request.provider_name.as_deref()).or_else(|| Some(selection.provider.clone()))?;
-    let provider_selector =
-        non_empty(request.provider_id.as_deref()).or_else(|| Some(selection.provider.clone()));
-    let model_name =
-        non_empty(request.model_name.as_deref()).or_else(|| Some(selection.model.clone()))?;
-
-    Some(ProviderConfig {
-        provider_name,
-        provider_selector,
-        model_name,
-        api_key: request.api_key.clone(),
-        base_url: request.base_url.clone(),
-        credential_uuid: None,
-        reasoning_effort,
-        force_responses_api: false,
-        toolshim: matches!(
-            request.tool_call_strategy,
-            Some(RuntimeToolCallStrategy::ToolShim)
-        ),
-        toolshim_model: request.toolshim_model.clone(),
-    })
-}
-
-fn host_provider_preference(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.provider_preference.as_deref()))
-        .or_else(|| non_empty(host.provider_preference.as_deref()))
-}
-
-fn host_model_preference(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.model_preference.as_deref()))
-        .or_else(|| non_empty(host.model_preference.as_deref()))
-}
-
-fn host_reasoning_effort(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.reasoning_effort.as_deref()))
-        .or_else(|| non_empty(host.reasoning_effort.as_deref()))
-}
-
-fn host_approval_policy(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.approval_policy.as_deref()))
-        .or_else(|| non_empty(host.approval_policy.as_deref()))
-}
-
-fn host_sandbox_policy(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.sandbox_policy.as_deref()))
-        .or_else(|| non_empty(host.sandbox_policy.as_deref()))
-}
-
-fn host_system_prompt(host: &AsterChatRequestSnapshot) -> Option<String> {
-    host_turn_config(host)
-        .and_then(|turn_config| non_empty(turn_config.system_prompt.as_deref()))
-        .or_else(|| non_empty(host.system_prompt.as_deref()))
-}
-
-fn host_web_search(host: &AsterChatRequestSnapshot) -> Option<bool> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.web_search)
-        .or(host.web_search)
-}
-
-fn host_search_mode(host: &AsterChatRequestSnapshot) -> Option<RequestToolPolicyMode> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.search_mode)
-        .or(host.search_mode)
-}
-
-fn request_tool_policy_from_request(
-    host_request: Option<&AsterChatRequestSnapshot>,
-) -> RequestToolPolicy {
-    let web_search = host_request.and_then(host_web_search);
-    let search_mode = host_request.and_then(host_search_mode);
-    resolve_request_tool_policy_with_mode(web_search, search_mode, true)
-}
-
-fn session_config_from_request(
-    request: &ExecutionRequest,
-    host_request: Option<&AsterChatRequestSnapshot>,
-    scope: &RuntimeSessionScope,
-    selection: &RuntimeModelSelection,
-    request_tool_policy: &RequestToolPolicy,
-) -> aster::agents::SessionConfig {
-    let system_prompt = merge_system_prompt_with_request_tool_policy(
-        Some(request_system_prompt(request)),
-        request_tool_policy,
-    );
-    let mut builder = SessionConfigBuilder::new(&scope.session_id)
-        .thread_id(scope.thread_id.clone())
-        .turn_id(scope.turn_id.clone())
-        .include_context_trace(true);
-    if let Some(system_prompt) = system_prompt {
-        builder = builder.system_prompt(system_prompt);
-    }
-    if let Some(turn_context) = turn_context_from_request(request, host_request, scope, selection) {
-        builder = builder.turn_context(turn_context);
-    }
-    builder.build()
-}
-
-fn turn_context_from_request(
-    request: &ExecutionRequest,
-    host_request: Option<&AsterChatRequestSnapshot>,
-    scope: &RuntimeSessionScope,
-    selection: &RuntimeModelSelection,
-) -> Option<TurnContextOverride> {
-    let mut context = TurnContextOverride {
-        model: Some(selection.model.clone()),
-        effort: selection.reasoning_effort.clone(),
-        approval_policy: host_request.and_then(host_approval_policy),
-        sandbox_policy: host_request.and_then(host_sandbox_policy),
-        user_visible_input_text: non_empty(Some(&request.input.text)),
-        ..TurnContextOverride::default()
-    };
-    let mut metadata = HashMap::new();
-    metadata.insert(
-        "app_server_runtime_backend".to_string(),
-        json!({
-            "sessionId": scope.session_id,
-            "threadId": scope.thread_id,
-            "turnId": scope.turn_id,
-            "workspaceId": scope.workspace_id,
-        }),
-    );
-    if let Some(host_metadata) = host_request.and_then(host_metadata_value) {
-        metadata.insert("aster_chat_request".to_string(), host_metadata);
-    }
-    if let Some(runtime_metadata) = request
-        .runtime_options
-        .as_ref()
-        .and_then(|options| options.metadata.clone())
-        .or_else(|| request.metadata.clone())
-    {
-        metadata.insert("runtime_options".to_string(), runtime_metadata);
-    }
-    context.metadata = metadata;
-    if context.approval_policy.is_none()
-        && context.sandbox_policy.is_none()
-        && context.user_visible_input_text.is_none()
-        && context.metadata.is_empty()
-    {
-        None
-    } else {
-        Some(context)
-    }
-}
-
-fn host_metadata_value(host: &AsterChatRequestSnapshot) -> Option<Value> {
-    host_turn_config(host)
-        .and_then(|turn_config| turn_config.metadata.clone())
-        .or_else(|| host.metadata.clone())
-}
-
-fn runtime_event_type_from_raw(raw_type: &str) -> &'static str {
-    match raw_type {
-        "thread_started" => "thread.started",
-        "turn_started" => "turn.started",
-        "turn_completed" => "turn.completed",
-        "turn_failed" => "turn.failed",
-        "item_started" => "item.started",
-        "item_updated" => "item.updated",
-        "item_completed" => "item.completed",
-        "text_delta" => "message.delta",
-        "text_delta_batch" => "message.delta_batch",
-        "thinking_delta" => "thinking.delta",
-        "tool_start" => "tool.started",
-        "tool_end" => "tool.result",
-        "tool_progress" => "tool.progress",
-        "tool_output_delta" => "tool.output.delta",
-        "tool_input_delta" => "tool.input.delta",
-        "artifact_snapshot" => "artifact.snapshot",
-        "action_required" => "action.required",
-        "action_resolved" => "action.resolved",
-        "turn_context" => "turn.context",
-        "model_change" => "model.changed",
-        "context_trace" => "context.trace",
-        "context_compaction_started" => "context.compaction.started",
-        "context_compaction_completed" => "context.compaction.completed",
-        "runtime_status" => "runtime.status",
-        "task_profile_resolved" => "task.profile.resolved",
-        "candidate_set_resolved" => "routing.candidates.resolved",
-        "routing_decision_made" => "routing.decision.made",
-        "routing_fallback_applied" => "routing.fallback.applied",
-        "routing_not_possible" => "routing.not_possible",
-        "limit_state_updated" => "limit.state.updated",
-        "single_candidate_only" => "limit.single_candidate_only",
-        "single_candidate_capability_gap" => "limit.single_candidate_capability_gap",
-        "cost_estimated" => "cost.estimated",
-        "cost_recorded" => "cost.recorded",
-        "rate_limit_hit" => "rate_limit.hit",
-        "quota_low" => "quota.low",
-        "quota_blocked" => "quota.blocked",
-        "queue_added" => "queue.added",
-        "queue_removed" => "queue.removed",
-        "queue_started" => "queue.started",
-        "queue_cleared" => "queue.cleared",
-        "error" => "turn.failed",
-        "warning" => "runtime.warning",
-        "message" => "message",
-        _ => "runtime.event",
-    }
-}
-
-fn emit_runtime_agent_event(
+fn emit_runtime_agent_event_with_coding_mirror(
     event: &RuntimeAgentEvent,
     sink: &mut dyn RuntimeEventSink,
+    coding_event_mirror: &mut coding_events::CodingEventMirror,
 ) -> Result<(), RuntimeCoreError> {
-    let runtime_event = serde_json::to_value(event).map_err(backend_error)?;
-    let raw_type = runtime_event
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or("runtime_event")
-        .to_string();
-    let mut payload = runtime_event
-        .as_object()
-        .cloned()
-        .map(Value::Object)
-        .unwrap_or_else(|| json!({ "value": runtime_event.clone() }));
-    if let Some(payload_object) = payload.as_object_mut() {
-        payload_object.insert("backend".to_string(), Value::String("runtime".to_string()));
-        payload_object.insert("runtimeEvent".to_string(), runtime_event);
+    let coding_events = coding_event_mirror.process_event(event);
+    for event in coding_events.before_raw {
+        sink.emit(event)?;
     }
-    sink.emit(RuntimeEvent::new(
-        runtime_event_type_from_raw(&raw_type),
-        payload,
-    ))
-}
-
-fn json_pointer_string(value: &Value, pointers: &[&str]) -> Option<String> {
-    pointers.iter().find_map(|pointer| {
-        value
-            .pointer(pointer)
-            .and_then(Value::as_str)
-            .and_then(|value| non_empty(Some(value)))
-    })
-}
-
-fn non_empty(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
+    tool_events::emit_runtime_agent_event(event, sink)?;
+    for event in coding_events.after_raw {
+        sink.emit(event)?;
+    }
+    Ok(())
 }
 
 fn backend_error(error: impl std::fmt::Display) -> RuntimeCoreError {
     RuntimeCoreError::Backend(error.to_string())
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct AsterChatRequestSnapshot {
-    #[serde(default, alias = "turnConfig")]
-    turn_config: Option<AgentTurnConfigSnapshot>,
-    #[serde(default, alias = "providerConfig")]
-    provider_config: Option<ConfigureProviderRequest>,
-    #[serde(default, alias = "providerPreference")]
-    provider_preference: Option<String>,
-    #[serde(default, alias = "modelPreference")]
-    model_preference: Option<String>,
-    #[serde(default, alias = "reasoningEffort")]
-    reasoning_effort: Option<String>,
-    #[serde(default, alias = "approvalPolicy")]
-    approval_policy: Option<String>,
-    #[serde(default, alias = "sandboxPolicy")]
-    sandbox_policy: Option<String>,
-    #[serde(default, alias = "workspaceId")]
-    workspace_id: Option<String>,
-    #[serde(default, alias = "webSearch")]
-    web_search: Option<bool>,
-    #[serde(default, alias = "searchMode")]
-    search_mode: Option<RequestToolPolicyMode>,
-    #[serde(default, alias = "systemPrompt")]
-    system_prompt: Option<String>,
-    #[serde(default, alias = "turnId")]
-    turn_id: Option<String>,
-    #[serde(default)]
-    metadata: Option<Value>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct AgentTurnConfigSnapshot {
-    #[serde(default, alias = "providerConfig")]
-    provider_config: Option<ConfigureProviderRequest>,
-    #[serde(default, alias = "providerPreference")]
-    provider_preference: Option<String>,
-    #[serde(default, alias = "modelPreference")]
-    model_preference: Option<String>,
-    #[serde(default, alias = "reasoningEffort")]
-    reasoning_effort: Option<String>,
-    #[serde(default, alias = "approvalPolicy")]
-    approval_policy: Option<String>,
-    #[serde(default, alias = "sandboxPolicy")]
-    sandbox_policy: Option<String>,
-    #[serde(default, alias = "webSearch")]
-    web_search: Option<bool>,
-    #[serde(default, alias = "searchMode")]
-    search_mode: Option<RequestToolPolicyMode>,
-    #[serde(default, alias = "systemPrompt")]
-    system_prompt: Option<String>,
-    #[serde(default)]
-    metadata: Option<Value>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct ConfigureProviderRequest {
-    #[serde(default, alias = "providerId")]
-    provider_id: Option<String>,
-    #[serde(default, alias = "providerName")]
-    provider_name: Option<String>,
-    #[serde(default, alias = "modelName")]
-    model_name: Option<String>,
-    #[serde(default, alias = "apiKey")]
-    api_key: Option<String>,
-    #[serde(default, alias = "baseUrl")]
-    base_url: Option<String>,
-    #[serde(default, alias = "toolCallStrategy")]
-    tool_call_strategy: Option<RuntimeToolCallStrategy>,
-    #[serde(default, alias = "toolshimModel")]
-    toolshim_model: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-enum RuntimeToolCallStrategy {
-    Native,
-    ToolShim,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RuntimeModelSelection {
-    provider: String,
-    model: String,
-    source: &'static str,
-    reasoning_effort: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RuntimeSessionScope {
-    session_id: String,
-    thread_id: String,
-    turn_id: String,
-    workspace_id: Option<String>,
 }
 
 #[cfg(test)]

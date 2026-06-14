@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::CapabilityListContext;
 
 pub(in crate::runtime::tests) struct TestCapabilitySource;
 

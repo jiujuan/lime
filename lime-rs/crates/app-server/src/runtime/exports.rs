@@ -5,9 +5,8 @@ mod metrics;
 use self::builders::*;
 use self::files::*;
 use self::metrics::*;
-use super::agent_session_status_label;
-use super::artifact_summaries_for_turn;
-use super::events_for_turn;
+use super::artifact_projection;
+use super::status::agent_session_status_label;
 use super::timestamp;
 use super::EvidencePackRequest;
 use super::RuntimeCore;
@@ -72,12 +71,15 @@ impl RuntimeCore {
                 None => stored.turns.clone(),
             };
             let events = if params.include_events.unwrap_or(true) {
-                events_for_turn(&stored.events, params.turn_id.as_deref())
+                artifact_projection::events_for_turn(&stored.events, params.turn_id.as_deref())
             } else {
                 Vec::new()
             };
             let artifacts = if params.include_artifacts.unwrap_or(true) {
-                artifact_summaries_for_turn(&stored.events, params.turn_id.as_deref())
+                artifact_projection::stored_artifact_summaries_for_turn(
+                    stored,
+                    params.turn_id.as_deref(),
+                )
             } else {
                 Vec::new()
             };

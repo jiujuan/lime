@@ -57,4 +57,10 @@ describe("buildWorkspaceNavbarProps", () => {
 
     expect(props?.openedProjects).toBe(openedProjects);
   });
+
+  it("任务中心工具栏不应进入 ChatNavbar props，避免被限制在左侧项目栏", () => {
+    const props = buildWorkspaceNavbarProps(createNavbarParams());
+
+    expect("taskCenterRightTools" in (props ?? {})).toBe(false);
+  });
 });

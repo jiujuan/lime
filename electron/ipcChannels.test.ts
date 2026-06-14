@@ -19,23 +19,24 @@ import {
 describe("electron/ipcChannels", () => {
   it("Electron host command 白名单承接本地宿主与 App Server 桥接命令", () => {
     expect(isElectronHostCommand("app_server_handle_json_lines")).toBe(true);
-    expect(isElectronHostCommand("agent_runtime_create_session")).toBe(true);
-    expect(isElectronHostCommand("agent_runtime_submit_turn")).toBe(true);
-    expect(isElectronHostCommand("agent_runtime_interrupt_turn")).toBe(true);
-    expect(isElectronHostCommand("agent_runtime_update_session")).toBe(true);
-    expect(isElectronHostCommand("agent_runtime_respond_action")).toBe(true);
-    expect(isElectronHostCommand("agent_runtime_get_thread_read")).toBe(true);
+    expect(isElectronHostCommand("agent_runtime_create_session")).toBe(false);
+    expect(isElectronHostCommand("agent_runtime_submit_turn")).toBe(false);
+    expect(isElectronHostCommand("agent_runtime_interrupt_turn")).toBe(false);
+    expect(isElectronHostCommand("agent_runtime_update_session")).toBe(false);
+    expect(isElectronHostCommand("agent_runtime_respond_action")).toBe(false);
+    expect(isElectronHostCommand("agent_runtime_get_thread_read")).toBe(false);
     expect(isElectronHostCommand("agent_runtime_export_evidence_pack")).toBe(
-      true,
+      false,
     );
     expect(isElectronHostCommand("agent_runtime_get_tool_inventory")).toBe(
-      true,
+      false,
     );
-    expect(isElectronHostCommand("agent_runtime_list_sessions")).toBe(true);
+    expect(isElectronHostCommand("agent_runtime_list_sessions")).toBe(false);
+    expect(isElectronHostCommand("agent_runtime_get_session")).toBe(false);
     expect(isElectronHostCommand("agent_runtime_delete_session")).toBe(false);
     expect(
       isElectronHostCommand("agent_runtime_list_workspace_skill_bindings"),
-    ).toBe(true);
+    ).toBe(false);
     expect(isElectronHostCommand("fetch_provider_models_auto")).toBe(false);
     expect(isElectronHostCommand("get_provider_ui_state")).toBe(false);
     expect(isElectronHostCommand("get_local_skills_for_app")).toBe(true);
@@ -127,6 +128,13 @@ describe("electron/ipcChannels", () => {
     );
     expect(isElectronHostCommand("site_list_adapters")).toBe(false);
     expect(isElectronHostCommand("open_external_url")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_mount")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_set_bounds")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_navigate")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_reload")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_go_back")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_go_forward")).toBe(true);
+    expect(isElectronHostCommand("embedded_browser_view_destroy")).toBe(true);
     expect(isElectronHostCommand("open_system_settings_url")).toBe(true);
     expect(isElectronHostCommand("open_with_default_app")).toBe(true);
     expect(isElectronHostCommand("open_project_path_with_tool")).toBe(true);
@@ -190,17 +198,6 @@ describe("electron/ipcChannels", () => {
       "agent_app_runtime_submit_host_response",
       "agent_app_start_ui_runtime",
       "agent_app_stop_ui_runtime",
-      "agent_runtime_create_session",
-      "agent_runtime_export_evidence_pack",
-      "agent_runtime_get_session",
-      "agent_runtime_get_thread_read",
-      "agent_runtime_get_tool_inventory",
-      "agent_runtime_interrupt_turn",
-      "agent_runtime_list_sessions",
-      "agent_runtime_list_workspace_skill_bindings",
-      "agent_runtime_respond_action",
-      "agent_runtime_submit_turn",
-      "agent_runtime_update_session",
       "aster_agent_init",
       "get_default_provider",
       "get_local_skills_for_app",

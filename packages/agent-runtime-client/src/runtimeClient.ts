@@ -9,6 +9,8 @@ import {
   type AgentSessionEventNotification,
   type AgentSessionReadParams,
   type AgentSessionReadResponse,
+  type AgentSessionToolInventoryReadParams,
+  type AgentSessionToolInventoryReadResponse,
   type AgentSessionTurnCancelParams,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartParams,
@@ -88,6 +90,13 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     options?: AppServerRequestOptions,
   ): Promise<AppServerRequestResult<AgentSessionReadResponse>> {
     return await this.#base.readThread(params, options);
+  }
+
+  async readToolInventory(
+    params: AgentSessionToolInventoryReadParams = {},
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<AgentSessionToolInventoryReadResponse>> {
+    return await this.#base.readToolInventory(params, options);
   }
 
   async exportEvidence(

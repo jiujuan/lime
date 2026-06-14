@@ -397,6 +397,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     useState<AgentRuntimeThreadReadModel | null>(null);
   const [executionRuntime, setExecutionRuntime] =
     useState<AsterSessionExecutionRuntime | null>(null);
+  const [sessionWorkingDir, setSessionWorkingDir] = useState<string | null>(
+    null,
+  );
   const [todoItems, setTodoItems] = useState<AsterTodoItem[]>([]);
   const [childSubagentSessions, setChildSubagentSessions] = useState<
     AsterSubagentSessionInfo[]
@@ -440,6 +443,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const executionRuntimeRef = useRef<AsterSessionExecutionRuntime | null>(
     executionRuntime,
   );
+  const sessionWorkingDirRef = useRef<string | null>(sessionWorkingDir);
   const appServerConfirmedSessionIdsRef = useRef<Set<string>>(new Set());
   const restoreCandidateSessionIdRef = useRef<string | null>(
     loadScopedSessionRestoreCandidate(),
@@ -587,7 +591,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       threadTurnsRef.current = snapshot.threadTurns;
       threadItemsRef.current = snapshot.threadItems;
       executionRuntimeRef.current = snapshot.executionRuntime;
+      sessionWorkingDirRef.current = snapshot.workingDir;
       setSessionId(snapshot.sessionId);
+      setSessionWorkingDir(snapshot.workingDir);
       setMessages(snapshot.messages);
       setThreadTurns(snapshot.threadTurns);
       setThreadItems(snapshot.threadItems);
@@ -726,6 +732,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   useEffect(() => {
     executionRuntimeRef.current = executionRuntime;
   }, [executionRuntime]);
+
+  useEffect(() => {
+    sessionWorkingDirRef.current = sessionWorkingDir;
+  }, [sessionWorkingDir]);
 
   useEffect(
     () => () => {
@@ -2182,6 +2192,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       startTransition(() => {
         applySessionSnapshot({
           sessionId: targetSessionId,
+          workingDir: sessionWorkingDirRef.current,
           messages: mergePlan.mergedMessages,
           threadTurns: mergePlan.mergedThreadTurns,
           threadItems: mergePlan.mergedThreadItems,
@@ -2889,6 +2900,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     queuedTurns,
     threadRead,
     executionRuntime,
+    sessionWorkingDir,
     setExecutionRuntime,
     setQueuedTurns,
     topics,

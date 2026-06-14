@@ -1,5 +1,10 @@
 use super::data_error;
 use super::values_from_serializable_vec;
+use crate::automation_execution::{
+    apply_automation_run_finished, apply_automation_run_started, build_automation_run_start,
+    next_run_for_automation_schedule, validate_automation_schedule_value, AutomationRunFailure,
+    AutomationRunFinish, AutomationRunStart,
+};
 use crate::RuntimeCoreError;
 mod health;
 use app_server_protocol::AutomationJobCreateParams;
@@ -9,7 +14,6 @@ use app_server_protocol::AutomationJobListResponse;
 use app_server_protocol::AutomationJobReadResponse;
 use app_server_protocol::AutomationJobRunHistoryParams;
 use app_server_protocol::AutomationJobRunHistoryResponse;
-use app_server_protocol::AutomationJobRunNowResponse;
 use app_server_protocol::AutomationJobUpdateParams;
 use app_server_protocol::AutomationJobWriteResponse;
 use app_server_protocol::AutomationScheduleParams;
@@ -19,8 +23,6 @@ use app_server_protocol::AutomationSchedulerConfigReadResponse;
 use app_server_protocol::AutomationSchedulerConfigUpdateParams;
 use app_server_protocol::AutomationSchedulerConfigUpdateResponse;
 use app_server_protocol::AutomationSchedulerStatusResponse;
-use chrono::DateTime;
-use chrono::Duration;
 use chrono::Utc;
 pub(crate) use health::read_automation_health;
 use lime_core::config::load_config;
@@ -37,7 +39,6 @@ use lime_core::database::DbConnection;
 use serde::Deserialize;
 use serde_json::json;
 use serde_json::Value;
-use std::str::FromStr;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -283,12 +284,78 @@ pub(crate) fn delete_automation_job(
     Ok(AutomationJobDeleteResponse { deleted })
 }
 
-pub(crate) fn run_automation_job_now(
-    _params: AutomationJobIdParams,
-) -> Result<AutomationJobRunNowResponse, RuntimeCoreError> {
-    Err(RuntimeCoreError::Backend(
-        "automationJob/runNow 尚未迁移到 App Server 执行器，已拒绝回退旧 Tauri 命令".to_string(),
-    ))
+pub(crate) fn start_automation_job_run(
+    db: &DbConnection,
+    id: String,
+) -> Result<AutomationRunStart, RuntimeCoreError> {
+    let id = normalize_automation_job_id(&id)?;
+    let conn = database::lock_db(db).map_err(data_error)?;
+    let job = AutomationJobDao::get(&conn, &id)
+        .map_err(data_error)?
+        .ok_or_else(|| RuntimeCoreError::Backend(format!("自动化任务不存在: {id}")))?;
+    let mut start = build_automation_run_start(job)?;
+    AgentRunDao::create_run(&conn, &start.run).map_err(data_error)?;
+    apply_automation_run_started(&mut start.job, &start.run);
+    AutomationJobDao::update(&conn, &start.job).map_err(data_error)?;
+    Ok(start)
+}
+
+pub(crate) fn finish_automation_job_run(
+    db: &DbConnection,
+    finish: AutomationRunFinish,
+) -> Result<(), RuntimeCoreError> {
+    let conn = database::lock_db(db).map_err(data_error)?;
+    let metadata = serde_json::to_string(&finish.metadata).map_err(data_error)?;
+    AgentRunDao::finish_run(
+        &conn,
+        &finish.run_id,
+        finish.status.clone(),
+        &finish.finished_at,
+        finish.duration_ms,
+        finish.error_code.as_deref(),
+        finish.error_message.as_deref(),
+        Some(metadata.as_str()),
+    )
+    .map_err(data_error)?;
+    let mut job = finish.job;
+    apply_automation_run_finished(
+        &mut job,
+        &finish.status,
+        finish.finished_at,
+        finish.error_message,
+    );
+    AutomationJobDao::update(&conn, &job).map_err(data_error)?;
+    Ok(())
+}
+
+pub(crate) fn fail_automation_job_run(
+    db: &DbConnection,
+    failure: AutomationRunFailure,
+) -> Result<(), RuntimeCoreError> {
+    let conn = database::lock_db(db).map_err(data_error)?;
+    let metadata = serde_json::to_string(&failure.metadata).map_err(data_error)?;
+    if let Some(run) = failure.run.as_ref() {
+        AgentRunDao::finish_run(
+            &conn,
+            &run.id,
+            failure.status.clone(),
+            &failure.finished_at,
+            failure.duration_ms,
+            Some(failure.error_code.as_str()),
+            Some(failure.error_message.as_str()),
+            Some(metadata.as_str()),
+        )
+        .map_err(data_error)?;
+    }
+    let mut job = failure.job;
+    apply_automation_run_finished(
+        &mut job,
+        &failure.status,
+        failure.finished_at,
+        Some(failure.error_message),
+    );
+    AutomationJobDao::update(&conn, &job).map_err(data_error)?;
+    Ok(())
 }
 
 pub(crate) fn read_automation_run_history(
@@ -495,94 +562,4 @@ fn validate_automation_managed_objective_metadata(
 
 fn preview_next_automation_run(schedule: &TaskSchedule) -> Result<Option<String>, String> {
     Ok(next_run_for_automation_schedule(schedule, Utc::now())?.map(|value| value.to_rfc3339()))
-}
-
-fn next_run_for_automation_schedule(
-    schedule: &TaskSchedule,
-    from: DateTime<Utc>,
-) -> Result<Option<DateTime<Utc>>, String> {
-    match schedule {
-        TaskSchedule::Every { every_secs } => {
-            let secs = (*every_secs).max(60);
-            Ok(Some(from + Duration::seconds(secs as i64)))
-        }
-        TaskSchedule::Cron { expr, tz } => {
-            let normalized = normalize_cron_expression(expr);
-            let cron_schedule = cron::Schedule::from_str(&normalized)
-                .map_err(|error| format!("无效的 Cron 表达式: {error}"))?;
-            let next = if let Some(tz_str) = tz
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                let timezone: chrono_tz::Tz = tz_str
-                    .parse()
-                    .map_err(|_| format!("无效的时区: {tz_str}"))?;
-                cron_schedule
-                    .after(&from.with_timezone(&timezone))
-                    .next()
-                    .map(|value| value.with_timezone(&Utc))
-            } else {
-                cron_schedule.after(&from).next()
-            };
-            Ok(next)
-        }
-        TaskSchedule::At { at } => {
-            let target = DateTime::parse_from_rfc3339(at)
-                .map_err(|error| format!("无效的时间格式（需要 RFC3339）: {error}"))?
-                .with_timezone(&Utc);
-            if target > from {
-                Ok(Some(target))
-            } else {
-                Ok(None)
-            }
-        }
-    }
-}
-
-fn validate_automation_schedule_value(
-    schedule: &TaskSchedule,
-    now: DateTime<Utc>,
-) -> Result<(), String> {
-    match schedule {
-        TaskSchedule::Every { every_secs } => {
-            if *every_secs < 60 {
-                return Err("间隔时间不能小于 60 秒".to_string());
-            }
-            Ok(())
-        }
-        TaskSchedule::Cron { expr, tz } => {
-            let normalized = normalize_cron_expression(expr);
-            cron::Schedule::from_str(&normalized)
-                .map_err(|error| format!("无效的 Cron 表达式: {error}"))?;
-            if let Some(tz_str) = tz
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                let _: chrono_tz::Tz = tz_str
-                    .parse()
-                    .map_err(|_| format!("无效的时区: {tz_str}"))?;
-            }
-            Ok(())
-        }
-        TaskSchedule::At { at } => {
-            let target = DateTime::parse_from_rfc3339(at)
-                .map_err(|error| format!("无效的时间格式: {error}"))?
-                .with_timezone(&Utc);
-            if target <= now {
-                return Err("指定时间已过期".to_string());
-            }
-            Ok(())
-        }
-    }
-}
-
-fn normalize_cron_expression(expr: &str) -> String {
-    let parts = expr.split_whitespace().collect::<Vec<_>>();
-    if parts.len() == 5 {
-        format!("0 {}", expr.trim())
-    } else {
-        expr.trim().to_string()
-    }
 }

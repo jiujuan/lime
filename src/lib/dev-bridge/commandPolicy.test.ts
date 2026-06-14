@@ -23,7 +23,7 @@ import {
 describe("commandPolicy", () => {
   it("集中声明必须走真实桥接的前后端 truth 命令", () => {
     expect(isBridgeTruthCommand("app_server_handle_json_lines")).toBe(true);
-    expect(isBridgeTruthCommand("agent_runtime_submit_turn")).toBe(true);
+    expect(isBridgeTruthCommand("agent_runtime_submit_turn")).toBe(false);
     expect(isBridgeTruthCommand("workspace_list")).toBe(true);
     for (const command of [
       "get_model_registry",
@@ -87,10 +87,20 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("aster_agent_status")).toBe(false);
     expect(isBridgeTruthCommand("aster_agent_configure_provider")).toBe(false);
     expect(isBridgeTruthCommand("aster_agent_reset")).toBe(false);
-    expect(isBridgeTruthCommand("agent_runtime_get_thread_read")).toBe(true);
+    expect(isBridgeTruthCommand("agent_runtime_interrupt_turn")).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_respond_action")).toBe(false);
+    expect(isBridgeTruthCommand("agent_runtime_get_thread_read")).toBe(false);
     expect(isBridgeTruthCommand("agent_runtime_export_evidence_pack")).toBe(
-      true,
+      false,
     );
+    expect(
+      isBridgeTruthCommand("agent_runtime_list_workspace_skill_bindings"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand(
+        "agent_runtime_list_workspace_skill_bindings",
+      ),
+    ).toBe(false);
     expect(isBridgeTruthCommand("workspace_ensure")).toBe(true);
     expect(shouldDisallowMockFallbackCommand("workspace_ensure")).toBe(true);
     for (const command of [
@@ -286,7 +296,10 @@ describe("commandPolicy", () => {
     );
     expect(
       resolveDevBridgeCommandTimeoutProfile("agent_runtime_get_session"),
-    ).toBe("agent-session-get");
+    ).toBe("default");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("agent_app_runtime_get_task"),
+    ).toBe("agent-runtime");
     expect(
       resolveDevBridgeCommandTimeoutProfile("agent_app_start_ui_runtime"),
     ).toBe("agent-app-ui-runtime-start");
@@ -410,6 +423,24 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "session-update",
+              method: "agentSession/update",
+              params: { sessionId: "session-1" },
+            }),
+            JSON.stringify({
+              id: "session-start",
+              method: "agentSession/start",
+              params: { workspaceId: "workspace-1" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "skill-management",
               method: "skillManagement/list",
               params: { app: "lime" },
@@ -501,13 +532,13 @@ describe("commandPolicy", () => {
     );
 
     expect(shouldBypassDevBridgeCooldown("agent_runtime_get_session")).toBe(
-      true,
+      false,
     );
     expect(
       shouldBypassDevBridgeCooldown("agent_runtime_send_subagent_input"),
     ).toBe(false);
     expect(shouldRetryDevBridgeReadCommand("agent_runtime_get_session")).toBe(
-      true,
+      false,
     );
     expect(shouldRetryDevBridgeReadCommand("agent_runtime_submit_turn")).toBe(
       false,
@@ -517,6 +548,8 @@ describe("commandPolicy", () => {
   it("集中声明运行时真相事件前缀", () => {
     expect(isBridgeTruthEvent("aster_stream_session-1")).toBe(true);
     expect(isBridgeTruthEvent("agent_subagent_status:session-1")).toBe(true);
+    expect(isBridgeTruthEvent("embedded-browser-view-state")).toBe(true);
+    expect(isBridgeTruthEvent("embedded-browser-view-load-failed")).toBe(true);
     expect(isBridgeTruthEvent("retired-runtime-event")).toBe(false);
   });
 });

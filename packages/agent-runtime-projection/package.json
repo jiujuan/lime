@@ -1,6 +1,6 @@
 {
   "name": "@limecloud/agent-runtime-projection",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Shared Agent Runtime event projection and read-model helpers.",
   "license": "MIT",

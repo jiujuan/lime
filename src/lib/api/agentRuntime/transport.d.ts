@@ -1,7 +1,6 @@
 import { safeInvoke } from "@/lib/dev-bridge";
-import type { AgentRuntimeCommandName } from "./commandManifest.generated";
 export type AgentRuntimeBridgeInvoke = <TResponse>(command: string, payload?: Record<string, unknown>) => Promise<TResponse>;
-export type AgentRuntimeCommandInvoke = <TResponse>(command: AgentRuntimeCommandName, payload?: Record<string, unknown>) => Promise<TResponse>;
+export type AgentRuntimeCommandInvoke = <TResponse>(command: string, payload?: Record<string, unknown>) => Promise<TResponse>;
 export interface AgentRuntimeTransportDeps {
     invoke?: typeof safeInvoke;
 }

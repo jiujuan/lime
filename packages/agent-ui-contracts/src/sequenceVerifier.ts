@@ -25,6 +25,16 @@ export type RuntimeSequenceViolationCode =
   | "tool_failed_without_start"
   | "tool_started_already_active"
   | "tool_unclosed_at_turn_end"
+  | "patch_terminal_without_start"
+  | "patch_started_already_active"
+  | "patch_unclosed_at_turn_end"
+  | "command_output_without_start"
+  | "command_exited_without_start"
+  | "command_started_already_active"
+  | "command_unclosed_at_turn_end"
+  | "test_completed_without_start"
+  | "test_started_already_active"
+  | "test_unclosed_at_turn_end"
   | "action_resolved_without_request"
   | "action_required_already_active"
   | "action_unresolved_at_turn_end"
@@ -54,6 +64,12 @@ const ACTION_TERMINAL_CLASSES = new Set([
 interface TurnState {
   /** 仍处于活跃状态的 toolCallId -> 起始事件 id。 */
   activeTools: Map<string, string>;
+  /** 仍处于活跃状态的 patchId -> 起始事件 id。 */
+  activePatches: Map<string, string>;
+  /** 仍处于活跃状态的 commandId -> 起始事件 id。 */
+  activeCommands: Map<string, string>;
+  /** 仍处于活跃状态的 testRunId -> 起始事件 id。 */
+  activeTests: Map<string, string>;
   /** 仍处于活跃状态的 actionId -> 起始事件 id。 */
   activeActions: Map<string, string>;
   /** 是否有未收口的 model 流（model.delta 后未见 model.completed/model.failed）。 */
@@ -69,6 +85,9 @@ interface TurnState {
 function createTurnState(): TurnState {
   return {
     activeTools: new Map(),
+    activePatches: new Map(),
+    activeCommands: new Map(),
+    activeTests: new Map(),
     activeActions: new Map(),
     modelStreaming: false,
     terminal: false,
@@ -152,6 +171,122 @@ export function createRuntimeSequenceVerifier(): RuntimeSequenceVerifier {
     }
 
     switch (eventClass) {
+      case "patch.started": {
+        const patchId = eventScopeId(event, "patchId");
+        if (patchId) {
+          if (turn.activePatches.has(patchId)) {
+            record({
+              code: "patch_started_already_active",
+              eventId: event.id,
+              scopeId: patchId,
+              turnId: event.turnId,
+              message: `patch.started for '${patchId}' while a patch with the same id is still active.`,
+            });
+          } else {
+            turn.activePatches.set(patchId, event.id);
+          }
+        }
+        break;
+      }
+      case "patch.applied":
+      case "patch.failed": {
+        const patchId = eventScopeId(event, "patchId");
+        if (patchId) {
+          if (turn.activePatches.has(patchId)) {
+            turn.activePatches.delete(patchId);
+          } else {
+            record({
+              code: "patch_terminal_without_start",
+              eventId: event.id,
+              scopeId: patchId,
+              turnId: event.turnId,
+              message: `${eventClass} for '${patchId}' has no matching patch.started.`,
+            });
+          }
+        }
+        break;
+      }
+      case "command.started": {
+        const commandId = eventScopeId(event, "commandId");
+        if (commandId) {
+          if (turn.activeCommands.has(commandId)) {
+            record({
+              code: "command_started_already_active",
+              eventId: event.id,
+              scopeId: commandId,
+              turnId: event.turnId,
+              message: `command.started for '${commandId}' while a command with the same id is still active.`,
+            });
+          } else {
+            turn.activeCommands.set(commandId, event.id);
+          }
+        }
+        break;
+      }
+      case "command.output": {
+        const commandId = eventScopeId(event, "commandId");
+        if (commandId && !turn.activeCommands.has(commandId)) {
+          record({
+            code: "command_output_without_start",
+            eventId: event.id,
+            scopeId: commandId,
+            turnId: event.turnId,
+            message: `command.output for '${commandId}' has no matching command.started.`,
+          });
+        }
+        break;
+      }
+      case "command.exited": {
+        const commandId = eventScopeId(event, "commandId");
+        if (commandId) {
+          if (turn.activeCommands.has(commandId)) {
+            turn.activeCommands.delete(commandId);
+          } else {
+            record({
+              code: "command_exited_without_start",
+              eventId: event.id,
+              scopeId: commandId,
+              turnId: event.turnId,
+              message: `command.exited for '${commandId}' has no matching command.started.`,
+            });
+          }
+        }
+        break;
+      }
+      case "test.started": {
+        const testRunId = eventScopeId(event, "testRunId");
+        if (testRunId) {
+          if (turn.activeTests.has(testRunId)) {
+            record({
+              code: "test_started_already_active",
+              eventId: event.id,
+              scopeId: testRunId,
+              turnId: event.turnId,
+              message: `test.started for '${testRunId}' while a test run with the same id is still active.`,
+            });
+          } else {
+            turn.activeTests.set(testRunId, event.id);
+          }
+        }
+        break;
+      }
+      case "test.completed": {
+        const testRunId = eventScopeId(event, "testRunId");
+        if (testRunId) {
+          if (turn.activeTests.has(testRunId)) {
+            turn.activeTests.delete(testRunId);
+          } else {
+            record({
+              code: "test_completed_without_start",
+              eventId: event.id,
+              scopeId: testRunId,
+              turnId: event.turnId,
+              message: `test.completed for '${testRunId}' has no matching test.started.`,
+            });
+          }
+        }
+        break;
+      }
       case "tool.started": {
         if (typeof event.toolCallId === "string") {
           if (turn.activeTools.has(event.toolCallId)) {
@@ -257,6 +392,33 @@ export function createRuntimeSequenceVerifier(): RuntimeSequenceVerifier {
             message: `tool.started '${toolCallId}' (event '${startedId}') was not closed before ${eventClass}.`,
           });
         }
+        for (const [patchId, startedId] of turn.activePatches) {
+          record({
+            code: "patch_unclosed_at_turn_end",
+            eventId: event.id,
+            scopeId: patchId,
+            turnId: event.turnId,
+            message: `patch.started '${patchId}' (event '${startedId}') was not closed before ${eventClass}.`,
+          });
+        }
+        for (const [commandId, startedId] of turn.activeCommands) {
+          record({
+            code: "command_unclosed_at_turn_end",
+            eventId: event.id,
+            scopeId: commandId,
+            turnId: event.turnId,
+            message: `command.started '${commandId}' (event '${startedId}') was not closed before ${eventClass}.`,
+          });
+        }
+        for (const [testRunId, startedId] of turn.activeTests) {
+          record({
+            code: "test_unclosed_at_turn_end",
+            eventId: event.id,
+            scopeId: testRunId,
+            turnId: event.turnId,
+            message: `test.started '${testRunId}' (event '${startedId}') was not closed before ${eventClass}.`,
+          });
+        }
         for (const [actionId, requiredId] of turn.activeActions) {
           record({
             code: "action_unresolved_at_turn_end",
@@ -269,6 +431,9 @@ export function createRuntimeSequenceVerifier(): RuntimeSequenceVerifier {
         turn.terminal = true;
         turn.terminalEventId = event.id;
         turn.activeTools.clear();
+        turn.activePatches.clear();
+        turn.activeCommands.clear();
+        turn.activeTests.clear();
         turn.activeActions.clear();
         turn.modelStreaming = false;
         break;
@@ -289,6 +454,21 @@ export function createRuntimeSequenceVerifier(): RuntimeSequenceVerifier {
   }
 
   return { push, finalize, getViolations };
+}
+
+function eventPayloadString(
+  event: AgentRuntimeExecutionEvent,
+  key: string,
+): string | undefined {
+  const value = event.payload?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function eventScopeId(
+  event: AgentRuntimeExecutionEvent,
+  payloadKey: string,
+): string | undefined {
+  return eventPayloadString(event, payloadKey) ?? event.toolCallId;
 }
 
 /**
@@ -314,6 +494,10 @@ export function verifyRuntimeEventSequence(
 function isExecutionStreamClass(eventClass: string): boolean {
   return (
     eventClass.startsWith("tool.") ||
+    eventClass.startsWith("file.") ||
+    eventClass.startsWith("patch.") ||
+    eventClass.startsWith("command.") ||
+    eventClass.startsWith("test.") ||
     eventClass.startsWith("action.") ||
     eventClass.startsWith("model.") ||
     eventClass.startsWith("reasoning.") ||

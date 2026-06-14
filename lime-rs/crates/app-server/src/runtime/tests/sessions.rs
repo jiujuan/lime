@@ -222,6 +222,84 @@ async fn queue_session_controls_use_current_runtime_core_read_model() {
 }
 
 #[tokio::test]
+async fn second_active_turn_without_queue_fails_closed() {
+    let backend = Arc::new(RunningCountingBackend {
+        start_count: AtomicUsize::new(0),
+    });
+    let core = RuntimeCore::with_backend(backend.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_single_active".to_string()),
+        thread_id: Some("thread_single_active".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_single_active".to_string(),
+            turn_id: Some("turn_active".to_string()),
+            input: AgentInput {
+                text: "running".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("first turn");
+
+    let error = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_single_active".to_string(),
+                turn_id: Some("turn_parallel".to_string()),
+                input: AgentInput {
+                    text: "parallel".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("parallel turn must fail closed");
+
+    match error {
+        RuntimeCoreError::TurnAlreadyActive(turn_id) => {
+            assert_eq!(turn_id, "turn_active");
+        }
+        other => panic!("expected active turn error, got {other:?}"),
+    }
+    assert_eq!(backend.start_count.load(Ordering::SeqCst), 1);
+
+    let read = core
+        .read_session_current(AgentSessionReadParams {
+            session_id: "sess_single_active".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read session");
+    assert_eq!(read.turns.len(), 1);
+    assert_eq!(read.turns[0].turn_id, "turn_active");
+    let events = core
+        .events_for_session("sess_single_active")
+        .expect("runtime events");
+    assert!(events
+        .iter()
+        .all(|event| event.turn_id.as_deref() != Some("turn_parallel")));
+}
+
+#[tokio::test]
 async fn resume_queued_turn_rejects_incomplete_resume_contract_before_start() {
     let core = RuntimeCore::default();
     core.start_session(AgentSessionStartParams {

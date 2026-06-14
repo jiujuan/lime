@@ -254,6 +254,149 @@ async fn start_turn_hydrates_current_timeline_session_before_backend_submit() {
 }
 
 #[tokio::test]
+async fn start_turn_hydrates_persisted_active_coding_read_model_facts() {
+    let session_id = "sess_hydrated_coding_activity";
+    let turn_id = "turn_hydrated_coding_activity";
+    let persisted_session = AgentSession {
+        session_id: session_id.to_string(),
+        thread_id: "thread_hydrated_coding_activity".to_string(),
+        app_id: "agent-runtime".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: Some(app_server_protocol::BusinessObjectRef {
+            kind: "agent.session".to_string(),
+            id: session_id.to_string(),
+            title: Some("Hydrated Coding Activity".to_string()),
+            uri: None,
+            metadata: Some(json!({
+                "executionStrategy": "runtime-core"
+            })),
+        }),
+        status: AgentSessionStatus::WaitingAction,
+        created_at: "2026-06-13T00:00:00.000Z".to_string(),
+        updated_at: "2026-06-13T00:00:05.000Z".to_string(),
+    };
+    let persisted_turn = AgentTurn {
+        turn_id: turn_id.to_string(),
+        session_id: session_id.to_string(),
+        thread_id: "thread_hydrated_coding_activity".to_string(),
+        status: AgentTurnStatus::WaitingAction,
+        started_at: Some("2026-06-13T00:00:01.000Z".to_string()),
+        completed_at: None,
+    };
+    let persisted = AgentSessionReadResponse {
+        session: persisted_session,
+        turns: vec![persisted_turn],
+        detail: Some(json!({
+            "session_id": session_id,
+            "thread_id": "thread_hydrated_coding_activity",
+            "thread_read": {
+                "thread_id": "thread_hydrated_coding_activity",
+                "active_turn_id": turn_id,
+                "commands": [
+                    {
+                        "command_id": "cmd_hydrated_active",
+                        "turn_id": turn_id,
+                        "status": "running",
+                        "command": "npm test",
+                        "cwd": ".",
+                        "output_refs": ["output://cmd_hydrated_active"],
+                        "output_preview": "running tests",
+                        "started_at": "2026-06-13T00:00:02.000Z",
+                        "updated_at": "2026-06-13T00:00:03.000Z"
+                    }
+                ],
+                "tests": [
+                    {
+                        "test_run_id": "test_hydrated_active",
+                        "turn_id": turn_id,
+                        "status": "running",
+                        "command_id": "cmd_hydrated_active",
+                        "suite": "unit",
+                        "started_at": "2026-06-13T00:00:03.000Z"
+                    }
+                ],
+                "pending_requests": [
+                    {
+                        "id": "action_hydrated_active",
+                        "thread_id": "thread_hydrated_coding_activity",
+                        "turn_id": turn_id,
+                        "request_type": "tool_confirmation",
+                        "status": "pending",
+                        "title": "Allow npm test?",
+                        "payload": {
+                            "toolCallId": "tool_hydrated_active",
+                            "toolName": "Shell"
+                        },
+                        "created_at": "2026-06-13T00:00:04.000Z"
+                    }
+                ]
+            }
+        })),
+    };
+    let app_data_source = Arc::new(TestCurrentTimelineDataSource::new(persisted));
+    let backend = Arc::new(RecordingBackend::default());
+    let core =
+        RuntimeCore::with_backend(backend.clone()).with_app_data_source(app_data_source.clone());
+
+    let error = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session_id.to_string(),
+                turn_id: Some("turn_after_hydrated_active".to_string()),
+                input: AgentInput {
+                    text: "继续".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect_err("hydrated active turn should block a new turn");
+    assert!(matches!(error, RuntimeCoreError::TurnAlreadyActive(_)));
+    assert!(backend
+        .requests
+        .lock()
+        .expect("test backend requests mutex poisoned")
+        .is_empty());
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: session_id.to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("hydrated session is readable");
+    let detail = read.detail.expect("hydrated detail");
+    let thread_read = &detail["thread_read"];
+    assert_eq!(thread_read["active_turn_id"], turn_id);
+    assert_eq!(thread_read["active_command_id"], "cmd_hydrated_active");
+    assert_eq!(thread_read["active_test_run_id"], "test_hydrated_active");
+    assert_eq!(thread_read["active_action_id"], "action_hydrated_active");
+    assert_eq!(
+        thread_read["commands"][0]["output_refs"][0],
+        "output://cmd_hydrated_active"
+    );
+    assert_eq!(thread_read["tests"][0]["command_id"], "cmd_hydrated_active");
+    assert_eq!(
+        thread_read["pending_requests"][0]["request_type"],
+        "tool_confirmation"
+    );
+    assert_eq!(
+        thread_read["pending_requests"][0]["payload"]["toolCallId"],
+        "tool_hydrated_active"
+    );
+    assert_eq!(thread_read["diagnostics"]["pending_request_count"], 1);
+
+    let read_requests = app_data_source.read_requests();
+    assert_eq!(read_requests.len(), 1);
+    assert_eq!(read_requests[0].session_id, session_id);
+}
+
+#[tokio::test]
 async fn read_session_projects_runtime_events_into_thread_read_tool_calls() {
     let core = RuntimeCore::with_backend(Arc::new(ToolReadModelBackend));
     core.start_session(AgentSessionStartParams {

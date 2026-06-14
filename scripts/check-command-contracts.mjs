@@ -742,17 +742,6 @@ const currentElectronHostRequiredCommands = new Set([
   ...currentLayeredDesignDesktopHostShellCommands,
   ...currentFileBrowserDesktopHostShellCommands,
   "aster_agent_init",
-  "agent_runtime_create_session",
-  "agent_runtime_submit_turn",
-  "agent_runtime_interrupt_turn",
-  "agent_runtime_update_session",
-  "agent_runtime_respond_action",
-  "agent_runtime_get_thread_read",
-  "agent_runtime_export_evidence_pack",
-  "agent_runtime_get_tool_inventory",
-  "agent_runtime_list_sessions",
-  "agent_runtime_get_session",
-  "agent_runtime_list_workspace_skill_bindings",
   "agent_app_launch_shell",
   "agent_app_select_directory",
   "agent_app_get_ui_runtime_status",
@@ -885,31 +874,6 @@ function collectFrontendCommandUsage() {
       }
     }
   }
-  return commandUsage;
-}
-
-function collectAgentRuntimeSchemaUsage() {
-  const commandUsage = new Map();
-  const schemaPath = path.join(
-    repoRoot,
-    "src/lib/governance/agentRuntimeCommandSchema.json",
-  );
-  if (!fs.existsSync(schemaPath)) {
-    return commandUsage;
-  }
-
-  const relativePath = normalizePath(path.relative(repoRoot, schemaPath));
-  const parsed = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
-  const schemaCommands = Array.isArray(parsed?.commands) ? parsed.commands : [];
-
-  for (const entry of schemaCommands) {
-    const command = String(entry?.command ?? "").trim();
-    if (!command) {
-      continue;
-    }
-    addUsage(commandUsage, command, relativePath);
-  }
-
   return commandUsage;
 }
 
@@ -4629,12 +4593,6 @@ function printGuardFailures(title, failures) {
 
 function main() {
   const frontendUsage = collectFrontendCommandUsage();
-  const agentRuntimeSchemaUsage = collectAgentRuntimeSchemaUsage();
-  for (const [command, files] of agentRuntimeSchemaUsage.entries()) {
-    for (const file of files) {
-      addUsage(frontendUsage, command, file);
-    }
-  }
   const frontendCommands = new Set(frontendUsage.keys());
   const registeredCommands = collectElectronHostCommands();
   const mockPriorityCommands = collectMockPriorityCommands();

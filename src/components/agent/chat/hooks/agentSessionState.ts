@@ -31,6 +31,7 @@ import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentit
 
 export interface AgentSessionSnapshot {
   sessionId: string | null;
+  workingDir: string | null;
   messages: Message[];
   threadTurns: AgentThreadTurn[];
   threadItems: AgentThreadItem[];
@@ -45,9 +46,11 @@ export interface AgentSessionSnapshot {
 
 export function createEmptyAgentSessionSnapshot(options?: {
   executionRuntime?: AsterSessionExecutionRuntime | null;
+  workingDir?: string | null;
 }): AgentSessionSnapshot {
   return {
     sessionId: null,
+    workingDir: options?.workingDir?.trim() || null,
     messages: [],
     threadTurns: [],
     threadItems: [],
@@ -67,13 +70,21 @@ function resolveCurrentTurnIdFromTimeline(params: {
   preferredTurns?: AgentThreadTurn[];
   preferredItems?: AgentThreadItem[];
 }): string | null {
-  for (let index = (params.preferredTurns?.length ?? 0) - 1; index >= 0; index -= 1) {
+  for (
+    let index = (params.preferredTurns?.length ?? 0) - 1;
+    index >= 0;
+    index -= 1
+  ) {
     const turnId = params.preferredTurns?.[index]?.id;
     if (typeof turnId === "string" && turnId.trim().length > 0) {
       return turnId;
     }
   }
-  for (let index = (params.preferredItems?.length ?? 0) - 1; index >= 0; index -= 1) {
+  for (
+    let index = (params.preferredItems?.length ?? 0) - 1;
+    index >= 0;
+    index -= 1
+  ) {
     const turnId = params.preferredItems?.[index]?.turn_id;
     if (typeof turnId === "string" && turnId.trim().length > 0) {
       return turnId;
@@ -128,7 +139,10 @@ function isLocalTimelineCompatibleWithHydratedMessages(params: {
     return true;
   }
 
-  const compareCount = Math.min(hydratedUserTexts.length, localUserTexts.length);
+  const compareCount = Math.min(
+    hydratedUserTexts.length,
+    localUserTexts.length,
+  );
   for (let index = 0; index < compareCount; index += 1) {
     if (
       !areConversationTextsCompatible(
@@ -385,8 +399,7 @@ export function buildHydratedAgentSessionSnapshot(
     },
   );
   const hydratedMessagesForCompatibility =
-    mayPreserveExistingTimelineBySession &&
-    effectiveCurrentMessages.length > 0
+    mayPreserveExistingTimelineBySession && effectiveCurrentMessages.length > 0
       ? hydrateSessionDetailMessages(detail, topicId, {
           compactCompletedHistory: shouldCompactCompletedSessionHistory(detail),
           includeTimelineFallback: true,
@@ -445,6 +458,7 @@ export function buildHydratedAgentSessionSnapshot(
     executionStrategy: normalizeExecutionStrategy(nextExecutionStrategy),
     snapshot: {
       sessionId: syncSessionId ? topicId : currentSessionId,
+      workingDir: detail.working_dir?.trim() || null,
       messages: nextMessages,
       threadTurns: nextThreadTurns,
       threadItems: nextThreadItems,

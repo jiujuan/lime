@@ -9,6 +9,7 @@
 
 pub mod builder;
 pub mod instruction_discovery;
+pub mod prompt_assets;
 pub mod runtime_agents;
 pub mod templates;
 
@@ -17,8 +18,10 @@ pub use instruction_discovery::{
     clear_instruction_cache, discover_instructions, discover_instructions_cached,
     merge_instructions, InstructionLayer, InstructionSource,
 };
+pub use prompt_assets::*;
 pub use runtime_agents::{
-    build_runtime_agents_prompt, merge_system_prompt_with_runtime_agents,
+    build_runtime_agents_prompt, build_runtime_agents_prompt_for_project,
+    merge_system_prompt_with_runtime_agents, merge_system_prompt_with_runtime_agents_for_project,
     RUNTIME_AGENTS_PROMPT_MARKER,
 };
 pub use templates::*;

@@ -1,0 +1,859 @@
+use crate::RuntimeEvent;
+use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
+use serde_json::{json, Value};
+use std::collections::HashMap;
+
+mod patch;
+
+use patch::{patch_id_for_tool_start, patch_paths_from_arguments, patch_terminal_events};
+
+const COMMAND_OUTPUT_PREVIEW_CHARS: usize = 1_200;
+
+#[derive(Debug, Clone)]
+struct TrackedTool {
+    name: String,
+    arguments: Option<Value>,
+    test_run_id: Option<String>,
+    patch_id: Option<String>,
+    emitted_output: bool,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct CodingEventMirror {
+    tools: HashMap<String, TrackedTool>,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct CodingMirrorEvents {
+    pub(super) before_raw: Vec<RuntimeEvent>,
+    pub(super) after_raw: Vec<RuntimeEvent>,
+}
+
+impl CodingEventMirror {
+    pub(super) fn process_event(&mut self, event: &RuntimeAgentEvent) -> CodingMirrorEvents {
+        match event {
+            RuntimeAgentEvent::ToolStart {
+                tool_name,
+                tool_id,
+                arguments,
+            } => CodingMirrorEvents {
+                after_raw: self.handle_tool_start(tool_name, tool_id, arguments.as_deref()),
+                ..CodingMirrorEvents::default()
+            },
+            RuntimeAgentEvent::ToolOutputDelta {
+                tool_id,
+                delta,
+                output_kind,
+                metadata,
+            } => CodingMirrorEvents {
+                after_raw: self.handle_tool_output_delta(
+                    tool_id,
+                    delta,
+                    output_kind.as_deref(),
+                    metadata.as_ref(),
+                ),
+                ..CodingMirrorEvents::default()
+            },
+            RuntimeAgentEvent::ToolEnd { tool_id, result } => self.handle_tool_end(tool_id, result),
+            _ => CodingMirrorEvents::default(),
+        }
+    }
+
+    fn handle_tool_start(
+        &mut self,
+        tool_name: &str,
+        tool_id: &str,
+        arguments: Option<&str>,
+    ) -> Vec<RuntimeEvent> {
+        let normalized_name = normalize_tool_name(tool_name);
+        let arguments_value = arguments.and_then(parse_json_str);
+        let mut events = Vec::new();
+        let patch_id = patch_id_for_tool_start(normalized_name, tool_id, arguments_value.as_ref());
+        if let Some(patch_id) = &patch_id {
+            events.push(RuntimeEvent::new(
+                "patch.started",
+                compact_object(json!({
+                    "patchId": patch_id,
+                    "toolCallId": tool_id,
+                    "toolName": normalized_name,
+                    "source": "runtime_tool",
+                    "paths": patch_paths_from_arguments(arguments_value.as_ref()),
+                })),
+            ));
+        }
+        let test_run_id = if is_shell_tool(normalized_name) {
+            let command = command_from_arguments(arguments_value.as_ref()).unwrap_or_default();
+            events.push(RuntimeEvent::new(
+                "command.started",
+                compact_object(json!({
+                    "commandId": tool_id,
+                    "toolCallId": tool_id,
+                    "toolName": normalized_name,
+                    "command": command,
+                    "cwd": cwd_from_value(arguments_value.as_ref()),
+                    "source": "runtime_tool",
+                })),
+            ));
+
+            if is_likely_test_command(&command) {
+                let test_run_id = stable_scope_id("test", tool_id);
+                events.push(RuntimeEvent::new(
+                    "test.started",
+                    compact_object(json!({
+                        "testRunId": test_run_id,
+                        "commandId": tool_id,
+                        "command": command,
+                        "source": "runtime_tool",
+                    })),
+                ));
+                Some(test_run_id)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        self.tools.insert(
+            tool_id.to_string(),
+            TrackedTool {
+                name: normalized_name.to_string(),
+                arguments: arguments_value,
+                test_run_id,
+                patch_id,
+                emitted_output: false,
+            },
+        );
+
+        events
+    }
+
+    fn handle_tool_output_delta(
+        &mut self,
+        tool_id: &str,
+        delta: &str,
+        output_kind: Option<&str>,
+        metadata: Option<&HashMap<String, Value>>,
+    ) -> Vec<RuntimeEvent> {
+        let Some(tool) = self.tools.get_mut(tool_id) else {
+            return Vec::new();
+        };
+        if !is_shell_tool(&tool.name) || delta.trim().is_empty() {
+            return Vec::new();
+        }
+
+        tool.emitted_output = true;
+        let output_ref = output_ref_from_metadata(metadata, "command")
+            .unwrap_or_else(|| command_output_ref(tool_id));
+        let ref_ids = output_ref_ids(metadata, &output_ref);
+        vec![RuntimeEvent::new(
+            "command.output",
+            compact_object(json!({
+                "commandId": tool_id,
+                "toolCallId": tool_id,
+                "outputRef": output_ref,
+                "refIds": ref_ids,
+                "kind": output_kind,
+                "preview": truncate_chars(delta, COMMAND_OUTPUT_PREVIEW_CHARS),
+                "source": "runtime_tool_stream",
+                "metadata": metadata.cloned(),
+            })),
+        )]
+    }
+
+    fn handle_tool_end(&mut self, tool_id: &str, result: &AgentToolResult) -> CodingMirrorEvents {
+        let Some(tool) = self.tools.remove(tool_id) else {
+            return CodingMirrorEvents::default();
+        };
+        let after_raw = match tool.name.as_str() {
+            "Bash" | "PowerShell" => self.shell_tool_end_events(tool_id, &tool, result),
+            "Read" => file_read_tool_end_events(tool_id, &tool, result),
+            "Write" | "Edit" | "apply_patch" => file_tool_end_events(tool_id, &tool, result),
+            _ => Vec::new(),
+        };
+        CodingMirrorEvents {
+            before_raw: policy_block_events(tool_id, &tool, result),
+            after_raw,
+        }
+    }
+
+    fn shell_tool_end_events(
+        &self,
+        tool_id: &str,
+        tool: &TrackedTool,
+        result: &AgentToolResult,
+    ) -> Vec<RuntimeEvent> {
+        let metadata = result.metadata.as_ref();
+        let command = metadata
+            .and_then(|metadata| metadata_string(metadata, &["command"]))
+            .or_else(|| command_from_arguments(tool.arguments.as_ref()));
+        let exit_code = metadata.and_then(|metadata| metadata_i64(metadata, &["exit_code"]));
+        let status = command_status(exit_code, result.success);
+        let mut events = Vec::new();
+
+        if !tool.emitted_output && !result.output.trim().is_empty() {
+            let output_ref = output_ref_from_metadata(metadata, "command")
+                .unwrap_or_else(|| command_output_ref(tool_id));
+            let ref_ids = output_ref_ids(metadata, &output_ref);
+            events.push(RuntimeEvent::new(
+                "command.output",
+                compact_object(json!({
+                    "commandId": tool_id,
+                    "toolCallId": tool_id,
+                    "outputRef": output_ref,
+                    "refIds": ref_ids,
+                    "preview": truncate_chars(&result.output, COMMAND_OUTPUT_PREVIEW_CHARS),
+                    "source": "runtime_tool_result",
+                })),
+            ));
+        }
+
+        events.push(RuntimeEvent::new(
+            "command.exited",
+            compact_object(json!({
+                "commandId": tool_id,
+                "toolCallId": tool_id,
+                "command": command,
+                "exitCode": exit_code,
+                "status": status,
+                "success": result.success,
+                "cwd": metadata.and_then(|metadata| metadata_string(metadata, &["cwd"])),
+                "shell": metadata.and_then(|metadata| metadata_string(metadata, &["shell"])),
+                "source": "runtime_tool",
+            })),
+        ));
+        events.extend(patch_terminal_events(tool_id, tool, result));
+
+        if let Some(test_run_id) = &tool.test_run_id {
+            events.push(RuntimeEvent::new(
+                "test.completed",
+                compact_object(json!({
+                    "testRunId": test_run_id,
+                    "commandId": tool_id,
+                    "command": command,
+                    "result": if status == "passed" { "passed" } else { "failed" },
+                    "status": status,
+                    "exitCode": exit_code,
+                    "source": "runtime_tool",
+                })),
+            ));
+        }
+
+        events
+    }
+}
+
+fn file_tool_end_events(
+    tool_id: &str,
+    tool: &TrackedTool,
+    result: &AgentToolResult,
+) -> Vec<RuntimeEvent> {
+    let mut events = patch_terminal_events(tool_id, tool, result);
+    if !result.success {
+        return events;
+    }
+    if let Some(patch_file_change_events) = patch_file_change_events(tool_id, tool, result) {
+        events.extend(patch_file_change_events);
+        return events;
+    }
+
+    let Some(path) = file_path_from_result(result, tool.arguments.as_ref()) else {
+        return events;
+    };
+    let artifact_id = result
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata_string(metadata, &["artifact_id", "artifactId"]))
+        .unwrap_or_else(|| stable_scope_id("artifact:file", &path));
+    let metadata = result.metadata.as_ref();
+    let artifact_refs = artifact_refs_from_metadata(metadata, &artifact_id);
+
+    events.push(RuntimeEvent::new(
+        "file.changed",
+        compact_object(json!({
+            "path": path,
+            "artifactId": artifact_id,
+            "artifactRefs": artifact_refs,
+            "toolCallId": tool_id,
+            "toolName": tool.name,
+            "checkpointRef": metadata.and_then(|metadata| metadata_string(metadata, &["checkpointRef", "checkpoint_ref", "checkpointId", "checkpoint_id"])),
+            "contentRef": metadata.and_then(|metadata| metadata_string(metadata, &["contentRef", "content_ref"])),
+            "diffRef": metadata.and_then(|metadata| metadata_string(metadata, &["diffRef", "diff_ref"])),
+            "preview": metadata.and_then(|metadata| metadata_string(metadata, &["preview", "summary", "previewText", "preview_text"])),
+            "change": result
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("file_change").cloned()),
+            "source": "runtime_tool",
+        })),
+    ));
+    events
+}
+
+fn patch_file_change_events(
+    tool_id: &str,
+    tool: &TrackedTool,
+    result: &AgentToolResult,
+) -> Option<Vec<RuntimeEvent>> {
+    if tool.name != "apply_patch" {
+        return None;
+    }
+    let metadata = result.metadata.as_ref()?;
+    let changes = metadata
+        .get("file_changes")
+        .and_then(|value| value.get("changes"))
+        .and_then(Value::as_array)?;
+
+    let events = changes
+        .iter()
+        .filter_map(|change| {
+            let path = change.get("path").and_then(value_string)?;
+            let artifact_id = stable_scope_id("artifact:file", &path);
+            Some(RuntimeEvent::new(
+                "file.changed",
+                compact_object(json!({
+                    "path": path,
+                    "artifactId": artifact_id,
+                    "artifactRefs": artifact_refs_from_metadata(Some(metadata), &artifact_id),
+                    "toolCallId": tool_id,
+                    "toolName": tool.name,
+                    "checkpointRef": value_string_from_object(change, &["checkpointRef", "checkpoint_ref", "checkpointId", "checkpoint_id"])
+                        .or_else(|| metadata_string(metadata, &["checkpointRef", "checkpoint_ref", "checkpointId", "checkpoint_id"])),
+                    "contentRef": value_string_from_object(change, &["contentRef", "content_ref"])
+                        .or_else(|| metadata_string(metadata, &["contentRef", "content_ref"])),
+                    "diffRef": value_string_from_object(change, &["diffRef", "diff_ref"])
+                        .or_else(|| metadata_string(metadata, &["diffRef", "diff_ref"])),
+                    "diff": change.get("diff").cloned(),
+                    "preview": metadata_string(metadata, &["preview", "summary", "previewText", "preview_text"]),
+                    "change": change.clone(),
+                    "source": "runtime_tool",
+                })),
+            ))
+        })
+        .collect::<Vec<_>>();
+
+    (!events.is_empty()).then_some(events)
+}
+
+fn file_read_tool_end_events(
+    tool_id: &str,
+    tool: &TrackedTool,
+    result: &AgentToolResult,
+) -> Vec<RuntimeEvent> {
+    if !result.success {
+        return Vec::new();
+    }
+
+    let Some(path) = file_path_from_result(result, tool.arguments.as_ref()) else {
+        return Vec::new();
+    };
+    let metadata = result.metadata.as_ref();
+    let output_ref =
+        output_ref_from_metadata(metadata, "file").unwrap_or_else(|| file_output_ref(tool_id));
+    let ref_ids = output_ref_ids(metadata, &output_ref);
+
+    vec![RuntimeEvent::new(
+        "file.read",
+        compact_object(json!({
+            "path": path,
+            "toolCallId": tool_id,
+            "toolName": tool.name,
+            "outputRef": output_ref,
+            "contentRef": metadata.and_then(|metadata| metadata_string(metadata, &["contentRef", "content_ref"])),
+            "refIds": ref_ids,
+            "startLine": value_number_from_object(tool.arguments.as_ref(), &["start_line", "startLine"]),
+            "endLine": value_number_from_object(tool.arguments.as_ref(), &["end_line", "endLine"]),
+            "source": "runtime_tool",
+            "fileType": result
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata_string(metadata, &["file_type", "fileType"])),
+        })),
+    )]
+}
+
+fn policy_block_events(
+    tool_id: &str,
+    tool: &TrackedTool,
+    result: &AgentToolResult,
+) -> Vec<RuntimeEvent> {
+    if result.success {
+        return Vec::new();
+    }
+    let diagnostics = policy_diagnostics(tool, result);
+
+    match policy_block_kind(result) {
+        Some(PolicyBlockKind::PermissionDenied) => vec![RuntimeEvent::new(
+            "permission.denied",
+            compact_object(json!({
+                "toolCallId": tool_id,
+                "toolName": tool.name,
+                "reasonCode": policy_reason_code(result, "permission_denied"),
+                "reason": policy_reason(result),
+                "policyName": diagnostics.get("policyName").cloned(),
+                "policyProfile": diagnostics.get("policyProfile").cloned(),
+                "policyDecisionId": diagnostics.get("policyDecisionId").cloned(),
+                "platform": diagnostics.get("platform").cloned(),
+                "command": diagnostics.get("command").cloned(),
+                "cwd": diagnostics.get("cwd").cloned(),
+                "diagnostics": diagnostics,
+                "source": "runtime_tool",
+            })),
+        )],
+        Some(PolicyBlockKind::SandboxBlocked) => vec![RuntimeEvent::new(
+            "sandbox.blocked",
+            compact_object(json!({
+                "toolCallId": tool_id,
+                "toolName": tool.name,
+                "reasonCode": policy_reason_code(result, "sandbox_blocked"),
+                "reason": policy_reason(result),
+                "sandboxPolicy": diagnostics.get("sandboxPolicy").cloned(),
+                "policyProfile": diagnostics.get("policyProfile").cloned(),
+                "policyDecisionId": diagnostics.get("policyDecisionId").cloned(),
+                "platform": diagnostics.get("platform").cloned(),
+                "command": diagnostics.get("command").cloned(),
+                "cwd": diagnostics.get("cwd").cloned(),
+                "diagnostics": diagnostics,
+                "source": "runtime_tool",
+            })),
+        )],
+        None => Vec::new(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PolicyBlockKind {
+    PermissionDenied,
+    SandboxBlocked,
+}
+
+fn policy_block_kind(result: &AgentToolResult) -> Option<PolicyBlockKind> {
+    let metadata = result.metadata.as_ref();
+    if metadata
+        .and_then(|metadata| metadata_string(metadata, &["eventClass", "event_class"]))
+        .as_deref()
+        == Some("sandbox.blocked")
+    {
+        return Some(PolicyBlockKind::SandboxBlocked);
+    }
+    if metadata
+        .and_then(|metadata| metadata_string(metadata, &["eventClass", "event_class"]))
+        .as_deref()
+        == Some("permission.denied")
+    {
+        return Some(PolicyBlockKind::PermissionDenied);
+    }
+
+    let category = metadata
+        .and_then(|metadata| {
+            metadata_string(
+                metadata,
+                &[
+                    "failureCategory",
+                    "failure_category",
+                    "reasonCode",
+                    "reason_code",
+                    "code",
+                ],
+            )
+        })
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if category.contains("sandbox") {
+        return Some(PolicyBlockKind::SandboxBlocked);
+    }
+    if category.contains("permission") || category.contains("denied") || category.contains("policy")
+    {
+        return Some(PolicyBlockKind::PermissionDenied);
+    }
+
+    let text = format!(
+        "{}\n{}",
+        result.error.as_deref().unwrap_or_default(),
+        result.output
+    )
+    .to_ascii_lowercase();
+    if text.contains("sandbox") && (text.contains("block") || text.contains("denied")) {
+        Some(PolicyBlockKind::SandboxBlocked)
+    } else if text.contains("permission denied")
+        || text.contains("access denied")
+        || text.contains("policy denied")
+        || text.contains("not allowed")
+    {
+        Some(PolicyBlockKind::PermissionDenied)
+    } else {
+        None
+    }
+}
+
+fn policy_reason_code(result: &AgentToolResult, fallback: &str) -> String {
+    result
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata_string(metadata, &["reasonCode", "reason_code", "code"]))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn policy_reason(result: &AgentToolResult) -> Option<String> {
+    result
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata_string(metadata, &["reason", "message"]))
+        .or_else(|| result.error.as_deref().and_then(non_empty_string))
+        .or_else(|| non_empty_string(&result.output))
+}
+
+fn policy_diagnostics(tool: &TrackedTool, result: &AgentToolResult) -> Value {
+    let metadata = result.metadata.as_ref();
+    compact_object(json!({
+        "policyName": metadata.and_then(|metadata| metadata_string(metadata, &["policyName", "policy_name", "policy"])),
+        "policyProfile": metadata.and_then(|metadata| metadata_string(metadata, &["policyProfile", "policy_profile", "profile"])),
+        "policyDecisionId": metadata.and_then(|metadata| metadata_string(metadata, &["policyDecisionId", "policy_decision_id", "decisionId", "decision_id"])),
+        "sandboxPolicy": metadata.and_then(|metadata| metadata_string(metadata, &["sandboxPolicy", "sandbox_policy", "sandbox"])),
+        "sandboxReason": metadata.and_then(|metadata| metadata_string(metadata, &["sandboxReason", "sandbox_reason"])),
+        "platform": metadata.and_then(|metadata| metadata_string(metadata, &["platform", "os", "target_os"])).or_else(|| Some(std::env::consts::OS.to_string())),
+        "arch": metadata.and_then(|metadata| metadata_string(metadata, &["arch", "target_arch"])).or_else(|| Some(std::env::consts::ARCH.to_string())),
+        "toolSurface": metadata.and_then(|metadata| metadata_string(metadata, &["toolSurface", "tool_surface"])).unwrap_or_else(|| "runtime_tool".to_string()),
+        "toolName": tool.name,
+        "command": command_from_arguments(tool.arguments.as_ref()).or_else(|| metadata.and_then(|metadata| metadata_string(metadata, &["command", "cmd", "script"]))),
+        "cwd": cwd_from_value(tool.arguments.as_ref()).or_else(|| metadata.and_then(|metadata| metadata_string(metadata, &["cwd", "workingDir", "working_dir"]))),
+    }))
+}
+
+fn parse_json_str(value: &str) -> Option<Value> {
+    serde_json::from_str(value).ok()
+}
+
+fn normalize_tool_name(tool_name: &str) -> &str {
+    match lookup_key(tool_name).as_str() {
+        "bashtool" | "shell" | "developershell" | "mcpsystemshell" | "shellcommand"
+        | "execcommand" | "localshellcall" => "Bash",
+        "powershelltool" => "PowerShell",
+        "filewritetool" | "writefiletool" | "createfiletool" | "writefile" | "createfile"
+        | "mcpsystemwritefile" => "Write",
+        "fileedittool" | "editfile" | "developertexteditor" | "mcpsystemeditfile" => "Edit",
+        "filereadtool" | "readfiletool" | "readfile" | "developerread" | "mcpsystemreadfile" => {
+            "Read"
+        }
+        "applypatch" | "applypatchtool" => "apply_patch",
+        _ => tool_name.trim(),
+    }
+}
+
+fn lookup_key(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .map(|character| character.to_ascii_lowercase())
+        .collect()
+}
+
+fn is_shell_tool(tool_name: &str) -> bool {
+    matches!(tool_name, "Bash" | "PowerShell")
+}
+
+fn command_from_arguments(arguments: Option<&Value>) -> Option<String> {
+    value_string_from_object(arguments?, &["command", "cmd", "script"])
+}
+
+fn cwd_from_value(value: Option<&Value>) -> Option<String> {
+    value_string_from_object(value?, &["cwd", "workingDir", "working_dir"])
+}
+
+fn file_path_from_result(result: &AgentToolResult, arguments: Option<&Value>) -> Option<String> {
+    result
+        .metadata
+        .as_ref()
+        .and_then(|metadata| {
+            metadata_string(
+                metadata,
+                &[
+                    "path",
+                    "file_path",
+                    "filePath",
+                    "artifact_path",
+                    "artifactPath",
+                ],
+            )
+        })
+        .or_else(|| {
+            result
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata_paths(metadata, "artifact_paths"))
+                .and_then(|paths| paths.into_iter().next())
+        })
+        .or_else(|| value_string_from_object(arguments?, &["path", "filePath", "file_path"]))
+}
+
+fn metadata_string(metadata: &HashMap<String, Value>, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| metadata.get(*key))
+        .and_then(value_string)
+}
+
+fn metadata_i64(metadata: &HashMap<String, Value>, keys: &[&str]) -> Option<i64> {
+    keys.iter()
+        .find_map(|key| metadata.get(*key))
+        .and_then(value_i64)
+}
+
+fn metadata_string_array(metadata: &HashMap<String, Value>, keys: &[&str]) -> Vec<String> {
+    keys.iter()
+        .filter_map(|key| metadata.get(*key))
+        .flat_map(value_string_vec)
+        .collect()
+}
+
+fn metadata_paths(metadata: &HashMap<String, Value>, key: &str) -> Option<Vec<String>> {
+    let values = metadata.get(key)?.as_array()?;
+    let paths = values.iter().filter_map(value_string).collect::<Vec<_>>();
+    (!paths.is_empty()).then_some(paths)
+}
+
+fn value_string_from_object(value: &Value, keys: &[&str]) -> Option<String> {
+    let object = value.as_object()?;
+    keys.iter()
+        .find_map(|key| object.get(*key))
+        .and_then(value_string)
+}
+
+fn value_number_from_object(value: Option<&Value>, keys: &[&str]) -> Option<u64> {
+    let object = value?.as_object()?;
+    keys.iter()
+        .find_map(|key| object.get(*key))
+        .and_then(value_u64)
+}
+
+fn value_string(value: &Value) -> Option<String> {
+    value.as_str().and_then(non_empty_string)
+}
+
+fn value_string_vec(value: &Value) -> Vec<String> {
+    if let Some(values) = value.as_array() {
+        return values.iter().filter_map(value_string).collect();
+    }
+    value_string(value).into_iter().collect()
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
+fn value_i64(value: &Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
+        .or_else(|| value.as_str()?.trim().parse::<i64>().ok())
+}
+
+fn value_u64(value: &Value) -> Option<u64> {
+    value
+        .as_u64()
+        .or_else(|| value.as_i64().and_then(|value| u64::try_from(value).ok()))
+        .or_else(|| value.as_str()?.trim().parse::<u64>().ok())
+}
+
+fn command_status(exit_code: Option<i64>, success: bool) -> &'static str {
+    match exit_code {
+        Some(0) => "passed",
+        Some(_) => "failed",
+        None if success => "completed",
+        None => "failed",
+    }
+}
+
+fn is_likely_test_command(command: &str) -> bool {
+    let normalized = command.to_ascii_lowercase();
+    [
+        "npm test",
+        "npm run test",
+        "pnpm test",
+        "pnpm run test",
+        "yarn test",
+        "cargo test",
+        "cargo nextest",
+        "vitest",
+        "jest",
+        "pytest",
+        "go test",
+        "deno test",
+        "bun test",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
+fn command_output_ref(tool_id: &str) -> String {
+    stable_scope_id("output:command", tool_id)
+}
+
+fn file_output_ref(tool_id: &str) -> String {
+    stable_scope_id("output:file", tool_id)
+}
+
+fn output_ref_from_metadata(
+    metadata: Option<&HashMap<String, Value>>,
+    fallback_kind: &str,
+) -> Option<String> {
+    let metadata = metadata?;
+    metadata_string(
+        metadata,
+        &[
+            "outputRef",
+            "output_ref",
+            "contentRef",
+            "content_ref",
+            "refId",
+            "ref_id",
+            "outputId",
+            "output_id",
+        ],
+    )
+    .or_else(|| {
+        metadata_string_array(
+            metadata,
+            &[
+                "refIds",
+                "ref_ids",
+                "outputRefs",
+                "output_refs",
+                "contentRefs",
+                "content_refs",
+            ],
+        )
+        .into_iter()
+        .next()
+    })
+    .or_else(|| {
+        metadata_string(metadata, &["artifact_path", "artifactPath"])
+            .map(|path| stable_scope_id(&format!("output:{fallback_kind}"), &path))
+    })
+}
+
+fn output_ref_ids(
+    metadata: Option<&HashMap<String, Value>>,
+    output_ref: &str,
+) -> Option<Vec<String>> {
+    let mut refs = Vec::new();
+    if let Some(metadata) = metadata {
+        refs.extend(metadata_string_array(
+            metadata,
+            &[
+                "refIds",
+                "ref_ids",
+                "outputRefs",
+                "output_refs",
+                "contentRefs",
+                "content_refs",
+            ],
+        ));
+        refs.extend(
+            [
+                "outputRef",
+                "output_ref",
+                "contentRef",
+                "content_ref",
+                "refId",
+                "ref_id",
+                "outputId",
+                "output_id",
+            ]
+            .iter()
+            .filter_map(|key| metadata.get(*key))
+            .filter_map(value_string),
+        );
+    }
+    refs.push(output_ref.to_string());
+    dedupe_non_empty(refs)
+}
+
+fn artifact_refs_from_metadata(
+    metadata: Option<&HashMap<String, Value>>,
+    artifact_id: &str,
+) -> Option<Vec<String>> {
+    let mut refs = Vec::new();
+    if let Some(metadata) = metadata {
+        refs.extend(metadata_string_array(
+            metadata,
+            &[
+                "artifactRefs",
+                "artifact_refs",
+                "artifactIds",
+                "artifact_ids",
+                "artifact_ref",
+                "artifactRef",
+            ],
+        ));
+        refs.extend(
+            ["artifactId", "artifact_id"]
+                .iter()
+                .filter_map(|key| metadata.get(*key))
+                .filter_map(value_string),
+        );
+    }
+    refs.push(artifact_id.to_string());
+    dedupe_non_empty(refs)
+}
+
+fn dedupe_non_empty(values: Vec<String>) -> Option<Vec<String>> {
+    let mut deduped = Vec::new();
+    for value in values {
+        let Some(value) = non_empty_string(&value) else {
+            continue;
+        };
+        if !deduped.contains(&value) {
+            deduped.push(value);
+        }
+    }
+    (!deduped.is_empty()).then_some(deduped)
+}
+
+fn stable_scope_id(prefix: &str, value: &str) -> String {
+    format!("{prefix}:{:016x}", stable_hash(value))
+}
+
+fn stable_hash(value: &str) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in value.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    let mut output = String::new();
+    for (index, character) in value.chars().enumerate() {
+        if index >= max_chars {
+            output.push('…');
+            break;
+        }
+        output.push(character);
+    }
+    output
+}
+
+fn compact_object(value: Value) -> Value {
+    match value {
+        Value::Object(object) => Value::Object(
+            object
+                .into_iter()
+                .filter_map(|(key, value)| {
+                    let compacted = compact_object(value);
+                    if compacted.is_null() {
+                        None
+                    } else {
+                        Some((key, compacted))
+                    }
+                })
+                .collect(),
+        ),
+        Value::Array(values) => Value::Array(values.into_iter().map(compact_object).collect()),
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests;

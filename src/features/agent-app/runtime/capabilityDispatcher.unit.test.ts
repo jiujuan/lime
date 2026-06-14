@@ -302,7 +302,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     });
     expect(models).toMatchObject({
       appId: "content-factory-app",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: 1,
       models: [
         expect.objectContaining({
@@ -323,7 +323,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
             costStatus: "estimated",
             inputPerMillion: 0.8,
             outputPerMillion: 3.2,
-            source: "agent_runtime_model_constraints",
+            source: "app_server_runtime_model_constraints",
           }),
         }),
       ],
@@ -341,7 +341,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       },
     });
     expect(routing).toMatchObject({
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       routes: [
         expect.objectContaining({
           taskId: "agent-app-task-1",
@@ -375,7 +375,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     });
     expect(tokenUsage).toMatchObject({
       appId: "content-factory-app",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: 1,
       totals: {
         inputTokens: 1200,
@@ -404,7 +404,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       },
     });
     expect(costSummary).toMatchObject({
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       cost: {
         estimatedTotalCost: 0.043,
         currency: "USD",
@@ -426,7 +426,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       appId: "content-factory-app",
       scope: "task",
       status: "observed",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: 1,
       budgetCount: 1,
       observedCost: {
@@ -463,7 +463,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     });
     expect(listed).toMatchObject({
       appId: "content-factory-app",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
       taskCount: 1,
       skills: [
         expect.objectContaining({
@@ -474,7 +474,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
           invocationCount: 1,
           taskIds: ["agent-app-task-1"],
           taskKinds: ["content.scenario_planning"],
-          source: "agent_runtime_process",
+          source: "app_server_runtime_process",
         }),
         expect.objectContaining({
           skillId: "capability-report",
@@ -547,7 +547,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       skillId: "content-strategist",
       taskId: "agent-app-task-1",
       status: "succeeded",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
     });
 
     await expect(
@@ -565,7 +565,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toEqual({
       status: "not_available",
       reason: "skill_runtime_mutation_not_exposed_to_agent_apps",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
     });
   });
 
@@ -585,7 +585,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     expect(memoryStatus).toMatchObject({
       appId: "content-factory-app",
       status: "read_only_projection",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       writable: false,
       compactable: false,
       totals: {
@@ -630,7 +630,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     });
     expect(memoryQuery).toMatchObject({
       status: "limited_projection",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       records: [
         expect.objectContaining({
           taskId: "agent-app-task-1",
@@ -673,7 +673,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     });
     expect(contextSnapshot).toMatchObject({
       appId: "content-factory-app",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: 1,
       contexts: [
         expect.objectContaining({
@@ -713,7 +713,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toEqual({
       status: "not_available",
       reason: "memory_runtime_mutation_not_exposed_to_agent_apps",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
     });
 
     await expect(
@@ -731,7 +731,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toEqual({
       status: "not_available",
       reason: "memory_runtime_mutation_not_exposed_to_agent_apps",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
     });
 
     await expect(
@@ -749,7 +749,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toEqual({
       status: "not_available",
       reason: "context_mutation_not_exposed_to_agent_apps",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
     });
 
     await expect(
@@ -767,7 +767,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toEqual({
       status: "not_available",
       reason: "context_mutation_not_exposed_to_agent_apps",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
     });
   });
 
@@ -789,7 +789,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       appId: "content-factory-app",
       entryKey: "dashboard",
       status: "read_only_projection",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: 1,
       tasks: [
         expect.objectContaining({
@@ -800,7 +800,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
           runtimeStatus: "completed",
           hasResult: true,
           toolCount: 1,
-          source: "agent_runtime_projection",
+          source: "app_server_runtime_projection",
         }),
       ],
     });
@@ -822,7 +822,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       appId: "content-factory-app",
       status: "succeeded",
       runtimeStatus: "completed",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
     });
 
     await expect(
@@ -840,7 +840,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toMatchObject({
       status: "not_available",
       reason: "task_cancellation_must_use_lime_agent_cancel_task",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       next: {
         capability: "lime.agent",
         method: "cancelTask",
@@ -862,7 +862,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toMatchObject({
       status: "not_available",
       reason: "task_subscription_must_use_lime_agent_stream_task",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       next: {
         capability: "lime.agent",
         method: "streamTask",
@@ -1286,7 +1286,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
         status: "requires_agent_task",
         owner: "lime_agent_runtime",
         mutationExposed: false,
-        evidenceSource: "agent_runtime_projection",
+        evidenceSource: "app_server_runtime_projection",
         reason: "search_execution_requires_lime_agent_task",
         request: {
           capability: "lime.search",
@@ -1320,14 +1320,14 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
           capability: "lime.search",
           toolName: "web_search",
           taskId: "agent-app-task-1",
-          source: "agent_runtime_process",
+          source: "app_server_runtime_process",
         }),
         expect.objectContaining({
           runId: "thread-tool-search-1",
           capability: "lime.search",
           toolName: "web_search",
           status: "completed",
-          source: "agent_runtime_thread_read",
+          source: "app_server_runtime_thread_read",
           input: { query: "竞品" },
           output: { citationCount: 2 },
         }),
@@ -1369,7 +1369,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       runId: "thread-tool-search-1",
       capability: "lime.search",
       status: "completed",
-      source: "agent_runtime_thread_read",
+      source: "app_server_runtime_thread_read",
       input: { query: "竞品" },
       output: { citationCount: 2 },
     });
@@ -1409,7 +1409,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
         status: "requires_agent_task",
         owner: "lime_agent_runtime",
         mutationExposed: false,
-        evidenceSource: "agent_runtime_projection",
+        evidenceSource: "app_server_runtime_projection",
         request: {
           capability: "lime.tools",
           method: "invoke",
@@ -1461,12 +1461,12 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
         expect.objectContaining({
           runId: "web_search:run-1",
           capability: "lime.search",
-          source: "agent_runtime_process",
+          source: "app_server_runtime_process",
         }),
         expect.objectContaining({
           runId: "thread-tool-search-1",
           capability: "lime.search",
-          source: "agent_runtime_thread_read",
+          source: "app_server_runtime_thread_read",
         }),
       ]),
     );
@@ -1488,7 +1488,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
       runId: "thread-tool-search-1",
       capability: "lime.search",
       status: "completed",
-      source: "agent_runtime_thread_read",
+      source: "app_server_runtime_thread_read",
       input: { query: "竞品" },
       output: { citationCount: 2 },
     });
@@ -1587,7 +1587,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     expect(mcpServers).toMatchObject({
       appId: "content-factory-app",
       status: "read_only_projection",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
       servers: [
         expect.objectContaining({
           serverId: "research",
@@ -1687,7 +1687,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toEqual({
       status: "requires_agent_task_cancellation",
       reason: "tool_run_cancellation_must_use_agent_task_id",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       runId: "terminal:run-1",
       taskId: "agent-app-task-1",
       next: {
@@ -1710,7 +1710,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     expect(connectors).toMatchObject({
       appId: "content-factory-app",
       status: "read_only_projection",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
       connectors: [
         expect.objectContaining({
           connectorId: "notion",
@@ -1755,7 +1755,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
     ).resolves.toMatchObject({
       connectorId: "notion",
       status: "observed",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
       connector: expect.objectContaining({
         source: "mixed",
         runIds: expect.arrayContaining([
@@ -1902,7 +1902,7 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
         status: "requires_agent_task",
         owner: "lime_agent_runtime",
         mutationExposed: false,
-        evidenceSource: "agent_runtime_projection",
+        evidenceSource: "app_server_runtime_projection",
         request: {
           capability: "lime.connectors",
           method: "invoke",
@@ -1966,14 +1966,14 @@ describe("createAgentAppCapabilityDispatcher unit boundary", () => {
           runId: "connector:run-1",
           capability: "lime.connectors",
           toolName: "connector__notion__createPage",
-          source: "agent_runtime_process",
+          source: "app_server_runtime_process",
         }),
         expect.objectContaining({
           runId: "thread-connector-notion-1",
           capability: "lime.connectors",
           toolName: "connector__notion__createPage",
           status: "completed",
-          source: "agent_runtime_thread_read",
+          source: "app_server_runtime_thread_read",
           input: { connectorId: "notion", title: "内容计划" },
           output: { pageId: "notion-page-1" },
         }),

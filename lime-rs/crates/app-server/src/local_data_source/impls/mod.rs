@@ -1,0 +1,17 @@
+mod agent_apps;
+mod automation_management;
+mod automation_overview;
+mod connect;
+mod diagnostics;
+mod gateway;
+mod knowledge;
+mod mcp;
+mod media;
+mod memory;
+mod model_providers;
+mod sessions;
+mod skills;
+mod usage_stats;
+mod voice;
+mod workspace_skill_bindings;
+mod workspaces;

@@ -3,11 +3,15 @@ import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRun
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import {
   buildCanvasWorkbenchChangeView,
+  buildCanvasWorkbenchChangeViewFromCodingProjection,
+  buildCodingRuntimeEventsFromThreadItems,
+  buildCodingWorkbenchProjectionFromThreadItems,
   buildFileArtifactChangeItem,
   buildOutputHeaderViewModel,
   buildQuotedReplyText,
   buildSessionHeaderViewModel,
   buildSessionRuntimeCounters,
+  buildSessionRuntimeCountersFromCodingProjection,
   buildSessionRuntimeProjectionIdentity,
   buildSessionRuntimeProjectionState,
   buildWorkspaceHeaderView,
@@ -328,6 +332,241 @@ describe("workspaceConversationSceneViewModel", () => {
       ],
     });
     expect(view?.onOpenFile).toBe(onOpenFile);
+  });
+
+  it("应把迁移期 thread item 归一为标准 coding runtime events", () => {
+    const events = buildCodingRuntimeEventsFromThreadItems({
+      threadItems: [
+        createFileArtifactItem({
+          id: "file-item",
+          sequence: 1,
+          path: "src/App.tsx",
+          metadata: {
+            diffRef: "artifact://diff/app",
+          },
+        }),
+        createCommandExecutionItem({
+          id: "command-item",
+          sequence: 2,
+          command: "npm test",
+          cwd: ".",
+          exit_code: 0,
+          aggregated_output: "pass",
+        }),
+        {
+          id: "patch-item",
+          type: "tool_call",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 3,
+          status: "failed",
+          started_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:01Z",
+          tool_name: "apply_patch",
+          output: "conflict",
+          metadata: {
+            patchId: "patch-app",
+            path: "src/App.tsx",
+            failureCategory: "conflict",
+          },
+        },
+        {
+          id: "test-summary",
+          type: "turn_summary",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          sequence: 4,
+          status: "failed",
+          started_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:01Z",
+          text: "unit tests failed",
+          metadata: {
+            kind: "test_run",
+            testRunId: "test-unit",
+            commandId: "command-item",
+            passed: 8,
+            failed: 1,
+          },
+        },
+      ] as AgentThreadItem[],
+      fileCheckpointSummary: createCheckpointSummary(),
+    });
+
+    expect(events.map((event) => event.eventClass)).toEqual([
+      "file.changed",
+      "command.started",
+      "command.exited",
+      "patch.started",
+      "patch.failed",
+      "test.started",
+      "test.completed",
+    ]);
+    expect(events.every((event, index) => event.sequence === index + 1)).toBe(
+      true,
+    );
+  });
+
+  it("应通过标准 coding projection 派生工作台 change view", () => {
+    const onOpenFile = vi.fn();
+    const codingView = buildCodingWorkbenchProjectionFromThreadItems({
+      threadItems: [
+        createFileArtifactItem({
+          id: "file-item",
+          path: "src/App.tsx",
+          content: "export function App() {}",
+          metadata: {
+            previewText: "更新 App",
+            diffRef: "artifact://diff/app",
+          },
+        }),
+      ] as AgentThreadItem[],
+      fileCheckpointSummary: createCheckpointSummary(),
+    });
+    const changeView = buildCanvasWorkbenchChangeViewFromCodingProjection({
+      codingView,
+      fileCheckpointSummary: createCheckpointSummary(),
+      onOpenFile,
+    });
+
+    expect(codingView.changes).toHaveLength(1);
+    expect(changeView).toMatchObject({
+      checkpointCount: 1,
+      items: [
+        {
+          id: "coding_thread_item_file-item",
+          path: "src/App.tsx",
+          displayName: "App.tsx",
+          source: "runtime",
+          status: "completed",
+          preview: "更新 App",
+        },
+      ],
+    });
+    expect(changeView?.onOpenFile).toBe(onOpenFile);
+  });
+
+  it("应从 current thread read model 合并 coding command/test/action 状态", () => {
+    const codingView = buildCodingWorkbenchProjectionFromThreadItems({
+      threadItems: [],
+      threadRead: {
+        thread_id: "thread-1",
+        active_turn_id: "turn-1",
+        active_command_id: "command-active",
+        active_test_run_id: "test-active",
+        commands: [
+          {
+            command_id: "command-active",
+            status: "running",
+            command: "npm test",
+            cwd: "app",
+            output_refs: ["output://command-active"],
+            output_preview: "running tests",
+          },
+        ],
+        tests: [
+          {
+            test_run_id: "test-active",
+            status: "running",
+            command_id: "command-active",
+            suite: "unit",
+            passed: 3,
+            failed: 0,
+          },
+        ],
+        pending_requests: [
+          {
+            id: "action-approve-command",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            request_type: "approval",
+            status: "pending",
+            title: "确认执行命令",
+          },
+        ],
+      },
+    });
+
+    expect(codingView.mainObject.id).toBe("turn-1");
+    expect(codingView.mainObject.activeCommandId).toBe("command-active");
+    expect(codingView.mainObject.activeTestRunId).toBe("test-active");
+    expect(codingView.commands).toMatchObject([
+      {
+        commandId: "command-active",
+        status: "running",
+        command: "npm test",
+        cwd: "app",
+        preview: "running tests",
+      },
+    ]);
+    expect(codingView.tests).toMatchObject([
+      {
+        testRunId: "test-active",
+        status: "running",
+        commandId: "command-active",
+        suite: "unit",
+        passed: 3,
+      },
+    ]);
+    expect(codingView.actions[0]?.actionId).toBe("action-approve-command");
+    expect(codingView.ui.preferredTab).toBe("outputs");
+  });
+
+  it("应从 current coding projection 计算 workbench 输出和进度计数", () => {
+    const codingView = buildCodingWorkbenchProjectionFromThreadItems({
+      threadItems: [],
+      threadRead: {
+        thread_id: "thread-1",
+        active_turn_id: "turn-1",
+        active_command_id: "command-active",
+        active_test_run_id: "test-active",
+        commands: [
+          {
+            command_id: "command-active",
+            status: "running",
+            command: "npm test",
+            cwd: "app",
+            output_preview: "running tests",
+          },
+        ],
+        tests: [
+          {
+            test_run_id: "test-active",
+            status: "failed",
+            command_id: "command-active",
+            suite: "unit",
+            passed: 3,
+            failed: 1,
+          },
+        ],
+        pending_requests: [
+          {
+            id: "action-approve-command",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            request_type: "approval",
+            status: "pending",
+            title: "确认执行命令",
+          },
+        ],
+      },
+    });
+
+    expect(
+      buildSessionRuntimeCountersFromCodingProjection({
+        codingView,
+        fileCheckpointSummary: null,
+        queuedTurns: [],
+      }),
+    ).toEqual({
+      outputItemCount: 3,
+      failedOutputItemCount: 1,
+      inProgressItemCount: 1,
+      generatedFileCount: 0,
+      hasRuntimeFileChanges: false,
+      hasRuntimeOutputs: true,
+      shouldUseRuntimeWorkbench: true,
+      shouldExposeSessionProgress: true,
+    });
   });
 
   it("projection state 未变化时应复用当前对象", () => {

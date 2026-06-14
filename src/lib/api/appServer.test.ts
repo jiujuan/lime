@@ -21,6 +21,7 @@ import {
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
   APP_SERVER_METHOD_FILE_SYSTEM_LIST_DIRECTORY,
   APP_SERVER_METHOD_FILE_SYSTEM_READ_FILE_PREVIEW,
+  APP_SERVER_METHOD_PROJECT_GIT_DIFF,
   APP_SERVER_METHOD_GATEWAY_CHANNEL_START,
   APP_SERVER_METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT,
   APP_SERVER_METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL,
@@ -634,6 +635,45 @@ describe("App Server API", () => {
         },
       },
     );
+  });
+
+  it("readProjectGitDiff 应通过 App Server JSON-RPC 读取 Git diff", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 8,
+          result: {
+            rootPath: "/workspace",
+            repositoryRoot: "/workspace",
+            hasGitRepository: true,
+            patch: "diff --git a/README.md b/README.md\n+hello",
+            uncommittedFileCount: 1,
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 8 });
+    const diff = await client.readProjectGitDiff({
+      rootPath: "/workspace",
+      contextLines: 5,
+    });
+
+    expect(diff.result.patch).toContain("diff --git");
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 8,
+            method: APP_SERVER_METHOD_PROJECT_GIT_DIFF,
+            params: {
+              rootPath: "/workspace",
+              contextLines: 5,
+            },
+          }),
+        ],
+      },
+    });
   });
 
   it("exportEvidence 应通过 App Server JSON-RPC 导出 current evidence snapshot", async () => {

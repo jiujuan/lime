@@ -38,6 +38,8 @@ describe("buildUserInputSubmitOp", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
+          webSearch: false,
+          thinking: true,
           task: false,
           subagent: false,
         },
@@ -92,7 +94,7 @@ describe("buildUserInputSubmitOp", () => {
     });
   });
 
-  it("应保留尚未同步到 runtime 的显式偏好与 metadata", () => {
+  it("应迁移尚未同步到 runtime 的显式偏好并保留其他 metadata", () => {
     const op = buildUserInputSubmitOp({
       content: "切到发布确认",
       images: [],
@@ -150,7 +152,7 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences).toEqual({
       providerPreference: undefined,
       modelPreference: "gpt-5",
-      thinking: undefined,
+      thinking: true,
       approvalPolicy: "never",
       sandboxPolicy: "danger-full-access",
       executionStrategy: undefined,
@@ -163,6 +165,14 @@ describe("buildUserInputSubmitOp", () => {
       },
     });
     expect(op.metadata).toEqual({
+      harness: {
+        gate_key: "publish_confirm",
+        run_title: "发布确认",
+      },
+    });
+    const request = createSubmitTurnRequestFromAgentOp(op);
+    expect(request.turn_config?.thinking_enabled).toBe(true);
+    expect(request.turn_config?.metadata).toEqual({
       harness: {
         gate_key: "publish_confirm",
         run_title: "发布确认",
@@ -385,7 +395,7 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.modelPreference).toBeUndefined();
   });
 
-  it("应只透传显式搜索模式，不提交旧 webSearch 开关", () => {
+  it("应同时透传显式搜索开关和搜索模式到 turn_config", () => {
     const op = buildUserInputSubmitOp({
       content: "请搜索最新 AI 新闻",
       images: [],
@@ -397,10 +407,119 @@ describe("buildUserInputSubmitOp", () => {
       effectiveModel: "deepseek-chat",
       webSearch: true,
       searchMode: "required",
+      explicitToolPreferences: true,
     });
 
-    expect(op.preferences?.webSearch).toBeUndefined();
+    expect(op.preferences?.webSearch).toBe(true);
     expect(op.preferences?.searchMode).toBe("required");
+    const request = createSubmitTurnRequestFromAgentOp(op);
+    expect(request.turn_config?.web_search).toBe(true);
+    expect(request.turn_config?.search_mode).toBe("required");
+  });
+
+  it("应把输入框推理强度透传到 App Server turn_config", () => {
+    const op = buildUserInputSubmitOp({
+      content: "先深入推理再给出实施计划",
+      images: [],
+      sessionId: "session-reasoning-effort-1",
+      eventName: "aster_stream_reasoning_effort",
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.5",
+      reasoningEffort: " high ",
+    });
+
+    expect(op.preferences?.reasoningEffort).toBe("high");
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+
+    expect(request.turn_config?.reasoning_effort).toBe("high");
+  });
+
+  it("应把未同步的显式搜索和思考开关迁移到 App Server turn_config", () => {
+    const op = buildUserInputSubmitOp({
+      content: "搜索并深度分析今天的 AI 新闻",
+      images: [],
+      sessionId: "session-search-thinking-1",
+      eventName: "aster_stream_search_thinking",
+      workspaceId: "workspace-search-thinking",
+      requestMetadata: {
+        harness: {
+          preferences: {
+            web_search: true,
+            thinking: true,
+          },
+        },
+      },
+      executionRuntime: {
+        session_id: "session-search-thinking-1",
+        source: "runtime_snapshot",
+        recent_preferences: {
+          task: false,
+          subagent: false,
+        },
+      },
+      syncedRecentPreferences: {
+        task: false,
+        subagent: false,
+      },
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: "react",
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.5",
+      webSearch: true,
+      thinking: true,
+      explicitToolPreferences: true,
+    });
+
+    expect(op.preferences?.webSearch).toBe(true);
+    expect(op.preferences?.thinking).toBe(true);
+    expect(op.metadata).toBeUndefined();
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+
+    expect(request.turn_config?.web_search).toBe(true);
+    expect(request.turn_config?.thinking_enabled).toBe(true);
+    expect(request.turn_config?.metadata).toBeUndefined();
+  });
+
+  it("应把旧 metadata 显式偏好迁移到 turn_config 并清理旧承载", () => {
+    const op = buildUserInputSubmitOp({
+      content: "启用搜索和思考",
+      images: [],
+      sessionId: "session-legacy-prefs-1",
+      eventName: "aster_stream_legacy_prefs",
+      requestMetadata: {
+        harness: {
+          preferences: {
+            webSearchEnabled: true,
+            thinkingEnabled: true,
+          },
+          turn_purpose: "content_review",
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.5",
+    });
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+
+    expect(request.turn_config?.web_search).toBe(true);
+    expect(request.turn_config?.thinking_enabled).toBe(true);
+    expect(request.turn_config?.metadata).toEqual({
+      harness: {
+        turn_purpose: "content_review",
+      },
+    });
   });
 
   it("输入框自然语言新闻请求不应提交搜索、思考或旧执行策略选择", () => {

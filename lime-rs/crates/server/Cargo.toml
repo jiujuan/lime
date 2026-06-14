@@ -12,7 +12,6 @@ lime-services.workspace = true
 lime-websocket.workspace = true
 lime-processor.workspace = true
 lime-server-utils.workspace = true
-lime-scheduler.workspace = true
 lime-agent.workspace = true
 aster.workspace = true
 

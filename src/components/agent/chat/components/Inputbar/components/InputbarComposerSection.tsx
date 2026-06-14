@@ -189,9 +189,26 @@ export const InputbarComposerSection: React.FC<
     currentPendingImages.length > 0 &&
     Boolean(resolvedProviderType?.trim()) &&
     Boolean(resolvedModel?.trim());
+  const activeKnowledgeStatusControl =
+    knowledgePackSelection?.enabled &&
+    knowledgePackSelection.packName.trim() &&
+    knowledgePackSelection.workingDir.trim() ? (
+      <InputbarKnowledgeControl
+        knowledgePackSelection={knowledgePackSelection}
+        knowledgePackOptions={knowledgePackOptions}
+        inputText={input}
+        openKnowledgeHubRequestKey={knowledgeHubOpenRequestKey}
+        onToggleKnowledgePack={onToggleKnowledgePack}
+        onSelectKnowledgePack={onSelectKnowledgePack}
+        onToggleKnowledgeCompanionPack={onToggleKnowledgeCompanionPack}
+        onStartKnowledgeOrganize={onStartKnowledgeOrganize}
+        onManageKnowledgePacks={onManageKnowledgePacks}
+      />
+    ) : null;
   const resolvedTopExtra =
-    topExtra || shouldShowVisionNotice ? (
+    activeKnowledgeStatusControl || topExtra || shouldShowVisionNotice ? (
       <>
+        {activeKnowledgeStatusControl}
         {topExtra}
         {shouldShowVisionNotice && resolvedProviderType && resolvedModel ? (
           <InputbarVisionCapabilityNotice

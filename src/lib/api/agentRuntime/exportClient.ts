@@ -13,7 +13,6 @@ import {
   normalizeReplayCase,
   normalizeReviewDecisionTemplate,
 } from "./normalizers";
-import type { AgentRuntimeCommandInvoke } from "./transport";
 import type {
   AgentRuntimeAnalysisHandoff,
   AgentRuntimeAnalysisArtifact,
@@ -38,7 +37,6 @@ export type AgentRuntimeEvidenceExportAppServerClient = Pick<
 >;
 
 export interface AgentRuntimeExportClientDeps {
-  invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeEvidenceExportAppServerClient;
 }
 

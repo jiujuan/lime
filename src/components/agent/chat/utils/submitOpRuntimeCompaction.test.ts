@@ -43,6 +43,8 @@ describe("submitOpRuntimeCompaction", () => {
         model_name: "gpt-4.1",
         execution_strategy: "react",
         recent_preferences: {
+          webSearch: false,
+          thinking: true,
           task: false,
           subagent: true,
         },
@@ -118,7 +120,7 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitModelPreference).toBe(true);
   });
 
-  it("应裁掉旧 thinking preference，但保留尚未同步到 runtime 的其他显式变更", () => {
+  it("应迁移未同步的旧 thinking preference，并保留其他显式变更 metadata", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {
         harness: {
@@ -167,7 +169,8 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitModelPreference).toBe(true);
     expect(result.shouldSubmitExecutionStrategy).toBe(false);
     expect(result.shouldSubmitWebSearch).toBe(false);
-    expect(result.shouldSubmitThinking).toBe(false);
+    expect(result.shouldSubmitThinking).toBe(true);
+    expect(result.thinkingPreference).toBe(true);
     expect(result.metadata).toEqual({
       harness: {
         gate_key: "publish_confirm",
@@ -208,7 +211,7 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitExecutionStrategy).toBe(false);
   });
 
-  it("execution_runtime 缺失但 synced preferences 已同步时应裁掉重复偏好", () => {
+  it("execution_runtime 缺失时只裁掉 synced task/subagent，搜索和思考迁移到正式配置", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {
         harness: {
@@ -233,7 +236,8 @@ describe("submitOpRuntimeCompaction", () => {
     });
 
     expect(result.shouldSubmitWebSearch).toBe(false);
-    expect(result.shouldSubmitThinking).toBe(false);
+    expect(result.shouldSubmitThinking).toBe(true);
+    expect(result.thinkingPreference).toBe(true);
     expect(result.metadata).toBeUndefined();
   });
 
@@ -258,6 +262,63 @@ describe("submitOpRuntimeCompaction", () => {
 
     expect(result.shouldSubmitWebSearch).toBe(false);
     expect(result.shouldSubmitThinking).toBe(false);
+    expect(result.metadata).toBeUndefined();
+  });
+
+  it("未同步 runtime 时应提交显式开启的搜索和思考开关", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        harness: {
+          preferences: {
+            web_search: true,
+            thinking: true,
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+    });
+
+    expect(result.shouldSubmitWebSearch).toBe(true);
+    expect(result.shouldSubmitThinking).toBe(true);
+    expect(result.metadata).toBeUndefined();
+  });
+
+  it("runtime 偏好不同步时应提交本轮搜索和思考差异", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        harness: {
+          preferences: {
+            webSearch: false,
+            thinkingEnabled: true,
+          },
+        },
+      },
+      executionRuntime: {
+        session_id: "session-pref-diff",
+        source: "runtime_snapshot",
+        recent_preferences: {
+          webSearch: true,
+          thinking: false,
+          task: false,
+          subagent: false,
+        },
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4",
+    });
+
+    expect(result.shouldSubmitWebSearch).toBe(true);
+    expect(result.shouldSubmitThinking).toBe(true);
     expect(result.metadata).toBeUndefined();
   });
 

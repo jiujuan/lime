@@ -101,7 +101,7 @@ pub(in crate::runtime::tests) fn managed_objective(session_id: &str) -> ManagedO
 }
 
 #[async_trait]
-impl AppDataSource for TestCurrentTimelineDataSource {
+impl SessionAppDataSource for TestCurrentTimelineDataSource {
     async fn list_current_timeline_sessions(
         &self,
         params: AgentSessionListParams,
@@ -177,7 +177,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
         }
         Ok(objective.clone())
     }
+}
 
+#[async_trait]
+impl WorkspaceAppDataSource for TestCurrentTimelineDataSource {
     async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
         NoopAppDataSource.list_workspaces().await
     }
@@ -225,7 +228,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
             .resolve_workspace_project_path(params)
             .await
     }
+}
 
+#[async_trait]
+impl SkillAppDataSource for TestCurrentTimelineDataSource {
     async fn list_skills(&self) -> Result<SkillListResponse, RuntimeCoreError> {
         NoopAppDataSource.list_skills().await
     }
@@ -294,7 +300,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
             .install_skill_from_download_url(params)
             .await
     }
+}
 
+#[async_trait]
+impl WorkspaceSkillBindingAppDataSource for TestCurrentTimelineDataSource {
     async fn list_workspace_skill_bindings(
         &self,
         params: WorkspaceSkillBindingsListParams,
@@ -312,7 +321,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
             .list_workspace_registered_skills(params)
             .await
     }
+}
 
+#[async_trait]
+impl AgentAppDataSource for TestCurrentTimelineDataSource {
     async fn list_agent_app_installed(
         &self,
     ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
@@ -366,7 +378,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
     ) -> Result<AgentAppUninstallResponse, RuntimeCoreError> {
         NoopAppDataSource.uninstall_agent_app(params).await
     }
+}
 
+#[async_trait]
+impl KnowledgeAppDataSource for TestCurrentTimelineDataSource {
     async fn list_knowledge_packs(
         &self,
         params: KnowledgeListPacksParams,
@@ -439,18 +454,27 @@ impl AppDataSource for TestCurrentTimelineDataSource {
             .validate_knowledge_context_run(params)
             .await
     }
+}
 
+#[async_trait]
+impl AutomationOverviewAppDataSource for TestCurrentTimelineDataSource {
     async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError> {
         NoopAppDataSource.list_automation_jobs().await
     }
+}
 
+#[async_trait]
+impl MemoryAppDataSource for TestCurrentTimelineDataSource {
     async fn read_project_memory(
         &self,
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
         NoopAppDataSource.read_project_memory(params).await
     }
+}
 
+#[async_trait]
+impl MediaAppDataSource for TestCurrentTimelineDataSource {
     async fn get_gallery_material(
         &self,
         params: GalleryMaterialLookupParams,
@@ -580,7 +604,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
             .read_project_material_content(params)
             .await
     }
+}
 
+#[async_trait]
+impl VoiceAppDataSource for TestCurrentTimelineDataSource {
     async fn list_voice_asr_credentials(
         &self,
     ) -> Result<VoiceAsrCredentialListResponse, RuntimeCoreError> {
@@ -652,7 +679,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
     ) -> Result<VoiceInstructionMutationResponse, RuntimeCoreError> {
         NoopAppDataSource.delete_voice_instruction(params).await
     }
+}
 
+#[async_trait]
+impl DiagnosticsAppDataSource for TestCurrentTimelineDataSource {
     async fn list_logs(&self) -> Result<LogListResponse, RuntimeCoreError> {
         NoopAppDataSource.list_logs().await
     }
@@ -687,7 +717,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
     ) -> Result<WindowsStartupDiagnosticsResponse, RuntimeCoreError> {
         NoopAppDataSource.read_windows_startup_diagnostics().await
     }
+}
 
+#[async_trait]
+impl UsageStatsAppDataSource for TestCurrentTimelineDataSource {
     async fn read_usage_stats(
         &self,
         params: UsageStatsRangeParams,
@@ -712,7 +745,10 @@ impl AppDataSource for TestCurrentTimelineDataSource {
             .list_usage_stats_daily_trends(params)
             .await
     }
+}
 
+#[async_trait]
+impl ModelProviderAppDataSource for TestCurrentTimelineDataSource {
     async fn list_models(
         &self,
         params: ModelListParams,
@@ -753,3 +789,8 @@ impl AppDataSource for TestCurrentTimelineDataSource {
         NoopAppDataSource.list_model_provider_aliases().await
     }
 }
+
+impl GatewayAppDataSource for TestCurrentTimelineDataSource {}
+impl McpAppDataSource for TestCurrentTimelineDataSource {}
+impl AutomationManagementAppDataSource for TestCurrentTimelineDataSource {}
+impl ConnectAppDataSource for TestCurrentTimelineDataSource {}

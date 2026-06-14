@@ -9,8 +9,6 @@ homepage.workspace = true
 [dependencies]
 # 项目内 crate
 lime-core.workspace = true
-lime-agent = { path = "../agent" }
-lime-scheduler.workspace = true
 
 # 序列化
 serde.workspace = true

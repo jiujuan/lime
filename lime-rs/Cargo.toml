@@ -11,7 +11,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "1.67.0"
+version = "1.68.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"
@@ -44,6 +44,7 @@ app-server-daemon = { path = "crates/app-server-daemon" }
 app-server-protocol = { path = "crates/app-server-protocol" }
 app-server-test-client = { path = "crates/app-server-test-client" }
 app-server-transport = { path = "crates/app-server-transport" }
+patch-apply = { path = "crates/patch-apply" }
 voice-core = { path = "crates/voice-core" }
 aster = { package = "aster-core", path = "crates/aster-rust/crates/aster" }
 aster-models = { path = "crates/aster-rust/crates/aster-models" }

@@ -48,7 +48,10 @@ use crate::queued_turn::QueuedTurnSnapshot;
 use lime_core::database::DbConnection;
 use lime_services::aster_session_store::LimeSessionStore;
 
-async fn configure_lime_native_file_tools(agent: &Agent) {
+async fn configure_lime_native_file_tools(agent: &mut Agent) {
+    agent.add_tool_inspector(Box::new(
+        crate::agent_tools::tool_policy_inspector::WorkspaceToolPolicyInspector::new(),
+    ));
     let shared_history = create_shared_history();
     let registry_arc = agent.tool_registry().clone();
     let mut registry = registry_arc.write().await;
@@ -58,6 +61,7 @@ async fn configure_lime_native_file_tools(agent: &Agent) {
     registry.register(Box::new(
         EditTool::new(shared_history).with_require_read_before_edit(false),
     ));
+    registry.register(Box::new(crate::tools::ApplyPatchTool));
     // 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。
     registry.register(Box::new(crate::tools::LimeSkillTool::new()));
 }
@@ -236,7 +240,7 @@ impl AsterAgentState {
             // 创建 Agent（启用 Ask/LSP 回调）并注入 SessionStore
             let tool_config = crate::create_lime_tool_config();
             let runtime_store = crate::aster_runtime_support::require_aster_runtime_store()?;
-            let agent = Agent::with_tool_config(tool_config)
+            let mut agent = Agent::with_tool_config(tool_config)
                 .with_session_store(session_store)
                 .with_thread_runtime_store(runtime_store);
 
@@ -250,7 +254,7 @@ impl AsterAgentState {
             // 使用异步方法设置 Lime 专属身份
             let identity = crate::create_lime_identity();
             agent.set_identity(identity).await;
-            configure_lime_native_file_tools(&agent).await;
+            configure_lime_native_file_tools(&mut agent).await;
 
             // 加载 Lime Skills 到 aster-rust 的 global_registry
             crate::reload_lime_skills();

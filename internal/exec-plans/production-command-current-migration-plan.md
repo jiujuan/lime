@@ -4,7 +4,7 @@
 > 更新时间：2026-06-10
 > 主路线图：`internal/roadmap/appserver/frontend-integration-matrix.md`
 > 总计划：`internal/exec-plans/app-server-implementation-plan.md`
-> 当前阶段：production command current 主目标已完成；P1/P2 文件、P4 MCP、P6/P15 media task artifact / image worker / video worker / CLI dispatch、P14 Voice current / realtime GUI retired、P15 resources / gallery / document import-export、P16 diagnostics / preview guard 均有 current 证据或 retired guard，最终总门禁已通过。剩余项降级为 residual：GUI 专项 E2E 补强、App Server / media-runtime 巨型文件继续拆分治理、`src/lib/dev-bridge/**` 按 9A / CCD-012 继续按命令组收缩旧 policy / mock / fallback；不得恢复 `lime-rs/src/**` 或 `lime-rs/src/commands/**`。
+> 当前阶段：production command current 主目标已完成；P1/P2 文件、P4 MCP、P6/P15 media task artifact / image worker / video worker / CLI dispatch、P14 Voice current / realtime GUI retired、P15 resources / gallery / document import-export、P16 diagnostics / preview guard 均有 current 证据或 retired guard，最终总门禁已通过。2026-06-13 追加完成 `agent_runtime_get_tool_inventory` 退场：完整工具库存 current 入口为 App Server `agentSession/toolInventory/read`，旧 Desktop facade / mock / DevBridge truth 已清理为 retired guard-only。剩余项降级为 residual：GUI 专项 E2E 补强、App Server / media-runtime 巨型文件继续拆分治理、`src/lib/dev-bridge/**` 按 9A / CCD-012 继续按命令组收缩旧 policy / mock / fallback；不得恢复 `lime-rs/src/**`、`lime-rs/src/commands/**` 或旧 `agent_runtime_*` 库存 facade。
 
 ## 目标
 

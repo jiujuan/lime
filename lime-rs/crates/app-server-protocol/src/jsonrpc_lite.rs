@@ -90,6 +90,7 @@ pub mod error_codes {
     pub const ALREADY_INITIALIZED: i64 = -32003;
     pub const SESSION_NOT_FOUND: i64 = -32010;
     pub const TURN_NOT_ACTIVE: i64 = -32011;
+    pub const TURN_ALREADY_ACTIVE: i64 = -32012;
     pub const SESSION_ALREADY_EXISTS: i64 = -32013;
     pub const CAPABILITY_DENIED: i64 = -32020;
 }

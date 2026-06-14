@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createExportClient } from "./exportClient";
 import type { AppServerRequestResult } from "@/lib/api/appServer";
-import type { AgentRuntimeCommandInvoke } from "./transport";
 import type { AgentRuntimeEvidenceExportAppServerClient } from "./exportClient";
 
 const handoffBundleOutput = {
@@ -249,10 +248,8 @@ function malformedAppServerResult<T>(
 describe("agentRuntime exportClient", () => {
   it("handoff export 应走 App Server current，不回退 legacy command", async () => {
     const appServerClient = appServerClientMock();
-    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createExportClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(
@@ -271,15 +268,12 @@ describe("agentRuntime exportClient", () => {
     expect(appServerClient.exportHandoffBundle).toHaveBeenCalledWith({
       sessionId: "session-handoff",
     });
-    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
   it("analysis / replay / review current 导出应走 App Server 并先校验 DTO 再 normalize", async () => {
     const appServerClient = appServerClientMock();
-    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createExportClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(
@@ -358,7 +352,6 @@ describe("agentRuntime exportClient", () => {
       regressionRequirements: ["npm run test:contracts"],
       notes: "",
     });
-    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
   it("handoff current export 收到假成功或缺字段时应 fail closed", async () => {
@@ -366,10 +359,8 @@ describe("agentRuntime exportClient", () => {
     vi.mocked(appServerClient.exportHandoffBundle).mockResolvedValueOnce(
       malformedAppServerResult({ success: true }),
     );
-    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createExportClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(
@@ -381,7 +372,6 @@ describe("agentRuntime exportClient", () => {
     expect(appServerClient.exportHandoffBundle).toHaveBeenCalledWith({
       sessionId: "session-handoff",
     });
-    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
   it("analysis / replay / review current 收到假成功或缺字段时应 fail closed", async () => {
@@ -417,10 +407,8 @@ describe("agentRuntime exportClient", () => {
         },
       }),
     );
-    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createExportClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(
@@ -454,15 +442,12 @@ describe("agentRuntime exportClient", () => {
     ).rejects.toThrow(
       "agentSession/reviewDecision/save did not return runtime review decision template",
     );
-    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
   it("exportAgentRuntimeEvidencePack 应走 App Server evidence/export，不回退 legacy command", async () => {
     const appServerClient = appServerClientMock();
-    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createExportClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(
@@ -481,15 +466,12 @@ describe("agentRuntime exportClient", () => {
       includeArtifacts: true,
       includeEvidencePack: true,
     });
-    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
   it("缺少 sessionId 时 evidence export 应 fail closed", async () => {
     const appServerClient = appServerClientMock();
-    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createExportClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(client.exportAgentRuntimeEvidencePack(" ")).rejects.toThrow(
@@ -497,15 +479,12 @@ describe("agentRuntime exportClient", () => {
     );
 
     expect(appServerClient.exportEvidence).not.toHaveBeenCalled();
-    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
   it("缺少 sessionId 时 handoff export 应 fail closed", async () => {
     const appServerClient = appServerClientMock();
-    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createExportClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(client.exportAgentRuntimeHandoffBundle(" ")).rejects.toThrow(
@@ -513,15 +492,12 @@ describe("agentRuntime exportClient", () => {
     );
 
     expect(appServerClient.exportHandoffBundle).not.toHaveBeenCalled();
-    expect(invokeCommand).not.toHaveBeenCalled();
   });
 
   it("缺少 sessionId 时派生导出应 fail closed", async () => {
     const appServerClient = appServerClientMock();
-    const invokeCommand = vi.fn() as unknown as AgentRuntimeCommandInvoke;
     const client = createExportClient({
       appServerClient,
-      invokeCommand,
     });
 
     await expect(client.exportAgentRuntimeReplayCase(" ")).rejects.toThrow(
@@ -556,6 +532,5 @@ describe("agentRuntime exportClient", () => {
     expect(appServerClient.exportAnalysisHandoff).not.toHaveBeenCalled();
     expect(appServerClient.exportReviewDecisionTemplate).not.toHaveBeenCalled();
     expect(appServerClient.saveReviewDecision).not.toHaveBeenCalled();
-    expect(invokeCommand).not.toHaveBeenCalled();
   });
 });

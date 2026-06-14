@@ -2,17 +2,10 @@
 //!
 //! 目标：将 Telegram 作为标准渠道接入，承载多账号轮询、路由与策略校验。
 
+use crate::agent_runner::{GatewayAgentRunRequest, GatewayAgentRunnerHandle};
 use chrono::Utc;
 use lime_core::config::{Config, TelegramAccountConfig, TelegramBotConfig, TelegramGroupConfig};
-use lime_core::database::DbConnection;
 use lime_core::logger::LogStore;
-use lime_websocket::handlers::{RpcHandler, RpcHandlerState};
-use lime_websocket::protocol::{
-    AgentRunResult, AgentStopResult, AgentWaitResult, CronHealthResult, CronListResult,
-    CronRunResult, GatewayRpcRequest, GatewayRpcResponse, RpcMethod, SessionGetResult,
-    SessionsListResult,
-};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -25,9 +18,6 @@ use uuid::Uuid;
 const TELEGRAM_API_BASE: &str = "https://api.telegram.org";
 const DEFAULT_POLL_TIMEOUT_SECS: u64 = 25;
 const TELEGRAM_MAX_MESSAGE_LEN: usize = 3800;
-const RUN_WAIT_TIMEOUT_MS: u64 = 1200;
-const RUN_WAIT_MAX_ROUNDS: usize = 180;
-const CONFIRMATION_TTL_SECS: i64 = 90;
 
 type LogState = Arc<RwLock<LogStore>>;
 type SessionRouteState = Arc<RwLock<HashMap<String, String>>>;
@@ -154,25 +144,8 @@ fn build_gateway_source_metadata(
 }
 
 #[derive(Debug, Clone)]
-struct PendingConfirmation {
-    token: String,
-    command: TelegramCommand,
-    expires_at: chrono::DateTime<Utc>,
-}
-
-#[derive(Debug, Clone)]
 enum TelegramCommand {
-    Run(String),
-    New(Option<String>),
-    Status(String),
-    Stop(String),
-    CronList,
-    CronHealth,
-    CronRun(String),
-    Sessions,
-    Session(String),
-    Confirm(String),
-    Cancel,
+    New,
     Help,
 }
 
@@ -234,8 +207,8 @@ struct TelegramSendResult {
 
 pub async fn start_gateway(
     state: &TelegramGatewayState,
-    db: DbConnection,
     logs: LogState,
+    agent_runner: GatewayAgentRunnerHandle,
     config: Config,
     account_filter: Option<String>,
     poll_timeout_secs: Option<u64>,
@@ -273,15 +246,15 @@ pub async fn start_gateway(
         let stop_for_task = stop_token.clone();
         let account_for_task = account.clone();
         let state_for_task = state.clone();
-        let db_for_task = db.clone();
         let logs_for_task = logs.clone();
+        let runner_for_task = agent_runner.clone();
 
         let task = tokio::spawn(async move {
             run_account_loop(
                 state_for_task,
                 status_for_task,
-                db_for_task,
                 logs_for_task,
+                runner_for_task,
                 account_for_task,
                 poll_timeout,
                 stop_for_task,
@@ -408,8 +381,8 @@ async fn snapshot_status(
 async fn run_account_loop(
     runtime_state: Arc<RwLock<TelegramGatewayRuntime>>,
     status: Arc<RwLock<TelegramGatewayAccountStatus>>,
-    db: DbConnection,
     logs: LogState,
+    agent_runner: GatewayAgentRunnerHandle,
     account: ResolvedTelegramAccount,
     poll_timeout_secs: u64,
     stop_token: CancellationToken,
@@ -434,12 +407,9 @@ async fn run_account_loop(
         status.write().await.bot_username = me.username;
     }
 
-    let rpc_state = RpcHandlerState::new(Some(db), None, logs.clone());
-    let rpc_handler = Arc::new(RpcHandler::new(rpc_state));
     let session_route_state: SessionRouteState = Arc::new(RwLock::new(HashMap::new()));
 
     let mut offset = status.read().await.last_update_id.unwrap_or(0);
-    let mut pending_confirmation: Option<PendingConfirmation> = None;
 
     loop {
         if stop_token.is_cancelled() {
@@ -520,6 +490,14 @@ async fn run_account_loop(
                 );
                 continue;
             }
+            let _ = send_chat_action(
+                &client,
+                &account.bot_token,
+                inbound.chat_id,
+                "typing",
+                message_thread_id,
+            )
+            .await;
 
             let reply = if text.starts_with('/') {
                 logs.write().await.add(
@@ -553,42 +531,16 @@ async fn run_account_loop(
                     }
                 };
 
-                match command {
-                    TelegramCommand::Run(prompt) => {
-                        tokio::spawn(process_plain_text_update(
-                            client.clone(),
-                            account.clone(),
-                            rpc_handler.clone(),
-                            logs.clone(),
-                            session_route_state.clone(),
-                            inbound.clone(),
-                            prompt,
-                            streaming_mode,
-                            reply_to_mode,
-                        ));
-                        None
-                    }
-                    other => match handle_command(
-                        &client,
-                        &account,
-                        rpc_handler.as_ref(),
-                        &logs,
-                        &inbound,
-                        other,
-                        &session_route_state,
-                        &mut pending_confirmation,
-                    )
-                    .await
-                    {
-                        Ok(text) => text,
-                        Err(error) => Some(format!("❌ {}", error)),
-                    },
+                match handle_command(&account, &logs, &inbound, command, &session_route_state).await
+                {
+                    Ok(text) => text,
+                    Err(error) => Some(format!("❌ {}", error)),
                 }
             } else {
                 tokio::spawn(process_plain_text_update(
                     client.clone(),
                     account.clone(),
-                    rpc_handler.clone(),
+                    agent_runner.clone(),
                     logs.clone(),
                     session_route_state.clone(),
                     inbound.clone(),
@@ -1123,7 +1075,7 @@ fn sanitize_message_thread_id(chat_kind: &str, message_thread_id: Option<i64>) -
 async fn handle_plain_text_with_mode(
     client: &reqwest::Client,
     account: &ResolvedTelegramAccount,
-    rpc_handler: &RpcHandler,
+    agent_runner: &GatewayAgentRunnerHandle,
     logs: &LogState,
     session_route_state: &SessionRouteState,
     inbound: &InboundMessage,
@@ -1144,23 +1096,23 @@ async fn handle_plain_text_with_mode(
     logs.write().await.add(
         "info",
         &format!(
-            "[TelegramGateway] account={} 收到文本消息: chat={} sender={:?} messageId={} session={} streaming={:?} model={} search_mode=allowed",
+            "[TelegramGateway] account={} 通过 App Server current runner 处理文本: chat={} sender={:?} messageId={} session={} streaming={:?} model={}",
             account.account_id,
             inbound.chat_id,
             inbound.sender_id,
             inbound.message_id,
             session_id,
             streaming_mode,
-            account.default_model.as_deref().unwrap_or("<rpc-default>")
+            account.default_model.as_deref().unwrap_or("<runtime-default>")
         ),
     );
 
-    let mut progress_message_id = if streaming_mode == StreamingMode::Partial {
+    let progress_message_id = if streaming_mode == StreamingMode::Partial {
         match send_message_get_id(
             client,
             &account.bot_token,
             inbound.chat_id,
-            "⏳ 正在处理请求...",
+            "已收到，正在通过 App Server current Agent 会话处理...",
             message_thread_id,
             first_reply_to_message_id,
         )
@@ -1182,204 +1134,53 @@ async fn handle_plain_text_with_mode(
         None
     };
 
-    let run_response = rpc_handler
-        .handle_request(GatewayRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            id: Uuid::new_v4().to_string(),
-            method: RpcMethod::AgentRun,
-            params: Some(json!({
-                "session_id": session_id,
-                "message": text,
-                "stream": false,
-                "model": account.default_model.clone(),
-                "web_search": true,
-                "search_mode": "allowed",
-                "source_metadata": build_gateway_source_metadata(account, inbound),
-            })),
+    let response = agent_runner
+        .run_agent_turn(GatewayAgentRunRequest {
+            channel: "telegram".to_string(),
+            account_id: account.account_id.clone(),
+            session_id: session_id.clone(),
+            input_text: text,
+            metadata: build_gateway_source_metadata(account, inbound),
+            provider_preference: None,
+            model_preference: account.default_model.clone(),
         })
-        .await;
+        .await?;
 
-    let run_value = match run_response.result {
-        Some(value) => value,
-        None => {
-            let error = extract_rpc_error(run_response.error, "agent.run 失败");
-            if let Some(message_id) = progress_message_id {
-                let _ = edit_message(
-                    client,
-                    &account.bot_token,
-                    inbound.chat_id,
-                    message_id,
-                    &format!("❌ {}", error),
-                )
-                .await;
-                return Ok(PlainTextReply::AlreadySent);
-            }
-            return Err(error);
-        }
-    };
-    let run_result: AgentRunResult = parse_result(run_value)?;
-    logs.write().await.add(
-        "info",
-        &format!(
-            "[TelegramGateway] account={} agent.run 已创建: runId={} session={}",
-            account.account_id, run_result.run_id, run_result.session_id
-        ),
-    );
-
-    for round in 0..RUN_WAIT_MAX_ROUNDS {
-        let wait_response = rpc_handler
-            .handle_request(GatewayRpcRequest {
-                jsonrpc: "2.0".to_string(),
-                id: Uuid::new_v4().to_string(),
-                method: RpcMethod::AgentWait,
-                params: Some(json!({
-                    "run_id": run_result.run_id,
-                    "timeout": RUN_WAIT_TIMEOUT_MS,
-                })),
-            })
-            .await;
-
-        let wait_value = match wait_response.result {
-            Some(value) => value,
-            None => {
-                let error = extract_rpc_error(wait_response.error, "agent.wait 失败");
-                if let Some(message_id) = progress_message_id {
-                    let _ = edit_message(
-                        client,
-                        &account.bot_token,
-                        inbound.chat_id,
-                        message_id,
-                        &format!("❌ {}", error),
-                    )
-                    .await;
-                    return Ok(PlainTextReply::AlreadySent);
-                }
-                return Err(error);
-            }
+    if progress_message_id.is_some() {
+        let reply = if response.reply_text.trim().is_empty() {
+            format!(
+                "已完成，但当前会话没有生成可发送文本。\nsession_id: {}\nturn_id: {}",
+                response.session_id, response.turn_id
+            )
+        } else {
+            response.reply_text
         };
-        let wait_result: AgentWaitResult = parse_result(wait_value)?;
-
-        if wait_result.completed {
-            let content = wait_result
-                .content
-                .unwrap_or_else(|| "任务已完成，但无可展示输出".to_string());
-            logs.write().await.add(
-                "info",
-                &format!(
-                    "[TelegramGateway] account={} runId={} 已完成: contentLen={}",
-                    account.account_id,
-                    run_result.run_id,
-                    content.chars().count()
-                ),
-            );
-            if let Some(message_id) = progress_message_id {
-                let chunks = split_message_chunks(&content);
-                if let Some(first_chunk) = chunks.first() {
-                    if edit_message(
-                        client,
-                        &account.bot_token,
-                        inbound.chat_id,
-                        message_id,
-                        first_chunk,
-                    )
-                    .await
-                    .is_ok()
-                    {
-                        for chunk in chunks.iter().skip(1) {
-                            let reply_to = if reply_to_mode == ReplyToMode::All {
-                                Some(inbound.message_id)
-                            } else {
-                                None
-                            };
-                            let _ = send_message(
-                                client,
-                                &account.bot_token,
-                                inbound.chat_id,
-                                chunk,
-                                message_thread_id,
-                                reply_to,
-                            )
-                            .await;
-                        }
-                        return Ok(PlainTextReply::AlreadySent);
-                    }
-                }
-            }
-            return Ok(PlainTextReply::Message(content));
-        }
-
-        if matches!(
-            streaming_mode,
-            StreamingMode::Partial | StreamingMode::Block
-        ) && round % 3 == 0
-        {
-            let _ = send_chat_action(
+        if let Some(progress_message_id) = progress_message_id {
+            edit_message(
                 client,
                 &account.bot_token,
                 inbound.chat_id,
-                "typing",
-                message_thread_id,
+                progress_message_id,
+                &reply,
             )
-            .await;
+            .await?;
         }
-
-        if streaming_mode == StreamingMode::Partial && round % 5 == 0 {
-            if let Some(message_id) = progress_message_id {
-                let elapsed = ((round as u64) * RUN_WAIT_TIMEOUT_MS) / 1000;
-                let progress_text = format!("⏳ 正在处理，请稍候... {}s", elapsed.max(1));
-                if edit_message(
-                    client,
-                    &account.bot_token,
-                    inbound.chat_id,
-                    message_id,
-                    &progress_text,
-                )
-                .await
-                .is_err()
-                {
-                    progress_message_id = None;
-                }
-            }
-        }
-
-        if round % 20 == 0 {
-            logs.write().await.add(
-                "info",
-                &format!(
-                    "[TelegramGateway] account={} runId={} 等待中: round={} completed={}",
-                    account.account_id, run_result.run_id, round, wait_result.completed
-                ),
-            );
-        }
-    }
-
-    let timeout_message = "等待任务完成超时，请稍后使用 /status 查询".to_string();
-    logs.write().await.add(
-        "warn",
-        &format!(
-            "[TelegramGateway] account={} runId={} 等待超时: maxRounds={}",
-            account.account_id, run_result.run_id, RUN_WAIT_MAX_ROUNDS
-        ),
-    );
-    if let Some(message_id) = progress_message_id.take() {
-        let _ = edit_message(
-            client,
-            &account.bot_token,
-            inbound.chat_id,
-            message_id,
-            &format!("⏱️ {}", timeout_message),
-        )
-        .await;
         return Ok(PlainTextReply::AlreadySent);
     }
 
-    Err(timeout_message)
+    if response.reply_text.trim().is_empty() {
+        return Ok(PlainTextReply::Message(format!(
+            "已完成，但当前会话没有生成可发送文本。\nsession_id: {}\nturn_id: {}",
+            response.session_id, response.turn_id
+        )));
+    }
+    Ok(PlainTextReply::Message(response.reply_text))
 }
 
 async fn process_plain_text_update(
     client: reqwest::Client,
     account: ResolvedTelegramAccount,
-    rpc_handler: Arc<RpcHandler>,
+    agent_runner: GatewayAgentRunnerHandle,
     logs: LogState,
     session_route_state: SessionRouteState,
     inbound: InboundMessage,
@@ -1392,7 +1193,7 @@ async fn process_plain_text_update(
     let reply = match handle_plain_text_with_mode(
         &client,
         &account,
-        rpc_handler.as_ref(),
+        &agent_runner,
         &logs,
         &session_route_state,
         &inbound,
@@ -1481,54 +1282,15 @@ async fn rotate_active_session_id(
 }
 
 async fn handle_command(
-    client: &reqwest::Client,
     account: &ResolvedTelegramAccount,
-    rpc_handler: &RpcHandler,
     logs: &LogState,
     inbound: &InboundMessage,
     command: TelegramCommand,
     session_route_state: &SessionRouteState,
-    pending_confirmation: &mut Option<PendingConfirmation>,
 ) -> Result<Option<String>, String> {
     match command {
         TelegramCommand::Help => Ok(Some(help_text())),
-        TelegramCommand::Cancel => {
-            *pending_confirmation = None;
-            Ok(Some("🧹 已取消待确认操作".to_string()))
-        }
-        TelegramCommand::Confirm(token) => {
-            let confirmed = take_pending_confirmation(pending_confirmation, &token)?;
-            dispatch_command(rpc_handler, confirmed).await.map(Some)
-        }
-        cmd if requires_confirmation(&cmd) => {
-            let token = set_pending_confirmation(pending_confirmation, cmd.clone());
-            Ok(Some(format!(
-                "⚠️ 检测到危险操作：{}\n请在 {} 秒内发送 /confirm {} 继续，或发送 /cancel 取消。",
-                danger_command_label(&cmd),
-                CONFIRMATION_TTL_SECS,
-                token
-            )))
-        }
-        TelegramCommand::Run(prompt) => {
-            match handle_plain_text_with_mode(
-                client,
-                account,
-                rpc_handler,
-                logs,
-                session_route_state,
-                inbound,
-                prompt,
-                None,
-                parse_streaming_mode(&account.streaming),
-                parse_reply_to_mode(&account.reply_to_mode),
-            )
-            .await?
-            {
-                PlainTextReply::AlreadySent => Ok(None),
-                PlainTextReply::Message(text) => Ok(Some(text)),
-            }
-        }
-        TelegramCommand::New(first_prompt) => {
+        TelegramCommand::New => {
             let new_session_id =
                 rotate_active_session_id(account, inbound, session_route_state).await;
             logs.write().await.add(
@@ -1539,291 +1301,12 @@ async fn handle_command(
                 ),
             );
 
-            if let Some(prompt) = first_prompt {
-                match handle_plain_text_with_mode(
-                    client,
-                    account,
-                    rpc_handler,
-                    logs,
-                    session_route_state,
-                    inbound,
-                    prompt,
-                    Some(new_session_id.clone()),
-                    parse_streaming_mode(&account.streaming),
-                    parse_reply_to_mode(&account.reply_to_mode),
-                )
-                .await?
-                {
-                    PlainTextReply::AlreadySent => Ok(None),
-                    PlainTextReply::Message(text) => Ok(Some(text)),
-                }
-            } else {
-                Ok(Some(format!(
-                    "🆕 已开启新对话\nsession_id: {}\n后续消息会在这个新会话中进行。",
-                    new_session_id
-                )))
-            }
+            Ok(Some(format!(
+                "🆕 已开启新对话\nsession_id: {}\n后续消息会在这个新会话中进行。",
+                new_session_id
+            )))
         }
-        cmd => dispatch_command(rpc_handler, cmd).await.map(Some),
     }
-}
-
-fn set_pending_confirmation(
-    pending_confirmation: &mut Option<PendingConfirmation>,
-    command: TelegramCommand,
-) -> String {
-    let token = Uuid::new_v4()
-        .to_string()
-        .chars()
-        .take(8)
-        .collect::<String>();
-    let expires_at = Utc::now() + chrono::Duration::seconds(CONFIRMATION_TTL_SECS);
-    *pending_confirmation = Some(PendingConfirmation {
-        token: token.clone(),
-        command,
-        expires_at,
-    });
-    token
-}
-
-fn take_pending_confirmation(
-    pending_confirmation: &mut Option<PendingConfirmation>,
-    token: &str,
-) -> Result<TelegramCommand, String> {
-    let pending = pending_confirmation
-        .take()
-        .ok_or_else(|| "当前没有待确认操作".to_string())?;
-
-    if Utc::now() > pending.expires_at {
-        return Err("确认已过期，请重新发起命令".to_string());
-    }
-    if pending.token != token {
-        *pending_confirmation = Some(pending);
-        return Err("确认 token 不匹配".to_string());
-    }
-    if !requires_confirmation(&pending.command) {
-        return Err("当前命令不需要确认".to_string());
-    }
-
-    Ok(pending.command)
-}
-
-async fn dispatch_command(
-    rpc_handler: &RpcHandler,
-    command: TelegramCommand,
-) -> Result<String, String> {
-    let request = build_rpc_request(command)?;
-    let response = rpc_handler.handle_request(request).await;
-    format_rpc_response(response)
-}
-
-fn build_rpc_request(command: TelegramCommand) -> Result<GatewayRpcRequest, String> {
-    let (method, params) = match command {
-        TelegramCommand::Run(message) => (
-            RpcMethod::AgentRun,
-            Some(json!({
-                "message": message,
-                "stream": false,
-                "web_search": true,
-                "search_mode": "allowed"
-            })),
-        ),
-        TelegramCommand::Status(run_id) => (
-            RpcMethod::AgentWait,
-            Some(json!({ "run_id": run_id, "timeout": 200 })),
-        ),
-        TelegramCommand::Stop(run_id) => (RpcMethod::AgentStop, Some(json!({ "run_id": run_id }))),
-        TelegramCommand::CronList => (RpcMethod::CronList, None),
-        TelegramCommand::CronHealth => (RpcMethod::CronHealth, None),
-        TelegramCommand::CronRun(task_id) => {
-            (RpcMethod::CronRun, Some(json!({ "task_id": task_id })))
-        }
-        TelegramCommand::Sessions => (RpcMethod::SessionsList, None),
-        TelegramCommand::Session(session_id) => (
-            RpcMethod::SessionsGet,
-            Some(json!({ "session_id": session_id })),
-        ),
-        TelegramCommand::New(_) => return Err("内部错误：new 不应构造 RPC 请求".to_string()),
-        TelegramCommand::Help => return Err("内部错误：help 不应构造 RPC 请求".to_string()),
-        TelegramCommand::Confirm(_) => {
-            return Err("内部错误：confirm 不应构造 RPC 请求".to_string())
-        }
-        TelegramCommand::Cancel => return Err("内部错误：cancel 不应构造 RPC 请求".to_string()),
-    };
-
-    Ok(GatewayRpcRequest {
-        jsonrpc: "2.0".to_string(),
-        id: Uuid::new_v4().to_string(),
-        method,
-        params,
-    })
-}
-
-fn format_rpc_response(response: GatewayRpcResponse) -> Result<String, String> {
-    if let Some(error) = response.error {
-        return Err(format!("{} (code={})", error.message, error.code));
-    }
-
-    let result_value = response
-        .result
-        .ok_or_else(|| "RPC 返回缺少 result".to_string())?;
-    match response_id_hint(&result_value) {
-        Some(ResponseHint::AgentRun) => {
-            let payload: AgentRunResult = parse_result(result_value)?;
-            Ok(format!(
-                "✅ 已启动\nrun_id: {}\nsession_id: {}\ncompleted: {}",
-                payload.run_id, payload.session_id, payload.completed
-            ))
-        }
-        Some(ResponseHint::AgentWait) => {
-            let payload: AgentWaitResult = parse_result(result_value)?;
-            if payload.completed {
-                Ok(format!(
-                    "✅ 已完成\nrun_id: {}\n{}",
-                    payload.run_id,
-                    payload.content.unwrap_or_else(|| "无输出内容".to_string())
-                ))
-            } else {
-                Ok(format!("⏳ 运行中\nrun_id: {}", payload.run_id))
-            }
-        }
-        Some(ResponseHint::AgentStop) => {
-            let payload: AgentStopResult = parse_result(result_value)?;
-            Ok(format!(
-                "{} run_id: {}",
-                if payload.stopped {
-                    "🛑 已停止"
-                } else {
-                    "ℹ️ 未找到活跃任务"
-                },
-                payload.run_id
-            ))
-        }
-        Some(ResponseHint::CronList) => {
-            let payload: CronListResult = parse_result(result_value)?;
-            if payload.tasks.is_empty() {
-                Ok("📭 当前无定时任务".to_string())
-            } else {
-                let lines = payload
-                    .tasks
-                    .iter()
-                    .take(10)
-                    .map(|item| {
-                        format!(
-                            "- {} | {} | enabled={}",
-                            item.task_id, item.name, item.enabled
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                Ok(format!(
-                    "📌 定时任务（前 {} 条）\n{}",
-                    lines.len(),
-                    lines.join("\n")
-                ))
-            }
-        }
-        Some(ResponseHint::CronRun) => {
-            let payload: CronRunResult = parse_result(result_value)?;
-            Ok(format!(
-                "✅ cron 已触发\ntask_id: {}\nexecution_id: {}",
-                payload.task_id, payload.execution_id
-            ))
-        }
-        Some(ResponseHint::CronHealth) => {
-            let payload: CronHealthResult = parse_result(result_value)?;
-            Ok(format!(
-                "📊 cron 健康概览\n总任务: {}\n待执行: {}\n运行中: {}\n失败: {}\n冷却中: {}\n悬挂运行: {}\n24h 失败: {}",
-                payload.total_tasks,
-                payload.pending_tasks,
-                payload.running_tasks,
-                payload.failed_tasks,
-                payload.cooldown_tasks,
-                payload.stale_running_tasks,
-                payload.failed_last_24h,
-            ))
-        }
-        Some(ResponseHint::SessionsList) => {
-            let payload: SessionsListResult = parse_result(result_value)?;
-            if payload.sessions.is_empty() {
-                Ok("📭 当前无会话".to_string())
-            } else {
-                let lines = payload
-                    .sessions
-                    .iter()
-                    .take(10)
-                    .map(|item| {
-                        format!(
-                            "- {} | model={} | msgs={}",
-                            item.session_id, item.model, item.message_count
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                Ok(format!(
-                    "🧵 会话列表（前 {} 条）\n{}",
-                    lines.len(),
-                    lines.join("\n")
-                ))
-            }
-        }
-        Some(ResponseHint::SessionGet) => {
-            let payload: SessionGetResult = parse_result(result_value)?;
-            Ok(format!(
-                "🧵 会话详情\nsession_id: {}\nmodel: {}\nmessages: {}",
-                payload.session_id, payload.model, payload.message_count
-            ))
-        }
-        None => Ok(format!("✅ 已处理\n{}", result_value)),
-    }
-}
-
-enum ResponseHint {
-    AgentRun,
-    AgentWait,
-    AgentStop,
-    CronList,
-    CronRun,
-    CronHealth,
-    SessionsList,
-    SessionGet,
-}
-
-fn response_id_hint(value: &serde_json::Value) -> Option<ResponseHint> {
-    if value.get("runId").is_some() && value.get("sessionId").is_some() {
-        return Some(ResponseHint::AgentRun);
-    }
-    if value.get("runId").is_some() && value.get("completed").is_some() {
-        return Some(ResponseHint::AgentWait);
-    }
-    if value.get("runId").is_some() && value.get("stopped").is_some() {
-        return Some(ResponseHint::AgentStop);
-    }
-    if value.get("tasks").is_some() {
-        return Some(ResponseHint::CronList);
-    }
-    if value.get("taskId").is_some() && value.get("executionId").is_some() {
-        return Some(ResponseHint::CronRun);
-    }
-    if value.get("totalTasks").is_some() && value.get("cooldownTasks").is_some() {
-        return Some(ResponseHint::CronHealth);
-    }
-    if value.get("sessions").is_some() {
-        return Some(ResponseHint::SessionsList);
-    }
-    if value.get("sessionId").is_some() && value.get("messageCount").is_some() {
-        return Some(ResponseHint::SessionGet);
-    }
-    None
-}
-
-fn parse_result<T: DeserializeOwned>(value: serde_json::Value) -> Result<T, String> {
-    serde_json::from_value(value).map_err(|e| format!("解析 RPC 结果失败: {e}"))
-}
-
-fn extract_rpc_error(error: Option<lime_websocket::protocol::RpcError>, fallback: &str) -> String {
-    if let Some(err) = error {
-        return format!("{} (code={})", err.message, err.code);
-    }
-    fallback.to_string()
 }
 
 fn parse_telegram_command(text: &str) -> Result<TelegramCommand, String> {
@@ -1841,93 +1324,23 @@ fn parse_telegram_command(text: &str) -> Result<TelegramCommand, String> {
         .to_ascii_lowercase();
 
     match normalized_cmd.as_str() {
-        "/run" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/run <任务内容>".to_string())
-            } else {
-                Ok(TelegramCommand::Run(rest.to_string()))
-            }
-        }
         "/new" | "/reset" => {
             if rest.is_empty() {
-                Ok(TelegramCommand::New(None))
+                Ok(TelegramCommand::New)
             } else {
-                Ok(TelegramCommand::New(Some(rest.to_string())))
+                Err("❌ /new 不接收首条消息；请先发送 /new，再直接发送下一条消息。".to_string())
             }
         }
-        "/status" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/status <run_id>".to_string())
-            } else {
-                Ok(TelegramCommand::Status(rest.to_string()))
-            }
-        }
-        "/stop" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/stop <run_id>".to_string())
-            } else {
-                Ok(TelegramCommand::Stop(rest.to_string()))
-            }
-        }
-        "/cron_list" => Ok(TelegramCommand::CronList),
-        "/cron_health" => Ok(TelegramCommand::CronHealth),
-        "/cron_run" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/cron_run <task_id>".to_string())
-            } else {
-                Ok(TelegramCommand::CronRun(rest.to_string()))
-            }
-        }
-        "/sessions" => Ok(TelegramCommand::Sessions),
-        "/session" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/session <session_id>".to_string())
-            } else {
-                Ok(TelegramCommand::Session(rest.to_string()))
-            }
-        }
-        "/confirm" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/confirm <token>".to_string())
-            } else {
-                Ok(TelegramCommand::Confirm(rest.to_string()))
-            }
-        }
-        "/cancel" => Ok(TelegramCommand::Cancel),
         "/help" | "/start" => Ok(TelegramCommand::Help),
         _ => Err(help_text()),
-    }
-}
-
-fn requires_confirmation(command: &TelegramCommand) -> bool {
-    matches!(
-        command,
-        TelegramCommand::Stop(_) | TelegramCommand::CronRun(_)
-    )
-}
-
-fn danger_command_label(command: &TelegramCommand) -> &'static str {
-    match command {
-        TelegramCommand::Stop(_) => "/stop",
-        TelegramCommand::CronRun(_) => "/cron_run",
-        _ => "unknown",
     }
 }
 
 fn help_text() -> String {
     [
         "🤖 Lime Telegram Gateway 命令",
-        "/run <任务内容> - 启动一个 Agent 任务",
-        "/new [首条消息] - 开启新对话（/reset 同义）",
-        "/status <run_id> - 查看任务状态",
-        "/stop <run_id> - 停止任务（需确认）",
-        "/cron_list - 列出定时任务",
-        "/cron_health - 查看定时任务健康概览",
-        "/cron_run <task_id> - 触发定时任务（需确认）",
-        "/sessions - 列出会话",
-        "/session <session_id> - 查看会话摘要",
-        "/confirm <token> - 确认危险操作",
-        "/cancel - 取消待确认操作",
+        "/new - 开启新对话（/reset 同义）",
+        "普通文本 - 进入 App Server current Agent 会话",
         "/help - 查看帮助",
     ]
     .join("\n")
@@ -2447,16 +1860,13 @@ mod tests {
     fn parse_new_command_supports_optional_prompt() {
         assert!(matches!(
             parse_telegram_command("/new"),
-            Ok(TelegramCommand::New(None))
+            Ok(TelegramCommand::New)
         ));
         assert!(matches!(
             parse_telegram_command("/reset"),
-            Ok(TelegramCommand::New(None))
+            Ok(TelegramCommand::New)
         ));
-        assert!(matches!(
-            parse_telegram_command("/new 你好"),
-            Ok(TelegramCommand::New(Some(prompt))) if prompt == "你好"
-        ));
+        assert!(parse_telegram_command("/new 你好").is_err());
     }
 
     #[test]

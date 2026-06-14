@@ -1,6 +1,5 @@
 import { safeInvoke } from "@/lib/dev-bridge";
 import { assertNotDiagnosticFacade } from "../diagnosticFacade";
-import type { AgentRuntimeCommandName } from "./commandManifest.generated";
 
 export type AgentRuntimeBridgeInvoke = <TResponse>(
   command: string,
@@ -8,7 +7,7 @@ export type AgentRuntimeBridgeInvoke = <TResponse>(
 ) => Promise<TResponse>;
 
 export type AgentRuntimeCommandInvoke = <TResponse>(
-  command: AgentRuntimeCommandName,
+  command: string,
   payload?: Record<string, unknown>,
 ) => Promise<TResponse>;
 
@@ -70,7 +69,7 @@ export function createAgentRuntimeCommandInvoke({
     bridgeInvoke ?? createAgentRuntimeBridgeInvoke({ invoke });
 
   return async <TResponse>(
-    command: AgentRuntimeCommandName,
+    command: string,
     payload?: Record<string, unknown>,
   ): Promise<TResponse> => {
     const result =

@@ -65,9 +65,13 @@ describe("managed-objective-guardrails-core", () => {
     ]);
   });
 
-  it("默认扫描当前仓库实现路径时不应出现禁用命名", () => {
-    expect(scanManagedObjectiveForbiddenSurfaces()).toEqual([]);
-  });
+  it(
+    "默认扫描当前仓库实现路径时不应出现禁用命名",
+    () => {
+      expect(scanManagedObjectiveForbiddenSurfaces()).toEqual([]);
+    },
+    20_000,
+  );
 
   it("禁用 surface 列表应覆盖路线图第 10 节约束", () => {
     expect(managedObjectiveForbiddenSurfaceTokens()).toEqual([

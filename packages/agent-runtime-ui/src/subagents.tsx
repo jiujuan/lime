@@ -139,15 +139,16 @@ export function SubagentActivityList({
 
 export function SubagentsView<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent>({
   state,
+  model: modelProp,
   emptyThreads,
   emptyDelegations,
   emptyActivities,
   labels,
   onOpenThread,
 }: SubagentsViewProps<TEvent>) {
-  const model = state.subagents;
+  const model = modelProp ?? state?.subagents;
 
-  if (!model.hasSubagents) {
+  if (!model?.hasSubagents) {
     return null;
   }
 

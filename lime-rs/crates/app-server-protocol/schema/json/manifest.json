@@ -160,6 +160,10 @@
     },
     {
       "kind": "request",
+      "method": "agentSession/toolInventory/read"
+    },
+    {
+      "kind": "request",
       "method": "agentSession/turn/cancel"
     },
     {
@@ -648,6 +652,10 @@
     },
     {
       "kind": "request",
+      "method": "projectGit/diff"
+    },
+    {
+      "kind": "request",
       "method": "projectGit/status"
     },
     {
@@ -1102,6 +1110,8 @@
       "AgentSessionStatus",
       "AgentSessionThreadResumeParams",
       "AgentSessionThreadResumeResponse",
+      "AgentSessionToolInventoryReadParams",
+      "AgentSessionToolInventoryReadResponse",
       "AgentSessionTurnCancelParams",
       "AgentSessionTurnCancelResponse",
       "AgentSessionTurnStartParams",
@@ -1302,6 +1312,8 @@
       "PlatformInfo",
       "ProjectGitBranchCheckoutParams",
       "ProjectGitBranchCreateParams",
+      "ProjectGitDiffParams",
+      "ProjectGitDiffResponse",
       "ProjectGitStatusParams",
       "ProjectGitStatusResponse",
       "ProjectGitWorktreeCreateParams",

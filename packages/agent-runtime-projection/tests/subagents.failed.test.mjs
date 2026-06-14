@@ -56,7 +56,7 @@ test("subagents model treats failed and closed workers as inactive terminal thre
   assert.deepEqual(model.failedThreadIds, ["subagent-1", "subagent-2"]);
   assert.equal(model.threads[0].completedAt, "2026-06-12T00:00:02.000Z");
   assert.equal(model.threads[1].completedAt, "2026-06-12T00:00:03.000Z");
-  assert.equal(model.activities.at(-1).kind, "updated");
+  assert.equal(model.activities.at(-1).kind, "interrupted");
 });
 
 test("runtime status resolves action cancellation before blocked status", () => {

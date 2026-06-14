@@ -3,14 +3,9 @@ import type { DirectoryListing } from "@/lib/api/fileBrowser";
 import type { Artifact } from "@/lib/artifact/types";
 import {
   buildEntries,
-  findChangeItemForSelection,
   isSavedContentBundleDirectory,
   isHtmlPreviewContext,
-  isPendingChangeItem,
   normalizeCanvasWorkbenchPath,
-  resolveChangeItemDisplayName,
-  resolveChangeStatusClassName,
-  resolveChangeStatusCopyKey,
   resolveCodingPreviewTabLabel,
   resolvePreviewContent,
   resolvePreviewPath,
@@ -320,60 +315,6 @@ describe("CanvasWorkbenchLayoutViewModel", () => {
       ),
     ).toBe("预览 · 主页");
     expect(resolveCodingPreviewTabLabel(null, "预览")).toBe("预览");
-  });
-
-  it("应按 selection path / target path / 标题匹配变更项", () => {
-    const items = [
-      {
-        id: "a",
-        path: "src/app.ts",
-        absolutePath: "/workspace/src/app.ts",
-        status: "completed" as const,
-      },
-      {
-        id: "b",
-        path: "README.md",
-        displayName: "README.md",
-        status: "in_progress" as const,
-      },
-    ];
-
-    expect(
-      findChangeItemForSelection(items, {
-        title: "App",
-        selectionPath: "/workspace/SRC/APP.ts",
-        target: { kind: "empty", title: "empty" },
-      })?.id,
-    ).toBe("a");
-    expect(
-      findChangeItemForSelection(items, {
-        title: "README.md",
-        target: { kind: "empty", title: "empty" },
-      })?.id,
-    ).toBe("b");
-    expect(findChangeItemForSelection(items, null)).toBeNull();
-  });
-
-  it("应推导变更项展示名、pending 状态和状态样式", () => {
-    expect(
-      resolveChangeItemDisplayName({
-        path: "/workspace/src/app.ts",
-        displayName: "  ",
-      }),
-    ).toBe("app.ts");
-    expect(isPendingChangeItem({ path: "src/app.ts", status: "in_progress" }))
-      .toBe(true);
-    expect(resolveChangeStatusCopyKey({ path: "src/app.ts", status: "failed" }))
-      .toBe("agentChat.canvasWorkbench.coding.changes.status.failed");
-    expect(
-      resolveChangeStatusClassName({
-        path: "src/app.ts",
-        status: "completed",
-      }),
-    ).toContain("emerald");
-    expect(resolveChangeStatusClassName({ path: "src/app.ts" })).toContain(
-      "slate",
-    );
   });
 
   it("应构造去重后的产物、任务文件 entry 列表", () => {

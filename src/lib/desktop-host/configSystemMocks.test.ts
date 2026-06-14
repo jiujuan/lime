@@ -6,10 +6,7 @@ async function expectRetiredCommandsToFailClosed(commands: string[]) {
     await expect(invokeMockOnly(command)).rejects.toSatisfy((error) => {
       const message =
         error instanceof Error ? error.message : String(error ?? "");
-      return (
-        message.includes(`未注册命令 "${command}"`) ||
-        message.includes(`命令 ${command} 已废弃`)
-      );
+      return message.includes(`未注册命令 "${command}"`);
     });
   }
 }

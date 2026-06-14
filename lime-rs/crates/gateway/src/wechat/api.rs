@@ -1,7 +1,4 @@
-use super::types::{
-    BaseInfo, GetConfigResp, GetUpdatesResp, GetUploadUrlReq, GetUploadUrlResp, QrCodeResponse,
-    QrStatusResponse, SendMessageReq, SendTypingReq, SendTypingResp,
-};
+use super::types::{BaseInfo, GetUpdatesResp, QrCodeResponse, QrStatusResponse, SendMessageReq};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use rand::Rng;
@@ -13,7 +10,6 @@ use std::time::Duration;
 const CHANNEL_VERSION: &str = "lime-wechat-rust";
 const DEFAULT_API_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_LONG_POLL_TIMEOUT_MS: u64 = 35_000;
-const DEFAULT_CONFIG_TIMEOUT_MS: u64 = 10_000;
 
 pub(crate) fn build_base_info() -> BaseInfo {
     BaseInfo {
@@ -178,76 +174,4 @@ pub async fn send_message(
     )
     .await?;
     Ok(())
-}
-
-#[allow(dead_code)]
-pub async fn get_upload_url(
-    client: &reqwest::Client,
-    base_url: &str,
-    token: &str,
-    req: GetUploadUrlReq,
-) -> Result<GetUploadUrlResp, String> {
-    post_json(
-        client,
-        base_url,
-        "ilink/bot/getuploadurl",
-        json!({
-            "filekey": req.filekey,
-            "media_type": req.media_type,
-            "to_user_id": req.to_user_id,
-            "rawsize": req.rawsize,
-            "rawfilemd5": req.rawfilemd5,
-            "filesize": req.filesize,
-            "no_need_thumb": req.no_need_thumb,
-            "aeskey": req.aeskey,
-            "base_info": build_base_info(),
-        }),
-        Some(token),
-        DEFAULT_API_TIMEOUT_MS,
-    )
-    .await
-}
-
-pub async fn get_config(
-    client: &reqwest::Client,
-    base_url: &str,
-    token: &str,
-    ilink_user_id: &str,
-    context_token: Option<&str>,
-) -> Result<GetConfigResp, String> {
-    post_json(
-        client,
-        base_url,
-        "ilink/bot/getconfig",
-        json!({
-            "ilink_user_id": ilink_user_id,
-            "context_token": context_token,
-            "base_info": build_base_info(),
-        }),
-        Some(token),
-        DEFAULT_CONFIG_TIMEOUT_MS,
-    )
-    .await
-}
-
-pub async fn send_typing(
-    client: &reqwest::Client,
-    base_url: &str,
-    token: &str,
-    req: SendTypingReq,
-) -> Result<SendTypingResp, String> {
-    post_json(
-        client,
-        base_url,
-        "ilink/bot/sendtyping",
-        json!({
-            "ilink_user_id": req.ilink_user_id,
-            "typing_ticket": req.typing_ticket,
-            "status": req.status,
-            "base_info": build_base_info(),
-        }),
-        Some(token),
-        DEFAULT_CONFIG_TIMEOUT_MS,
-    )
-    .await
 }

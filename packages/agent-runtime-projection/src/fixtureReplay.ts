@@ -7,6 +7,7 @@ import {
   type AgentRuntimeExecutionEvent,
   type RuntimeSequenceViolation,
 } from "@limecloud/agent-ui-contracts";
+import { projectCodingWorkbenchView } from "./coding.js";
 import { projectAgentUiState } from "./uiState.js";
 
 export interface AgentUiFixtureReplayResult<
@@ -104,11 +105,79 @@ function collectReplayDiagnostics<
   if (expected.evidenceCount !== undefined && state.evidence.length < expected.evidenceCount) {
     diagnostics.push("evidence_below_expected");
   }
+  diagnostics.push(...collectCodingReplayDiagnostics(fixture, state));
   diagnostics.push(...collectSubagentsReplayDiagnostics(fixture, state));
 
   return diagnostics.filter(
     (diagnostic) => !(expected.diagnostics ?? []).includes(diagnostic),
   );
+}
+
+function collectCodingReplayDiagnostics<
+  TEvent extends AgentRuntimeExecutionEvent,
+>(
+  fixture: AgentUiFixture<TEvent>,
+  state: AgentUiProjectionState<TEvent>,
+): string[] {
+  const expected = fixture.expected.coding;
+  if (!expected) {
+    return [];
+  }
+
+  const diagnostics: string[] = [];
+  const model = projectCodingWorkbenchView(state);
+  if (
+    expected.fileCount !== undefined &&
+    model.files.length < expected.fileCount
+  ) {
+    diagnostics.push("coding_files_below_expected");
+  }
+  if (
+    expected.changeCount !== undefined &&
+    model.changes.length < expected.changeCount
+  ) {
+    diagnostics.push("coding_changes_below_expected");
+  }
+  if (
+    expected.patchCount !== undefined &&
+    model.patches.length < expected.patchCount
+  ) {
+    diagnostics.push("coding_patches_below_expected");
+  }
+  if (
+    expected.commandCount !== undefined &&
+    model.commands.length < expected.commandCount
+  ) {
+    diagnostics.push("coding_commands_below_expected");
+  }
+  if (
+    expected.testCount !== undefined &&
+    model.tests.length < expected.testCount
+  ) {
+    diagnostics.push("coding_tests_below_expected");
+  }
+  if (
+    expected.blockedCount !== undefined &&
+    model.diagnostics.filter((diagnostic) => diagnostic.status === "blocked")
+      .length !== expected.blockedCount
+  ) {
+    diagnostics.push("coding_blocked_count_mismatch");
+  }
+  if (
+    expected.failedPatchCount !== undefined &&
+    model.patches.filter((patch) => patch.status === "failed").length !==
+      expected.failedPatchCount
+  ) {
+    diagnostics.push("coding_failed_patch_count_mismatch");
+  }
+  if (
+    expected.failedTestCount !== undefined &&
+    model.tests.filter((test) => test.status === "failed").length !==
+      expected.failedTestCount
+  ) {
+    diagnostics.push("coding_failed_test_count_mismatch");
+  }
+  return diagnostics;
 }
 
 function collectSubagentsReplayDiagnostics<

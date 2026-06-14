@@ -764,6 +764,16 @@ function collectFixtureExpectationValidationIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   requireString(input, "status", path, issues);
+  if ("coding" in input && input.coding !== undefined) {
+    requireRecord(input, "coding", path, issues);
+    if (isRecord(input.coding)) {
+      collectFixtureCodingExpectationValidationIssues(
+        input.coding,
+        `${path}.coding`,
+        issues,
+      );
+    }
+  }
   if ("subagents" in input && input.subagents !== undefined) {
     requireRecord(input, "subagents", path, issues);
     if (isRecord(input.subagents)) {
@@ -774,6 +784,28 @@ function collectFixtureExpectationValidationIssues(
       );
     }
   }
+}
+
+function collectFixtureCodingExpectationValidationIssues(
+  input: Record<string, unknown>,
+  path: string,
+  issues: AgentUiContractValidationIssue[],
+): void {
+  const numberFields = [
+    "fileCount",
+    "changeCount",
+    "patchCount",
+    "commandCount",
+    "testCount",
+    "blockedCount",
+    "failedPatchCount",
+    "failedTestCount",
+  ];
+  numberFields.forEach((field) => {
+    if (field in input && input[field] !== undefined) {
+      requireNumber(input, field, path, issues);
+    }
+  });
 }
 
 function collectFixtureSubagentsExpectationValidationIssues(
@@ -902,6 +934,7 @@ function collectScopeIssues(
   issues: AgentUiContractValidationIssue[],
 ): void {
   const eventClass = String(event.eventClass);
+  const payload = isRecord(event.payload) ? event.payload : {};
 
   if (eventClass.startsWith("tool.") && typeof event.toolCallId !== "string") {
     issues.push(
@@ -940,6 +973,146 @@ function collectScopeIssues(
     );
   }
 
+  if (eventClass === "file.read" && !payloadString(payload, "path")) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.path`,
+        "file.read events must include payload.path.",
+      ),
+    );
+  }
+
+  if (
+    eventClass === "file.changed" &&
+    typeof event.artifactId !== "string" &&
+    !hasNonEmptyStringArray(event.artifactRefs)
+  ) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.artifactId`,
+        "file.changed events must include artifactId or artifactRefs.",
+      ),
+    );
+  }
+
+  if (eventClass === "file.changed" && !payloadString(payload, "path")) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.path`,
+        "file.changed events must include payload.path.",
+      ),
+    );
+  }
+
+  if (
+    eventClass.startsWith("patch.") &&
+    !payloadString(payload, "patchId") &&
+    typeof event.toolCallId !== "string"
+  ) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.patchId`,
+        "Patch events must include payload.patchId or toolCallId.",
+      ),
+    );
+  }
+
+  if (
+    eventClass === "patch.failed" &&
+    !payloadString(payload, "failureCategory")
+  ) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.failureCategory`,
+        "patch.failed events must include payload.failureCategory.",
+      ),
+    );
+  }
+
+  if (
+    eventClass.startsWith("command.") &&
+    !payloadString(payload, "commandId") &&
+    typeof event.toolCallId !== "string"
+  ) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.commandId`,
+        "Command events must include payload.commandId or toolCallId.",
+      ),
+    );
+  }
+
+  if (eventClass === "command.output" && !hasAnyRef(event, payload)) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.refIds`,
+        "command.output events must include an output ref.",
+      ),
+    );
+  }
+
+  if (
+    eventClass === "command.exited" &&
+    !Number.isInteger(payload.exitCode) &&
+    typeof payload.status !== "string"
+  ) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.exitCode`,
+        "command.exited events must include payload.exitCode or payload.status.",
+      ),
+    );
+  }
+
+  if (
+    eventClass.startsWith("test.") &&
+    !payloadString(payload, "testRunId") &&
+    typeof event.toolCallId !== "string"
+  ) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.testRunId`,
+        "Test events must include payload.testRunId or toolCallId.",
+      ),
+    );
+  }
+
+  if (
+    eventClass === "test.completed" &&
+    !payloadString(payload, "result") &&
+    typeof payload.status !== "string"
+  ) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.result`,
+        "test.completed events must include payload.result or payload.status.",
+      ),
+    );
+  }
+
+  if (
+    eventClass === "sandbox.blocked" &&
+    !payloadString(payload, "reasonCode")
+  ) {
+    issues.push(
+      issue(
+        "missing_scope_id",
+        `${path}.payload.reasonCode`,
+        "sandbox.blocked events must include payload.reasonCode.",
+      ),
+    );
+  }
+
   if (
     (eventClass.startsWith("evidence.") || eventClass.startsWith("review."))
     && typeof event.evidenceId !== "string"
@@ -953,6 +1126,28 @@ function collectScopeIssues(
       ),
     );
   }
+}
+
+function payloadString(
+  payload: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = payload[key];
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function hasAnyRef(
+  event: Record<string, unknown>,
+  payload: Record<string, unknown>,
+): boolean {
+  return (
+    hasNonEmptyStringArray(event.refIds) ||
+    hasNonEmptyStringArray(event.artifactRefs) ||
+    hasNonEmptyStringArray(event.evidenceRefs) ||
+    Boolean(payloadString(payload, "outputRef")) ||
+    Boolean(payloadString(payload, "contentRef")) ||
+    Boolean(payloadString(payload, "diffRef"))
+  );
 }
 
 function collectLegacyTurnTerminalIssues(

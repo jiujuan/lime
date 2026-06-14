@@ -308,6 +308,7 @@ describe("agentSessionState", () => {
     });
 
     expect(result.snapshot.sessionId).toBe("topic-1");
+    expect(result.snapshot.workingDir).toBeNull();
     expect(result.snapshot.messages).toEqual(currentMessages);
     expect(result.snapshot.threadTurns.map((turn) => turn.id)).toEqual([
       "turn-local",
@@ -329,6 +330,32 @@ describe("agentSessionState", () => {
         position: 1,
       },
     ]);
+  });
+
+  it("hydrate 会把 App Server session working_dir 作为会话工作目录事实源", () => {
+    const detail = {
+      id: "topic-with-working-dir",
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      working_dir: " /workspace/runtime-cwd ",
+      messages: [],
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-with-working-dir",
+      detail,
+      currentSessionId: null,
+      currentMessages: [],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      syncSessionId: true,
+    });
+
+    expect(result.snapshot.sessionId).toBe("topic-with-working-dir");
+    expect(result.snapshot.workingDir).toBe("/workspace/runtime-cwd");
   });
 
   it("同会话 hydrate 时远端纯正文不应刷新掉本地 assistant 执行过程", () => {

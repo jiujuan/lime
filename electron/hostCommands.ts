@@ -13,15 +13,11 @@ import {
   METHOD_AGENT_APP_UI_RUNTIME_START,
   METHOD_AGENT_APP_UI_RUNTIME_STATUS,
   METHOD_AGENT_APP_UI_RUNTIME_STOP,
-  METHOD_AGENT_SESSION_LIST,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_READ,
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
-  METHOD_AGENT_SESSION_UPDATE,
-  METHOD_CAPABILITY_LIST,
-  METHOD_EVIDENCE_EXPORT,
   METHOD_MODEL_LIST,
   METHOD_MODEL_PROVIDER_LIST,
   METHOD_PROJECT_MEMORY_READ,
@@ -40,25 +36,16 @@ import {
   METHOD_WORKSPACE_PROJECTS_ROOT_READ,
   METHOD_WORKSPACE_PROJECT_PATH_RESOLVE,
   METHOD_WORKSPACE_READ,
-  METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
-  type AgentAttachment,
   type AgentSessionActionRespondResponse,
-  type AgentSessionListResponse,
-  type AgentSessionOverview,
   type AgentSessionReadResponse,
   type AgentSessionStartResponse,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartResponse,
-  type AgentSessionUpdateResponse,
   type AgentAppShellPrepareResponse,
   type AgentAppUiRuntimeStartParams,
   type AgentAppUiRuntimeStatusParams,
   type AgentAppUiRuntimeStatusResponse,
   type AgentAppUiRuntimeStopParams,
-  type ArtifactSummary,
-  type CapabilityDescriptor,
-  type CapabilityListResponse,
-  type EvidenceExportResponse,
   type ModelListResponse,
   type ModelProviderListResponse,
   type ProjectMemoryReadResponse,
@@ -69,7 +56,6 @@ import {
   type WorkspaceProjectPathResolveResponse,
   type WorkspaceProjectsRootReadResponse,
   type WorkspaceReadResponse,
-  type WorkspaceSkillBindingsListResponse,
 } from "@limecloud/app-server-client";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -396,28 +382,6 @@ export class ElectronHostCommands {
         return await this.#initAgentRuntime();
       case "get_default_provider":
         return await this.#getDefaultProvider();
-      case "agent_runtime_list_sessions":
-        return await this.#listAgentRuntimeSessions(args);
-      case "agent_runtime_get_session":
-        return await this.#getAgentRuntimeSession(args);
-      case "agent_runtime_create_session":
-        return await this.#createAgentRuntimeSession(args);
-      case "agent_runtime_submit_turn":
-        return await this.#submitAgentRuntimeTurn(args);
-      case "agent_runtime_interrupt_turn":
-        return await this.#interruptAgentRuntimeTurn(args);
-      case "agent_runtime_update_session":
-        return await this.#updateAgentRuntimeSession(args);
-      case "agent_runtime_respond_action":
-        return await this.#respondAgentRuntimeAction(args);
-      case "agent_runtime_get_thread_read":
-        return await this.#getAgentRuntimeThreadRead(args);
-      case "agent_runtime_export_evidence_pack":
-        return await this.#exportAgentRuntimeEvidencePack(args);
-      case "agent_runtime_get_tool_inventory":
-        return await this.#getAgentRuntimeToolInventory(args);
-      case "agent_runtime_list_workspace_skill_bindings":
-        return await this.#listWorkspaceSkillBindings(args);
       case "workspace_list":
         return await this.#listWorkspaces();
       case "workspace_get_default":
@@ -1524,297 +1488,6 @@ export class ElectronHostCommands {
     });
   }
 
-  async #listAgentRuntimeSessions(args: HostArgs): Promise<unknown[]> {
-    const request = readRequest(args);
-    const params: AppServerParams = {
-      ...readBooleanParam(request, "include_archived", "includeArchived"),
-      ...readBooleanParam(request, "archived_only", "archivedOnly"),
-      ...readStringParam(request, "workspace_id", "workspaceId"),
-      ...readNumberParam(request, "limit", "limit"),
-    };
-    const response = await this.#appServerRequest<AgentSessionListResponse>(
-      METHOD_AGENT_SESSION_LIST,
-      params,
-    );
-    return response.sessions.map(sessionOverviewToLegacy);
-  }
-
-  async #getAgentRuntimeSession(args: HostArgs): Promise<unknown> {
-    const request = readRequest(args);
-    const sessionId =
-      readString(request, "sessionId") ?? readString(request, "session_id");
-    if (!sessionId) {
-      throw new Error("agent_runtime_get_session requires sessionId");
-    }
-    const response = await this.#appServerRequest<AgentSessionReadResponse>(
-      METHOD_AGENT_SESSION_READ,
-      {
-        sessionId,
-        ...readNumberParam(request, "historyLimit", "historyLimit"),
-        ...readNumberParam(request, "history_limit", "historyLimit"),
-        ...readNumberParam(request, "historyOffset", "historyOffset"),
-        ...readNumberParam(request, "history_offset", "historyOffset"),
-        ...readNumberParam(
-          request,
-          "historyBeforeMessageId",
-          "historyBeforeMessageId",
-        ),
-        ...readNumberParam(
-          request,
-          "history_before_message_id",
-          "historyBeforeMessageId",
-        ),
-      },
-    );
-    return response.detail ?? sessionReadToLegacy(response);
-  }
-
-  async #createAgentRuntimeSession(args: HostArgs): Promise<string> {
-    const request = readRequest(args);
-    const workspaceId =
-      readString(request, "workspaceId") ?? readString(request, "workspace_id");
-    if (!workspaceId) {
-      throw new Error("agent_runtime_create_session requires workspaceId");
-    }
-    const name = readString(request, "name") ?? "新对话";
-    const optionMetadata = readRecord(request, "metadata") ?? {};
-    const executionStrategy =
-      readString(request, "executionStrategy") ??
-      readString(request, "execution_strategy") ??
-      undefined;
-    const response = await this.#appServerRequest<AgentSessionStartResponse>(
-      METHOD_AGENT_SESSION_START,
-      {
-        appId: "desktop",
-        workspaceId,
-        businessObjectRef: {
-          kind: "agent.session",
-          id: `agent-session:${workspaceId}:${Date.now()}`,
-          title: name,
-          metadata: {
-            ...optionMetadata,
-            title: name,
-            executionStrategy,
-            ...(readBoolean(request, "runStartHooks") === false
-              ? { runStartHooks: false }
-              : {}),
-          },
-        },
-      },
-    );
-    return response.session.sessionId;
-  }
-
-  async #submitAgentRuntimeTurn(args: HostArgs): Promise<void> {
-    const request = readRequest(args);
-    const sessionId =
-      readString(request, "session_id") ?? readString(request, "sessionId");
-    const message = readString(request, "message") ?? "";
-    if (!sessionId) {
-      throw new Error("agent_runtime_submit_turn requires session_id");
-    }
-    if (!message.trim()) {
-      throw new Error("agent_runtime_submit_turn requires message");
-    }
-
-    const turnConfig =
-      readRecord(request, "turn_config") ?? readRecord(request, "turnConfig");
-    const metadata = readRecord(turnConfig, "metadata") ?? undefined;
-    const providerPreference =
-      readString(turnConfig, "provider_preference") ??
-      readString(turnConfig, "providerPreference") ??
-      undefined;
-    const modelPreference =
-      readString(turnConfig, "model_preference") ??
-      readString(turnConfig, "modelPreference") ??
-      undefined;
-    const asterChatRequest = buildAgentRuntimeAsterChatRequest({
-      request,
-      sessionId,
-      message,
-      turnConfig,
-      providerPreference,
-      modelPreference,
-    });
-    await this.#appServerRequest<AgentSessionTurnStartResponse>(
-      METHOD_AGENT_SESSION_TURN_START,
-      {
-        sessionId,
-        ...readStringParam(request, "turn_id", "turnId"),
-        ...readStringParam(request, "turnId", "turnId"),
-        input: {
-          text: message,
-          attachments: normalizeAgentAttachments(readArray(request, "images")),
-        },
-        runtimeOptions: {
-          stream: true,
-          eventName:
-            readString(request, "event_name") ??
-            readString(request, "eventName") ??
-            `agentSession/event/${sessionId}`,
-          providerPreference,
-          modelPreference,
-          metadata,
-          queuedTurnId:
-            readString(request, "queued_turn_id") ??
-            readString(request, "queuedTurnId") ??
-            undefined,
-          hostOptions: {
-            asterChatRequest,
-            agentRuntimeSubmitTurnRequest: request,
-          },
-        },
-        queueIfBusy:
-          readBoolean(request, "queue_if_busy") ??
-          readBoolean(request, "queueIfBusy") ??
-          false,
-        skipPreSubmitResume:
-          readBoolean(request, "skip_pre_submit_resume") ??
-          readBoolean(request, "skipPreSubmitResume") ??
-          false,
-      },
-    );
-  }
-
-  async #interruptAgentRuntimeTurn(args: HostArgs): Promise<boolean> {
-    const request = readRequest(args);
-    const sessionId =
-      readString(request, "session_id") ?? readString(request, "sessionId");
-    const turnId =
-      readString(request, "turn_id") ?? readString(request, "turnId");
-    if (!sessionId || !turnId) {
-      throw new Error(
-        "agent_runtime_interrupt_turn requires session_id and turn_id",
-      );
-    }
-    await this.#appServerRequest<AgentSessionTurnCancelResponse>(
-      METHOD_AGENT_SESSION_TURN_CANCEL,
-      { sessionId, turnId },
-    );
-    return true;
-  }
-
-  async #updateAgentRuntimeSession(args: HostArgs): Promise<void> {
-    const request = readRequest(args);
-    const sessionId =
-      readString(request, "session_id") ?? readString(request, "sessionId");
-    if (!sessionId) {
-      throw new Error("agent_runtime_update_session requires session_id");
-    }
-    await this.#appServerRequest<AgentSessionUpdateResponse>(
-      METHOD_AGENT_SESSION_UPDATE,
-      {
-        sessionId,
-        ...readStringParam(request, "name", "title"),
-        ...readStringParam(request, "title", "title"),
-        ...readBooleanParam(request, "archived", "archived"),
-        ...readBooleanParam(request, "isArchived", "archived"),
-        ...readStringParam(request, "provider_selector", "providerSelector"),
-        ...readStringParam(request, "providerSelector", "providerSelector"),
-        ...readStringParam(request, "provider_name", "providerName"),
-        ...readStringParam(request, "providerName", "providerName"),
-        ...readStringParam(request, "model_name", "modelName"),
-        ...readStringParam(request, "modelName", "modelName"),
-        ...readStringParam(request, "execution_strategy", "executionStrategy"),
-        ...readStringParam(request, "executionStrategy", "executionStrategy"),
-        ...readStringParam(request, "recent_access_mode", "recentAccessMode"),
-        ...readStringParam(request, "recentAccessMode", "recentAccessMode"),
-        ...readValueParam(request, "recent_preferences", "recentPreferences"),
-        ...readValueParam(request, "recentPreferences", "recentPreferences"),
-        ...readValueParam(
-          request,
-          "recent_team_selection",
-          "recentTeamSelection",
-        ),
-        ...readValueParam(
-          request,
-          "recentTeamSelection",
-          "recentTeamSelection",
-        ),
-      },
-    );
-  }
-
-  async #respondAgentRuntimeAction(args: HostArgs): Promise<void> {
-    const request = readRequest(args);
-    const sessionId =
-      readString(request, "session_id") ?? readString(request, "sessionId");
-    const requestId =
-      readString(request, "request_id") ?? readString(request, "requestId");
-    const actionType =
-      readString(request, "action_type") ??
-      readString(request, "actionType") ??
-      "tool_confirmation";
-    if (!sessionId || !requestId) {
-      throw new Error(
-        "agent_runtime_respond_action requires session_id and request_id",
-      );
-    }
-    await this.#appServerRequest(METHOD_AGENT_SESSION_ACTION_RESPOND, {
-      sessionId,
-      requestId,
-      actionType,
-      confirmed: readBoolean(request, "confirmed") ?? false,
-      ...readStringParam(request, "response", "response"),
-      userData: request.user_data ?? request.userData,
-      metadata: request.metadata,
-      ...readStringParam(request, "event_name", "eventName"),
-      ...readStringParam(request, "eventName", "eventName"),
-      actionScope: request.action_scope ?? request.actionScope,
-    });
-  }
-
-  async #getAgentRuntimeThreadRead(
-    args: HostArgs,
-  ): Promise<Record<string, unknown>> {
-    const request = readRequest(args);
-    const sessionId =
-      readString(request, "sessionId") ?? readString(request, "session_id");
-    if (!sessionId) {
-      throw new Error("agent_runtime_get_thread_read requires sessionId");
-    }
-    const response = await this.#appServerRequest<AgentSessionReadResponse>(
-      METHOD_AGENT_SESSION_READ,
-      { sessionId },
-    );
-    const threadRead = threadReadFromAgentSessionRead(response);
-    if (threadRead) {
-      return threadRead;
-    }
-    return {
-      session_id: response.session.sessionId,
-      thread_id: response.session.threadId,
-      turns: response.turns,
-      pending_requests: [],
-      queued_turns: [],
-      diagnostics: null,
-    };
-  }
-
-  async #exportAgentRuntimeEvidencePack(
-    args: HostArgs,
-  ): Promise<Record<string, unknown>> {
-    const request = readRequest(args);
-    const sessionId =
-      readString(request, "sessionId") ?? readString(request, "session_id");
-    if (!sessionId) {
-      throw new Error("agent_runtime_export_evidence_pack requires sessionId");
-    }
-    const turnId =
-      readString(request, "turnId") ?? readString(request, "turn_id");
-    const response = await this.#appServerRequest<EvidenceExportResponse>(
-      METHOD_EVIDENCE_EXPORT,
-      {
-        sessionId,
-        ...(turnId ? { turnId } : {}),
-        includeEvents: true,
-        includeArtifacts: true,
-        includeEvidencePack: true,
-      },
-    );
-    return evidenceExportToLegacy(response);
-  }
-
   async #listModelProviders(): Promise<unknown[]> {
     const response = await this.#appServerRequest<ModelProviderListResponse>(
       METHOD_MODEL_PROVIDER_LIST,
@@ -1828,32 +1501,6 @@ export class ElectronHostCommands {
       params,
     );
     return response.models;
-  }
-
-  async #getAgentRuntimeToolInventory(
-    args: HostArgs,
-  ): Promise<Record<string, unknown>> {
-    const request = readRequest(args);
-    const caller = readString(request, "caller") ?? "assistant";
-    const surface = {
-      workbench: readBoolean(request, "workbench") ?? false,
-      browser_assist:
-        readBoolean(request, "browserAssist") ??
-        readBoolean(request, "browser_assist") ??
-        false,
-    };
-    const response = await this.#appServerRequest<CapabilityListResponse>(
-      METHOD_CAPABILITY_LIST,
-      {
-        ...readStringParam(request, "appId", "appId"),
-        ...readStringParam(request, "app_id", "appId"),
-        ...readStringParam(request, "workspaceId", "workspaceId"),
-        ...readStringParam(request, "workspace_id", "workspaceId"),
-        ...readStringParam(request, "sessionId", "sessionId"),
-        ...readStringParam(request, "session_id", "sessionId"),
-      },
-    );
-    return capabilitiesToToolInventory(response.capabilities, caller, surface);
   }
 
   async #listWorkspaces(): Promise<unknown[]> {
@@ -1955,14 +1602,15 @@ export class ElectronHostCommands {
       readString(request, "workspace_type") ??
       readString(args, "workspaceType") ??
       readString(args, "workspace_type");
-    const response = await this.#appServerRequest<WorkspaceEnsureProjectResponse>(
-      METHOD_WORKSPACE_ENSURE,
-      {
-        name,
-        rootPath,
-        ...(workspaceType ? { workspaceType } : {}),
-      },
-    );
+    const response =
+      await this.#appServerRequest<WorkspaceEnsureProjectResponse>(
+        METHOD_WORKSPACE_ENSURE,
+        {
+          name,
+          rootPath,
+          ...(workspaceType ? { workspaceType } : {}),
+        },
+      );
     return response.workspace;
   }
 
@@ -2001,32 +1649,6 @@ export class ElectronHostCommands {
     const response =
       await this.#appServerRequest<SkillListResponse>(METHOD_SKILL_LIST);
     return response.skills.map(skillToLocalSkill);
-  }
-
-  async #listWorkspaceSkillBindings(args: HostArgs): Promise<unknown> {
-    const request = readRequest(args);
-    const workspaceRoot =
-      readString(request, "workspaceRoot") ??
-      readString(request, "workspace_root") ??
-      readString(args, "workspaceRoot") ??
-      readString(args, "workspace_root");
-    if (!workspaceRoot) {
-      throw new Error(
-        "agent_runtime_list_workspace_skill_bindings requires workspaceRoot",
-      );
-    }
-    const response =
-      await this.#appServerRequest<WorkspaceSkillBindingsListResponse>(
-        METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
-        {
-          workspaceRoot,
-          ...readStringParam(request, "caller", "caller"),
-          ...readBooleanParam(request, "workbench", "workbench"),
-          ...readBooleanParam(request, "browserAssist", "browserAssist"),
-          ...readBooleanParam(request, "browser_assist", "browserAssist"),
-        },
-      );
-    return response.bindings;
   }
 
   async #getVoiceShortcutRuntimeStatus(): Promise<Record<string, unknown>> {
@@ -3586,90 +3208,6 @@ function readStringParam(
   return next ? { [outputKey]: next } : {};
 }
 
-function readNumberParam(
-  value: unknown,
-  inputKey: string,
-  outputKey: string,
-): AppServerParams {
-  const record = toRecord(value);
-  if (!record) {
-    return {};
-  }
-  const next = record[inputKey];
-  if (typeof next !== "number" || !Number.isFinite(next) || next < 0) {
-    return {};
-  }
-  return { [outputKey]: Math.trunc(next) };
-}
-
-function readValueParam(
-  value: unknown,
-  inputKey: string,
-  outputKey: string,
-): AppServerParams {
-  const record = toRecord(value);
-  if (!record || record[inputKey] === undefined) {
-    return {};
-  }
-  return { [outputKey]: record[inputKey] };
-}
-
-function buildAgentRuntimeAsterChatRequest(params: {
-  request: Record<string, unknown>;
-  sessionId: string;
-  message: string;
-  turnConfig: Record<string, unknown> | null;
-  providerPreference?: string;
-  modelPreference?: string;
-}): Record<string, unknown> {
-  const { request, sessionId, message, turnConfig } = params;
-  const eventName =
-    readString(request, "event_name") ??
-    readString(request, "eventName") ??
-    `agentSession/event/${sessionId}`;
-  return {
-    message,
-    session_id: sessionId,
-    event_name: eventName,
-    images: readArray(request, "images") ?? null,
-    provider_config:
-      turnConfig?.provider_config ?? turnConfig?.providerConfig ?? null,
-    provider_preference: params.providerPreference,
-    model_preference: params.modelPreference,
-    reasoning_effort:
-      turnConfig?.reasoning_effort ?? turnConfig?.reasoningEffort ?? null,
-    thinking_enabled:
-      turnConfig?.thinking_enabled ?? turnConfig?.thinkingEnabled ?? null,
-    approval_policy:
-      turnConfig?.approval_policy ?? turnConfig?.approvalPolicy ?? null,
-    sandbox_policy:
-      turnConfig?.sandbox_policy ?? turnConfig?.sandboxPolicy ?? null,
-    workspace_id:
-      readString(request, "workspace_id") ??
-      readString(request, "workspaceId") ??
-      "",
-    web_search: turnConfig?.web_search ?? turnConfig?.webSearch ?? null,
-    search_mode: turnConfig?.search_mode ?? turnConfig?.searchMode ?? null,
-    execution_strategy:
-      turnConfig?.execution_strategy ?? turnConfig?.executionStrategy ?? null,
-    auto_continue:
-      turnConfig?.auto_continue ?? turnConfig?.autoContinue ?? null,
-    system_prompt:
-      turnConfig?.system_prompt ?? turnConfig?.systemPrompt ?? null,
-    metadata: turnConfig?.metadata ?? null,
-    turn_id: readString(request, "turn_id") ?? readString(request, "turnId"),
-    queue_if_busy:
-      readBoolean(request, "queue_if_busy") ??
-      readBoolean(request, "queueIfBusy") ??
-      false,
-    queued_turn_id:
-      readString(request, "queued_turn_id") ??
-      readString(request, "queuedTurnId") ??
-      null,
-    turn_config: turnConfig,
-  };
-}
-
 function buildAgentAppRuntimeTaskMessage(
   request: Record<string, unknown>,
 ): string {
@@ -3777,26 +3315,6 @@ function isAppServerSessionAlreadyExistsError(error: unknown): boolean {
   );
 }
 
-function sessionOverviewToLegacy(
-  session: AgentSessionOverview,
-): Record<string, unknown> {
-  return {
-    id: session.sessionId,
-    thread_id: session.threadId ?? session.sessionId,
-    name: session.title ?? undefined,
-    created_at: timestampMillis(session.createdAt),
-    updated_at: timestampMillis(session.updatedAt),
-    archived_at: session.archivedAt
-      ? timestampMillis(session.archivedAt)
-      : null,
-    model: session.model,
-    workspace_id: session.workspaceId,
-    working_dir: session.workingDir,
-    execution_strategy: session.executionStrategy,
-    messages_count: session.messagesCount,
-  };
-}
-
 function sessionReadToLegacy(
   response: AgentSessionReadResponse,
 ): Record<string, unknown> {
@@ -3841,310 +3359,6 @@ function timestampMillis(value: string | undefined): number {
     return Math.abs(numeric) < 10_000_000_000 ? numeric * 1000 : numeric;
   }
   return Date.now();
-}
-
-function normalizeAgentAttachments(
-  images?: unknown[],
-): AgentAttachment[] | undefined {
-  if (!images?.length) {
-    return undefined;
-  }
-
-  const attachments = images
-    .map((image, index): AgentAttachment | null => {
-      const record = toRecord(image);
-      if (!record) {
-        return null;
-      }
-      const uri = readString(record, "data") ?? readString(record, "uri");
-      if (!uri) {
-        return null;
-      }
-      return {
-        kind: "image",
-        uri,
-        metadata: {
-          mediaType:
-            readString(record, "media_type") ?? readString(record, "mediaType"),
-          index,
-        },
-      };
-    })
-    .filter((attachment): attachment is AgentAttachment => attachment !== null);
-
-  return attachments.length > 0 ? attachments : undefined;
-}
-
-function evidenceExportToLegacy(
-  response: EvidenceExportResponse,
-): Record<string, unknown> {
-  const pack = response.evidencePack;
-  const latestTurn =
-    response.turns.length > 0
-      ? response.turns[response.turns.length - 1]
-      : undefined;
-  const observabilitySummary =
-    pack?.observabilitySummary ??
-    observabilitySummaryFromEvidenceEvents(response.events);
-  const workspaceRoot =
-    readString(
-      toRecord(response.session.businessObjectRef?.metadata),
-      "workspaceRoot",
-    ) ??
-    readString(
-      toRecord(response.session.businessObjectRef?.metadata),
-      "workspace_root",
-    ) ??
-    "";
-
-  return {
-    sessionId: response.session.sessionId,
-    threadId: response.session.threadId,
-    workspaceId: response.session.workspaceId,
-    workspaceRoot,
-    packRelativeRoot: pack?.packRelativeRoot ?? "",
-    packAbsoluteRoot: pack?.packAbsoluteRoot ?? "",
-    exportedAt: pack?.exportedAt ?? response.exportedAt,
-    threadStatus: pack?.threadStatus ?? response.session.status,
-    latestTurnStatus: pack?.latestTurnStatus ?? latestTurn?.status,
-    turnCount: pack?.turnCount ?? response.turns.length,
-    itemCount: pack?.itemCount ?? response.events.length,
-    pendingRequestCount: pack?.pendingRequestCount ?? 0,
-    queuedTurnCount:
-      pack?.queuedTurnCount ??
-      response.turns.filter((turn) => turn.status === "queued").length,
-    recentArtifactCount: pack?.recentArtifactCount ?? response.artifacts.length,
-    knownGaps: pack?.knownGaps ?? [],
-    observabilitySummary,
-    completionAuditSummary: pack?.completionAuditSummary,
-    artifacts:
-      pack?.artifacts ??
-      response.artifacts.map(artifactSummaryToEvidenceArtifact),
-  };
-}
-
-function observabilitySummaryFromEvidenceEvents(
-  events: EvidenceExportResponse["events"],
-): Record<string, unknown> | undefined {
-  const toolCalls = toolCallsFromEvidenceEvents(events);
-  if (toolCalls.length === 0) {
-    return undefined;
-  }
-
-  return {
-    schemaVersion: "runtime-evidence-observability.v1",
-    toolCalls,
-  };
-}
-
-function toolCallsFromEvidenceEvents(
-  events: EvidenceExportResponse["events"],
-): Array<Record<string, unknown>> {
-  const calls: Array<Record<string, unknown>> = [];
-  for (const event of events) {
-    for (const next of toolCallProjectionsFromEvidenceEvent(event)) {
-      mergeToolCallProjection(calls, next);
-    }
-  }
-  return calls;
-}
-
-function toolCallProjectionsFromEvidenceEvent(
-  event: EvidenceExportResponse["events"][number],
-): Array<Record<string, unknown>> {
-  const type = String(event.type || "");
-  const payload = toRecord(event.payload) ?? {};
-  const runtimeEvent = toRecord(payload.runtimeEvent);
-  const item = toRecord(payload.item) ?? toRecord(runtimeEvent?.item);
-  const result = toRecord(payload.result) ?? toRecord(runtimeEvent?.result);
-  const projections: Array<Record<string, unknown>> = [];
-  const status = toolCallStatusFromEvidenceEvent(type, item);
-
-  if (status) {
-    const success =
-      readBoolean(payload, "success") ??
-      readBoolean(runtimeEvent, "success") ??
-      readBoolean(item, "success") ??
-      readBoolean(result, "success") ??
-      (status === "failed" ? false : undefined);
-    projections.push(
-      omitNullishRecord({
-        id:
-          readToolCallId(payload) ??
-          readToolCallId(runtimeEvent) ??
-          readToolCallId(item) ??
-          readToolCallId(result),
-        toolName:
-          readToolName(payload) ??
-          readToolName(runtimeEvent) ??
-          readToolName(item) ??
-          readToolName(result),
-        status,
-        success,
-        output:
-          readToolOutput(item) ??
-          readToolOutput(result) ??
-          readToolOutput(payload) ??
-          readToolOutput(runtimeEvent),
-        error:
-          payload.error ?? runtimeEvent?.error ?? item?.error ?? result?.error,
-        eventId: event.eventId,
-        turnId: event.turnId,
-        timestamp: event.timestamp,
-      }),
-    );
-  }
-
-  for (const content of toolMessageContentRecords(payload, runtimeEvent)) {
-    const contentType = readString(content, "type");
-    if (contentType !== "tool_request" && contentType !== "tool_response") {
-      continue;
-    }
-    projections.push(
-      omitNullishRecord({
-        id: readToolCallId(content),
-        toolName: readToolName(content),
-        status: contentType === "tool_response" ? "completed" : "running",
-        success: readBoolean(content, "success"),
-        output: readToolOutput(content),
-        error: content.error,
-        eventId: event.eventId,
-        turnId: event.turnId,
-        timestamp: event.timestamp,
-      }),
-    );
-  }
-
-  return projections;
-}
-
-function toolCallStatusFromEvidenceEvent(
-  type: string,
-  item: Record<string, unknown> | null,
-): string | null {
-  if (type === "tool.started") {
-    return "running";
-  }
-  if (type === "tool.result") {
-    return "completed";
-  }
-  if (type === "tool.failed") {
-    return "failed";
-  }
-  if (item && readString(item, "type") === "tool_call") {
-    if (type === "item.started") {
-      return "running";
-    }
-    if (type === "item.completed") {
-      return readString(item, "status") ?? "completed";
-    }
-  }
-  return null;
-}
-
-function mergeToolCallProjection(
-  calls: Array<Record<string, unknown>>,
-  next: Record<string, unknown>,
-): void {
-  const id = readString(next, "id");
-  const toolName = readString(next, "toolName");
-  const existing = calls.find((call) => {
-    if (id && readString(call, "id") === id) {
-      return true;
-    }
-    return (
-      !id &&
-      Boolean(toolName) &&
-      readString(call, "toolName") === toolName &&
-      readString(call, "turnId") === readString(next, "turnId")
-    );
-  });
-  const normalizedNext = omitNullishRecord({
-    id: id ?? existing?.id ?? readString(next, "eventId"),
-    ...next,
-  });
-  if (existing) {
-    Object.assign(existing, normalizedNext);
-  } else {
-    calls.push(normalizedNext);
-  }
-}
-
-function readToolCallId(record: Record<string, unknown> | null): string | null {
-  return (
-    readString(record, "id") ??
-    readString(record, "tool_call_id") ??
-    readString(record, "toolCallId") ??
-    readString(record, "toolId") ??
-    readString(record, "tool_id")
-  );
-}
-
-function readToolName(record: Record<string, unknown> | null): string | null {
-  return (
-    readString(record, "tool_name") ??
-    readString(record, "toolName") ??
-    readString(record, "name")
-  );
-}
-
-function readToolOutput(record: Record<string, unknown> | null): unknown {
-  if (!record) {
-    return undefined;
-  }
-  return (
-    readString(record, "output") ??
-    readString(record, "output_preview") ??
-    readString(record, "outputPreview") ??
-    readString(record, "text") ??
-    readString(record, "content") ??
-    readString(record, "result") ??
-    record.output ??
-    record.output_preview ??
-    record.outputPreview ??
-    record.text ??
-    record.content ??
-    record.result
-  );
-}
-
-function toolMessageContentRecords(
-  payload: Record<string, unknown>,
-  runtimeEvent: Record<string, unknown> | null,
-): Array<Record<string, unknown>> {
-  const content =
-    readArray(readRecord(payload, "message"), "content") ??
-    readArray(readRecord(runtimeEvent, "message"), "content") ??
-    [];
-  return content
-    .map((entry) => toRecord(entry))
-    .filter((entry): entry is Record<string, unknown> => entry !== null);
-}
-
-function omitNullishRecord(
-  record: Record<string, unknown>,
-): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(record).filter(
-      ([, value]) => value !== undefined && value !== null,
-    ),
-  );
-}
-
-function artifactSummaryToEvidenceArtifact(
-  artifact: ArtifactSummary,
-): Record<string, unknown> {
-  const relativePath = artifact.path ?? artifact.artifactRef;
-  return {
-    kind: artifact.kind ?? "artifacts",
-    title: artifact.title ?? artifact.artifactId ?? artifact.artifactRef,
-    relativePath,
-    absolutePath: "",
-    bytes:
-      typeof artifact.content === "string"
-        ? Buffer.byteLength(artifact.content)
-        : 0,
-  };
 }
 
 function findProvider(
@@ -4325,91 +3539,6 @@ function shouldEmitOemCloudOAuthCallback(
     payload.deviceCode ||
     payload.status,
   );
-}
-
-function capabilitiesToToolInventory(
-  capabilities: CapabilityDescriptor[],
-  caller: string,
-  surface: { workbench: boolean; browser_assist: boolean },
-): Record<string, unknown> {
-  const runtimeTools = capabilities.flatMap((capability) =>
-    capabilityRuntimeToolNames(capability).map((name) => ({
-      name,
-      description: capability.description ?? capability.title,
-      source_kind: "current_surface",
-      source_label: capability.id,
-      status: "available",
-      deferred_loading: false,
-      always_visible: true,
-      allowed_callers: [caller],
-      tags: [capability.id],
-      input_examples_count: 0,
-      caller_allowed: true,
-      visible_in_context: true,
-    })),
-  );
-  const defaultAllowedTools = runtimeTools.map((entry) => entry.name).sort();
-
-  return {
-    request: {
-      caller,
-      surface,
-    },
-    agent_initialized: true,
-    warnings: [
-      "当前工具库存来自 App Server capability/list；细粒度工具权限 catalog 尚未迁入 App Server protocol。",
-    ],
-    mcp_servers: [],
-    default_allowed_tools: defaultAllowedTools,
-    counts: {
-      catalog_total: 0,
-      catalog_current_total: 0,
-      catalog_compat_total: 0,
-      catalog_deprecated_total: 0,
-      default_allowed_total: defaultAllowedTools.length,
-      runtime_total: runtimeTools.length,
-      runtime_visible_total: runtimeTools.length,
-      registry_total: 0,
-      registry_visible_total: 0,
-      registry_catalog_unmapped_total: 0,
-      extension_surface_total: 0,
-      extension_mcp_bridge_total: 0,
-      extension_runtime_total: 0,
-      extension_tool_total: 0,
-      extension_tool_visible_total: 0,
-      mcp_server_total: 0,
-      mcp_tool_total: 0,
-      mcp_tool_visible_total: 0,
-    },
-    catalog_tools: [],
-    registry_tools: [],
-    runtime_tools: runtimeTools,
-    extension_surfaces: [],
-    extension_tools: [],
-    mcp_tools: [],
-  };
-}
-
-function capabilityRuntimeToolNames(
-  capability: CapabilityDescriptor,
-): string[] {
-  const toolName = capabilityToolName(capability);
-  if (toolName) {
-    return [toolName];
-  }
-  return capability.methods;
-}
-
-function capabilityToolName(capability: CapabilityDescriptor): string | null {
-  const id = capability.id.trim();
-  if (!id.startsWith("tool.")) {
-    return null;
-  }
-  const title = capability.title.trim();
-  if (title) {
-    return title;
-  }
-  return id.slice("tool.".length).trim() || null;
 }
 
 function buildDefaultConfig(): Record<string, unknown> {

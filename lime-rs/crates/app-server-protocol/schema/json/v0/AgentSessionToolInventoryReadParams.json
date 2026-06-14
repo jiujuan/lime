@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "browserAssist": {
+      "default": false,
+      "type": "boolean"
+    },
+    "caller": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "metadata": true,
+    "workbench": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "title": "AgentSessionToolInventoryReadParams",
+  "type": "object"
+}

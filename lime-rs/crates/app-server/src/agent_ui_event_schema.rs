@@ -17,6 +17,10 @@ static STATE_DELTA_VALIDATOR: OnceLock<Result<Validator, String>> = OnceLock::ne
 
 pub(crate) fn validate_agent_event(event: &AgentEvent) -> Result<(), String> {
     reject_legacy_turn_terminal_event(&event.event_type)?;
+    if is_text_delta_fast_path_event(&event.event_type) {
+        return validate_text_delta_fast_path_event(event);
+    }
+    validate_coding_event_payload(event)?;
 
     let runtime_event = runtime_event_schema_value(event);
     validate_with_schema(
@@ -35,6 +39,93 @@ pub(crate) fn validate_agent_event(event: &AgentEvent) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn validate_text_delta_fast_path_event(event: &AgentEvent) -> Result<(), String> {
+    let payload = payload_object(&event.payload)
+        .ok_or_else(|| format!("{} payload must be a JSON object", event.event_type))?;
+    if event.timestamp.is_empty() {
+        return Err(format!(
+            "agent runtime event schema validation failed: {} createdAt must not be empty",
+            event.event_type
+        ));
+    }
+    if let Some(schema_version) = payload_string(Some(payload), &["runtimeEventSchemaVersion"]) {
+        if schema_version != "lime-runtime-event/v0.1" {
+            return Err(format!(
+                "agent runtime event schema validation failed: {} schemaVersion must be lime-runtime-event/v0.1",
+                event.event_type
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_coding_event_payload(event: &AgentEvent) -> Result<(), String> {
+    let event_class = normalize_event_class(&event.event_type);
+    let payload = payload_object(&event.payload);
+    match event_class {
+        "file.read" => require_payload_string(payload, &["path"], event_class),
+        "file.changed" => {
+            require_payload_string(payload, &["path"], event_class)?;
+            if payload_string(payload, &["artifactId", "artifact_id"]).is_none()
+                && payload_array_non_empty(payload, &["artifactRefs", "artifact_refs"]).is_none()
+            {
+                return Err(
+                    "file.changed events must include artifactId or artifactRefs".to_string(),
+                );
+            }
+            Ok(())
+        }
+        "patch.failed" => require_payload_string(
+            payload,
+            &["failureCategory", "failure_category"],
+            event_class,
+        ),
+        "command.output" => {
+            if payload_string(payload, &["outputRef", "output_ref"]).is_none()
+                && payload_array_non_empty(payload, &["refIds", "ref_ids"]).is_none()
+            {
+                return Err("command.output events must include outputRef or refIds".to_string());
+            }
+            Ok(())
+        }
+        "command.exited" => {
+            if payload_number(payload, &["exitCode", "exit_code"]).is_none()
+                && payload_string(payload, &["status"]).is_none()
+            {
+                return Err("command.exited events must include exitCode or status".to_string());
+            }
+            Ok(())
+        }
+        "test.completed" => {
+            if payload_string(payload, &["result", "status"]).is_none() {
+                return Err("test.completed events must include result or status".to_string());
+            }
+            Ok(())
+        }
+        "sandbox.blocked" => {
+            require_payload_string(payload, &["reasonCode", "reason_code"], event_class)
+        }
+        "permission.denied" => {
+            require_payload_string(payload, &["reasonCode", "reason_code"], event_class)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn require_payload_string(
+    payload: Option<&serde_json::Map<String, Value>>,
+    keys: &[&str],
+    event_class: &str,
+) -> Result<(), String> {
+    if payload_string(payload, keys).is_some() {
+        return Ok(());
+    }
+    Err(format!(
+        "{event_class} events must include {}",
+        keys.join(" or ")
+    ))
 }
 
 fn reject_legacy_turn_terminal_event(event_type: &str) -> Result<(), String> {
@@ -158,6 +249,13 @@ fn normalize_event_class(event_type: &str) -> &str {
     }
 }
 
+fn is_text_delta_fast_path_event(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "message.delta" | "message.delta_batch" | "message.batch"
+    )
+}
+
 fn kind_for_event_class(event_class: &str) -> &str {
     match event_class.split('.').next() {
         Some("action") => "action",
@@ -232,6 +330,27 @@ fn payload_string<'a>(
     })
 }
 
+fn payload_number(payload: Option<&serde_json::Map<String, Value>>, keys: &[&str]) -> Option<f64> {
+    payload.and_then(|payload| {
+        keys.iter()
+            .filter_map(|key| payload.get(*key))
+            .find_map(Value::as_f64)
+            .filter(|value| value.is_finite())
+    })
+}
+
+fn payload_array_non_empty<'a>(
+    payload: Option<&'a serde_json::Map<String, Value>>,
+    keys: &[&str],
+) -> Option<&'a Vec<Value>> {
+    payload.and_then(|payload| {
+        keys.iter()
+            .filter_map(|key| payload.get(*key))
+            .find_map(Value::as_array)
+            .filter(|value| !value.is_empty())
+    })
+}
+
 fn compact_object(value: Value) -> Value {
     let Value::Object(object) = value else {
         return value;
@@ -265,6 +384,43 @@ mod tests {
     fn validates_standard_runtime_event_projection() {
         validate_agent_event(&event("message.delta", json!({ "text": "hello" })))
             .expect("valid runtime event");
+    }
+
+    #[test]
+    fn validates_text_delta_fast_path_variants() {
+        for event_type in ["message.delta", "message.delta_batch", "message.batch"] {
+            validate_agent_event(&event(
+                event_type,
+                json!({
+                    "text": "hello",
+                    "runtimeEventSchemaVersion": "lime-runtime-event/v0.1"
+                }),
+            ))
+            .unwrap_or_else(|error| panic!("{event_type} should be valid: {error}"));
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_text_delta_fast_path_payloads() {
+        let error = validate_agent_event(&event("message.delta", json!("hello")))
+            .expect_err("text delta payload must remain object-shaped");
+        assert!(error.contains("message.delta payload must be a JSON object"));
+
+        let mut empty_timestamp_event = event("message.delta", json!({ "text": "hello" }));
+        empty_timestamp_event.timestamp.clear();
+        let error = validate_agent_event(&empty_timestamp_event)
+            .expect_err("text delta timestamp must remain constrained");
+        assert!(error.contains("createdAt must not be empty"));
+
+        let error = validate_agent_event(&event(
+            "message.delta",
+            json!({
+                "text": "hello",
+                "runtimeEventSchemaVersion": "wrong-version"
+            }),
+        ))
+        .expect_err("text delta schema version override must remain constrained");
+        assert!(error.contains("agent runtime event schema validation failed"));
     }
 
     #[test]
@@ -339,5 +495,97 @@ mod tests {
         .expect_err("invalid state delta should be rejected");
 
         assert!(error.contains("agent runtime state delta schema validation failed"));
+    }
+
+    #[test]
+    fn validates_coding_event_payload_requirements() {
+        for (event_type, payload) in [
+            ("file.read", json!({ "path": "src/App.tsx" })),
+            (
+                "file.changed",
+                json!({ "path": "src/App.tsx", "artifactId": "artifact_1" }),
+            ),
+            (
+                "patch.failed",
+                json!({ "patchId": "patch_1", "failureCategory": "conflict" }),
+            ),
+            (
+                "command.output",
+                json!({ "commandId": "cmd_1", "outputRef": "output://cmd_1" }),
+            ),
+            (
+                "command.exited",
+                json!({ "commandId": "cmd_1", "exitCode": 0 }),
+            ),
+            (
+                "test.completed",
+                json!({ "testRunId": "test_1", "result": "passed" }),
+            ),
+            (
+                "sandbox.blocked",
+                json!({ "reasonCode": "network_blocked" }),
+            ),
+            (
+                "permission.denied",
+                json!({ "reasonCode": "permission_denied" }),
+            ),
+        ] {
+            validate_agent_event(&event(event_type, payload))
+                .unwrap_or_else(|error| panic!("{event_type} should be valid: {error}"));
+        }
+    }
+
+    #[test]
+    fn rejects_incomplete_coding_event_payloads() {
+        for (event_type, payload, expected) in [
+            ("file.read", json!({}), "file.read events must include path"),
+            (
+                "file.changed",
+                json!({ "artifactId": "artifact_1" }),
+                "file.changed events must include path",
+            ),
+            (
+                "file.changed",
+                json!({ "path": "src/App.tsx" }),
+                "file.changed events must include artifactId or artifactRefs",
+            ),
+            (
+                "patch.failed",
+                json!({ "patchId": "patch_1" }),
+                "patch.failed events must include failureCategory",
+            ),
+            (
+                "command.output",
+                json!({ "commandId": "cmd_1" }),
+                "command.output events must include outputRef or refIds",
+            ),
+            (
+                "command.exited",
+                json!({ "commandId": "cmd_1" }),
+                "command.exited events must include exitCode or status",
+            ),
+            (
+                "test.completed",
+                json!({ "testRunId": "test_1" }),
+                "test.completed events must include result or status",
+            ),
+            (
+                "sandbox.blocked",
+                json!({}),
+                "sandbox.blocked events must include reasonCode",
+            ),
+            (
+                "permission.denied",
+                json!({}),
+                "permission.denied events must include reasonCode",
+            ),
+        ] {
+            let error = validate_agent_event(&event(event_type, payload))
+                .expect_err("invalid coding event payload should fail");
+            assert!(
+                error.contains(expected),
+                "unexpected error for {event_type}: {error}"
+            );
+        }
     }
 }

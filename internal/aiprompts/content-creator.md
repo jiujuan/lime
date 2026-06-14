@@ -20,7 +20,7 @@
      ↓
 用户发送消息 → useAgentChatUnified.sendMessage()
      ↓
-统一收口到 useAgentChatUnified / useAsterAgentChat / agent_runtime_*
+统一收口到 useAgentChatUnified / App Server `agentSession/turn/start`
      ↓
 第一条消息时注入 systemPrompt → 发送到 Aster Agent
      ↓
@@ -124,7 +124,7 @@ export function parseAIResponse(
 
 ### 3. useAgentChatUnified / useAsterAgentChat - systemPrompt 注入
 
-在发送第一条消息时注入 systemPrompt，并通过现役 runtime adapter 提交到 `agent_runtime_*`。
+在发送第一条消息时注入 systemPrompt，并通过现役 runtime adapter 提交到 App Server `agentSession/turn/start`。
 
 ```typescript
 // src/components/agent/chat/hooks/index.ts

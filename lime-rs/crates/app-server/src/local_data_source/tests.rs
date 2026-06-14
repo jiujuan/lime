@@ -53,7 +53,6 @@ fn setup_data_source() -> LocalAppDataSource {
     LocalAppDataSource {
         db: Arc::new(Mutex::new(conn)),
         logs: Arc::new(tokio::sync::RwLock::new(lime_core::logger::LogStore::new())),
-        aster_agent_state: AsterAgentState::new(),
         api_key_provider_service: ApiKeyProviderService::new(),
         model_registry_service: ModelRegistryService::new(Arc::new(Mutex::new(
             Connection::open_in_memory().expect("open model db"),

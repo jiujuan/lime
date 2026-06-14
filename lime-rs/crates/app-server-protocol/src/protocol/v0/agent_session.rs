@@ -45,6 +45,25 @@ pub struct AgentSessionReadResponse {
     pub detail: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionToolInventoryReadParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+    #[serde(default)]
+    pub workbench: bool,
+    #[serde(default)]
+    pub browser_assist: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionToolInventoryReadResponse {
+    pub inventory: serde_json::Value,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionTurnStartParams {

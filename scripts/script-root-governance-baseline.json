@@ -37,7 +37,6 @@
     "scripts/connect-open-deep-link-current-smoke.mjs",
     "scripts/design-canvas-smoke.mjs",
     "scripts/ensure-dev-port.mjs",
-    "scripts/generate-agent-runtime-clients.mjs",
     "scripts/generate-extension-site-adapter-runners.mjs",
     "scripts/generate-protocol-types.mjs",
     "scripts/generate-tray-icons.mjs",

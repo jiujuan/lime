@@ -56,7 +56,7 @@
 默认事实源如下：
 
 - `current`：Electron Desktop Host bridge、Electron preload / IPC 白名单、App Server JSON-RPC、`packages/app-server-client`、`src/lib/desktop-host/` mock、`npm run smoke:electron` / `npm run verify:gui-smoke`
-- `compat`：`safeInvoke` 兼容层、DevBridge 浏览器 fallback、旧 `agent_runtime_*` facade；测试只能证明它们委托 current 主链
+- `compat`：`safeInvoke` 兼容层、DevBridge 浏览器 fallback；旧 `agent_runtime_*` 只允许作为 retired guard / test-only fixture / migration-only residual，测试只能证明它们未回流 production truth 或 mock fallback
 - `deprecated`：legacy desktop facade、legacy mock path、legacy host 注册；测试只能证明旧入口被限制、未回流、未承接新业务逻辑
 - `dead`：旧桌面宿主路径、旧宿主 GUI smoke 和旧宿主专用 E2E 口径；不得作为新改动的可交付证据
 
@@ -197,11 +197,11 @@ npm run smoke:claw-chat-current-fixture
 
 如果本轮涉及 `capability_draft_create/list/get/verify/register/list_registered_skills/submit_approval_session_inputs/execute_controlled_get`，还要同步检查 `src/lib/api/capabilityDrafts.ts`、App Server / RuntimeCore capability draft owner、current command catalog、retired guard、`mockPriorityCommands` 与 test-only mock；注册命令只能证明 workspace-local Agent Skill 包已落盘，registered discovery 只能证明当前 workspace 可发现带 provenance 的 Skill 包，session 输入命令只能证明一次性授权输入有效，受控 GET 命令只能返回当前命令 evidence，正向 / `request_failed` 只能落非敏感 evidence artifact，不能保存 endpoint/token/response preview，不能把“已注册 / 已发现 / 已校验 / 已执行一次 GET”当成“已进入 tool surface / 可自动运行”。最低校验至少包含 Rust capability draft 定向测试、前端 API / UI 回归、`npm run test:contracts`；若 Skills 工作台可见行为变化，再补 `npm run verify:gui-smoke`。
 
-如果本轮涉及 `agent_runtime_list_workspace_skill_bindings`，还要同步检查 `src/lib/api/agentRuntime/inventoryClient.ts`、`src/lib/governance/agentRuntimeCommandSchema.json`、generated runtime command manifest、App Server / RuntimeCore runtime binding owner、current command catalog、retired guard、`mockPriorityCommands` 与 test-only mock；该命令只表示 P3B registered skill 的 runtime binding readiness projection，不能把 `ready_for_manual_enable` 当成“已注入 Query Loop / 已进入 SkillTool / 可自动执行”。最低校验至少包含 Rust runtime binding 定向测试、前端 API / UI 回归、`npm run generate:agent-runtime-clients` 或 `npm run check:agent-runtime-clients`、`npm run test:contracts`；若 Skills 工作台可见行为变化，再补 `npm run verify:gui-smoke`。
+如果本轮涉及 App Server `workspaceSkillBindings/list`，还要同步检查 `src/lib/api/agentRuntime/inventoryClient.ts`、App Server protocol / client、RuntimeCore runtime binding owner、current command catalog、retired guard、`mockPriorityCommands` 与 test-only mock；旧 `agent_runtime_list_workspace_skill_bindings` 只允许作为 retired guard / 历史 evidence。该 method 只表示 P3B registered skill 的 runtime binding readiness projection，不能把 `ready_for_manual_enable` 当成“已注入 Query Loop / 已进入 SkillTool / 可自动执行”。最低校验至少包含 Rust runtime binding 定向测试、前端 API / UI 回归、App Server client / protocol check、`npm run test:contracts`；若 Skills 工作台可见行为变化，再补 `npm run verify:gui-smoke`。
 
 如果本轮涉及 `request_metadata.harness.workspace_skill_bindings` / `workspaceSkillBindings` 的 Query Loop metadata 投影，还要同步检查 `lime-rs/crates/agent/src/turn_input_envelope.rs` 的 prompt stage contract、`src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts` 与 `buildHarnessRequestMetadata` 的裁剪边界；旧 `lime-rs/src/commands/aster_agent_cmd/workspace_skill_binding_prompt.rs` 已随 `lime-rs/src/**` 删除，只允许从 git history / 执行计划只读参考，不是新增 prompt 投影落点。该 metadata 只表示 P3C readiness 的只读规划上下文，不能自动打开 `allow_model_skills`、不能注入 `SkillTool` registry、不能改变默认 tool surface。最低校验至少包含 Rust prompt 投影定向测试、前端 metadata builder 单测和 `npm run typecheck`；若同时改了 runtime command schema 或 command manifest，再补 `npm run test:contracts`。
 
-如果本轮涉及 `request_metadata.harness.workspace_skill_runtime_enable` / `workspaceSkillRuntimeEnable` 的 Skill Forge P3E runtime enable，还要同步检查 App Server / RuntimeCore 的 runtime binding current owner、`lime-rs/crates/agent/src/tools/skill_tool_gate.rs`、`src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts` 与 `buildHarnessRequestMetadata`；旧 `lime-rs/src/services/runtime_skill_binding_service.rs`、`lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`、`workspace_skill_binding_prompt.rs` 已删除，只允许从 git history / 执行计划只读参考，不是新增 runtime enable 落点。该 metadata 只能在当前 session scope 内显式启用 P3C ready binding，并把 `SkillTool` 裁剪到 allowlist，不能复活 marketplace、scheduler 或绕过 `agent_runtime_submit_turn` 的平行执行命令。最低校验至少包含 Rust runtime binding / SkillTool gate 定向测试、Rust prompt 投影定向测试、前端 metadata builder 单测和 `npm run test:contracts`。
+如果本轮涉及 `request_metadata.harness.workspace_skill_runtime_enable` / `workspaceSkillRuntimeEnable` 的 Skill Forge P3E runtime enable，还要同步检查 App Server / RuntimeCore 的 runtime binding current owner、`lime-rs/crates/agent/src/tools/skill_tool_gate.rs`、`src/components/agent/chat/utils/workspaceSkillBindingsMetadata.ts` 与 `buildHarnessRequestMetadata`；旧 `lime-rs/src/services/runtime_skill_binding_service.rs`、`lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`、`workspace_skill_binding_prompt.rs` 已删除，只允许从 git history / 执行计划只读参考，不是新增 runtime enable 落点。该 metadata 只能在当前 session scope 内显式启用 P3C ready binding，并把 `SkillTool` 裁剪到 allowlist，不能复活 marketplace、scheduler 或绕过 App Server `agentSession/turn/start` 的平行执行命令。最低校验至少包含 Rust runtime binding / SkillTool gate 定向测试、Rust prompt 投影定向测试、前端 metadata builder 单测和 `npm run test:contracts`。
 
 如果本轮涉及记忆主链，还要同步检查 `src/lib/api/memoryRuntime.ts`、App Server / RuntimeCore / memory services、current command catalog 与 test-only guard 是否仍保持同一条 current surface；旧 `lime-rs/src/commands/memory_management_cmd.rs` 已随 `lime-rs/src/**` 删除，只允许从 git history / 执行计划只读参考，不是新增记忆实现落点。`rules / working / durable / team / compaction` 的产品分层可以在页面上拆开，但底层命令边界仍必须继续收敛到 `memory_runtime_*` 与 `unified_memory_*` 的 current 主链，不得恢复已删除的旧 wrapper、旧注册或旧分发分支。
 
@@ -382,7 +382,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 这类问题 **单靠** `lint`、`typecheck`、`vitest` 无法覆盖。
 
-默认 `npm run verify:local`、`npm test`、`cargo test --manifest-path "lime-rs/Cargo.toml"` 与 `npm run verify:gui-smoke` 不允许消耗真实模型 / 图片 Provider 额度。会调用 `agent_runtime_submit_turn`、App Server `modelProvider/testChat`、图片生成、embedding、ASR 或 live AgentRuntime transcript 的测试 / smoke，必须显式 opt-in：
+默认 `npm run verify:local`、`npm test`、`cargo test --manifest-path "lime-rs/Cargo.toml"` 与 `npm run verify:gui-smoke` 不允许消耗真实模型 / 图片 Provider 额度。会调用 App Server `agentSession/turn/start`、App Server `modelProvider/testChat`、图片生成、embedding、ASR 或 live AgentRuntime transcript 的测试 / smoke，必须显式 opt-in：
 
 ```bash
 npm run verify:gui-smoke -- --include-live-provider-smokes
@@ -480,12 +480,12 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 修改 `create_skill_scaffold_for_app`、技能草稿透传字段，或“聊天结果 -> Skill 脚手架”主链
 - 修改 `capability_draft_*` 生成、验证或注册命令，或 Skills 工作台的 Capability Draft 隔离区
 - 修改 `src/lib/api/document-export.ts`、`save_exported_document`，或把新的 GUI 导出入口接到本地文件保存主链
-- 修改 `agent_runtime_submit_turn.turn_config.approval_policy / sandbox_policy`
-- 修改 `agent_runtime_submit_turn.turn_config.provider_config.model_capabilities / tool_call_strategy / toolshim_model`
-- 修改 `agent_runtime_submit_turn.request_metadata.harness.team_memory_shadow`
-- 修改 `agent_runtime_spawn_subagent` 的 `name / teamName / cwd`、spawn 后 Team 成员写回，或 child `working_dir` / 父子上下文投影语义
+- 修改 App Server `agentSession/turn/start.runtimeOptions.hostOptions.asterChatRequest.approval_policy / sandbox_policy`
+- 修改 App Server `agentSession/turn/start.runtimeOptions.hostOptions.asterChatRequest.provider_config.model_capabilities / tool_call_strategy / toolshim_model`
+- 修改 App Server `agentSession/turn/start.runtimeOptions.hostOptions.asterChatRequest.metadata.harness.team_memory_shadow`
+- 修改 App Server / RuntimeCore / `lime-rs/crates/agent` 子代理 request surface 的 `name / teamName / cwd`、spawn 后 Team 成员写回，或 child `working_dir` / 父子上下文投影语义
 - 修改 team runtime tool surface、tool inventory、主线程用户消息工具或协作工具展示，例如 `SendUserMessage`、`Agent / TeamCreate / TeamDelete / SendMessage / ListPeers`
-- 修改 `agent_runtime_update_session` 或会话 provider/model / recent_access_mode / recent_preferences / recent_team_selection 恢复语义
+- 修改 App Server `agentSession/update` 或会话 provider/model / recent_access_mode / recent_preferences / recent_team_selection 恢复语义
 - 修改 `execution_runtime.recent_access_mode / recent_theme / recent_session_mode / recent_gate_key / recent_run_title / recent_content_id` 恢复语义，或前端 `harness.access_mode / harness.theme / harness.session_mode / harness.gate_key / harness.run_title / harness.content_id` steady-state 去重逻辑
 - 修改首页 / 工作区进入 `Claw` 时的首条自动发送上下文，例如 `initialUserPrompt`、`initialAutoSendRequestMetadata`、`harness.service_skill_launch`
 - 修改 `site_*` 站点适配器命令族，例如 `site_recommend_adapters`、`site_get_adapter_launch_readiness`、`site_import_adapter_yaml_bundle`、`site_run_adapter`
@@ -783,17 +783,17 @@ npm run agent-qc:audit
 - 如果这次改动把 `content_id` steady-state 从“每回合显式提交”后移到 `session/runtime`，除了契约检查之外，还应补 Hook/UI 回归，证明：
   - session 已有 `execution_runtime.recent_content_id` 时，前端不会重复提交相同 `harness.content_id`
 - 如果这次改动涉及上下文压缩语义，至少要同时验证两条运行时链路：
-  - 普通 `agent_runtime_submit_turn` 发消息链路
-  - `agent_runtime_respond_action` 的 ask-user / elicitation 恢复链路
+  - 普通 App Server `agentSession/turn/start` 发消息链路
+  - App Server `agentSession/action/respond` 的 ask-user / elicitation 恢复链路
     二者在 `workspace.settings.auto_compact=false` 时都不应再偷偷触发自动压缩，而应把“请手动压缩或新建会话”的错误显式投影到前端。
   - 切换到新 content 但 runtime 尚未同步时，前端仍会保留显式 `content_id`
 - 如果这次改动把 `theme / session_mode` steady-state 从“每回合显式提交”后移到 `session/runtime`，除了契约检查之外，还应补 Hook/UI 回归，证明：
   - session 已有 `execution_runtime.recent_theme / recent_session_mode` 时，前端不会重复提交相同 `harness.theme / harness.session_mode`
   - 切换到新 theme 或 `general_workbench` 但 runtime 尚未同步时，前端仍会保留显式 `theme / session_mode`
 - 如果这次改动影响 `harness.team_memory_shadow` 这类 repo-scoped Team 协作上下文，除了契约检查之外，还应补：
-  - 前端发送边界回归，确认 `team_memory_shadow` 能随当前请求进入 `agent_runtime_submit_turn`
+  - 前端发送边界回归，确认 `team_memory_shadow` 能随当前请求进入 App Server `agentSession/turn/start`
   - Rust `prompt_context` 定向测试，确认 shadow 只作为低优先级协作参考，不覆盖显式 `selected_team_*` 或 `recent_team_selection`
-- 如果这次改动影响 `agent_runtime_spawn_subagent` 的 current request surface，除了契约检查之外，还应补：
+- 如果这次改动影响 App Server / RuntimeCore / `lime-rs/crates/agent` 子代理 current request surface，除了契约检查之外，还应补：
   - Rust 定向测试，确认显式 `name` 会覆盖 child session 展示名 / role hint 的 fallback
   - Rust 或前端回归，确认 `teamName` 必须与 `name` 搭配，并且只在现有 Team 上下文内写回成员关系
   - Rust 定向测试，确认当前 runtime 对非空 `mode / isolation` 会返回明确 unsupported，而不是静默忽略
@@ -808,11 +808,11 @@ npm run agent-qc:audit
 - 如果这次改动影响浏览器工作台里的站点采集链路，例如推荐区、资料自动选择、`site_get_adapter_launch_readiness` 门禁、`report_hint` 展示、`lime_site_recommend`，或“优先写回当前 `content_id` 而不是新建资源文档”的主线收敛，除了契约检查，还应补对应 `*.test.tsx` 回归并执行 `verify:gui-smoke`。
 - 如果这次改动影响浏览器资料 / 环境预设的真实来源，还应补一次浏览器模式实测，确认控制台不再出现 `[Mock] invoke: list_browser_profiles_cmd` 或 `[Mock] invoke: list_browser_environment_presets_cmd`。
 - 如果这次改动影响设置页“连接器”主路径或 Chrome 扩展导出链路，除了 `test:contracts`，还应补对应设置页回归，并在 GUI smoke 或 Playwright 续测里确认连接器页能打开、目录可选、扩展状态可读。
-- 如果这次改动影响 `agent_runtime_export_handoff_bundle`、`agent_runtime_export_evidence_pack`、`agent_runtime_export_analysis_handoff`、`agent_runtime_export_review_decision_template`、`agent_runtime_save_review_decision` 或 `agent_runtime_export_replay_case` 这条 Harness 导出 / 审核主链，除了契约检查，还应至少补：
-  - `src/lib/api/agent.test.ts` 一类的网关回归，确认仍走统一 `agent_runtime_*` 主命令
+- 如果这次改动影响 App Server `agentSession/handoffBundle/export`、`evidence/export`、`agentSession/analysisHandoff/export`、`agentSession/reviewDecisionTemplate/export`、`agentSession/reviewDecision/save` 或 `agentSession/replayCase/export` 这条 Harness 导出 / 审核主链，除了契约检查，还应至少补：
+  - `src/lib/api/agent.test.ts` 一类的网关回归，确认仍走 App Server current export method
   - `HarnessStatusPanel.test.tsx` 一类的 UI 回归，确认导出入口、保存弹窗、状态与制品展示正常
   - 受影响 Rust 服务 / 命令的定向测试，确认 `.lime/harness/sessions/<session_id>/...` 一类制品仍能生成
-- 如果这次改动影响 `src/lib/api/agentRuntime/` 的 current 目录结构，例如 `types.ts`、分域 client、`commandManifest.generated.ts` 或 compat 根入口 `agentRuntime.ts`，最低应补：
+- 如果这次改动影响 `src/lib/api/agentRuntime/` 的 current 目录结构，例如 `types.ts`、分域 client或 compat 根入口 `agentRuntime.ts`，最低应补：
   - `npm run typecheck`
   - `npx eslint "src/lib/api/agentRuntime.ts" "src/lib/api/agentRuntime/*.ts" --max-warnings 0`
   - `npm test -- src/lib/api/agent.test.ts src/components/agent/chat/hooks/agentRuntimeAdapter.test.ts`

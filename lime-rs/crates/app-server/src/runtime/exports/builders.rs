@@ -1,5 +1,5 @@
-use super::super::agent_session_status_label;
-use super::super::agent_turn_status_label;
+use super::super::status::agent_session_status_label;
+use super::super::status::agent_turn_status_label;
 use super::super::RuntimeCoreError;
 use super::metrics::HandoffMetrics;
 use super::metrics::HandoffRecentArtifact;

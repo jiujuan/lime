@@ -27,6 +27,7 @@ import {
   METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_THREAD_RESUME,
+  METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
@@ -41,6 +42,7 @@ import {
   METHOD_FILE_SYSTEM_RENAME_FILE,
   METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
   METHOD_PROJECT_GIT_BRANCH_CREATE,
+  METHOD_PROJECT_GIT_DIFF,
   METHOD_PROJECT_GIT_STATUS,
   METHOD_PROJECT_GIT_WORKTREE_CREATE,
   METHOD_GALLERY_MATERIAL_GET,
@@ -188,6 +190,8 @@ import {
   type AgentSessionStatus,
   type AgentSessionThreadResumeParams,
   type AgentSessionThreadResumeResponse,
+  type AgentSessionToolInventoryReadParams,
+  type AgentSessionToolInventoryReadResponse,
   type AgentSessionTurnCancelParams,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartParams,
@@ -226,6 +230,9 @@ import {
   type ProjectGitBranchCheckoutResponse,
   type ProjectGitBranchCreateParams,
   type ProjectGitBranchCreateResponse,
+  type ProjectGitDiffBase,
+  type ProjectGitDiffParams,
+  type ProjectGitDiffResponse,
   type ProjectGitStatusParams,
   type ProjectGitStatusResponse,
   type ProjectGitWorktreeCreateParams,
@@ -362,6 +369,7 @@ export const APP_SERVER_METHOD_FILE_SYSTEM_RENAME_FILE =
 export const APP_SERVER_METHOD_FILE_SYSTEM_DELETE_FILE =
   METHOD_FILE_SYSTEM_DELETE_FILE;
 export const APP_SERVER_METHOD_PROJECT_GIT_STATUS = METHOD_PROJECT_GIT_STATUS;
+export const APP_SERVER_METHOD_PROJECT_GIT_DIFF = METHOD_PROJECT_GIT_DIFF;
 export const APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CHECKOUT =
   METHOD_PROJECT_GIT_BRANCH_CHECKOUT;
 export const APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CREATE =
@@ -382,6 +390,8 @@ export const APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE =
 export const APP_SERVER_METHOD_AGENT_SESSION_START = METHOD_AGENT_SESSION_START;
 export const APP_SERVER_METHOD_AGENT_SESSION_LIST = METHOD_AGENT_SESSION_LIST;
 export const APP_SERVER_METHOD_AGENT_SESSION_READ = METHOD_AGENT_SESSION_READ;
+export const APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =
+  METHOD_AGENT_SESSION_TOOL_INVENTORY_READ;
 export const APP_SERVER_METHOD_AGENT_SESSION_UPDATE =
   METHOD_AGENT_SESSION_UPDATE;
 export const APP_SERVER_METHOD_AGENT_SESSION_ARCHIVE_MANY =
@@ -615,6 +625,9 @@ export type AppServerFileSystemDirectoryListing = FileSystemDirectoryListing;
 export type AppServerFileSystemFileEntry = FileSystemFileEntry;
 export type AppServerFileSystemFilePreview = FileSystemFilePreview;
 export type AppServerProjectGitStatusParams = ProjectGitStatusParams;
+export type AppServerProjectGitDiffBase = ProjectGitDiffBase;
+export type AppServerProjectGitDiffParams = ProjectGitDiffParams;
+export type AppServerProjectGitDiffResponse = ProjectGitDiffResponse;
 export type AppServerProjectGitBranchCheckoutParams =
   ProjectGitBranchCheckoutParams;
 export type AppServerProjectGitBranchCheckoutResponse =
@@ -656,6 +669,8 @@ export type AppServerAgentSessionStartParams = AgentSessionStartParams;
 export type AppServerAgentSessionListParams = AgentSessionListParams;
 export type AppServerAgentSessionListResponse = AgentSessionListResponse;
 export type AppServerAgentSessionReadParams = AgentSessionReadParams;
+export type AppServerAgentSessionToolInventoryReadParams =
+  AgentSessionToolInventoryReadParams;
 export type AppServerAgentInput = AgentInput;
 export type AppServerAgentAttachment = AgentAttachment;
 export type AppServerRuntimeOptions = RuntimeOptions;
@@ -673,6 +688,8 @@ export type AppServerAgentTurn = AgentTurn;
 export type AppServerAgentEvent = AgentEvent;
 export type AppServerAgentSessionStartResponse = AgentSessionStartResponse;
 export type AppServerAgentSessionReadResponse = AgentSessionReadResponse;
+export type AppServerAgentSessionToolInventoryReadResponse =
+  AgentSessionToolInventoryReadResponse;
 export type AppServerAgentSessionUpdateParams = AgentSessionUpdateParams;
 export type AppServerAgentSessionUpdateResponse = AgentSessionUpdateResponse;
 export type AppServerAgentSessionArchiveManyParams =
@@ -1112,6 +1129,15 @@ export class AppServerClient {
     );
   }
 
+  async readProjectGitDiff(
+    params: AppServerProjectGitDiffParams,
+  ): Promise<AppServerRequestResult<AppServerProjectGitDiffResponse>> {
+    return await this.request<AppServerProjectGitDiffResponse>(
+      APP_SERVER_METHOD_PROJECT_GIT_DIFF,
+      params,
+    );
+  }
+
   async checkoutProjectGitBranch(
     params: AppServerProjectGitBranchCheckoutParams,
   ): Promise<
@@ -1216,6 +1242,17 @@ export class AppServerClient {
     );
   }
 
+  async readAgentSessionToolInventory(
+    params: AppServerAgentSessionToolInventoryReadParams = {},
+  ): Promise<
+    AppServerRequestResult<AppServerAgentSessionToolInventoryReadResponse>
+  > {
+    return await this.request<AppServerAgentSessionToolInventoryReadResponse>(
+      APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
+      params,
+    );
+  }
+
   async updateSession(
     params: AppServerAgentSessionUpdateParams,
   ): Promise<AppServerRequestResult<AppServerAgentSessionUpdateResponse>> {
@@ -1227,9 +1264,7 @@ export class AppServerClient {
 
   async archiveManySessions(
     params: AppServerAgentSessionArchiveManyParams,
-  ): Promise<
-    AppServerRequestResult<AppServerAgentSessionArchiveManyResponse>
-  > {
+  ): Promise<AppServerRequestResult<AppServerAgentSessionArchiveManyResponse>> {
     return await this.request<AppServerAgentSessionArchiveManyResponse>(
       APP_SERVER_METHOD_AGENT_SESSION_ARCHIVE_MANY,
       params,

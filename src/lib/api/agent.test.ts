@@ -37,8 +37,8 @@ import {
   APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   APP_SERVER_METHOD_AGENT_SESSION_START,
   APP_SERVER_METHOD_AGENT_SESSION_THREAD_RESUME,
+  APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
   APP_SERVER_METHOD_AGENT_SESSION_UPDATE,
-  APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
   APP_SERVER_METHOD_EVIDENCE_EXPORT,
 } from "./appServer";
@@ -57,7 +57,6 @@ import {
   getAgentRuntimeSession,
   getAgentRuntimeThreadRead,
   getAgentRuntimeToolInventory,
-  interruptAgentRuntimeTurn,
   listAgentRuntimeSessions,
   promoteAgentRuntimeQueuedTurn,
   replayAgentRuntimeRequest,
@@ -642,8 +641,7 @@ describe("Agent API 治理护栏", () => {
     );
   });
 
-  it("interruptAgentRuntimeTurn 与 updateAgentRuntimeSession 应经 Electron IPC 调 App Server", async () => {
-    mockAppServerResponse({});
+  it("updateAgentRuntimeSession 应经 Electron IPC 调 App Server", async () => {
     mockAppServerResponse({
       session: {
         sessionId: "session-runtime",
@@ -656,21 +654,13 @@ describe("Agent API 治理护栏", () => {
       },
     });
 
-    await interruptAgentRuntimeTurn({
-      session_id: "session-runtime",
-      turn_id: "turn-1",
-    });
     await updateAgentRuntimeSession({
       session_id: "session-runtime",
       name: "新标题",
       execution_strategy: "react",
     });
 
-    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL, {
-      sessionId: "session-runtime",
-      turnId: "turn-1",
-    });
-    expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
+    expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_UPDATE, {
       sessionId: "session-runtime",
       title: "新标题",
       executionStrategy: "react",
@@ -1715,80 +1705,82 @@ describe("Agent API 治理护栏", () => {
   });
 
   it("getAgentRuntimeToolInventory 应走统一 runtime inventory 命令", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      request: {
-        caller: "assistant",
-        surface: {
-          workbench: true,
-          browser_assist: true,
+    mockAppServerResponse({
+      inventory: {
+        request: {
+          caller: "assistant",
+          surface: {
+            workbench: true,
+            browser_assist: true,
+          },
         },
+        agent_initialized: true,
+        warnings: [],
+        mcp_servers: ["docs"],
+        default_allowed_tools: ["ToolSearch"],
+        counts: {
+          catalog_total: 1,
+          catalog_current_total: 1,
+          catalog_compat_total: 0,
+          catalog_deprecated_total: 0,
+          default_allowed_total: 1,
+          registry_total: 1,
+          registry_visible_total: 1,
+          registry_catalog_unmapped_total: 0,
+          extension_surface_total: 1,
+          extension_mcp_bridge_total: 1,
+          extension_runtime_total: 0,
+          extension_tool_total: 1,
+          extension_tool_visible_total: 1,
+          mcp_server_total: 1,
+          mcp_tool_total: 1,
+          mcp_tool_visible_total: 1,
+        },
+        catalog_tools: [
+          {
+            name: "bash",
+            profiles: ["core"],
+            capabilities: ["execution"],
+            lifecycle: "current",
+            source: "aster_builtin",
+            permission_plane: "parameter_restricted",
+            workspace_default_allow: false,
+            execution_warning_policy: "shell_command_risk",
+            execution_warning_policy_source: "default",
+            execution_restriction_profile: "workspace_shell_command",
+            execution_restriction_profile_source: "runtime",
+            execution_sandbox_profile: "workspace_command",
+            execution_sandbox_profile_source: "persisted",
+          },
+        ],
+        registry_tools: [
+          {
+            name: "bash",
+            description: "workspace bash",
+            catalog_entry_name: "bash",
+            catalog_source: "aster_builtin",
+            catalog_lifecycle: "current",
+            catalog_permission_plane: "parameter_restricted",
+            catalog_workspace_default_allow: false,
+            catalog_execution_warning_policy: "shell_command_risk",
+            catalog_execution_warning_policy_source: "default",
+            catalog_execution_restriction_profile: "workspace_shell_command",
+            catalog_execution_restriction_profile_source: "runtime",
+            catalog_execution_sandbox_profile: "workspace_command",
+            catalog_execution_sandbox_profile_source: "persisted",
+            deferred_loading: false,
+            always_visible: true,
+            allowed_callers: ["assistant"],
+            tags: [],
+            input_examples_count: 0,
+            caller_allowed: true,
+            visible_in_context: true,
+          },
+        ],
+        extension_surfaces: [],
+        extension_tools: [],
+        mcp_tools: [],
       },
-      agent_initialized: true,
-      warnings: [],
-      mcp_servers: ["docs"],
-      default_allowed_tools: ["ToolSearch"],
-      counts: {
-        catalog_total: 1,
-        catalog_current_total: 1,
-        catalog_compat_total: 0,
-        catalog_deprecated_total: 0,
-        default_allowed_total: 1,
-        registry_total: 1,
-        registry_visible_total: 1,
-        registry_catalog_unmapped_total: 0,
-        extension_surface_total: 1,
-        extension_mcp_bridge_total: 1,
-        extension_runtime_total: 0,
-        extension_tool_total: 1,
-        extension_tool_visible_total: 1,
-        mcp_server_total: 1,
-        mcp_tool_total: 1,
-        mcp_tool_visible_total: 1,
-      },
-      catalog_tools: [
-        {
-          name: "bash",
-          profiles: ["core"],
-          capabilities: ["execution"],
-          lifecycle: "current",
-          source: "aster_builtin",
-          permission_plane: "parameter_restricted",
-          workspace_default_allow: false,
-          execution_warning_policy: "shell_command_risk",
-          execution_warning_policy_source: "default",
-          execution_restriction_profile: "workspace_shell_command",
-          execution_restriction_profile_source: "runtime",
-          execution_sandbox_profile: "workspace_command",
-          execution_sandbox_profile_source: "persisted",
-        },
-      ],
-      registry_tools: [
-        {
-          name: "bash",
-          description: "workspace bash",
-          catalog_entry_name: "bash",
-          catalog_source: "aster_builtin",
-          catalog_lifecycle: "current",
-          catalog_permission_plane: "parameter_restricted",
-          catalog_workspace_default_allow: false,
-          catalog_execution_warning_policy: "shell_command_risk",
-          catalog_execution_warning_policy_source: "default",
-          catalog_execution_restriction_profile: "workspace_shell_command",
-          catalog_execution_restriction_profile_source: "runtime",
-          catalog_execution_sandbox_profile: "workspace_command",
-          catalog_execution_sandbox_profile_source: "persisted",
-          deferred_loading: false,
-          always_visible: true,
-          allowed_callers: ["assistant"],
-          tags: [],
-          input_examples_count: 0,
-          caller_allowed: true,
-          visible_in_context: true,
-        },
-      ],
-      extension_surfaces: [],
-      extension_tools: [],
-      mcp_tools: [],
     });
 
     await expect(
@@ -1817,54 +1809,55 @@ describe("Agent API 治理护栏", () => {
       ],
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_get_tool_inventory",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
       {
-        request: {
-          workbench: true,
-          browserAssist: true,
-          caller: "assistant",
-        },
+        workbench: true,
+        browserAssist: true,
+        caller: "assistant",
       },
     );
   });
 
   it("getAgentRuntimeToolInventory 应透传 metadata 以计算 effective policy", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      request: {
-        caller: "assistant",
-        surface: {
-          workbench: false,
-          browser_assist: false,
+    mockAppServerResponse({
+      inventory: {
+        request: {
+          caller: "assistant",
+          surface: {
+            workbench: false,
+            browser_assist: false,
+          },
         },
+        agent_initialized: true,
+        warnings: [],
+        mcp_servers: [],
+        default_allowed_tools: [],
+        counts: {
+          catalog_total: 0,
+          catalog_current_total: 0,
+          catalog_compat_total: 0,
+          catalog_deprecated_total: 0,
+          default_allowed_total: 0,
+          registry_total: 0,
+          registry_visible_total: 0,
+          registry_catalog_unmapped_total: 0,
+          extension_surface_total: 0,
+          extension_mcp_bridge_total: 0,
+          extension_runtime_total: 0,
+          extension_tool_total: 0,
+          extension_tool_visible_total: 0,
+          mcp_server_total: 0,
+          mcp_tool_total: 0,
+          mcp_tool_visible_total: 0,
+        },
+        catalog_tools: [],
+        registry_tools: [],
+        extension_surfaces: [],
+        extension_tools: [],
+        mcp_tools: [],
       },
-      agent_initialized: true,
-      warnings: [],
-      mcp_servers: [],
-      default_allowed_tools: [],
-      counts: {
-        catalog_total: 0,
-        catalog_current_total: 0,
-        catalog_compat_total: 0,
-        catalog_deprecated_total: 0,
-        default_allowed_total: 0,
-        registry_total: 0,
-        registry_visible_total: 0,
-        registry_catalog_unmapped_total: 0,
-        extension_surface_total: 0,
-        extension_mcp_bridge_total: 0,
-        extension_runtime_total: 0,
-        extension_tool_total: 0,
-        extension_tool_visible_total: 0,
-        mcp_server_total: 0,
-        mcp_tool_total: 0,
-        mcp_tool_visible_total: 0,
-      },
-      catalog_tools: [],
-      registry_tools: [],
-      extension_surfaces: [],
-      extension_tools: [],
-      mcp_tools: [],
     });
 
     await getAgentRuntimeToolInventory({
@@ -1882,18 +1875,17 @@ describe("Agent API 治理护栏", () => {
       },
     });
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_get_tool_inventory",
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
       {
-        request: {
-          caller: "assistant",
-          metadata: {
-            harness: {
-              executionPolicy: {
-                toolOverrides: {
-                  bash: {
-                    warningPolicy: "none",
-                  },
+        caller: "assistant",
+        metadata: {
+          harness: {
+            executionPolicy: {
+              toolOverrides: {
+                bash: {
+                  warningPolicy: "none",
                 },
               },
             },
@@ -1904,50 +1896,51 @@ describe("Agent API 治理护栏", () => {
   });
 
   it("getAgentRuntimeToolInventory 默认请求应传空对象", async () => {
-    mockSafeInvoke.mockResolvedValueOnce({
-      request: {
-        caller: "assistant",
-        surface: {
-          workbench: false,
-          browser_assist: false,
+    mockAppServerResponse({
+      inventory: {
+        request: {
+          caller: "assistant",
+          surface: {
+            workbench: false,
+            browser_assist: false,
+          },
         },
+        agent_initialized: false,
+        warnings: [],
+        mcp_servers: [],
+        default_allowed_tools: [],
+        counts: {
+          catalog_total: 0,
+          catalog_current_total: 0,
+          catalog_compat_total: 0,
+          catalog_deprecated_total: 0,
+          default_allowed_total: 0,
+          registry_total: 0,
+          registry_visible_total: 0,
+          registry_catalog_unmapped_total: 0,
+          extension_surface_total: 0,
+          extension_mcp_bridge_total: 0,
+          extension_runtime_total: 0,
+          extension_tool_total: 0,
+          extension_tool_visible_total: 0,
+          mcp_server_total: 0,
+          mcp_tool_total: 0,
+          mcp_tool_visible_total: 0,
+        },
+        catalog_tools: [],
+        registry_tools: [],
+        extension_surfaces: [],
+        extension_tools: [],
+        mcp_tools: [],
       },
-      agent_initialized: false,
-      warnings: [],
-      mcp_servers: [],
-      default_allowed_tools: [],
-      counts: {
-        catalog_total: 0,
-        catalog_current_total: 0,
-        catalog_compat_total: 0,
-        catalog_deprecated_total: 0,
-        default_allowed_total: 0,
-        registry_total: 0,
-        registry_visible_total: 0,
-        registry_catalog_unmapped_total: 0,
-        extension_surface_total: 0,
-        extension_mcp_bridge_total: 0,
-        extension_runtime_total: 0,
-        extension_tool_total: 0,
-        extension_tool_visible_total: 0,
-        mcp_server_total: 0,
-        mcp_tool_total: 0,
-        mcp_tool_visible_total: 0,
-      },
-      catalog_tools: [],
-      registry_tools: [],
-      extension_surfaces: [],
-      extension_tools: [],
-      mcp_tools: [],
     });
 
     await getAgentRuntimeToolInventory();
 
-    expect(mockSafeInvoke).toHaveBeenCalledWith(
-      "agent_runtime_get_tool_inventory",
-      {
-        request: {},
-      },
+    expectAppServerRequest(
+      1,
+      APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
+      {},
     );
   });
 

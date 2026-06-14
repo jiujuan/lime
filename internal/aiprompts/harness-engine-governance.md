@@ -29,10 +29,10 @@
 
 从现在开始，Harness Engine 相关能力默认收敛到以下主链：
 
-- 运行时事实导出：`agent_runtime_export_evidence_pack`
-- 回放样本导出：`agent_runtime_export_replay_case`
-- 外部诊断交接：`agent_runtime_export_analysis_handoff`
-- 人工审核模板：`agent_runtime_export_review_decision_template`、`agent_runtime_save_review_decision`
+- 运行时事实导出：App Server `evidence/export`
+- 回放样本导出：App Server `agentSession/replayCase/export`
+- 外部诊断交接：App Server `agentSession/analysisHandoff/export`
+- 人工审核模板：App Server `agentSession/reviewDecisionTemplate/export`、`agentSession/reviewDecision/save`
 
 其中：
 
@@ -65,7 +65,7 @@ Harness Engine 相关 surface 继续沿用仓库统一分类：
 在 harness 语境里，常见判断如下：
 
 - `current`
-  - `agent_runtime_export_*`
+  - App Server `evidence/export` 与 `agentSession/*/export`
   - evidence pack 中的 `runtime.json / timeline.json / artifacts.json`
 - `compat`
   - 临时存在但只做委托的旧导出入口
@@ -208,7 +208,7 @@ Harness Engine 不只是导出文件目录。以下旁路也必须收敛：
 
 涉及 Harness Engine 改动时，默认按这个顺序做：
 
-1. 先确认唯一事实源是不是 `agent_runtime_export_*`
+1. 先确认唯一事实源是不是 App Server `evidence/export` 与 `agentSession/*/export`
 2. 再确认改动属于 `current / compat / deprecated / dead` 哪一类
 3. 先修 evidence pack，再修 replay / analysis / review / UI
 4. 先删错误默认值，再考虑是否需要新增字段

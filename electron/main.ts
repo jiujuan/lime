@@ -14,6 +14,10 @@ import {
   type ElectronInvokeResponse,
 } from "./ipcChannels";
 import { ElectronAppServerHost } from "./appServerHost";
+import {
+  ElectronEmbeddedBrowserHost,
+  isEmbeddedBrowserCommand,
+} from "./embeddedBrowserHost";
 import { ElectronDevHttpBridge } from "./devHttpBridge";
 import { ElectronHostCommands } from "./hostCommands";
 import {
@@ -22,6 +26,11 @@ import {
   buildMainWindowStartupHtml,
   buildMainWindowStartupOptions,
 } from "./mainWindowOptions";
+import {
+  isMainWindowRendererLoadInterruption,
+  isNavigationAbortError,
+  isWindowLifecycleLoadAbort,
+} from "./mainWindowLoadErrors";
 import { ElectronUpdateHost } from "./updateHost";
 import {
   buildUpdateNotificationWindowBounds,
@@ -67,6 +76,7 @@ const hostCommands = new ElectronHostCommands(
   app.getPath("userData"),
   broadcast,
 );
+const embeddedBrowserHost = new ElectronEmbeddedBrowserHost(broadcast);
 const updateHost = new ElectronUpdateHost(broadcast, {
   open: openUpdateNotificationWindow,
   close: closeUpdateNotificationWindow,
@@ -139,7 +149,7 @@ function createMainWindow(): BrowserWindow {
   installDevRendererContextMenu(window, devServerUrl);
   installDevRendererShortcuts(window, devServerUrl);
   void showStartupScreenBeforeRenderer(window, devServerUrl).catch((error) => {
-    if (isNavigationAbortError(error)) {
+    if (isMainWindowRendererLoadInterruption(error, mainWindowLoadState(window))) {
       return;
     }
     console.error(
@@ -312,19 +322,22 @@ async function loadMainWindowUrl(
   try {
     await window.loadURL(url);
   } catch (error) {
-    if (isNavigationAbortError(error)) {
+    if (
+      isNavigationAbortError(error) ||
+      isWindowLifecycleLoadAbort(error, mainWindowLoadState(window))
+    ) {
       return;
     }
     throw error;
   }
 }
 
-function isNavigationAbortError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.message.includes("ERR_ABORTED") ||
-      error.message.includes("ERR_FAILED (-3)"))
-  );
+function mainWindowLoadState(window: Pick<BrowserWindow, "isDestroyed" | "webContents">) {
+  return {
+    appQuitting: isQuitting,
+    windowDestroyed: window.isDestroyed(),
+    webContentsDestroyed: window.webContents.isDestroyed(),
+  };
 }
 
 function withNativeStartupFlag(targetUrl: string): string {
@@ -999,9 +1012,9 @@ function currentWindow(event: IpcMainInvokeEvent): BrowserWindow | null {
 function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_INVOKE_CHANNEL,
-    async (_event, command: string, args?: Record<string, unknown>) => {
+    async (event, command: string, args?: Record<string, unknown>) => {
       try {
-        const result = await handleHostInvoke(command, args);
+        const result = await handleHostInvoke(event, command, args);
         return { ok: true, result } satisfies ElectronInvokeResponse;
       } catch (error) {
         return {
@@ -1069,6 +1082,7 @@ function registerIpcHandlers(): void {
 }
 
 async function handleHostInvoke(
+  event: IpcMainInvokeEvent | null,
   command: string,
   args?: Record<string, unknown>,
 ): Promise<unknown> {
@@ -1096,6 +1110,13 @@ async function handleHostInvoke(
   }
   if (command === "take_pending_skill_package_open_requests") {
     return takePendingSkillPackageOpenRequests();
+  }
+  if (isEmbeddedBrowserCommand(command)) {
+    return await embeddedBrowserHost.invoke(
+      event ? currentWindow(event) : null,
+      command,
+      args,
+    );
   }
   if (isElectronUpdateCommand(command)) {
     return await updateHost.invoke(command, args);
@@ -1591,7 +1612,7 @@ function startDevHttpBridge(): ElectronDevHttpBridge | null {
   }
 
   const bridge = new ElectronDevHttpBridge({
-    invoke: handleHostInvoke,
+    invoke: (command, args) => handleHostInvoke(null, command, args),
     host: process.env.LIME_ELECTRON_DEV_HTTP_BRIDGE_HOST?.trim() || undefined,
     port: parseDevHttpBridgePort(
       process.env.LIME_ELECTRON_DEV_HTTP_BRIDGE_PORT,

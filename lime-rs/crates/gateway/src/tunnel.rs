@@ -6,8 +6,8 @@ use chrono::Utc;
 use lime_core::config::{Config, GatewayTunnelConfig};
 use lime_core::logger::LogStore;
 use serde::{Deserialize, Serialize};
+use std::process::Stdio;
 use std::sync::Arc;
-use std::{ffi::OsStr, process::Stdio};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::RwLock;
@@ -654,11 +654,6 @@ fn looks_like_uuid(token: &str) -> bool {
         }
     }
     true
-}
-
-#[allow(dead_code)]
-fn as_str_lossy<T: AsRef<OsStr>>(value: T) -> String {
-    value.as_ref().to_string_lossy().to_string()
 }
 
 #[cfg(test)]

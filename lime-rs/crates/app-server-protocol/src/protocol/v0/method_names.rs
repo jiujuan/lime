@@ -9,6 +9,7 @@ pub const METHOD_FILE_SYSTEM_CREATE_DIRECTORY: &str = "fileSystem/createDirector
 pub const METHOD_FILE_SYSTEM_RENAME_FILE: &str = "fileSystem/renameFile";
 pub const METHOD_FILE_SYSTEM_DELETE_FILE: &str = "fileSystem/deleteFile";
 pub const METHOD_PROJECT_GIT_STATUS: &str = "projectGit/status";
+pub const METHOD_PROJECT_GIT_DIFF: &str = "projectGit/diff";
 pub const METHOD_PROJECT_GIT_BRANCH_CHECKOUT: &str = "projectGit/branch/checkout";
 pub const METHOD_PROJECT_GIT_BRANCH_CREATE: &str = "projectGit/branch/create";
 pub const METHOD_PROJECT_GIT_WORKTREE_CREATE: &str = "projectGit/worktree/create";
@@ -45,6 +46,7 @@ pub const METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET: &str = "agentSession/fileChe
 pub const METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF: &str = "agentSession/fileCheckpoint/diff";
 pub const METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE: &str =
     "agentSession/fileCheckpoint/restore";
+pub const METHOD_AGENT_SESSION_TOOL_INVENTORY_READ: &str = "agentSession/toolInventory/read";
 pub const METHOD_SESSION_FILE_GET_OR_CREATE: &str = "sessionFile/getOrCreate";
 pub const METHOD_SESSION_FILE_UPDATE_META: &str = "sessionFile/updateMeta";
 pub const METHOD_SESSION_FILE_SAVE: &str = "sessionFile/save";

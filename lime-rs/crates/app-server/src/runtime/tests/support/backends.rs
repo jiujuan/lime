@@ -94,6 +94,114 @@ impl ExecutionBackend for ToolReadModelBackend {
     }
 }
 
+pub(in crate::runtime::tests) struct CodingLifecycleBackend;
+
+#[async_trait]
+impl ExecutionBackend for CodingLifecycleBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new(
+            "file.changed",
+            json!({
+                "path": "src/App.tsx",
+                "artifactId": "artifact_app_tsx"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "patch.started",
+            json!({ "patchId": "patch_app_tsx" }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "patch.applied",
+            json!({ "patchId": "patch_app_tsx" }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "command.started",
+            json!({
+                "commandId": "cmd_test",
+                "command": "npm test"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "command.output",
+            json!({
+                "commandId": "cmd_test",
+                "outputRef": "output://cmd_test"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "command.exited",
+            json!({
+                "commandId": "cmd_test",
+                "exitCode": 0
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "test.started",
+            json!({ "testRunId": "test_unit" }),
+        ))?;
+        sink.emit(RuntimeEvent::new(
+            "test.completed",
+            json!({
+                "testRunId": "test_unit",
+                "result": "passed"
+            }),
+        ))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
+pub(in crate::runtime::tests) struct InvalidCodingPayloadBackend;
+
+#[async_trait]
+impl ExecutionBackend for InvalidCodingPayloadBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        sink.emit(RuntimeEvent::new(
+            "file.changed",
+            json!({ "path": "src/App.tsx" }),
+        ))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 pub(in crate::runtime::tests) struct PartialFailureBackend;
 
 #[async_trait]
@@ -183,6 +291,38 @@ impl ExecutionBackend for HangingCancelBackend {
     ) -> Result<(), RuntimeCoreError> {
         self.cancel_count.fetch_add(1, Ordering::SeqCst);
         std::future::pending::<()>().await;
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
+pub(in crate::runtime::tests) struct RunningCountingBackend {
+    pub(in crate::runtime::tests) start_count: AtomicUsize,
+}
+
+#[async_trait]
+impl ExecutionBackend for RunningCountingBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.start_count.fetch_add(1, Ordering::SeqCst);
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
         Ok(())
     }
 

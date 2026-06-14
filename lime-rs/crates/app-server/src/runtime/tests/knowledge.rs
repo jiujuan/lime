@@ -1,5 +1,6 @@
 use super::support::*;
 use super::*;
+use app_server_protocol::KnowledgeCompilePackParams;
 
 #[tokio::test]
 async fn knowledge_compile_pack_runs_builder_runtime_executor_on_current_path() {

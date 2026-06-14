@@ -58,7 +58,7 @@ const CREATIVE_CAPABILITY_TOOL_KEYS = new Set(
   [
     "creative_capability_search",
     "claw_capability_catalog",
-    "agent_runtime_capability_catalog",
+    "app_server_runtime_capability_catalog",
   ].map(capabilityMatchToken),
 );
 
@@ -166,7 +166,7 @@ interface RuntimeModelConstraintsProjection {
   cacheReadPerMillion?: number;
   cacheWritePerMillion?: number;
   currency?: string;
-  source: "agent_runtime_model_constraints";
+  source: "app_server_runtime_model_constraints";
 }
 
 interface RuntimeUsageProjection {
@@ -210,7 +210,7 @@ interface RuntimeBudgetProjection {
   notes: string[];
   limitState?: Record<string, unknown>;
   costState?: Record<string, unknown>;
-  source: "agent_runtime_projection";
+  source: "app_server_runtime_projection";
 }
 
 interface RuntimeSkillProjection {
@@ -222,7 +222,7 @@ interface RuntimeSkillProjection {
   taskIds: string[];
   taskKinds: string[];
   lastSeenAt: string;
-  source: "agent_runtime_process" | "workspace_skill_binding";
+  source: "app_server_runtime_process" | "workspace_skill_binding";
   description?: string;
   directory?: string;
   bindingStatus?: string;
@@ -243,7 +243,7 @@ interface RuntimeSkillInvocationProjection {
   status: AgentAppTaskRecord["status"];
   startedAt: string;
   finishedAt?: string;
-  source: "agent_runtime_process";
+  source: "app_server_runtime_process";
 }
 
 interface RuntimeMemoryProjection {
@@ -262,7 +262,7 @@ interface RuntimeMemoryProjection {
   missingContextCount: number;
   teamMemoryRefCount: number;
   contextGateStatus: string;
-  source: "agent_runtime_projection";
+  source: "app_server_runtime_projection";
 }
 
 interface RuntimeMemoryBudgetProjection {
@@ -293,7 +293,7 @@ interface RuntimeContextProjection {
   retrievalRefCount: number;
   missingContextCount: number;
   teamMemoryRefCount: number;
-  source: "agent_runtime_projection";
+  source: "app_server_runtime_projection";
 }
 
 type ToolIntegrationCapability =
@@ -320,7 +320,7 @@ interface RuntimeToolRunProjection {
   detail?: string;
   input?: unknown;
   output?: unknown;
-  source: "agent_runtime_process" | "agent_runtime_thread_read";
+  source: "app_server_runtime_process" | "app_server_runtime_thread_read";
 }
 
 interface ToolExecutionPolicyProjection {
@@ -516,7 +516,7 @@ interface RuntimeTaskProjection {
   eventCount: number;
   hasResult: boolean;
   runtimeStatus?: string;
-  source: "agent_runtime_projection";
+  source: "app_server_runtime_projection";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1460,7 +1460,7 @@ function buildRuntimeTaskProjection(
     eventCount: task.events.length + task.trace.length,
     hasResult: task.result !== undefined,
     runtimeStatus: recordStringByKeys(threadRead, ["status", "profile_status"]),
-    source: "agent_runtime_projection",
+    source: "app_server_runtime_projection",
   };
 }
 
@@ -1573,7 +1573,7 @@ function buildRuntimeModelConstraints(
       "cache_write_per_million",
     ]),
     currency: recordStringByKeys(costState, ["currency"]),
-    source: "agent_runtime_model_constraints",
+    source: "app_server_runtime_model_constraints",
   };
 }
 
@@ -1671,7 +1671,7 @@ function buildBudgetProjection(
     notes: recordStringArrayByKeys(limitState, ["notes"]),
     limitState: limitState ?? undefined,
     costState: costState ?? undefined,
-    source: "agent_runtime_projection",
+    source: "app_server_runtime_projection",
   };
 }
 
@@ -1817,7 +1817,7 @@ function buildRuntimeSkillProjection(
         taskIds: [task.taskId],
         taskKinds: [task.taskKind],
         lastSeenAt,
-        source: "agent_runtime_process",
+        source: "app_server_runtime_process",
       });
     });
     collectWorkspaceSkillBindingRecords(task).forEach((binding) => {
@@ -1932,7 +1932,7 @@ function buildRuntimeSkillInvocations(
         status: task.status,
         startedAt: task.startedAt,
         finishedAt: task.finishedAt,
-        source: "agent_runtime_process" as const,
+        source: "app_server_runtime_process" as const,
       }));
   });
 }
@@ -2092,7 +2092,7 @@ function buildDeclaredToolRun(
     statusText: "已声明",
     message:
       "Agent App task 声明了该 ToolRuntime intent，实际执行仍由 Lime AgentRuntime 管理。",
-    source: "agent_runtime_process",
+    source: "app_server_runtime_process",
   };
 }
 
@@ -2126,7 +2126,7 @@ function buildTimelineToolRun(
     statusText: item.statusText,
     message: item.message,
     detail: item.detail,
-    source: "agent_runtime_process",
+    source: "app_server_runtime_process",
   };
 }
 
@@ -2174,7 +2174,7 @@ function buildThreadReadToolRun(
     detail: recordStringByKeys(call, ["detail"]),
     input: recordValueByKeys(call, ["input", "args", "arguments"]),
     output: recordValueByKeys(call, ["output", "result"]),
-    source: "agent_runtime_thread_read",
+    source: "app_server_runtime_thread_read",
   };
 }
 
@@ -2498,7 +2498,7 @@ function buildToolExecutionHandoffTaskRequest(
     expectedOutput: {
       kind: "tool_execution_result",
       evidenceRequired: true,
-      source: "agent_runtime_tool_runtime",
+      source: "app_server_tool_runtime",
     },
     tools: uniqueHints,
     requiredCapabilities: [executionRequest.capability],
@@ -2802,7 +2802,7 @@ function buildToolIntentResponse(
       status: "requires_agent_task",
       owner: "lime_agent_runtime",
       mutationExposed: false,
-      evidenceSource: "agent_runtime_projection",
+      evidenceSource: "app_server_runtime_projection",
       reason: spec.reason,
       request: publicExecutionRequest,
     },
@@ -2871,7 +2871,7 @@ function buildGenericToolIntentResponse(
       status: "requires_agent_task",
       owner: "lime_agent_runtime",
       mutationExposed: false,
-      evidenceSource: "agent_runtime_projection",
+      evidenceSource: "app_server_runtime_projection",
       reason,
       request: executionRequest,
     },
@@ -2939,7 +2939,7 @@ async function cancelToolExecutionViaAgentTask(
     return {
       status: "not_available",
       reason: "tool_cancellation_requires_agent_task_id",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       next: {
         capability: "lime.agent",
         method: "cancelTask",
@@ -2950,7 +2950,7 @@ async function cancelToolExecutionViaAgentTask(
     return {
       status: "requires_agent_task_cancellation",
       reason: "tool_run_cancellation_must_use_agent_task_id",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       runId,
       taskId: resolvedTaskId,
       next: {
@@ -2963,8 +2963,8 @@ async function cancelToolExecutionViaAgentTask(
   if (!resolveSdk) {
     return {
       status: "requires_agent_task_cancellation",
-      reason: "agent_runtime_sdk_unavailable",
-      source: "agent_runtime_projection",
+      reason: "lime_agent_sdk_unavailable",
+      source: "app_server_runtime_projection",
       taskId: resolvedTaskId,
       next: {
         capability: "lime.agent",
@@ -3424,7 +3424,7 @@ function buildRuntimeMemoryProjection(
     missingContextCount: contextGate.missingContext.length,
     teamMemoryRefCount: contextGate.teamMemoryRefs.length,
     contextGateStatus: contextGate.status,
-    source: "agent_runtime_projection",
+    source: "app_server_runtime_projection",
   };
 }
 
@@ -3459,7 +3459,7 @@ function buildRuntimeContextProjection(
     retrievalRefCount: contextGate.retrievalRefs.length,
     missingContextCount: contextGate.missingContext.length,
     teamMemoryRefCount: contextGate.teamMemoryRefs.length,
-    source: "agent_runtime_projection",
+    source: "app_server_runtime_projection",
   };
 }
 
@@ -3474,7 +3474,7 @@ function dispatchModels(
   if (request.method === "list") {
     return {
       appId: request.appId,
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: tasks.length,
       models: uniqueModelSummaries(routedTasks),
     };
@@ -3482,7 +3482,7 @@ function dispatchModels(
   if (request.method === "getRouting") {
     return {
       appId: request.appId,
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: tasks.length,
       routes: routedTasks,
     };
@@ -3510,7 +3510,7 @@ function dispatchModels(
       status: costs.length
         ? "estimated_from_runtime_projection"
         : "insufficient_data",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       sampleSize: costs.length,
       cost: aggregateCost(costs),
     };
@@ -3529,7 +3529,7 @@ function dispatchSkills(
     const kind = readString(input.kind);
     return {
       appId: request.appId,
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
       taskCount: tasks.length,
       skills: kind
         ? skills.filter(
@@ -3566,7 +3566,7 @@ function dispatchSkills(
     return {
       status: "not_available",
       reason: "skill_runtime_mutation_not_exposed_to_agent_apps",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
     };
   }
   throwUnsupportedMethod(request);
@@ -3584,7 +3584,7 @@ function dispatchMemory(
       appId: request.appId,
       scope: readString(input.scope) ?? "task",
       status: "read_only_projection",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: tasks.length,
       writable: false,
       compactable: false,
@@ -3623,7 +3623,7 @@ function dispatchMemory(
       appId: request.appId,
       query,
       status: "limited_projection",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       records: observations.filter((item) =>
         [
           item.taskId,
@@ -3641,7 +3641,7 @@ function dispatchMemory(
     return {
       status: "not_available",
       reason: "memory_runtime_mutation_not_exposed_to_agent_apps",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
     };
   }
   throwUnsupportedMethod(request);
@@ -3657,7 +3657,7 @@ function dispatchContext(
     return {
       appId: request.appId,
       scope: readString(input.scope) ?? "task",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: tasks.length,
       contexts: tasks.map(buildRuntimeContextProjection),
     };
@@ -3666,7 +3666,7 @@ function dispatchContext(
     return {
       status: "not_available",
       reason: "context_mutation_not_exposed_to_agent_apps",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
     };
   }
   throwUnsupportedMethod(request);
@@ -3692,7 +3692,7 @@ function dispatchTasks(
       appId: request.appId,
       entryKey: request.entryKey,
       status: "read_only_projection",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: items.length,
       tasks: items,
     };
@@ -3706,7 +3706,7 @@ function dispatchTasks(
           taskId,
           status: "not_found",
           reason: "task_not_found",
-          source: "agent_runtime_projection",
+          source: "app_server_runtime_projection",
         };
   }
   if (request.method === "cancel") {
@@ -3714,7 +3714,7 @@ function dispatchTasks(
     return {
       status: "not_available",
       reason: "task_cancellation_must_use_lime_agent_cancel_task",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       next: {
         capability: "lime.agent",
         method: "cancelTask",
@@ -3726,7 +3726,7 @@ function dispatchTasks(
     return {
       status: "not_available",
       reason: "task_subscription_must_use_lime_agent_stream_task",
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       next: {
         capability: "lime.agent",
         method: "streamTask",
@@ -3896,7 +3896,7 @@ async function dispatchMcp(
         toolCount: number;
         runIds: string[];
         lastSeenAt: string;
-        source: "agent_runtime_process";
+        source: "app_server_runtime_process";
       }
     >();
     tools.forEach((tool) => {
@@ -3916,13 +3916,13 @@ async function dispatchMcp(
         toolCount: 1,
         runIds: [...tool.runIds],
         lastSeenAt: tool.lastSeenAt,
-        source: "agent_runtime_process",
+        source: "app_server_runtime_process",
       });
     });
     return {
       appId: request.appId,
       status: "read_only_projection",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
       servers: Array.from(servers.values()).sort((left, right) =>
         right.lastSeenAt.localeCompare(left.lastSeenAt),
       ),
@@ -3933,7 +3933,7 @@ async function dispatchMcp(
     return {
       appId: request.appId,
       status: "read_only_projection",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
       tools: serverId
         ? tools.filter((tool) => tool.serverId === serverId)
         : tools,
@@ -3997,7 +3997,7 @@ async function dispatchConnectors(
       appId: request.appId,
       kind: readString(input.kind),
       status: "read_only_projection",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
       connectors,
       authorizationRequests,
     };
@@ -4014,7 +4014,7 @@ async function dispatchConnectors(
       return {
         connectorId,
         status: "observed",
-        source: "agent_runtime_process",
+        source: "app_server_runtime_process",
         connector,
         authorizationRequest,
       };
@@ -4053,7 +4053,7 @@ async function dispatchConnectors(
       connectorId,
       status: "not_connected",
       reason: "no_connector_runtime_facts",
-      source: "agent_runtime_process",
+      source: "app_server_runtime_process",
     };
   }
   if (request.method === "requestAuth") {
@@ -4195,7 +4195,7 @@ function dispatchUsage(
       appId: request.appId,
       taskId: readString(input.taskId),
       window: readString(input.window),
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: tasks.length,
       totals: aggregateUsage(usageItems),
       tasks: usageItems,
@@ -4206,7 +4206,7 @@ function dispatchUsage(
       appId: request.appId,
       taskId: readString(input.taskId),
       window: readString(input.window),
-      source: "agent_runtime_projection",
+      source: "app_server_runtime_projection",
       taskCount: tasks.length,
       cost: aggregateCost(costItems),
       tasks: costItems,
@@ -4219,7 +4219,7 @@ function dispatchUsage(
         appId: request.appId,
         scope,
         status: "observed",
-        source: "agent_runtime_projection",
+        source: "app_server_runtime_projection",
         taskCount: tasks.length,
         budgetCount: budgetItems.length,
         observedCost: aggregateCost(costItems),
@@ -4231,8 +4231,8 @@ function dispatchUsage(
       appId: request.appId,
       scope,
       status: "not_configured",
-      reason: "no_agent_runtime_budget_facts",
-      source: "agent_runtime_projection",
+      reason: "no_app_server_runtime_budget_facts",
+      source: "app_server_runtime_projection",
       observedCost: aggregateCost(costItems),
     };
   }

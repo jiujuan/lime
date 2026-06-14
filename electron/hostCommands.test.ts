@@ -30,6 +30,8 @@ const execFileAsync = promisify(execFile);
 const {
   browserWindowCtorMock,
   browserWindowGetAllWindowsMock,
+  contentViewAddChildViewMock,
+  contentViewRemoveChildViewMock,
   getFileIconMock,
   getPathMock,
   loadUrlMock,
@@ -42,13 +44,26 @@ const {
   showItemInFolderMock,
   openProjectPathWithLocalToolMock,
   runProjectShellCommandMock,
+  webContentsDestroyMock,
+  webContentsLoadUrlMock,
+  webContentsReloadMock,
+  webContentsViewCtorMock,
 } = vi.hoisted(() => {
   const loadUrlMock = vi.fn();
+  const contentViewAddChildViewMock = vi.fn();
+  const contentViewRemoveChildViewMock = vi.fn();
   const showWindowMock = vi.fn();
   const focusWindowMock = vi.fn();
   const browserWindowCtorMock = vi.fn(() => ({
+    contentView: {
+      addChildView: contentViewAddChildViewMock,
+      removeChildView: contentViewRemoveChildViewMock,
+    },
     focus: focusWindowMock,
+    isDestroyed: () => false,
     loadURL: loadUrlMock,
+    off: vi.fn(),
+    on: vi.fn(),
     once: vi.fn((event: string, callback: () => void) => {
       if (event === "ready-to-show") {
         callback();
@@ -59,9 +74,36 @@ const {
       getURL: () => "",
     },
   }));
+  const webContentsLoadUrlMock = vi.fn();
+  const webContentsReloadMock = vi.fn();
+  const webContentsDestroyMock = vi.fn();
+  const webContentsViewCtorMock = vi.fn(() => ({
+    setBackgroundColor: vi.fn(),
+    setBounds: vi.fn(),
+    setVisible: vi.fn(),
+    webContents: {
+      destroy: webContentsDestroyMock,
+      getTitle: () => "Example",
+      getURL: () => "https://example.com/",
+      isDestroyed: () => false,
+      isLoading: () => false,
+      loadURL: webContentsLoadUrlMock,
+      navigationHistory: {
+        canGoBack: () => false,
+        canGoForward: () => false,
+        goBack: vi.fn(),
+        goForward: vi.fn(),
+      },
+      on: vi.fn(),
+      reload: webContentsReloadMock,
+      setWindowOpenHandler: vi.fn(),
+    },
+  }));
   return {
     browserWindowCtorMock,
     browserWindowGetAllWindowsMock: vi.fn(() => []),
+    contentViewAddChildViewMock,
+    contentViewRemoveChildViewMock,
     getFileIconMock: vi.fn(),
     getPathMock: vi.fn((_name: string) => os.tmpdir()),
     globalShortcutIsRegisteredMock: vi.fn((_shortcut: string) => false),
@@ -74,6 +116,10 @@ const {
     showItemInFolderMock: vi.fn(),
     openProjectPathWithLocalToolMock: vi.fn(),
     runProjectShellCommandMock: vi.fn(),
+    webContentsDestroyMock,
+    webContentsLoadUrlMock,
+    webContentsReloadMock,
+    webContentsViewCtorMock,
   };
 });
 const tempDirs: string[] = [];
@@ -105,11 +151,11 @@ vi.mock("./electronRuntime", () => ({
     openPath: openPathMock,
     showItemInFolder: showItemInFolderMock,
   },
+  WebContentsView: webContentsViewCtorMock,
 }));
 
 vi.mock("./projectToolsHost", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("./projectToolsHost")>();
+  const actual = await importOriginal<typeof import("./projectToolsHost")>();
   return {
     ...actual,
     openProjectPathWithLocalTool: openProjectPathWithLocalToolMock,
@@ -1480,413 +1526,6 @@ describe("ElectronHostCommands model provider current source", () => {
       provider_name: "Lime Hub",
       provider_selector: "lime-hub",
       model_name: undefined,
-    });
-  });
-});
-
-describe("ElectronHostCommands Agent runtime legacy facade current bridge", () => {
-  it("agent_runtime_get_tool_inventory 将 App Server tool capability 投影为运行时工具名", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string) => {
-      if (method === "capability/list") {
-        return {
-          capabilities: [
-            {
-              id: "agent.session",
-              title: "Agent Session",
-              description: "Session control.",
-              methods: [
-                "agentSession/start",
-                "agentSession/read",
-                "agentSession/turn/start",
-              ],
-            },
-            {
-              id: "tool.WebFetch",
-              title: "WebFetch",
-              description: "Fetch a specific URL.",
-              methods: ["agentSession/turn/start"],
-            },
-            {
-              id: "tool.WebSearch",
-              title: "WebSearch",
-              description: "Search the web.",
-              methods: ["agentSession/turn/start"],
-            },
-          ],
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    const inventory = (await host.invoke("agent_runtime_get_tool_inventory", {
-      request: {
-        caller: "assistant",
-        workbench: true,
-        browserAssist: true,
-        workspaceId: "workspace-1",
-        sessionId: "session-1",
-      },
-    })) as {
-      default_allowed_tools: string[];
-      runtime_tools: Array<{ name: string; source_label: string }>;
-    };
-
-    expect(request).toHaveBeenCalledWith("capability/list", {
-      workspaceId: "workspace-1",
-      sessionId: "session-1",
-    });
-    expect(inventory.default_allowed_tools).toContain("WebFetch");
-    expect(inventory.default_allowed_tools).toContain("WebSearch");
-    expect(inventory.runtime_tools).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "WebFetch",
-          source_label: "tool.WebFetch",
-        }),
-        expect.objectContaining({
-          name: "WebSearch",
-          source_label: "tool.WebSearch",
-        }),
-      ]),
-    );
-    expect(
-      inventory.runtime_tools.filter(
-        (tool) => tool.name === "agentSession/turn/start",
-      ),
-    ).toHaveLength(1);
-  });
-
-  it("agent_runtime_submit_turn 将 Claw turnConfig 投影到 App Server asterChatRequest", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentSession/turn/start") {
-        return {
-          turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
-          },
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_runtime_submit_turn", {
-        request: {
-          message: "整理今天的国际新闻",
-          sessionId: "session-1",
-          workspaceId: "workspace-1",
-          eventName: "agent-runtime-event-1",
-          turnId: "turn-1",
-          queuedTurnId: "queued-1",
-          queueIfBusy: true,
-          skipPreSubmitResume: true,
-          turnConfig: {
-            providerPreference: "fixture-openai",
-            modelPreference: "fixture-model",
-            providerConfig: {
-              providerName: "fixture-openai",
-              modelName: "fixture-model",
-              apiKey: "fixture-key",
-              baseUrl: "http://127.0.0.1:5555/v1",
-              toolCallStrategy: "tool-shim",
-              toolshimModel: "fixture-toolshim",
-            },
-            approvalPolicy: "never",
-            sandboxPolicy: "danger-full-access",
-            webSearch: true,
-            searchMode: "allowed",
-            metadata: { source: "host-submit-test" },
-          },
-        },
-      }),
-    ).resolves.toBeUndefined();
-
-    expect(request).toHaveBeenCalledWith(
-      "agentSession/turn/start",
-      expect.objectContaining({
-        sessionId: "session-1",
-        turnId: "turn-1",
-        input: {
-          text: "整理今天的国际新闻",
-          attachments: undefined,
-        },
-        queueIfBusy: true,
-        skipPreSubmitResume: true,
-        runtimeOptions: expect.objectContaining({
-          stream: true,
-          eventName: "agent-runtime-event-1",
-          providerPreference: "fixture-openai",
-          modelPreference: "fixture-model",
-          metadata: { source: "host-submit-test" },
-          queuedTurnId: "queued-1",
-          hostOptions: {
-            asterChatRequest: expect.objectContaining({
-              message: "整理今天的国际新闻",
-              session_id: "session-1",
-              event_name: "agent-runtime-event-1",
-              provider_preference: "fixture-openai",
-              model_preference: "fixture-model",
-              workspace_id: "workspace-1",
-              approval_policy: "never",
-              sandbox_policy: "danger-full-access",
-              web_search: true,
-              search_mode: "allowed",
-              turn_id: "turn-1",
-              queue_if_busy: true,
-              queued_turn_id: "queued-1",
-              metadata: { source: "host-submit-test" },
-              provider_config: {
-                providerName: "fixture-openai",
-                modelName: "fixture-model",
-                apiKey: "fixture-key",
-                baseUrl: "http://127.0.0.1:5555/v1",
-                toolCallStrategy: "tool-shim",
-                toolshimModel: "fixture-toolshim",
-              },
-              turn_config: expect.objectContaining({
-                providerConfig: expect.objectContaining({
-                  providerName: "fixture-openai",
-                  baseUrl: "http://127.0.0.1:5555/v1",
-                }),
-              }),
-            }),
-            agentRuntimeSubmitTurnRequest: expect.objectContaining({
-              sessionId: "session-1",
-              turnConfig: expect.objectContaining({
-                providerPreference: "fixture-openai",
-              }),
-            }),
-          },
-        }),
-      }),
-    );
-  });
-
-  it("agent_runtime_get_thread_read 透传 App Server read detail 的工具调用", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const threadRead = {
-      session_id: "session-1",
-      thread_id: "thread-1",
-      status: "completed",
-      execution_strategy: "react",
-      turns: [],
-      pending_requests: [],
-      queued_turns: [],
-      tool_calls: [
-        {
-          id: "tool-call-webfetch",
-          tool_name: "WebFetch",
-          status: "completed",
-          success: true,
-          output_preview: "fetched example.com",
-        },
-        {
-          id: "tool-call-websearch",
-          toolName: "WebSearch",
-          status: "completed",
-          outputPreview: "search results",
-        },
-      ],
-    };
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentSession/read") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "desktop",
-            workspaceId: "workspace-1",
-            status: "completed",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:01.000Z",
-          },
-          turns: [],
-          detail: {
-            id: "session-1",
-            execution_strategy: "react",
-            thread_read: threadRead,
-          },
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_runtime_get_thread_read", {
-        sessionId: "session-1",
-      }),
-    ).resolves.toEqual(threadRead);
-    expect(request).toHaveBeenCalledWith("agentSession/read", {
-      sessionId: "session-1",
-    });
-  });
-
-  it("agent_runtime_export_evidence_pack 从 App Server events 投影真实工具轨迹", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string) => {
-      if (method === "evidence/export") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "desktop",
-            workspaceId: "workspace-1",
-            status: "completed",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:03.000Z",
-          },
-          turns: [
-            {
-              turnId: "turn-1",
-              sessionId: "session-1",
-              threadId: "thread-1",
-              status: "completed",
-            },
-          ],
-          events: [
-            {
-              eventId: "event-fetch-started",
-              sequence: 1,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "tool.started",
-              timestamp: "2026-06-07T00:00:01.000Z",
-              payload: {
-                toolCallId: "tool-call-webfetch",
-                toolName: "WebFetch",
-              },
-            },
-            {
-              eventId: "event-fetch-result",
-              sequence: 2,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "tool.result",
-              timestamp: "2026-06-07T00:00:02.000Z",
-              payload: {
-                toolCallId: "tool-call-webfetch",
-                toolName: "WebFetch",
-                output: "Example Domain",
-              },
-            },
-            {
-              eventId: "event-nested-fetch-result",
-              sequence: 3,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "tool.result",
-              timestamp: "2026-06-07T00:00:02.500Z",
-              payload: {
-                runtimeEvent: {
-                  tool_id: "tool-call-webfetch",
-                  type: "tool_end",
-                  result: {
-                    success: true,
-                    output: "Example Domain nested runtime output",
-                  },
-                },
-                tool_id: "tool-call-webfetch",
-                type: "tool_end",
-                result: {
-                  success: true,
-                  output: "Example Domain nested runtime output",
-                },
-              },
-            },
-            {
-              eventId: "event-search-result",
-              sequence: 4,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "item.completed",
-              timestamp: "2026-06-07T00:00:03.000Z",
-              payload: {
-                runtimeEvent: {
-                  type: "item_completed",
-                  item: {
-                    id: "tool-call-websearch",
-                    type: "tool_call",
-                    tool_name: "WebSearch",
-                    status: "completed",
-                    success: true,
-                    output: "Lime runtime tool smoke example domain",
-                  },
-                },
-                item: {
-                  id: "tool-call-websearch",
-                  type: "tool_call",
-                  tool_name: "WebSearch",
-                  status: "completed",
-                  success: true,
-                  output: "Lime runtime tool smoke example domain",
-                },
-              },
-            },
-          ],
-          artifacts: [],
-          exportedAt: "2026-06-07T00:00:04.000Z",
-          evidencePack: {
-            packRelativeRoot: "",
-            exportedAt: "2026-06-07T00:00:04.000Z",
-            threadStatus: "completed",
-            latestTurnStatus: "completed",
-            turnCount: 1,
-            itemCount: 3,
-            pendingRequestCount: 0,
-            queuedTurnCount: 0,
-            recentArtifactCount: 0,
-            knownGaps: [],
-            artifacts: [],
-          },
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_runtime_export_evidence_pack", {
-        sessionId: "session-1",
-      }),
-    ).resolves.toMatchObject({
-      sessionId: "session-1",
-      threadId: "thread-1",
-      observabilitySummary: {
-        schemaVersion: "runtime-evidence-observability.v1",
-        toolCalls: [
-          expect.objectContaining({
-            id: "tool-call-webfetch",
-            toolName: "WebFetch",
-            status: "completed",
-            success: true,
-            output: "Example Domain nested runtime output",
-          }),
-          expect.objectContaining({
-            id: "tool-call-websearch",
-            toolName: "WebSearch",
-            status: "completed",
-            success: true,
-            output: "Lime runtime tool smoke example domain",
-          }),
-        ],
-      },
-    });
-    expect(request).toHaveBeenCalledWith("evidence/export", {
-      sessionId: "session-1",
-      includeEvents: true,
-      includeArtifacts: true,
-      includeEvidencePack: true,
     });
   });
 });

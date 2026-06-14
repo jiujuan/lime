@@ -157,7 +157,7 @@ describe("http-client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("旧会话恢复命令应允许绕过短退避重新探测，避免恢复时卡在 cooldown", async () => {
+  it("工作区恢复命令应允许绕过短退避重新探测，避免恢复时卡在 cooldown", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
@@ -167,11 +167,8 @@ describe("http-client", () => {
         new Response(
           JSON.stringify({
             result: {
-              id: "session-1",
-              name: "旧会话",
-              messages: [],
-              created_at: 1,
-              updated_at: 2,
+              id: "workspace-1",
+              name: "当前工作区",
             },
           }),
           {
@@ -187,13 +184,10 @@ describe("http-client", () => {
     await expect(healthCheck()).resolves.toBe(false);
 
     await expect(
-      invokeViaHttp("agent_runtime_get_session", {
-        sessionId: "session-1",
-        historyLimit: 40,
-      }),
+      invokeViaHttp("workspace_get", { id: "workspace-1" }),
     ).resolves.toMatchObject({
-      id: "session-1",
-      name: "旧会话",
+      id: "workspace-1",
+      name: "当前工作区",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
@@ -201,7 +195,7 @@ describe("http-client", () => {
     expect(fetchMock.mock.calls[3]?.[0]).toBe("http://127.0.0.1:3030/invoke");
   });
 
-  it("工作区与会话列表命令应允许绕过短退避重新探测，恢复首页和侧栏", async () => {
+  it("工作区列表命令应允许绕过短退避重新探测，恢复首页和侧栏", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
@@ -219,11 +213,9 @@ describe("http-client", () => {
 
     await expect(healthCheck()).resolves.toBe(false);
 
-    await expect(
-      invokeViaHttp("agent_runtime_list_sessions", {
-        request: { workspace_id: "workspace-1", limit: 21 },
-      }),
-    ).resolves.toEqual([{ id: "session-1" }]);
+    await expect(invokeViaHttp("workspace_list")).resolves.toEqual([
+      { id: "session-1" },
+    ]);
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[2]?.[0]).toBe("http://127.0.0.1:3030/health");
@@ -396,34 +388,6 @@ describe("http-client", () => {
     expect(fetchMock.mock.calls[3]?.[0]).toBe("http://127.0.0.1:3030/invoke");
   });
 
-  it("agent runtime 提交命令应保留长请求超时窗口", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(electronHostHealthResponse())
-      .mockImplementationOnce(createAbortablePendingFetch());
-    vi.stubGlobal("fetch", fetchMock);
-
-    let settled = false;
-    const invokePromise = invokeViaHttp("agent_runtime_submit_turn").then(
-      () => ({ ok: true as const }),
-      (error) => ({ ok: false as const, error }),
-    );
-    invokePromise.finally(() => {
-      settled = true;
-    });
-
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(settled).toBe(false);
-
-    await vi.advanceTimersByTimeAsync(58000);
-    await expect(invokePromise).resolves.toMatchObject({
-      ok: false,
-      error: expect.objectContaining({
-        message: expect.stringContaining("timeout after 60000ms"),
-      }),
-    });
-  });
-
   it("App Server turn/start JSON-RPC 请求应保留真实运行时超时窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -462,15 +426,23 @@ describe("http-client", () => {
     });
   });
 
-  it("会话列表读取命令应使用较短超时，避免恢复链路卡住 60 秒", async () => {
+  it("App Server 会话列表读取应使用较短超时，避免恢复链路卡住 60 秒", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
-    const listSessionsPromise = invokeViaHttp("agent_runtime_list_sessions", {
-      request: { workspace_id: "workspace-1", limit: 21 },
+    const listSessionsPromise = invokeViaHttp("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          JSON.stringify({
+            id: "list-sessions",
+            method: "agentSession/list",
+            params: { workspaceId: "workspace-1", limit: 21 },
+          }),
+        ],
+      },
     }).then(
       () => ({ ok: true as const }),
       (error) => ({ ok: false as const, error }),
@@ -486,7 +458,7 @@ describe("http-client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("旧会话读取命令硬连接失败后应强制健康探测并重试一次", async () => {
+  it("工作区读取命令硬连接失败后应强制健康探测并重试一次", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(electronHostHealthResponse())
@@ -496,11 +468,8 @@ describe("http-client", () => {
         new Response(
           JSON.stringify({
             result: {
-              id: "session-1",
-              name: "旧会话",
-              messages: [],
-              created_at: 1,
-              updated_at: 2,
+              id: "workspace-1",
+              name: "当前工作区",
             },
           }),
           {
@@ -513,39 +482,46 @@ describe("http-client", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    const invokePromise = invokeViaHttp("agent_runtime_get_session", {
-      sessionId: "session-1",
-      historyLimit: 40,
+    const invokePromise = invokeViaHttp("workspace_get", {
+      id: "workspace-1",
     });
 
     await expect(invokePromise).resolves.toMatchObject({
-      id: "session-1",
-      name: "旧会话",
+      id: "workspace-1",
+      name: "当前工作区",
     });
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[2]?.[0]).toBe("http://127.0.0.1:3030/health");
     expect(fetchMock.mock.calls[3]?.[0]).toBe("http://127.0.0.1:3030/invoke");
   });
 
-  it("会话后台回填命令应快速超时，避免占用旧会话恢复通道", async () => {
+  it("App Server 会话更新应使用 current read 超时，不回退旧 session facade", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(electronHostHealthResponse())
       .mockImplementationOnce(createAbortablePendingFetch());
     vi.stubGlobal("fetch", fetchMock);
 
-    const invokePromise = invokeViaHttp("agent_runtime_update_session", {
-      request: { session_id: "session-1" },
+    const invokePromise = invokeViaHttp("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          JSON.stringify({
+            id: "update-session",
+            method: "agentSession/update",
+            params: { sessionId: "session-1", title: "新标题" },
+          }),
+        ],
+      },
     }).then(
       () => ({ ok: true as const }),
       (error) => ({ ok: false as const, error }),
     );
 
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(30000);
     await expect(invokePromise).resolves.toMatchObject({
       ok: false,
       error: expect.objectContaining({
-        message: expect.stringContaining("timeout after 5000ms"),
+        message: expect.stringContaining("timeout after 30000ms"),
       }),
     });
   });
@@ -650,12 +626,32 @@ describe("http-client", () => {
     expect(
       resolveBridgeRequestTimeoutMs("workspace_ensure_default_ready"),
     ).toBe(30000);
-    expect(resolveBridgeRequestTimeoutMs("agent_runtime_get_session")).toBe(
-      20000,
-    );
-    expect(resolveBridgeRequestTimeoutMs("agent_runtime_list_sessions")).toBe(
-      8000,
-    );
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "read-session",
+              method: "agentSession/read",
+              params: { sessionId: "session-1" },
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "list-sessions",
+              method: "agentSession/list",
+              params: { limit: 20 },
+            }),
+          ],
+        },
+      }),
+    ).toBe(8000);
     expect(resolveBridgeRequestTimeoutMs("agent_app_start_ui_runtime")).toBe(
       150000,
     );

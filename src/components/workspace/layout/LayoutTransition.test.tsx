@@ -18,6 +18,19 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function dispatchPointerLikeEvent(
+  element: HTMLElement,
+  type: string,
+  options: { clientX: number; pointerId: number },
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperties(event, {
+    clientX: { value: options.clientX },
+    pointerId: { value: options.pointerId },
+  });
+  element.dispatchEvent(event);
+}
+
 function LayoutHarness({
   mode,
   forceOpenChatPanel = false,
@@ -118,7 +131,94 @@ describe("LayoutTransition", () => {
     expect(root?.getAttribute("data-layout-axis")).toBe("horizontal");
   });
 
-  it("小屏 chat-canvas 模式应改为右侧聊天抽屉，而不是上下堆叠", () => {
+  it("大屏 chat-canvas 模式应把对话列放在画布列之前", () => {
+    const { container } = mountHarness(
+      LayoutHarness,
+      { mode: "chat-canvas" },
+      mountedRoots,
+    );
+
+    const root = container.querySelector<HTMLElement>(
+      '[data-testid="layout-transition-root"]',
+    );
+    const orderedPanels = Array.from(root?.children ?? [])
+      .map((node) => node.getAttribute("data-testid"))
+      .filter(Boolean);
+
+    expect(orderedPanels).toEqual([
+      "layout-chat-panel",
+      "layout-chat-canvas-resize-handle",
+      "layout-canvas-panel",
+    ]);
+    expect(
+      container.querySelector('[data-testid="layout-chat-content"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="layout-canvas-content"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="layout-chat-canvas-resize-handle"]'),
+    ).not.toBeNull();
+  });
+
+  it("大屏 chat-canvas 模式应支持拖动分隔线调整对话区宽度", async () => {
+    const { container } = mountHarness(
+      LayoutHarness,
+      { mode: "chat-canvas" },
+      mountedRoots,
+    );
+
+    const root = container.querySelector<HTMLElement>(
+      '[data-testid="layout-transition-root"]',
+    );
+    const chatPanel = container.querySelector<HTMLElement>(
+      '[data-testid="layout-chat-panel"]',
+    );
+    const handle = container.querySelector<HTMLElement>(
+      '[data-testid="layout-chat-canvas-resize-handle"]',
+    );
+
+    expect(root).not.toBeNull();
+    expect(chatPanel).not.toBeNull();
+    expect(handle).not.toBeNull();
+
+    root!.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 1200,
+        bottom: 720,
+        width: 1200,
+        height: 720,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    handle!.setPointerCapture = () => undefined;
+    handle!.releasePointerCapture = () => undefined;
+    handle!.hasPointerCapture = () => true;
+
+    await act(async () => {
+      dispatchPointerLikeEvent(handle!, "pointerdown", {
+        clientX: 720,
+        pointerId: 1,
+      });
+      dispatchPointerLikeEvent(handle!, "pointermove", {
+        clientX: 760,
+        pointerId: 1,
+      });
+      dispatchPointerLikeEvent(handle!, "pointerup", {
+        clientX: 760,
+        pointerId: 1,
+      });
+      await Promise.resolve();
+    });
+
+    expect(chatPanel?.getAttribute("data-chat-panel-width")).toBe("760px");
+    expect(handle?.getAttribute("data-dragging")).toBe("false");
+  });
+
+  it("小屏 chat-canvas 模式仍应保持中右分栏比例一致", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
@@ -139,6 +239,57 @@ describe("LayoutTransition", () => {
     const root = container.querySelector<HTMLElement>(
       '[data-testid="layout-transition-root"]',
     );
+    const orderedPanels = Array.from(root?.children ?? [])
+      .map((node) => node.getAttribute("data-testid"))
+      .filter(Boolean);
+
+    expect(root?.getAttribute("data-layout-axis")).toBe("horizontal");
+    expect(root?.getAttribute("data-chat-panel-placement")).toBe("inline");
+    expect(orderedPanels).toEqual([
+      "layout-chat-panel",
+      "layout-chat-canvas-resize-handle",
+      "layout-canvas-panel",
+    ]);
+    expect(
+      container
+        .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
+        ?.getAttribute("data-overlay-state"),
+    ).toBe("inline");
+    expect(
+      container.querySelector('[data-testid="layout-chat-content"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="layout-canvas-content"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="layout-chat-overlay-trigger"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="layout-chat-canvas-resize-handle"]'),
+    ).not.toBeNull();
+  });
+
+  it("极窄 chat-canvas 模式才应改为右侧聊天抽屉", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 820,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      writable: true,
+      value: 600,
+    });
+
+    const { container } = mountHarness(
+      LayoutHarness,
+      { mode: "chat-canvas" },
+      mountedRoots,
+    );
+
+    const root = container.querySelector<HTMLElement>(
+      '[data-testid="layout-transition-root"]',
+    );
 
     expect(root?.getAttribute("data-layout-axis")).toBe("horizontal");
     expect(root?.getAttribute("data-chat-panel-placement")).toBe(
@@ -148,55 +299,36 @@ describe("LayoutTransition", () => {
       container.querySelector('[data-testid="layout-chat-overlay-trigger"]'),
     ).not.toBeNull();
     expect(
+      container.querySelector('[data-testid="layout-chat-canvas-resize-handle"]'),
+    ).toBeNull();
+    expect(
       container
         .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
         ?.getAttribute("data-overlay-state"),
     ).toBe("closed");
 
-    clickElement(
-      container.querySelector('button[aria-label="展开右侧聊天区"]'),
-    );
+    await act(async () => {
+      clickElement(container.querySelector('[data-testid="layout-chat-overlay-trigger"]'));
+      await Promise.resolve();
+    });
 
     expect(
       container
         .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
         ?.getAttribute("data-overlay-state"),
     ).toBe("open");
-    expect(
-      container.querySelector('[data-testid="layout-chat-content"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector('[data-testid="layout-chat-drawer-header"]')
-        ?.textContent,
-    ).toContain("右侧聊天区");
-    expect(
-      container.querySelector('[data-testid="layout-chat-drawer-header"]')
-        ?.textContent,
-    ).toContain("调度记录");
-    expect(
-      container.querySelector('[data-testid="layout-canvas-content"]'),
-    ).not.toBeNull();
-
-    clickElement(
-      container.querySelector('button[aria-label="收起右侧聊天区"]'),
-    );
-    expect(
-      container
-        .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
-        ?.getAttribute("data-overlay-state"),
-    ).toBe("closed");
   });
 
   it("小屏聊天抽屉打开后，收到工作台抽屉打开事件应自动收起", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
-      value: 1080,
+      value: 820,
     });
     Object.defineProperty(window, "innerHeight", {
       configurable: true,
       writable: true,
-      value: 720,
+      value: 600,
     });
 
     const { container } = mountHarness(
@@ -205,9 +337,12 @@ describe("LayoutTransition", () => {
       mountedRoots,
     );
 
-    clickElement(
-      container.querySelector('button[aria-label="展开右侧聊天区"]'),
-    );
+    await act(async () => {
+      clickElement(
+        container.querySelector('[data-testid="layout-chat-overlay-trigger"]'),
+      );
+      await Promise.resolve();
+    });
     expect(
       container
         .querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
@@ -230,12 +365,12 @@ describe("LayoutTransition", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
-      value: 1080,
+      value: 820,
     });
     Object.defineProperty(window, "innerHeight", {
       configurable: true,
       writable: true,
-      value: 720,
+      value: 600,
     });
 
     const { container } = mountHarness(

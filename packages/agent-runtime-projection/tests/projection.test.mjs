@@ -75,6 +75,7 @@ import {
   buildWorkerUsageProjection,
   buildRoutingDecisionPayload,
   extractArtifactRefs,
+  projectCodingWorkbenchViewFromEvents,
   summarizeAgentUiProjectionEvents,
   summarizeAgentUiSubagentsProjectionEvents,
   summarizeAgentUiSubagentsSurfaceLanes,
@@ -153,6 +154,67 @@ test("projectAgentRuntimeReadModel projects multiple HITL controls as standard a
     model.pendingActions[0].actions?.map((action) => action.decision),
     ["approve", "reject"],
   );
+});
+
+test("projectCodingWorkbenchViewFromEvents consumes current thread read model coding facts", () => {
+  const view = projectCodingWorkbenchViewFromEvents({
+    executionEvents: [
+      {
+        id: "evt-turn",
+        kind: "state",
+        status: "running",
+        eventClass: "turn.started",
+        title: "开始执行",
+        turnId: "turn-1",
+        createdAt: "2026-06-07T00:00:00.000Z",
+      },
+    ],
+    codingReadModel: {
+      thread_id: "thread-1",
+      active_turn_id: "turn-1",
+      active_command_id: "command-install",
+      active_test_run_id: "test-unit",
+      commands: [
+        {
+          command_id: "command-install",
+          status: "running",
+          command: "npm test",
+          cwd: "app",
+          output_refs: ["output://command-install"],
+          output_preview: "running tests",
+        },
+      ],
+      tests: [
+        {
+          test_run_id: "test-unit",
+          status: "running",
+          command_id: "command-install",
+          suite: "unit",
+          passed: 8,
+          failed: 0,
+        },
+      ],
+      pending_requests: [
+        {
+          id: "action-approve-command",
+          turn_id: "turn-1",
+          request_type: "approval",
+          status: "pending",
+          title: "确认执行命令",
+        },
+      ],
+    },
+  });
+
+  assert.equal(view.mainObject.id, "turn-1");
+  assert.equal(view.mainObject.activeCommandId, "command-install");
+  assert.equal(view.mainObject.activeTestRunId, "test-unit");
+  assert.equal(view.commands[0].command, "npm test");
+  assert.equal(view.commands[0].preview, "running tests");
+  assert.equal(view.tests[0].suite, "unit");
+  assert.equal(view.actions.length, 1);
+  assert.equal(view.actions[0].actionId, "action-approve-command");
+  assert.equal(view.ui.preferredTab, "outputs");
 });
 
 test("projectAgentRuntimeReadModel marks action terminal events as resolved", () => {
@@ -860,6 +922,51 @@ test("state.delta supports nested payload and item alias target", () => {
   assert.equal(state.artifacts[0].preview, "修复后的预览");
 });
 
+test("state.delta recomputes subagent terminal thread ids after patch", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-subagent-start",
+        kind: "handoff",
+        status: "running",
+        eventClass: "agent.spawned",
+        title: "启动研究子代理",
+        runtimeId: "runtime-1",
+        threadId: "thread-parent",
+        subagentId: "subagent-1",
+        taskId: "task-1",
+        sequence: 1,
+        createdAt: "2026-06-12T00:00:00.000Z",
+      },
+      {
+        id: "evt-projection-delta",
+        kind: "state",
+        status: "completed",
+        eventClass: "state.delta",
+        title: "修复子代理关闭态",
+        runtimeId: "runtime-1",
+        threadId: "thread-parent",
+        sequence: 2,
+        payload: {
+          target: "projection.subagents",
+          patch: [
+            {
+              op: "replace",
+              path: "/threads/0/status",
+              value: "closed",
+            },
+          ],
+        },
+        createdAt: "2026-06-12T00:00:01.000Z",
+      },
+    ],
+  });
+
+  assert.deepEqual(state.subagents.activeThreadIds, []);
+  assert.deepEqual(state.subagents.completedThreadIds, []);
+  assert.deepEqual(state.subagents.failedThreadIds, ["subagent-1"]);
+});
+
 test("state.delta failure marks projection stale without mutating target state", () => {
   const executionEvents = [
     {
@@ -1000,6 +1107,75 @@ test("state.delta does not override newer runtime facts for the same projection 
   assert.equal(state.subagents.threads[0].status, "running");
   assert.deepEqual(state.subagents.activeThreadIds, ["subagent-1"]);
   assert.deepEqual(state.subagents.completedThreadIds, []);
+});
+
+test("state.delta treats channel messages as newer subagent projection facts", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-subagent-start",
+        kind: "handoff",
+        status: "running",
+        eventClass: "agent.spawned",
+        title: "启动研究子代理",
+        runtimeId: "runtime-1",
+        threadId: "thread-parent",
+        subagentId: "subagent-1",
+        taskId: "task-1",
+        sequence: 1,
+        createdAt: "2026-06-12T00:00:00.000Z",
+      },
+      {
+        id: "evt-stale-delta",
+        kind: "state",
+        status: "completed",
+        eventClass: "state.delta",
+        title: "过期的子代理修复",
+        runtimeId: "runtime-1",
+        threadId: "thread-parent",
+        sequence: 2,
+        payload: {
+          target: "projection.subagents",
+          patch: [
+            {
+              op: "replace",
+              path: "/threads/0/summary",
+              value: "不应覆盖真实 channel 更新",
+            },
+          ],
+        },
+        createdAt: "2026-06-12T00:00:01.000Z",
+      },
+      {
+        id: "evt-channel-message",
+        kind: "handoff",
+        status: "running",
+        eventClass: "channel.message",
+        title: "子代理发来进展",
+        runtimeId: "runtime-1",
+        threadId: "thread-parent",
+        taskId: "task-1",
+        sequence: 3,
+        payload: {
+          targetThreadId: "subagent-1",
+          summary: "真实 channel 更新",
+        },
+        createdAt: "2026-06-12T00:00:02.000Z",
+      },
+    ],
+  });
+
+  assert.equal(state.subagents.threads[0].summary, "真实 channel 更新");
+  assert.deepEqual(
+    state.subagents.activities.map((activity) => [
+      activity.sourceEventId,
+      activity.kind,
+    ]),
+    [
+      ["evt-subagent-start", "started"],
+      ["evt-channel-message", "interacted"],
+    ],
+  );
 });
 
 test("Agent UI projection event selectors index host-neutral events", () => {

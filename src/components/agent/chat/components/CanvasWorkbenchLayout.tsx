@@ -7,93 +7,49 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Clock3,
-  Copy,
-  Download,
-  ExternalLink,
-  FileCode2,
-  FileText,
-  Folder,
-  FolderOpen,
-  GitCompare,
-  ListChecks,
-  Loader2,
-  Maximize2,
-  Minimize2,
-  Monitor,
-  RefreshCw,
-  TerminalSquare,
-  X,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { listDirectory, type DirectoryListing } from "@/lib/api/fileBrowser";
 import type { Artifact } from "@/lib/artifact/types";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
 import type { TaskFile } from "./TaskFiles";
 import type { HarnessFilePreviewResult } from "./HarnessStatusPanel";
-import {
-  buildCanvasWorkbenchDiff,
-  type CanvasWorkbenchDiffLine,
-} from "../utils/canvasWorkbenchDiff";
+import { buildCanvasWorkbenchDiff } from "../utils/canvasWorkbenchDiff";
 import { extractFileNameFromPath } from "../workspace/workspacePath";
-import { filterWorkspaceDirectoryListing } from "../workspace/workspaceTreeVisibility";
 import {
-  ArtifactWorkbenchDocumentInspector,
-  type ArtifactWorkbenchDocumentController,
-} from "../workspace/artifactWorkbenchDocument";
-import {
-  formatEntryModifiedTime,
-  formatFileSize,
-} from "./FileManager/fileManagerDisplay";
-import {
-  buildEntries,
-  buildDefaultPreviewSelection,
-  findChangeItemForSelection,
-  isHtmlPreviewContext,
-  isPendingChangeItem,
-  normalizeCanvasWorkbenchPath,
-  resolveSelectionContext,
-  resolveChangeItemDisplayName,
-  resolveChangeStatusClassName,
-  resolveChangeStatusCopyKey,
-  resolveCodingPreviewTabLabel,
-  resolvePreviewPath,
-  resolveSavedContentBundleRoot,
-  resolveWorkspacePanelDisplayPath,
-  sortWorkspaceListingEntries,
   type CanvasWorkbenchCopy,
-  type CanvasWorkbenchDefaultPreview,
   type CanvasWorkbenchPreviewTarget,
-  type WorkspaceFileSelection,
 } from "./CanvasWorkbenchLayoutViewModel";
+import {
+  CanvasWorkbenchShell,
+  type CanvasWorkbenchChangeView,
+} from "./canvas-workbench";
+import {
+  WORKBENCH_GHOST_BUTTON_CLASSNAME,
+  WORKBENCH_MUTED_PANEL_CLASSNAME,
+  WORKBENCH_PANEL_CLASSNAME,
+  WORKBENCH_SHELL_CLASSNAME,
+  downloadCanvasWorkbenchText,
+  translateCanvasWorkbenchText,
+  type CanvasWorkbenchBrowserOpenRequest,
+  type CanvasWorkbenchDefaultPreview,
+  type CanvasWorkbenchLayoutMode,
+  type CanvasWorkbenchMode,
+  type CanvasWorkbenchNewToolTab,
+  type CanvasWorkbenchTab,
+  type CanvasWorkbenchTranslation,
+} from "./canvas-workbench/CanvasWorkbenchLayoutState";
+import { useCanvasWorkbenchDocumentState } from "./canvas-workbench/useCanvasWorkbenchDocumentState";
+import { buildCanvasWorkbenchToolTabProjection } from "./canvas-workbench/tabs/CanvasWorkbenchToolTabsViewModel";
+import { useCanvasWorkbenchToolTabsState } from "./canvas-workbench/tabs/useCanvasWorkbenchToolTabsState";
 
-export type CanvasWorkbenchTab =
-  | "preview"
-  | "session"
-  | "workspace"
-  | "changes"
-  | "outputs"
-  | "logs"
-  | `document:${string}`;
-type CanvasWorkbenchDocumentViewMode = "preview" | "changes";
-export type CanvasWorkbenchLayoutMode = "split" | "stacked";
-export type CanvasWorkbenchMode = "default" | "coding";
-
-export type { CanvasWorkbenchDefaultPreview };
-
-type CanvasWorkbenchTranslation = (
-  key: string,
-  options?: Record<string, unknown>,
-) => string;
-
+export type {
+  CanvasWorkbenchBrowserOpenRequest,
+  CanvasWorkbenchDefaultPreview,
+  CanvasWorkbenchLayoutMode,
+  CanvasWorkbenchMode,
+  CanvasWorkbenchNewToolTab,
+  CanvasWorkbenchTab,
+};
 
 export type CanvasWorkbenchHeaderBadgeTone = "default" | "accent" | "success";
 
@@ -144,27 +100,6 @@ export interface CanvasWorkbenchUtilityView extends CanvasWorkbenchHeaderView {
   renderPanel: () => ReactNode;
 }
 
-export interface CanvasWorkbenchChangeItem {
-  id: string;
-  path: string;
-  absolutePath?: string | null;
-  displayName?: string;
-  source?: string;
-  status?: "in_progress" | "completed" | "failed";
-  preview?: string;
-  currentContent?: string | null;
-  previousContent?: string | null;
-  checkpointPath?: string | null;
-  checkpointLabel?: string | null;
-}
-
-export interface CanvasWorkbenchChangeView {
-  items: CanvasWorkbenchChangeItem[];
-  checkpointCount?: number;
-  latestCheckpointPath?: string | null;
-  onOpenFile?: (path: string) => void | Promise<void>;
-}
-
 export interface CanvasWorkbenchLayoutProps {
   artifacts: Artifact[];
   canvasState: CanvasStateUnion | null;
@@ -176,15 +111,6 @@ export interface CanvasWorkbenchLayoutProps {
   loadFilePreview: (path: string) => Promise<HarnessFilePreviewResult>;
   onOpenPath: (path: string) => Promise<void>;
   onRevealPath: (path: string) => Promise<void>;
-  renderPreview: (
-    target: CanvasWorkbenchPreviewTarget,
-    options?: {
-      stackedWorkbenchTrigger?: ReactNode;
-      onArtifactDocumentControllerChange?: (
-        controller: ArtifactWorkbenchDocumentController | null,
-      ) => void;
-    },
-  ) => ReactNode;
   onClose?: () => void;
   onLayoutModeChange?: (mode: CanvasWorkbenchLayoutMode) => void;
   workbenchMode?: CanvasWorkbenchMode;
@@ -193,101 +119,12 @@ export interface CanvasWorkbenchLayoutProps {
   outputView?: CanvasWorkbenchUtilityView | null;
   logView?: CanvasWorkbenchUtilityView | null;
   changeView?: CanvasWorkbenchChangeView | null;
+  topRightTools?: ReactNode;
+  browserOpenRequest?: CanvasWorkbenchBrowserOpenRequest | null;
+  onBrowserOpenRequestHandled?: (requestKey: string | number) => void;
 }
-
-const WORKBENCH_SHELL_CLASSNAME =
-  "rounded-[12px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]";
-
-const WORKBENCH_PANEL_CLASSNAME =
-  "rounded-[10px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]";
-
-const WORKBENCH_MUTED_PANEL_CLASSNAME =
-  "rounded-[10px] border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-5 text-sm text-[color:var(--lime-text-muted)]";
-
-const WORKBENCH_BUTTON_CLASSNAME =
-  "border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] text-[color:var(--lime-text)] hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface)] hover:text-[color:var(--lime-text-strong)]";
-
-const WORKBENCH_ACTIVE_BUTTON_CLASSNAME =
-  "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text-strong)]";
-
-const WORKBENCH_GHOST_BUTTON_CLASSNAME =
-  "border-[color:var(--lime-surface-border)] text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-soft)] hover:text-[color:var(--lime-text-strong)]";
 
 const STACKED_LAYOUT_BREAKPOINT = 1040;
-
-function downloadText(filename: string, content: string): void {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
-
-function renderDiffState(diffLines: CanvasWorkbenchDiffLine[]): ReactNode {
-  return (
-    <div className={cn("overflow-hidden", WORKBENCH_PANEL_CLASSNAME)}>
-      <div className="max-h-[28rem] overflow-auto">
-        {diffLines.map((line, index) => (
-          <div
-            key={`${line.type}-${index}`}
-            className={cn(
-              "grid grid-cols-[20px_1fr] gap-3 px-3 py-2 font-mono text-[12px] leading-6",
-              line.type === "add" && "bg-emerald-50 text-emerald-900",
-              line.type === "remove" && "bg-rose-50 text-rose-900",
-              line.type === "context" && "text-slate-500",
-            )}
-          >
-            <span className="select-none text-center">
-              {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
-            </span>
-            <span className="whitespace-pre-wrap break-all">
-              {line.value || " "}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function buildDocumentTabKey(selectionKey: string): `document:${string}` {
-  return `document:${selectionKey}`;
-}
-
-function isDocumentTabKey(
-  value: CanvasWorkbenchTab | string,
-): value is `document:${string}` {
-  return value.startsWith("document:");
-}
-
-function parseDocumentTabKey(tabKey: `document:${string}` | string): string {
-  return tabKey.replace(/^document:/, "");
-}
-
-function resolveChangeStatusIcon(item: CanvasWorkbenchChangeItem): ReactNode {
-  if (item.status === "failed") {
-    return <AlertTriangle className="h-3.5 w-3.5" />;
-  }
-  if (item.status === "in_progress") {
-    return <Clock3 className="h-3.5 w-3.5" />;
-  }
-  if (item.status === "completed") {
-    return <CheckCircle2 className="h-3.5 w-3.5" />;
-  }
-  return <GitCompare className="h-3.5 w-3.5" />;
-}
-
-function canvasWorkbenchText(
-  t: CanvasWorkbenchTranslation,
-  key: string,
-  options?: Record<string, unknown>,
-): string {
-  return t(key, options);
-}
 
 export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   artifacts,
@@ -300,7 +137,6 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   loadFilePreview,
   onOpenPath,
   onRevealPath,
-  renderPreview,
   onClose,
   onLayoutModeChange,
   workbenchMode = "default",
@@ -309,15 +145,25 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   outputView = null,
   logView = null,
   changeView = null,
+  topRightTools = null,
+  browserOpenRequest = null,
+  onBrowserOpenRequestHandled,
 }: CanvasWorkbenchLayoutProps) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language || "zh-CN";
   const canvasT = t as unknown as CanvasWorkbenchTranslation;
+  const [shellNodeVersion, setShellNodeVersion] = useState(0);
   const canvasTRef = useRef(canvasT);
   canvasTRef.current = canvasT;
+  const handleShellRef = useCallback((node: HTMLElement | null) => {
+    shellRef.current = node;
+    if (node) {
+      setShellNodeVersion((version) => version + 1);
+    }
+  }, []);
   const translateWorkbench = useCallback(
     (key: string, options?: Record<string, unknown>) =>
-      canvasWorkbenchText(canvasTRef.current, key, options),
+      translateCanvasWorkbenchText(canvasTRef.current, key, options),
     [],
   );
   const workbenchCopy = useMemo<CanvasWorkbenchCopy>(
@@ -369,204 +215,78 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
   );
   const isCodingWorkbench = workbenchMode === "coding";
   const hasDefaultPreviewContent = Boolean(defaultPreview?.content.trim());
-  const shellRef = useRef<HTMLDivElement | null>(null);
+  const hasCustomSessionView = Boolean(sessionView?.renderPanel);
+  const shellRef = useRef<HTMLElement | null>(null);
   const [isStackedLayout, setIsStackedLayout] = useState(false);
-  const [documentPreviewMode, setDocumentPreviewMode] =
-    useState<CanvasWorkbenchDocumentViewMode>("preview");
-  const [documentInspectorCollapsed, setDocumentInspectorCollapsed] =
-    useState(true);
-  const [previewRefreshNonce, setPreviewRefreshNonce] = useState(0);
-  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
-  const [artifactDocumentController, setArtifactDocumentController] =
-    useState<ArtifactWorkbenchDocumentController | null>(null);
-  const [directoryCache, setDirectoryCache] = useState<
-    Record<string, DirectoryListing>
-  >({});
-  const [loadingDirectories, setLoadingDirectories] = useState<
-    Record<string, boolean>
-  >({});
-  const [expandedDirectories, setExpandedDirectories] = useState<
-    Record<string, boolean>
-  >({});
-  const [workspaceFileSelections, setWorkspaceFileSelections] = useState<
-    Record<string, WorkspaceFileSelection>
-  >({});
-
-  const entries = useMemo(
-    () =>
-      buildEntries(
-        artifacts,
-        canvasState,
-        taskFiles,
-        workbenchCopy,
-        workspaceRoot,
-      ),
-    [artifacts, canvasState, taskFiles, workbenchCopy, workspaceRoot],
-  );
-
-  const entryMap = useMemo(
-    () => new Map(entries.map((entry) => [entry.key, entry])),
-    [entries],
-  );
-
-  const fallbackSelectionKey = useMemo(() => {
-    if (
-      defaultPreview?.selectionKey &&
-      entryMap.has(defaultPreview.selectionKey)
-    ) {
-      return defaultPreview.selectionKey;
-    }
-
-    if (selectedFileId) {
-      const selectedTaskKey = `task:${selectedFileId}`;
-      if (entryMap.has(selectedTaskKey)) {
-        return selectedTaskKey;
-      }
-    }
-
-    return entries[0]?.key || null;
-  }, [defaultPreview?.selectionKey, entries, entryMap, selectedFileId]);
-
-  const initialDocumentSelectionKey =
-    defaultPreview?.selectionKey || fallbackSelectionKey;
-  const shouldPreferSessionTabOnMount = Boolean(
-    !isCodingWorkbench &&
-    (sessionView?.renderPanel || hasDefaultPreviewContent) &&
-    !initialDocumentSelectionKey,
-  );
-
-  const [selectedKey, setSelectedKey] = useState<string | null>(
-    initialDocumentSelectionKey,
-  );
-  const [openDocumentTabs, setOpenDocumentTabs] = useState<
-    Array<`document:${string}`>
-  >(() =>
-    initialDocumentSelectionKey
-      ? [buildDocumentTabKey(initialDocumentSelectionKey)]
-      : [],
-  );
-  const [activeTab, setActiveTab] = useState<CanvasWorkbenchTab>(() => {
-    if (isCodingWorkbench) {
-      return "preview";
-    }
-    if (shouldPreferSessionTabOnMount) {
-      return "session";
-    }
-    if (initialDocumentSelectionKey) {
-      return buildDocumentTabKey(initialDocumentSelectionKey);
-    }
-    return "workspace";
-  });
-  const hasAutoFocusedInitialDocumentTabRef = useRef(
-    isCodingWorkbench || Boolean(initialDocumentSelectionKey),
-  );
-  const isKnownSelectionKey = useCallback(
-    (selectionKey: string | null) => {
-      if (!selectionKey) {
-        return false;
-      }
-      if (selectionKey.startsWith("workspace-file:")) {
-        return true;
-      }
-      return (
-        entryMap.has(selectionKey) ||
-        selectionKey === defaultPreview?.selectionKey
-      );
-    },
-    [defaultPreview?.selectionKey, entryMap],
-  );
-
-  useEffect(() => {
-    if (!selectedKey || isKnownSelectionKey(selectedKey)) {
-      return;
-    }
-    setSelectedKey(fallbackSelectionKey);
-  }, [fallbackSelectionKey, isKnownSelectionKey, selectedKey]);
-
-  useEffect(() => {
-    const seedSelectionKeys = [
-      defaultPreview?.selectionKey || null,
-      fallbackSelectionKey,
-    ].filter((value): value is string => Boolean(value));
-
-    if (seedSelectionKeys.length === 0) {
-      return;
-    }
-
-    setOpenDocumentTabs((previous) => {
-      const next = [...previous];
-      let changed = false;
-      seedSelectionKeys.forEach((selectionKey) => {
-        const tabKey = buildDocumentTabKey(selectionKey);
-        if (!next.includes(tabKey)) {
-          next.push(tabKey);
-          changed = true;
-        }
-      });
-      return changed ? next : previous;
-    });
-  }, [defaultPreview?.selectionKey, fallbackSelectionKey]);
-
-  useEffect(() => {
-    setOpenDocumentTabs((previous) => {
-      const next = previous.filter((tabKey) =>
-        isKnownSelectionKey(parseDocumentTabKey(tabKey)),
-      );
-      return next.length === previous.length ? previous : next;
-    });
-  }, [isKnownSelectionKey]);
-
-  useEffect(() => {
-    if (isCodingWorkbench) {
-      return;
-    }
-    if (!isDocumentTabKey(activeTab)) {
-      return;
-    }
-    const selectionKey = parseDocumentTabKey(activeTab);
-    if (!isKnownSelectionKey(selectionKey)) {
-      setActiveTab(
-        openDocumentTabs[0] ||
-          (sessionView?.renderPanel || hasDefaultPreviewContent
-            ? "session"
-            : "workspace"),
-      );
-      return;
-    }
-    if (selectedKey !== selectionKey) {
-      setSelectedKey(selectionKey);
-    }
-  }, [
+  const {
     activeTab,
-    isCodingWorkbench,
+    setActiveTab,
+    activePreviewContext,
+    documentContext,
+    documentSelectionKey,
+    previewModeState,
+    projectFilesPreviewMode,
+    setProjectFilesPreviewMode,
+    workspacePanelRootPath,
+    workspacePanelDisplayPath,
+    directoryCache,
+    expandedDirectories,
+    loadingDirectories,
+    toggleDirectory,
+    refreshDirectorySubtree,
+    handleSelectWorkspaceFile,
+  } = useCanvasWorkbenchDocumentState({
+    artifacts,
+    canvasState,
+    taskFiles,
+    selectedFileId,
+    workspaceRoot,
+    workspaceUnavailable,
+    defaultPreview,
+    loadFilePreview,
+    workbenchCopy,
+    translateWorkbench,
     hasDefaultPreviewContent,
-    isKnownSelectionKey,
-    openDocumentTabs,
-    sessionView?.renderPanel,
-    selectedKey,
-  ]);
+    hasCustomSessionView,
+    isCodingWorkbench,
+    changeView,
+  });
+  const {
+    openedToolTabs,
+    openNewToolTab,
+    closeToolTab,
+    resolveToolTabKind,
+    resolveBrowserInitialUrl,
+    updateBrowserTabUrl,
+  } = useCanvasWorkbenchToolTabsState({
+    activeTab,
+    setActiveTab,
+    browserOpenRequest,
+    onBrowserOpenRequestHandled,
+  });
+  const [changesFilesPanelOpen, setChangesFilesPanelOpen] = useState(false);
+  const hasAutoFocusedInitialDocumentTabRef = useRef(
+    Boolean(documentSelectionKey),
+  );
 
   useEffect(() => {
-    if (isCodingWorkbench) {
-      return;
-    }
     if (hasAutoFocusedInitialDocumentTabRef.current) {
       return;
     }
-    if (!sessionView?.renderPanel || activeTab !== "session") {
+    if (!sessionView?.renderPanel || activeTab !== "outputs") {
       return;
     }
-    const initialDocumentTab = openDocumentTabs[0];
-    if (!initialDocumentTab) {
+    if (!documentSelectionKey) {
       return;
     }
     hasAutoFocusedInitialDocumentTabRef.current = true;
-    setActiveTab(initialDocumentTab);
+    setActiveTab(previewModeState.defaultMode);
   }, [
     activeTab,
-    isCodingWorkbench,
-    openDocumentTabs,
+    documentSelectionKey,
+    previewModeState.defaultMode,
     sessionView?.renderPanel,
+    setActiveTab,
   ]);
 
   useEffect(() => {
@@ -605,266 +325,15 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [shellNodeVersion]);
 
   useEffect(() => {
     onLayoutModeChange?.(isStackedLayout ? "stacked" : "split");
   }, [isStackedLayout, onLayoutModeChange]);
 
-  const loadDirectory = useCallback(
-    async (path: string) => {
-      if (!path.trim()) {
-        return;
-      }
-      setLoadingDirectories((previous) => ({ ...previous, [path]: true }));
-      try {
-        const listing = filterWorkspaceDirectoryListing(
-          await listDirectory(path),
-          workspaceRoot,
-        );
-        setDirectoryCache((previous) => ({
-          ...previous,
-          [path]: listing,
-        }));
-      } catch (error) {
-        toast.error(
-          translateWorkbench("agentChat.canvasWorkbench.workspace.loadFailed", {
-            message: error instanceof Error ? error.message : String(error),
-          }),
-        );
-      } finally {
-        setLoadingDirectories((previous) => ({ ...previous, [path]: false }));
-      }
-    },
-    [translateWorkbench, workspaceRoot],
-  );
-
-  const handleOpenDocumentSelection = useCallback(
-    (selectionKey: string) => {
-      setSelectedKey(selectionKey);
-      const tabKey = buildDocumentTabKey(selectionKey);
-      setOpenDocumentTabs((previous) =>
-        previous.includes(tabKey) ? previous : [...previous, tabKey],
-      );
-      setActiveTab(isCodingWorkbench ? "preview" : tabKey);
-    },
-    [isCodingWorkbench],
-  );
-  const handleCloseDocumentTab = useCallback(
-    (tabKey: `document:${string}`) => {
-      const selectionKey = parseDocumentTabKey(tabKey);
-      setOpenDocumentTabs((previous) =>
-        previous.filter((currentTabKey) => currentTabKey !== tabKey),
-      );
-
-      if (selectedKey === selectionKey) {
-        setSelectedKey(fallbackSelectionKey);
-      }
-
-      if (activeTab === tabKey) {
-        const fallbackTab =
-          openDocumentTabs.find((currentTabKey) => currentTabKey !== tabKey) ||
-          "session";
-        setActiveTab(fallbackTab as CanvasWorkbenchTab);
-      }
-    },
-    [activeTab, fallbackSelectionKey, openDocumentTabs, selectedKey],
-  );
-
-  const handleToggleDirectory = useCallback(
-    (path: string) => {
-      const willExpand = !expandedDirectories[path];
-      setExpandedDirectories((previous) => ({
-        ...previous,
-        [path]: willExpand,
-      }));
-      if (willExpand) {
-        void loadDirectory(path);
-      }
-    },
-    [expandedDirectories, loadDirectory],
-  );
-
-  const refreshDirectorySubtree = useCallback(
-    async (rootPath: string) => {
-      const normalizedRootPath = normalizeCanvasWorkbenchPath(rootPath.trim());
-      if (!normalizedRootPath) {
-        return;
-      }
-
-      const expandedDescendants = Object.entries(expandedDirectories)
-        .filter(
-          ([path, expanded]) =>
-            expanded &&
-            normalizeCanvasWorkbenchPath(path).startsWith(
-              `${normalizedRootPath}/`,
-            ),
-        )
-        .map(([path]) => path);
-
-      await Promise.all([
-        loadDirectory(rootPath),
-        ...expandedDescendants.map((path) => loadDirectory(path)),
-      ]);
-    },
-    [expandedDirectories, loadDirectory],
-  );
-
-  const handleSelectWorkspaceFile = useCallback(
-    async (path: string) => {
-      const title = extractFileNameFromPath(path);
-      const selectionKey = `workspace-file:${path}`;
-      handleOpenDocumentSelection(selectionKey);
-      setWorkspaceFileSelections((previous) => ({
-        ...previous,
-        [selectionKey]: {
-          path,
-          title,
-          status: "loading",
-        },
-      }));
-
-      const preview = await loadFilePreview(path);
-      setWorkspaceFileSelections((previous) => {
-        if (preview.isBinary) {
-          return {
-            ...previous,
-            [selectionKey]: {
-              path,
-              title,
-              status: "binary",
-              error: preview.error ?? null,
-              size: preview.size,
-            },
-          };
-        }
-
-        if (preview.error) {
-          return {
-            ...previous,
-            [selectionKey]: {
-              path,
-              title,
-              status: "error",
-              error: preview.error,
-              size: preview.size,
-            },
-          };
-        }
-
-        return {
-          ...previous,
-          [selectionKey]: {
-            path,
-            title,
-            status: "ready",
-            content: preview.content || "",
-            size: preview.size,
-          },
-        };
-      });
-    },
-    [handleOpenDocumentSelection, loadFilePreview],
-  );
-
-  const documentSelectionKey = useMemo(() => {
-    if (!isCodingWorkbench && isDocumentTabKey(activeTab)) {
-      return parseDocumentTabKey(activeTab);
-    }
-    return selectedKey || fallbackSelectionKey;
-  }, [activeTab, fallbackSelectionKey, isCodingWorkbench, selectedKey]);
-
-  const documentContext = useMemo(
-    () =>
-      resolveSelectionContext({
-        selectionKey: documentSelectionKey,
-        defaultPreview,
-        entryMap,
-        workspaceFileSelections,
-        canvasState,
-        artifacts,
-        copy: workbenchCopy,
-        workspaceRoot,
-      }),
-    [
-      artifacts,
-      canvasState,
-      defaultPreview,
-      documentSelectionKey,
-      entryMap,
-      workspaceFileSelections,
-      workbenchCopy,
-      workspaceRoot,
-    ],
-  );
-
-  const sessionContext = useMemo(() => {
-    if (defaultPreview?.content.trim()) {
-      return buildDefaultPreviewSelection(defaultPreview, workbenchCopy);
-    }
-    return documentContext;
-  }, [defaultPreview, documentContext, workbenchCopy]);
-
-  const workspacePanelRootPath = useMemo(
-    () =>
-      resolveSavedContentBundleRoot(
-        workspaceRoot,
-        documentContext?.selectionPath || sessionContext?.selectionPath,
-      ) ||
-      workspaceRoot ||
-      null,
-    [
-      documentContext?.selectionPath,
-      sessionContext?.selectionPath,
-      workspaceRoot,
-    ],
-  );
-
-  const workspacePanelDisplayPath = useMemo(
-    () =>
-      resolveWorkspacePanelDisplayPath(workspaceRoot, workspacePanelRootPath),
-    [workspacePanelRootPath, workspaceRoot],
-  );
-
-  useEffect(() => {
-    if (!workspacePanelRootPath?.trim() || workspaceUnavailable) {
-      return;
-    }
-    if (directoryCache[workspacePanelRootPath]) {
-      return;
-    }
-    void loadDirectory(workspacePanelRootPath);
-  }, [
-    directoryCache,
-    loadDirectory,
-    workspacePanelRootPath,
-    workspaceUnavailable,
-  ]);
-
-  const hasCustomSessionView = Boolean(sessionView?.renderPanel);
-  const shouldShowSessionTab = Boolean(sessionContext || hasCustomSessionView);
-
-  const activePreviewContext =
-    activeTab === "preview"
-      ? documentContext
-      : activeTab === "session"
-        ? hasCustomSessionView
-          ? null
-          : sessionContext
-        : isDocumentTabKey(activeTab)
-          ? documentContext
-          : null;
-
-  useEffect(() => {
-    if (isCodingWorkbench || activeTab !== "session" || shouldShowSessionTab) {
-      return;
-    }
-    setActiveTab(openDocumentTabs[0] || "workspace");
-  }, [activeTab, isCodingWorkbench, openDocumentTabs, shouldShowSessionTab]);
-
   const activeSelectionPath = activePreviewContext?.selectionPath;
   const activeContent = activePreviewContext?.content || "";
-  const closeWorkbenchLabel = canvasWorkbenchText(
+  const closeWorkbenchLabel = translateCanvasWorkbenchText(
     canvasT,
     "agentChat.canvasWorkbench.close",
   );
@@ -882,248 +351,73 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
         : [],
     [documentContext],
   );
+  const hasReviewSurface =
+    isCodingWorkbench || Boolean(changeView) || documentDiffLines.length > 0;
+  const resolvedChangeView = useMemo<CanvasWorkbenchChangeView | null>(() => {
+    if (changeView) {
+      return changeView;
+    }
+    if (!hasReviewSurface) {
+      return null;
+    }
+    if (documentDiffLines.length > 0) {
+      return null;
+    }
+    return {
+      items: [],
+      checkpointCount: 0,
+      latestCheckpointPath: null,
+    };
+  }, [changeView, documentDiffLines.length, hasReviewSurface]);
   const changeItems = useMemo(() => changeView?.items ?? [], [changeView]);
   const changeItemCount = changeItems.length;
-  const hasChangeQueue = changeItemCount > 0;
-  const pendingChangeItemCount = useMemo(
-    () => changeItems.filter(isPendingChangeItem).length,
-    [changeItems],
-  );
   const failedChangeItemCount = useMemo(
     () => changeItems.filter((item) => item.status === "failed").length,
     [changeItems],
   );
-  const activeSelectionChangeItem = useMemo(
-    () => findChangeItemForSelection(changeItems, documentContext),
-    [changeItems, documentContext],
+
+  const hasAutoFocusedCodingReviewRef = useRef(
+    (changeView?.items?.length || 0) > 0 ||
+      Boolean(defaultPreview?.previousContent),
   );
 
   useEffect(() => {
-    setDocumentPreviewMode("preview");
-  }, [documentSelectionKey]);
-
-  useEffect(() => {
-    if (activeTab !== "preview") {
-      setIsPreviewFullscreen(false);
-    }
-  }, [activeTab]);
-
-  const handleArtifactDocumentControllerChange = useCallback(
-    (controller: ArtifactWorkbenchDocumentController | null) => {
-      setArtifactDocumentController((previous) =>
-        previous === controller ? previous : controller,
-      );
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (
-      activeTab !== "preview" &&
-      activeTab !== "session" &&
-      !isDocumentTabKey(activeTab)
-    ) {
-      setArtifactDocumentController(null);
+    if (!hasReviewSurface) {
       return;
     }
-
-    const previewTarget = activePreviewContext?.target;
-    if (previewTarget?.kind !== "artifact") {
-      setArtifactDocumentController(null);
+    if (hasAutoFocusedCodingReviewRef.current) {
+      return;
     }
-  }, [activePreviewContext?.target, activeTab]);
+    if (changeItemCount <= 0 && documentDiffLines.length <= 0) {
+      return;
+    }
+    hasAutoFocusedCodingReviewRef.current = true;
+    setActiveTab("changes");
+  }, [
+    changeItemCount,
+    documentDiffLines.length,
+    hasReviewSurface,
+    setActiveTab,
+  ]);
 
-  useEffect(() => {
-    setDocumentInspectorCollapsed(true);
-  }, [documentSelectionKey, artifactDocumentController?.document?.artifactId]);
-
-  const documentTabs = useMemo(
+  const { primaryTabs, newTabActions } = useMemo(
     () =>
-      openDocumentTabs.map((tabKey) => {
-        const context = resolveSelectionContext({
-          selectionKey: parseDocumentTabKey(tabKey),
-          defaultPreview,
-          entryMap,
-          workspaceFileSelections,
-          canvasState,
-          artifacts,
-          copy: workbenchCopy,
-          workspaceRoot,
-        });
-
-        if (context) {
-          return {
-            key: tabKey,
-            label: context.tabLabel,
-            title: context.title,
-            badgeLabel: context.badgeLabel,
-            kindLabel: context.kindLabel,
-          };
-        }
-
-        const selectionKey = parseDocumentTabKey(tabKey);
-        const fallbackLabel = selectionKey.startsWith("workspace-file:")
-          ? extractFileNameFromPath(
-              selectionKey.replace(/^workspace-file:/, ""),
-            )
-          : selectionKey;
-        return {
-          key: tabKey,
-          label: fallbackLabel,
-          title: fallbackLabel,
-          badgeLabel: undefined,
-          kindLabel: undefined,
-        };
+      buildCanvasWorkbenchToolTabProjection({
+        changeItemCount,
+        documentDiffLineCount: documentDiffLines.length,
+        failedChangeItemCount,
+        openedToolTabs,
+        translateWorkbench: canvasT,
       }),
     [
-      artifacts,
-      canvasState,
-      defaultPreview,
-      entryMap,
-      openDocumentTabs,
-      workspaceFileSelections,
-      workbenchCopy,
-      workspaceRoot,
+      changeItemCount,
+      documentDiffLines.length,
+      failedChangeItemCount,
+      openedToolTabs,
+      canvasT,
     ],
   );
 
-  const primaryTabs = useMemo<
-    Array<{
-      key: CanvasWorkbenchTab;
-      label: string;
-      badge?: string;
-      badgeTone?: "slate" | "sky" | "rose";
-    }>
-  >(() => {
-    const workspaceBadge =
-      workspaceView?.tabBadge?.trim() ||
-      (workspacePanelRootPath?.trim() &&
-      directoryCache[workspacePanelRootPath]?.entries.length
-        ? String(
-            Math.min(directoryCache[workspacePanelRootPath].entries.length, 99),
-          )
-        : undefined);
-
-    if (isCodingWorkbench) {
-      return [
-        {
-          key: "preview" as const,
-          label: resolveCodingPreviewTabLabel(
-            documentContext,
-            canvasWorkbenchText(
-              canvasT,
-              "agentChat.canvasWorkbench.coding.tabs.preview",
-            ),
-          ),
-          badge: isHtmlPreviewContext(documentContext)
-            ? canvasWorkbenchText(
-                canvasT,
-                "agentChat.canvasWorkbench.coding.preview.htmlBadge",
-              )
-            : documentContext?.kindLabel,
-          badgeTone: isHtmlPreviewContext(documentContext) ? "sky" : "slate",
-        },
-        {
-          key: "workspace" as const,
-          label: canvasWorkbenchText(
-            canvasT,
-            "agentChat.canvasWorkbench.coding.tabs.files",
-          ),
-          badge: workspaceBadge,
-          badgeTone: workspaceView?.tabBadgeTone,
-        },
-        {
-          key: "changes" as const,
-          label: canvasWorkbenchText(
-            canvasT,
-            "agentChat.canvasWorkbench.coding.tabs.changes",
-          ),
-          badge:
-            changeItemCount > 0
-              ? changeItemCount > 99
-                ? "99+"
-                : String(changeItemCount)
-              : documentDiffLines.length > 0
-                ? String(documentDiffLines.length)
-                : undefined,
-          badgeTone:
-            failedChangeItemCount > 0
-              ? "rose"
-              : changeItemCount > 0 || documentDiffLines.length > 0
-                ? "sky"
-                : "slate",
-        },
-        {
-          key: "outputs" as const,
-          label: canvasWorkbenchText(
-            canvasT,
-            "agentChat.canvasWorkbench.coding.tabs.outputs",
-          ),
-          badge: outputView?.tabBadge?.trim() || undefined,
-          badgeTone: outputView?.tabBadgeTone,
-        },
-        {
-          key: "logs" as const,
-          label: canvasWorkbenchText(
-            canvasT,
-            "agentChat.canvasWorkbench.coding.tabs.logs",
-          ),
-          badge:
-            logView?.tabBadge?.trim() ||
-            sessionView?.tabBadge?.trim() ||
-            undefined,
-          badgeTone: logView?.tabBadgeTone || sessionView?.tabBadgeTone,
-        },
-      ];
-    }
-
-    return [
-      ...(shouldShowSessionTab
-        ? [
-            {
-              key: "session" as const,
-              label: sessionContext
-                ? workbenchCopy.tab.sessionMain
-                : sessionView?.tabLabel?.trim() ||
-                  workbenchCopy.tab.sessionMain,
-              badge: sessionContext
-                ? undefined
-                : sessionView?.tabBadge?.trim() || undefined,
-              badgeTone: sessionContext ? undefined : sessionView?.tabBadgeTone,
-            },
-          ]
-        : []),
-      {
-        key: "workspace" as const,
-        label: workspaceView?.tabLabel?.trim() || workbenchCopy.tab.files,
-        badge: workspaceBadge,
-        badgeTone: workspaceView?.tabBadgeTone,
-      },
-    ];
-  }, [
-    changeItemCount,
-    directoryCache,
-    documentContext,
-    documentDiffLines.length,
-    failedChangeItemCount,
-    isCodingWorkbench,
-    logView?.tabBadge,
-    logView?.tabBadgeTone,
-    outputView?.tabBadge,
-    outputView?.tabBadgeTone,
-    sessionView?.tabBadge,
-    sessionView?.tabBadgeTone,
-    sessionView?.tabLabel,
-    sessionContext,
-    shouldShowSessionTab,
-    canvasT,
-    workbenchCopy.tab.files,
-    workbenchCopy.tab.sessionMain,
-    workspacePanelRootPath,
-    workspaceView?.tabBadge,
-    workspaceView?.tabBadgeTone,
-    workspaceView?.tabLabel,
-  ]);
   const handleCopyPath = useCallback(async () => {
     if (!activeSelectionPath) {
       return;
@@ -1156,1227 +450,91 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     const filename = extractFileNameFromPath(
       activeSelectionPath || activePreviewContext?.title || "canvas.md",
     );
-    downloadText(filename, activeContent);
+    downloadCanvasWorkbenchText(filename, activeContent);
   }, [activeContent, activePreviewContext?.title, activeSelectionPath]);
 
-  const renderDocumentInspector = () => {
-    if (
-      !isDocumentTabKey(activeTab) ||
-      !artifactDocumentController?.document ||
-      !documentContext
-    ) {
-      return null;
-    }
-
-    const documentTitle =
-      artifactDocumentController.document.title?.trim() ||
-      documentContext.title;
-    const documentSummary =
-      artifactDocumentController.document.summary?.trim() ||
-      canvasWorkbenchText(
-        canvasT,
-        "agentChat.canvasWorkbench.documentInspector.summaryFallback",
-      );
-    const versionCount = artifactDocumentController.versionHistory.length || 0;
-    const sourceCount = artifactDocumentController.sourceLinks.length || 0;
-    const diffCount =
-      artifactDocumentController.currentVersionDiff?.changedBlocks.length || 0;
-    const currentVersionLabel = artifactDocumentController.currentVersion
-      ? `v${artifactDocumentController.currentVersion.versionNo}`
-      : null;
-
-    return (
-      <section className="border-b border-[color:var(--lime-surface-border)] bg-slate-50">
-        <button
-          type="button"
-          aria-label={
-            documentInspectorCollapsed
-              ? canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.canvasWorkbench.documentInspector.expand",
-                )
-              : canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.canvasWorkbench.documentInspector.collapse",
-                )
-          }
-          aria-expanded={!documentInspectorCollapsed}
-          aria-controls="canvas-workbench-document-inspector-panel"
-          onClick={() => setDocumentInspectorCollapsed((current) => !current)}
-          className={cn(
-            "flex w-full items-start justify-between gap-3 bg-white px-4 py-2.5 text-left transition-colors hover:bg-slate-50",
-            !documentInspectorCollapsed && "border-b border-slate-200/80",
-          )}
-        >
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium text-slate-500">
-              {canvasWorkbenchText(
-                canvasT,
-                "agentChat.canvasWorkbench.documentInspector.title",
-              )}
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <div className="truncate text-sm font-semibold text-slate-900">
-                {documentTitle}
-              </div>
-              {currentVersionLabel ? (
-                <span className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                  {currentVersionLabel}
-                </span>
-              ) : null}
-            </div>
-            <p className="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
-              {documentSummary}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
-              <span>
-                {canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.canvasWorkbench.documentInspector.sourceCount",
-                  { count: sourceCount },
-                )}
-              </span>
-              <span>
-                {canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.canvasWorkbench.documentInspector.versionCount",
-                  { count: versionCount },
-                )}
-              </span>
-              <span>
-                {canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.canvasWorkbench.documentInspector.diffCount",
-                  { count: diffCount },
-                )}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 pt-1 text-slate-500">
-            <span className="text-[11px] font-medium">
-              {documentInspectorCollapsed
-                ? canvasWorkbenchText(
-                    canvasT,
-                    "agentChat.canvasWorkbench.documentInspector.expandShort",
-                  )
-                : canvasWorkbenchText(
-                    canvasT,
-                    "agentChat.canvasWorkbench.documentInspector.collapseShort",
-                  )}
-            </span>
-            {documentInspectorCollapsed ? (
-              <ChevronRight className="h-4 w-4 shrink-0" />
-            ) : (
-              <ChevronDown className="h-4 w-4 shrink-0" />
-            )}
-          </div>
-        </button>
-
-        {documentInspectorCollapsed ? null : (
-          <ArtifactWorkbenchDocumentInspector
-            controller={artifactDocumentController}
-            testId="canvas-workbench-document-inspector"
-            containerClassName="min-h-0 overflow-hidden bg-slate-50"
-            tabsClassName="flex h-full min-h-0 flex-col p-3"
-          />
-        )}
-      </section>
-    );
-  };
-
-  const renderDirectoryNode = (path: string, depth = 0): ReactNode => {
-    const listing = directoryCache[path];
-    if (!listing) {
-      return null;
-    }
-
-    return sortWorkspaceListingEntries(
-      listing.entries,
-      path,
-      workspaceRoot,
-    ).map((entry) => {
-      const rowKey = entry.path;
-      const isDirectory = entry.isDir;
-      const isExpanded = Boolean(expandedDirectories[entry.path]);
-      const fileSelectionKey = `workspace-file:${entry.path}`;
-      const isSelected = documentSelectionKey === fileSelectionKey;
-
-      return (
-        <div key={rowKey}>
-          <button
-            type="button"
-            aria-label={
-              isDirectory
-                ? translateWorkbench(
-                    isExpanded
-                      ? "agentChat.canvasWorkbench.workspace.collapseDirectoryAria"
-                      : "agentChat.canvasWorkbench.workspace.expandDirectoryAria",
-                    { name: entry.name },
-                  )
-                : translateWorkbench(
-                    "agentChat.canvasWorkbench.workspace.selectFileAria",
-                    { name: entry.name },
-                  )
-            }
-            onClick={() => {
-              if (isDirectory) {
-                handleToggleDirectory(entry.path);
-                return;
-              }
-              void handleSelectWorkspaceFile(entry.path);
-            }}
-            className={cn(
-              "grid min-h-[34px] w-full grid-cols-[minmax(0,1fr)_94px_66px] items-center gap-3 border-b border-slate-100 px-3 py-1.5 text-left text-[13px] transition-colors",
-              isSelected
-                ? "bg-sky-50 text-slate-950"
-                : "text-slate-600 hover:bg-sky-50/70 hover:text-slate-900",
-            )}
-            title={entry.name}
-          >
-            <span
-              className="flex min-w-0 items-center gap-2"
-              style={{ paddingLeft: `${depth * 14}px` }}
-            >
-              {isDirectory ? (
-                isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                )
-              ) : (
-                <span className="w-3.5 shrink-0" />
-              )}
-              {isDirectory ? (
-                isExpanded ? (
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                ) : (
-                  <Folder className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                )
-              ) : entry.name.match(
-                  /\.(ts|tsx|js|jsx|rs|json|yml|yaml|toml)$/i,
-                ) ? (
-                <FileCode2 className="h-3.5 w-3.5 shrink-0 text-sky-600" />
-              ) : (
-                <FileText className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-              )}
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {entry.name}
-              </span>
-              {loadingDirectories[entry.path] ? (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-              ) : null}
-            </span>
-            <span className="truncate text-[12px] text-slate-500">
-              {formatEntryModifiedTime(entry.modifiedAt, locale)}
-            </span>
-            <span className="truncate text-right text-[12px] text-slate-500">
-              {entry.isDir ? "-" : formatFileSize(entry.size, "-")}
-            </span>
-          </button>
-          {isDirectory && isExpanded
-            ? renderDirectoryNode(entry.path, depth + 1)
-            : null}
-        </div>
-      );
-    });
-  };
-
-  const renderHeaderActionButton = ({
-    label,
-    onClick,
-    disabled,
-    icon,
-  }: {
-    label: string;
-    onClick: () => void;
-    disabled?: boolean;
-    icon: ReactNode;
-  }) =>
-    disabled ? null : (
-      <button
-        type="button"
-        aria-label={label}
-        title={label}
-        onClick={onClick}
-        className={cn(
-          "inline-flex h-8 w-8 items-center justify-center rounded-[10px] border text-[color:var(--lime-text-muted)] transition-colors",
-          WORKBENCH_GHOST_BUTTON_CLASSNAME,
-        )}
-      >
-        {icon}
-      </button>
-    );
-
-  const renderPreviewToolbarButton = ({
-    label,
-    onClick,
-    disabled,
-    icon,
-  }: {
-    label: string;
-    onClick: () => void;
-    disabled?: boolean;
-    icon: ReactNode;
-  }) => (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border text-slate-500 transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-        WORKBENCH_GHOST_BUTTON_CLASSNAME,
-      )}
-    >
-      {icon}
-    </button>
-  );
-
-  const renderTopTab = ({
-    key,
-    label,
-    badge,
-    badgeTone,
-    closable = false,
-  }: {
-    key: CanvasWorkbenchTab;
-    label: string;
-    badge?: string;
-    badgeTone?: "slate" | "sky" | "rose";
-    closable?: boolean;
-  }) => {
-    const active = activeTab === key;
-    const visibleBadge = key === "workspace" ? undefined : badge;
-    const badgeClassName =
-      badgeTone === "rose"
-        ? "bg-rose-50 text-rose-700"
-        : badgeTone === "sky"
-          ? "bg-sky-50 text-sky-700"
-          : "bg-slate-100 text-slate-600";
-    const leading =
-      key === "preview" ? (
-        <Monitor className="h-3.5 w-3.5 shrink-0" />
-      ) : key === "changes" ? (
-        <GitCompare className="h-3.5 w-3.5 shrink-0" />
-      ) : key === "outputs" ? (
-        <TerminalSquare className="h-3.5 w-3.5 shrink-0" />
-      ) : key === "logs" ? (
-        <ListChecks className="h-3.5 w-3.5 shrink-0" />
-      ) : key === "session" ? (
-        <span className="h-2 w-2 rounded-full bg-slate-400" />
-      ) : key === "workspace" ? (
-        <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-      ) : label.match(/\.(ts|tsx|js|jsx|rs|json|yml|yaml|toml)$/i) ? (
-        <FileCode2 className="h-3.5 w-3.5 shrink-0" />
-      ) : (
-        <FileText className="h-3.5 w-3.5 shrink-0" />
-      );
-
-    return (
-      <button
-        key={key}
-        type="button"
-        aria-label={translateWorkbench(
-          "agentChat.canvasWorkbench.tabs.switchAria",
-          { label },
-        )}
-        data-canvas-tab-key={key}
-        role="tab"
-        aria-selected={active}
-        onClick={() => setActiveTab(key)}
-        className={cn(
-          "inline-flex h-9 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-[13px] font-medium transition-colors",
-          active
-            ? "border-[color:var(--lime-brand)] bg-transparent text-slate-950"
-            : "border-transparent bg-transparent text-slate-600 hover:bg-[color:var(--lime-surface-soft)] hover:text-slate-900",
-        )}
-      >
-        <span className={cn(active ? "text-slate-500" : "text-slate-400")}>
-          {leading}
-        </span>
-        <span className="truncate">{label}</span>
-        {visibleBadge ? (
-          <span
-            className={cn(
-              "rounded-[5px] px-1.5 py-0.5 text-[10px] font-semibold",
-              badgeClassName,
-            )}
-          >
-            {visibleBadge}
-          </span>
-        ) : null}
-        {closable && isDocumentTabKey(key) ? (
-          <span
-            role="button"
-            aria-label={translateWorkbench(
-              "agentChat.canvasWorkbench.tabs.closeFileAria",
-              { label },
-            )}
-            onClick={(event) => {
-              event.stopPropagation();
-              handleCloseDocumentTab(key);
-            }}
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-          >
-            <X className="h-3 w-3" />
-          </span>
-        ) : null}
-      </button>
-    );
-  };
-
-  const renderWorkspacePanel = () => {
-    if (workspaceUnavailable) {
-      return (
-        <div data-testid="canvas-workbench-panel-workspace" className="p-3">
-          <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-            {workspaceView?.panelCopy?.unavailableText ||
-              translateWorkbench(
-                "agentChat.canvasWorkbench.workspace.unavailable",
-              )}
-          </div>
-        </div>
-      );
-    }
-
-    if (!workspacePanelRootPath?.trim()) {
-      return (
-        <div data-testid="canvas-workbench-panel-workspace" className="p-3">
-          <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-            {workspaceView?.panelCopy?.emptyText ||
-              translateWorkbench("agentChat.canvasWorkbench.workspace.empty")}
-          </div>
-        </div>
-      );
-    }
-
-    const rootListing = directoryCache[workspacePanelRootPath];
-    const workspacePanelEyebrow =
-      workspacePanelRootPath !== workspaceRoot
-        ? translateWorkbench("agentChat.canvasWorkbench.workspace.resultDir")
-        : null;
-
-    return (
-      <section
-        data-testid="canvas-workbench-panel-workspace"
-        className="flex h-full min-h-0 flex-col bg-white"
-      >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex h-11 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[7px] border border-slate-200 bg-white px-2.5 py-1.5">
-              <FolderOpen className="h-4 w-4 shrink-0 text-slate-400" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-medium text-slate-900">
-                  {workspaceView?.panelCopy?.sectionEyebrow ||
-                    workspacePanelEyebrow ||
-                    translateWorkbench(
-                      "agentChat.canvasWorkbench.workspace.projectDir",
-                    )}
-                </div>
-              </div>
-              <div
-                className="min-w-0 flex-1 truncate text-right text-[12px] text-slate-500"
-                title={workspacePanelDisplayPath || workspacePanelRootPath}
-              >
-                {workspacePanelDisplayPath || workspacePanelRootPath}
-              </div>
-            </div>
-            <button
-              type="button"
-              aria-label={canvasWorkbenchText(
-                canvasT,
-                "agentChat.canvasWorkbench.workspace.refreshTree",
-              )}
-              onClick={() =>
-                void refreshDirectorySubtree(workspacePanelRootPath)
-              }
-              className={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border transition-colors",
-                WORKBENCH_GHOST_BUTTON_CLASSNAME,
-              )}
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
-          </div>
-          {rootListing ? (
-            <div className="grid h-8 grid-cols-[minmax(0,1fr)_94px_66px] items-center gap-3 border-b border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-500">
-              <span>
-                {canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.fileManager.column.name",
-                )}
-              </span>
-              <span>
-                {canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.fileManager.column.modified",
-                )}
-              </span>
-              <span className="text-right">
-                {canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.fileManager.column.size",
-                )}
-              </span>
-            </div>
-          ) : null}
-          <div className="min-h-0 flex-1 overflow-auto">
-            {loadingDirectories[workspacePanelRootPath] && !rootListing ? (
-              <div className="flex items-center gap-2 px-2 py-4 text-sm text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {workspaceView?.panelCopy?.loadingText ||
-                  translateWorkbench(
-                    "agentChat.canvasWorkbench.workspace.loading",
-                  )}
-              </div>
-            ) : rootListing ? (
-              renderDirectoryNode(workspacePanelRootPath)
-            ) : (
-              <div className="px-2 py-4 text-sm text-slate-500">
-                {workspaceView?.panelCopy?.emptyDirectoryText ||
-                  translateWorkbench(
-                    "agentChat.canvasWorkbench.workspace.emptyDirectory",
-                  )}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-    );
-  };
-
-  const renderSessionPanel = () => {
-    if (sessionContext) {
-      return (
-        <div
-          data-testid="canvas-workbench-panel-session"
-          className="h-full min-h-0 bg-white"
-        >
-          <div
-            data-testid="canvas-workbench-preview-region"
-            className="h-full min-h-0 overflow-hidden bg-white"
-          >
-            {renderPreview(sessionContext.target)}
-          </div>
-        </div>
-      );
-    }
-
-    if (sessionView?.renderPanel) {
-      return (
-        <div
-          data-testid="canvas-workbench-panel-session"
-          className="h-full min-h-0 overflow-auto bg-white p-3"
-        >
-          {sessionView.renderPanel()}
-        </div>
-      );
-    }
-
-    return (
-      <div data-testid="canvas-workbench-panel-session" className="p-3">
-        <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-          {canvasWorkbenchText(
-            canvasT,
-            "agentChat.canvasWorkbench.session.empty",
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderPreviewPanel = () => {
-    if (!documentContext) {
-      return (
-        <div data-testid="canvas-workbench-panel-preview" className="p-5">
-          <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-            {canvasWorkbenchText(
-              canvasT,
-              "agentChat.canvasWorkbench.coding.preview.empty",
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    const previewAddress =
-      documentContext.selectionPath ||
-      documentContext.subtitle ||
-      resolvePreviewPath(documentContext.target) ||
-      documentContext.title;
-    const isStaticHtmlPreview = isHtmlPreviewContext(documentContext);
-    const fullscreenLabel = canvasWorkbenchText(
-      canvasT,
-      isPreviewFullscreen
-        ? "agentChat.canvasWorkbench.coding.preview.toolbar.exitFullscreen"
-        : "agentChat.canvasWorkbench.coding.preview.toolbar.enterFullscreen",
-    );
-
-    return (
-      <section
-        data-testid="canvas-workbench-panel-preview"
-        data-preview-fullscreen={isPreviewFullscreen ? "true" : "false"}
-        className={cn(
-          "flex h-full min-h-0 flex-col bg-white",
-          isPreviewFullscreen
-            ? "fixed inset-3 z-[70] rounded-[12px] border border-slate-200 bg-white shadow-lg shadow-slate-950/15"
-            : null,
-        )}
-      >
-        <div
-          data-testid="canvas-workbench-preview-toolbar"
-          className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3"
-        >
-          <div className="flex shrink-0 items-center gap-1">
-            {renderPreviewToolbarButton({
-              label: canvasWorkbenchText(
-                canvasT,
-                "agentChat.canvasWorkbench.coding.preview.toolbar.refresh",
-              ),
-              onClick: () => setPreviewRefreshNonce((value) => value + 1),
-              icon: <RefreshCw className="h-4 w-4" />,
-            })}
-          </div>
-          <div
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-[9px] border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600"
-            aria-label={canvasWorkbenchText(
-              canvasT,
-              "agentChat.canvasWorkbench.coding.preview.toolbar.address",
-            )}
-            title={previewAddress}
-          >
-            <Monitor className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span className="min-w-0 flex-1 truncate font-mono">
-              {previewAddress}
-            </span>
-          </div>
-          <span
-            className={cn(
-              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[9px] border px-2.5 text-xs font-medium",
-              isStaticHtmlPreview
-                ? "border-sky-200 bg-sky-50 text-sky-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700",
-            )}
-            title={
-              isStaticHtmlPreview
-                ? canvasWorkbenchText(
-                    canvasT,
-                    "agentChat.canvasWorkbench.coding.preview.staticHtmlHint",
-                  )
-                : undefined
-            }
-          >
-            <span
-              className={cn(
-                "h-2 w-2 rounded-full",
-                isStaticHtmlPreview ? "bg-sky-500" : "bg-emerald-500",
-              )}
-            />
-            {canvasWorkbenchText(
-              canvasT,
-              isStaticHtmlPreview
-                ? "agentChat.canvasWorkbench.coding.preview.toolbar.staticHtml"
-                : "agentChat.canvasWorkbench.coding.preview.toolbar.ready",
-            )}
-          </span>
-          <div className="flex shrink-0 items-center gap-1">
-            {renderPreviewToolbarButton({
-              label: fullscreenLabel,
-              onClick: () => setIsPreviewFullscreen((value) => !value),
-              icon: isPreviewFullscreen ? (
-                <Minimize2 className="h-4 w-4" />
-              ) : (
-                <Maximize2 className="h-4 w-4" />
-              ),
-            })}
-          </div>
-        </div>
-        <div
-          key={`preview:${documentSelectionKey || previewAddress}:${previewRefreshNonce}`}
-          data-testid="canvas-workbench-preview-region"
-          className="min-h-0 flex-1 overflow-hidden bg-white"
-        >
-          {renderPreview(documentContext.target, {
-            onArtifactDocumentControllerChange:
-              handleArtifactDocumentControllerChange,
-          })}
-        </div>
-      </section>
-    );
-  };
-
-  const renderChangesPanel = () => {
-    if (hasChangeQueue) {
-      const selectedChangeItem = activeSelectionChangeItem || changeItems[0];
-      const selectedDiffLines =
-        selectedChangeItem?.previousContent != null &&
-        selectedChangeItem.currentContent != null
-          ? buildCanvasWorkbenchDiff(
-              selectedChangeItem.previousContent,
-              selectedChangeItem.currentContent,
-            )
-          : [];
-      const latestCheckpointPath =
-        changeView?.latestCheckpointPath ||
-        selectedChangeItem?.checkpointPath ||
-        null;
-
-      return (
-        <section
-          data-testid="canvas-workbench-panel-changes"
-          className="grid h-full min-h-0 gap-4 p-4 lg:grid-cols-[minmax(260px,0.36fr)_minmax(0,1fr)]"
-        >
-          <div
-            className={cn(
-              WORKBENCH_PANEL_CLASSNAME,
-              "flex min-h-0 flex-col overflow-hidden",
-            )}
-          >
-            <div className="border-b border-slate-200/80 px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs font-medium text-slate-500">
-                    {canvasWorkbenchText(
-                      canvasT,
-                      "agentChat.canvasWorkbench.coding.changes.queueTitle",
-                    )}
-                  </div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">
-                    {canvasWorkbenchText(
-                      canvasT,
-                      "agentChat.canvasWorkbench.coding.changes.queueSummary",
-                      {
-                        count: changeItemCount,
-                        pending: pendingChangeItemCount,
-                      },
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {changeView?.checkpointCount ? (
-                    <span
-                      className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
-                      data-testid="canvas-workbench-changes-checkpoints"
-                    >
-                      <ListChecks className="h-3.5 w-3.5" />
-                      {canvasWorkbenchText(
-                        canvasT,
-                        "agentChat.canvasWorkbench.coding.changes.checkpointBadge",
-                        { count: changeView.checkpointCount },
-                      )}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto p-3">
-              <div className="space-y-2">
-                {changeItems.map((item) => {
-                  const active = item.id === selectedChangeItem?.id;
-                  const displayName = resolveChangeItemDisplayName(item);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={cn(
-                        "w-full rounded-[10px] border px-3 py-2.5 text-left transition-colors",
-                        active
-                          ? "border-slate-300 bg-white"
-                          : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white",
-                      )}
-                      onClick={() => {
-                        if (item.absolutePath || item.path) {
-                          void changeView?.onOpenFile?.(
-                            item.absolutePath || item.path,
-                          );
-                        }
-                      }}
-                      data-testid="canvas-workbench-change-item"
-                      data-change-id={item.id}
-                    >
-                      <div className="flex items-start gap-2">
-                        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-slate-900">
-                            {displayName}
-                          </div>
-                          <div className="mt-1 truncate text-xs text-slate-500">
-                            {item.path}
-                          </div>
-                        </div>
-                        <span
-                          className={cn(
-                            "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                            resolveChangeStatusClassName(item),
-                          )}
-                        >
-                          {resolveChangeStatusIcon(item)}
-                          {canvasWorkbenchText(
-                            canvasT,
-                            resolveChangeStatusCopyKey(item),
-                          )}
-                        </span>
-                      </div>
-                      {item.preview ? (
-                        <div className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">
-                          {item.preview}
-                        </div>
-                      ) : null}
-                      {item.source ? (
-                        <div className="mt-2 text-[11px] text-slate-400">
-                          {canvasWorkbenchText(
-                            canvasT,
-                            "agentChat.canvasWorkbench.coding.changes.source",
-                            { source: item.source },
-                          )}
-                        </div>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex min-h-0 flex-col gap-3">
-            {selectedChangeItem ? (
-              <div className={cn(WORKBENCH_PANEL_CLASSNAME, "px-4 py-3")}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-slate-500">
-                      {canvasWorkbenchText(
-                        canvasT,
-                        "agentChat.canvasWorkbench.coding.changes.detailTitle",
-                      )}
-                    </div>
-                    <div className="mt-1 truncate text-sm font-semibold text-slate-900">
-                      {resolveChangeItemDisplayName(selectedChangeItem)}
-                    </div>
-                    <div className="mt-1 truncate text-xs text-slate-500">
-                      {selectedChangeItem.path}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {latestCheckpointPath ? (
-                      <Badge variant="outline">
-                        {canvasWorkbenchText(
-                          canvasT,
-                          "agentChat.canvasWorkbench.coding.changes.latestCheckpoint",
-                          {
-                            path:
-                              selectedChangeItem.checkpointLabel ||
-                              latestCheckpointPath,
-                          },
-                        )}
-                      </Badge>
-                    ) : null}
-                    <Badge variant="outline">
-                      {selectedDiffLines.length > 0
-                        ? canvasWorkbenchText(
-                            canvasT,
-                            "agentChat.canvasWorkbench.coding.changes.badge",
-                            { count: selectedDiffLines.length },
-                          )
-                        : canvasWorkbenchText(
-                            canvasT,
-                            "agentChat.canvasWorkbench.coding.changes.noDiffBadge",
-                          )}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {selectedDiffLines.length > 0 ? (
-                renderDiffState(selectedDiffLines)
-              ) : selectedChangeItem?.preview ? (
-                <div
-                  className={cn(
-                    WORKBENCH_PANEL_CLASSNAME,
-                    "h-full overflow-auto p-4",
-                  )}
-                >
-                  <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-6 text-slate-700">
-                    {selectedChangeItem.preview}
-                  </pre>
-                </div>
-              ) : (
-                <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-                  {canvasWorkbenchText(
-                    canvasT,
-                    "agentChat.canvasWorkbench.coding.changes.noDiff",
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-      );
-    }
-
-    if (!documentContext) {
-      return (
-        <div data-testid="canvas-workbench-panel-changes" className="p-5">
-          <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-            {canvasWorkbenchText(
-              canvasT,
-              "agentChat.canvasWorkbench.coding.changes.empty",
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    if (documentContext.previousContent === null) {
-      return (
-        <div data-testid="canvas-workbench-panel-changes" className="p-5">
-          <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-            {canvasWorkbenchText(
-              canvasT,
-              "agentChat.canvasWorkbench.coding.changes.noBaseline",
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <section
-        data-testid="canvas-workbench-panel-changes"
-        className="flex h-full min-h-0 flex-col gap-3 p-4"
-      >
-        <div className={cn(WORKBENCH_PANEL_CLASSNAME, "px-4 py-3")}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-slate-500">
-                {canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.canvasWorkbench.coding.changes.title",
-                )}
-              </div>
-              <div className="mt-1 truncate text-sm font-semibold text-slate-900">
-                {documentContext.title}
-              </div>
-              {documentContext.subtitle || documentContext.selectionPath ? (
-                <div className="mt-1 truncate text-xs text-slate-500">
-                  {documentContext.subtitle || documentContext.selectionPath}
-                </div>
-              ) : null}
-            </div>
-            <Badge variant="outline">
-              {canvasWorkbenchText(
-                canvasT,
-                "agentChat.canvasWorkbench.coding.changes.badge",
-                {
-                  count: documentDiffLines.length,
-                },
-              )}
-            </Badge>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-hidden">
-          {renderDiffState(documentDiffLines)}
-        </div>
-      </section>
-    );
-  };
-
-  const renderUtilityPanel = (
-    view: CanvasWorkbenchUtilityView | null | undefined,
-    fallback: {
-      testId: string;
-      textKey: string;
-    },
-  ) => {
-    if (view?.enabled !== false && view?.renderPanel) {
-      return (
-        <div
-          data-testid={fallback.testId}
-          className="flex h-full min-h-0 flex-col overflow-hidden bg-white"
-        >
-          {view.leadContent ? (
-            <div
-              data-testid={`${fallback.testId}-lead`}
-              className="border-b border-slate-200 px-3 py-2"
-            >
-              {view.leadContent}
-            </div>
-          ) : null}
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {view.renderPanel()}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div data-testid={fallback.testId} className="p-5">
-        <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-          {canvasWorkbenchText(canvasT, fallback.textKey)}
-        </div>
-      </div>
-    );
-  };
-
-  const renderDocumentPanel = () => {
-    if (!documentContext) {
-      return (
-        <div data-testid="canvas-workbench-panel-document" className="p-5">
-          <div className={WORKBENCH_MUTED_PANEL_CLASSNAME}>
-            {canvasWorkbenchText(
-              canvasT,
-              "agentChat.canvasWorkbench.document.empty",
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    const canShowDiff = documentContext.previousContent !== null;
-    const showDiff = canShowDiff && documentPreviewMode === "changes";
-
-    return (
-      <section
-        data-testid="canvas-workbench-panel-document"
-        className="flex h-full min-h-0 flex-col bg-white"
-      >
-        <div className="flex h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[color:var(--lime-surface-border)] px-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="truncate text-[13px] font-semibold text-slate-950">
-                  {documentContext.title}
-                </div>
-                {documentContext.badgeLabel ? (
-                  <Badge variant="outline">{documentContext.badgeLabel}</Badge>
-                ) : null}
-                <span className="shrink-0 rounded-[6px] border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-                  {documentContext.kindLabel}
-                </span>
-              </div>
-              {documentContext.subtitle ? (
-                <div className="truncate text-[11px] text-slate-500">
-                  {documentContext.subtitle}
-                </div>
-              ) : documentContext.selectionPath ? (
-                <div className="truncate text-[11px] text-slate-500">
-                  {documentContext.selectionPath}
-                </div>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                aria-label={canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.canvasWorkbench.document.view.previewAria",
-                )}
-                onClick={() => setDocumentPreviewMode("preview")}
-                className={cn(
-                  "h-8 rounded-[10px] border px-3 text-xs transition-colors",
-                  documentPreviewMode === "preview"
-                    ? WORKBENCH_ACTIVE_BUTTON_CLASSNAME
-                    : WORKBENCH_BUTTON_CLASSNAME,
-                )}
-              >
-                {canvasWorkbenchText(
-                  canvasT,
-                  "agentChat.canvasWorkbench.document.view.preview",
-                )}
-              </button>
-              {canShowDiff ? (
-                <button
-                  type="button"
-                  aria-label={canvasWorkbenchText(
-                    canvasT,
-                    "agentChat.canvasWorkbench.document.view.changesAria",
-                  )}
-                  onClick={() => setDocumentPreviewMode("changes")}
-                  className={cn(
-                    "h-8 rounded-[10px] border px-3 text-xs transition-colors",
-                    documentPreviewMode === "changes"
-                      ? WORKBENCH_ACTIVE_BUTTON_CLASSNAME
-                      : WORKBENCH_BUTTON_CLASSNAME,
-                  )}
-                >
-                  {canvasWorkbenchText(
-                    canvasT,
-                    "agentChat.canvasWorkbench.document.view.changes",
-                  )}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        {renderDocumentInspector()}
-
-        <div className="min-h-0 flex-1">
-          {showDiff ? (
-            renderDiffState(documentDiffLines)
-          ) : (
-            <div
-              data-testid="canvas-workbench-preview-region"
-              className="h-full min-h-0 overflow-hidden bg-white"
-            >
-              {renderPreview(documentContext.target, {
-                onArtifactDocumentControllerChange:
-                  handleArtifactDocumentControllerChange,
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-    );
-  };
+  const activeToolTabKind = resolveToolTabKind(activeTab);
+  const topActiveTab: CanvasWorkbenchTab =
+    primaryTabs.some((tab) => tab.key === activeTab) || activeTab === "changes"
+      ? activeTab
+      : hasReviewSurface
+        ? "changes"
+        : primaryTabs[0]?.key || activeTab;
 
   return (
-    <section
-      ref={shellRef}
-      data-testid="canvas-workbench-shell"
-      data-layout-mode={isStackedLayout ? "stacked" : "split"}
-      className={cn(
-        "lime-workbench-theme-scope",
-        "lime-workbench-surface-scope",
-        WORKBENCH_SHELL_CLASSNAME,
-        "relative flex h-full min-h-0 flex-col overflow-hidden",
-      )}
-    >
-      <header className="border-b border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2">
-        <div
-          data-testid="canvas-workbench-header-row"
-          className="flex min-w-0 items-center justify-between gap-2"
-        >
-          <div className="min-w-0 flex-1 overflow-hidden pr-1">
-            <div
-              role="tablist"
-              className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-              {primaryTabs.map((tab) =>
-                renderTopTab({
-                  key: tab.key,
-                  label: tab.label,
-                  badge: tab.badge,
-                  badgeTone: tab.badgeTone,
-                }),
-              )}
-
-              {!isCodingWorkbench && documentTabs.length > 0 ? (
-                <div className="mx-1 h-6 w-px shrink-0 bg-[color:var(--lime-surface-border-strong)]" />
-              ) : null}
-
-              {!isCodingWorkbench
-                ? documentTabs.map((tab) =>
-                    renderTopTab({
-                      key: tab.key,
-                      label: tab.label,
-                      badge: tab.badgeLabel || tab.kindLabel,
-                      closable: true,
-                    }),
-                  )
-                : null}
-            </div>
-          </div>
-
-          {headerActionsVisible || onClose ? (
-            <div className="flex shrink-0 items-center justify-end gap-1">
-              {headerActionsVisible ? (
-                <div
-                  className="flex shrink-0 items-center justify-end gap-1"
-                  data-testid="canvas-workbench-header-actions"
-                >
-                  {renderHeaderActionButton({
-                    label: translateWorkbench(
-                      "agentChat.canvasWorkbench.actions.copyPath",
-                    ),
-                    disabled: !activeSelectionPath,
-                    onClick: () => {
-                      void handleCopyPath();
-                    },
-                    icon: <Copy className="h-4 w-4" />,
-                  })}
-                  {renderHeaderActionButton({
-                    label: translateWorkbench(
-                      "agentChat.canvasWorkbench.actions.revealPath",
-                    ),
-                    disabled: !activeSelectionPath,
-                    onClick: () => {
-                      if (activeSelectionPath) {
-                        void onRevealPath(activeSelectionPath);
-                      }
-                    },
-                    icon: <FolderOpen className="h-4 w-4" />,
-                  })}
-                  {renderHeaderActionButton({
-                    label: translateWorkbench(
-                      "agentChat.canvasWorkbench.actions.openPath",
-                    ),
-                    disabled: !activeSelectionPath,
-                    onClick: () => {
-                      if (activeSelectionPath) {
-                        void onOpenPath(activeSelectionPath);
-                      }
-                    },
-                    icon: <ExternalLink className="h-4 w-4" />,
-                  })}
-                  {renderHeaderActionButton({
-                    label: translateWorkbench(
-                      "agentChat.canvasWorkbench.actions.download",
-                    ),
-                    disabled: !activeContent.trim(),
-                    onClick: handleDownload,
-                    icon: <Download className="h-4 w-4" />,
-                  })}
-                </div>
-              ) : null}
-
-              {onClose ? (
-                <button
-                  type="button"
-                  aria-label={closeWorkbenchLabel}
-                  title={closeWorkbenchLabel}
-                  onClick={onClose}
-                  className={cn(
-                    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border transition-colors",
-                    WORKBENCH_GHOST_BUTTON_CLASSNAME,
-                  )}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </header>
-
-      <div
-        data-testid="canvas-workbench-layout"
-        data-panel-placement="canvas"
-        className="min-h-0 flex-1 overflow-hidden bg-[image:var(--lime-stage-surface-soft)]"
-      >
-        {activeTab === "preview"
-          ? renderPreviewPanel()
-          : activeTab === "workspace"
-            ? renderWorkspacePanel()
-            : activeTab === "changes"
-              ? renderChangesPanel()
-              : activeTab === "outputs"
-                ? renderUtilityPanel(outputView, {
-                    testId: "canvas-workbench-panel-outputs",
-                    textKey: "agentChat.canvasWorkbench.coding.outputs.empty",
-                  })
-                : activeTab === "logs"
-                  ? renderUtilityPanel(logView || sessionView, {
-                      testId: "canvas-workbench-panel-logs",
-                      textKey: "agentChat.canvasWorkbench.coding.logs.empty",
-                    })
-                  : activeTab === "session"
-                    ? renderSessionPanel()
-                    : renderDocumentPanel()}
-      </div>
-    </section>
+    <CanvasWorkbenchShell
+      shellRef={handleShellRef}
+      layoutMode={isStackedLayout ? "stacked" : "split"}
+      activeTab={topActiveTab}
+      contentTab={activeTab}
+      tabs={primaryTabs}
+      newTabActions={newTabActions}
+      topRightTools={topRightTools}
+      detailHeaderVisible={
+        activeTab !== "changes" &&
+        activeToolTabKind !== "terminal" &&
+        activeToolTabKind !== "browser" &&
+        (activeToolTabKind !== "project-files" || Boolean(activePreviewContext))
+      }
+      translateWorkbench={translateWorkbench}
+      onSelectTab={setActiveTab}
+      onNewToolTab={openNewToolTab}
+      onCloseTab={closeToolTab}
+      onClose={onClose}
+      closeWorkbenchLabel={closeWorkbenchLabel}
+      headerActionsVisible={headerActionsVisible}
+      activeSelectionPath={activeSelectionPath}
+      activeContent={activeContent}
+      onCopyPath={() => {
+        void handleCopyPath();
+      }}
+      onOpenPath={(path) => {
+        void onOpenPath(path);
+      }}
+      onRevealPath={(path) => {
+        void onRevealPath(path);
+      }}
+      onDownload={handleDownload}
+      documentContext={documentContext}
+      documentSelectionKey={documentSelectionKey}
+      documentDiffLines={documentDiffLines}
+      previewModeState={previewModeState}
+      changeView={resolvedChangeView}
+      changesFilesPanelOpen={changesFilesPanelOpen}
+      browserInitialUrl={resolveBrowserInitialUrl(activeTab)}
+      onBrowserNavigate={(url) => {
+        updateBrowserTabUrl(activeTab, url);
+      }}
+      loadFilePreview={loadFilePreview}
+      workspaceUnavailable={workspaceUnavailable}
+      workspaceRoot={workspaceRoot}
+      workspacePanelRootPath={workspacePanelRootPath}
+      workspacePanelDisplayPath={workspacePanelDisplayPath}
+      projectFilesPreviewMode={projectFilesPreviewMode}
+      directoryCache={directoryCache}
+      expandedDirectories={expandedDirectories}
+      loadingDirectories={loadingDirectories}
+      workspacePanelCopy={workspaceView?.panelCopy}
+      locale={locale}
+      outputView={outputView}
+      logView={logView}
+      sessionView={sessionView}
+      shellClassName={WORKBENCH_SHELL_CLASSNAME}
+      panelClassName={WORKBENCH_PANEL_CLASSNAME}
+      mutedPanelClassName={WORKBENCH_MUTED_PANEL_CLASSNAME}
+      ghostButtonClassName={WORKBENCH_GHOST_BUTTON_CLASSNAME}
+      onToggleDirectory={toggleDirectory}
+      onSelectFile={(path) => {
+        void handleSelectWorkspaceFile(path);
+      }}
+      onRefreshDirectory={(path) => {
+        void refreshDirectorySubtree(path);
+      }}
+      onSelectPreviewMode={setActiveTab}
+      onSelectProjectFilesPreviewMode={setProjectFilesPreviewMode}
+      onToggleChangesFilesPanel={() =>
+        setChangesFilesPanelOpen((open) => !open)
+      }
+    />
   );
 });

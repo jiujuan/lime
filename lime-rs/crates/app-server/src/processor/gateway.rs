@@ -28,9 +28,10 @@ impl RequestProcessor {
     ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let params: GatewayChannelStartParams = parse_params(params)?;
+        let runtime = self.runtime_arc();
         let response = self
             .runtime
-            .start_gateway_channel(params)
+            .start_gateway_channel(params, runtime)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

@@ -1,5 +1,4 @@
 import { type AppServerClient } from "@/lib/api/appServer";
-import { type AgentRuntimeCommandInvoke } from "./transport";
 import type {
   AgentRuntimeListWorkspaceSkillBindingsRequest,
   AgentRuntimeToolInventory,
@@ -11,12 +10,10 @@ export type AgentRuntimeWorkspaceSkillBindingsAppServerClient = Pick<
   "request"
 >;
 export interface AgentRuntimeInventoryClientDeps {
-  invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeWorkspaceSkillBindingsAppServerClient;
 }
 export declare function createInventoryClient({
   appServerClient,
-  invokeCommand,
 }?: AgentRuntimeInventoryClientDeps): {
   getAgentRuntimeToolInventory: (
     request?: AgentRuntimeToolInventoryRequest,

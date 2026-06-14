@@ -44,12 +44,11 @@
 //! ```
 
 pub mod dao;
-pub mod executor;
 pub mod scheduler;
+mod task_context;
 pub mod types;
 
 pub use dao::SchedulerDao;
-pub use executor::{AgentExecutor, TaskExecutor};
 pub use scheduler::{AgentScheduler, SchedulerGovernanceConfig, SchedulerTrait};
 pub use types::{
     ScheduledTask, TaskFilter, TaskStatus, DEFAULT_TASK_COOLDOWN_SECS,

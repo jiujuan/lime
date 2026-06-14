@@ -120,9 +120,10 @@ impl RequestProcessor {
     ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let params: AutomationJobIdParams = parse_params(params)?;
+        let host = self.runtime_host_context();
         let response = self
             .runtime
-            .run_automation_job_now(params)
+            .run_automation_job_now(params, host)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

@@ -3,6 +3,10 @@
 //! 该模块沉淀“请求级工具策略（例如联网搜索）”与统一流式执行逻辑，
 //! 供 aster_agent_cmd、scheduler、gateway 等入口复用同一条执行主链。
 
+use crate::agent_tools::tool_orchestrator::{
+    execute_planned_tool_batch, rewrite_tool_terminal_event, PlannedToolExecution,
+    ToolExecutionBatchInput, ToolTerminalEventUpdate,
+};
 use crate::protocol::{
     build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus,
     AgentToolResult, TextDeltaBatchBoundary,
@@ -13,8 +17,7 @@ use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
 use aster::conversation::message::{Message, MessageContent, SystemNotificationType};
 use aster::providers::errors::ProviderError;
 use aster::session::SessionManager;
-use aster::tools::ToolContext;
-use futures::{stream, StreamExt};
+use futures::StreamExt;
 use lime_core::env_compat;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -273,14 +276,6 @@ impl PreflightToolExecution {
             coverage_summary: None,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-struct PlannedWebSearchQuery {
-    index: usize,
-    query: String,
-    tool_id: String,
-    arguments: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1727,11 +1722,12 @@ pub async fn execute_web_search_preflight_if_needed(
         .enumerate()
         .map(|(index, query)| {
             let params = serde_json::json!({ "query": query });
-            PlannedWebSearchQuery {
+            PreflightSearchPlan {
                 index,
                 query,
                 tool_id: format!("preflight-websearch-{}-{}", index + 1, Uuid::new_v4()),
                 arguments: serde_json::to_string(&params).ok(),
+                params,
             }
         })
         .collect::<Vec<_>>();
@@ -1739,71 +1735,64 @@ pub async fn execute_web_search_preflight_if_needed(
         .map(Path::to_path_buf)
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_default();
-    let mut events = Vec::new();
     for planned in &planned_queries {
         tracker.record_tool_start(policy, &planned.tool_id, &preflight_tool_name);
-        events.push(RuntimeAgentEvent::ToolStart {
-            tool_name: preflight_tool_name.clone(),
-            tool_id: planned.tool_id.clone(),
-            arguments: planned.arguments.clone(),
-        });
     }
 
-    #[allow(clippy::redundant_iter_cloned)]
-    let mut outcomes = stream::iter(planned_queries.iter().cloned().map(|planned| {
-        let registry_arc = registry_arc.clone();
-        let preflight_tool_name = preflight_tool_name.clone();
-        let session_id = session_id.to_string();
-        let working_directory = working_directory.clone();
-        let cancel_token = cancel_token.clone();
-        let turn_context = turn_context.clone();
-        async move {
-            let query = planned.query.clone();
-            let params = serde_json::json!({ "query": query });
-            let mut context = ToolContext::new(working_directory).with_session_id(session_id);
-            if let Some(token) = cancel_token {
-                context = context.with_cancellation_token(token);
-            }
-            let result = aster::session_context::with_turn_context(turn_context, async {
-                let registry = registry_arc.read().await;
-                registry
-                    .execute(&preflight_tool_name, params, &context, None)
-                    .await
+    let execution_batch = execute_planned_tool_batch(
+        ToolExecutionBatchInput {
+            registry: registry_arc,
+            session_id: session_id.to_string(),
+            working_directory,
+            cancel_token,
+            turn_context,
+            persisted_execution_policy: None,
+            parallelism: NEWS_PREFLIGHT_QUERY_PARALLELISM,
+            auto_mode: false,
+            bypass_restrictions: false,
+        },
+        planned_queries
+            .iter()
+            .map(|planned| PlannedToolExecution {
+                tool_name: preflight_tool_name.clone(),
+                tool_id: planned.tool_id.clone(),
+                arguments: planned.arguments.clone(),
+                params: planned.params.clone(),
             })
-            .await;
-            match result {
-                Ok(tool_result) => {
-                    let output = tool_result.output.unwrap_or_default();
-                    let mut outcome = PreflightSearchOutcome {
-                        index: planned.index,
-                        query: planned.query,
-                        tool_id: planned.tool_id,
-                        success: tool_result.success,
-                        output,
-                        error: tool_result.error,
-                    };
-                    if outcome.success && !preflight_search_outcome_has_usable_result(&outcome) {
-                        outcome.success = false;
-                        outcome.error = Some("WebSearch 未返回可用搜索结果链接".to_string());
-                    }
-                    outcome
-                }
-                Err(error) => PreflightSearchOutcome {
-                    index: planned.index,
-                    query: planned.query,
-                    tool_id: planned.tool_id,
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!("执行 WebSearch 预调用失败: {}", error)),
-                },
-            }
-        }
-    }))
-    .buffer_unordered(NEWS_PREFLIGHT_QUERY_PARALLELISM)
-    .collect::<Vec<_>>()
+            .collect(),
+    )
     .await;
+
+    let mut outcomes = planned_queries
+        .iter()
+        .zip(execution_batch.outcomes.iter())
+        .map(|(planned, outcome)| {
+            let mut preflight_outcome = PreflightSearchOutcome {
+                index: planned.index,
+                query: planned.query.clone(),
+                tool_id: outcome.tool_id.clone(),
+                success: outcome.success,
+                output: outcome.output.clone(),
+                error: outcome.error.clone().map(|error| {
+                    if error.starts_with("执行工具失败:") {
+                        error.replacen("执行工具失败:", "执行 WebSearch 预调用失败:", 1)
+                    } else {
+                        error
+                    }
+                }),
+            };
+            if preflight_outcome.success
+                && !preflight_search_outcome_has_usable_result(&preflight_outcome)
+            {
+                preflight_outcome.success = false;
+                preflight_outcome.error = Some("WebSearch 未返回可用搜索结果链接".to_string());
+            }
+            preflight_outcome
+        })
+        .collect::<Vec<_>>();
     outcomes.sort_by_key(|item| item.index);
 
+    let mut events = execution_batch.events;
     for outcome in &outcomes {
         tracker.record_tool_end(
             policy,
@@ -1811,16 +1800,16 @@ pub async fn execute_web_search_preflight_if_needed(
             outcome.success,
             outcome.error.as_deref(),
         );
-        events.push(RuntimeAgentEvent::ToolEnd {
-            tool_id: outcome.tool_id.clone(),
-            result: AgentToolResult {
+        rewrite_tool_terminal_event(
+            &mut events,
+            &ToolTerminalEventUpdate {
+                tool_id: outcome.tool_id.clone(),
                 success: outcome.success,
                 output: outcome.output.clone(),
                 error: outcome.error.clone(),
-                images: None,
                 metadata: None,
             },
-        });
+        );
     }
 
     let planned_query_texts = planned_queries
@@ -1854,6 +1843,15 @@ pub async fn execute_web_search_preflight_if_needed(
             coverage_summary,
         })
     }
+}
+
+#[derive(Debug, Clone)]
+struct PreflightSearchPlan {
+    index: usize,
+    query: String,
+    tool_id: String,
+    arguments: Option<String>,
+    params: Value,
 }
 
 /// 统一流式执行器：执行 preflight + reply 流，并复用统一的策略校验。
@@ -2366,7 +2364,7 @@ mod tests {
         MemorySearchResult, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
         TurnContextOverride, TurnStatus,
     };
-    use aster::tools::{PermissionCheckResult, Tool, ToolError, ToolResult};
+    use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
     use async_trait::async_trait;
     use std::collections::HashMap;
     use std::path::PathBuf;

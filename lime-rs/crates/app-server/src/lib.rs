@@ -2,10 +2,12 @@ mod agent_ui_event_schema;
 mod agent_ui_sequence_verifier;
 #[cfg(feature = "aster-backend")]
 mod aster_backend;
+mod automation_execution;
 mod backend_event;
 mod capability;
 mod external_backend;
 mod file_checkpoint;
+mod file_checkpoint_snapshot;
 mod gateway_tunnel;
 mod knowledge_builder_runtime;
 mod local_data_source;
@@ -119,21 +121,44 @@ pub use local_data_source::LocalAppDataSource;
 use processor::event_notification_jsonrpc;
 use processor::RequestProcessor;
 pub use runtime::ActionRespondRequest;
+pub use runtime::AgentAppDataSource;
 pub use runtime::AppDataSource;
 pub use runtime::ArtifactContentProvider;
 pub use runtime::ArtifactContentRequest;
+pub use runtime::AutomationManagementAppDataSource;
+pub use runtime::AutomationOverviewAppDataSource;
 pub use runtime::BasicEvidenceExportProvider;
 pub use runtime::CancelExecutionRequest;
+pub use runtime::ConnectAppDataSource;
+pub use runtime::DiagnosticsAppDataSource;
 pub use runtime::EvidenceExportProvider;
 pub use runtime::EvidencePackRequest;
 pub use runtime::ExecutionBackend;
 pub use runtime::ExecutionRequest;
+pub use runtime::FileCheckpointSnapshotReadRequest;
+pub use runtime::FileCheckpointSnapshotRecord;
+pub use runtime::FileCheckpointSnapshotSaveRequest;
+pub use runtime::FileCheckpointSnapshotStore;
 pub use runtime::FilesystemArtifactContentProvider;
+pub use runtime::FilesystemFileCheckpointSnapshotStore;
+pub use runtime::FilesystemOutputSnapshotStore;
+pub use runtime::GatewayAppDataSource;
 pub use runtime::InlineArtifactContentProvider;
+pub use runtime::KnowledgeAppDataSource;
 pub use runtime::ManagedObjectiveAuditUpdate;
+pub use runtime::McpAppDataSource;
+pub use runtime::MediaAppDataSource;
+pub use runtime::MemoryAppDataSource;
 pub use runtime::MockBackend;
+pub use runtime::ModelProviderAppDataSource;
 pub use runtime::NoopAppDataSource;
 pub use runtime::NoopEvidenceExportProvider;
+pub use runtime::NoopFileCheckpointSnapshotStore;
+pub use runtime::NoopOutputSnapshotStore;
+pub use runtime::OutputSnapshotReadRequest;
+pub use runtime::OutputSnapshotRecord;
+pub use runtime::OutputSnapshotSaveRequest;
+pub use runtime::OutputSnapshotStore;
 pub use runtime::RuntimeCore;
 pub use runtime::RuntimeCoreError;
 pub use runtime::RuntimeCoreEventAppender;
@@ -141,7 +166,14 @@ pub use runtime::RuntimeCoreOutput;
 pub use runtime::RuntimeEvent;
 pub use runtime::RuntimeEventSink;
 pub use runtime::RuntimeHostContext;
+pub use runtime::SessionAppDataSource;
+pub use runtime::SkillAppDataSource;
+pub use runtime::ToolInventoryReadRequest;
 pub use runtime::UnavailableBackend;
+pub use runtime::UsageStatsAppDataSource;
+pub use runtime::VoiceAppDataSource;
+pub use runtime::WorkspaceAppDataSource;
+pub use runtime::WorkspaceSkillBindingAppDataSource;
 pub use runtime_backend::RuntimeBackend;
 pub use runtime_factory::AppServerBackendMode;
 pub use runtime_factory::AppServerRuntimeFactory;
@@ -218,6 +250,10 @@ impl AppServer {
     #[cfg(test)]
     fn runtime(&self) -> &RuntimeCore {
         self.processor.runtime()
+    }
+
+    fn runtime_arc(&self) -> Arc<RuntimeCore> {
+        self.processor.runtime_arc()
     }
 
     pub async fn handle_json_line(&self, line: &str) -> Result<Vec<String>, AppServerError> {
@@ -989,6 +1025,71 @@ mod tests {
         )
         .await;
         assert!(read["turns"].as_array().expect("turns").is_empty());
+    }
+
+    #[tokio::test]
+    async fn turn_start_rejects_parallel_active_turn_without_queue_flag() {
+        let server = AppServer::new();
+        initialize(&server).await;
+        request(
+            &server,
+            2,
+            METHOD_AGENT_SESSION_START,
+            json!({
+                "sessionId": "sess_single_active_jsonrpc",
+                "threadId": "thread_single_active_jsonrpc",
+                "appId": "agent-chat",
+                "workspaceId": "default"
+            }),
+        )
+        .await;
+        request(
+            &server,
+            3,
+            METHOD_AGENT_SESSION_TURN_START,
+            json!({
+                "sessionId": "sess_single_active_jsonrpc",
+                "turnId": "turn_active",
+                "input": {
+                    "text": "running"
+                }
+            }),
+        )
+        .await;
+
+        let messages = server
+            .handle_message(JsonRpcMessage::Request(JsonRpcRequest::new(
+                RequestId::Integer(4),
+                METHOD_AGENT_SESSION_TURN_START,
+                Some(json!({
+                    "sessionId": "sess_single_active_jsonrpc",
+                    "turnId": "turn_parallel",
+                    "input": {
+                        "text": "parallel"
+                    }
+                })),
+            )))
+            .await
+            .expect("parallel turn start");
+
+        match messages.first().expect("error response") {
+            JsonRpcMessage::Error(error) => {
+                assert_eq!(error.error.code, error_codes::TURN_ALREADY_ACTIVE);
+                assert_eq!(error.error.message, "turn already active: turn_active");
+            }
+            other => panic!("expected active turn error, got {other:?}"),
+        }
+
+        let read = request(
+            &server,
+            5,
+            METHOD_AGENT_SESSION_READ,
+            json!({ "sessionId": "sess_single_active_jsonrpc" }),
+        )
+        .await;
+        let turns = read["turns"].as_array().expect("turns");
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0]["turnId"], "turn_active");
     }
 
     #[tokio::test]

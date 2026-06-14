@@ -1,3 +1,5 @@
+use crate::file_checkpoint_snapshot::FileCheckpointSnapshotReadRequest;
+use crate::file_checkpoint_snapshot::FileCheckpointSnapshotStore;
 use app_server_protocol::AgentSessionFileCheckpointDetail;
 use app_server_protocol::AgentSessionFileCheckpointDiffResponse;
 use app_server_protocol::AgentSessionFileCheckpointListResponse;
@@ -37,6 +39,7 @@ pub fn list_file_checkpoints(
 pub fn get_file_checkpoint(
     detail: &Value,
     workspace_root: &Path,
+    snapshot_store: &dyn FileCheckpointSnapshotStore,
     checkpoint_id: &str,
 ) -> Result<AgentSessionFileCheckpointDetail, String> {
     let session_id = required_detail_string(detail, &["session_id", "id"], "session_id")?;
@@ -55,6 +58,12 @@ pub fn get_file_checkpoint(
                 None
             }
         });
+    let content = checkpoint_content(
+        session_id.as_str(),
+        metadata,
+        record.content.as_deref(),
+        snapshot_store,
+    );
 
     Ok(AgentSessionFileCheckpointDetail {
         session_id,
@@ -67,7 +76,7 @@ pub fn get_file_checkpoint(
         version_history: extract_version_history(metadata),
         validation_issues: extract_validation_issues(metadata),
         metadata: record.metadata.clone(),
-        content: record.content.clone(),
+        content,
     })
 }
 
@@ -95,6 +104,7 @@ pub fn diff_file_checkpoint(
 pub fn restore_file_checkpoint(
     detail: &Value,
     workspace_root: &Path,
+    snapshot_store: &dyn FileCheckpointSnapshotStore,
     checkpoint_id: &str,
     confirm_restore: bool,
     create_backup: bool,
@@ -116,7 +126,12 @@ pub fn restore_file_checkpoint(
     let live_path = workspace_root.join(relative_path_to_platform_path(&live_relative_path));
     let snapshot_path =
         workspace_root.join(relative_path_to_platform_path(&snapshot_relative_path));
-    let restored_content = extract_previous_content_from_file_change(metadata);
+    let restored_content = checkpoint_content(
+        session_id.as_str(),
+        metadata,
+        record.content.as_deref(),
+        snapshot_store,
+    );
     if restored_content.is_none() && live_relative_path == snapshot_relative_path {
         return Err(format!(
             "文件快照与目标文件相同，无法安全恢复: {live_relative_path}"
@@ -446,10 +461,48 @@ fn extract_version_diff(metadata: Option<&Value>) -> Option<Value> {
         .cloned()
 }
 
+fn checkpoint_content(
+    session_id: &str,
+    metadata: Option<&Value>,
+    inline_content: Option<&str>,
+    snapshot_store: &dyn FileCheckpointSnapshotStore,
+) -> Option<String> {
+    read_checkpoint_snapshot_content(session_id, metadata, snapshot_store)
+        .or_else(|| inline_content.map(ToString::to_string))
+        .or_else(|| extract_previous_content_from_file_change(metadata))
+}
+
+fn read_checkpoint_snapshot_content(
+    session_id: &str,
+    metadata: Option<&Value>,
+    snapshot_store: &dyn FileCheckpointSnapshotStore,
+) -> Option<String> {
+    let file_name = metadata_string(metadata, "checkpointSnapshotFile")
+        .or_else(|| nested_metadata_string(metadata, "file_change", "previousContentSnapshotFile"))
+        .or_else(|| nested_metadata_string(metadata, "file_change", "checkpointSnapshotFile"))?;
+    snapshot_store.read_file_checkpoint_snapshot(&FileCheckpointSnapshotReadRequest {
+        session_id: session_id.to_string(),
+        file_name,
+    })
+}
+
 fn extract_previous_content_from_file_change(metadata: Option<&Value>) -> Option<String> {
     let file_change = metadata_object(metadata)?
         .get("file_change")
         .and_then(Value::as_object)?;
+    if let Some(content) = [
+        "previousContent",
+        "previous_content",
+        "beforeContent",
+        "before_content",
+        "oldContent",
+        "old_content",
+    ]
+    .iter()
+    .find_map(|key| file_change.get(*key).and_then(Value::as_str))
+    {
+        return Some(content.to_string());
+    }
     if file_change
         .get("truncated")
         .and_then(Value::as_bool)

@@ -4886,24 +4886,6 @@
       "allowedPaths": []
     },
     {
-      "id": "rust-agent-runtime-legacy-queue-table-leak",
-      "classification": "deprecated",
-      "description": "legacy runtime queue 表名从数据库迁移边界向外扩散",
-      "patterns": ["agent_runtime_queued_turns"],
-      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": [
-        "lime-rs/crates/core/src/database/agent_runtime_queue_repository.rs"
-      ]
-    },
-    {
-      "id": "rust-agent-runtime-legacy-queue-migration-leak",
-      "classification": "deprecated",
-      "description": "legacy runtime queue 启动迁移 helper 只允许停留在 aster runtime support 边界",
-      "patterns": ["migrate_legacy_runtime_queue_to_aster_store("],
-      "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": ["lime-rs/crates/agent/src/aster_runtime_support.rs"]
-    },
-    {
       "id": "rust-agent-session-legacy-todo-state-leak",
       "classification": "dead-candidate",
       "description": "已零引用的 Lime 业务层 direct legacy TodoState 读取回流",

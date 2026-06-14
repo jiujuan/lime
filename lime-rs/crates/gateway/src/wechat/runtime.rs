@@ -1,44 +1,26 @@
-use super::api::{get_config, get_updates, send_typing};
+use super::api::get_updates;
 use super::media::{
-    body_from_item_list, download_media_from_item, find_media_item, resolve_account_data_dir,
-    send_text_message, WechatInboundMedia,
+    body_from_item_list, find_media_item, resolve_account_data_dir, send_text_message,
 };
-use super::types::{
-    TypingStatus, WechatMessage, DEFAULT_BASE_URL, DEFAULT_CDN_BASE_URL, SESSION_EXPIRED_ERRCODE,
-};
+use super::types::{WechatMessage, DEFAULT_BASE_URL, SESSION_EXPIRED_ERRCODE};
+use crate::agent_runner::{GatewayAgentRunRequest, GatewayAgentRunnerHandle};
 use chrono::Utc;
-use lime_agent::{AgentActionRequiredScope, AsterAgentState};
-use lime_core::config::{
-    Config, ConfigManager, WechatAccountConfig, WechatBotConfig, WechatGroupConfig,
-};
-use lime_core::database::DbConnection;
+use lime_core::config::{Config, WechatAccountConfig, WechatBotConfig, WechatGroupConfig};
 use lime_core::logger::LogStore;
-use lime_websocket::handlers::{RpcHandler, RpcHandlerState};
-use lime_websocket::protocol::{
-    AgentInputBlock, AgentInputMedia, AgentInputSourceType, AgentRunResult, AgentWaitResult,
-    GatewayRpcRequest, RpcMethod,
-};
-use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 const DEFAULT_POLL_TIMEOUT_MS: u64 = 35_000;
-const RUN_WAIT_TIMEOUT_MS: u64 = 1_200;
-const RUN_WAIT_MAX_ROUNDS: usize = 180;
 const MESSAGE_DEDUP_TTL_MS: i64 = 5 * 60 * 1_000;
 const MESSAGE_DEDUP_MAX_ENTRIES: usize = 2_048;
-const PROGRESS_ACK_THRESHOLD_MS: u64 = 900;
-const PROGRESS_MESSAGE_LIMIT: usize = 2;
 
 type LogState = Arc<RwLock<LogStore>>;
 type SessionRouteState = Arc<RwLock<HashMap<String, String>>>;
@@ -98,11 +80,8 @@ impl Default for WechatGatewayState {
 struct ResolvedWechatAccount {
     account_id: String,
     base_url: String,
-    cdn_base_url: String,
     bot_token: String,
     scanner_user_id: Option<String>,
-    default_provider: Option<String>,
-    default_model: Option<String>,
     dm_policy: String,
     allow_from: HashSet<String>,
     group_policy: String,
@@ -121,143 +100,33 @@ struct InboundMessage {
 fn build_gateway_source_metadata(
     account: &ResolvedWechatAccount,
     inbound: &InboundMessage,
-    session_id: &str,
+    media_present: bool,
 ) -> serde_json::Value {
-    let remote_task_id = format!("gateway:wechat:{}:{}", account.account_id, Uuid::new_v4());
-    json!({
+    let remote_task_id = format!(
+        "gateway:wechat:{}:{}:{}",
+        account.account_id,
+        inbound
+            .group_id
+            .as_deref()
+            .unwrap_or(inbound.from_user_id.as_str()),
+        Utc::now().timestamp_millis()
+    );
+    serde_json::json!({
         "remote_task": {
             "source": "gateway_channel",
             "channel": "wechat",
             "accountId": account.account_id.as_str(),
             "remoteTaskId": remote_task_id,
-            "sessionId": session_id,
             "fromUserId": inbound.from_user_id.as_str(),
             "groupId": inbound.group_id.as_deref(),
-            "contextTokenPresent": inbound.context_token.is_some(),
+            "mediaPresent": media_present,
             "agentCard": {
                 "id": format!("wechat:{}", account.account_id),
-                "name": "Wechat Remote",
+                "name": "WeChat Remote",
                 "provider": "wechat"
             }
         }
     })
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PendingWechatActionType {
-    ToolConfirmation,
-    AskUser,
-    Elicitation,
-}
-
-impl PendingWechatActionType {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::ToolConfirmation => "tool_confirmation",
-            Self::AskUser => "ask_user",
-            Self::Elicitation => "elicitation",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct PendingWechatAction {
-    session_id: String,
-    run_id: String,
-    request_id: String,
-    action_type: PendingWechatActionType,
-    prompt: String,
-    options: Vec<String>,
-    scope: Option<AgentActionRequiredScope>,
-}
-
-enum WechatAgentOutcome {
-    Completed(String),
-    ActionRequired(PendingWechatAction),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WechatProgressStage {
-    Received,
-    Searching,
-    Tooling,
-}
-
-impl WechatProgressStage {
-    fn message(self) -> &'static str {
-        match self {
-            Self::Received => "已收到，正在处理中，请稍等。",
-            Self::Searching => "正在查询资料，请稍等。",
-            Self::Tooling => "正在执行工具，请稍等。",
-        }
-    }
-
-    fn log_label(self) -> &'static str {
-        match self {
-            Self::Received => "received",
-            Self::Searching => "searching",
-            Self::Tooling => "tooling",
-        }
-    }
-}
-
-struct WechatProgressState {
-    started_at: std::time::Instant,
-    sent_stages: Vec<WechatProgressStage>,
-}
-
-impl WechatProgressState {
-    fn new() -> Self {
-        Self {
-            started_at: std::time::Instant::now(),
-            sent_stages: Vec::new(),
-        }
-    }
-
-    fn message_count(&self) -> usize {
-        self.sent_stages.len()
-    }
-
-    fn has_sent(&self, stage: WechatProgressStage) -> bool {
-        self.sent_stages.contains(&stage)
-    }
-
-    fn can_send_more(&self) -> bool {
-        self.message_count() < PROGRESS_MESSAGE_LIMIT
-    }
-
-    fn ack_due(&self) -> bool {
-        self.started_at.elapsed() >= Duration::from_millis(PROGRESS_ACK_THRESHOLD_MS)
-    }
-
-    fn mark_sent(&mut self, stage: WechatProgressStage) {
-        if !self.has_sent(stage) {
-            self.sent_stages.push(stage);
-        }
-    }
-}
-
-fn select_progress_stage(
-    progress: &WechatProgressState,
-    detected_stage: Option<WechatProgressStage>,
-) -> Option<WechatProgressStage> {
-    if !progress.can_send_more() {
-        return None;
-    }
-
-    if !progress.has_sent(WechatProgressStage::Received) {
-        if !progress.ack_due() || detected_stage.is_none() {
-            return None;
-        }
-        return Some(WechatProgressStage::Received);
-    }
-
-    let stage = detected_stage?;
-    if progress.has_sent(stage) {
-        return None;
-    }
-
-    Some(stage)
 }
 
 #[derive(Default)]
@@ -338,9 +207,8 @@ fn build_wechat_message_dedup_key(message: &WechatMessage) -> Option<Cow<'_, str
 
 pub async fn start_gateway(
     state: &WechatGatewayState,
-    db: DbConnection,
-    aster_state: AsterAgentState,
     logs: LogState,
+    agent_runner: GatewayAgentRunnerHandle,
     config: Config,
     account_filter: Option<String>,
     poll_timeout_secs: Option<u64>,
@@ -375,9 +243,8 @@ pub async fn start_gateway(
         }));
         let state_for_task = state_inner.clone();
         let status_for_task = status.clone();
-        let db_for_task = db.clone();
-        let aster_state_for_task = aster_state.clone();
         let logs_for_task = logs.clone();
+        let runner_for_task = agent_runner.clone();
         let stop_token = CancellationToken::new();
         let stop_for_task = stop_token.clone();
         let account_for_task = account.clone();
@@ -385,9 +252,8 @@ pub async fn start_gateway(
             run_account_loop(
                 state_for_task,
                 status_for_task,
-                db_for_task,
-                aster_state_for_task,
                 logs_for_task,
+                runner_for_task,
                 account_for_task,
                 poll_timeout_ms,
                 stop_for_task,
@@ -503,9 +369,8 @@ async fn snapshot_status(
 async fn run_account_loop(
     state: Arc<RwLock<WechatGatewayRuntime>>,
     status: Arc<RwLock<WechatGatewayAccountStatus>>,
-    db: DbConnection,
-    aster_state: AsterAgentState,
     logs: LogState,
+    agent_runner: GatewayAgentRunnerHandle,
     account: ResolvedWechatAccount,
     poll_timeout_ms: u64,
     stop_token: CancellationToken,
@@ -518,11 +383,8 @@ async fn run_account_loop(
         .timeout(std::time::Duration::from_millis(poll_timeout_ms + 10_000))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
-    let rpc_state = RpcHandlerState::new(Some(db.clone()), None, logs.clone());
-    let rpc_handler = Arc::new(RpcHandler::new(rpc_state));
     let session_route_state = Arc::new(RwLock::new(HashMap::new()));
     let mut get_updates_buf = load_sync_buf(&account.account_id).unwrap_or_default();
-    let mut pending_actions = HashMap::<String, PendingWechatAction>::new();
     let mut message_dedup = WechatMessageDedupCache::default();
 
     loop {
@@ -590,12 +452,9 @@ async fn run_account_loop(
                     if let Err(error) = process_message(
                         &client,
                         &account,
-                        &db,
-                        &aster_state,
-                        rpc_handler.as_ref(),
                         &logs,
+                        &agent_runner,
                         &session_route_state,
-                        &mut pending_actions,
                         &message,
                     )
                     .await
@@ -645,12 +504,9 @@ async fn set_last_error(status: &Arc<RwLock<WechatGatewayAccountStatus>>, error:
 async fn process_message(
     client: &reqwest::Client,
     account: &ResolvedWechatAccount,
-    db: &DbConnection,
-    aster_state: &AsterAgentState,
-    rpc_handler: &RpcHandler,
     logs: &LogState,
+    agent_runner: &GatewayAgentRunnerHandle,
     session_route_state: &SessionRouteState,
-    pending_actions: &mut HashMap<String, PendingWechatAction>,
     message: &WechatMessage,
 ) -> Result<(), String> {
     let from_user_id = message
@@ -690,864 +546,60 @@ async fn process_message(
     }
 
     let session_id = resolve_active_session_id(account, &inbound, session_route_state).await;
-    let (rpc_model, rpc_model_source) = resolve_runtime_rpc_model(account);
-    let text_preview = preview_inbound_text(&inbound.text);
-
-    if let Some(pending) = pending_actions.remove(&session_id) {
-        logs.write().await.add(
-            "info",
-            &format!(
-                "[WechatGateway] account={} 收到补充信息: session={} run_id={} request_id={} action_type={} text_preview=\"{}\"",
-                account.account_id,
-                session_id,
-                pending.run_id,
-                pending.request_id,
-                pending.action_type.as_str(),
-                text_preview
-            ),
-        );
-        let outcome = match resume_pending_action_for_message(
-            client,
-            account,
-            db,
-            aster_state,
-            rpc_handler,
-            logs,
-            &pending,
-            &inbound,
-            rpc_model.as_deref(),
-        )
-        .await
-        {
-            Ok(outcome) => outcome,
-            Err(error) => {
-                let fallback = format_gateway_error_for_user(&error);
-                match send_text_message(
-                    client,
-                    &account.base_url,
-                    &account.bot_token,
-                    &inbound.from_user_id,
-                    &fallback,
-                    inbound.context_token.as_deref(),
-                )
-                .await
-                {
-                    Ok(()) => return Ok(()),
-                    Err(send_error) => {
-                        return Err(format!("{}；且回传错误提示失败: {}", error, send_error));
-                    }
-                }
-            }
-        };
-        return dispatch_wechat_outcome(client, account, logs, pending_actions, &inbound, outcome)
-            .await;
-    }
-
-    let media = match find_media_item(message.item_list.as_deref()) {
-        Some(item) => {
-            download_media_from_item(client, &account.account_id, &account.cdn_base_url, &item)
-                .await?
-        }
-        None => None,
-    };
-
-    let media_count = usize::from(media.is_some());
+    let media_present = find_media_item(message.item_list.as_deref()).is_some();
     logs.write().await.add(
         "info",
         &format!(
-            "[WechatGateway] account={} 收到消息: sender={} group={} session={} text_preview=\"{}\" media_count={} model={} model_source={}",
+            "[WechatGateway] account={} 通过 App Server current runner 处理消息: sender={} group={} session={} text_preview=\"{}\" media_present={}",
             account.account_id,
             inbound.from_user_id,
             inbound.group_id.as_deref().unwrap_or("<dm>"),
             session_id,
             preview_inbound_text(&inbound.text),
-            media_count,
-            rpc_model.as_deref().unwrap_or("<rpc-default>"),
-            rpc_model_source
-        ),
-    );
-    let outcome = match run_agent_for_message(
-        client,
-        account,
-        db,
-        rpc_handler,
-        logs,
-        &session_id,
-        &inbound,
-        media.as_ref(),
-        rpc_model.as_deref(),
-    )
-    .await
-    {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            let fallback = format_gateway_error_for_user(&error);
-            match send_text_message(
-                client,
-                &account.base_url,
-                &account.bot_token,
-                &inbound.from_user_id,
-                &fallback,
-                inbound.context_token.as_deref(),
-            )
-            .await
-            {
-                Ok(()) => return Ok(()),
-                Err(send_error) => {
-                    return Err(format!("{}；且回传错误提示失败: {}", error, send_error));
-                }
-            }
-        }
-    };
-    dispatch_wechat_outcome(client, account, logs, pending_actions, &inbound, outcome).await
-}
-
-async fn run_agent_for_message(
-    client: &reqwest::Client,
-    account: &ResolvedWechatAccount,
-    db: &DbConnection,
-    rpc_handler: &RpcHandler,
-    logs: &LogState,
-    session_id: &str,
-    inbound: &InboundMessage,
-    media: Option<&WechatInboundMedia>,
-    rpc_model: Option<&str>,
-) -> Result<WechatAgentOutcome, String> {
-    let mut inputs = Vec::new();
-    let trimmed_text = inbound.text.trim();
-    if !trimmed_text.is_empty() {
-        inputs.push(AgentInputBlock::Text {
-            text: trimmed_text.to_string(),
-        });
-    }
-    if let Some(media) = media {
-        inputs.push(AgentInputBlock::Media(AgentInputMedia {
-            media_type: media.media_type.clone(),
-            source_type: AgentInputSourceType::LocalPath,
-            path_or_data: media.file_path.clone(),
-            mime_type: Some(media.mime_type.clone()),
-            file_name: media.file_name.clone(),
-            metadata: None,
-        }));
-    }
-    if inputs.is_empty() {
-        return Ok(WechatAgentOutcome::Completed(
-            "收到消息，但没有可处理的文本或附件。".to_string(),
-        ));
-    }
-
-    if let Ok(config_resp) = get_config(
-        client,
-        &account.base_url,
-        &account.bot_token,
-        &inbound.from_user_id,
-        inbound.context_token.as_deref(),
-    )
-    .await
-    {
-        if let Some(ticket) = config_resp
-            .typing_ticket
-            .filter(|value| !value.trim().is_empty())
-        {
-            let _ = send_typing(
-                client,
-                &account.base_url,
-                &account.bot_token,
-                super::types::SendTypingReq {
-                    ilink_user_id: inbound.from_user_id.clone(),
-                    typing_ticket: ticket.clone(),
-                    status: TypingStatus::Typing as i32,
-                },
-            )
-            .await;
-            let result = run_agent_wait_loop(
-                client,
-                account,
-                db,
-                rpc_handler,
-                logs,
-                session_id,
-                &inbound.from_user_id,
-                inbound.context_token.as_deref(),
-                inputs,
-                rpc_model,
-                preview_inbound_text(&inbound.text),
-                usize::from(media.is_some()),
-                build_gateway_source_metadata(account, inbound, session_id),
-            )
-            .await;
-            let _ = send_typing(
-                client,
-                &account.base_url,
-                &account.bot_token,
-                super::types::SendTypingReq {
-                    ilink_user_id: inbound.from_user_id.clone(),
-                    typing_ticket: ticket,
-                    status: TypingStatus::Cancel as i32,
-                },
-            )
-            .await;
-            return result;
-        }
-    }
-
-    run_agent_wait_loop(
-        client,
-        account,
-        db,
-        rpc_handler,
-        logs,
-        session_id,
-        &inbound.from_user_id,
-        inbound.context_token.as_deref(),
-        inputs,
-        rpc_model,
-        preview_inbound_text(&inbound.text),
-        usize::from(media.is_some()),
-        build_gateway_source_metadata(account, inbound, session_id),
-    )
-    .await
-}
-
-async fn run_agent_wait_loop(
-    client: &reqwest::Client,
-    account: &ResolvedWechatAccount,
-    db: &DbConnection,
-    rpc_handler: &RpcHandler,
-    logs: &LogState,
-    session_id: &str,
-    to_user_id: &str,
-    context_token: Option<&str>,
-    inputs: Vec<AgentInputBlock>,
-    rpc_model: Option<&str>,
-    text_preview: String,
-    media_count: usize,
-    source_metadata: serde_json::Value,
-) -> Result<WechatAgentOutcome, String> {
-    let request = GatewayRpcRequest {
-        jsonrpc: "2.0".to_string(),
-        id: Uuid::new_v4().to_string(),
-        method: RpcMethod::AgentRun,
-        params: Some(json!({
-            "session_id": session_id,
-            "message": "",
-            "inputs": inputs,
-            "stream": false,
-            "web_search": true,
-            "model": rpc_model,
-            "source_metadata": source_metadata,
-        })),
-    };
-    let response = rpc_handler.handle_request(request).await;
-    let run_value = response.result.ok_or_else(|| {
-        response
-            .error
-            .map(|error| error.message)
-            .unwrap_or_else(|| "agent.run 返回空结果".to_string())
-    })?;
-    let run_result: AgentRunResult =
-        serde_json::from_value(run_value).map_err(|e| format!("解析 agent.run 失败: {e}"))?;
-    logs.write().await.add(
-        "info",
-        &format!(
-            "[WechatGateway] account={} agent.run 已受理: run_id={} session={} model={} text_preview=\"{}\" media_count={}",
-            account.account_id,
-            run_result.run_id,
-            session_id,
-            rpc_model.unwrap_or("<rpc-default>"),
-            text_preview,
-            media_count
+            media_present
         ),
     );
 
-    wait_for_run_outcome(
-        client,
-        account,
-        db,
-        rpc_handler,
-        logs,
-        session_id,
-        &run_result.run_id,
-        to_user_id,
-        context_token,
-        rpc_model,
-        text_preview,
-        media_count,
-        None,
-    )
-    .await
-}
-
-async fn wait_for_run_outcome(
-    client: &reqwest::Client,
-    account: &ResolvedWechatAccount,
-    db: &DbConnection,
-    rpc_handler: &RpcHandler,
-    logs: &LogState,
-    session_id: &str,
-    run_id: &str,
-    to_user_id: &str,
-    context_token: Option<&str>,
-    rpc_model: Option<&str>,
-    text_preview: String,
-    media_count: usize,
-    ignored_request_id: Option<&str>,
-) -> Result<WechatAgentOutcome, String> {
-    let mut progress = WechatProgressState::new();
-    for _ in 0..RUN_WAIT_MAX_ROUNDS {
-        let wait_response = rpc_handler
-            .handle_request(GatewayRpcRequest {
-                jsonrpc: "2.0".to_string(),
-                id: Uuid::new_v4().to_string(),
-                method: RpcMethod::AgentWait,
-                params: Some(json!({
-                    "run_id": run_id,
-                    "timeout": RUN_WAIT_TIMEOUT_MS,
-                })),
-            })
-            .await;
-        if let Some(error) = wait_response.error {
-            return Err(format!("agent.wait 失败: {}", error.message));
-        }
-        let wait_result: AgentWaitResult = serde_json::from_value(
-            wait_response
-                .result
-                .ok_or_else(|| "agent.wait 返回空结果".to_string())?,
-        )
-        .map_err(|e| format!("解析 agent.wait 失败: {e}"))?;
-        if wait_result.completed {
-            let content = wait_result
-                .content
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-                .unwrap_or_else(|| "任务已完成，但没有文本输出。".to_string());
-            logs.write().await.add(
-                "info",
-                &format!(
-                    "[WechatGateway] account={} agent.wait 完成: run_id={} reply_chars={}",
-                    account.account_id,
-                    run_id,
-                    content.chars().count()
-                ),
-            );
-            return Ok(WechatAgentOutcome::Completed(content));
-        }
-
-        if let Some(action) = load_latest_pending_action(db, session_id, run_id)? {
-            if ignored_request_id == Some(action.request_id.as_str()) {
-                tokio::time::sleep(Duration::from_millis(120)).await;
-                continue;
-            }
-            logs.write().await.add(
-                "info",
-                &format!(
-                    "[WechatGateway] account={} agent.wait 进入待补充输入: run_id={} session={} request_id={} action_type={}",
-                    account.account_id,
-                    run_id,
-                    session_id,
-                    action.request_id,
-                    action.action_type.as_str()
-                ),
-            );
-            return Ok(WechatAgentOutcome::ActionRequired(action));
-        }
-
-        maybe_emit_progress_update(
+    if inbound.text.trim().is_empty() {
+        return send_text_message(
             client,
-            account,
-            db,
-            logs,
-            session_id,
-            run_id,
-            to_user_id,
-            context_token,
-            &mut progress,
+            &account.base_url,
+            &account.bot_token,
+            &inbound.from_user_id,
+            "收到消息，但没有可处理的文本。",
+            inbound.context_token.as_deref(),
         )
         .await;
     }
 
-    logs.write().await.add(
-        "warn",
-        &format!(
-            "[WechatGateway] account={} agent.wait 超时: run_id={} session={} model={} text_preview=\"{}\" media_count={}",
-            account.account_id,
-            run_id,
+    let response = agent_runner
+        .run_agent_turn(GatewayAgentRunRequest {
+            channel: "wechat".to_string(),
+            account_id: account.account_id.clone(),
             session_id,
-            rpc_model.unwrap_or("<rpc-default>"),
-            text_preview,
-            media_count
-        ),
-    );
-    Err("等待 Agent 执行超时，请稍后重试。".to_string())
-}
-
-async fn maybe_emit_progress_update(
-    client: &reqwest::Client,
-    account: &ResolvedWechatAccount,
-    db: &DbConnection,
-    logs: &LogState,
-    session_id: &str,
-    run_id: &str,
-    to_user_id: &str,
-    context_token: Option<&str>,
-    progress: &mut WechatProgressState,
-) {
-    let Ok(detected_stage) = load_tool_progress_stage(db, session_id) else {
-        return;
+            input_text: inbound.text.clone(),
+            metadata: build_gateway_source_metadata(account, &inbound, media_present),
+            provider_preference: None,
+            model_preference: None,
+        })
+        .await?;
+    let reply = if response.reply_text.trim().is_empty() {
+        format!(
+            "已完成，但当前会话没有生成可发送文本。\nsession_id: {}\nturn_id: {}",
+            response.session_id, response.turn_id
+        )
+    } else {
+        response.reply_text
     };
-    let Some(stage) = select_progress_stage(progress, detected_stage) else {
-        return;
-    };
-
-    emit_progress_message(
-        client,
-        account,
-        logs,
-        run_id,
-        to_user_id,
-        context_token,
-        stage,
-        progress,
-    )
-    .await;
-}
-
-async fn emit_progress_message(
-    client: &reqwest::Client,
-    account: &ResolvedWechatAccount,
-    logs: &LogState,
-    run_id: &str,
-    to_user_id: &str,
-    context_token: Option<&str>,
-    stage: WechatProgressStage,
-    progress: &mut WechatProgressState,
-) {
-    if !progress.can_send_more() || progress.has_sent(stage) {
-        return;
-    }
-
-    match send_text_message(
+    send_text_message(
         client,
         &account.base_url,
         &account.bot_token,
-        to_user_id,
-        stage.message(),
-        context_token,
-    )
-    .await
-    {
-        Ok(()) => {
-            progress.mark_sent(stage);
-            logs.write().await.add(
-                "info",
-                &format!(
-                    "[WechatGateway] account={} 发送过程回执: run_id={} stage={} sent_count={}",
-                    account.account_id,
-                    run_id,
-                    stage.log_label(),
-                    progress.message_count()
-                ),
-            );
-        }
-        Err(error) => {
-            logs.write().await.add(
-                "warn",
-                &format!(
-                    "[WechatGateway] account={} 发送过程回执失败: run_id={} stage={} error={}",
-                    account.account_id,
-                    run_id,
-                    stage.log_label(),
-                    error
-                ),
-            );
-        }
-    }
-}
-
-fn load_tool_progress_stage(
-    db: &DbConnection,
-    session_id: &str,
-) -> Result<Option<WechatProgressStage>, String> {
-    let conn = lime_core::database::lock_db(db)?;
-    let mut turn_stmt = conn
-        .prepare(
-            "SELECT id
-             FROM agent_thread_turns
-             WHERE session_id = ?1 AND status = 'running'
-             ORDER BY updated_at DESC, started_at DESC, id DESC
-             LIMIT 1",
-        )
-        .map_err(|e| format!("查询运行中 turn 失败: {e}"))?;
-    let running_turn_id = turn_stmt
-        .query_row([session_id], |row| row.get::<_, String>(0))
-        .optional()
-        .map_err(|e| format!("读取运行中 turn 失败: {e}"))?;
-    let Some(turn_id) = running_turn_id else {
-        return Ok(None);
-    };
-
-    let mut item_stmt = conn
-        .prepare(
-            "SELECT item_type
-             FROM agent_thread_items
-             WHERE session_id = ?1
-               AND turn_id = ?2
-               AND status = 'in_progress'
-               AND item_type IN ('tool_call', 'web_search', 'command_execution')
-             ORDER BY updated_at DESC, sequence DESC, id DESC
-             LIMIT 1",
-        )
-        .map_err(|e| format!("查询过程阶段 item 失败: {e}"))?;
-    let item_type = item_stmt
-        .query_row([session_id, turn_id.as_str()], |row| {
-            row.get::<_, String>(0)
-        })
-        .optional()
-        .map_err(|e| format!("读取过程阶段 item 失败: {e}"))?;
-
-    Ok(item_type.and_then(|item_type| match item_type.as_str() {
-        "web_search" => Some(WechatProgressStage::Searching),
-        "tool_call" | "command_execution" => Some(WechatProgressStage::Tooling),
-        _ => None,
-    }))
-}
-
-async fn dispatch_wechat_outcome(
-    client: &reqwest::Client,
-    account: &ResolvedWechatAccount,
-    logs: &LogState,
-    pending_actions: &mut HashMap<String, PendingWechatAction>,
-    inbound: &InboundMessage,
-    outcome: WechatAgentOutcome,
-) -> Result<(), String> {
-    match outcome {
-        WechatAgentOutcome::Completed(reply) => {
-            send_text_message(
-                client,
-                &account.base_url,
-                &account.bot_token,
-                &inbound.from_user_id,
-                &reply,
-                inbound.context_token.as_deref(),
-            )
-            .await
-        }
-        WechatAgentOutcome::ActionRequired(action) => {
-            let prompt = format_pending_action_prompt(&action);
-            logs.write().await.add(
-                "info",
-                &format!(
-                    "[WechatGateway] account={} 回传待补充问题: session={} run_id={} request_id={} action_type={}",
-                    account.account_id,
-                    action.session_id,
-                    action.run_id,
-                    action.request_id,
-                    action.action_type.as_str()
-                ),
-            );
-            pending_actions.insert(action.session_id.clone(), action);
-            send_text_message(
-                client,
-                &account.base_url,
-                &account.bot_token,
-                &inbound.from_user_id,
-                &prompt,
-                inbound.context_token.as_deref(),
-            )
-            .await
-        }
-    }
-}
-
-async fn resume_pending_action_for_message(
-    client: &reqwest::Client,
-    account: &ResolvedWechatAccount,
-    db: &DbConnection,
-    aster_state: &AsterAgentState,
-    rpc_handler: &RpcHandler,
-    logs: &LogState,
-    pending: &PendingWechatAction,
-    inbound: &InboundMessage,
-    rpc_model: Option<&str>,
-) -> Result<WechatAgentOutcome, String> {
-    let answer = inbound.text.trim();
-    if answer.is_empty() {
-        return Ok(WechatAgentOutcome::ActionRequired(pending.clone()));
-    }
-
-    match pending.action_type {
-        PendingWechatActionType::ToolConfirmation => {
-            let Some(confirmed) = parse_tool_confirmation_reply(answer) else {
-                return Ok(WechatAgentOutcome::ActionRequired(pending.clone()));
-            };
-            logs.write().await.add(
-                "info",
-                &format!(
-                    "[WechatGateway] account={} 提交工具确认: session={} run_id={} request_id={} confirmed={}",
-                    account.account_id,
-                    pending.session_id,
-                    pending.run_id,
-                    pending.request_id,
-                    confirmed
-                ),
-            );
-            aster_state
-                .confirm_tool_action(&pending.request_id, confirmed)
-                .await?;
-        }
-        PendingWechatActionType::AskUser | PendingWechatActionType::Elicitation => {
-            logs.write().await.add(
-                "info",
-                &format!(
-                    "[WechatGateway] account={} 提交补充信息: session={} run_id={} request_id={} answer_preview=\"{}\"",
-                    account.account_id,
-                    pending.session_id,
-                    pending.run_id,
-                    pending.request_id,
-                    preview_inbound_text(answer)
-                ),
-            );
-            aster_state
-                .submit_elicitation_response(
-                    &pending.session_id,
-                    &pending.request_id,
-                    json!({ "answer": answer }),
-                    pending.scope.clone(),
-                )
-                .await?;
-        }
-    }
-
-    wait_for_run_outcome(
-        client,
-        account,
-        db,
-        rpc_handler,
-        logs,
-        &pending.session_id,
-        &pending.run_id,
         &inbound.from_user_id,
+        &reply,
         inbound.context_token.as_deref(),
-        rpc_model,
-        preview_inbound_text(answer),
-        0,
-        Some(pending.request_id.as_str()),
     )
     .await
-}
-
-fn load_latest_pending_action(
-    db: &DbConnection,
-    session_id: &str,
-    run_id: &str,
-) -> Result<Option<PendingWechatAction>, String> {
-    let conn = lime_core::database::lock_db(db)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT role, content_json
-             FROM agent_messages
-             WHERE session_id = ?1
-             ORDER BY id DESC
-             LIMIT 1",
-        )
-        .map_err(|e| format!("查询最新会话消息失败: {e}"))?;
-    let latest = stmt
-        .query_row([session_id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .optional()
-        .map_err(|e| format!("读取最新会话消息失败: {e}"))?;
-    let Some((role, content_json)) = latest else {
-        return Ok(None);
-    };
-    if role != "assistant" {
-        return Ok(None);
-    }
-
-    let content: serde_json::Value =
-        serde_json::from_str(&content_json).map_err(|e| format!("解析最新会话消息失败: {e}"))?;
-    Ok(extract_pending_action_from_content(
-        session_id, run_id, &content,
-    ))
-}
-
-fn extract_pending_action_from_content(
-    session_id: &str,
-    run_id: &str,
-    content: &serde_json::Value,
-) -> Option<PendingWechatAction> {
-    let items = content.as_array()?;
-    for item in items.iter().rev() {
-        let kind = item.get("type").and_then(|value| value.as_str())?;
-        if kind == "text" {
-            let has_text = item
-                .get("text")
-                .and_then(|value| value.as_str())
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .is_some();
-            if has_text {
-                return None;
-            }
-            continue;
-        }
-        if kind != "action_required" {
-            continue;
-        }
-
-        let action_type_value = item.get("action_type").and_then(|value| value.as_str())?;
-        let action_type = parse_pending_action_type(action_type_value)?;
-        let request_id = item
-            .get("id")
-            .or_else(|| item.get("request_id"))
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())?;
-        let data = item.get("data").cloned().unwrap_or_else(|| json!({}));
-        let prompt = extract_pending_action_prompt(action_type, &data);
-        let options = extract_pending_action_options(&data);
-        let scope = item
-            .get("scope")
-            .cloned()
-            .and_then(|value| serde_json::from_value(value).ok());
-        return Some(PendingWechatAction {
-            session_id: session_id.to_string(),
-            run_id: run_id.to_string(),
-            request_id: request_id.to_string(),
-            action_type,
-            prompt,
-            options,
-            scope,
-        });
-    }
-    None
-}
-
-fn parse_pending_action_type(value: &str) -> Option<PendingWechatActionType> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "tool_confirmation" => Some(PendingWechatActionType::ToolConfirmation),
-        "ask_user" => Some(PendingWechatActionType::AskUser),
-        "elicitation" => Some(PendingWechatActionType::Elicitation),
-        _ => None,
-    }
-}
-
-fn extract_pending_action_prompt(
-    action_type: PendingWechatActionType,
-    data: &serde_json::Value,
-) -> String {
-    match action_type {
-        PendingWechatActionType::ToolConfirmation => data
-            .get("prompt")
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-            .or_else(|| {
-                data.get("tool_name")
-                    .and_then(|value| value.as_str())
-                    .map(|tool_name| format!("需要确认是否执行工具：{tool_name}"))
-            })
-            .unwrap_or_else(|| "需要确认是否继续执行当前操作。".to_string()),
-        PendingWechatActionType::AskUser | PendingWechatActionType::Elicitation => data
-            .get("message")
-            .or_else(|| data.get("prompt"))
-            .and_then(|value| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-            .unwrap_or_else(|| "请补充必要信息后继续执行。".to_string()),
-    }
-}
-
-fn extract_pending_action_options(data: &serde_json::Value) -> Vec<String> {
-    data.get("requested_schema")
-        .and_then(|value| value.get("properties"))
-        .and_then(|value| value.get("answer"))
-        .and_then(|value| value.get("enum"))
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(str::trim))
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
-}
-
-fn format_pending_action_prompt(action: &PendingWechatAction) -> String {
-    let mut lines = vec![action.prompt.trim().to_string()];
-    if !action.options.is_empty() {
-        lines.push(format!("可选项：{}", action.options.join(" / ")));
-    }
-    if action.action_type == PendingWechatActionType::ToolConfirmation {
-        lines.push("请回复：确认 / 继续 / 是，或 取消 / 否。".to_string());
-    }
-    lines
-        .into_iter()
-        .filter(|line| !line.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn parse_tool_confirmation_reply(text: &str) -> Option<bool> {
-    let normalized = text.trim().to_ascii_lowercase();
-    if normalized.is_empty() {
-        return None;
-    }
-
-    let positive = [
-        "y", "yes", "ok", "okay", "confirm", "允许", "确认", "继续", "同意", "可以", "是", "好的",
-        "好",
-    ];
-    if positive
-        .iter()
-        .any(|value| normalized == *value || normalized.starts_with(value))
-    {
-        return Some(true);
-    }
-
-    let negative = [
-        "n",
-        "no",
-        "cancel",
-        "deny",
-        "拒绝",
-        "取消",
-        "不同意",
-        "不要",
-        "否",
-        "不",
-    ];
-    if negative
-        .iter()
-        .any(|value| normalized == *value || normalized.starts_with(value))
-    {
-        return Some(false);
-    }
-
-    None
-}
-
-fn format_gateway_error_for_user(error: &str) -> String {
-    let normalized = error.trim();
-    let lowered = normalized.to_ascii_lowercase();
-
-    if lowered.contains("authentication error")
-        || lowered.contains("invalid api key")
-        || lowered.contains("api key not found")
-        || lowered.contains("401 unauthorized")
-    {
-        return "当前机器人调用模型失败：Provider 鉴权未通过，请在 Lime 的 Provider 设置里检查 API Key、模型绑定和默认模型配置。".to_string();
-    }
-
-    if lowered.contains("timeout") || normalized.contains("超时") {
-        return "当前机器人处理消息超时，请稍后重试。".to_string();
-    }
-
-    format!("当前机器人处理消息失败：{}", normalized)
 }
 
 async fn handle_local_command(
@@ -1557,20 +609,18 @@ async fn handle_local_command(
 ) -> Result<Option<String>, String> {
     let text = inbound.text.trim();
     if text.eq_ignore_ascii_case("/help") {
-        return Ok(Some("可用命令：/new [首条消息]、/help".to_string()));
+        return Ok(Some("可用命令：/new、/help".to_string()));
     }
-    if let Some(rest) = text.strip_prefix("/new") {
+    if text == "/new" {
         let new_session_id = rotate_active_session_id(account, inbound, session_route_state).await;
-        let first_prompt = rest.trim();
-        if first_prompt.is_empty() {
-            return Ok(Some(format!(
-                "已开启新会话：{new_session_id}\n后续消息将进入新上下文。"
-            )));
-        }
         return Ok(Some(format!(
-            "已开启新会话：{new_session_id}\n请继续发送消息：{}",
-            first_prompt
+            "已开启新会话：{new_session_id}\n后续消息将进入新上下文。"
         )));
+    }
+    if text.starts_with("/new ") {
+        return Ok(Some(
+            "/new 不再接收首条消息；请先发送 /new，再直接发送下一条消息。".to_string(),
+        ));
     }
     Ok(None)
 }
@@ -1693,7 +743,7 @@ fn resolve_wechat_accounts(
                     continue;
                 }
             }
-            resolved.push(resolve_account_config(account_id, account, wechat, config)?);
+            resolved.push(resolve_account_config(account_id, account, wechat)?);
         }
         return Ok(resolved);
     }
@@ -1716,18 +766,8 @@ fn resolve_wechat_accounts(
                 } else {
                     wechat.base_url.trim().to_string()
                 },
-                cdn_base_url: if wechat.cdn_base_url.trim().is_empty() {
-                    DEFAULT_CDN_BASE_URL.to_string()
-                } else {
-                    wechat.cdn_base_url.trim().to_string()
-                },
                 bot_token: wechat.bot_token.trim().to_string(),
                 scanner_user_id: wechat.scanner_user_id.clone(),
-                default_provider: resolve_default_provider(config),
-                default_model: wechat
-                    .default_model
-                    .clone()
-                    .or_else(|| normalize_optional_text(Some(config.agent.default_model.as_str()))),
                 dm_policy: wechat.dm_policy.clone(),
                 allow_from: wechat.allow_from.iter().cloned().collect(),
                 group_policy: wechat.group_policy.clone(),
@@ -1744,7 +784,6 @@ fn resolve_account_config(
     account_id: &str,
     account: &WechatAccountConfig,
     root: &WechatBotConfig,
-    config: &Config,
 ) -> Result<ResolvedWechatAccount, String> {
     let base_url = account
         .base_url
@@ -1756,19 +795,6 @@ fn resolve_account_config(
                 DEFAULT_BASE_URL
             } else {
                 root.base_url.trim()
-            }
-        })
-        .to_string();
-    let cdn_base_url = account
-        .cdn_base_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| {
-            if root.cdn_base_url.trim().is_empty() {
-                DEFAULT_CDN_BASE_URL
-            } else {
-                root.cdn_base_url.trim()
             }
         })
         .to_string();
@@ -1791,18 +817,11 @@ fn resolve_account_config(
     Ok(ResolvedWechatAccount {
         account_id: account_id.to_string(),
         base_url,
-        cdn_base_url,
         bot_token: bot_token.to_string(),
         scanner_user_id: account
             .scanner_user_id
             .clone()
             .or_else(|| root.scanner_user_id.clone()),
-        default_provider: resolve_default_provider(config),
-        default_model: account
-            .default_model
-            .clone()
-            .or_else(|| root.default_model.clone())
-            .or_else(|| normalize_optional_text(Some(config.agent.default_model.as_str()))),
         dm_policy: account
             .dm_policy
             .clone()
@@ -1827,65 +846,6 @@ fn resolve_account_config(
             account.groups.clone()
         },
     })
-}
-
-fn normalize_optional_text(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-}
-
-fn resolve_default_provider(config: &Config) -> Option<String> {
-    normalize_optional_text(Some(config.routing.default_provider.as_str()))
-        .or_else(|| normalize_optional_text(Some(config.default_provider.as_str())))
-}
-
-fn build_rpc_model(default_provider: Option<&str>, default_model: Option<&str>) -> Option<String> {
-    let model = normalize_optional_text(default_model)?;
-    if model.contains('/') {
-        return Some(model);
-    }
-    match normalize_optional_text(default_provider) {
-        Some(provider) => Some(format!("{provider}/{model}")),
-        None => Some(model),
-    }
-}
-
-fn resolve_runtime_rpc_model(account: &ResolvedWechatAccount) -> (Option<String>, &'static str) {
-    let cached = build_rpc_model(
-        account.default_provider.as_deref(),
-        account.default_model.as_deref(),
-    );
-    let has_cached = cached.is_some();
-    let cached_source = if has_cached {
-        "startup_cache"
-    } else {
-        "rpc_default"
-    };
-    let config_path = ConfigManager::default_config_path();
-    let live_manager = match ConfigManager::load(&config_path) {
-        Ok(manager) => manager,
-        Err(_) => return (cached, cached_source),
-    };
-
-    let live_account = resolve_wechat_accounts(live_manager.config(), Some(&account.account_id))
-        .ok()
-        .and_then(|accounts| accounts.into_iter().next());
-    let live_model = live_account.and_then(|resolved| {
-        build_rpc_model(
-            resolved.default_provider.as_deref(),
-            resolved.default_model.as_deref(),
-        )
-    });
-
-    if live_model.is_some() {
-        (live_model, "config_live")
-    } else if has_cached {
-        (cached, "startup_cache")
-    } else {
-        (None, "rpc_default")
-    }
 }
 
 fn sync_buf_path(account_id: &str) -> Result<PathBuf, String> {
@@ -1914,9 +874,6 @@ fn save_sync_buf(account_id: &str, value: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lime_core::database::schema::create_tables;
-    use rusqlite::params;
-    use std::sync::{Arc, Mutex};
 
     #[test]
     fn build_wechat_message_dedup_key_prefers_message_id() {
@@ -1954,166 +911,5 @@ mod tests {
             key.as_ref(),
             "fallback:user-1:group-1:1700000000000:ctx-1:今天 的 天气 怎么样"
         );
-    }
-
-    #[test]
-    fn parse_tool_confirmation_reply_supports_common_inputs() {
-        assert_eq!(parse_tool_confirmation_reply("确认"), Some(true));
-        assert_eq!(parse_tool_confirmation_reply("继续执行"), Some(true));
-        assert_eq!(parse_tool_confirmation_reply("取消"), Some(false));
-        assert_eq!(parse_tool_confirmation_reply("不要执行"), Some(false));
-        assert_eq!(parse_tool_confirmation_reply("帮我看一下"), None);
-    }
-
-    #[test]
-    fn extract_pending_action_from_content_reads_elicitation() {
-        let content = json!([
-            {
-                "type": "action_required",
-                "id": "req-1",
-                "action_type": "elicitation",
-                "data": {
-                    "message": "请问你所在的城市是哪里？",
-                    "requested_schema": {
-                        "type": "object",
-                        "properties": {
-                            "answer": {
-                                "type": "string",
-                                "enum": ["北京", "上海"]
-                            }
-                        }
-                    }
-                },
-                "scope": {
-                    "session_id": "session-1",
-                    "thread_id": "thread-1",
-                    "turn_id": "turn-1"
-                }
-            }
-        ]);
-
-        let action = extract_pending_action_from_content("session-1", "run-1", &content).unwrap();
-        assert_eq!(action.session_id, "session-1");
-        assert_eq!(action.run_id, "run-1");
-        assert_eq!(action.request_id, "req-1");
-        assert_eq!(action.action_type, PendingWechatActionType::Elicitation);
-        assert_eq!(action.prompt, "请问你所在的城市是哪里？");
-        assert_eq!(action.options, vec!["北京", "上海"]);
-        let scope = action.scope.expect("scope should exist");
-        assert_eq!(scope.session_id.as_deref(), Some("session-1"));
-        assert_eq!(scope.thread_id.as_deref(), Some("thread-1"));
-        assert_eq!(scope.turn_id.as_deref(), Some("turn-1"));
-    }
-
-    #[test]
-    fn extract_pending_action_from_content_ignores_assistant_text_tail() {
-        let content = json!([
-            {
-                "type": "action_required",
-                "id": "req-1",
-                "action_type": "elicitation",
-                "data": {
-                    "message": "请补充城市"
-                }
-            },
-            {
-                "type": "text",
-                "text": "收到，继续处理中。"
-            }
-        ]);
-
-        assert!(extract_pending_action_from_content("session-1", "run-1", &content).is_none());
-    }
-
-    #[test]
-    fn progress_state_respects_threshold_and_limit() {
-        let mut progress = WechatProgressState::new();
-        assert!(!progress.ack_due());
-        assert!(progress.can_send_more());
-
-        progress.started_at = std::time::Instant::now() - Duration::from_millis(1_500);
-        assert!(progress.ack_due());
-
-        progress.mark_sent(WechatProgressStage::Received);
-        progress.mark_sent(WechatProgressStage::Searching);
-        assert_eq!(progress.message_count(), 2);
-        assert!(!progress.can_send_more());
-    }
-
-    #[test]
-    fn select_progress_stage_requires_slow_tool_path() {
-        let mut progress = WechatProgressState::new();
-        progress.started_at = std::time::Instant::now() - Duration::from_millis(1_500);
-
-        assert_eq!(select_progress_stage(&progress, None), None);
-        assert_eq!(
-            select_progress_stage(&progress, Some(WechatProgressStage::Searching)),
-            Some(WechatProgressStage::Received)
-        );
-
-        progress.mark_sent(WechatProgressStage::Received);
-        assert_eq!(
-            select_progress_stage(&progress, Some(WechatProgressStage::Searching)),
-            Some(WechatProgressStage::Searching)
-        );
-
-        progress.mark_sent(WechatProgressStage::Searching);
-        assert_eq!(
-            select_progress_stage(&progress, Some(WechatProgressStage::Searching)),
-            None
-        );
-    }
-
-    #[test]
-    fn load_tool_progress_stage_resolves_searching_and_tooling() {
-        let db: DbConnection =
-            Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
-        {
-            let conn = db.lock().unwrap();
-            create_tables(&conn).unwrap();
-            conn.execute(
-                "INSERT INTO agent_sessions (id, model, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
-                params!["session-1", "agent:test", "2026-03-22T00:00:00Z", "2026-03-22T00:00:00Z"],
-            )
-            .unwrap();
-            conn.execute(
-                "INSERT INTO agent_thread_turns (id, session_id, prompt_text, status, started_at, completed_at, error_message, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?5, ?5)",
-                params!["turn-1", "session-1", "hello", "running", "2026-03-22T00:00:01Z"],
-            )
-            .unwrap();
-            conn.execute(
-                "INSERT INTO agent_thread_items (id, session_id, turn_id, sequence, item_type, status, started_at, completed_at, updated_at, payload_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?7, ?8)",
-                params![
-                    "item-1",
-                    "session-1",
-                    "turn-1",
-                    1_i64,
-                    "web_search",
-                    "in_progress",
-                    "2026-03-22T00:00:02Z",
-                    "{\"type\":\"web_search\"}"
-                ],
-            )
-            .unwrap();
-        }
-
-        let stage = load_tool_progress_stage(&db, "session-1").unwrap();
-        assert_eq!(stage, Some(WechatProgressStage::Searching));
-
-        {
-            let conn = db.lock().unwrap();
-            conn.execute(
-                "UPDATE agent_thread_items
-                 SET item_type = 'tool_call', updated_at = '2026-03-22T00:00:03Z'
-                 WHERE id = 'item-1'",
-                [],
-            )
-            .unwrap();
-        }
-
-        let stage = load_tool_progress_stage(&db, "session-1").unwrap();
-        assert_eq!(stage, Some(WechatProgressStage::Tooling));
     }
 }

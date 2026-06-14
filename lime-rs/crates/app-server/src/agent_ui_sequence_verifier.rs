@@ -7,6 +7,9 @@ use std::collections::HashSet;
 struct TurnState {
     active_tools: HashMap<String, String>,
     active_actions: HashMap<String, String>,
+    active_patches: HashMap<String, String>,
+    active_commands: HashMap<String, String>,
+    active_tests: HashMap<String, String>,
     terminal: bool,
 }
 
@@ -133,6 +136,95 @@ impl SequenceVerifier {
                     }
                 }
             }
+            "patch.started" => {
+                if let Some(patch_id) = patch_id(event) {
+                    if turn.active_patches.contains_key(&patch_id) {
+                        violations.push(SequenceViolation {
+                            code: "patch_started_already_active",
+                            event_id: event.event_id.clone(),
+                            scope_id: Some(patch_id),
+                        });
+                    } else {
+                        turn.active_patches.insert(patch_id, event.event_id.clone());
+                    }
+                }
+            }
+            "patch.applied" | "patch.failed" => {
+                if let Some(patch_id) = patch_id(event) {
+                    if turn.active_patches.remove(&patch_id).is_none() {
+                        violations.push(SequenceViolation {
+                            code: if event_class == "patch.applied" {
+                                "patch_applied_without_start"
+                            } else {
+                                "patch_failed_without_start"
+                            },
+                            event_id: event.event_id.clone(),
+                            scope_id: Some(patch_id),
+                        });
+                    }
+                }
+            }
+            "command.started" => {
+                if let Some(command_id) = command_id(event) {
+                    if turn.active_commands.contains_key(&command_id) {
+                        violations.push(SequenceViolation {
+                            code: "command_started_already_active",
+                            event_id: event.event_id.clone(),
+                            scope_id: Some(command_id),
+                        });
+                    } else {
+                        turn.active_commands
+                            .insert(command_id, event.event_id.clone());
+                    }
+                }
+            }
+            "command.output" => {
+                if let Some(command_id) = command_id(event) {
+                    if !turn.active_commands.contains_key(&command_id) {
+                        violations.push(SequenceViolation {
+                            code: "command_output_without_start",
+                            event_id: event.event_id.clone(),
+                            scope_id: Some(command_id),
+                        });
+                    }
+                }
+            }
+            "command.exited" => {
+                if let Some(command_id) = command_id(event) {
+                    if turn.active_commands.remove(&command_id).is_none() {
+                        violations.push(SequenceViolation {
+                            code: "command_exited_without_start",
+                            event_id: event.event_id.clone(),
+                            scope_id: Some(command_id),
+                        });
+                    }
+                }
+            }
+            "test.started" => {
+                if let Some(test_run_id) = test_run_id(event) {
+                    if turn.active_tests.contains_key(&test_run_id) {
+                        violations.push(SequenceViolation {
+                            code: "test_started_already_active",
+                            event_id: event.event_id.clone(),
+                            scope_id: Some(test_run_id),
+                        });
+                    } else {
+                        turn.active_tests
+                            .insert(test_run_id, event.event_id.clone());
+                    }
+                }
+            }
+            "test.completed" => {
+                if let Some(test_run_id) = test_run_id(event) {
+                    if turn.active_tests.remove(&test_run_id).is_none() {
+                        violations.push(SequenceViolation {
+                            code: "test_completed_without_start",
+                            event_id: event.event_id.clone(),
+                            scope_id: Some(test_run_id),
+                        });
+                    }
+                }
+            }
             "turn.completed" | "turn.failed" | "turn.canceled" => {
                 if turn.terminal {
                     violations.push(SequenceViolation {
@@ -155,9 +247,33 @@ impl SequenceVerifier {
                         scope_id: Some(action_id.clone()),
                     });
                 }
+                for patch_id in turn.active_patches.keys() {
+                    violations.push(SequenceViolation {
+                        code: "patch_unclosed_at_turn_end",
+                        event_id: event.event_id.clone(),
+                        scope_id: Some(patch_id.clone()),
+                    });
+                }
+                for command_id in turn.active_commands.keys() {
+                    violations.push(SequenceViolation {
+                        code: "command_unclosed_at_turn_end",
+                        event_id: event.event_id.clone(),
+                        scope_id: Some(command_id.clone()),
+                    });
+                }
+                for test_run_id in turn.active_tests.keys() {
+                    violations.push(SequenceViolation {
+                        code: "test_unclosed_at_turn_end",
+                        event_id: event.event_id.clone(),
+                        scope_id: Some(test_run_id.clone()),
+                    });
+                }
                 turn.terminal = true;
                 turn.active_tools.clear();
                 turn.active_actions.clear();
+                turn.active_patches.clear();
+                turn.active_commands.clear();
+                turn.active_tests.clear();
             }
             _ => {}
         }
@@ -187,6 +303,10 @@ fn is_execution_stream_class(event_class: &str) -> bool {
         || event_class.starts_with("action.")
         || event_class.starts_with("model.")
         || event_class.starts_with("reasoning.")
+        || event_class.starts_with("file.")
+        || event_class.starts_with("patch.")
+        || event_class.starts_with("command.")
+        || event_class.starts_with("test.")
         || event_class == "context.resolved"
         || event_class.starts_with("permission.")
         || event_class.starts_with("sandbox.")
@@ -214,7 +334,44 @@ fn action_id(event: &AgentEvent) -> Option<String> {
 }
 
 fn event_scope_id(event: &AgentEvent) -> Option<String> {
-    tool_call_id(event).or_else(|| action_id(event))
+    tool_call_id(event)
+        .or_else(|| action_id(event))
+        .or_else(|| patch_id(event))
+        .or_else(|| command_id(event))
+        .or_else(|| test_run_id(event))
+}
+
+fn patch_id(event: &AgentEvent) -> Option<String> {
+    string_field(
+        &event.payload,
+        &["patchId", "patch_id", "toolCallId", "tool_call_id", "id"],
+    )
+}
+
+fn command_id(event: &AgentEvent) -> Option<String> {
+    string_field(
+        &event.payload,
+        &[
+            "commandId",
+            "command_id",
+            "toolCallId",
+            "tool_call_id",
+            "id",
+        ],
+    )
+}
+
+fn test_run_id(event: &AgentEvent) -> Option<String> {
+    string_field(
+        &event.payload,
+        &[
+            "testRunId",
+            "test_run_id",
+            "toolCallId",
+            "tool_call_id",
+            "id",
+        ],
+    )
 }
 
 fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
@@ -377,5 +534,123 @@ mod tests {
         let error = validate_agent_event_sequence(&existing, &candidate)
             .expect_err("terminal canceled turn should block later execution");
         assert!(error.contains("execution_after_turn_terminal"));
+    }
+
+    #[test]
+    fn accepts_paired_coding_patch_command_and_test_sequence() {
+        let existing = vec![
+            event(
+                "evt_patch_start",
+                "patch.started",
+                json!({ "patchId": "patch_1" }),
+            ),
+            event(
+                "evt_patch_done",
+                "patch.applied",
+                json!({ "patchId": "patch_1" }),
+            ),
+            event(
+                "evt_command_start",
+                "command.started",
+                json!({ "commandId": "cmd_1", "command": "npm test" }),
+            ),
+            event(
+                "evt_command_output",
+                "command.output",
+                json!({ "commandId": "cmd_1", "outputRef": "output://cmd_1" }),
+            ),
+            event(
+                "evt_command_exit",
+                "command.exited",
+                json!({ "commandId": "cmd_1", "exitCode": 0 }),
+            ),
+            event(
+                "evt_test_start",
+                "test.started",
+                json!({ "testRunId": "test_1" }),
+            ),
+        ];
+        let candidate = event(
+            "evt_test_done",
+            "test.completed",
+            json!({ "testRunId": "test_1", "result": "passed" }),
+        );
+
+        validate_agent_event_sequence(&existing, &candidate).expect("valid coding lifecycle");
+    }
+
+    #[test]
+    fn rejects_coding_terminal_events_without_start() {
+        for (event_type, payload, expected_code) in [
+            (
+                "patch.applied",
+                json!({ "patchId": "patch_1" }),
+                "patch_applied_without_start",
+            ),
+            (
+                "command.exited",
+                json!({ "commandId": "cmd_1", "exitCode": 0 }),
+                "command_exited_without_start",
+            ),
+            (
+                "test.completed",
+                json!({ "testRunId": "test_1", "result": "passed" }),
+                "test_completed_without_start",
+            ),
+        ] {
+            let candidate = event("evt_candidate", event_type, payload);
+
+            let error = validate_agent_event_sequence(&[], &candidate)
+                .expect_err("coding terminal without start should fail");
+            assert!(
+                error.contains(expected_code),
+                "unexpected error for {event_type}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_coding_execution_after_turn_terminal() {
+        let existing = vec![event("evt_turn_done", "turn.completed", json!({}))];
+        let candidate = event(
+            "evt_late_file_change",
+            "file.changed",
+            json!({
+                "path": "src/App.tsx",
+                "artifactId": "artifact_1"
+            }),
+        );
+
+        let error = validate_agent_event_sequence(&existing, &candidate)
+            .expect_err("terminal turn should block coding execution stream");
+        assert!(error.contains("execution_after_turn_terminal"));
+    }
+
+    #[test]
+    fn rejects_unclosed_coding_lifecycles_at_terminal_turn() {
+        let existing = vec![
+            event(
+                "evt_patch_start",
+                "patch.started",
+                json!({ "patchId": "patch_1" }),
+            ),
+            event(
+                "evt_command_start",
+                "command.started",
+                json!({ "commandId": "cmd_1" }),
+            ),
+            event(
+                "evt_test_start",
+                "test.started",
+                json!({ "testRunId": "test_1" }),
+            ),
+        ];
+        let candidate = event("evt_turn_done", "turn.completed", json!({}));
+
+        let error = validate_agent_event_sequence(&existing, &candidate)
+            .expect_err("terminal turn should close active coding lifecycles");
+        assert!(error.contains("patch_unclosed_at_turn_end"));
+        assert!(error.contains("command_unclosed_at_turn_end"));
+        assert!(error.contains("test_unclosed_at_turn_end"));
     }
 }

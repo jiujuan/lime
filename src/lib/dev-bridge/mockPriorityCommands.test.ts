@@ -98,7 +98,7 @@ describe("mockPriorityCommands", () => {
     );
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_submit_turn"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_runtime_start_task"),
     ).toBe(true);
@@ -213,10 +213,10 @@ describe("mockPriorityCommands", () => {
     ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_list_sessions"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_update_session"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_delete_session"),
     ).toBe(false);
@@ -344,6 +344,14 @@ describe("mockPriorityCommands", () => {
     expect(
       shouldDisallowMockEventFallbackInBrowser(
         "agent_subagent_stream:session-1",
+      ),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockEventFallbackInBrowser("embedded-browser-view-state"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockEventFallbackInBrowser(
+        "embedded-browser-view-load-failed",
       ),
     ).toBe(true);
   });

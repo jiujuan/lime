@@ -11,11 +11,10 @@ use aster::session::{
     ThreadRuntimeStore,
 };
 use lime_core::app_paths;
-use lime_core::database::agent_runtime_queue_repository::{self, LegacyRuntimeQueuedTurn};
-use lime_core::database::{lock_db, DbConnection};
+use lime_core::database::DbConnection;
 use lime_services::aster_session_store::LimeSessionStore;
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -23,14 +22,6 @@ use std::sync::{Arc, OnceLock};
 const QUEUED_TURN_EVENT_NAME_METADATA_KEY: &str = "event_name";
 const DEFAULT_QUEUE_EVENT_NAME: &str = "agent_stream";
 static ASTER_RUNTIME_ROOT: OnceLock<Result<PathBuf, String>> = OnceLock::new();
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-struct LegacyRuntimeQueueMigrationReport {
-    pub session_count: usize,
-    pub migrated_turn_count: usize,
-    pub skipped_existing_turn_count: usize,
-    pub invalid_turn_count: usize,
-}
 
 pub(crate) fn ensure_aster_runtime_dirs() -> Result<PathBuf, String> {
     ASTER_RUNTIME_ROOT
@@ -58,13 +49,11 @@ pub(crate) fn ensure_aster_runtime_dirs_with_root(root: PathBuf) -> Result<PathB
 pub fn initialize_aster_runtime(db: DbConnection) -> Result<(), String> {
     let runtime_root = ensure_aster_runtime_dirs()?;
     let session_store = Arc::new(LimeSessionStore::new(db.clone()));
-    let migration_db = db.clone();
 
     block_on_aster_runtime_init(async move {
         initialize_shared_session_runtime_with_root(runtime_root, Some(session_store))
             .await
             .map_err(|error| format!("初始化 Aster runtime 失败: {error}"))?;
-        migrate_legacy_runtime_queue_to_aster_store(&migration_db).await?;
         Ok(())
     })
 }
@@ -258,71 +247,6 @@ pub(crate) fn queued_turn_snapshot_from_runtime(
         image_count: queued_turn.image_count,
         position,
     }
-}
-
-async fn migrate_legacy_runtime_queue_to_aster_store(
-    db: &DbConnection,
-) -> Result<LegacyRuntimeQueueMigrationReport, String> {
-    ensure_aster_runtime_dirs_async().await?;
-    let snapshot = {
-        let conn = lock_db(db)?;
-        agent_runtime_queue_repository::load_legacy_runtime_queue_snapshot(&conn)?
-    };
-    let Some(snapshot) = snapshot else {
-        return Ok(LegacyRuntimeQueueMigrationReport::default());
-    };
-
-    let mut report = LegacyRuntimeQueueMigrationReport {
-        session_count: snapshot.sessions.len(),
-        invalid_turn_count: snapshot.invalid_turn_count,
-        ..LegacyRuntimeQueueMigrationReport::default()
-    };
-
-    for session in snapshot.sessions {
-        let mut existing_ids = list_aster_runtime_queued_turns(&session.session_id)
-            .await?
-            .into_iter()
-            .map(|queued_turn| queued_turn.queued_turn_id)
-            .collect::<HashSet<_>>();
-
-        for queued_turn in session.turns {
-            if !existing_ids.insert(queued_turn.queued_turn_id.clone()) {
-                report.skipped_existing_turn_count += 1;
-                continue;
-            }
-
-            enqueue_aster_runtime_turn(queued_turn_runtime_from_legacy_turn(&queued_turn)).await?;
-            report.migrated_turn_count += 1;
-        }
-    }
-
-    {
-        let conn = lock_db(db)?;
-        agent_runtime_queue_repository::drop_legacy_runtime_queue_table(&conn)?;
-    }
-    tracing::info!(
-        "[AsterAgent][Queue] legacy 排队队列已导入到 Aster store: sessions={}, migrated={}, skipped_existing={}, invalid={}",
-        report.session_count,
-        report.migrated_turn_count,
-        report.skipped_existing_turn_count,
-        report.invalid_turn_count
-    );
-    Ok(report)
-}
-
-fn queued_turn_runtime_from_legacy_turn(
-    queued_turn: &LegacyRuntimeQueuedTurn,
-) -> QueuedTurnRuntime {
-    build_queued_turn_runtime(QueuedTurnRuntimeInput {
-        queued_turn_id: &queued_turn.queued_turn_id,
-        session_id: &queued_turn.session_id,
-        event_name: &queued_turn.event_name,
-        message_preview: &queued_turn.message_preview,
-        message_text: &queued_turn.message_text,
-        created_at: queued_turn.created_at,
-        image_count: queued_turn.image_count,
-        payload: queued_turn.payload.clone(),
-    })
 }
 
 struct QueuedTurnRuntimeInput<'a> {

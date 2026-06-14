@@ -15,22 +15,34 @@ import {
 
 test("createAgentRuntimeClient is available from the standard runtime client package", async () => {
   const sent = [];
+  const responses = [
+    {
+      id: 1,
+      result: {
+        turn: {
+          turnId: "turn-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          status: "accepted",
+        },
+      },
+    },
+    {
+      id: 2,
+      result: {
+        tools: [],
+        updatedAt: "2026-05-15T00:00:01.000Z",
+      },
+    },
+  ];
   const connection = new AppServerConnection({
     send(message) {
       sent.push(message);
     },
     async nextMessage() {
-      return {
-        id: 1,
-        result: {
-          turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
-          },
-        },
-      };
+      const response = responses.shift();
+      assert.ok(response, "unexpected App Server request");
+      return response;
     },
   });
 
@@ -39,8 +51,10 @@ test("createAgentRuntimeClient is available from the standard runtime client pac
     sessionId: "session-1",
     input: { text: "生成草稿" },
   });
+  await runtime.readToolInventory({ sessionId: "session-1" });
 
   assert.equal(sent[0].method, "agentSession/turn/start");
+  assert.equal(sent[1].method, "agentSession/toolInventory/read");
   assert.equal(result.result.turn.turnId, "turn-1");
 });
 
@@ -79,6 +93,19 @@ test("createAgentRuntimeClientFromSessionGateway adapts an existing session gate
           turns: [],
         },
         response: { jsonrpc: "2.0", id: 2, result: {} },
+        notifications: [],
+        messages: [],
+      };
+    },
+    async readToolInventory(params, options) {
+      calls.push(["readToolInventory", params, options]);
+      return {
+        id: 6,
+        result: {
+          tools: [],
+          updatedAt: "2026-05-15T00:00:01.000Z",
+        },
+        response: { jsonrpc: "2.0", id: 6, result: {} },
         notifications: [],
         messages: [],
       };
@@ -135,6 +162,7 @@ test("createAgentRuntimeClientFromSessionGateway adapts an existing session gate
     requestOptions,
   );
   await runtime.readThread({ sessionId: "session-1" }, requestOptions);
+  await runtime.readToolInventory({ sessionId: "session-1" }, requestOptions);
   await runtime.cancelTurn(
     { sessionId: "session-1", turnId: "turn-1" },
     requestOptions,
@@ -161,13 +189,16 @@ test("createAgentRuntimeClientFromSessionGateway adapts an existing session gate
   assert.deepEqual(calls.map(([name]) => name), [
     "startTurn",
     "readSession",
+    "readToolInventory",
     "cancelTurn",
     "respondAction",
     "exportEvidence",
   ]);
   assert.equal(calls[1][1].sessionId, "session-1");
   assert.equal(calls[1][2].timeoutMs, 120_000);
-  assert.equal(calls[4][1].includeEvents, true);
+  assert.equal(calls[2][1].sessionId, "session-1");
+  assert.equal(calls[2][2].timeoutMs, 120_000);
+  assert.equal(calls[5][1].includeEvents, true);
 });
 
 test("session gateway client dispatches only App Server runtime events", async () => {

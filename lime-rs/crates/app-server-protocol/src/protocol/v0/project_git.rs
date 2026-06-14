@@ -9,6 +9,26 @@ pub struct ProjectGitStatusParams {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectGitDiffParams {
+    pub root_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_lines: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<ProjectGitDiffBase>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ProjectGitDiffBase {
+    #[default]
+    Unstaged,
+    Staged,
+    Branch,
+    PreviousConversation,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectGitBranchCheckoutParams {
     pub root_path: String,
     pub branch: String,
@@ -50,6 +70,18 @@ pub struct ProjectGitStatusResponse {
     pub current_branch: Option<String>,
     #[serde(default)]
     pub branches: Vec<String>,
+    #[serde(default)]
+    pub uncommitted_file_count: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGitDiffResponse {
+    pub root_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository_root: Option<String>,
+    pub has_git_repository: bool,
+    pub patch: String,
     #[serde(default)]
     pub uncommitted_file_count: u32,
 }

@@ -1,0 +1,129 @@
+use super::requires_current;
+use super::NoopAppDataSource;
+use super::RuntimeCoreError;
+use app_server_protocol::*;
+use async_trait::async_trait;
+
+#[async_trait]
+pub trait McpAppDataSource: Send + Sync {
+    async fn list_mcp_servers(&self) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Ok(McpServerListResponse::default())
+    }
+
+    async fn list_mcp_servers_with_status(
+        &self,
+    ) -> Result<McpServerStatusListResponse, RuntimeCoreError> {
+        Ok(McpServerStatusListResponse::default())
+    }
+
+    async fn create_mcp_server(
+        &self,
+        _params: McpServerCreateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/create"))
+    }
+
+    async fn update_mcp_server(
+        &self,
+        _params: McpServerUpdateParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/update"))
+    }
+
+    async fn delete_mcp_server(
+        &self,
+        _params: McpServerDeleteParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/delete"))
+    }
+
+    async fn set_mcp_server_enabled(
+        &self,
+        _params: McpServerEnabledSetParams,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/enabled/set"))
+    }
+
+    async fn import_mcp_servers_from_app(
+        &self,
+        _params: McpServerImportFromAppParams,
+    ) -> Result<McpServerImportFromAppResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/importFromApp"))
+    }
+
+    async fn sync_all_mcp_servers_to_live(
+        &self,
+    ) -> Result<McpServerListResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/syncAllToLive"))
+    }
+
+    async fn start_mcp_server(
+        &self,
+        _params: McpServerStartParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/start"))
+    }
+
+    async fn stop_mcp_server(
+        &self,
+        _params: McpServerStopParams,
+    ) -> Result<McpServerLifecycleResponse, RuntimeCoreError> {
+        Err(requires_current("mcpServer/stop"))
+    }
+
+    async fn list_mcp_tools(&self) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Ok(McpToolListResponse::default())
+    }
+
+    async fn list_mcp_tools_for_context(
+        &self,
+        _params: McpToolListForContextParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Ok(McpToolListResponse::default())
+    }
+
+    async fn search_mcp_tools(
+        &self,
+        _params: McpToolSearchParams,
+    ) -> Result<McpToolListResponse, RuntimeCoreError> {
+        Ok(McpToolListResponse::default())
+    }
+
+    async fn call_mcp_tool(
+        &self,
+        _params: McpToolCallParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        Err(requires_current("mcpTool/call"))
+    }
+
+    async fn call_mcp_tool_with_caller(
+        &self,
+        _params: McpToolCallWithCallerParams,
+    ) -> Result<McpToolCallResponse, RuntimeCoreError> {
+        Err(requires_current("mcpTool/callWithCaller"))
+    }
+
+    async fn list_mcp_prompts(&self) -> Result<McpPromptListResponse, RuntimeCoreError> {
+        Ok(McpPromptListResponse::default())
+    }
+
+    async fn get_mcp_prompt(
+        &self,
+        _params: McpPromptGetParams,
+    ) -> Result<McpPromptGetResponse, RuntimeCoreError> {
+        Err(requires_current("mcpPrompt/get"))
+    }
+
+    async fn list_mcp_resources(&self) -> Result<McpResourceListResponse, RuntimeCoreError> {
+        Ok(McpResourceListResponse::default())
+    }
+
+    async fn read_mcp_resource(
+        &self,
+        _params: McpResourceReadParams,
+    ) -> Result<McpResourceReadResponse, RuntimeCoreError> {
+        Err(requires_current("mcpResource/read"))
+    }
+}
+
+impl McpAppDataSource for NoopAppDataSource {}

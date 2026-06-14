@@ -48,13 +48,14 @@
 ## Phase C：runtime inventory（已完成）
 
 - [x] 新增 `agent_tools/inventory.rs`
-- [x] 新增 `agent_runtime_get_tool_inventory`
-- [x] 接入 `agentRuntime.ts`
-- [x] 接入 mock / governance command catalog / API test
+- [x] 新增 App Server `agentSession/toolInventory/read`
+- [x] 接入 `agentRuntime/inventoryClient.ts`
+- [x] 接入 App Server protocol / client / contract guard / API test
+- [x] 清退旧 `agent_runtime_get_tool_inventory` Electron facade 与 desktop-host mock
 
 ### 验收标准
 
-- 一条命令能同时输出 catalog / registry / extension / MCP 四视角
+- 一个 App Server current method 能同时输出 catalog / registry / extension / MCP 四视角
 - 能看到 visible / deferred / caller_allowed 状态
 - 能发现 registry 未被 catalog 覆盖的漂移项
 
@@ -90,14 +91,14 @@
 
 ## Phase F：执行权限事实源收口（本轮完成）
 
-- [x] 新增 `lime-rs/src/agent_tools/execution.rs`
+- [x] 新增 `lime-rs/crates/agent/src/agent_tools/execution.rs`
 - [x] 把 workspace execution permission 模板从 `aster_agent_cmd.rs` 收回 `agent_tools` 边界
 - [x] 统一 `bash` / `Task` warning gate 语义
 - [x] 把 execution profile 暴露到 inventory / `agentRuntime.ts`
 - [x] 补齐 `execution.rs` 与 inventory 的定向测试
 - [x] 新增 `NativeAgentConfig.tool_execution`，承接 persisted policy 覆盖
 - [x] 让 `request.metadata.harness.executionPolicy` 承接 runtime session override
-- [x] 让 `agent_runtime_get_tool_inventory` 支持 `metadata`，返回 runtime override 后的 effective profile
+- [x] 让 `agentSession/toolInventory/read` 支持 `metadata`，返回 runtime override 后的 effective profile
 - [x] 给 inventory 增加 provenance 字段，逐项标记 `default` / `persisted` / `runtime`
 - [x] 补齐配置层 default / alias / roundtrip 测试
 

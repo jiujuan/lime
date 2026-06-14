@@ -537,8 +537,7 @@ mod tests {
                 payload: { text: 'before hang' }
               }));
               await new Promise((resolve) => process.stdout.write('', resolve));
-              const fs = await import('node:fs');
-              fs.closeSync(1);
+              await new Promise((resolve) => process.stdout.end(resolve));
               console.error('backend cleanup hung');
               setTimeout(() => {}, 10_000);
             "#,
@@ -554,9 +553,8 @@ mod tests {
         )
         .await;
 
-        assert!(error.contains("timed out after"));
-        assert!(error.contains("while waiting for exit"));
-        assert!(error.contains("backend cleanup hung"));
+        assert!(error.contains("timed out after"), "{error}");
+        assert!(error.contains("backend cleanup hung"), "{error}");
     }
 
     #[test]

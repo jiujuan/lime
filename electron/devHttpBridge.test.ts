@@ -105,7 +105,7 @@ describe("electron/devHttpBridge", () => {
     const { bridge } = await createStartedBridge(invoke);
 
     const response = await postJson(bridge.url, {
-      cmd: " agent_runtime_create_session ",
+      cmd: " app_server_handle_json_lines ",
       args: { workspaceRoot: "/tmp/workspace" },
     });
 
@@ -114,7 +114,7 @@ describe("electron/devHttpBridge", () => {
       body: { result: { accepted: true } },
     });
     expect(invoke).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith("agent_runtime_create_session", {
+    expect(invoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
       workspaceRoot: "/tmp/workspace",
     });
   });

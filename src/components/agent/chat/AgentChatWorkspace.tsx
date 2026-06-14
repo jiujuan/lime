@@ -34,7 +34,10 @@ import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerati
 import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
 import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoiceGenerationBrief";
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
-import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
+import {
+  type CanvasWorkbenchBrowserOpenRequest,
+  type CanvasWorkbenchLayoutMode,
+} from "./components/CanvasWorkbenchLayout";
 import type { CreationMode } from "./components/types";
 import { type TaskFile } from "./components/TaskFiles";
 import { useWorkflow } from "@/components/workspace/hooks/useWorkflow";
@@ -238,6 +241,8 @@ import {
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
 import { RuntimeReviewDecisionDialog } from "./components/RuntimeReviewDecisionDialog";
 import {
+  CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH,
+  CODE_WORKBENCH_CHAT_PANEL_WIDTH,
   TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH,
   TEAM_PRIMARY_CHAT_PANEL_WIDTH,
 } from "./workspace/WorkspaceStyles";
@@ -1388,6 +1393,8 @@ export function AgentChatWorkspace({
   >("desktop");
   const [canvasWorkbenchLayoutMode, setCanvasWorkbenchLayoutMode] =
     useState<CanvasWorkbenchLayoutMode>("split");
+  const [browserWorkbenchOpenRequest, setBrowserWorkbenchOpenRequest] =
+    useState<CanvasWorkbenchBrowserOpenRequest | null>(null);
   const [focusedArtifactBlockId, setFocusedArtifactBlockId] = useState<
     string | null
   >(null);
@@ -1397,7 +1404,25 @@ export function AgentChatWorkspace({
     string | null
   >(null);
   const [timelineFocusRequestKey, setTimelineFocusRequestKey] = useState(0);
+  const browserWorkbenchRequestKeyRef = useRef(0);
   const autoCollapsedTopicSidebarRef = useRef(false);
+
+  const requestBrowserWorkbenchOpen = useCallback((url: string | null) => {
+    browserWorkbenchRequestKeyRef.current += 1;
+    setBrowserWorkbenchOpenRequest({
+      requestKey: browserWorkbenchRequestKeyRef.current,
+      url,
+    });
+  }, []);
+
+  const handleBrowserWorkbenchOpenRequestHandled = useCallback(
+    (requestKey: string | number) => {
+      setBrowserWorkbenchOpenRequest((current) =>
+        current?.requestKey === requestKey ? null : current,
+      );
+    },
+    [],
+  );
 
   // 跳转到技能主页面
   const handleNavigateToSkillSettings = useCallback(() => {
@@ -1929,6 +1954,7 @@ export function AgentChatWorkspace({
     queuedTurns = [],
     threadRead = null,
     executionRuntime = null,
+    sessionWorkingDir = null,
     activeExecutionRuntime = null,
     isSending,
     sendMessage,
@@ -2529,6 +2555,7 @@ export function AgentChatWorkspace({
     setLayoutMode,
     upsertGeneralArtifact,
     generalBrowserAssistProfileKey: GENERAL_BROWSER_ASSIST_PROFILE_KEY,
+    onBrowserWorkbenchOpenRequest: requestBrowserWorkbenchOpen,
   });
   const initialHarnessBrowserAssist = useMemo(() => {
     return asRecord(
@@ -3626,8 +3653,7 @@ export function AgentChatWorkspace({
     taskCenterOpenTabIdsRef.current = taskCenterOpenTabIds;
   }, [taskCenterOpenTabIds]);
 
-  const isTaskCenterEntry =
-    agentEntry === "claw" || agentEntry === "new-task";
+  const isTaskCenterEntry = agentEntry === "claw" || agentEntry === "new-task";
 
   useEffect(() => {
     if (!isTaskCenterEntry) {
@@ -4104,7 +4130,7 @@ export function AgentChatWorkspace({
   );
   const isTaskCenterDraftSurfaceActive = Boolean(
     isTaskCenterEntry &&
-      (activeTaskCenterDraftTab || taskCenterDraftSurfaceActiveRef.current),
+    (activeTaskCenterDraftTab || taskCenterDraftSurfaceActiveRef.current),
   );
   const isTaskCenterDraftSendInFlight = Boolean(
     agentEntry === "claw" &&
@@ -4161,41 +4187,38 @@ export function AgentChatWorkspace({
     setSelectedText("");
   }, [activeTheme, contentId]);
 
-  const {
-    handleToggleCanvas,
-    handleCloseCanvas,
-    resolvedCanvasState,
-  } = useWorkspaceCanvasLayoutRuntime({
-    activeTheme,
-    isThemeWorkbench,
-    hasPendingA2UIForm,
-    layoutMode,
-    showChatPanel: effectiveShowChatPanel,
-    showSidebar,
-    defaultTopicSidebarVisible,
-    hasMessages,
-    canvasWorkbenchLayoutMode,
-    autoCollapsedTopicSidebarRef,
-    mappedTheme,
-    normalizedEntryTheme,
-    shouldPreserveBlankHomeSurface,
-    shouldBootstrapCanvasOnEntry,
-    canvasState,
-    generalCanvasState,
-    hasCurrentCanvasArtifact: Boolean(currentCanvasArtifact),
-    currentCanvasArtifactType: currentCanvasArtifact?.type,
-    hasBrowserAssistArtifact,
-    currentImageWorkbenchActive: currentImageWorkbenchState.active,
-    onHasMessagesChange,
-    suppressGeneralCanvasArtifactAutoOpen,
-    suppressBrowserAssistCanvasAutoOpen,
-    clearBrowserAssistCanvasArtifact,
-    setShowSidebar,
-    setLayoutMode,
-    setGeneralCanvasState,
-    setCanvasState,
-    setCanvasWorkbenchLayoutMode,
-  });
+  const { handleToggleCanvas, handleCloseCanvas, resolvedCanvasState } =
+    useWorkspaceCanvasLayoutRuntime({
+      activeTheme,
+      isThemeWorkbench,
+      hasPendingA2UIForm,
+      layoutMode,
+      showChatPanel: effectiveShowChatPanel,
+      showSidebar,
+      defaultTopicSidebarVisible,
+      hasMessages,
+      canvasWorkbenchLayoutMode,
+      autoCollapsedTopicSidebarRef,
+      mappedTheme,
+      normalizedEntryTheme,
+      shouldPreserveBlankHomeSurface,
+      shouldBootstrapCanvasOnEntry,
+      canvasState,
+      generalCanvasState,
+      hasCurrentCanvasArtifact: Boolean(currentCanvasArtifact),
+      currentCanvasArtifactType: currentCanvasArtifact?.type,
+      hasBrowserAssistArtifact,
+      currentImageWorkbenchActive: currentImageWorkbenchState.active,
+      onHasMessagesChange,
+      suppressGeneralCanvasArtifactAutoOpen,
+      suppressBrowserAssistCanvasAutoOpen,
+      clearBrowserAssistCanvasArtifact,
+      setShowSidebar,
+      setLayoutMode,
+      setGeneralCanvasState,
+      setCanvasState,
+      setCanvasWorkbenchLayoutMode,
+    });
 
   useWorkspaceCanvasTaskFileSync({
     taskFiles,
@@ -5943,6 +5966,11 @@ export function AgentChatWorkspace({
       teamSessionRuntime.subagentsRuntimeVisible &&
       (teamSessionRuntime.hasRuntimeSessions ||
         Boolean(teamDispatchPreviewState));
+    const shouldUseCodeWorkbenchChatPanelWidth =
+      layoutMode === "chat-canvas" &&
+      activeTheme === "general" &&
+      hasCanvasWorkbenchContent &&
+      !shouldUseSubagentsPrimaryChatPanelWidth;
     return {
       showChatLayout,
       isWorkspaceCompactChrome,
@@ -5958,15 +5986,20 @@ export function AgentChatWorkspace({
       shouldRenderTopBar,
       layoutTransitionChatPanelWidth: shouldUseSubagentsPrimaryChatPanelWidth
         ? TEAM_PRIMARY_CHAT_PANEL_WIDTH
-        : undefined,
+        : shouldUseCodeWorkbenchChatPanelWidth
+          ? CODE_WORKBENCH_CHAT_PANEL_WIDTH
+          : undefined,
       layoutTransitionChatPanelMinWidth: shouldUseSubagentsPrimaryChatPanelWidth
         ? TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH
-        : undefined,
+        : shouldUseCodeWorkbenchChatPanelWidth
+          ? CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH
+          : undefined,
       shouldShowGeneralWorkbenchFloatingInputOverlay,
       shouldRenderInlineA2UI,
     };
   }, [
     agentEntry,
+    activeTheme,
     contextWorkspace.generalWorkbenchEnabled,
     currentGate.status,
     hasDisplayMessages,
@@ -6757,6 +6790,8 @@ export function AgentChatWorkspace({
   const sceneLayoutMode = shouldRenderTaskCenterEmbeddedHome
     ? "chat"
     : layoutMode;
+  const canvasWorkbenchRootPath =
+    sessionWorkingDir?.trim() || project?.rootPath || null;
 
   const conversationSceneRuntime = useWorkspaceConversationSceneRuntime({
     messageListEmptyStateVariant: sceneMessageListEmptyStateVariant,
@@ -6771,6 +6806,9 @@ export function AgentChatWorkspace({
     shellChromeRuntime,
     generalWorkbenchHarnessDialog,
     currentImageWorkbenchActive: currentImageWorkbenchState.active,
+    browserWorkbenchOpenRequest,
+    onBrowserWorkbenchOpenRequestHandled:
+      handleBrowserWorkbenchOpenRequestHandled,
     projectId: projectId ?? null,
     openedProjects,
     onCloseProject: handleCloseOpenedProject,
@@ -6784,6 +6822,7 @@ export function AgentChatWorkspace({
       setBrowserWorkspaceHintVisible(false);
     },
     projectRootPath: project?.rootPath || null,
+    canvasWorkbenchRootPath,
     projectCharacters: projectMemory?.characters || [],
     generalCanvasContent: generalCanvasState.content,
     handleToggleHarnessPanel: contextHarnessRuntime.handleToggleHarnessPanel,

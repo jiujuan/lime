@@ -169,7 +169,7 @@ const {
   mockSendAgentRuntimeSubagentInput: vi.fn(),
   mockWaitAgentRuntimeSubagents: vi.fn(),
   mockCanvasWorkbenchLayoutState: {
-    renderPreview: false,
+    renderPreviewProbe: false,
   },
   mockCanvasWorkbenchLayout: vi.fn((props?: Record<string, unknown>) => {
     const defaultPreview =
@@ -181,27 +181,11 @@ const {
             absolutePath?: string;
           })
         : null;
-    const preview =
-      mockCanvasWorkbenchLayoutState.renderPreview &&
-      typeof props?.renderPreview === "function"
-        ? props.renderPreview(
-            {
-              kind: "default-canvas",
-              title: defaultPreview?.title || "当前画布草稿",
-              content:
-                defaultPreview?.content || "# 新文档\n\n在这里开始编写内容...",
-              filePath: defaultPreview?.filePath,
-              absolutePath: defaultPreview?.absolutePath,
-            },
-            {
-              stackedWorkbenchTrigger: (
-                <button type="button" data-testid="stacked-workbench-trigger">
-                  切换工作台
-                </button>
-              ),
-            },
-          )
-        : null;
+    const preview = mockCanvasWorkbenchLayoutState.renderPreviewProbe ? (
+      <div data-testid="canvas-workbench-default-preview-probe">
+        {defaultPreview?.title || "当前画布草稿"}
+      </div>
+    ) : null;
 
     return (
       <div
@@ -219,6 +203,16 @@ const {
           typeof props.defaultPreview.title === "string"
             ? props.defaultPreview.title
             : ""
+        }
+        data-default-preview-file-path={defaultPreview?.filePath || ""}
+        data-default-preview-absolute-path={defaultPreview?.absolutePath || ""}
+        data-default-preview-content={defaultPreview?.content || ""}
+        data-default-preview-content-type={
+          /\.(md|markdown|mdx)$/i.test(defaultPreview?.filePath || "")
+            ? "markdown"
+            : /\.(html|htm)$/i.test(defaultPreview?.filePath || "")
+              ? "html"
+              : "code"
         }
       >
         {preview}
@@ -1509,7 +1503,7 @@ beforeEach(() => {
     readFile: vi.fn(async () => null),
     meta: null,
   });
-  mockCanvasWorkbenchLayoutState.renderPreview = false;
+  mockCanvasWorkbenchLayoutState.renderPreviewProbe = false;
 
   mockJotaiState.artifacts = [];
   mockJotaiState.selectedArtifact = null;

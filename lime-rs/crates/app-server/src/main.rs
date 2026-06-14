@@ -5,6 +5,8 @@ use app_server::AppServer;
 use app_server::AppServerBackendMode;
 use app_server::AppServerRuntimeFactory;
 use app_server::ExternalBackendConfig;
+use app_server::FilesystemFileCheckpointSnapshotStore;
+use app_server::FilesystemOutputSnapshotStore;
 use app_server::LocalAppDataSource;
 use app_server::DEFAULT_EXTERNAL_BACKEND_TIMEOUT_MS;
 use app_server_transport::DEFAULT_LISTEN_URL;
@@ -105,6 +107,8 @@ async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
             AppServerRuntimeFactory::unavailable_runtime_core()
         }
     }
+    .with_file_checkpoint_snapshot_store(Arc::new(FilesystemFileCheckpointSnapshotStore::new()))
+    .with_output_snapshot_store(Arc::new(FilesystemOutputSnapshotStore::new()))
     .with_app_data_source(app_data_source);
 
     Ok(AppServer::with_runtime(runtime))

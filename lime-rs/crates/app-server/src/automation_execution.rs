@@ -1,0 +1,922 @@
+use app_server_protocol::AgentInput;
+use app_server_protocol::AgentSessionStartParams;
+use app_server_protocol::AgentSessionTurnStartParams;
+use app_server_protocol::AgentTurnStatus;
+use app_server_protocol::AutomationJobIdParams;
+use app_server_protocol::AutomationJobRunNowResponse;
+use app_server_protocol::BusinessObjectRef;
+use app_server_protocol::RuntimeOptions;
+use chrono::DateTime;
+use chrono::Duration;
+use chrono::Utc;
+use lime_core::config::TaskSchedule;
+use lime_core::database::dao::agent_run::AgentRun;
+use lime_core::database::dao::agent_run::AgentRunStatus;
+use lime_core::database::dao::automation_job::AutomationJob;
+use serde_json::json;
+use serde_json::Value;
+use std::str::FromStr;
+use uuid::Uuid;
+
+use crate::RuntimeCore;
+use crate::RuntimeCoreError;
+use crate::RuntimeHostContext;
+
+const AUTOMATION_SOURCE: &str = "automation";
+
+#[derive(Debug, Clone)]
+pub struct AutomationRunStart {
+    pub job: AutomationJob,
+    pub run: AgentRun,
+    pub session_id: String,
+    pub thread_id: String,
+    pub turn_id: String,
+    pub prompt: String,
+    pub runtime_options: RuntimeOptions,
+}
+
+#[derive(Debug, Clone)]
+pub struct AutomationRunFinish {
+    pub job: AutomationJob,
+    pub run_id: String,
+    pub status: AgentRunStatus,
+    pub finished_at: String,
+    pub duration_ms: Option<i64>,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+    pub metadata: Value,
+}
+
+#[derive(Debug, Clone)]
+pub struct AutomationRunFailure {
+    pub job: AutomationJob,
+    pub run: Option<AgentRun>,
+    pub status: AgentRunStatus,
+    pub finished_at: String,
+    pub duration_ms: Option<i64>,
+    pub error_code: String,
+    pub error_message: String,
+    pub metadata: Value,
+}
+
+impl RuntimeCore {
+    pub async fn execute_automation_job_now(
+        &self,
+        params: AutomationJobIdParams,
+        host: RuntimeHostContext,
+    ) -> Result<AutomationJobRunNowResponse, RuntimeCoreError> {
+        let started_ms = Utc::now().timestamp_millis();
+        let start = match self.start_automation_job_run(params.id.clone()).await {
+            Ok(start) => start,
+            Err(error) => return Err(error),
+        };
+
+        let start_result = self.start_automation_turn(&start, host).await;
+        match start_result {
+            Ok(turn) => {
+                let status = match turn.status {
+                    AgentTurnStatus::Completed => Some(AgentRunStatus::Success),
+                    AgentTurnStatus::Failed => Some(AgentRunStatus::Error),
+                    AgentTurnStatus::Canceled => Some(AgentRunStatus::Canceled),
+                    _ => None,
+                };
+                if let Some(status) = status {
+                    let finish = AutomationRunFinish {
+                        job: start.job,
+                        run_id: start.run.id.clone(),
+                        status,
+                        finished_at: Utc::now().to_rfc3339(),
+                        duration_ms: Some(Utc::now().timestamp_millis().saturating_sub(started_ms)),
+                        error_code: None,
+                        error_message: None,
+                        metadata: json!({
+                            "jobId": params.id,
+                            "sessionId": start.session_id,
+                            "threadId": start.thread_id,
+                            "turnId": turn.turn_id,
+                            "turnStatus": agent_turn_status_value(turn.status),
+                        }),
+                    };
+                    self.finish_automation_job_run(finish).await?;
+                }
+                Ok(AutomationJobRunNowResponse {
+                    result: json!({
+                        "job_id": params.id,
+                        "run_id": start.run.id,
+                        "session_id": start.session_id,
+                        "thread_id": start.thread_id,
+                        "turn_id": turn.turn_id,
+                        "started": true,
+                        "status": agent_turn_status_value(turn.status),
+                    }),
+                })
+            }
+            Err(error) => {
+                let failure = AutomationRunFailure {
+                    job: start.job,
+                    run: Some(start.run),
+                    status: AgentRunStatus::Error,
+                    finished_at: Utc::now().to_rfc3339(),
+                    duration_ms: Some(Utc::now().timestamp_millis().saturating_sub(started_ms)),
+                    error_code: "automation_turn_start_failed".to_string(),
+                    error_message: error.to_string(),
+                    metadata: json!({
+                        "jobId": params.id,
+                        "sessionId": start.session_id,
+                        "threadId": start.thread_id,
+                        "turnId": start.turn_id,
+                    }),
+                };
+                self.fail_automation_job_run(failure).await?;
+                Err(error)
+            }
+        }
+    }
+
+    async fn start_automation_turn(
+        &self,
+        start: &AutomationRunStart,
+        host: RuntimeHostContext,
+    ) -> Result<app_server_protocol::AgentTurn, RuntimeCoreError> {
+        match self.start_session(AgentSessionStartParams {
+            session_id: Some(start.session_id.clone()),
+            thread_id: Some(start.thread_id.clone()),
+            app_id: "automation".to_string(),
+            workspace_id: Some(start.job.workspace_id.clone()),
+            business_object_ref: Some(BusinessObjectRef {
+                kind: "automation_job".to_string(),
+                id: start.job.id.clone(),
+                title: Some(start.job.name.clone()),
+                uri: None,
+                metadata: Some(json!({
+                    "source": AUTOMATION_SOURCE,
+                    "runId": start.run.id,
+                    "executionMode": start.job.execution_mode,
+                })),
+            }),
+            locale: None,
+        }) {
+            Ok(_) => {}
+            Err(RuntimeCoreError::SessionAlreadyExists(_)) => {}
+            Err(error) => return Err(error),
+        }
+
+        let output = self
+            .start_turn(
+                AgentSessionTurnStartParams {
+                    session_id: start.session_id.clone(),
+                    turn_id: Some(start.turn_id.clone()),
+                    input: AgentInput {
+                        text: start.prompt.clone(),
+                        attachments: Vec::new(),
+                    },
+                    runtime_options: Some(start.runtime_options.clone()),
+                    queue_if_busy: false,
+                    skip_pre_submit_resume: false,
+                },
+                host,
+            )
+            .await?;
+        Ok(output.response.turn)
+    }
+}
+
+pub fn build_automation_run_start(
+    job: AutomationJob,
+) -> Result<AutomationRunStart, RuntimeCoreError> {
+    validate_automation_job_for_run(&job)?;
+    let payload = job
+        .payload
+        .as_object()
+        .ok_or_else(|| RuntimeCoreError::Backend("自动化任务 payload 必须为对象".to_string()))?;
+    let prompt = string_field(payload, &["prompt"])
+        .ok_or_else(|| RuntimeCoreError::Backend("自动化任务内容不能为空".to_string()))?;
+    let run_id = format!("automation-run-{}", Uuid::new_v4());
+    let session_id = string_field(payload, &["session_id", "sessionId"])
+        .unwrap_or_else(|| format!("automation-session-{}", job.id));
+    let thread_id = string_field(payload, &["thread_id", "threadId"])
+        .unwrap_or_else(|| format!("automation-thread-{}", job.id));
+    let turn_id =
+        string_field(payload, &["turn_id", "turnId"]).unwrap_or_else(|| format!("turn-{run_id}"));
+    let started_at = Utc::now().to_rfc3339();
+    let runtime_options = build_runtime_options(&job, &run_id, &session_id, &thread_id, &turn_id)?;
+    let run = AgentRun {
+        id: run_id,
+        source: AUTOMATION_SOURCE.to_string(),
+        source_ref: Some(job.id.clone()),
+        session_id: Some(session_id.clone()),
+        status: AgentRunStatus::Running,
+        started_at: started_at.clone(),
+        finished_at: None,
+        duration_ms: None,
+        error_code: None,
+        error_message: None,
+        metadata: Some(
+            serde_json::to_string(&json!({
+                "jobId": job.id,
+                "jobName": job.name,
+                "sessionId": session_id,
+                "threadId": thread_id,
+                "turnId": turn_id,
+                "payloadKind": "agent_turn",
+                "runtimeOptions": runtime_options,
+            }))
+            .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?,
+        ),
+        created_at: started_at.clone(),
+        updated_at: started_at,
+    };
+
+    Ok(AutomationRunStart {
+        job,
+        run,
+        session_id,
+        thread_id,
+        turn_id,
+        prompt,
+        runtime_options,
+    })
+}
+
+pub fn apply_automation_run_started(job: &mut AutomationJob, run: &AgentRun) {
+    job.running_started_at = Some(run.started_at.clone());
+    job.last_run_at = Some(run.started_at.clone());
+    job.last_finished_at = None;
+    job.last_status = Some("running".to_string());
+    job.last_error = None;
+    job.updated_at = run.started_at.clone();
+}
+
+pub fn apply_automation_run_finished(
+    job: &mut AutomationJob,
+    status: &AgentRunStatus,
+    finished_at: String,
+    error_message: Option<String>,
+) {
+    job.running_started_at = None;
+    job.last_finished_at = Some(finished_at.clone());
+    job.last_status = Some(status.as_str().to_string());
+    job.last_error = error_message.clone();
+    match status {
+        AgentRunStatus::Success => {
+            job.consecutive_failures = 0;
+            job.last_retry_count = 0;
+            job.auto_disabled_until = None;
+        }
+        AgentRunStatus::Error | AgentRunStatus::Timeout => {
+            job.consecutive_failures = job.consecutive_failures.saturating_add(1);
+            job.last_retry_count = job.last_retry_count.saturating_add(1);
+        }
+        AgentRunStatus::Canceled => {}
+        AgentRunStatus::Queued | AgentRunStatus::Running => {}
+    }
+    job.next_run_at = if job.enabled {
+        next_run_for_automation_schedule(&job.schedule, Utc::now())
+            .ok()
+            .flatten()
+            .map(|value| value.to_rfc3339())
+    } else {
+        None
+    };
+    job.updated_at = finished_at;
+}
+
+pub fn next_run_for_automation_schedule(
+    schedule: &TaskSchedule,
+    from: DateTime<Utc>,
+) -> Result<Option<DateTime<Utc>>, String> {
+    match schedule {
+        TaskSchedule::Every { every_secs } => {
+            let secs = (*every_secs).max(60);
+            Ok(Some(from + Duration::seconds(secs as i64)))
+        }
+        TaskSchedule::Cron { expr, tz } => {
+            let normalized = normalize_cron_expression(expr);
+            let cron_schedule = cron::Schedule::from_str(&normalized)
+                .map_err(|error| format!("无效的 Cron 表达式: {error}"))?;
+            let next = if let Some(tz_str) = tz
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                let timezone: chrono_tz::Tz = tz_str
+                    .parse()
+                    .map_err(|_| format!("无效的时区: {tz_str}"))?;
+                cron_schedule
+                    .after(&from.with_timezone(&timezone))
+                    .next()
+                    .map(|value| value.with_timezone(&Utc))
+            } else {
+                cron_schedule.after(&from).next()
+            };
+            Ok(next)
+        }
+        TaskSchedule::At { at } => {
+            let target = DateTime::parse_from_rfc3339(at)
+                .map_err(|error| format!("无效的时间格式（需要 RFC3339）: {error}"))?
+                .with_timezone(&Utc);
+            if target > from {
+                Ok(Some(target))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
+pub fn validate_automation_schedule_value(
+    schedule: &TaskSchedule,
+    now: DateTime<Utc>,
+) -> Result<(), String> {
+    match schedule {
+        TaskSchedule::Every { every_secs } => {
+            if *every_secs < 60 {
+                return Err("间隔时间不能小于 60 秒".to_string());
+            }
+            Ok(())
+        }
+        TaskSchedule::Cron { expr, tz } => {
+            let normalized = normalize_cron_expression(expr);
+            cron::Schedule::from_str(&normalized)
+                .map_err(|error| format!("无效的 Cron 表达式: {error}"))?;
+            if let Some(tz_str) = tz
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                let _: chrono_tz::Tz = tz_str
+                    .parse()
+                    .map_err(|_| format!("无效的时区: {tz_str}"))?;
+            }
+            Ok(())
+        }
+        TaskSchedule::At { at } => {
+            let target = DateTime::parse_from_rfc3339(at)
+                .map_err(|error| format!("无效的时间格式: {error}"))?
+                .with_timezone(&Utc);
+            if target <= now {
+                return Err("指定时间已过期".to_string());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_automation_job_for_run(job: &AutomationJob) -> Result<(), RuntimeCoreError> {
+    if !job.enabled {
+        return Err(RuntimeCoreError::Backend(format!(
+            "自动化任务已禁用: {}",
+            job.id
+        )));
+    }
+    if job.running_started_at.is_some() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "自动化任务正在运行: {}",
+            job.id
+        )));
+    }
+    if let Some(until) = job.auto_disabled_until.as_deref() {
+        let until = DateTime::parse_from_rfc3339(until)
+            .map(|value| value.with_timezone(&Utc))
+            .map_err(|error| {
+                RuntimeCoreError::Backend(format!("自动化任务冷却时间无效: {error}"))
+            })?;
+        if until > Utc::now() {
+            return Err(RuntimeCoreError::Backend(format!(
+                "自动化任务处于冷却中，直到 {}",
+                until.to_rfc3339()
+            )));
+        }
+    }
+    let kind = job
+        .payload
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if kind != "agent_turn" {
+        return Err(RuntimeCoreError::Backend(format!(
+            "不支持执行自动化任务 payload.kind: {kind}"
+        )));
+    }
+    Ok(())
+}
+
+fn build_runtime_options(
+    job: &AutomationJob,
+    run_id: &str,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+) -> Result<RuntimeOptions, RuntimeCoreError> {
+    let payload = job
+        .payload
+        .as_object()
+        .ok_or_else(|| RuntimeCoreError::Backend("自动化任务 payload 必须为对象".to_string()))?;
+    let request_metadata = payload
+        .get("request_metadata")
+        .or_else(|| payload.get("requestMetadata"))
+        .cloned()
+        .filter(Value::is_object);
+    let working_dir = string_field(
+        payload,
+        &[
+            "working_dir",
+            "workingDir",
+            "working_directory",
+            "workingDirectory",
+            "cwd",
+        ],
+    );
+    let project_root = string_field(
+        payload,
+        &[
+            "project_root",
+            "projectRoot",
+            "workspace_root",
+            "workspaceRoot",
+        ],
+    );
+    let reasoning_effort = string_field(
+        payload,
+        &[
+            "reasoning_effort",
+            "reasoningEffort",
+            "model_reasoning_effort",
+            "modelReasoningEffort",
+        ],
+    )
+    .or_else(|| json_pointer_string_value(&job.payload, &["/reasoning/effort"]));
+    let provider_preference = string_field(
+        payload,
+        &["provider_preference", "providerPreference", "provider"],
+    );
+    let model_preference = string_field(payload, &["model_preference", "modelPreference", "model"]);
+    let system_prompt = string_field(payload, &["system_prompt", "systemPrompt"]);
+    let approval_policy = string_field(payload, &["approval_policy", "approvalPolicy"]);
+    let sandbox_policy = string_field(payload, &["sandbox_policy", "sandboxPolicy"]);
+    let search_mode = string_field(payload, &["search_mode", "searchMode"]);
+    let web_search = bool_field(payload, &["web_search", "webSearch"]);
+    let provider_config = payload
+        .get("provider_config")
+        .or_else(|| payload.get("providerConfig"))
+        .cloned();
+    let output_schema = payload
+        .get("output_schema")
+        .or_else(|| payload.get("outputSchema"))
+        .cloned()
+        .or_else(|| {
+            job.delivery
+                .output_schema
+                .as_ref()
+                .map(|value| json!(value))
+        });
+
+    let runtime_metadata = json!({
+        "source": AUTOMATION_SOURCE,
+        "automation_job": {
+            "id": job.id,
+            "name": job.name,
+            "workspace_id": job.workspace_id,
+            "execution_mode": job.execution_mode,
+            "run_id": run_id,
+        },
+        "request_metadata": request_metadata,
+        "harness": {
+            "automation_job": {
+                "id": job.id,
+                "run_id": run_id,
+                "session_id": session_id,
+                "thread_id": thread_id,
+                "turn_id": turn_id,
+            },
+            "reasoning_effort": reasoning_effort,
+            "search_mode": search_mode,
+            "web_search": web_search,
+            "working_dir": working_dir,
+            "project_root": project_root,
+        },
+        "turn_config": {
+            "reasoning_effort": reasoning_effort,
+            "working_dir": working_dir,
+            "project_root": project_root,
+            "output_schema": output_schema,
+        },
+    });
+
+    let turn_config = json_strip_nulls(json!({
+        "provider_config": provider_config,
+        "provider_preference": provider_preference,
+        "model_preference": model_preference,
+        "reasoning_effort": reasoning_effort,
+        "approval_policy": approval_policy,
+        "sandbox_policy": sandbox_policy,
+        "web_search": web_search,
+        "search_mode": search_mode,
+        "system_prompt": system_prompt,
+        "working_dir": working_dir,
+        "project_root": project_root,
+        "metadata": request_metadata,
+    }));
+    let host_options = json_strip_nulls(json!({
+        "asterChatRequest": {
+            "session_id": session_id,
+            "thread_id": thread_id,
+            "turn_id": turn_id,
+            "workspace_id": job.workspace_id,
+            "provider_config": provider_config,
+            "provider_preference": provider_preference,
+            "model_preference": model_preference,
+            "reasoning_effort": reasoning_effort,
+            "approval_policy": approval_policy,
+            "sandbox_policy": sandbox_policy,
+            "web_search": web_search,
+            "search_mode": search_mode,
+            "system_prompt": system_prompt,
+            "working_dir": working_dir,
+            "project_root": project_root,
+            "metadata": request_metadata,
+            "turn_config": turn_config,
+        }
+    }));
+
+    Ok(RuntimeOptions {
+        capability_id: None,
+        stream: true,
+        event_name: Some("automation.turn".to_string()),
+        provider_preference,
+        model_preference,
+        metadata: Some(json_strip_nulls(runtime_metadata)),
+        queued_turn_id: None,
+        host_options: Some(host_options),
+    })
+}
+
+fn normalize_cron_expression(expr: &str) -> String {
+    let parts = expr.split_whitespace().collect::<Vec<_>>();
+    if parts.len() == 5 {
+        format!("0 {}", expr.trim())
+    } else {
+        expr.trim().to_string()
+    }
+}
+
+fn agent_turn_status_value(status: AgentTurnStatus) -> &'static str {
+    match status {
+        AgentTurnStatus::Accepted => "accepted",
+        AgentTurnStatus::Queued => "queued",
+        AgentTurnStatus::Running => "running",
+        AgentTurnStatus::WaitingAction => "waiting_action",
+        AgentTurnStatus::Completed => "completed",
+        AgentTurnStatus::Failed => "failed",
+        AgentTurnStatus::Canceled => "canceled",
+    }
+}
+
+fn string_field(map: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| map.get(*key))
+        .find_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn json_pointer_string_value(value: &Value, pointers: &[&str]) -> Option<String> {
+    pointers.iter().find_map(|pointer| {
+        value
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn bool_field(map: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<bool> {
+    keys.iter()
+        .filter_map(|key| map.get(*key))
+        .find_map(|value| match value {
+            Value::Bool(flag) => Some(*flag),
+            Value::String(raw) => match raw.trim().to_ascii_lowercase().as_str() {
+                "true" | "1" | "yes" | "on" | "enabled" => Some(true),
+                "false" | "0" | "no" | "off" | "disabled" => Some(false),
+                _ => None,
+            },
+            Value::Number(number) => number.as_i64().map(|value| value != 0),
+            _ => None,
+        })
+}
+
+fn json_strip_nulls(value: Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut next = serde_json::Map::new();
+            for (key, value) in map {
+                let value = json_strip_nulls(value);
+                if !value.is_null() {
+                    next.insert(key, value);
+                }
+            }
+            Value::Object(next)
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(json_strip_nulls).collect()),
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ActionRespondRequest;
+    use crate::CancelExecutionRequest;
+    use crate::ExecutionBackend;
+    use crate::ExecutionRequest;
+    use crate::LocalAppDataSource;
+    use crate::RuntimeEvent;
+    use crate::RuntimeEventSink;
+    use lime_core::config::AutomationExecutionMode;
+    use lime_core::config::DeliveryConfig;
+    use lime_core::database;
+    use lime_core::database::dao::agent_run::AgentRunDao;
+    use lime_core::database::dao::automation_job::AutomationJobDao;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    struct RecordingCompletedBackend {
+        requests: Mutex<Vec<ExecutionRequest>>,
+    }
+
+    #[async_trait::async_trait]
+    impl ExecutionBackend for RecordingCompletedBackend {
+        async fn start_turn(
+            &self,
+            request: ExecutionRequest,
+            sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            self.requests
+                .lock()
+                .expect("test backend requests mutex poisoned")
+                .push(request);
+            sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+            sink.emit(RuntimeEvent::new(
+                "message.delta",
+                json!({ "text": "自动化任务已完成" }),
+            ))?;
+            sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+        }
+
+        async fn cancel_turn(
+            &self,
+            _request: CancelExecutionRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+
+        async fn respond_action(
+            &self,
+            _request: ActionRespondRequest,
+            _sink: &mut dyn RuntimeEventSink,
+        ) -> Result<(), RuntimeCoreError> {
+            Ok(())
+        }
+    }
+
+    fn sample_job(payload: Value) -> AutomationJob {
+        let now = Utc::now().to_rfc3339();
+        AutomationJob {
+            id: "job-1".to_string(),
+            name: "每日摘要".to_string(),
+            description: None,
+            enabled: true,
+            workspace_id: "workspace-1".to_string(),
+            execution_mode: AutomationExecutionMode::Skill,
+            schedule: TaskSchedule::Every { every_secs: 300 },
+            payload,
+            delivery: DeliveryConfig::default(),
+            timeout_secs: None,
+            max_retries: 3,
+            next_run_at: Some(now.clone()),
+            last_status: None,
+            last_error: None,
+            last_run_at: None,
+            last_finished_at: None,
+            running_started_at: None,
+            consecutive_failures: 0,
+            last_retry_count: 0,
+            auto_disabled_until: None,
+            last_delivery: None,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+
+    #[test]
+    fn builds_runtime_options_for_agent_turn_payload() {
+        let job = sample_job(json!({
+            "kind": "agent_turn",
+            "prompt": "生成摘要",
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "system_prompt": "请求级提示",
+            "reasoningEffort": "high",
+            "webSearch": true,
+            "searchMode": "required",
+            "workingDir": "/tmp/workspace/packages/app",
+            "projectRoot": "/tmp/workspace",
+            "approvalPolicy": "on-request",
+            "sandboxPolicy": "workspace-write",
+            "request_metadata": {
+                "harness": {
+                    "service_skill": {
+                        "id": "daily"
+                    }
+                }
+            }
+        }));
+
+        let start = build_automation_run_start(job).expect("run start");
+        let metadata = start.runtime_options.metadata.expect("metadata");
+        let host_options = start.runtime_options.host_options.expect("host options");
+
+        assert_eq!(start.prompt, "生成摘要");
+        assert_eq!(
+            start.runtime_options.provider_preference.as_deref(),
+            Some("openai")
+        );
+        assert_eq!(
+            start.runtime_options.model_preference.as_deref(),
+            Some("gpt-4.1")
+        );
+        assert_eq!(
+            metadata
+                .pointer("/turn_config/reasoning_effort")
+                .and_then(Value::as_str),
+            Some("high")
+        );
+        assert_eq!(
+            metadata
+                .pointer("/turn_config/working_dir")
+                .and_then(Value::as_str),
+            Some("/tmp/workspace/packages/app")
+        );
+        assert_eq!(
+            metadata
+                .pointer("/turn_config/project_root")
+                .and_then(Value::as_str),
+            Some("/tmp/workspace")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/system_prompt")
+                .and_then(Value::as_str),
+            Some("请求级提示")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/search_mode")
+                .and_then(Value::as_str),
+            Some("required")
+        );
+        assert_eq!(
+            host_options
+                .pointer("/asterChatRequest/turn_config/metadata/harness/service_skill/id")
+                .and_then(Value::as_str),
+            Some("daily")
+        );
+    }
+
+    #[test]
+    fn rejects_non_agent_turn_payload() {
+        let job = sample_job(json!({
+            "kind": "browser_session",
+            "prompt": "旧浏览器自动化"
+        }));
+
+        let error = build_automation_run_start(job).expect_err("should reject");
+        assert!(error.to_string().contains("browser_session"));
+    }
+
+    #[tokio::test]
+    async fn run_now_executes_agent_turn_and_persists_run_state() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let db = database::init_database_at_path(temp.path().join("automation.db"))
+            .expect("init test db");
+        let data_source = LocalAppDataSource::initialize_with_db(db.clone())
+            .await
+            .expect("local data source");
+        let job = sample_job(json!({
+            "kind": "agent_turn",
+            "prompt": "生成今日摘要",
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "system_prompt": "请求级提示",
+            "reasoningEffort": "high",
+            "webSearch": true,
+            "searchMode": "required",
+            "workingDir": "/tmp/workspace/packages/app",
+            "projectRoot": "/tmp/workspace",
+            "approvalPolicy": "on-request",
+            "sandboxPolicy": "workspace-write",
+            "request_metadata": {
+                "harness": {
+                    "service_skill": {
+                        "id": "daily"
+                    }
+                }
+            }
+        }));
+        {
+            let conn = database::lock_db(&db).expect("lock db");
+            AutomationJobDao::create(&conn, &job).expect("insert job");
+        }
+
+        let backend = Arc::new(RecordingCompletedBackend {
+            requests: Mutex::new(Vec::new()),
+        });
+        let core =
+            RuntimeCore::with_backend(backend.clone()).with_app_data_source(Arc::new(data_source));
+
+        let response = core
+            .run_automation_job_now(
+                AutomationJobIdParams {
+                    id: "job-1".to_string(),
+                },
+                RuntimeHostContext::default(),
+            )
+            .await
+            .expect("run automation job");
+
+        assert_eq!(
+            response.result.get("status").and_then(Value::as_str),
+            Some("completed")
+        );
+        let requests = backend
+            .requests
+            .lock()
+            .expect("test backend requests mutex poisoned");
+        assert_eq!(requests.len(), 1);
+        let request = &requests[0];
+        assert_eq!(request.input.text, "生成今日摘要");
+        assert_eq!(request.provider_preference.as_deref(), Some("openai"));
+        assert_eq!(request.model_preference.as_deref(), Some("gpt-4.1"));
+        assert_eq!(
+            request
+                .runtime_options
+                .as_ref()
+                .and_then(|options| options.host_options.as_ref())
+                .and_then(|value| value.pointer("/asterChatRequest/turn_config/reasoning_effort"))
+                .and_then(Value::as_str),
+            Some("high")
+        );
+        assert_eq!(
+            request
+                .metadata
+                .as_ref()
+                .and_then(|value| value.pointer("/turn_config/working_dir"))
+                .and_then(Value::as_str),
+            Some("/tmp/workspace/packages/app")
+        );
+        assert_eq!(
+            request
+                .metadata
+                .as_ref()
+                .and_then(|value| value.pointer("/turn_config/project_root"))
+                .and_then(Value::as_str),
+            Some("/tmp/workspace")
+        );
+        assert_eq!(
+            request
+                .runtime_options
+                .as_ref()
+                .and_then(|options| options.host_options.as_ref())
+                .and_then(|value| value.pointer("/asterChatRequest/turn_config/project_root"))
+                .and_then(Value::as_str),
+            Some("/tmp/workspace")
+        );
+        assert_eq!(
+            request
+                .metadata
+                .as_ref()
+                .and_then(|value| value.pointer("/harness/automation_job/id"))
+                .and_then(Value::as_str),
+            Some("job-1")
+        );
+
+        let conn = database::lock_db(&db).expect("lock db");
+        let updated_job = AutomationJobDao::get(&conn, "job-1")
+            .expect("read job")
+            .expect("job exists");
+        assert_eq!(updated_job.last_status.as_deref(), Some("success"));
+        assert!(updated_job.last_finished_at.is_some());
+        assert!(updated_job.running_started_at.is_none());
+        let runs = AgentRunDao::list_runs_by_source_ref(&conn, AUTOMATION_SOURCE, "job-1", 10)
+            .expect("list runs");
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, AgentRunStatus::Success);
+        assert_eq!(
+            runs[0].session_id.as_deref(),
+            Some("automation-session-job-1")
+        );
+    }
+}

@@ -22,7 +22,7 @@ lime-rs/src/services/
 ## 核心服务
 
 > 注意：`general_chat/` 兼容壳已删除。
-> 新 AI Agent、runtime、host integration 与跨 App 复用能力应直接落到 App Server JSON-RPC current 主链；`agent_runtime_*` 与现役 `agent/chat` 体系只继续服务 Desktop 兼容和既有 GUI 主路径，不要重新引回旧入口。
+> 新 AI Agent、runtime、host integration 与跨 App 复用能力应直接落到 App Server JSON-RPC current 主链；旧 `agent_runtime_*` 只允许作为 retired guard、历史 evidence、test-only fixture 或受控迁移残留，不要重新引回旧入口。
 > 旧 `ProviderPoolService`、`TokenCacheService` 与 OAuth/local CLI credential runtime 已退役。凭证选择统一走 `ApiKeyProviderService`。
 
 ### ApiKeyProviderService

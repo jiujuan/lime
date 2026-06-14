@@ -5753,6 +5753,39 @@
       "title": "AgentSessionThreadResumeResponse",
       "type": "object"
     },
+    "AgentSessionToolInventoryReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "browserAssist": {
+          "default": false,
+          "type": "boolean"
+        },
+        "caller": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "metadata": true,
+        "workbench": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "AgentSessionToolInventoryReadParams",
+      "type": "object"
+    },
+    "AgentSessionToolInventoryReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "inventory": true
+      },
+      "required": [
+        "inventory"
+      ],
+      "title": "AgentSessionToolInventoryReadResponse",
+      "type": "object"
+    },
     "AgentSessionTurnCancelParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -13827,6 +13860,60 @@
       "title": "ProjectGitBranchCreateParams",
       "type": "object"
     },
+    "ProjectGitDiffParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "contextLines": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rootPath"
+      ],
+      "title": "ProjectGitDiffParams",
+      "type": "object"
+    },
+    "ProjectGitDiffResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "hasGitRepository": {
+          "type": "boolean"
+        },
+        "patch": {
+          "type": "string"
+        },
+        "repositoryRoot": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "uncommittedFileCount": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "hasGitRepository",
+        "patch",
+        "rootPath"
+      ],
+      "title": "ProjectGitDiffResponse",
+      "type": "object"
+    },
     "ProjectGitStatusParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -21191,6 +21278,7 @@
               "agentSession/reviewDecisionTemplate/export",
               "agentSession/start",
               "agentSession/thread/resume",
+              "agentSession/toolInventory/read",
               "agentSession/turn/cancel",
               "agentSession/turn/start",
               "agentSession/update",
@@ -21312,6 +21400,7 @@
               "modelSyncState/read",
               "projectGit/branch/checkout",
               "projectGit/branch/create",
+              "projectGit/diff",
               "projectGit/status",
               "projectGit/worktree/create",
               "projectMaterial/content",

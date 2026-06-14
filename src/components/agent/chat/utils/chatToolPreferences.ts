@@ -2,6 +2,8 @@ import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import { isGeneralResearchTheme } from "./generalAgentPrompt";
 
 export interface ChatToolPreferences {
+  webSearch?: boolean;
+  thinking?: boolean;
   task: boolean;
   subagent: boolean;
 }

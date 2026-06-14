@@ -12,7 +12,15 @@ const { mockWorkspaceMainArea, mockWorkspacePendingA2UIPanel } = vi.hoisted(
 );
 
 vi.mock("../components/CanvasWorkbenchLayout", () => ({
-  CanvasWorkbenchLayout: () => <div data-testid="canvas-layout-stub" />,
+  CanvasWorkbenchLayout: (props: { topRightTools?: React.ReactNode }) => (
+    <div data-testid="canvas-layout-stub">
+      {props.topRightTools ? (
+        <div data-testid="canvas-layout-top-right-tools">
+          {props.topRightTools}
+        </div>
+      ) : null}
+    </div>
+  ),
 }));
 
 vi.mock("../components/ChatNavbar", () => ({
@@ -363,6 +371,9 @@ describe("WorkspaceConversationScene", () => {
       mockWorkspaceMainArea.mock.calls.at(-1)?.[0]
         ?.taskCenterUtilityToolbarNode,
     ).toBeTruthy();
+    expect(
+      container.querySelector('[data-testid="canvas-layout-top-right-tools"]'),
+    ).toBeNull();
 
     act(() => {
       toolbar?.click();

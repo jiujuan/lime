@@ -194,6 +194,20 @@ mod tests {
             ])
         );
     }
+
+    #[test]
+    fn session_config_builder_should_preserve_schedule_id() {
+        let config = super::SessionConfigBuilder::new("session-1")
+            .thread_id("thread-1")
+            .turn_id("turn-1")
+            .schedule_id("schedule-1")
+            .build();
+
+        assert_eq!(config.id, "session-1");
+        assert_eq!(config.thread_id.as_deref(), Some("thread-1"));
+        assert_eq!(config.turn_id.as_deref(), Some("turn-1"));
+        assert_eq!(config.schedule_id.as_deref(), Some("schedule-1"));
+    }
 }
 
 /// 构建带项目上下文的 System Prompt
@@ -208,6 +222,7 @@ pub struct SessionConfigBuilder {
     id: String,
     thread_id: Option<String>,
     turn_id: Option<String>,
+    schedule_id: Option<String>,
     max_turns: Option<u32>,
     system_prompt: Option<String>,
     system_prompt_override: Option<bool>,
@@ -221,6 +236,7 @@ impl SessionConfigBuilder {
             id: id.into(),
             thread_id: None,
             turn_id: None,
+            schedule_id: None,
             max_turns: None,
             system_prompt: None,
             system_prompt_override: None,
@@ -236,6 +252,11 @@ impl SessionConfigBuilder {
 
     pub fn turn_id(mut self, turn_id: impl Into<String>) -> Self {
         self.turn_id = Some(turn_id.into());
+        self
+    }
+
+    pub fn schedule_id(mut self, schedule_id: impl Into<String>) -> Self {
+        self.schedule_id = Some(schedule_id.into());
         self
     }
 
@@ -269,7 +290,7 @@ impl SessionConfigBuilder {
             id: self.id,
             thread_id: self.thread_id,
             turn_id: self.turn_id,
-            schedule_id: None,
+            schedule_id: self.schedule_id,
             max_turns: self.max_turns,
             retry_config: None,
             system_prompt: self.system_prompt,

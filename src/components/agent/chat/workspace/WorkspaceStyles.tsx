@@ -321,6 +321,8 @@ interface LayoutTransitionRenderGateProps {
   canvasContent: ReactNode;
   chatPanelWidth?: string;
   chatPanelMinWidth?: string;
+  chatPanelTopInset?: string;
+  canvasPanelTopInset?: string;
   forceOpenChatPanel?: boolean;
 }
 
@@ -331,6 +333,8 @@ export const LayoutTransitionRenderGate = memo(
     canvasContent,
     chatPanelWidth,
     chatPanelMinWidth,
+    chatPanelTopInset,
+    canvasPanelTopInset,
     forceOpenChatPanel = false,
   }: LayoutTransitionRenderGateProps) => (
     <GeneralWorkbenchCanvasHost>
@@ -341,6 +345,8 @@ export const LayoutTransitionRenderGate = memo(
         chatPanelChrome="plain"
         chatPanelWidth={chatPanelWidth}
         chatPanelMinWidth={chatPanelMinWidth}
+        chatPanelTopInset={chatPanelTopInset}
+        canvasPanelTopInset={canvasPanelTopInset}
         forceOpenChatPanel={forceOpenChatPanel}
       />
     </GeneralWorkbenchCanvasHost>
@@ -351,6 +357,8 @@ export const LayoutTransitionRenderGate = memo(
     previous.canvasContent === next.canvasContent &&
     previous.chatPanelWidth === next.chatPanelWidth &&
     previous.chatPanelMinWidth === next.chatPanelMinWidth &&
+    previous.chatPanelTopInset === next.chatPanelTopInset &&
+    previous.canvasPanelTopInset === next.canvasPanelTopInset &&
     previous.forceOpenChatPanel === next.forceOpenChatPanel,
 );
 
@@ -360,5 +368,5 @@ export const TEAM_PRIMARY_CHAT_PANEL_WIDTH =
   "min(100%, clamp(420px, 34%, 560px))";
 export const TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH = "400px";
 export const CODE_WORKBENCH_CHAT_PANEL_WIDTH =
-  "min(100%, clamp(360px, 28%, 460px))";
-export const CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH = "340px";
+  "min(100%, clamp(640px, 54%, 1180px))";
+export const CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH = "560px";

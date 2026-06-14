@@ -141,7 +141,7 @@ describe("AgentRuntimeStrip", () => {
     ).toContain("任务工具缺 6");
     expect(
       container.querySelector(
-        '[data-testid="agent-runtime-strip-status-subagent_runtime_gap"]',
+        '[data-testid="agent-runtime-strip-status-subagent_tool_gap"]',
       )?.textContent,
     ).toContain("Subagents 缺 5 个 current tools");
     expect(

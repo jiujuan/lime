@@ -34,21 +34,10 @@ const bridgeTruthCommands = new Set<string>([
   "workspace_get",
   "workspace_ensure",
   "workspace_ensure_ready",
-  "agent_runtime_submit_turn",
-  "agent_runtime_interrupt_turn",
-  "agent_runtime_export_evidence_pack",
-  "agent_runtime_get_thread_read",
-  "agent_runtime_respond_action",
   "agent_app_start_ui_runtime",
   "agent_app_get_ui_runtime_status",
   "agent_app_stop_ui_runtime",
-  "agent_runtime_create_session",
-  "agent_runtime_list_sessions",
-  "agent_runtime_get_session",
-  "agent_runtime_update_session",
-  "agent_runtime_get_tool_inventory",
   "get_default_provider",
-  "agent_runtime_list_workspace_skill_bindings",
   "app_server_handle_json_lines",
   "app_server_drain_events",
   "project_memory_get",
@@ -88,10 +77,6 @@ const electronHostLayeredDesignProjectCommands = new Set([
 ]);
 
 const devBridgeCooldownBypassCommands = new Set([
-  "agent_runtime_get_session",
-  "agent_runtime_list_sessions",
-  "agent_runtime_submit_turn",
-  "agent_runtime_create_session",
   "get_or_create_default_project",
   "workspace_get",
   "workspace_get_default",
@@ -101,9 +86,13 @@ const devBridgeCooldownBypassCommands = new Set([
   "workspace_ensure_default_ready",
 ]);
 
-const devBridgeReadRetryCommands = new Set([
-  "agent_runtime_get_session",
-  "agent_runtime_list_sessions",
+const devBridgeReadRetryCommands = new Set<string>([
+  "workspace_get",
+  "workspace_get_default",
+  "workspace_list",
+  "workspace_ensure",
+  "workspace_ensure_ready",
+  "workspace_ensure_default_ready",
 ]);
 
 const devBridgeStartupTruthCommands = new Set([
@@ -126,7 +115,10 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "fileSystem/createDirectory",
   "fileSystem/renameFile",
   "fileSystem/deleteFile",
+  "agentSession/start",
   "agentSession/read",
+  "agentSession/update",
+  "agentSession/archiveMany",
   "skill/list",
   "skill/read",
   "skillManagement/list",
@@ -210,6 +202,7 @@ const bridgeTruthEventPrefixes = [
   "aster_stream_",
   "agent_subagent_status:",
   "agent_subagent_stream:",
+  "embedded-browser-view-",
 ];
 
 export function isBridgeTruthCommand(command: string): boolean {
@@ -266,18 +259,6 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (devBridgeStartupTruthCommands.has(command)) {
     return "startup-truth";
   }
-  if (command === "agent_runtime_get_session") {
-    return "agent-session-get";
-  }
-  if (command === "agent_runtime_list_sessions") {
-    return "agent-session-list";
-  }
-  if (command === "agent_runtime_update_session") {
-    return "agent-session-patch";
-  }
-  if (command === "agent_runtime_create_session") {
-    return "agent-session-create";
-  }
   if (isAppServerAgentTurnStartCommand(command, args)) {
     return "app-server-turn-start";
   }
@@ -296,10 +277,7 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerCurrentMethodCommand(command, args)) {
     return "app-server-read";
   }
-  if (
-    command.startsWith("agent_app_runtime_") ||
-    command.startsWith("agent_runtime_")
-  ) {
+  if (command.startsWith("agent_app_runtime_")) {
     return "agent-runtime";
   }
   if (devBridgeAgentAppUiRuntimeStartCommands.has(command)) {

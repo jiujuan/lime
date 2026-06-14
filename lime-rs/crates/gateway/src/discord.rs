@@ -4,25 +4,17 @@
 //! 当前版本支持：
 //! - 多账号启动/停止/状态/探测
 //! - Discord Gateway 实时入站消息（MESSAGE_CREATE）
-//! - 入站命令与普通文本触发 RPC Agent 执行并回包
-//! - 会话路由、/new 会话旋转、核心命令
+//! - 入站普通文本进入 App Server current Agent 会话并回包
+//! - 会话路由与 /new 会话旋转
 
+use crate::agent_runner::{GatewayAgentRunRequest, GatewayAgentRunnerHandle};
 use chrono::Utc;
 use futures::{SinkExt, StreamExt};
 use lime_core::config::{
-    Config, DiscordAccountConfig, DiscordActionsConfig, DiscordAgentComponentsConfig,
-    DiscordAutoPresenceConfig, DiscordBotConfig, DiscordExecApprovalsConfig, DiscordGuildConfig,
-    DiscordIntentsConfig, DiscordThreadBindingsConfig, DiscordUiConfig, DiscordVoiceConfig,
+    Config, DiscordAccountConfig, DiscordActionsConfig, DiscordBotConfig, DiscordGuildConfig,
+    DiscordIntentsConfig,
 };
-use lime_core::database::DbConnection;
 use lime_core::logger::LogStore;
-use lime_websocket::handlers::{RpcHandler, RpcHandlerState};
-use lime_websocket::protocol::{
-    AgentRunResult, AgentStopResult, AgentWaitResult, CronHealthResult, CronListResult,
-    CronRunResult, GatewayRpcRequest, GatewayRpcResponse, RpcMethod, SessionGetResult,
-    SessionsListResult,
-};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -37,13 +29,9 @@ use uuid::Uuid;
 
 const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
 const DISCORD_MAX_MESSAGE_LEN: usize = 1800;
-const RUN_WAIT_TIMEOUT_MS: u64 = 1200;
-const RUN_WAIT_MAX_ROUNDS: usize = 180;
-const CONFIRMATION_TTL_SECS: i64 = 90;
 
 type LogState = Arc<RwLock<LogStore>>;
 type SessionRouteState = Arc<RwLock<HashMap<String, String>>>;
-type PendingConfirmationState = Arc<RwLock<Option<PendingConfirmation>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StreamingMode {
@@ -117,7 +105,6 @@ impl Default for DiscordGatewayState {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct ResolvedDiscordAccount {
     account_id: String,
@@ -133,14 +120,6 @@ struct ResolvedDiscordAccount {
     reply_to_mode: String,
     intents: DiscordIntentsConfig,
     actions: DiscordActionsConfig,
-    thread_bindings: DiscordThreadBindingsConfig,
-    auto_presence: DiscordAutoPresenceConfig,
-    voice: DiscordVoiceConfig,
-    agent_components: DiscordAgentComponentsConfig,
-    ui: DiscordUiConfig,
-    exec_approvals: DiscordExecApprovalsConfig,
-    response_prefix: Option<String>,
-    ack_reaction: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -181,25 +160,8 @@ fn build_gateway_source_metadata(
 }
 
 #[derive(Debug, Clone)]
-struct PendingConfirmation {
-    token: String,
-    command: DiscordCommand,
-    expires_at: chrono::DateTime<Utc>,
-}
-
-#[derive(Debug, Clone)]
 enum DiscordCommand {
-    Run(String),
-    New(Option<String>),
-    Status(String),
-    Stop(String),
-    CronList,
-    CronHealth,
-    CronRun(String),
-    Sessions,
-    Session(String),
-    Confirm(String),
-    Cancel,
+    New,
     Help,
 }
 
@@ -207,11 +169,10 @@ enum DiscordCommand {
 struct DiscordRuntimeContext {
     account: ResolvedDiscordAccount,
     client: reqwest::Client,
-    rpc_handler: Arc<RpcHandler>,
+    agent_runner: GatewayAgentRunnerHandle,
     logs: LogState,
     session_route_state: SessionRouteState,
     status: Arc<RwLock<DiscordGatewayAccountStatus>>,
-    pending_confirmation: PendingConfirmationState,
     reply_to_mode: ReplyToMode,
 }
 
@@ -269,8 +230,8 @@ struct DiscordMessageCreateEvent {
 
 pub async fn start_gateway(
     state: &DiscordGatewayState,
-    db: DbConnection,
     logs: LogState,
+    agent_runner: GatewayAgentRunnerHandle,
     config: Config,
     account_filter: Option<String>,
     _poll_timeout_secs: Option<u64>,
@@ -311,15 +272,15 @@ pub async fn start_gateway(
         let stop_for_task = stop_token.clone();
         let account_for_task = account.clone();
         let state_for_task = state.clone();
-        let db_for_task = db.clone();
         let logs_for_task = logs.clone();
+        let runner_for_task = agent_runner.clone();
 
         let task = tokio::spawn(async move {
             run_account_loop(
                 state_for_task,
                 status_for_task,
-                db_for_task,
                 logs_for_task,
+                runner_for_task,
                 account_for_task,
                 stop_for_task,
             )
@@ -451,13 +412,11 @@ async fn snapshot_status(
 async fn run_account_loop(
     _state: Arc<RwLock<DiscordGatewayRuntime>>,
     status: Arc<RwLock<DiscordGatewayAccountStatus>>,
-    db: DbConnection,
     logs: LogState,
+    agent_runner: GatewayAgentRunnerHandle,
     account: ResolvedDiscordAccount,
     stop_token: CancellationToken,
 ) {
-    let rpc_handler_state = RpcHandlerState::new(Some(db), None, logs.clone());
-    let rpc_handler = Arc::new(RpcHandler::new(rpc_handler_state));
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
@@ -485,15 +444,13 @@ async fn run_account_loop(
     let streaming_mode = parse_streaming_mode(&account.streaming);
     let reply_to_mode = parse_reply_to_mode(&account.reply_to_mode);
     let session_route_state: SessionRouteState = Arc::new(RwLock::new(HashMap::new()));
-    let pending_confirmation: PendingConfirmationState = Arc::new(RwLock::new(None));
     let context = DiscordRuntimeContext {
         account: account.clone(),
         client,
-        rpc_handler,
+        agent_runner,
         logs: logs.clone(),
         session_route_state,
         status: status.clone(),
-        pending_confirmation,
         reply_to_mode,
     };
     let streaming_mode_label = match streaming_mode {
@@ -798,6 +755,7 @@ async fn handle_message_event(
         mentioned_bot: resolve_mentioned_bot(event, bot_id),
     };
     authorize_message(&context.account, &inbound)?;
+    send_typing_indicator(&context.account, &inbound.channel_id).await?;
 
     let reply = if is_slash_command(&inbound.text) {
         let command = parse_discord_command(&inbound.text)?;
@@ -805,7 +763,7 @@ async fn handle_message_event(
     } else {
         match handle_plain_text(
             &context.account,
-            context.rpc_handler.as_ref(),
+            &context.agent_runner,
             &context.logs,
             &context.session_route_state,
             &inbound,
@@ -1061,14 +1019,6 @@ fn resolve_discord_accounts(
             reply_to_mode: normalize_reply_to_mode(&discord.reply_to_mode),
             intents: discord.intents.clone(),
             actions: discord.actions.clone(),
-            thread_bindings: discord.thread_bindings.clone(),
-            auto_presence: discord.auto_presence.clone(),
-            voice: discord.voice.clone(),
-            agent_components: discord.agent_components.clone(),
-            ui: discord.ui.clone(),
-            exec_approvals: discord.exec_approvals.clone(),
-            response_prefix: normalize_optional_text(discord.response_prefix.as_deref()),
-            ack_reaction: normalize_optional_text(discord.ack_reaction.as_deref()),
         });
     } else {
         for (account_id, account) in &discord.accounts {
@@ -1146,39 +1096,6 @@ fn resolve_discord_accounts(
                     .actions
                     .clone()
                     .unwrap_or_else(|| discord.actions.clone()),
-                thread_bindings: account
-                    .thread_bindings
-                    .clone()
-                    .unwrap_or_else(|| discord.thread_bindings.clone()),
-                auto_presence: account
-                    .auto_presence
-                    .clone()
-                    .unwrap_or_else(|| discord.auto_presence.clone()),
-                voice: account
-                    .voice
-                    .clone()
-                    .unwrap_or_else(|| discord.voice.clone()),
-                agent_components: account
-                    .agent_components
-                    .clone()
-                    .unwrap_or_else(|| discord.agent_components.clone()),
-                ui: account.ui.clone().unwrap_or_else(|| discord.ui.clone()),
-                exec_approvals: account
-                    .exec_approvals
-                    .clone()
-                    .unwrap_or_else(|| discord.exec_approvals.clone()),
-                response_prefix: normalize_optional_text(
-                    account
-                        .response_prefix
-                        .as_deref()
-                        .or(discord.response_prefix.as_deref()),
-                ),
-                ack_reaction: normalize_optional_text(
-                    account
-                        .ack_reaction
-                        .as_deref()
-                        .or(discord.ack_reaction.as_deref()),
-                ),
             });
         }
 
@@ -1197,14 +1114,6 @@ fn resolve_discord_accounts(
                 reply_to_mode: normalize_reply_to_mode(&discord.reply_to_mode),
                 intents: discord.intents.clone(),
                 actions: discord.actions.clone(),
-                thread_bindings: discord.thread_bindings.clone(),
-                auto_presence: discord.auto_presence.clone(),
-                voice: discord.voice.clone(),
-                agent_components: discord.agent_components.clone(),
-                ui: discord.ui.clone(),
-                exec_approvals: discord.exec_approvals.clone(),
-                response_prefix: normalize_optional_text(discord.response_prefix.as_deref()),
-                ack_reaction: normalize_optional_text(discord.ack_reaction.as_deref()),
             });
         }
     }
@@ -1421,7 +1330,7 @@ fn is_slash_command(text: &str) -> bool {
 
 async fn handle_plain_text(
     account: &ResolvedDiscordAccount,
-    rpc_handler: &RpcHandler,
+    agent_runner: &GatewayAgentRunnerHandle,
     logs: &LogState,
     session_route_state: &SessionRouteState,
     inbound: &InboundMessage,
@@ -1435,66 +1344,36 @@ async fn handle_plain_text(
     logs.write().await.add(
         "info",
         &format!(
-            "[DiscordGateway] account={} 收到文本消息: guild={:?} channel={} sender={} messageId={} session={} model={} search_mode=allowed",
+            "[DiscordGateway] account={} 通过 App Server current runner 处理文本: guild={:?} channel={} sender={} messageId={} session={} model={}",
             account.account_id,
             inbound.guild_id,
             inbound.channel_id,
             inbound.sender_id,
             inbound.message_id,
             session_id,
-            account.default_model.as_deref().unwrap_or("<rpc-default>")
+            account.default_model.as_deref().unwrap_or("<runtime-default>")
         ),
     );
 
-    let run_response = rpc_handler
-        .handle_request(GatewayRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            id: Uuid::new_v4().to_string(),
-            method: RpcMethod::AgentRun,
-            params: Some(json!({
-                "session_id": session_id,
-                "message": text,
-                "stream": false,
-                "model": account.default_model.clone(),
-                "web_search": true,
-                "search_mode": "allowed",
-                "source_metadata": build_gateway_source_metadata(account, inbound),
-            })),
+    let response = agent_runner
+        .run_agent_turn(GatewayAgentRunRequest {
+            channel: "discord".to_string(),
+            account_id: account.account_id.clone(),
+            session_id,
+            input_text: text,
+            metadata: build_gateway_source_metadata(account, inbound),
+            provider_preference: None,
+            model_preference: account.default_model.clone(),
         })
-        .await;
-    let run_value = run_response
-        .result
-        .ok_or_else(|| extract_rpc_error(run_response.error, "agent.run 失败"))?;
-    let run_result: AgentRunResult = parse_result(run_value)?;
+        .await?;
 
-    for round in 0..RUN_WAIT_MAX_ROUNDS {
-        let wait_response = rpc_handler
-            .handle_request(GatewayRpcRequest {
-                jsonrpc: "2.0".to_string(),
-                id: Uuid::new_v4().to_string(),
-                method: RpcMethod::AgentWait,
-                params: Some(json!({
-                    "run_id": run_result.run_id,
-                    "timeout": RUN_WAIT_TIMEOUT_MS,
-                })),
-            })
-            .await;
-        let wait_value = wait_response
-            .result
-            .ok_or_else(|| extract_rpc_error(wait_response.error, "agent.wait 失败"))?;
-        let wait_result: AgentWaitResult = parse_result(wait_value)?;
-        if wait_result.completed {
-            let content = wait_result
-                .content
-                .unwrap_or_else(|| "任务已完成，但无可展示输出".to_string());
-            return Ok(PlainTextReply::Message(content));
-        }
-        if round % 3 == 0 {
-            let _ = send_typing_indicator(account, inbound.channel_id.as_str()).await;
-        }
+    if response.reply_text.trim().is_empty() {
+        return Ok(PlainTextReply::Message(format!(
+            "已完成，但当前会话没有生成可发送文本。\nsession_id: {}\nturn_id: {}",
+            response.session_id, response.turn_id
+        )));
     }
-
-    Err("等待任务完成超时，请稍后使用 /status 查询".to_string())
+    Ok(PlainTextReply::Message(response.reply_text))
 }
 
 async fn handle_command(
@@ -1504,71 +1383,15 @@ async fn handle_command(
 ) -> Result<Option<String>, String> {
     match command {
         DiscordCommand::Help => Ok(Some(help_text())),
-        DiscordCommand::Cancel => {
-            *context.pending_confirmation.write().await = None;
-            Ok(Some("🧹 已取消待确认操作".to_string()))
-        }
-        DiscordCommand::Confirm(token) => {
-            let mut pending_guard = context.pending_confirmation.write().await;
-            let confirmed = take_pending_confirmation(&mut pending_guard, &token)?;
-            drop(pending_guard);
-            dispatch_command(context.rpc_handler.as_ref(), confirmed)
-                .await
-                .map(Some)
-        }
-        cmd if requires_confirmation(&cmd) => {
-            let mut pending_guard = context.pending_confirmation.write().await;
-            let token = set_pending_confirmation(&mut pending_guard, cmd.clone());
-            Ok(Some(format!(
-                "⚠️ 检测到危险操作：{}\n请在 {} 秒内发送 /confirm {} 继续，或发送 /cancel 取消。",
-                danger_command_label(&cmd),
-                CONFIRMATION_TTL_SECS,
-                token
-            )))
-        }
-        DiscordCommand::Run(prompt) => {
-            match handle_plain_text(
-                &context.account,
-                context.rpc_handler.as_ref(),
-                &context.logs,
-                &context.session_route_state,
-                inbound,
-                prompt,
-                None,
-            )
-            .await?
-            {
-                PlainTextReply::Message(text) => Ok(Some(text)),
-            }
-        }
-        DiscordCommand::New(first_prompt) => {
+        DiscordCommand::New => {
             let new_session_id =
                 rotate_active_session_id(&context.account, inbound, &context.session_route_state)
                     .await;
-            if let Some(prompt) = first_prompt {
-                match handle_plain_text(
-                    &context.account,
-                    context.rpc_handler.as_ref(),
-                    &context.logs,
-                    &context.session_route_state,
-                    inbound,
-                    prompt,
-                    Some(new_session_id.clone()),
-                )
-                .await?
-                {
-                    PlainTextReply::Message(text) => Ok(Some(text)),
-                }
-            } else {
-                Ok(Some(format!(
-                    "🆕 已开启新对话\nsession_id: {}\n后续消息会在这个新会话中进行。",
-                    new_session_id
-                )))
-            }
+            Ok(Some(format!(
+                "🆕 已开启新对话\nsession_id: {}\n后续消息会在这个新会话中进行。",
+                new_session_id
+            )))
         }
-        cmd => dispatch_command(context.rpc_handler.as_ref(), cmd)
-            .await
-            .map(Some),
     }
 }
 
@@ -1581,349 +1404,26 @@ fn parse_discord_command(text: &str) -> Result<DiscordCommand, String> {
     let first = parts.next().unwrap_or_default().to_ascii_lowercase();
     let rest = parts.next().unwrap_or_default().trim();
     match first.as_str() {
-        "/run" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/run <任务内容>".to_string())
-            } else {
-                Ok(DiscordCommand::Run(rest.to_string()))
-            }
-        }
         "/new" | "/reset" => {
             if rest.is_empty() {
-                Ok(DiscordCommand::New(None))
+                Ok(DiscordCommand::New)
             } else {
-                Ok(DiscordCommand::New(Some(rest.to_string())))
+                Err("❌ /new 不接收首条消息；请先发送 /new，再直接发送下一条消息。".to_string())
             }
         }
-        "/status" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/status <run_id>".to_string())
-            } else {
-                Ok(DiscordCommand::Status(rest.to_string()))
-            }
-        }
-        "/stop" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/stop <run_id>".to_string())
-            } else {
-                Ok(DiscordCommand::Stop(rest.to_string()))
-            }
-        }
-        "/cron_list" => Ok(DiscordCommand::CronList),
-        "/cron_health" => Ok(DiscordCommand::CronHealth),
-        "/cron_run" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/cron_run <task_id>".to_string())
-            } else {
-                Ok(DiscordCommand::CronRun(rest.to_string()))
-            }
-        }
-        "/sessions" => Ok(DiscordCommand::Sessions),
-        "/session" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/session <session_id>".to_string())
-            } else {
-                Ok(DiscordCommand::Session(rest.to_string()))
-            }
-        }
-        "/confirm" => {
-            if rest.is_empty() {
-                Err("❌ 用法：/confirm <token>".to_string())
-            } else {
-                Ok(DiscordCommand::Confirm(rest.to_string()))
-            }
-        }
-        "/cancel" => Ok(DiscordCommand::Cancel),
         "/help" | "/start" => Ok(DiscordCommand::Help),
         _ => Err(help_text()),
-    }
-}
-
-fn requires_confirmation(command: &DiscordCommand) -> bool {
-    matches!(
-        command,
-        DiscordCommand::Stop(_) | DiscordCommand::CronRun(_)
-    )
-}
-
-fn danger_command_label(command: &DiscordCommand) -> &'static str {
-    match command {
-        DiscordCommand::Stop(_) => "/stop",
-        DiscordCommand::CronRun(_) => "/cron_run",
-        _ => "unknown",
     }
 }
 
 fn help_text() -> String {
     [
         "🤖 Lime Discord Gateway 命令",
-        "/run <任务内容> - 启动一个 Agent 任务",
-        "/new [首条消息] - 开启新对话（/reset 同义）",
-        "/status <run_id> - 查看任务状态",
-        "/stop <run_id> - 停止任务（需确认）",
-        "/cron_list - 列出定时任务",
-        "/cron_health - 查看定时任务健康概览",
-        "/cron_run <task_id> - 触发定时任务（需确认）",
-        "/sessions - 列出会话",
-        "/session <session_id> - 查看会话摘要",
-        "/confirm <token> - 确认危险操作",
-        "/cancel - 取消待确认操作",
+        "/new - 开启新对话（/reset 同义）",
+        "普通文本 - 进入 App Server current Agent 会话",
         "/help - 查看帮助",
     ]
     .join("\n")
-}
-
-fn set_pending_confirmation(
-    pending_confirmation: &mut Option<PendingConfirmation>,
-    command: DiscordCommand,
-) -> String {
-    let token = Uuid::new_v4()
-        .to_string()
-        .chars()
-        .take(8)
-        .collect::<String>();
-    let expires_at = Utc::now() + chrono::Duration::seconds(CONFIRMATION_TTL_SECS);
-    *pending_confirmation = Some(PendingConfirmation {
-        token: token.clone(),
-        command,
-        expires_at,
-    });
-    token
-}
-
-fn take_pending_confirmation(
-    pending_confirmation: &mut Option<PendingConfirmation>,
-    token: &str,
-) -> Result<DiscordCommand, String> {
-    let pending = pending_confirmation
-        .take()
-        .ok_or_else(|| "当前没有待确认操作".to_string())?;
-    if Utc::now() > pending.expires_at {
-        return Err("确认已过期，请重新发起命令".to_string());
-    }
-    if pending.token != token {
-        *pending_confirmation = Some(pending);
-        return Err("确认 token 不匹配".to_string());
-    }
-    if !requires_confirmation(&pending.command) {
-        return Err("当前命令不需要确认".to_string());
-    }
-    Ok(pending.command)
-}
-
-async fn dispatch_command(
-    rpc_handler: &RpcHandler,
-    command: DiscordCommand,
-) -> Result<String, String> {
-    let request = build_rpc_request(command)?;
-    let response = rpc_handler.handle_request(request).await;
-    format_rpc_response(response)
-}
-
-fn build_rpc_request(command: DiscordCommand) -> Result<GatewayRpcRequest, String> {
-    let (method, params) = match command {
-        DiscordCommand::Run(message) => (
-            RpcMethod::AgentRun,
-            Some(json!({
-                "message": message,
-                "stream": false,
-                "web_search": true,
-                "search_mode": "allowed"
-            })),
-        ),
-        DiscordCommand::Status(run_id) => (
-            RpcMethod::AgentWait,
-            Some(json!({ "run_id": run_id, "timeout": 200 })),
-        ),
-        DiscordCommand::Stop(run_id) => (RpcMethod::AgentStop, Some(json!({ "run_id": run_id }))),
-        DiscordCommand::CronList => (RpcMethod::CronList, None),
-        DiscordCommand::CronHealth => (RpcMethod::CronHealth, None),
-        DiscordCommand::CronRun(task_id) => {
-            (RpcMethod::CronRun, Some(json!({ "task_id": task_id })))
-        }
-        DiscordCommand::Sessions => (RpcMethod::SessionsList, None),
-        DiscordCommand::Session(session_id) => (
-            RpcMethod::SessionsGet,
-            Some(json!({ "session_id": session_id })),
-        ),
-        DiscordCommand::New(_) => return Err("内部错误：new 不应构造 RPC 请求".to_string()),
-        DiscordCommand::Help => return Err("内部错误：help 不应构造 RPC 请求".to_string()),
-        DiscordCommand::Confirm(_) => return Err("内部错误：confirm 不应构造 RPC 请求".to_string()),
-        DiscordCommand::Cancel => return Err("内部错误：cancel 不应构造 RPC 请求".to_string()),
-    };
-
-    Ok(GatewayRpcRequest {
-        jsonrpc: "2.0".to_string(),
-        id: Uuid::new_v4().to_string(),
-        method,
-        params,
-    })
-}
-
-enum ResponseHint {
-    AgentRun,
-    AgentWait,
-    AgentStop,
-    CronList,
-    CronRun,
-    CronHealth,
-    SessionsList,
-    SessionGet,
-}
-
-fn response_id_hint(value: &serde_json::Value) -> Option<ResponseHint> {
-    if value.get("runId").is_some() && value.get("sessionId").is_some() {
-        return Some(ResponseHint::AgentRun);
-    }
-    if value.get("runId").is_some() && value.get("completed").is_some() {
-        return Some(ResponseHint::AgentWait);
-    }
-    if value.get("runId").is_some() && value.get("stopped").is_some() {
-        return Some(ResponseHint::AgentStop);
-    }
-    if value.get("tasks").is_some() {
-        return Some(ResponseHint::CronList);
-    }
-    if value.get("taskId").is_some() && value.get("executionId").is_some() {
-        return Some(ResponseHint::CronRun);
-    }
-    if value.get("totalTasks").is_some() && value.get("cooldownTasks").is_some() {
-        return Some(ResponseHint::CronHealth);
-    }
-    if value.get("sessions").is_some() {
-        return Some(ResponseHint::SessionsList);
-    }
-    if value.get("sessionId").is_some() && value.get("messageCount").is_some() {
-        return Some(ResponseHint::SessionGet);
-    }
-    None
-}
-
-fn format_rpc_response(response: GatewayRpcResponse) -> Result<String, String> {
-    if let Some(error) = response.error {
-        return Err(format!("{} (code={})", error.message, error.code));
-    }
-    let result_value = response
-        .result
-        .ok_or_else(|| "RPC 返回缺少 result".to_string())?;
-    match response_id_hint(&result_value) {
-        Some(ResponseHint::AgentRun) => {
-            let payload: AgentRunResult = parse_result(result_value)?;
-            Ok(format!(
-                "✅ 已启动\nrun_id: {}\nsession_id: {}\ncompleted: {}",
-                payload.run_id, payload.session_id, payload.completed
-            ))
-        }
-        Some(ResponseHint::AgentWait) => {
-            let payload: AgentWaitResult = parse_result(result_value)?;
-            if payload.completed {
-                Ok(format!(
-                    "✅ 已完成\nrun_id: {}\n{}",
-                    payload.run_id,
-                    payload.content.unwrap_or_else(|| "无输出内容".to_string())
-                ))
-            } else {
-                Ok(format!("⏳ 运行中\nrun_id: {}", payload.run_id))
-            }
-        }
-        Some(ResponseHint::AgentStop) => {
-            let payload: AgentStopResult = parse_result(result_value)?;
-            Ok(format!(
-                "{} run_id: {}",
-                if payload.stopped {
-                    "🛑 已停止"
-                } else {
-                    "ℹ️ 未找到活跃任务"
-                },
-                payload.run_id
-            ))
-        }
-        Some(ResponseHint::CronList) => {
-            let payload: CronListResult = parse_result(result_value)?;
-            if payload.tasks.is_empty() {
-                Ok("📭 当前无定时任务".to_string())
-            } else {
-                let lines = payload
-                    .tasks
-                    .iter()
-                    .take(10)
-                    .map(|item| {
-                        format!(
-                            "- {} | {} | enabled={}",
-                            item.task_id, item.name, item.enabled
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                Ok(format!(
-                    "📌 定时任务（前 {} 条）\n{}",
-                    lines.len(),
-                    lines.join("\n")
-                ))
-            }
-        }
-        Some(ResponseHint::CronRun) => {
-            let payload: CronRunResult = parse_result(result_value)?;
-            Ok(format!(
-                "✅ cron 已触发\ntask_id: {}\nexecution_id: {}",
-                payload.task_id, payload.execution_id
-            ))
-        }
-        Some(ResponseHint::CronHealth) => {
-            let payload: CronHealthResult = parse_result(result_value)?;
-            Ok(format!(
-                "📊 cron 健康概览\n总任务: {}\n待执行: {}\n运行中: {}\n失败: {}\n冷却中: {}\n悬挂运行: {}\n24h 失败: {}",
-                payload.total_tasks,
-                payload.pending_tasks,
-                payload.running_tasks,
-                payload.failed_tasks,
-                payload.cooldown_tasks,
-                payload.stale_running_tasks,
-                payload.failed_last_24h,
-            ))
-        }
-        Some(ResponseHint::SessionsList) => {
-            let payload: SessionsListResult = parse_result(result_value)?;
-            if payload.sessions.is_empty() {
-                Ok("📭 当前无会话".to_string())
-            } else {
-                let lines = payload
-                    .sessions
-                    .iter()
-                    .take(10)
-                    .map(|item| {
-                        format!(
-                            "- {} | model={} | msgs={}",
-                            item.session_id, item.model, item.message_count
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                Ok(format!(
-                    "🧵 会话列表（前 {} 条）\n{}",
-                    lines.len(),
-                    lines.join("\n")
-                ))
-            }
-        }
-        Some(ResponseHint::SessionGet) => {
-            let payload: SessionGetResult = parse_result(result_value)?;
-            Ok(format!(
-                "🧵 会话详情\nsession_id: {}\nmodel: {}\nmessages: {}",
-                payload.session_id, payload.model, payload.message_count
-            ))
-        }
-        None => Ok(format!("✅ 已处理\n{}", result_value)),
-    }
-}
-
-fn parse_result<T: DeserializeOwned>(value: serde_json::Value) -> Result<T, String> {
-    serde_json::from_value(value).map_err(|e| format!("解析 RPC 结果失败: {e}"))
-}
-
-fn extract_rpc_error(error: Option<lime_websocket::protocol::RpcError>, fallback: &str) -> String {
-    if let Some(err) = error {
-        return format!("{} (code={})", err.message, err.code);
-    }
-    fallback.to_string()
 }
 
 fn split_message_chunks(text: &str) -> Vec<String> {
@@ -2054,14 +1554,6 @@ mod tests {
             reply_to_mode: "off".to_string(),
             intents: DiscordIntentsConfig::default(),
             actions: DiscordActionsConfig::default(),
-            thread_bindings: DiscordThreadBindingsConfig::default(),
-            auto_presence: DiscordAutoPresenceConfig::default(),
-            voice: DiscordVoiceConfig::default(),
-            agent_components: DiscordAgentComponentsConfig::default(),
-            ui: DiscordUiConfig::default(),
-            exec_approvals: DiscordExecApprovalsConfig::default(),
-            response_prefix: None,
-            ack_reaction: None,
         }
     }
 
@@ -2069,12 +1561,9 @@ mod tests {
     fn parse_command_supports_new() {
         assert!(matches!(
             parse_discord_command("/new").expect("should parse"),
-            DiscordCommand::New(None)
+            DiscordCommand::New
         ));
-        assert!(matches!(
-            parse_discord_command("/reset hi").expect("should parse"),
-            DiscordCommand::New(Some(_))
-        ));
+        assert!(parse_discord_command("/reset hi").is_err());
     }
 
     #[test]

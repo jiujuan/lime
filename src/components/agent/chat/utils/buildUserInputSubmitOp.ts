@@ -49,6 +49,7 @@ export interface BuildUserInputSubmitOpOptions {
   webSearch?: boolean;
   searchMode?: AgentRuntimeWebSearchMode;
   thinking?: boolean;
+  explicitToolPreferences?: boolean;
   autoContinue?: AutoContinueRequestPayload;
 }
 
@@ -76,7 +77,10 @@ export function buildUserInputSubmitOp(
     effectiveModel,
     modelOverride,
     reasoningEffort,
+    webSearch,
     searchMode,
+    thinking,
+    explicitToolPreferences,
     autoContinue,
   } = options;
   const normalizedEffectiveExecutionStrategy = normalizeExecutionStrategy(
@@ -93,6 +97,8 @@ export function buildUserInputSubmitOp(
     effectiveProviderType,
     effectiveModel,
     modelOverride,
+    requestedWebSearch: explicitToolPreferences ? webSearch : undefined,
+    requestedThinking: explicitToolPreferences ? thinking : undefined,
   });
   const runtimePolicies =
     createRuntimePoliciesFromAccessMode(effectiveAccessMode);
@@ -116,13 +122,17 @@ export function buildUserInputSubmitOp(
         ? effectiveModel
         : undefined,
       reasoningEffort: reasoningEffort?.trim() || undefined,
-      thinking: undefined,
+      thinking: compaction.shouldSubmitThinking
+        ? compaction.thinkingPreference
+        : undefined,
       approvalPolicy: runtimePolicies.approvalPolicy,
       sandboxPolicy: runtimePolicies.sandboxPolicy,
       executionStrategy: compaction.shouldSubmitExecutionStrategy
         ? normalizedEffectiveExecutionStrategy
         : undefined,
-      webSearch: undefined,
+      webSearch: compaction.shouldSubmitWebSearch
+        ? compaction.webSearchPreference
+        : undefined,
       ...(searchMode ? { searchMode } : {}),
       autoContinue,
     },

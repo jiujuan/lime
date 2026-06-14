@@ -12,7 +12,8 @@ use app_server_protocol::{
     AgentSessionObjectiveContinueParams, AgentSessionObjectiveReadParams,
     AgentSessionObjectiveSetParams, AgentSessionObjectiveStatusUpdateParams,
     AgentSessionQueuedTurnPromoteParams, AgentSessionQueuedTurnRemoveParams,
-    AgentSessionThreadResumeParams, AgentSessionUpdateParams, JsonRpcError,
+    AgentSessionThreadResumeParams, AgentSessionToolInventoryReadParams, AgentSessionUpdateParams,
+    JsonRpcError,
 };
 
 impl RequestProcessor {
@@ -251,6 +252,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .restore_agent_session_file_checkpoint(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_tool_inventory_read_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: AgentSessionToolInventoryReadParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_agent_session_tool_inventory(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

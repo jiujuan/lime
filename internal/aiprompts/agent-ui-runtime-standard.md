@@ -210,7 +210,7 @@ Agent Runtime 后端事实源是 App Server JSON-RPC current 主链：
 - events：`agentSession/event`
 - evidence：`evidence/export`
 
-Electron 只作为 Desktop Host bridge 和 sidecar lifecycle host。新增 runtime 能力不得落到 legacy desktop facade；旧 `agent_runtime_*` 只允许作为兼容委托或退场对象。
+Electron 只作为 Desktop Host bridge 和 sidecar lifecycle host。新增 runtime 能力不得落到 legacy desktop facade；旧 `agent_runtime_*` 只允许作为 retired guard、历史 evidence、test-only fixture 或退场对象。
 
 `readThread` 当前映射 `agentSession/read`。独立 `readTask` 只能等 App Server current method 出现后再接入，不得在前端 client 包中伪造。
 

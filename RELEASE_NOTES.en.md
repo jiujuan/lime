@@ -1,39 +1,40 @@
-## Lime v1.67.0
+## Lime v1.68.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
-- Agent Workbench v2 executable protocol core landed in the main repo: sequence verifier, runtime event pipeline, middleware / adapters, `state.delta` schemas, and projection apply now form a mechanically verifiable event chain.
-- App Server / RuntimeCore now gate events before persistence with AgentUI runtime event schema, `state.delta` schema, and sequence validation; invalid streams fail closed instead of mutating session state, turn status, or outbound notifications.
-- Runtime / Provider capability manifest and resume contract are now wired through contracts, App Server protocol, RuntimeCore, and the frontend current gateway; `capability/list` can expose runtime capabilities, and thread resume can carry a validated resume contract.
-- Agent Runtime client now supports `0..N` event fan-out, flush substrate, schema compatibility middleware, and the browser-safe sessionGateway pipeline; Claw and Agent App current event gateways consume the same pipeline output.
-- Task Center now includes a Project Shell panel and Electron / App Server project shell current command chain for start, write, resize, kill, drain events, and multi-tab terminal workflows.
+- The coding workbench main path has been upgraded with layered Canvas Workbench panels, top tool tabs, project file browsing, change lists, review menus, preview mode, and a coding output panel, moving the workbench from a monolith to an extensible coding execution surface.
+- Added current Project Git capability and App Server JSON-RPC schemas so the frontend can read project diffs, file changes, and workspace context, then render them in the workbench changes panel.
+- Electron Desktop Host now includes an embedded browser host and main-window load error capture, bringing browser preview, loading state, and diagnostics into the current host boundary.
+- Agent tool execution now has tool orchestration, policy inspection, sandbox / rules / decision layers, and an apply_patch tool chain for more realistic engineering execution.
+- App Server runtime now includes coding events, file checkpoint projection, artifact projection, tool lifecycle, turn execution, session hydration / lifecycle, and related modules for a unified read model across code artifacts, tool traces, and session state.
 
 ### Fixes
-- Fixed the runtime event layer relying only on per-event schema checks without cross-event state-machine enforcement; tool/action/model/turn pairing and post-terminal execution pollution are now guarded.
-- Fixed `state.delta` patch failures so they mark hydration as stale with diagnostics instead of corrupting projection / read model state.
-- Fixed fragmented Agent Runtime pipeline wiring across App Server notifications, local publish, bridge listeners, and Agent App runtime clients, reducing inconsistent behavior for invalid streams.
-- Fixed several synchronization and regression gaps in App Sidebar recent sessions, Agent thread resume, Chat navbar, Workspace conversation scene, and Task Center tab state.
+- Fixed the Canvas Workbench single-component surface being too large and tightly coupling file, diff, preview, and toolbar state; extracted ViewModels and subpanels reduce state drift and rendering regressions.
+- Fixed synchronization issues around Agent session completion, continue output, browser assist, workspace conversation scene, and active stream cleanup, reducing the chance that stale terminal events stop a new stream.
+- Fixed incomplete runtime backend aggregation for tool events, tool inventory, request context, and coding events so tool execution, file patches, and the read model stay aligned.
+- Fixed several flattened gateway / websocket / scheduler responsibilities and removed old executor residue, keeping ownership on the current App Server / RuntimeCore path.
 
 ### Improvements and Refactors
-- Agent Workbench roadmap advanced from v0.4 to v2.10, with v2.11 focused on projection reconciliation, tool args buffering, reasoning continuity, and external transport compatibility.
-- `@limecloud/agent-ui-contracts` now includes capability / resume contracts, sequence verifier, schema constants, and validation APIs so protocol constraints are executable contracts rather than prose-only rules.
-- `@limecloud/agent-runtime-projection` now strengthens fixture replay, read model, runtime status, subagents, and `state.delta` apply; batch and incremental projectors share the same merge semantics.
-- `@limecloud/agent-runtime-client` now centralizes event pipeline, event verifier, runtime client, and session gateway behavior, reducing duplicate GUI, SDK, and Agent App wiring.
-- App Server protocol schemas, the TypeScript app-server-client, and governance catalog now include project shell, runtime capability manifest, resume contract, and thread resume shapes.
+- Continued splitting central App Server files such as `runtime.rs`, `local_data_source.rs`, and `runtime_backend.rs` into domain modules, keeping processors focused on dispatch wiring.
+- Agent prompt assets, managed goals, permissions, review, and realtime templates are now checked-in upstream assets, reducing scattered and unaudited runtime prompt construction.
+- Gateway WeChat / Telegram / Feishu / Discord runtime logic now shares agent runner and task context structure, reducing repeated execution branches.
+- Removed legacy agent runtime mock / command manifest residue so DevBridge and governance catalogs focus on the current App Server / Electron Desktop Host boundary.
+- Updated the coding roadmap, Agent Workbench, App Server integration matrix, governance docs, and execution plans with the current coding workbench and tool execution state.
 
 ### Tests and Quality
-- Expanded targeted regression coverage for Agent UI contracts, runtime projection, runtime client, app-server-client, and Agent App current runtime, including bad-stream fail-closed behavior, fan-out / flush, capability manifest, and resume contract.
-- Expanded Rust App Server runtime / protocol / schema gate tests for event schema gate, sequence gate, `state.delta` validation, and the project shell processor path.
-- Expanded Task Center shell terminal, utility toolbar, Workspace main area, App Sidebar conversations, Chat navbar, MessageList, and streaming renderer regressions.
-- Updated the root app, Rust workspace, CLI npm package, App Server client package, Agent Runtime client dependency, and lockfiles to `1.67.0`.
-- Release version consistency passes `npm run verify:app-version`.
+- Expanded Rust regression coverage for App Server runtime, runtime backend, coding events, tool inventory, file checkpoints, evidence exports, and session archive JSON-RPC.
+- Expanded tests for Agent tool execution, tool orchestrator, policy inspector, apply patch, request tool policy, and aster tool execution.
+- Expanded regressions for Canvas Workbench, Workspace main area, Project Shell, Inputbar, Agent Runtime Strip, Layout Transition, Agent App runtime, and i18n resources.
+- Expanded app-server-client, agent-runtime-client, agent-runtime-projection, agent-runtime-ui, and agent-ui-contracts tests for the new protocol, projection, and tool trace behavior.
+- Updated the root app, Rust workspace, CLI npm package, App Server client package, Agent Runtime client dependency, and Cargo lock to `1.68.0`.
 
 ### Documentation
-- Added `internal/roadmap/agentworkbench/v2.md` to capture the Workbench v2 executable protocol core, AG-UI mechanism choices, v2.0-v2.11 staged scope, and completion criteria.
-- Updated the Agent Workbench README with v2.0-v2.10 completion status, current event gateway, Rust/App Server schema + sequence enforcement, capability / resume contract, and next work.
+- Updated coding workbench architecture, implementation plan, runtime capability map, UI projection, and reference boundary docs with current owners and delivery criteria.
+- Updated quality workflow, command boundary, Harness Engine, state / history / telemetry, memory compaction, services, and query-loop docs to align the App Server current path and legacy boundaries.
+- Updated tools PRD, tool inventory, Agent Workbench roadmap, and execution plans with release evidence for tool execution and the coding workbench.
 
 ### Other
-- This release continues to consolidate runtime facts around App Server JSON-RPC, RuntimeCore, Electron Desktop Host, current npm clients, checked-in schemas, and machine-readable guards instead of leaving protocol rules only in docs or downstream GUI projection.
+- This release continues to consolidate the coding task path around App Server JSON-RPC, RuntimeCore, Electron Desktop Host, current npm clients, checked-in schemas, and machine-readable guards; local screenshot evidence is not included in the release commit.
 
-**Full changes**: `v1.66.0` -> `v1.67.0`
+**Full changes**: `v1.67.0` -> `v1.68.0`

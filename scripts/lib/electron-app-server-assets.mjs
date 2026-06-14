@@ -1,18 +1,27 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import {
   chmod,
   copyFile,
   mkdir,
   readFile,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import {
   appServerBinaryName,
   resolveDevAppServerBinary,
 } from "./electron-dev-sidecar.mjs";
+
+const execFileAsync = promisify(execFile);
+const MACOS_LAUNCH_BLOCKING_XATTRS = [
+  "com.apple.quarantine",
+  "com.apple.provenance",
+];
 
 export const APP_SERVER_RELEASE_MANIFEST_NAME = "app-server.release.json";
 export const APP_SERVER_PROTOCOL_VERSION = "appserver.v0";
@@ -115,7 +124,9 @@ export async function prepareElectronAppServerAssets({
   const manifestPath = electronAppServerManifestPath({ outputRoot });
 
   await makeDir(path.dirname(destination), { recursive: true });
+  await rm(destination, { force: true });
   await copy(path.resolve(sourceBinary), destination);
+  await clearMacLaunchBlockingXattrs(destination, platform);
   const sourceStat = await getStat(path.resolve(sourceBinary));
   await changeMode(destination, sourceStat.mode);
 
@@ -164,6 +175,24 @@ async function hashFile(filePath) {
 
 async function readJsonFile(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function clearMacLaunchBlockingXattrs(filePath, platform) {
+  if (platform !== "darwin") {
+    return;
+  }
+
+  for (const attribute of MACOS_LAUNCH_BLOCKING_XATTRS) {
+    try {
+      await execFileAsync("xattr", ["-d", attribute, filePath]);
+    } catch (error) {
+      const stderr = String(error?.stderr || "");
+      if (stderr.includes("No such xattr") || stderr.includes("No such file")) {
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 function requiredValue(value, name) {

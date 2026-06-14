@@ -250,10 +250,12 @@ function eventTouchesStateDeltaArea(
       event.subagentId ||
         event.workerId ||
         eventClass.startsWith("subagent.") ||
+        eventClass.startsWith("channel.") ||
         eventClass.startsWith("handoff.") ||
         eventClass.startsWith("review.") ||
         eventClass === "agent.spawned" ||
         eventClass === "agent.completed" ||
+        eventClass === "agent.changed" ||
         eventClass === "agent.handoff",
     );
   }
@@ -278,6 +280,17 @@ function isActionTerminalEventClass(eventClass: string): boolean {
     eventClass === "action.cancelled" ||
     eventClass === "action.canceled" ||
     eventClass === "action.expired"
+  );
+}
+
+function isFailedSubagentTerminalStatus(status: string): boolean {
+  return (
+    status === "failed" ||
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "aborted" ||
+    status === "closed" ||
+    status === "not_found"
   );
 }
 
@@ -571,7 +584,7 @@ function syncProjectionRefsFromReadModel<TEvent extends AgentRuntimeExecutionEve
         .filter((thread) => thread.status === "completed")
         .map((thread) => thread.threadId),
       failedThreadIds: state.subagents.threads
-        .filter((thread) => thread.status === "failed")
+        .filter((thread) => isFailedSubagentTerminalStatus(thread.status))
         .map((thread) => thread.threadId),
     },
   };

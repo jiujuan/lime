@@ -1,10 +1,8 @@
 import { AppServerClient } from "@/lib/api/appServer";
-import { METHOD_WORKSPACE_SKILL_BINDINGS_LIST } from "../../../../packages/app-server-client/src/protocol";
-import { AGENT_RUNTIME_COMMANDS } from "./commandManifest.generated";
 import {
-  invokeAgentRuntimeCommand,
-  type AgentRuntimeCommandInvoke,
-} from "./transport";
+  METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
+  METHOD_WORKSPACE_SKILL_BINDINGS_LIST,
+} from "../../../../packages/app-server-client/src/protocol";
 import type {
   AgentRuntimeListWorkspaceSkillBindingsRequest,
   AgentRuntimeToolInventory,
@@ -21,8 +19,11 @@ type AppServerWorkspaceSkillBindingsListResponse = {
   bindings: AgentRuntimeWorkspaceSkillBindings;
 };
 
+type AppServerToolInventoryReadResponse = {
+  inventory: unknown;
+};
+
 export interface AgentRuntimeInventoryClientDeps {
-  invokeCommand?: AgentRuntimeCommandInvoke;
   appServerClient?: AgentRuntimeWorkspaceSkillBindingsAppServerClient;
 }
 
@@ -31,7 +32,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
 function isOptionalString(value: unknown): value is string | undefined {
@@ -42,12 +45,9 @@ function isOptionalBoolean(value: unknown): value is boolean | undefined {
   return value === undefined || typeof value === "boolean";
 }
 
-function isOptionalFiniteNumber(
-  value: unknown,
-): value is number | undefined {
+function isOptionalFiniteNumber(value: unknown): value is number | undefined {
   return (
-    value === undefined ||
-    (typeof value === "number" && Number.isFinite(value))
+    value === undefined || (typeof value === "number" && Number.isFinite(value))
   );
 }
 
@@ -245,22 +245,23 @@ function assertToolInventoryShape(
     !isArrayOf(value.mcp_tools, isMcpToolEntry)
   ) {
     throw new Error(
-      "agent_runtime_get_tool_inventory did not return tool inventory",
+      "App Server agentSession/toolInventory/read did not return tool inventory",
     );
   }
 }
 
 export function createInventoryClient({
   appServerClient = new AppServerClient(),
-  invokeCommand = invokeAgentRuntimeCommand,
 }: AgentRuntimeInventoryClientDeps = {}) {
   async function getAgentRuntimeToolInventory(
     request: AgentRuntimeToolInventoryRequest = {},
   ): Promise<AgentRuntimeToolInventory> {
-    const result = await invokeCommand<AgentRuntimeToolInventory>(
-      AGENT_RUNTIME_COMMANDS.getToolInventory,
-      { request },
-    );
+    const response =
+      await appServerClient.request<AppServerToolInventoryReadResponse>(
+        METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
+        toolInventoryParamsFromRequest(request),
+      );
+    const result = response.result.inventory;
     assertToolInventoryShape(result);
     return result;
   }
@@ -310,5 +311,20 @@ function workspaceSkillBindingsListParamsFromRequest(
     ...(request.browserAssist === undefined
       ? {}
       : { browserAssist: request.browserAssist }),
+  };
+}
+
+function toolInventoryParamsFromRequest(
+  request: AgentRuntimeToolInventoryRequest,
+) {
+  return {
+    ...(request.caller ? { caller: request.caller } : {}),
+    ...(request.workbench === undefined
+      ? {}
+      : { workbench: request.workbench }),
+    ...(request.browserAssist === undefined
+      ? {}
+      : { browserAssist: request.browserAssist }),
+    ...(request.metadata === undefined ? {} : { metadata: request.metadata }),
   };
 }

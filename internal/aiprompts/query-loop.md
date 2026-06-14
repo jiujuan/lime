@@ -15,8 +15,8 @@
 
 遇到以下任一情况时，先读本文件：
 
-- 调整 `agent_runtime_submit_turn`
-- 调整 `agent_runtime_respond_action` 或 elicitation / ask 恢复路径
+- 调整 App Server `agentSession/turn/start`
+- 调整 App Server `agentSession/action/respond` 或 elicitation / ask 恢复路径
 - 调整 turn 级 system prompt / metadata / provider routing / continuation
 - 调整 runtime queue、流式执行、自动压缩或记忆预取
 - 调整 `@` 命令、`/scene`、`service_scene_launch`、`*_skill_launch` 这类“提交前补 metadata”能力
@@ -32,15 +32,15 @@
 
 当前 Lime 的 Query Loop 统一按下面这条链理解：
 
-`agent_runtime_submit_turn -> runtime_turn 归一化与组包 -> TurnInputEnvelope -> runtime_queue -> stream_reply_once -> timeline / artifact / memory -> thread_read / evidence / replay / review`
+`agentSession/turn/start -> RuntimeCore turn_execution -> AsterBackend -> TurnInputEnvelope -> runtime_queue -> stream_reply_once -> timeline / artifact / memory -> agentSession/read thread_read -> evidence/export / agentSession/*/export`
 
 这条主链意味着：
 
-1. **统一入口是 `agent_runtime_submit_turn`**
-   其他 `@` 命令、`/scene`、图片/素材/站点搜索等场景，只允许在提交前补 `request_metadata.harness.*`，不能绕开 submit turn 另建第二条执行链。
+1. **统一入口是 App Server `agentSession/turn/start`**
+   其他 `@` 命令、`/scene`、图片/素材/站点搜索等场景，只允许在提交前补 `runtimeOptions.metadata` / `hostOptions.asterChatRequest` 中的 harness metadata，不能绕开 App Server turn start 另建第二条执行链。旧 `agent_runtime_submit_turn` 只能作为前端 compat request 形状或 retired guard，不再是 current 主入口。
 
-2. **`runtime_turn.rs` 是当前组包主边界**
-   Provider 解析、workspace 解析、execution profile、request tool policy、prompt augmentation、sandbox、preload、turn state 都在这里收口。
+2. **RuntimeCore `turn_execution` 与 AsterBackend 是当前组包主边界**
+   App Server 负责 session/turn lifecycle、runtime options、事件与读模型；AsterBackend / `lime-rs/crates/agent` 继续承接 Claw 原链里的 provider 解析、workspace 解析、execution profile、request tool policy、prompt augmentation、sandbox、preload、turn state。旧 `runtime_turn.rs` 只允许作为 git history / 执行计划参考。
 
 3. **`TurnInputEnvelope` 是当前 turn 输入快照**
    它记录最终 system prompt、history source、provider routing、tool policy、continuation、turn context metadata，不允许下游再各自重组另一份“真实输入”。
@@ -56,7 +56,7 @@
 
 ### Rust 命令目录迁移边界
 
-`agent_runtime_*` 等命令名在迁移期仍可作为前端网关 surface，但 `lime-rs/src/commands/**` 不是新的 Query Loop 实现目录。本文列出的 `runtime_turn.rs`、`tool_runtime.rs`、`command_api/runtime_api.rs` 等路径是现有行为锚点和迁移来源；新增运行时能力应进入 App Server JSON-RPC、RuntimeCore、ExecutionBackend、services 或 `lime-rs/crates/agent`。当核心逻辑迁出后，旧 wrapper 应撤 runner / DevBridge / catalog / mock 注册并删除；不得在 `commands/**` 新增 compat wrapper、退场 stub 或平行 runtime 分支。
+`agent_runtime_*` 等命令名只能作为 retired guard、历史 evidence、测试 fixture 或短期前端 compat request 形状存在；`lime-rs/src/commands/**` 已删除，不是新的 Query Loop 实现目录。本文如提到旧 `runtime_turn.rs`、`tool_runtime.rs`、`command_api/runtime_api.rs`，只表示旧实现来源，不代表 current owner。新增运行时能力必须进入 App Server JSON-RPC、RuntimeCore、ExecutionBackend、services 或 `lime-rs/crates/agent`，不得恢复 compat wrapper、退场 stub 或平行 runtime 分支。
 
 ### Managed Objective / `/goal` 类能力边界
 
@@ -64,7 +64,7 @@
 
 如果后续实现 `Managed Objective`：
 
-1. continuation turn 仍必须通过 `agent_runtime_submit_turn` 或 runtime queue 进入本主链。
+1. continuation turn 仍必须通过 App Server `agentSession/turn/start` 或 RuntimeCore runtime queue 进入本主链。
 2. durable 后台目标仍必须挂到 `automation job`，不能自建 scheduler。
 3. 完成审计必须消费 `artifact / evidence / thread_read`，不能只靠模型自报完成。
 4. `auto_continue` 仍只表示当前已有文稿续写的 prompt augmentation，不等同于 persistent objective。
@@ -76,26 +76,29 @@
 
 ### 1. 提交入口
 
-- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
-  - `agent_runtime_submit_turn`
-  - `agent_runtime_interrupt_turn`
-  - `agent_runtime_compact_session`
-  - `agent_runtime_get_session`
-  - `agent_runtime_get_thread_read`
+- `src/lib/api/agentRuntime/threadClient.ts`
+  - 将旧 UI request 形状投影到 App Server `agentSession/turn/start`、`agentSession/turn/cancel`、`agentSession/action/respond`
+- `lime-rs/crates/app-server/src/runtime/turn_execution.rs`
+  - RuntimeCore turn lifecycle、queue、action respond 与 backend dispatch
+- `lime-rs/crates/app-server/src/aster_backend.rs`
+  - App Server 到 Aster / Claw backend host 的当前适配层
+- App Server `agentSession/read`
 
 这里的固定规则：
 
-- `agent_runtime_submit_turn` 是唯一提交入口
-- `agent_runtime_respond_action` 这类恢复路径只能复用当前 turn context snapshot 组装，不能再旁路拼第二份 turn context 真相
-- `get_session / get_thread_read` 负责消费稳定读模型，不负责重新解释提交逻辑
-- `compact_session` 是主链内的上下文治理动作，不是独立聊天系统
+- App Server `agentSession/turn/start` 是唯一 current 提交入口
+- App Server `agentSession/action/respond` 这类恢复路径只能复用当前 turn context snapshot 组装，不能再旁路拼第二份 turn context 真相
+- App Server `agentSession/read` 负责消费稳定读模型，不负责重新解释提交逻辑
+- App Server `agentSession/compact` / RuntimeCore compaction 是主链内的上下文治理动作，不是独立聊天系统
 
 ### 2. turn 归一化与输入组装
 
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- App Server `RuntimeOptions` / `hostOptions.asterChatRequest`
+- `lime-rs/crates/app-server/src/runtime/turn_execution.rs`
+- `lime-rs/crates/app-server/src/aster_backend.rs`
 - `lime-rs/crates/agent/src/turn_input_envelope.rs`
 
-当前 `runtime_turn.rs` 负责的关键步骤：
+当前组包边界负责的关键步骤：
 
 1. 确保 agent、session store、runtime support tools 已准备好
 2. 解析 provider config、workspace、session recent harness/runtime context
@@ -128,9 +131,10 @@
 - approval / sandbox policy
 - turn context metadata
 
-后续如果一个改动说不清应该落在 `runtime_turn.rs` 还是 `TurnInputEnvelope`，先判断它属于：
+后续如果一个改动说不清应该落在 App Server turn execution / AsterBackend 还是 `TurnInputEnvelope`，先判断它属于：
 
-- **组包逻辑**：落 `runtime_turn.rs`
+- **协议与 session/turn lifecycle**：落 App Server protocol / RuntimeCore turn execution
+- **Claw 原链组包逻辑**：落 AsterBackend / `lime-rs/crates/agent`
 - **turn 输入快照字段**：落 `turn_input_envelope.rs`
 
 ### 3. queue 与恢复
@@ -155,7 +159,8 @@
 
 ### 4. 工具面与沙箱
 
-- `lime-rs/src/commands/aster_agent_cmd/tool_runtime.rs`
+- `lime-rs/crates/agent/src/agent_tools/**`
+- `lime-rs/crates/agent/src/request_tool_policy.rs`
 
 当前这里负责：
 
@@ -167,12 +172,13 @@
 固定规则：
 
 - Query Loop 不直接 new tool registry
-- 所有工具面增删都先回到 `tool_runtime.rs`
+- 所有工具面增删都先回到 `lime-rs/crates/agent` 的工具 catalog / policy owner
 - `request_tool_policy` 只能在这里影响实际工具可见面，不能在别处再复制一套“隐藏工具”逻辑
 
 ### 5. 流式执行与主回合副作用
 
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- `lime-rs/crates/app-server/src/runtime/turn_execution.rs`
+- `lime-rs/crates/app-server/src/aster_backend.rs`
 
 主回合执行当前固定通过：
 
@@ -193,12 +199,14 @@
 
 当前 Query Loop 的下游消费统一挂在下面几处：
 
-- `agent_runtime_compact_session`
-- `agent_runtime_get_session`
-- `agent_runtime_get_thread_read`
-- `lime-rs/src/services/runtime_evidence_pack_service.rs`
-- `lime-rs/src/services/runtime_replay_case_service.rs`
-- `lime-rs/src/services/runtime_review_decision_service.rs`
+- App Server `agentSession/compact`
+- App Server `agentSession/read`
+- App Server `evidence/export`
+- App Server `agentSession/handoffBundle/export`
+- App Server `agentSession/replayCase/export`
+- App Server `agentSession/analysisHandoff/export`
+- App Server `agentSession/reviewDecisionTemplate/export`
+- App Server `agentSession/reviewDecision/save`
 
 固定规则：
 
@@ -220,7 +228,7 @@
 它们当前的正确角色是：
 
 1. 前端发送边界写入结构化 `request_metadata.harness.*`
-2. `runtime_turn.rs` 在提交前归一化 metadata 与 prompt
+2. RuntimeCore / AsterBackend 在提交前归一化 metadata 与 prompt
 3. Agent 首刀按系统提示走 skill / tool / service skill 主链
 
 不允许回流成：
@@ -234,17 +242,17 @@
 
 ### `current`
 
-- `agent_runtime_submit_turn`
-- `runtime_turn.rs` 现有行为锚点；新核心逻辑迁向 RuntimeCore / services
+- App Server `agentSession/turn/start`
+- App Server `agentSession/turn/cancel`
+- App Server `agentSession/action/respond`
+- RuntimeCore `turn_execution`
+- AsterBackend / `lime-rs/crates/agent` Claw 原链适配
 - `TurnInputEnvelope`
 - `runtime_queue.rs`
-- `tool_runtime.rs` 现有行为锚点；新工具治理逻辑迁向 RuntimeCore / services
-- `agent_runtime_get_session / get_thread_read`
-- `agent_runtime_compact_session`
-- `lime-rs/src/commands/aster_agent_cmd/action_runtime.rs::agent_runtime_respond_action`
-- `runtime_evidence_pack_service.rs`
-- `runtime_replay_case_service.rs`
-- `runtime_review_decision_service.rs`
+- `lime-rs/crates/agent` 工具 catalog / request tool policy
+- App Server `agentSession/read`
+- App Server `agentSession/compact`
+- App Server `evidence/export` 与 `agentSession/*/export`
 
 ### `compat`
 
@@ -266,7 +274,7 @@
 
 - 让任何 `@` 场景、slash scene 或 viewer 自己维护执行状态
 - 在 UI、专题 service 或证据导出层重新拼装“真实模型输入”
-- 绕开 `agent_runtime_submit_turn` 直接定义第二条主回合执行链
+- 绕开 App Server `agentSession/turn/start` 直接定义第二条主回合执行链
 - 在 Desktop Host / legacy adapter 命令层继续新增未分类的原始 `agent.reply(...)` / `stream_reply_with_policy(...)` 调用
 
 ## 最低验证要求
@@ -289,4 +297,4 @@
 
 ## 一句话
 
-> Lime 当前 Query Loop 的唯一主链，是 `agent_runtime_submit_turn` 驱动的 turn 组包、runtime queue、tool runtime、流式执行与 evidence 下游消费链；任何新能力都只能往这条链收敛，不能平行再长一套执行真相。
+> Lime 当前 Query Loop 的唯一主链，是 App Server `agentSession/turn/start` 驱动的 turn 组包、runtime queue、tool runtime、流式执行与 App Server evidence / export 下游消费链；任何新能力都只能往这条链收敛，不能平行再长一套执行真相。

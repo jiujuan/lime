@@ -1,0 +1,621 @@
+use super::*;
+use lime_agent::AgentToolResult;
+
+fn success_result(output: &str, metadata: HashMap<String, Value>) -> AgentToolResult {
+    AgentToolResult {
+        success: true,
+        output: output.to_string(),
+        error: None,
+        images: None,
+        metadata: Some(metadata),
+    }
+}
+
+#[test]
+fn shell_tool_events_emit_command_and_test_lifecycle() {
+    let mut mirror = CodingEventMirror::default();
+
+    let started = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-1".to_string(),
+        arguments: Some(json!({ "command": "cargo test -p app-server coding_events" }).to_string()),
+    });
+    let output = mirror.process_event(&RuntimeAgentEvent::ToolOutputDelta {
+        tool_id: "tool-1".to_string(),
+        delta: "running tests".to_string(),
+        output_kind: Some("stdout".to_string()),
+        metadata: None,
+    });
+    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-1".to_string(),
+        result: success_result(
+            "ok",
+            HashMap::from([
+                ("exit_code".to_string(), json!(0)),
+                (
+                    "command".to_string(),
+                    json!("cargo test -p app-server coding_events"),
+                ),
+                ("cwd".to_string(), json!("/workspace")),
+                ("shell".to_string(), json!("bash")),
+            ]),
+        ),
+    });
+
+    let event_types = started
+        .after_raw
+        .into_iter()
+        .chain(output.after_raw)
+        .chain(ended.after_raw)
+        .map(|event| event.event_type)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "command.started",
+            "test.started",
+            "command.output",
+            "command.exited",
+            "test.completed"
+        ]
+    );
+}
+
+#[test]
+fn shell_tool_result_emits_output_when_stream_delta_was_absent() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "PowerShellTool".to_string(),
+        tool_id: "tool-2".to_string(),
+        arguments: Some(json!({ "command": "Write-Output ok" }).to_string()),
+    });
+
+    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-2".to_string(),
+        result: success_result(
+            "ok",
+            HashMap::from([
+                ("exit_code".to_string(), json!(0)),
+                ("command".to_string(), json!("Write-Output ok")),
+            ]),
+        ),
+    });
+
+    assert_eq!(ended.after_raw[0].event_type, "command.output");
+    assert_eq!(ended.after_raw[1].event_type, "command.exited");
+    assert!(ended.after_raw[0].payload["outputRef"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("output:command:")));
+}
+
+#[test]
+fn shell_apply_patch_command_emits_patch_lifecycle_after_command_exit() {
+    let mut mirror = CodingEventMirror::default();
+    let started = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-patch-shell".to_string(),
+        arguments: Some(
+            json!({
+                "command": "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: notes/live.md\n+hello\n*** End Patch\nPATCH"
+            })
+            .to_string(),
+        ),
+    });
+
+    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-patch-shell".to_string(),
+        result: success_result(
+            "ok",
+            HashMap::from([
+                ("exit_code".to_string(), json!(0)),
+                ("command".to_string(), json!("apply_patch <<'PATCH'")),
+            ]),
+        ),
+    });
+
+    let event_types = started
+        .after_raw
+        .into_iter()
+        .chain(ended.after_raw)
+        .map(|event| event.event_type)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "patch.started",
+            "command.started",
+            "command.output",
+            "command.exited",
+            "patch.applied"
+        ]
+    );
+}
+
+#[test]
+fn apply_patch_tool_failure_emits_patch_failed_with_category() {
+    let mut mirror = CodingEventMirror::default();
+    let started = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "apply_patch".to_string(),
+        tool_id: "tool-patch-failed".to_string(),
+        arguments: Some(
+            json!({
+                "patch": "*** Begin Patch\n*** Update File: missing.txt\n@@\n-old\n+new\n*** End Patch\n"
+            })
+            .to_string(),
+        ),
+    });
+
+    let ended = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-patch-failed".to_string(),
+        result: AgentToolResult {
+            success: false,
+            output: "target file not found".to_string(),
+            error: None,
+            images: None,
+            metadata: None,
+        },
+    });
+
+    assert_eq!(started.after_raw.len(), 1);
+    assert_eq!(started.after_raw[0].event_type, "patch.started");
+    assert_eq!(ended.after_raw.len(), 1);
+    assert_eq!(ended.after_raw[0].event_type, "patch.failed");
+    assert_eq!(
+        ended.after_raw[0].payload["failureCategory"].as_str(),
+        Some("missing_target")
+    );
+}
+
+#[test]
+fn apply_patch_tool_success_emits_patch_and_all_file_changes() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "apply_patch".to_string(),
+        tool_id: "tool-patch-success".to_string(),
+        arguments: Some(
+            json!({
+                "patch": "*** Begin Patch\n*** Add File: a.txt\n+a\n*** Add File: b.txt\n+b\n*** End Patch\n"
+            })
+            .to_string(),
+        ),
+    });
+
+    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-patch-success".to_string(),
+        result: success_result(
+            "applied",
+            HashMap::from([(
+                "file_changes".to_string(),
+                json!({
+                    "changes": [
+                        {
+                            "kind": "add",
+                            "path": "a.txt",
+                            "content_size": 2,
+                            "checkpointRef": "checkpoint:file:a",
+                            "contentRef": "content:file:a",
+                            "diffRef": "diff:file:a",
+                            "diff": [
+                                { "kind": "add", "value": "a" }
+                            ]
+                        },
+                        {
+                            "kind": "add",
+                            "path": "b.txt",
+                            "content_size": 2,
+                            "checkpointRef": "checkpoint:file:b",
+                            "contentRef": "content:file:b",
+                            "diffRef": "diff:file:b"
+                        }
+                    ]
+                }),
+            )]),
+        ),
+    });
+
+    let event_types = events
+        .after_raw
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec!["patch.applied", "file.changed", "file.changed"]
+    );
+    let changed_paths = events
+        .after_raw
+        .iter()
+        .filter(|event| event.event_type == "file.changed")
+        .filter_map(|event| event.payload["path"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(changed_paths, vec!["a.txt", "b.txt"]);
+    let first_file_change = events
+        .after_raw
+        .iter()
+        .find(|event| event.event_type == "file.changed")
+        .expect("file.changed event");
+    assert_eq!(
+        first_file_change.payload["checkpointRef"].as_str(),
+        Some("checkpoint:file:a")
+    );
+    assert_eq!(
+        first_file_change.payload["contentRef"].as_str(),
+        Some("content:file:a")
+    );
+    assert_eq!(
+        first_file_change.payload["diffRef"].as_str(),
+        Some("diff:file:a")
+    );
+    assert_eq!(
+        first_file_change.payload["diff"].as_array().expect("diff"),
+        &vec![json!({ "kind": "add", "value": "a" })]
+    );
+}
+
+#[test]
+fn write_tool_result_emits_file_changed_with_artifact_reference() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Write".to_string(),
+        tool_id: "tool-3".to_string(),
+        arguments: Some(json!({ "path": "src/App.tsx", "content": "export {}" }).to_string()),
+    });
+
+    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-3".to_string(),
+        result: success_result(
+            "written",
+            HashMap::from([("path".to_string(), json!("src/App.tsx"))]),
+        ),
+    });
+
+    assert_eq!(events.after_raw.len(), 1);
+    assert_eq!(events.after_raw[0].event_type, "file.changed");
+    assert_eq!(
+        events.after_raw[0].payload["path"].as_str(),
+        Some("src/App.tsx")
+    );
+    assert!(events.after_raw[0].payload["artifactId"].as_str().is_some());
+}
+
+#[test]
+fn write_tool_result_preserves_artifact_checkpoint_and_diff_refs() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Edit".to_string(),
+        tool_id: "tool-edit-refs".to_string(),
+        arguments: Some(json!({ "path": "src/App.tsx" }).to_string()),
+    });
+
+    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-edit-refs".to_string(),
+        result: success_result(
+            "updated",
+            HashMap::from([
+                ("path".to_string(), json!("src/App.tsx")),
+                ("artifactId".to_string(), json!("artifact_src_app_after")),
+                (
+                    "artifactRefs".to_string(),
+                    json!(["artifact_src_app_after", "artifact_src_app_before"]),
+                ),
+                (
+                    "checkpointRef".to_string(),
+                    json!("checkpoint_src_app_after"),
+                ),
+                ("contentRef".to_string(), json!("content://src-app-after")),
+                ("diffRef".to_string(), json!("diff://src-app")),
+                ("previewText".to_string(), json!("changed App component")),
+            ]),
+        ),
+    });
+
+    let event = events.after_raw.first().expect("file.changed event");
+    assert_eq!(event.event_type, "file.changed");
+    assert_eq!(
+        event.payload["artifactId"].as_str(),
+        Some("artifact_src_app_after")
+    );
+    assert_eq!(
+        event.payload["artifactRefs"]
+            .as_array()
+            .expect("artifact refs"),
+        &vec![
+            json!("artifact_src_app_after"),
+            json!("artifact_src_app_before")
+        ]
+    );
+    assert_eq!(
+        event.payload["checkpointRef"].as_str(),
+        Some("checkpoint_src_app_after")
+    );
+    assert_eq!(
+        event.payload["contentRef"].as_str(),
+        Some("content://src-app-after")
+    );
+    assert_eq!(event.payload["diffRef"].as_str(), Some("diff://src-app"));
+    assert_eq!(
+        event.payload["preview"].as_str(),
+        Some("changed App component")
+    );
+}
+
+#[test]
+fn read_tool_result_emits_file_read_from_arguments() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Read".to_string(),
+        tool_id: "tool-read".to_string(),
+        arguments: Some(
+            json!({ "path": "src/App.tsx", "start_line": 2, "end_line": 8 }).to_string(),
+        ),
+    });
+
+    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-read".to_string(),
+        result: success_result(
+            "2 | export {}",
+            HashMap::from([("file_type".to_string(), json!("text"))]),
+        ),
+    });
+
+    assert_eq!(events.after_raw.len(), 1);
+    assert_eq!(events.after_raw[0].event_type, "file.read");
+    assert_eq!(
+        events.after_raw[0].payload["path"].as_str(),
+        Some("src/App.tsx")
+    );
+    assert_eq!(events.after_raw[0].payload["startLine"].as_u64(), Some(2));
+    assert_eq!(events.after_raw[0].payload["endLine"].as_u64(), Some(8));
+    assert!(events.after_raw[0].payload["outputRef"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("output:file:")));
+}
+
+#[test]
+fn read_and_shell_tool_results_preserve_output_refs() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Read".to_string(),
+        tool_id: "tool-read-ref".to_string(),
+        arguments: Some(json!({ "path": "src/App.tsx" }).to_string()),
+    });
+    let read_events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-read-ref".to_string(),
+        result: success_result(
+            "export {}",
+            HashMap::from([
+                ("path".to_string(), json!("src/App.tsx")),
+                ("outputRef".to_string(), json!("output://file-read")),
+                ("contentRef".to_string(), json!("content://file-read")),
+                (
+                    "refIds".to_string(),
+                    json!(["output://file-read", "trace://read"]),
+                ),
+            ]),
+        ),
+    });
+    let read = read_events.after_raw.first().expect("file.read event");
+    assert_eq!(
+        read.payload["outputRef"].as_str(),
+        Some("output://file-read")
+    );
+    assert_eq!(
+        read.payload["contentRef"].as_str(),
+        Some("content://file-read")
+    );
+    assert_eq!(
+        read.payload["refIds"].as_array().expect("read refs"),
+        &vec![
+            json!("output://file-read"),
+            json!("trace://read"),
+            json!("content://file-read")
+        ]
+    );
+
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-shell-ref".to_string(),
+        arguments: Some(json!({ "command": "npm test" }).to_string()),
+    });
+    let shell_events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-shell-ref".to_string(),
+        result: success_result(
+            "ok",
+            HashMap::from([
+                ("exit_code".to_string(), json!(0)),
+                ("outputRef".to_string(), json!("output://npm-test")),
+                (
+                    "refIds".to_string(),
+                    json!(["output://npm-test", "log://npm-test"]),
+                ),
+            ]),
+        ),
+    });
+    let output = shell_events
+        .after_raw
+        .iter()
+        .find(|event| event.event_type == "command.output")
+        .expect("command.output event");
+    assert_eq!(
+        output.payload["outputRef"].as_str(),
+        Some("output://npm-test")
+    );
+    assert_eq!(
+        output.payload["refIds"].as_array().expect("command refs"),
+        &vec![json!("output://npm-test"), json!("log://npm-test")]
+    );
+}
+
+#[test]
+fn failed_edit_does_not_emit_file_changed() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Edit".to_string(),
+        tool_id: "tool-4".to_string(),
+        arguments: Some(json!({ "path": "src/App.tsx" }).to_string()),
+    });
+
+    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-4".to_string(),
+        result: AgentToolResult {
+            success: false,
+            output: "not found".to_string(),
+            error: Some("not found".to_string()),
+            images: None,
+            metadata: Some(HashMap::from([("path".to_string(), json!("src/App.tsx"))])),
+        },
+    });
+
+    assert!(events.after_raw.is_empty());
+}
+
+#[test]
+fn failed_tool_result_emits_permission_denied_before_raw_terminal() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-denied".to_string(),
+        arguments: Some(json!({ "command": "rm -rf important" }).to_string()),
+    });
+
+    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-denied".to_string(),
+        result: AgentToolResult {
+            success: false,
+            output: String::new(),
+            error: Some("policy denied this command".to_string()),
+            images: None,
+            metadata: Some(HashMap::from([
+                ("reasonCode".to_string(), json!("dangerous_command")),
+                ("policyName".to_string(), json!("default-shell-policy")),
+                ("policyProfile".to_string(), json!("workspace-write")),
+                ("policyDecisionId".to_string(), json!("decision-123")),
+                ("platform".to_string(), json!("macos")),
+            ])),
+        },
+    });
+
+    assert_eq!(events.before_raw.len(), 1);
+    assert_eq!(events.before_raw[0].event_type, "permission.denied");
+    assert_eq!(
+        events.before_raw[0].payload["reasonCode"].as_str(),
+        Some("dangerous_command")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["policyName"].as_str(),
+        Some("default-shell-policy")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["policyProfile"].as_str(),
+        Some("workspace-write")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["policyDecisionId"].as_str(),
+        Some("decision-123")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["platform"].as_str(),
+        Some("macos")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["command"].as_str(),
+        Some("rm -rf important")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["diagnostics"]["toolSurface"].as_str(),
+        Some("runtime_tool")
+    );
+}
+
+#[test]
+fn failed_tool_result_uses_policy_metadata_command_when_start_arguments_are_missing() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-denied-metadata".to_string(),
+        arguments: None,
+    });
+
+    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-denied-metadata".to_string(),
+        result: AgentToolResult {
+            success: false,
+            output: String::new(),
+            error: Some("Permission denied: policy denied this command".to_string()),
+            images: None,
+            metadata: Some(HashMap::from([
+                ("eventClass".to_string(), json!("permission.denied")),
+                ("command".to_string(), json!("rm -rf /tmp/outside")),
+                ("cwd".to_string(), json!("/workspace")),
+                ("policyName".to_string(), json!("workspace_tool_execution")),
+            ])),
+        },
+    });
+
+    assert_eq!(events.before_raw.len(), 1);
+    assert_eq!(events.before_raw[0].event_type, "permission.denied");
+    assert_eq!(
+        events.before_raw[0].payload["command"].as_str(),
+        Some("rm -rf /tmp/outside")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["cwd"].as_str(),
+        Some("/workspace")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["diagnostics"]["command"].as_str(),
+        Some("rm -rf /tmp/outside")
+    );
+}
+
+#[test]
+fn failed_tool_result_emits_sandbox_blocked_before_raw_terminal() {
+    let mut mirror = CodingEventMirror::default();
+    let _ = mirror.process_event(&RuntimeAgentEvent::ToolStart {
+        tool_name: "Bash".to_string(),
+        tool_id: "tool-sandbox".to_string(),
+        arguments: Some(json!({ "command": "curl https://example.com" }).to_string()),
+    });
+
+    let events = mirror.process_event(&RuntimeAgentEvent::ToolEnd {
+        tool_id: "tool-sandbox".to_string(),
+        result: AgentToolResult {
+            success: false,
+            output: "sandbox blocked network access".to_string(),
+            error: None,
+            images: None,
+            metadata: Some(HashMap::from([
+                (
+                    "failureCategory".to_string(),
+                    json!("sandbox_network_blocked"),
+                ),
+                ("sandboxPolicy".to_string(), json!("network-disabled")),
+                ("policyProfile".to_string(), json!("read-only")),
+                ("platform".to_string(), json!("windows")),
+            ])),
+        },
+    });
+
+    assert_eq!(events.before_raw.len(), 1);
+    assert_eq!(events.before_raw[0].event_type, "sandbox.blocked");
+    assert_eq!(
+        events.before_raw[0].payload["reasonCode"].as_str(),
+        Some("sandbox_blocked")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["sandboxPolicy"].as_str(),
+        Some("network-disabled")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["policyProfile"].as_str(),
+        Some("read-only")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["platform"].as_str(),
+        Some("windows")
+    );
+    assert_eq!(
+        events.before_raw[0].payload["command"].as_str(),
+        Some("curl https://example.com")
+    );
+}

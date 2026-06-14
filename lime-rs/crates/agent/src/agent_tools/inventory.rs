@@ -16,7 +16,7 @@ use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyCon
 use lime_core::tool_calling::{
     extract_tool_surface_metadata, tool_matches_caller, tool_visible_in_context,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};
 
 fn extract_harness_object(
@@ -79,14 +79,14 @@ fn catalog_runtime_visibility_allowed(entry: Option<&ToolCatalogEntry>) -> bool 
     entry.is_none_or(|item| item.lifecycle == ToolLifecycle::Current)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeExtensionSourceKind {
     McpBridge,
     RuntimeExtension,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolInventorySurfaceSnapshot {
     pub workbench: bool,
     pub browser_assist: bool,
@@ -101,13 +101,13 @@ impl From<WorkspaceToolSurface> for ToolInventorySurfaceSnapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolInventoryRequestSnapshot {
     pub caller: String,
     pub surface: ToolInventorySurfaceSnapshot,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolInventoryCounts {
     pub catalog_total: usize,
     pub catalog_current_total: usize,
@@ -129,7 +129,7 @@ pub struct ToolInventoryCounts {
     pub mcp_tool_visible_total: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolCatalogInventoryEntry {
     pub name: String,
     pub profiles: Vec<ToolSurfaceProfile>,
@@ -146,7 +146,7 @@ pub struct ToolCatalogInventoryEntry {
     pub execution_sandbox_profile_source: ToolExecutionPolicySource,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeRegistryToolInventoryEntry {
     pub name: String,
     pub description: String,
@@ -170,7 +170,7 @@ pub struct RuntimeRegistryToolInventoryEntry {
     pub visible_in_context: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeToolSourceKind {
     RegistryNative,
@@ -179,7 +179,7 @@ pub enum RuntimeToolSourceKind {
     Mcp,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeToolInventoryEntry {
     pub name: String,
     pub description: String,
@@ -202,7 +202,7 @@ pub struct RuntimeToolInventoryEntry {
     pub visible_in_context: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeExtensionSurfaceInventoryEntry {
     pub extension_name: String,
     pub description: String,
@@ -215,7 +215,7 @@ pub struct RuntimeExtensionSurfaceInventoryEntry {
     pub searchable_tools: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeExtensionToolInventoryEntry {
     pub name: String,
     pub description: String,
@@ -242,7 +242,7 @@ pub struct ExtensionToolRuntimeStatus {
     pub allowed_caller: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct McpToolInventoryEntry {
     pub server_name: String,
     pub name: String,
@@ -256,7 +256,7 @@ pub struct McpToolInventoryEntry {
     pub visible_in_context: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentToolInventorySnapshot {
     pub request: ToolInventoryRequestSnapshot,
     pub agent_initialized: bool,
@@ -1446,6 +1446,7 @@ mod tests {
                         sandbox_profile: None,
                     },
                 )]),
+                ..Default::default()
             }),
             request_metadata: Some(json!({
                 "harness": {

@@ -1,7 +1,7 @@
 # Lime Agent Workbench 路线图
 
 > 状态：active
-> 更新时间：2026-06-11
+> 更新时间：2026-06-12
 > 范围：`/Users/coso/Documents/dev/ai/limecloud/lime-agent-workbench` 文档站、Lime AgentUI SDK 标准、AgentRuntime 配合边界、Subagents 标准化。
 
 ## 主目标
@@ -87,9 +87,9 @@ Workbench 不是外部 SDK 套壳，也不是第二套 runtime。外部 AG-UI、
 - Rust/App Server RuntimeCore 在同一入库边界已接入 AgentUI sequence gate：`tool.result/failed` 必须有同 turn `tool.started`，`action.required` 必须由 `action.resolved / action.cancelled / action.canceled / action.expired` 收口，current turn terminal 只认 `turn.completed / turn.failed / turn.canceled`，终态前必须收口 active tool/action；`done / final_done / turn.done / turn.final_done / turn.cancelled / cancelled` 属于 legacy terminal dead surface，只允许负向 guard / test-only 证明不能关闭 current stream。violation 直接 fail closed，不写入 `StoredSession.events`，也不会提前改变 turn/session 状态。
 - `@limecloud/agent-ui-contracts` 已有 v2.10 Runtime / Provider capability manifest 与 resume contract seed：类型、JSON Schema constants、checked-in schema 文件和 validation API；Lime 本体 App Server `capability/list` 已返回 `runtimeCapabilityManifest`，`agentSession/thread/resume` 已接收并校验 `resumeContract`，前端 `AgentRuntime` current gateway 会消费/构造同一合同。自动 capability negotiation 仍不是已完成能力。
 - `@limecloud/agent-runtime-projection` 已消费 `state.delta`：`projectAgentUiState` 与 `createAgentUiProjector.apply()` 都会把 RFC 6902 patch 归并进 `AgentUiProjectionState` / `readModel`，batch 与 incremental 输出等价；patch 失败时进入 `hydration.status = "stale"` 并写入 diagnostics，不污染目标 state。read model 与 runtime status 使用同一 action terminal 语义，避免后端已收口但 UI 仍残留 pending action。
-- Content Studio `AI agents` 工作台和通用 `AgentSessionPanel` 已统一通过 `AgentUiProjectionSurface` 消费共享 projection read model，并输出 `.agent-ui-projection` / `.agent-ui-main` / `.agent-ui-sidecar` 标准 DOM surface；其 standalone/dev App Server turn 主链已通过 `@limecloud/agent-runtime-client/sessionGateway` 包装为标准 `AgentRuntimeClient`。标准 npm 链路已发布并接入 `@limecloud/app-server-client@1.66.0` 与 `@limecloud/agent-runtime-client@0.1.1`，Content Studio 不能安装误发的无 scope 链路。
+- Content Studio `AI agents` 工作台和通用 `AgentSessionPanel` 已统一通过 `AgentUiProjectionSurface` 消费共享 projection read model，并输出 `.agent-ui-projection` / `.agent-ui-main` / `.agent-ui-sidecar` 标准 DOM surface；其 standalone/dev App Server turn 主链已通过 `@limecloud/agent-runtime-client/sessionGateway` 包装为标准 `AgentRuntimeClient`。标准 npm 链路已发布并接入 `@limecloud/app-server-client@1.66.0` 与 `@limecloud/agent-runtime-client@0.1.1`，Content Studio 不能安装误发的无 scope 链路；真实 Electron E2E 已证明 conversation/runtime 标准 surface 在产品页面可运行。
 - `@limecloud/agent-runtime-ui` 已有 `ArtifactRefList` / `EvidenceRefList`，引用内容由宿主 artifact workspace / evidence pack owner 打开。
-- `@limecloud/agent-runtime-ui` 已有 `SubagentsView`，只消费 `state.subagents`。
+- `@limecloud/agent-runtime-ui` 已有 `SubagentsView`，只消费 `state.subagents` / 已投影的 `AgentUiSubagentsModel`；`subagent-handoff` fixture 已覆盖 channel、artifact、handoff、review、task completed、state.delta 和 snapshot.updated 的完整闭环。
 
 ### compat
 
@@ -119,7 +119,7 @@ Workbench 不是外部 SDK 套壳，也不是第二套 runtime。外部 AG-UI、
 
 v2.0-v2.10 已完成，`state.delta` projection apply、Rust/App Server schema + sequence enforcement、Workbench 活体矩阵、runtime-client fan-out / flush substrate、Lime 本体消费路径和 capability / resume contract seed 已补齐。后续优先补 AG-UI 仍领先的协议执行深水区：
 
-1. RuntimeCore tool orchestrator：参考 Codex `ToolRouter + ToolOrchestrator`，把 MCP / ACP / skills / shell / project tools 收敛到单一 tool lifecycle owner。
+1. RuntimeCore tool orchestrator：参考成熟执行内核的 `ToolRouter + ToolOrchestrator` 边界，把 MCP / ACP / skills / shell / project tools 收敛到单一 tool lifecycle owner。
 2. Projection reconciliation：message snapshot、tool result adjacency、partial tool args、reasoning continuity。
 3. 外部 transport compatibility：SSE / protobuf / Accept negotiation 仅作为 gateway 候选，不覆盖 current JSON-RPC owner。
 
@@ -129,4 +129,4 @@ v2.0-v2.10 已完成，`state.delta` projection apply、Rust/App Server schema +
 
 本路线图目录是并行协作入口。新进程先读 `task-board.md` 认领窄写集，完成后把进度写回 `iteration-plan.md` 的进度日志，避免聊天记录成为唯一状态源。
 
-发布与 Content Studio 接入阶段先读 `standard-package-release-runbook.md`。当前 scoped registry 发布与 Content Studio 依赖接入已完成；后续提升完成度前必须先补 GUI smoke / 产品回归证据。
+发布与 Content Studio 接入阶段先读 `standard-package-release-runbook.md`。当前 scoped registry 发布、Content Studio 依赖接入和 GUI smoke / 产品回归证据已完成；后续进入 v2.11 协议深水区或单独授权的发布 / 删除任务。

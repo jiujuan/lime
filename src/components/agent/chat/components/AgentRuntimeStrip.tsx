@@ -222,7 +222,7 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         !runtimeToolAvailability.subagentRuntime
       ) {
         nextItems.push({
-          key: "subagent_runtime_gap",
+          key: "subagent_tool_gap",
           label: translate("agentChat.runtimeStrip.status.subagentToolGap", {
             count: [
               ...runtimeToolAvailability.missingSubagentCoreTools,

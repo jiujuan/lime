@@ -10,6 +10,7 @@ import {
   createAgentSessionCurrent,
   exportAgentSessionEvidencePackCurrent,
   invokeDevBridge,
+  invokeAppServerMethod,
   readAgentRuntimeThreadCurrent,
   readAgentSessionDetailCurrent,
   respondAgentSessionActionCurrent,
@@ -45,6 +46,8 @@ const DEFAULT_INVOKE_URL = "http://127.0.0.1:3030/invoke";
 const DEFAULT_TIMEOUT_MS = 240_000;
 const DEFAULT_INTERVAL_MS = 1_000;
 const LOG_PREFIX = "[smoke:agent-runtime-tool-execution]";
+const APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =
+  "agentSession/toolInventory/read";
 
 const FIXTURE_ROOT = "lime-qc/agent-runtime-tool-execution";
 const EDIT_RELATIVE_PATH = `${FIXTURE_ROOT}/files/edit-target.txt`;
@@ -1546,24 +1549,32 @@ async function collectToolInventories(options, metadata) {
     metadata,
   };
   const [core, workbench, browserAssist] = await Promise.all([
-    invokeDevBridge(options, "agent_runtime_get_tool_inventory", {
-      request: baseRequest,
+    readToolInventoryCurrent(options, baseRequest),
+    readToolInventoryCurrent(options, {
+      ...baseRequest,
+      workbench: true,
     }),
-    invokeDevBridge(options, "agent_runtime_get_tool_inventory", {
-      request: {
-        ...baseRequest,
-        workbench: true,
-      },
-    }),
-    invokeDevBridge(options, "agent_runtime_get_tool_inventory", {
-      request: {
-        ...baseRequest,
-        browserAssist: true,
-      },
+    readToolInventoryCurrent(options, {
+      ...baseRequest,
+      browserAssist: true,
     }),
   ]);
 
   return { core, workbench, browserAssist };
+}
+
+async function readToolInventoryCurrent(options, request) {
+  const response = await invokeAppServerMethod(
+    options,
+    APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
+    request,
+  );
+  const inventory = response?.inventory;
+  assertSmoke(
+    inventory && typeof inventory === "object" && !Array.isArray(inventory),
+    "agentSession/toolInventory/read 未返回工具库存",
+  );
+  return inventory;
 }
 
 async function resolveWorkspaceRoot(options, workspace, workspaceId) {
@@ -1731,7 +1742,7 @@ async function runSmoke(options) {
 
     console.log(`${LOG_PREFIX} stage=submit-turn session=${sessionId}`);
     const turnId = `tool-execution-${Date.now()}-${process.pid}`;
-    const eventName = `agent_runtime_tool_execution_${turnId}`;
+    const eventName = `app_server_tool_execution_${turnId}`;
     await startAgentSessionTurnCurrent(options, {
       sessionId,
       workspaceId,

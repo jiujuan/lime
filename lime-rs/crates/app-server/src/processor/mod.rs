@@ -90,6 +90,7 @@ use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE;
 use app_server_protocol::METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT;
 use app_server_protocol::METHOD_AGENT_SESSION_START;
 use app_server_protocol::METHOD_AGENT_SESSION_THREAD_RESUME;
+use app_server_protocol::METHOD_AGENT_SESSION_TOOL_INVENTORY_READ;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_CANCEL;
 use app_server_protocol::METHOD_AGENT_SESSION_TURN_START;
 use app_server_protocol::METHOD_AGENT_SESSION_UPDATE;
@@ -212,6 +213,7 @@ use app_server_protocol::METHOD_MODEL_PROVIDER_UPDATE;
 use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
 use app_server_protocol::METHOD_PROJECT_GIT_BRANCH_CHECKOUT;
 use app_server_protocol::METHOD_PROJECT_GIT_BRANCH_CREATE;
+use app_server_protocol::METHOD_PROJECT_GIT_DIFF;
 use app_server_protocol::METHOD_PROJECT_GIT_STATUS;
 use app_server_protocol::METHOD_PROJECT_GIT_WORKTREE_CREATE;
 use app_server_protocol::METHOD_PROJECT_MATERIAL_CONTENT;
@@ -311,7 +313,7 @@ use std::sync::Mutex;
 #[derive(Clone)]
 pub struct RequestProcessor {
     state: Arc<Mutex<ProcessorState>>,
-    runtime: RuntimeCore,
+    runtime: Arc<RuntimeCore>,
     project_shell: ProjectShellManager,
 }
 
@@ -326,13 +328,17 @@ impl RequestProcessor {
     pub fn new(runtime: RuntimeCore) -> Self {
         Self {
             state: Arc::new(Mutex::new(ProcessorState::default())),
-            runtime,
+            runtime: Arc::new(runtime),
             project_shell: ProjectShellManager::default(),
         }
     }
 
     pub fn runtime(&self) -> &RuntimeCore {
-        &self.runtime
+        self.runtime.as_ref()
+    }
+
+    pub fn runtime_arc(&self) -> Arc<RuntimeCore> {
+        self.runtime.clone()
     }
 
     pub async fn handle_request(
@@ -380,6 +386,7 @@ impl RequestProcessor {
                 self.handle_file_system_delete_file_impl(params).await
             }
             METHOD_PROJECT_GIT_STATUS => self.handle_project_git_status_impl(params).await,
+            METHOD_PROJECT_GIT_DIFF => self.handle_project_git_diff_impl(params).await,
             METHOD_PROJECT_GIT_BRANCH_CHECKOUT => {
                 self.handle_project_git_branch_checkout_impl(params).await
             }
@@ -899,6 +906,9 @@ impl RequestProcessor {
             METHOD_AGENT_SESSION_TURN_CANCEL => self.handle_turn_cancel(params).await,
             METHOD_AGENT_SESSION_ACTION_REPLAY => self.handle_action_replay(params).await,
             METHOD_AGENT_SESSION_ACTION_RESPOND => self.handle_action_respond(params).await,
+            METHOD_AGENT_SESSION_TOOL_INVENTORY_READ => {
+                self.handle_tool_inventory_read_impl(params).await
+            }
             _ => Err(JsonRpcError::new(
                 error_codes::METHOD_NOT_FOUND,
                 format!("method not found: {method}"),

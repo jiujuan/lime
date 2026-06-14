@@ -164,13 +164,6 @@ export interface CanvasWorkbenchResolvedSelection {
   selectionPath?: string;
 }
 
-export interface CanvasWorkbenchChangeItemLike {
-  path: string;
-  absolutePath?: string | null;
-  displayName?: string;
-  status?: "in_progress" | "completed" | "failed";
-}
-
 export function normalizeCanvasWorkbenchPath(value: string): string {
   return value.replace(/\\/g, "/");
 }
@@ -651,85 +644,6 @@ export function resolveCodingPreviewTabLabel(
 ): string {
   const label = context?.tabLabel?.trim() || context?.title?.trim();
   return label ? `${fallback} · ${label}` : fallback;
-}
-
-export function isPendingChangeItem(
-  item: CanvasWorkbenchChangeItemLike,
-): boolean {
-  return item.status === "in_progress";
-}
-
-export function resolveChangeItemDisplayName(
-  item: CanvasWorkbenchChangeItemLike,
-): string {
-  return item.displayName?.trim() || extractFileNameFromPath(item.path);
-}
-
-function normalizeChangeItemPathForMatch(value: string | null | undefined) {
-  return normalizeCanvasWorkbenchPath(value || "")
-    .trim()
-    .toLowerCase();
-}
-
-export function findChangeItemForSelection<T extends CanvasWorkbenchChangeItemLike>(
-  items: T[],
-  context: CanvasWorkbenchSelectionContextLike | null,
-): T | null {
-  if (!context) {
-    return null;
-  }
-
-  const selectionCandidates = [
-    context.selectionPath,
-    resolvePreviewPath(context.target),
-    context.subtitle,
-    context.title,
-  ]
-    .map(normalizeChangeItemPathForMatch)
-    .filter(Boolean);
-
-  return (
-    items.find((item) => {
-      const itemCandidates = [
-        item.path,
-        item.absolutePath,
-        resolveChangeItemDisplayName(item),
-      ]
-        .map(normalizeChangeItemPathForMatch)
-        .filter(Boolean);
-
-      return itemCandidates.some((candidate) =>
-        selectionCandidates.includes(candidate),
-      );
-    }) || null
-  );
-}
-
-export function resolveChangeStatusCopyKey(
-  item: CanvasWorkbenchChangeItemLike,
-): string {
-  if (item.status === "failed") {
-    return "agentChat.canvasWorkbench.coding.changes.status.failed";
-  }
-  if (item.status === "in_progress") {
-    return "agentChat.canvasWorkbench.coding.changes.status.inProgress";
-  }
-  return "agentChat.canvasWorkbench.coding.changes.status.completed";
-}
-
-export function resolveChangeStatusClassName(
-  item: CanvasWorkbenchChangeItemLike,
-): string {
-  if (item.status === "failed") {
-    return "border-rose-200 bg-rose-50 text-rose-700";
-  }
-  if (item.status === "in_progress") {
-    return "border-sky-200 bg-sky-50 text-sky-700";
-  }
-  if (item.status === "completed") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
 export function buildDefaultPreviewSelection(

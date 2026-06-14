@@ -3,7 +3,7 @@
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
     JsonRpcError, ProjectGitBranchCheckoutParams, ProjectGitBranchCreateParams,
-    ProjectGitStatusParams, ProjectGitWorktreeCreateParams,
+    ProjectGitDiffParams, ProjectGitStatusParams, ProjectGitWorktreeCreateParams,
 };
 use serde_json::Value;
 
@@ -17,6 +17,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .read_project_git_status(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_project_git_diff_impl(
+        &self,
+        params: Option<Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: ProjectGitDiffParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .read_project_git_diff(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

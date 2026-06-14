@@ -77,11 +77,98 @@ const agentUiPackageNamingGuardFiles = [
   "tsconfig.json",
   "vite.config.ts",
 ];
-const legacySessionCompatCommandSpecs = [
-  { command: "agent_runtime_create_session", key: "createSession" },
-  { command: "agent_runtime_list_sessions", key: "listSessions" },
-  { command: "agent_runtime_get_session", key: "getSession" },
-  { command: "agent_runtime_update_session", key: "updateSession" },
+const retiredAgentRuntimeSessionFacadeSnippets = [
+  "AGENT_RUNTIME_COMMANDS.createSession",
+  "AGENT_RUNTIME_COMMANDS.listSessions",
+  "AGENT_RUNTIME_COMMANDS.getSession",
+  "AGENT_RUNTIME_COMMANDS.updateSession",
+  'createSession: "agent_runtime_create_session"',
+  'listSessions: "agent_runtime_list_sessions"',
+  'getSession: "agent_runtime_get_session"',
+  'updateSession: "agent_runtime_update_session"',
+  'readonly createSession: "agent_runtime_create_session"',
+  'readonly listSessions: "agent_runtime_list_sessions"',
+  'readonly getSession: "agent_runtime_get_session"',
+  'readonly updateSession: "agent_runtime_update_session"',
+  '"agent_runtime_create_session"',
+  '"agent_runtime_list_sessions"',
+  '"agent_runtime_get_session"',
+  '"agent_runtime_update_session"',
+];
+const retiredAgentRuntimeSessionFacadeProductionFiles = [
+  "electron/hostCommands.ts",
+  "electron/ipcChannels.ts",
+  "src/lib/dev-bridge/commandPolicy.ts",
+  "src/lib/governance/agentCommandCatalog.json",
+];
+const retiredAgentRuntimeEvidenceExportFacadeSnippets = [
+  "AGENT_RUNTIME_COMMANDS.exportEvidencePack",
+  'exportEvidencePack: "agent_runtime_export_evidence_pack"',
+  'readonly exportEvidencePack: "agent_runtime_export_evidence_pack"',
+  '"agent_runtime_export_evidence_pack"',
+];
+const retiredAgentRuntimeEvidenceExportFacadeProductionFiles = [
+  "electron/hostCommands.ts",
+  "electron/ipcChannels.ts",
+  "src/lib/dev-bridge/commandPolicy.ts",
+  "src/lib/governance/agentCommandCatalog.json",
+];
+const retiredAgentRuntimeThreadReadFacadeSnippets = [
+  "AGENT_RUNTIME_COMMANDS.getThreadRead",
+  'getThreadRead: "agent_runtime_get_thread_read"',
+  'readonly getThreadRead: "agent_runtime_get_thread_read"',
+  '"agent_runtime_get_thread_read"',
+];
+const retiredAgentRuntimeThreadReadFacadeProductionFiles =
+  retiredAgentRuntimeEvidenceExportFacadeProductionFiles;
+const retiredAgentRuntimeSubmitTurnFacadeSnippets = [
+  "AGENT_RUNTIME_COMMANDS.submitTurn",
+  'submitTurn: "agent_runtime_submit_turn"',
+  'readonly submitTurn: "agent_runtime_submit_turn"',
+  '"agent_runtime_submit_turn"',
+];
+const retiredAgentRuntimeSubmitTurnFacadeProductionFiles =
+  retiredAgentRuntimeEvidenceExportFacadeProductionFiles;
+const retiredAgentRuntimeInterruptTurnFacadeSnippets = [
+  "AGENT_RUNTIME_COMMANDS.interruptTurn",
+  'interruptTurn: "agent_runtime_interrupt_turn"',
+  'readonly interruptTurn: "agent_runtime_interrupt_turn"',
+  '"agent_runtime_interrupt_turn"',
+];
+const retiredAgentRuntimeInterruptTurnFacadeProductionFiles =
+  retiredAgentRuntimeEvidenceExportFacadeProductionFiles;
+const retiredAgentRuntimeRespondActionFacadeSnippets = [
+  "AGENT_RUNTIME_COMMANDS.respondAction",
+  'respondAction: "agent_runtime_respond_action"',
+  'readonly respondAction: "agent_runtime_respond_action"',
+  '"agent_runtime_respond_action"',
+];
+const retiredAgentRuntimeRespondActionFacadeProductionFiles =
+  retiredAgentRuntimeEvidenceExportFacadeProductionFiles;
+const activeAgentRuntimeAipromptFiles = [
+  "AGENTS.md",
+  ...fs
+    .readdirSync(path.join(repoRoot, "internal/aiprompts"), {
+      withFileTypes: true,
+    })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => `internal/aiprompts/${entry.name}`)
+    .sort(),
+];
+const activeAgentRuntimeMarkdownFiles = [
+  ...activeAgentRuntimeAipromptFiles,
+  ...collectMarkdownFiles("src"),
+  ...collectMarkdownFiles("packages"),
+  ...collectMarkdownFiles("electron"),
+];
+const allowedRetiredAgentRuntimeDocContextPattern =
+  /(旧|已删除|retired|legacy|历史|history|迁移|migration|compat|deprecated|dead|guard|test-only|fixture|只允许|不得|禁止|不再|不能|不要|not|forbid|forbidden|retire|退场|退役|残留|residual|reference|参考|cleanup|删除|现有迁移锚点)/i;
+const forbiddenAgentRuntimeCurrentDocContextPattern =
+  /(current|主链|事实源|唯一|继续收敛|新增|新增能力|当前.*入口|当前.*主路径|必须回到|继续走|default tool surface|统一提交|统一会话管理|统一中断|统一响应)/i;
+const retiredAgentRuntimeScriptCallPatterns = [
+  /\bcmd\s*:\s*["'`]agent_runtime_[A-Za-z0-9_]+["'`]/u,
+  /\bcommand\s*:\s*["'`]agent_runtime_[A-Za-z0-9_]+["'`]/u,
+  /\b(?:safeInvoke|invoke|invokeCommand|invokeAgentRuntimeBridge|bridgeInvoke|invokeViaHttp|postInvoke|postJson)\s*\([^)]*["'`]agent_runtime_[A-Za-z0-9_]+["'`]/su,
 ];
 const agentRuntimeThinGatewayForbiddenSnippets = [
   {
@@ -341,6 +428,38 @@ const retiredSkillExecutionSurfaceFiles = [
   "src/components/skills/SkillExecutionDialog.tsx",
   "src/components/skills/SkillExecutionDialog.test.tsx",
 ];
+const retiredAgentRuntimeMockFiles = [
+  "src/lib/desktop-host/agentRuntimeMocks.ts",
+  "src/lib/desktop-host/agentRuntimeMocks.d.ts",
+  "src/lib/desktop-host/agentRuntimeObjectiveMocks.ts",
+  "src/lib/desktop-host/agentRuntimeMocks.test.ts",
+  "src/lib/desktop-host/agentRuntimeObjectiveMocks.test.ts",
+];
+const retiredAgentRuntimeCommandManifestFiles = [
+  "src/lib/governance/agentRuntimeCommandSchema.json",
+  "src/lib/api/agentRuntime/commandManifest.generated.ts",
+  "src/lib/api/agentRuntime/commandManifest.generated.d.ts",
+  "scripts/generate-agent-runtime-clients.mjs",
+];
+const retiredAgentRuntimeLegacyQueueFiles = [
+  "lime-rs/crates/core/src/database/agent_runtime_queue_repository.rs",
+];
+const retiredAgentRuntimeLegacyQueueSurfaceFiles = [
+  "lime-rs/crates/agent/src/aster_runtime_support.rs",
+  "lime-rs/crates/core/src/database/mod.rs",
+  "src/lib/governance/legacySurfaceCatalog.json",
+];
+const retiredAgentRuntimeLegacyQueueSnippets = [
+  "agent_runtime_queued_turns",
+  "agent_runtime_queue_repository",
+  "migrate_legacy_runtime_queue_to_aster_store",
+  "LegacyRuntimeQueueMigrationReport",
+  "LegacyRuntimeQueuedTurn",
+];
+const retiredAgentRuntimeToolInventoryMockFiles = [
+  "src/lib/desktop-host/runtimeToolInventoryMocks.ts",
+  "src/lib/desktop-host/runtimeToolInventoryMocks.d.ts",
+];
 
 const checks = [
   {
@@ -395,20 +514,50 @@ const checks = [
       "lime-rs/crates/app-server/src/agent_ui_event_schema.rs",
       "lime-rs/crates/app-server/src/agent_ui_sequence_verifier.rs",
       "lime-rs/crates/app-server/src/runtime.rs",
+      "lime-rs/crates/app-server/src/runtime/event_store.rs",
+      "lime-rs/crates/app-server/src/runtime/tool_lifecycle.rs",
       "lime-rs/crates/app-server/src/runtime/tests.rs",
       "lime-rs/crates/app-server/src/runtime/tests/external_events.rs",
     ],
     snippets: [
       "mod agent_ui_event_schema;",
       "mod agent_ui_sequence_verifier;",
+      "mod tool_lifecycle;",
       "agent-runtime-event.v0.1.schema.json",
       "agent-runtime-state-delta.v0.1.schema.json",
       "jsonschema::validator_for",
-      "validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?",
-      "validate_agent_event_sequence(&stored.events, &event)",
+      "validation_context_for_event(stored, &events, turn_id)",
+      "agent_ui_event_schema::validate_agent_event(&event).map_err(RuntimeCoreError::Backend)?",
+      "agent_ui_sequence_verifier::validate_agent_event_sequence(validation_events, &event)",
+      "tool_lifecycle::validate_tool_lifecycle_event(&context, &event)",
+      "events.push(event)",
+      "stored.events.push(event)",
+      "pub(crate) fn validate_agent_event_sequence",
+      "pub(super) fn validate_tool_lifecycle_event",
       "agent runtime event sequence validation failed",
+      "agent runtime tool lifecycle validation failed",
+      "tool_args_without_start",
+      "tool_output_without_start",
+      "tool_policy_event_without_active_tool",
+      "tool_output_before_action_resolved",
+      "tool_result_before_action_resolved",
+      "tool_result_after_action_denied",
+      "tool_event_owner_mismatch",
+      "tool_terminal_missing_owner",
       "append_external_runtime_events_rejects_invalid_state_delta_before_storage",
       "invalid state.delta must fail closed",
+      "append_external_runtime_events_rejects_tool_args_without_started_tool",
+      "append_external_runtime_events_rejects_tool_output_delta_without_started_tool",
+      "append_external_runtime_events_allows_tool_args_between_start_and_result",
+      "append_external_runtime_events_rejects_batch_atomically_before_storage",
+      "append_external_runtime_events_rejects_sandbox_blocked_for_inactive_tool",
+      "append_external_runtime_events_rejects_action_required_for_inactive_tool",
+      "append_external_runtime_events_rejects_tool_output_before_action_resolved",
+      "append_external_runtime_events_allows_tool_result_after_action_resolved",
+      "append_external_runtime_events_rejects_tool_result_after_action_denied",
+      "append_external_runtime_events_allows_tool_result_with_matching_owner",
+      "append_external_runtime_events_rejects_tool_result_owner_mismatch",
+      "append_external_runtime_events_rejects_tool_terminal_missing_owner",
       "append_external_runtime_events_rejects_unpaired_tool_result_before_storage",
       "append_external_runtime_events_rejects_unclosed_tool_at_turn_terminal",
     ],
@@ -747,7 +896,7 @@ const checks = [
       "params: EvidenceExportParams",
       "Result<EvidenceExportResponse, RuntimeCoreError>",
       "events_for_turn(&stored.events, params.turn_id.as_deref())",
-      "artifact_summaries_for_turn(&stored.events, params.turn_id.as_deref())",
+      "artifact_projection::stored_artifact_summaries_for_turn(\n                    stored,\n                    params.turn_id.as_deref(),\n                )",
       "session: stored.session.clone()",
       "EvidenceExportProvider",
       "async fn export_evidence_pack(",
@@ -787,13 +936,26 @@ const checks = [
   {
     name: "Standalone App Server local data source implements workspace and skill surfaces",
     files: [
+      "lime-rs/crates/app-server/src/runtime/app_data.rs",
+      "lime-rs/crates/app-server/src/runtime/app_data/skills.rs",
+      "lime-rs/crates/app-server/src/runtime/app_data/workspaces.rs",
       "lime-rs/crates/app-server/src/local_data_source.rs",
+      "lime-rs/crates/app-server/src/local_data_source/impls/skills.rs",
+      "lime-rs/crates/app-server/src/local_data_source/impls/workspace_skill_bindings.rs",
+      "lime-rs/crates/app-server/src/local_data_source/impls/workspaces.rs",
       "lime-rs/crates/app-server/src/local_data_source/workspaces.rs",
       "lime-rs/crates/app-server/src/local_data_source/skills/workspace.rs",
     ],
     snippets: [
       "pub struct LocalAppDataSource",
-      "impl AppDataSource for LocalAppDataSource",
+      "pub trait AppDataSource:",
+      "impl<T> AppDataSource for T where",
+      "pub trait WorkspaceAppDataSource: Send + Sync",
+      "pub trait SkillAppDataSource: Send + Sync",
+      "pub trait WorkspaceSkillBindingAppDataSource: Send + Sync",
+      "impl WorkspaceAppDataSource for LocalAppDataSource",
+      "impl SkillAppDataSource for LocalAppDataSource",
+      "impl WorkspaceSkillBindingAppDataSource for LocalAppDataSource",
       "async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError>",
       "async fn read_workspace(",
       "async fn read_workspace_by_path(",
@@ -814,11 +976,13 @@ const checks = [
     files: [
       "lime-rs/crates/app-server/src/local_data_source.rs",
       "lime-rs/crates/app-server/src/local_data_source/current_timeline.rs",
+      "lime-rs/crates/app-server/src/local_data_source/impls/sessions.rs",
       "lime-rs/crates/app-server/src/local_data_source/tests.rs",
+      "lime-rs/crates/app-server/src/runtime/app_data/sessions.rs",
       "lime-rs/crates/app-server/src/local_data_source/workspaces.rs",
     ],
     snippets: [
-      "async fn list_current_timeline_sessions(",
+      "pub(crate) fn list_current_timeline_sessions(",
       "let workspace_id = workspaces::normalize_workspace_filter(params.workspace_id.as_deref());",
       "let include_archived = params.include_archived.unwrap_or(false);",
       "let archived_only = params.archived_only.unwrap_or(false);",
@@ -939,9 +1103,16 @@ const checks = [
     files: [
       "lime-rs/crates/app-server/src/runtime.rs",
       "lime-rs/crates/app-server/src/runtime/agent_apps.rs",
+      "lime-rs/crates/app-server/src/runtime/app_data.rs",
+      "lime-rs/crates/app-server/src/runtime/automation.rs",
+      "lime-rs/crates/app-server/src/runtime/knowledge.rs",
+      "lime-rs/crates/app-server/src/runtime/memory.rs",
       "lime-rs/crates/app-server/src/local_data_source.rs",
       "lime-rs/crates/app-server/src/local_data_source/agent_apps.rs",
       "lime-rs/crates/app-server/src/local_data_source/automation.rs",
+      "lime-rs/crates/app-server/src/local_data_source/impls/agent_apps.rs",
+      "lime-rs/crates/app-server/src/local_data_source/impls/automation_overview.rs",
+      "lime-rs/crates/app-server/src/local_data_source/impls/memory.rs",
       "lime-rs/crates/app-server/src/local_data_source/knowledge.rs",
     ],
     snippets: [
@@ -2096,82 +2267,48 @@ const checks = [
     ],
   },
   {
-    name: "Electron Desktop Host projects Claw Agent runtime facade turnConfig into App Server hostOptions",
-    files: ["electron/hostCommands.ts", "electron/hostCommands.test.ts"],
+    name: "App Server exposes full Agent runtime tool inventory current method",
+    files: [
+      "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
+      "lime-rs/crates/app-server-protocol/src/protocol/v0/catalog.rs",
+      "lime-rs/crates/app-server-protocol/src/protocol/v0/agent_session.rs",
+      "lime-rs/crates/app-server/src/processor/mod.rs",
+      "lime-rs/crates/app-server/src/processor/agent_session.rs",
+      "lime-rs/crates/app-server/src/runtime.rs",
+      "lime-rs/crates/app-server/src/runtime_backend.rs",
+      "lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs",
+      "packages/app-server-client/src/protocol.ts",
+      "packages/app-server-client/src/index.ts",
+      "src/lib/api/appServer.ts",
+    ],
     snippets: [
-      'case "agent_runtime_submit_turn":',
-      "async #submitAgentRuntimeTurn(",
-      "buildAgentRuntimeAsterChatRequest(",
-      "const asterChatRequest = buildAgentRuntimeAsterChatRequest({",
-      "hostOptions: {\n            asterChatRequest,",
-      "agentRuntimeSubmitTurnRequest: request",
-      "provider_config:\n      turnConfig?.provider_config ?? turnConfig?.providerConfig ?? null",
-      'workspace_id:\n      readString(request, "workspace_id") ??',
-      "turn_config: turnConfig",
-      "agent_runtime_submit_turn 将 Claw turnConfig 投影到 App Server asterChatRequest",
-      "providerConfig: {",
-      'apiKey: "fixture-key"',
-      'baseUrl: "http://127.0.0.1:5555/v1"',
-      "provider_config: {",
-      "agentRuntimeSubmitTurnRequest: expect.objectContaining",
+      'METHOD_AGENT_SESSION_TOOL_INVENTORY_READ: &str = "agentSession/toolInventory/read"',
+      "method!(METHOD_AGENT_SESSION_TOOL_INVENTORY_READ, Request)",
+      "pub struct AgentSessionToolInventoryReadParams",
+      "pub struct AgentSessionToolInventoryReadResponse",
+      "METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =>",
+      "handle_tool_inventory_read_impl",
+      "read_agent_session_tool_inventory",
+      "ToolInventoryReadRequest",
+      "async fn read_tool_inventory(",
+      "build_tool_inventory(AgentToolInventoryBuildInput",
+      'METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =\n  "agentSession/toolInventory/read"',
+      "readAgentSessionToolInventory(",
+      "APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ",
     ],
-    absentSnippets: [
-      "asterChatRequest: request",
-      "invokeMockOnly",
-      "mockPriorityCommands",
-      "defaultMocks",
-    ],
-  },
-  {
-    name: "Electron Desktop Host projects App Server tool capabilities into Claw runtime inventory",
-    files: ["electron/hostCommands.ts", "electron/hostCommands.test.ts"],
-    snippets: [
-      'case "agent_runtime_get_tool_inventory":',
-      "METHOD_CAPABILITY_LIST",
-      "capabilitiesToToolInventory(response.capabilities, caller, surface)",
-      "capabilityRuntimeToolNames(capability)",
-      "function capabilityToolName(capability: CapabilityDescriptor): string | null",
-      'if (!id.startsWith("tool.")) {',
-      'return id.slice("tool.".length).trim() || null;',
-      "agent_runtime_get_tool_inventory 将 App Server tool capability 投影为运行时工具名",
-      'id: "tool.WebFetch"',
-      'id: "tool.WebSearch"',
-      'name: "WebFetch"',
-      'name: "WebSearch"',
-      'source_label: "tool.WebFetch"',
-      'source_label: "tool.WebSearch"',
-    ],
-    absentSnippets: ["invokeMockOnly", "mockPriorityCommands", "defaultMocks"],
-  },
-  {
-    name: "Electron Desktop Host preserves App Server thread_read tool calls for Claw runtime facade",
-    files: ["electron/hostCommands.ts", "electron/hostCommands.test.ts"],
-    snippets: [
-      'case "agent_runtime_get_thread_read":',
-      "METHOD_AGENT_SESSION_READ",
-      "const threadRead = threadReadFromAgentSessionRead(response);",
-      "function threadReadFromAgentSessionRead(",
-      "toRecord(detail?.thread_read) ?? toRecord(detail?.threadRead)",
-      "agent_runtime_get_thread_read 透传 App Server read detail 的工具调用",
-      'tool_name: "WebFetch"',
-      'toolName: "WebSearch"',
-      'status: "completed"',
-      "output_preview",
-      "outputPreview",
-    ],
-    absentSnippets: ["invokeMockOnly", "mockPriorityCommands", "defaultMocks"],
   },
   {
     name: "App Server session read projects runtime events into thread_read",
     files: appServerRuntimeFiles,
     snippets: [
-      "let detail = runtime_session_read_detail(stored);",
+      "let detail = read_model::runtime_session_read_detail(stored);",
       "detail: Some(detail)",
-      "fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value",
+      "pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value",
       "fn runtime_thread_read_from_stored_session(stored: &StoredSession) -> serde_json::Value",
       '"thread_read": thread_read',
       '"tool_calls": tool_calls_from_events(&stored.events)',
-      '"artifacts": artifact_summaries_for_turn(&stored.events, None)',
+      '"artifacts": artifact_projection::stored_artifact_summaries_for_turn(stored, None)',
+      '"outputs": output_refs::read_model_outputs(stored.output_blobs.values(), None)',
       "fn tool_calls_from_events(events: &[AgentEvent]) -> Vec<serde_json::Value>",
       "fn tool_call_from_event(event: &AgentEvent) -> Option<serde_json::Value>",
       '"tool.started" => "running"',
@@ -2215,6 +2352,37 @@ const checks = [
       '"tool.WebSearch"',
     ],
     absentSnippets: ["APP_SERVER_BACKEND_MODE=mock", '"backend": "mock"'],
+  },
+  {
+    name: "Agent tool orchestrator owns planned tool execution events",
+    files: [
+      "lime-rs/crates/agent/src/agent_tools/mod.rs",
+      "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs",
+    ],
+    snippets: [
+      "pub mod tool_orchestrator;",
+      "pub struct PlannedToolExecution",
+      "pub struct ToolExecutionBatchInput",
+      "pub async fn execute_planned_tool_batch",
+      "RuntimeAgentEvent::ToolStart",
+      "RuntimeAgentEvent::ToolEnd",
+      "aster::session_context::with_turn_context",
+      ".execute(&planned.tool_name",
+      "execute_planned_tool_batch_emits_tool_start_and_terminal_events",
+    ],
+  },
+  {
+    name: "Request tool policy delegates WebSearch preflight execution to current tool orchestrator",
+    file: "lime-rs/crates/agent/src/request_tool_policy.rs",
+    snippets: [
+      "execute_planned_tool_batch(",
+      "ToolExecutionBatchInput",
+      "PreflightSearchPlan",
+      "rewrite_tool_terminal_event",
+      "WebSearch 未返回可用搜索结果链接",
+      "web_search_preflight_uses_turn_context_for_permission_check",
+    ],
+    absentSnippets: ["PlannedWebSearchQuery", ".execute(&preflight_tool_name"],
   },
   {
     name: "Electron Agent App runtime fixture proves Desktop Host facade to App Server runtime state",
@@ -2751,6 +2919,8 @@ const checks = [
     files: [
       "lime-rs/crates/app-server/src/lib.rs",
       "lime-rs/crates/app-server/src/runtime_backend.rs",
+      "lime-rs/crates/app-server/src/runtime_backend/request_context.rs",
+      "lime-rs/crates/app-server/src/runtime_backend/tool_events.rs",
       "lime-rs/crates/app-server/src/runtime_backend/tests.rs",
     ],
     snippets: [
@@ -2765,6 +2935,20 @@ const checks = [
       "configure_provider(provider_config.clone(), &session_scope.session_id, &db)",
       "configure_provider_from_pool(",
       "stream_reply_with_policy(",
+      "runtime_events_from_agent_event",
+      "runtime_event_type_for_agent_event",
+      '"tool.args"',
+      '"runtime_tool_start"',
+      '"tool.failed"',
+      '"failureCategory"',
+      "parse_tool_arguments(arguments)",
+      "final_done_raw_runtime_event_does_not_map_to_current_terminal_event",
+      "runtime_agent_tool_start_without_arguments_does_not_emit_empty_tool_args",
+      "runtime_agent_tool_args_preserve_non_json_arguments",
+      "runtime_agent_json_tool_args_emit_tool_args_fact",
+      "runtime_agent_successful_tool_end_emits_tool_result",
+      "runtime_agent_failed_tool_end_emits_tool_failed",
+      "runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts",
       "request_tool_policy_from_request",
       "RequestToolPolicyMode::Allowed",
       "resolve_request_tool_policy_with_mode(web_search, search_mode, true)",
@@ -2827,6 +3011,7 @@ const checks = [
       "lime-rs/crates/app-server/src/lib.rs",
       "lime-rs/crates/app-server/src/processor/mod.rs",
       "lime-rs/crates/app-server/src/runtime.rs",
+      "lime-rs/crates/app-server/src/runtime/turn_execution.rs",
       "lime-rs/crates/app-server-transport/src/lib.rs",
     ],
     snippets: [
@@ -2945,20 +3130,6 @@ const checks = [
       "fn rollback_started_turn(",
       "stored.turns.retain(|turn| turn.turn_id != turn_id)",
       "unavailable_backend_rejects_turn_without_persisting_fake_turn",
-    ],
-  },
-  {
-    name: "Electron Host action command bridges to App Server current action/respond",
-    file: "electron/hostCommands.ts",
-    snippets: [
-      'case "agent_runtime_respond_action":',
-      "async #respondAgentRuntimeAction(args: HostArgs): Promise<void>",
-      "METHOD_AGENT_SESSION_ACTION_RESPOND",
-      "agent_runtime_respond_action requires session_id and request_id",
-      "requestId",
-      "actionType",
-      "actionScope",
-      "userData",
     ],
   },
   {
@@ -3823,7 +3994,6 @@ const checks = [
       'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
       "isElectronHostCommandAvailable(APP_SERVER_HANDLE_JSON_LINES_COMMAND)",
       "AGENT_RUNTIME_COMMANDS.submitTurn",
-      "AGENT_RUNTIME_COMMANDS.interruptTurn",
       "AGENT_RUNTIME_COMMANDS.respondAction",
       "AGENT_RUNTIME_COMMANDS.compactSession",
       "AGENT_RUNTIME_COMMANDS.resumeThread",
@@ -3990,77 +4160,79 @@ const checks = [
     absentSnippets: ['"capability_draft_list_registered_skills"'],
   },
   {
-    name: "Renderer Agent Runtime tool inventory stays explicit compat until full inventory method exists",
+    name: "Renderer Agent Runtime tool inventory uses App Server current method",
     file: "src/lib/api/agentRuntime/inventoryClient.ts",
     snippets: [
       "async function getAgentRuntimeToolInventory(",
-      "invokeCommand<AgentRuntimeToolInventory>",
+      "METHOD_AGENT_SESSION_TOOL_INVENTORY_READ",
+      "appServerClient.request<AppServerToolInventoryReadResponse>",
+      "toolInventoryParamsFromRequest(request)",
+      "App Server agentSession/toolInventory/read did not return tool inventory",
+    ],
+    absentSnippets: [
+      "APP_SERVER_METHOD_CAPABILITY_LIST",
+      "listCapabilities(",
       "AGENT_RUNTIME_COMMANDS.getToolInventory",
-    ],
-    absentSnippets: ["APP_SERVER_METHOD_CAPABILITY_LIST", "listCapabilities("],
-  },
-  {
-    name: "Renderer Agent Runtime workspace skill bindings schema is compat only",
-    file: "src/lib/governance/agentRuntimeCommandSchema.json",
-    snippets: [
-      `"command": "agent_runtime_list_workspace_skill_bindings",
-      "domain": "inventory",
-      "requestType": "AgentRuntimeListWorkspaceSkillBindingsRequest",
-      "responseType": "AgentRuntimeWorkspaceSkillBindings",
-      "lifecycle": "compat",
-      "mockStrategy": "bridge-only"`,
-    ],
-    absentSnippets: [
-      `"command": "agent_runtime_list_workspace_skill_bindings",
-      "domain": "inventory",
-      "requestType": "AgentRuntimeListWorkspaceSkillBindingsRequest",
-      "responseType": "AgentRuntimeWorkspaceSkillBindings",
-      "lifecycle": "current",
-      "mockStrategy": "mock-priority"`,
+      "agent_runtime_get_tool_inventory",
+      "invokeCommand<AgentRuntimeToolInventory>",
     ],
   },
   {
-    name: "Renderer Agent Runtime workspace skill bindings manifest is compat only",
-    file: "src/lib/api/agentRuntime/commandManifest.generated.ts",
-    snippets: [
-      `key: "listWorkspaceSkillBindings",
-    command: AGENT_RUNTIME_COMMANDS.listWorkspaceSkillBindings,
-    domain: "inventory",
-    requestType: "AgentRuntimeListWorkspaceSkillBindingsRequest",
-    responseType: "AgentRuntimeWorkspaceSkillBindings",
-    lifecycle: "compat",
-    mockStrategy: "bridge-only"`,
+    name: "Agent Runtime workspace skill bindings legacy command is retired from production command surfaces",
+    files: [
+      "electron/hostCommands.ts",
+      "electron/ipcChannels.ts",
+      "src/lib/dev-bridge/commandPolicy.ts",
+      "src/lib/governance/agentCommandCatalog.json",
     ],
+    snippets: [],
+    absentSnippets: ['"agent_runtime_list_workspace_skill_bindings"'],
+  },
+  {
+    name: "Agent Runtime retired subagent facade names stay out of production gateway policy",
+    files: [
+      "src/lib/api/agentRuntime/subagentClient.ts",
+      "src/lib/dev-bridge/commandPolicy.ts",
+    ],
+    snippets: ["Public subagent control is retired"],
     absentSnippets: [
-      `key: "listWorkspaceSkillBindings",
-    command: AGENT_RUNTIME_COMMANDS.listWorkspaceSkillBindings,
-    domain: "inventory",
-    requestType: "AgentRuntimeListWorkspaceSkillBindingsRequest",
-    responseType: "AgentRuntimeWorkspaceSkillBindings",
-    lifecycle: "current",
-    mockStrategy: "mock-priority"`,
+      '"agent_runtime_spawn_subagent"',
+      '"agent_runtime_send_subagent_input"',
+      '"agent_runtime_wait_subagents"',
+      '"agent_runtime_resume_subagent"',
+      '"agent_runtime_close_subagent"',
+      'command.startsWith("agent_runtime_")',
     ],
   },
   {
-    name: "Renderer Agent Runtime workspace skill bindings declaration is compat only",
-    file: "src/lib/api/agentRuntime/commandManifest.generated.d.ts",
+    name: "Agent App runtime projections expose App Server current source labels",
+    files: [
+      "src/features/agent-app/runtime/capabilityDispatcher.ts",
+      "src/features/agent-app/runtime/agentRuntimeCapabilityHost.ts",
+    ],
     snippets: [
-      `readonly key: "listWorkspaceSkillBindings";
-    readonly command: "agent_runtime_list_workspace_skill_bindings";
-    readonly domain: "inventory";
-    readonly requestType: "AgentRuntimeListWorkspaceSkillBindingsRequest";
-    readonly responseType: "AgentRuntimeWorkspaceSkillBindings";
-    readonly lifecycle: "compat";
-    readonly mockStrategy: "bridge-only"`,
+      "app_server_runtime_capability_catalog",
+      "app_server_runtime_model_constraints",
+      "app_server_runtime_projection",
+      "app_server_runtime_process",
+      "app_server_runtime_thread_read",
+      "app_server_tool_runtime",
+      "app_server_artifact_replay",
+      "app_server_tool_call_replay",
+      "lime_agent_sdk_unavailable",
+      "no_app_server_runtime_budget_facts",
     ],
     absentSnippets: [
-      `readonly key: "listWorkspaceSkillBindings";
-    readonly command: "agent_runtime_list_workspace_skill_bindings";
-    readonly domain: "inventory";
-    readonly requestType: "AgentRuntimeListWorkspaceSkillBindingsRequest";
-    readonly responseType: "AgentRuntimeWorkspaceSkillBindings";
-    readonly lifecycle: "current";
-    readonly mockStrategy: "mock-priority"`,
+      '"agent_runtime_capability_catalog"',
+      '"agent_runtime_model_constraints"',
+      '"agent_runtime_projection"',
+      '"agent_runtime_process"',
+      '"agent_runtime_thread_read"',
+      '"agent_runtime_tool_runtime"',
+      '"agent_runtime_artifact_replay"',
+      '"agent_runtime_tool_call_replay"',
+      '"agent_runtime_sdk_unavailable"',
+      '"no_agent_runtime_budget_facts"',
     ],
   },
   {
@@ -5400,7 +5572,6 @@ const checks = [
       "exportAgentRuntimeEvidencePack 应走 App Server evidence/export，不回退 legacy command",
       "createExportClient({",
       "appServerClient,",
-      "invokeCommand,",
       'client.exportAgentRuntimeEvidencePack(" session-1 ")',
       "workspace_root",
       "appServerClient.exportEvidence",
@@ -5408,7 +5579,6 @@ const checks = [
       "includeEvents: true",
       "includeArtifacts: true",
       "includeEvidencePack: true",
-      "expect(invokeCommand).not.toHaveBeenCalled()",
       "缺少 sessionId 时 evidence export 应 fail closed",
       "sessionId is required to export App Server evidence",
     ],
@@ -5426,7 +5596,6 @@ const checks = [
       "appServerClient.exportReplayCase",
       "appServerClient.exportReviewDecisionTemplate",
       "appServerClient.saveReviewDecision",
-      "expect(invokeCommand).not.toHaveBeenCalled()",
       "agentSession/analysisHandoff/export did not return runtime analysis handoff",
       "agentSession/replayCase/export did not return runtime replay case",
       "agentSession/reviewDecisionTemplate/export did not return runtime review decision template",
@@ -5502,7 +5671,6 @@ const checks = [
     snippets: [
       'expect(call?.[0]).toBe("app_server_handle_json_lines")',
       "APP_SERVER_METHOD_AGENT_SESSION_TURN_START",
-      "APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL",
       "APP_SERVER_METHOD_AGENT_SESSION_UPDATE",
       "APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY",
       "APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
@@ -5514,11 +5682,10 @@ const checks = [
       "respondAgentRuntimeAction 应经 Electron IPC 调 App Server action/respond",
       "resumeAgentRuntimeThread 应经 Electron IPC 调 App Server thread/resume",
       "promoteAgentRuntimeQueuedTurn 应经 Electron IPC 调 App Server queuedTurn/promote",
-      "interruptAgentRuntimeTurn 与 updateAgentRuntimeSession 应经 Electron IPC 调 App Server",
+      "updateAgentRuntimeSession 应经 Electron IPC 调 App Server",
       "exportAgentRuntimeEvidencePack 应经 Electron IPC 调 App Server evidence/export",
       "mockIsElectronHostCommandAvailable.mockReturnValue(true)",
       "expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_START",
-      "expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL",
       "expectAppServerRequest(2, APP_SERVER_METHOD_AGENT_SESSION_UPDATE",
       "expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_REPLAY",
       "expectAppServerRequest(1, APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
@@ -5730,7 +5897,7 @@ const checks = [
       "runtimeClient: createAgentAppRuntimeClientFromAppServer(appServerClient)",
       "ensureSession: createAgentAppRuntimeSessionResolver(appServerClient)",
       "...createDefaultAgentAppRuntimeHostOptions()",
-      "app_server_agent_runtime_client",
+      "app_server_runtime_client",
       "appServerClientMocks.startSession",
       "appServerClientMocks.startTurn",
       "appServerClientMocks.readSession",
@@ -5746,6 +5913,7 @@ const checks = [
       "agent_app_runtime_get_task",
       "agent_app_runtime_cancel_task",
       "agent_app_runtime_submit_host_response",
+      "app_server_agent_runtime_client",
       "mockPriorityCommands",
       "defaultMocks",
       "invokeMockOnly",
@@ -5767,7 +5935,7 @@ const checks = [
       'readRecordArray(nestedThreadRead, "tool_calls")',
       "function buildRuntimeToolCallReplayEvents(",
       'type: "task:toolCall"',
-      'source: "agent_runtime_tool_call_replay"',
+      'source: "app_server_tool_call_replay"',
       "toolName",
       "outputPreview",
       '"tool.started"',
@@ -5814,11 +5982,11 @@ const checks = [
       "无 Electron host 且无 HTTP bridge 时 production invoke fail-closed",
       "测试注册的配置 mock",
       "知识库 legacy 显式 mock 已退场",
-      "工具库存显式 mock 不应返回空壳清单",
-      "工具库存显式 mock 应按 workbench + browser surface 补齐当前工具面",
+      "工具库存 legacy 显式 mock 已退场",
       "显式 mock 入口可返回默认工作区数据已退场",
       "媒体任务 artifact 默认 mock 已退场并 fail closed",
       'invokeMockOnly("agent_runtime_get_tool_inventory"',
+      '未注册命令 "agent_runtime_get_tool_inventory"',
       "expect(mocks.invokeViaHttp).not.toHaveBeenCalled()",
     ],
     absentSnippets: [
@@ -5832,17 +6000,18 @@ const checks = [
     ],
   },
   {
-    name: "Desktop Host default mocks do not fake App Server turn lifecycle",
-    file: "src/lib/desktop-host/agentRuntimeMocks.ts",
+    name: "Desktop Host core no longer loads Agent Runtime default mocks",
+    file: "src/lib/desktop-host/core.ts",
     snippets: [
-      "const createDeprecatedCommandMock",
-      "Mock 不再为旧链路伪造成功结果",
-      "deprecatedAgentCommandMocks",
-      "export const agentRuntimeMocks",
+      "生产 invoke 不再回退 mock",
+      "export async function invokeMockOnly<T = any>",
+      "const defaultMocks = await loadDefaultMocks()",
     ],
     absentSnippets: [
-      "app_server_handle_json_lines",
-      "app_server_drain_events",
+      'import("./agentRuntimeMocks")',
+      'import("./agentRuntimeObjectiveMocks")',
+      "agentRuntime.agentRuntimeMocks",
+      "agentRuntimeObjective.resetAgentRuntimeObjectiveMocks",
       "agent_runtime_submit_turn:",
       "agent_runtime_interrupt_turn:",
       "agent_runtime_respond_action:",
@@ -6177,6 +6346,50 @@ const checks = [
       "invokeMockOnly",
       "saveConnectRelayApiKey",
       "sendConnectCallback",
+    ],
+  },
+  {
+    name: "Agent runtime tool surface page smoke uses App Server current runtime methods",
+    file: "scripts/agent-runtime/tool-surface-page-smoke.mjs",
+    snippets: [
+      'const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines"',
+      'const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start"',
+      'const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update"',
+      'const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read"',
+      'const APP_SERVER_METHOD_AGENT_SESSION_LIST = "agentSession/list"',
+      "const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =",
+      '"agentSession/turn/start"',
+      "const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =",
+      '"agentSession/action/respond"',
+      "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =",
+      '"agentSession/fileCheckpoint/list"',
+      "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET =",
+      '"agentSession/fileCheckpoint/get"',
+      "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =",
+      '"agentSession/fileCheckpoint/diff"',
+      "const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE =",
+      '"agentSession/fileCheckpoint/restore"',
+      "FORBIDDEN_AGENT_RUNTIME_CURRENT_METHOD_COMMANDS",
+      "legacy_agent_runtime_current_method_command",
+      "hasAppServerMethodCount(",
+      "APP_SERVER_METHOD_AGENT_SESSION_TURN_START",
+      "APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND",
+      "APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ",
+      "APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE",
+      "findForbiddenAgentRuntimeCurrentMethodCommands(finalDiagnostics)",
+    ],
+    absentSnippets: [
+      'command === "agent_runtime_get_thread_read"',
+      'command === "agent_runtime_submit_turn"',
+      'command === "agent_runtime_respond_action"',
+      'command === "agent_runtime_create_session"',
+      'command === "agent_runtime_update_session"',
+      'command === "agent_runtime_list_file_checkpoints"',
+      'command === "agent_runtime_diff_file_checkpoint"',
+      'command === "agent_runtime_restore_file_checkpoint"',
+      '"agent_runtime_get_thread_read")',
+      '"agent_runtime_submit_turn")',
+      '"agent_runtime_respond_action")',
     ],
   },
   {
@@ -7014,6 +7227,22 @@ const checks = [
     ],
   },
   {
+    name: "RuntimeCore owns single active turn instead of relying on renderer queue flag",
+    files: [
+      "lime-rs/crates/app-server-protocol/src/jsonrpc_lite.rs",
+      "lime-rs/crates/app-server/src/runtime.rs",
+      "lime-rs/crates/app-server/src/runtime/tests/sessions.rs",
+      "lime-rs/crates/app-server/src/lib.rs",
+    ],
+    snippets: [
+      "pub const TURN_ALREADY_ACTIVE",
+      "TurnAlreadyActive",
+      "turn already active",
+      "second_active_turn_without_queue_fails_closed",
+      "turn_start_rejects_parallel_active_turn_without_queue_flag",
+    ],
+  },
+  {
     name: "Rust runtime options expose host-local and queue metadata",
     files: rustProtocolFiles,
     snippets: [
@@ -7153,10 +7382,21 @@ for (const check of checks) {
   }
 }
 
-checkLegacySessionCompatContracts();
+checkRetiredAgentRuntimeSessionFacadeSurface();
 checkAgentRuntimeThinGatewayContracts();
 checkAgentAppUiRuntimeLifecycleContracts();
+checkRetiredAgentRuntimeMockFiles();
+checkRetiredAgentRuntimeCommandManifestFiles();
+checkRetiredAgentRuntimeLegacyQueueSurface();
 checkRetiredSkillExecutionSurfaceFiles();
+checkRetiredAgentRuntimeToolInventoryMockFiles();
+checkRetiredAgentRuntimeEvidenceExportFacadeSurface();
+checkRetiredAgentRuntimeThreadReadFacadeSurface();
+checkRetiredAgentRuntimeSubmitTurnFacadeSurface();
+checkRetiredAgentRuntimeInterruptTurnFacadeSurface();
+checkRetiredAgentRuntimeRespondActionFacadeSurface();
+checkActiveAipromptsDoNotPromoteRetiredAgentRuntimeCommands();
+checkScriptsDoNotCallRetiredAgentRuntimeCommands();
 checkMcpRuntimeCurrentContracts();
 checkKnowledgeBuilderRuntimeCurrentContracts();
 checkRetiredAppServerAgentBackendCrate();
@@ -7170,7 +7410,7 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[app-server-client-contract] ok (${checks.length + 6} checks)`);
+console.log(`[app-server-client-contract] ok (${checks.length + 12} checks)`);
 
 function checkAgentUiPackageCanonicalNaming() {
   const packageManifestFiles = fs
@@ -7249,7 +7489,10 @@ function checkMcpRuntimeCurrentContracts() {
       ],
     ],
     [
-      "lime-rs/crates/app-server/src/runtime.rs",
+      [
+        "lime-rs/crates/app-server/src/runtime.rs",
+        "lime-rs/crates/app-server/src/runtime/mcp.rs",
+      ],
       [
         "pub async fn create_mcp_server(",
         "pub async fn update_mcp_server(",
@@ -7638,142 +7881,20 @@ function extractFunctionBlock(content, functionName) {
   return "";
 }
 
-function checkLegacySessionCompatContracts() {
-  const schema = JSON.parse(
-    fs.readFileSync(
-      path.join(repoRoot, "src/lib/governance/agentRuntimeCommandSchema.json"),
-      "utf8",
-    ),
-  );
-  const schemaEntries = new Map(
-    (schema.commands ?? []).map((entry) => [entry.command, entry]),
-  );
-  const generatedManifest = fs.readFileSync(
-    path.join(
-      repoRoot,
-      "src/lib/api/agentRuntime/commandManifest.generated.ts",
-    ),
-    "utf8",
-  );
-  const generatedDeclaration = fs.readFileSync(
-    path.join(
-      repoRoot,
-      "src/lib/api/agentRuntime/commandManifest.generated.d.ts",
-    ),
-    "utf8",
-  );
-
-  for (const spec of legacySessionCompatCommandSpecs) {
-    const schemaEntry = schemaEntries.get(spec.command);
-    if (!schemaEntry) {
-      failures.push(`legacy session command schema: missing ${spec.command}`);
+function checkRetiredAgentRuntimeSessionFacadeSurface() {
+  for (const file of retiredAgentRuntimeSessionFacadeProductionFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired session facade surface guard: missing expected production file ${file}`,
+      );
       continue;
     }
-    if (schemaEntry.domain !== "session") {
-      failures.push(
-        `legacy session command schema: ${spec.command} domain must stay session`,
-      );
-    }
-    if (schemaEntry.lifecycle !== "compat") {
-      failures.push(
-        `legacy session command schema: ${spec.command} lifecycle must stay compat`,
-      );
-    }
-    if (schemaEntry.mockStrategy !== "bridge-only") {
-      failures.push(
-        `legacy session command schema: ${spec.command} mockStrategy must stay bridge-only`,
-      );
-    }
-
-    const manifestBlock = descriptorBlock(
-      generatedManifest,
-      `key: "${spec.key}",`,
-    );
-    if (!manifestBlock) {
-      failures.push(
-        `legacy session command manifest: missing descriptor ${spec.key}`,
-      );
-    } else {
-      assertBlockIncludes(
-        manifestBlock,
-        `command: AGENT_RUNTIME_COMMANDS.${spec.key}`,
-        `legacy session command manifest: ${spec.key} command reference`,
-      );
-      assertBlockIncludes(
-        manifestBlock,
-        'domain: "session"',
-        `legacy session command manifest: ${spec.key} domain`,
-      );
-      assertBlockIncludes(
-        manifestBlock,
-        'lifecycle: "compat"',
-        `legacy session command manifest: ${spec.key} lifecycle`,
-      );
-      assertBlockIncludes(
-        manifestBlock,
-        'mockStrategy: "bridge-only"',
-        `legacy session command manifest: ${spec.key} mockStrategy`,
-      );
-      assertBlockExcludes(
-        manifestBlock,
-        'lifecycle: "current"',
-        `legacy session command manifest: ${spec.key} must not be current`,
-      );
-    }
-
-    const declarationBlock = descriptorBlock(
-      generatedDeclaration,
-      `readonly key: "${spec.key}";`,
-    );
-    if (!declarationBlock) {
-      failures.push(
-        `legacy session command declaration: missing descriptor ${spec.key}`,
-      );
-    } else {
-      assertBlockIncludes(
-        declarationBlock,
-        `readonly command: "${spec.command}";`,
-        `legacy session command declaration: ${spec.key} command literal`,
-      );
-      assertBlockIncludes(
-        declarationBlock,
-        'readonly domain: "session";',
-        `legacy session command declaration: ${spec.key} domain`,
-      );
-      assertBlockIncludes(
-        declarationBlock,
-        'readonly lifecycle: "compat";',
-        `legacy session command declaration: ${spec.key} lifecycle`,
-      );
-      assertBlockIncludes(
-        declarationBlock,
-        'readonly mockStrategy: "bridge-only";',
-        `legacy session command declaration: ${spec.key} mockStrategy`,
-      );
-      assertBlockExcludes(
-        declarationBlock,
-        'readonly lifecycle: "current";',
-        `legacy session command declaration: ${spec.key} must not be current`,
-      );
-    }
-  }
-
-  const retiredDeleteSessionSnippets = [
-    "AGENT_RUNTIME_COMMANDS.deleteSession",
-    'key: "deleteSession"',
-    'readonly key: "deleteSession";',
-    '"agent_runtime_delete_session"',
-  ];
-  const retiredDeleteSessionSources = [
-    ["agent runtime command schema", JSON.stringify(schema)],
-    ["agent runtime generated manifest", generatedManifest],
-    ["agent runtime generated declaration", generatedDeclaration],
-  ];
-  for (const [sourceName, content] of retiredDeleteSessionSources) {
-    for (const snippet of retiredDeleteSessionSnippets) {
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of retiredAgentRuntimeSessionFacadeSnippets) {
       if (content.includes(snippet)) {
         failures.push(
-          `retired delete session command surface: ${sourceName} must not contain ${JSON.stringify(
+          `retired session facade surface: ${file} must not contain ${JSON.stringify(
             snippet,
           )}`,
         );
@@ -7790,6 +7911,301 @@ function checkRetiredSkillExecutionSurfaceFiles() {
       );
     }
   }
+}
+
+function checkRetiredAgentRuntimeMockFiles() {
+  for (const file of retiredAgentRuntimeMockFiles) {
+    if (fs.existsSync(path.join(repoRoot, file))) {
+      failures.push(
+        `retired Agent Runtime mock file must stay deleted: ${file}`,
+      );
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeCommandManifestFiles() {
+  for (const file of retiredAgentRuntimeCommandManifestFiles) {
+    if (fs.existsSync(path.join(repoRoot, file))) {
+      failures.push(
+        `retired Agent Runtime command manifest surface must stay deleted: ${file}`,
+      );
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeLegacyQueueSurface() {
+  for (const file of retiredAgentRuntimeLegacyQueueFiles) {
+    if (fs.existsSync(path.join(repoRoot, file))) {
+      failures.push(
+        `retired Agent Runtime legacy queue file must stay deleted: ${file}`,
+      );
+    }
+  }
+
+  for (const file of retiredAgentRuntimeLegacyQueueSurfaceFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired Agent Runtime legacy queue guard: missing expected file ${file}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of retiredAgentRuntimeLegacyQueueSnippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired Agent Runtime legacy queue surface: ${file} must not contain ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeToolInventoryMockFiles() {
+  for (const file of retiredAgentRuntimeToolInventoryMockFiles) {
+    if (fs.existsSync(path.join(repoRoot, file))) {
+      failures.push(
+        `retired Agent Runtime tool inventory mock must stay deleted: ${file}`,
+      );
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeEvidenceExportFacadeSurface() {
+  for (const file of retiredAgentRuntimeEvidenceExportFacadeProductionFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired evidence export facade surface guard: missing expected production file ${file}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of retiredAgentRuntimeEvidenceExportFacadeSnippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired evidence export facade surface: ${file} must not contain ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeThreadReadFacadeSurface() {
+  for (const file of retiredAgentRuntimeThreadReadFacadeProductionFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired thread read facade surface guard: missing expected production file ${file}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of retiredAgentRuntimeThreadReadFacadeSnippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired thread read facade surface: ${file} must not contain ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeSubmitTurnFacadeSurface() {
+  for (const file of retiredAgentRuntimeSubmitTurnFacadeProductionFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired submit turn facade surface guard: missing expected production file ${file}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of retiredAgentRuntimeSubmitTurnFacadeSnippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired submit turn facade surface: ${file} must not contain ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeInterruptTurnFacadeSurface() {
+  for (const file of retiredAgentRuntimeInterruptTurnFacadeProductionFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired interrupt turn facade surface guard: missing expected production file ${file}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of retiredAgentRuntimeInterruptTurnFacadeSnippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired interrupt turn facade surface: ${file} must not contain ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+  }
+}
+
+function checkRetiredAgentRuntimeRespondActionFacadeSurface() {
+  for (const file of retiredAgentRuntimeRespondActionFacadeProductionFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `retired respond action facade surface guard: missing expected production file ${file}`,
+      );
+      continue;
+    }
+    const content = fs.readFileSync(absolutePath, "utf8");
+    for (const snippet of retiredAgentRuntimeRespondActionFacadeSnippets) {
+      if (content.includes(snippet)) {
+        failures.push(
+          `retired respond action facade surface: ${file} must not contain ${JSON.stringify(
+            snippet,
+          )}`,
+        );
+      }
+    }
+  }
+}
+
+function checkActiveAipromptsDoNotPromoteRetiredAgentRuntimeCommands() {
+  for (const file of activeAgentRuntimeMarkdownFiles) {
+    const absolutePath = path.join(repoRoot, file);
+    if (!fs.existsSync(absolutePath)) {
+      failures.push(
+        `active markdown retired agent_runtime guard: missing expected file ${file}`,
+      );
+      continue;
+    }
+
+    const lines = fs.readFileSync(absolutePath, "utf8").split(/\r?\n/u);
+    lines.forEach((line, index) => {
+      if (!/agent_runtime_[A-Za-z0-9_*]+/u.test(line)) {
+        return;
+      }
+      if (allowedRetiredAgentRuntimeDocContextPattern.test(line)) {
+        return;
+      }
+      failures.push(
+        `active markdown retired agent_runtime guard: ${file}:${index + 1} must mark agent_runtime_* as retired/guard/history/migration-only, got ${JSON.stringify(
+          line.trim(),
+        )}`,
+      );
+    });
+
+    lines.forEach((line, index) => {
+      if (!/agent_runtime_[A-Za-z0-9_*]+/u.test(line)) {
+        return;
+      }
+      if (!forbiddenAgentRuntimeCurrentDocContextPattern.test(line)) {
+        return;
+      }
+      if (allowedRetiredAgentRuntimeDocContextPattern.test(line)) {
+        return;
+      }
+      failures.push(
+        `active markdown retired agent_runtime current wording: ${file}:${index + 1} must not describe agent_runtime_* as current, got ${JSON.stringify(
+          line.trim(),
+        )}`,
+      );
+    });
+  }
+}
+
+function collectMarkdownFiles(relativeRoot) {
+  const root = path.join(repoRoot, relativeRoot);
+  if (!fs.existsSync(root)) {
+    return [];
+  }
+  const files = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const absolutePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      if (
+        entry.name === "node_modules" ||
+        entry.name === "dist" ||
+        entry.name === "target"
+      ) {
+        continue;
+      }
+      files.push(
+        ...collectMarkdownFiles(
+          path.relative(repoRoot, absolutePath).replaceAll("\\", "/"),
+        ),
+      );
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".md")) {
+      continue;
+    }
+    files.push(path.relative(repoRoot, absolutePath).replaceAll("\\", "/"));
+  }
+  return files.sort();
+}
+
+function checkScriptsDoNotCallRetiredAgentRuntimeCommands() {
+  const scriptsRoot = path.join(repoRoot, "scripts");
+  for (const relativePath of walkScriptFiles(scriptsRoot)) {
+    const content = fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+    for (const pattern of retiredAgentRuntimeScriptCallPatterns) {
+      const match = pattern.exec(content);
+      if (match) {
+        failures.push(
+          `retired agent_runtime script call guard: ${relativePath} must not call retired agent_runtime_* command via ${JSON.stringify(
+            match[0],
+          )}; keep legacy names only as negative guards or history evidence`,
+        );
+      }
+    }
+  }
+}
+
+function walkScriptFiles(root) {
+  if (!fs.existsSync(root)) {
+    return [];
+  }
+  const files = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const absolutePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      if (
+        entry.name === "node_modules" ||
+        entry.name === "dist" ||
+        entry.name === "target"
+      ) {
+        continue;
+      }
+      files.push(...walkScriptFiles(absolutePath));
+      continue;
+    }
+    if (!entry.isFile()) {
+      continue;
+    }
+    const relativePath = path.relative(repoRoot, absolutePath);
+    if (!/\.(?:cjs|js|mjs)$/u.test(relativePath)) {
+      continue;
+    }
+    if (/\.(?:test|spec)\.(?:cjs|js|mjs)$/u.test(relativePath)) {
+      continue;
+    }
+    files.push(relativePath.replaceAll("\\", "/"));
+  }
+  return files.sort();
 }
 
 function descriptorBlock(content, marker) {

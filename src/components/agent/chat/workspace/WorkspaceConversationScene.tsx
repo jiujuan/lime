@@ -718,6 +718,47 @@ export function WorkspaceConversationScene({
       workspaceDismissAria: text("workspaceAlert.dismissAria"),
     },
   });
+  const [shellPanelOpen, setShellPanelOpen] = useState(false);
+  const [shellPanelHeightPx, setShellPanelHeightPx] = useState(
+    TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
+  );
+  const [shellPanelMaximized, setShellPanelMaximized] = useState(false);
+  const shouldUseTaskCenterUtilityToolbar =
+    navbarContextVariant === "task-center" && Boolean(taskCenterTabsNode);
+  const effectiveShellPanelHeightPx =
+    shellPanelOpen && shouldUseTaskCenterUtilityToolbar
+      ? shellPanelMaximized && typeof window !== "undefined"
+        ? Math.max(
+            TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
+            Math.floor(
+              window.innerHeight * TASK_CENTER_SHELL_PANEL_MAX_HEIGHT_RATIO,
+            ),
+          )
+        : shellPanelHeightPx
+      : 0;
+  const effectiveShellBottomInset =
+    shellPanelOpen && shouldUseTaskCenterUtilityToolbar
+      ? `calc(${shellBottomInset} + ${effectiveShellPanelHeightPx}px)`
+      : shellBottomInset;
+  const taskCenterUtilityToolbarNode = shouldUseTaskCenterUtilityToolbar ? (
+    <TaskCenterUtilityToolbar
+      projectRootPath={projectRootPath}
+      placement={layoutMode !== "chat" ? "workbench-header" : "task-strip"}
+      showCanvasToggle={!isThemeWorkbench}
+      isCanvasOpen={layoutMode !== "chat"}
+      onToggleCanvas={onToggleCanvas}
+      showHarnessToggle={showHarnessToggle}
+      harnessPanelVisible={harnessPanelVisible}
+      onToggleHarnessPanel={onToggleHarnessPanel}
+      harnessPendingCount={harnessPendingCount}
+      harnessAttentionLevel={harnessAttentionLevel ?? "idle"}
+      harnessToggleLabel={harnessToggleLabel ?? "Harness"}
+      shellPanelOpen={shellPanelOpen}
+      onToggleShellPanel={() => {
+        setShellPanelOpen((current) => !current);
+      }}
+    />
+  ) : null;
   const chatNavbarProps = buildWorkspaceNavbarProps({
     visible: navbarVisible,
     isRunning,
@@ -776,46 +817,6 @@ export function WorkspaceConversationScene({
         );
       })()
     : null;
-  const [shellPanelOpen, setShellPanelOpen] = useState(false);
-  const [shellPanelHeightPx, setShellPanelHeightPx] = useState(
-    TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
-  );
-  const [shellPanelMaximized, setShellPanelMaximized] = useState(false);
-  const shouldUseTaskCenterUtilityToolbar =
-    navbarContextVariant === "task-center" && Boolean(taskCenterTabsNode);
-  const effectiveShellPanelHeightPx =
-    shellPanelOpen && shouldUseTaskCenterUtilityToolbar
-      ? shellPanelMaximized && typeof window !== "undefined"
-        ? Math.max(
-            TASK_CENTER_SHELL_PANEL_DEFAULT_HEIGHT_PX,
-            Math.floor(
-              window.innerHeight * TASK_CENTER_SHELL_PANEL_MAX_HEIGHT_RATIO,
-            ),
-          )
-        : shellPanelHeightPx
-      : 0;
-  const effectiveShellBottomInset =
-    shellPanelOpen && shouldUseTaskCenterUtilityToolbar
-      ? `calc(${shellBottomInset} + ${effectiveShellPanelHeightPx}px)`
-      : shellBottomInset;
-  const taskCenterUtilityToolbarNode = shouldUseTaskCenterUtilityToolbar ? (
-    <TaskCenterUtilityToolbar
-      projectRootPath={projectRootPath}
-      showCanvasToggle={!isThemeWorkbench}
-      isCanvasOpen={layoutMode !== "chat"}
-      onToggleCanvas={onToggleCanvas}
-      showHarnessToggle={showHarnessToggle}
-      harnessPanelVisible={harnessPanelVisible}
-      onToggleHarnessPanel={onToggleHarnessPanel}
-      harnessPendingCount={harnessPendingCount}
-      harnessAttentionLevel={harnessAttentionLevel ?? "idle"}
-      harnessToggleLabel={harnessToggleLabel ?? "Harness"}
-      shellPanelOpen={shellPanelOpen}
-      onToggleShellPanel={() => {
-        setShellPanelOpen((current) => !current);
-      }}
-    />
-  ) : null;
   const taskCenterShellPanelNode =
     shellPanelOpen && shouldUseTaskCenterUtilityToolbar ? (
       <TaskCenterShellPanel
@@ -839,7 +840,10 @@ export function WorkspaceConversationScene({
       shouldShowCanvasLoadingState ? (
       liveCanvasPreview
     ) : (
-      <CanvasWorkbenchLayout {...canvasWorkbenchLayoutProps} />
+      <CanvasWorkbenchLayout
+        {...canvasWorkbenchLayoutProps}
+        topRightTools={null}
+      />
     );
   const forceCanvasMode = Boolean(
     isThemeWorkbench && hasLiveCanvasPreviewContent,

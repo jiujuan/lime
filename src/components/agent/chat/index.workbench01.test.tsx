@@ -372,7 +372,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
   });
 
   it("普通画布应将工作台触发按钮并入头部工具栏，避免覆盖关闭区", async () => {
-    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
 
     const container = renderPage({
       theme: "general",
@@ -383,20 +383,15 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     clickButton(container, "toggle-canvas");
     await flushEffects(4);
 
-    const toolbar = container.querySelector(
-      '[data-testid="general-canvas-toolbar"]',
+    const workbench = container.querySelector(
+      '[data-testid="canvas-workbench-layout-mock"]',
     ) as HTMLDivElement | null;
-    const triggers = container.querySelectorAll(
-      '[data-testid="stacked-workbench-trigger"]',
-    );
 
+    expect(workbench).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="general-canvas"]'),
-    ).not.toBeNull();
-    expect(toolbar).not.toBeNull();
-    expect(triggers).toHaveLength(1);
-    expect(
-      toolbar?.querySelector('[data-testid="stacked-workbench-trigger"]'),
+      workbench?.querySelector(
+        '[data-testid="canvas-workbench-default-preview-probe"]',
+      ),
     ).not.toBeNull();
   });
 
@@ -478,7 +473,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
   });
 
   it("窄屏工作台切换 stacked/split 时不应恢复旧对话侧栏入口", async () => {
-    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
 
     const container = renderPage({
       theme: "general",

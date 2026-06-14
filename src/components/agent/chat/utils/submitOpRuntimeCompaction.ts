@@ -8,24 +8,8 @@ import type { SessionModelPreference } from "../hooks/agentChatShared";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 import { normalizeHarnessSessionMode } from "./harnessSessionMode";
 import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
+import { compactSubmitOpToolPreferences } from "./submitOpToolPreferenceCompaction";
 
-const HARNESS_THINKING_PREFERENCE_KEYS = [
-  "thinking",
-  "thinking_enabled",
-  "thinkingEnabled",
-] as const;
-const HARNESS_WEB_SEARCH_PREFERENCE_KEYS = [
-  "web_search",
-  "webSearch",
-  "web_search_enabled",
-  "webSearchEnabled",
-] as const;
-const HARNESS_TASK_PREFERENCE_KEYS = ["task", "task_mode", "taskMode"] as const;
-const HARNESS_SUBAGENT_PREFERENCE_KEYS = [
-  "subagent",
-  "subagent_mode",
-  "subagentMode",
-] as const;
 const HARNESS_CONTENT_ID_KEYS = ["content_id", "contentId"] as const;
 const HARNESS_ACCESS_MODE_KEYS = ["access_mode", "accessMode"] as const;
 const HARNESS_THEME_KEYS = ["theme", "harness_theme", "harnessTheme"] as const;
@@ -86,86 +70,6 @@ function normalizeRuntimeIdentifier(value?: string | null): string {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function omitHarnessPreferenceFromRequestMetadata(
-  requestMetadata: Record<string, unknown> | undefined,
-  keys: readonly string[],
-): Record<string, unknown> | undefined {
-  if (!requestMetadata) {
-    return requestMetadata;
-  }
-
-  const nestedHarness = requestMetadata.harness;
-  const usesNestedHarness = isPlainRecord(nestedHarness);
-  const harness = usesNestedHarness
-    ? (nestedHarness as Record<string, unknown>)
-    : requestMetadata;
-  const preferences = harness.preferences;
-  if (!isPlainRecord(preferences)) {
-    return requestMetadata;
-  }
-
-  let changed = false;
-  const nextPreferences = { ...preferences };
-  for (const key of keys) {
-    if (!(key in nextPreferences)) {
-      continue;
-    }
-    delete nextPreferences[key];
-    changed = true;
-  }
-
-  if (!changed) {
-    return requestMetadata;
-  }
-
-  const nextHarness = { ...harness };
-  if (Object.keys(nextPreferences).length === 0) {
-    delete nextHarness.preferences;
-  } else {
-    nextHarness.preferences = nextPreferences;
-  }
-
-  if (!usesNestedHarness) {
-    return Object.keys(nextHarness).length > 0 ? nextHarness : undefined;
-  }
-
-  if (Object.keys(nextHarness).length === 0) {
-    const { harness: _removedHarness, ...rest } = requestMetadata;
-    return Object.keys(rest).length > 0 ? rest : undefined;
-  }
-
-  return {
-    ...requestMetadata,
-    harness: nextHarness,
-  };
-}
-
-function readHarnessPreferenceFromRequestMetadata(
-  requestMetadata: Record<string, unknown> | undefined,
-  keys: readonly string[],
-): boolean | null {
-  if (!requestMetadata) {
-    return null;
-  }
-
-  const nestedHarness = requestMetadata.harness;
-  const harness = isPlainRecord(nestedHarness)
-    ? (nestedHarness as Record<string, unknown>)
-    : requestMetadata;
-  const preferences = harness.preferences;
-  if (!isPlainRecord(preferences)) {
-    return null;
-  }
-
-  for (const key of keys) {
-    if (typeof preferences[key] === "boolean") {
-      return preferences[key] as boolean;
-    }
-  }
-
-  return null;
 }
 
 function readHarnessStringFromRequestMetadata(
@@ -550,6 +454,8 @@ export interface BuildSubmitOpRuntimeCompactionOptions {
   effectiveProviderType: string;
   effectiveModel: string;
   modelOverride?: string;
+  requestedWebSearch?: boolean;
+  requestedThinking?: boolean;
 }
 
 export interface SubmitOpRuntimeCompactionResult {
@@ -560,6 +466,8 @@ export interface SubmitOpRuntimeCompactionResult {
   shouldSubmitExecutionStrategy: boolean;
   shouldSubmitWebSearch: boolean;
   shouldSubmitThinking: boolean;
+  webSearchPreference?: boolean;
+  thinkingPreference?: boolean;
 }
 
 export function buildSubmitOpRuntimeCompaction(
@@ -575,6 +483,8 @@ export function buildSubmitOpRuntimeCompaction(
     effectiveProviderType,
     effectiveModel,
     modelOverride,
+    requestedWebSearch,
+    requestedThinking,
   } = options;
 
   const syncedProviderSelector =
@@ -666,56 +576,14 @@ export function buildSubmitOpRuntimeCompaction(
       normalizeRuntimeIdentifier(knownExecutionStrategy) !==
         normalizeRuntimeIdentifier(normalizedEffectiveExecutionStrategy));
 
-  const knownTaskPreference =
-    typeof syncedRecentPreferences?.task === "boolean"
-      ? syncedRecentPreferences.task
-      : typeof executionRuntime?.recent_preferences?.task === "boolean"
-        ? executionRuntime.recent_preferences.task
-        : null;
-  const knownSubagentPreference =
-    typeof syncedRecentPreferences?.subagent === "boolean"
-      ? syncedRecentPreferences.subagent
-      : typeof executionRuntime?.recent_preferences?.subagent === "boolean"
-        ? executionRuntime.recent_preferences.subagent
-        : null;
-  const shouldSubmitWebSearch = false;
-  const shouldSubmitThinking = false;
-  const requestTaskPreference = readHarnessPreferenceFromRequestMetadata(
+  const preferenceCompaction = compactSubmitOpToolPreferences({
     requestMetadata,
-    HARNESS_TASK_PREFERENCE_KEYS,
-  );
-  const requestSubagentPreference = readHarnessPreferenceFromRequestMetadata(
-    requestMetadata,
-    HARNESS_SUBAGENT_PREFERENCE_KEYS,
-  );
-  let metadata = omitHarnessPreferenceFromRequestMetadata(
-    requestMetadata,
-    HARNESS_THINKING_PREFERENCE_KEYS,
-  );
-  metadata = omitHarnessPreferenceFromRequestMetadata(
-    metadata,
-    HARNESS_WEB_SEARCH_PREFERENCE_KEYS,
-  );
-  if (
-    requestTaskPreference !== null &&
-    knownTaskPreference !== null &&
-    knownTaskPreference === requestTaskPreference
-  ) {
-    metadata = omitHarnessPreferenceFromRequestMetadata(
-      metadata,
-      HARNESS_TASK_PREFERENCE_KEYS,
-    );
-  }
-  if (
-    requestSubagentPreference !== null &&
-    knownSubagentPreference !== null &&
-    knownSubagentPreference === requestSubagentPreference
-  ) {
-    metadata = omitHarnessPreferenceFromRequestMetadata(
-      metadata,
-      HARNESS_SUBAGENT_PREFERENCE_KEYS,
-    );
-  }
+    executionRuntime,
+    syncedRecentPreferences,
+    requestedWebSearch,
+    requestedThinking,
+  });
+  let metadata = preferenceCompaction.metadata;
 
   if (
     JSON.stringify(createComparableRequestTeamSelection(metadata)) ===
@@ -847,7 +715,9 @@ export function buildSubmitOpRuntimeCompaction(
     shouldSubmitProviderPreference,
     shouldSubmitModelPreference,
     shouldSubmitExecutionStrategy,
-    shouldSubmitWebSearch,
-    shouldSubmitThinking,
+    shouldSubmitWebSearch: preferenceCompaction.shouldSubmitWebSearch,
+    shouldSubmitThinking: preferenceCompaction.shouldSubmitThinking,
+    webSearchPreference: preferenceCompaction.webSearchPreference,
+    thinkingPreference: preferenceCompaction.thinkingPreference,
   };
 }

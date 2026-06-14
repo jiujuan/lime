@@ -718,6 +718,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     queuedTurns: session.queuedTurns,
     threadRead: session.threadRead,
     executionRuntime: session.executionRuntime,
+    sessionWorkingDir: session.sessionWorkingDir,
     activeExecutionRuntime,
     isSending: stream.isSending,
     sendMessage,

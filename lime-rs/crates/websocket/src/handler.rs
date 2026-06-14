@@ -39,9 +39,8 @@ impl WsHandlerState {
         api_key: String,
         logs: Arc<RwLock<LogStore>>,
         db: Option<lime_core::database::DbConnection>,
-        scheduler: Option<lime_agent::LimeScheduler>,
     ) -> Self {
-        let rpc_state = RpcHandlerState::new(db, scheduler, logs.clone());
+        let rpc_state = RpcHandlerState::new(db, logs.clone());
         Self {
             manager: Arc::new(WsConnectionManager::new(config)),
             api_key,

@@ -197,6 +197,7 @@ target-codex*
 
 tmp/
 .tmp/
+.tmp*
 
 governance/
 !src/lib/governance/

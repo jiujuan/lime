@@ -1,5 +1,8 @@
 use super::support::*;
 use super::*;
+use app_server_protocol::ArtifactContentStatus;
+use std::fs;
+use std::path::Path;
 
 #[tokio::test]
 async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
@@ -108,6 +111,100 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
     assert_eq!(summary_only.artifacts.len(), 0);
     assert_eq!(summary_only.turns.len(), 1);
     assert_eq!(summary_only.evidence_pack, None);
+}
+
+#[tokio::test]
+async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
+    let core = RuntimeCore::default();
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_coding_snapshot_evidence".to_string()),
+        thread_id: Some("thread_coding_snapshot_evidence".to_string()),
+        app_id: "content-studio".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_coding_snapshot_evidence".to_string(),
+            turn_id: Some("turn_coding_snapshot_evidence".to_string()),
+            input: AgentInput {
+                text: "生成 coding evidence".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+    core.append_external_runtime_events(
+        "sess_coding_snapshot_evidence",
+        Some("turn_coding_snapshot_evidence"),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "tool_snapshot_evidence",
+                    "toolName": "Bash"
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "tool_snapshot_evidence",
+                    "outputRef": "output://snapshot-evidence",
+                    "outputPreview": "snapshot output",
+                    "outputBytes": 42,
+                    "outputSnapshotFile": "runtime-outputs/snapshot-evidence.txt"
+                }),
+            ),
+            RuntimeEvent::new(
+                "file.changed",
+                json!({
+                    "path": "src/App.tsx",
+                    "artifactId": "artifact_snapshot_evidence",
+                    "checkpointRef": "checkpoint_snapshot_evidence",
+                    "checkpointSnapshotFile": "runtime-file-checkpoints/snapshot-evidence.txt",
+                    "change": {
+                        "previousContentSnapshotFile": "runtime-file-checkpoints/snapshot-evidence.txt"
+                    }
+                }),
+            ),
+        ],
+    )
+    .expect("append coding evidence events");
+
+    let response = core
+        .export_evidence(EvidenceExportParams {
+            session_id: "sess_coding_snapshot_evidence".to_string(),
+            turn_id: Some("turn_coding_snapshot_evidence".to_string()),
+            include_events: Some(true),
+            include_artifacts: Some(true),
+            include_evidence_pack: Some(true),
+        })
+        .await
+        .expect("export evidence");
+    let evidence_pack = response.evidence_pack.expect("evidence pack");
+    assert!(evidence_pack.artifacts.iter().any(|artifact| {
+        artifact.kind == "tool_output_snapshot"
+            && artifact.relative_path == "runtime-outputs/snapshot-evidence.txt"
+    }));
+    assert!(evidence_pack.artifacts.iter().any(|artifact| {
+        artifact.kind == "file_checkpoint_snapshot"
+            && artifact.relative_path == "runtime-file-checkpoints/snapshot-evidence.txt"
+    }));
+    assert_eq!(
+        evidence_pack
+            .observability_summary
+            .as_ref()
+            .and_then(|summary| summary.get("evidence_artifact_count"))
+            .and_then(serde_json::Value::as_u64),
+        Some(evidence_pack.artifacts.len() as u64)
+    );
 }
 
 #[tokio::test]

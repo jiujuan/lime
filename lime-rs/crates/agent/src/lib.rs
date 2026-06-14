@@ -69,8 +69,15 @@ pub use lime_mcp as mcp;
 pub use lsp_bridge::create_lsp_callback;
 pub use prompt::SystemPromptBuilder;
 pub use prompt::{
-    build_runtime_agents_prompt, merge_system_prompt_with_runtime_agents,
-    RUNTIME_AGENTS_PROMPT_MARKER,
+    budget_limit_prompt, build_runtime_agents_prompt, build_runtime_agents_prompt_for_project,
+    continuation_prompt, merge_system_prompt_with_runtime_agents,
+    merge_system_prompt_with_runtime_agents_for_project, objective_updated_prompt,
+    permissions_instructions, render_review_exit_interrupted, render_review_exit_success,
+    resolve_review_prompt, review_prompt, PermissionsPromptInput, PromptApprovalPolicy,
+    PromptNetworkAccess, PromptSandboxMode, ResolvedReviewPrompt, ReviewPromptTarget,
+    ThreadGoalPromptInput, APPLY_PATCH_TOOL_INSTRUCTIONS, HIERARCHICAL_AGENTS_MESSAGE,
+    REALTIME_BACKEND_PROMPT, REALTIME_END_INSTRUCTIONS, REALTIME_START_INSTRUCTIONS, REVIEW_PROMPT,
+    RUNTIME_AGENTS_PROMPT_MARKER, SUMMARIZATION_PROMPT, SUMMARY_PREFIX,
 };
 pub use protocol::{
     build_diagnostics_runtime_status_metadata, AgentActionRequiredScope, AgentArtifactSignal,

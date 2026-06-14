@@ -1,6 +1,6 @@
-use super::super::agent_session_status_label;
-use super::super::agent_turn_status_label;
 use super::super::event_request_id;
+use super::super::status::agent_session_status_label;
+use super::super::status::agent_turn_status_label;
 use super::super::string_field;
 use super::HANDOFF_RECENT_ARTIFACT_LIMIT;
 use app_server_protocol::AgentEvent;

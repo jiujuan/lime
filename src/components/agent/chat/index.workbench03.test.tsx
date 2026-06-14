@@ -24,7 +24,7 @@ const {
 
 describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
   it("历史旧导出结果与同会话新到的 saved_content 都不应自动打开画布，应等待用户手动点开", async () => {
-    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
     vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
       path: "/tmp/project-site-export/exports/x-article-export/latest/index.md",
       content: "# 最新导出\n\n![封面](images/cover.png)",
@@ -139,7 +139,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
   });
 
   it("历史任务携带 initialProjectFileOpenTarget 时应直接恢复真实 Markdown 文件预览", async () => {
-    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
     vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
       path: "/tmp/project-history-export/exports/x-article-export/history/index.md",
       content: "# 历史导出\n\n![插图](images/history-cover.png)",
@@ -191,7 +191,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
   });
 
   it("同项目内打开 saved site content 时应直接恢复真实 Markdown 文件预览", async () => {
-    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
     vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
       path: "/tmp/project-inline-export/exports/x-article-export/latest/index.md",
       content: "# 当前导出\n\n![封面](images/cover.png)",
@@ -245,24 +245,24 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
         ?.getAttribute("data-mode"),
     ).toBe("chat-canvas");
 
-    const generalCanvas = container.querySelector(
-      '[data-testid="general-canvas"]',
+    const workbench = container.querySelector(
+      '[data-testid="canvas-workbench-layout-mock"]',
     ) as HTMLDivElement | null;
-    expect(generalCanvas).not.toBeNull();
-    expect(generalCanvas?.dataset.filename).toBe(
+    expect(workbench).not.toBeNull();
+    expect(workbench?.dataset.defaultPreviewFilePath).toBe(
       "exports/x-article-export/latest/index.md",
     );
-    expect(generalCanvas?.dataset.baseFilePath).toBe(
+    expect(workbench?.dataset.defaultPreviewAbsolutePath).toBe(
       "/tmp/project-inline-export/exports/x-article-export/latest/index.md",
     );
-    expect(generalCanvas?.dataset.contentType).toBe("markdown");
-    expect(generalCanvas?.dataset.content || "").toContain(
+    expect(workbench?.dataset.defaultPreviewContentType).toBe("markdown");
+    expect(workbench?.dataset.defaultPreviewContent || "").toContain(
       "![封面](images/cover.png)",
     );
   });
 
   it("工具结果只提供文件路径时应读取真实文件预览再打开通用画布", async () => {
-    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
     vi.spyOn(fileBrowserModule, "readFilePreview").mockResolvedValue({
       path: "/tmp/project-tool-file/src/components/App.tsx",
       content: "export function App() {\n  return <main>Lime</main>;\n}\n",
@@ -299,22 +299,24 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
         ?.getAttribute("data-mode"),
     ).toBe("chat-canvas");
 
-    const generalCanvas = container.querySelector(
-      '[data-testid="general-canvas"]',
+    const workbench = container.querySelector(
+      '[data-testid="canvas-workbench-layout-mock"]',
     ) as HTMLDivElement | null;
-    expect(generalCanvas).not.toBeNull();
-    expect(generalCanvas?.dataset.filename).toBe("src/components/App.tsx");
-    expect(generalCanvas?.dataset.baseFilePath).toBe(
+    expect(workbench).not.toBeNull();
+    expect(workbench?.dataset.defaultPreviewFilePath).toBe(
+      "src/components/App.tsx",
+    );
+    expect(workbench?.dataset.defaultPreviewAbsolutePath).toBe(
       "/tmp/project-tool-file/src/components/App.tsx",
     );
-    expect(generalCanvas?.dataset.contentType).toBe("code");
-    expect(generalCanvas?.dataset.content || "").toContain(
+    expect(workbench?.dataset.defaultPreviewContentType).toBe("code");
+    expect(workbench?.dataset.defaultPreviewContent || "").toContain(
       "return <main>Lime</main>;",
     );
   });
 
   it("点击执行卡片里的结果文件按钮时应打开真实导出 Markdown 预览", async () => {
-    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
     vi.spyOn(webviewApiModule, "siteRunAdapter").mockResolvedValue({
       ok: true,
       adapter: "x/article-export",
@@ -394,7 +396,7 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
   });
 
   it("真实导出路径打开失败时不应回退到裸 index.md 任务文件", async () => {
-    mockCanvasWorkbenchLayoutState.renderPreview = true;
+    mockCanvasWorkbenchLayoutState.renderPreviewProbe = true;
     mockUseSessionFiles.mockReturnValue({
       saveFile: vi.fn(async () => undefined),
       files: [

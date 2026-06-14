@@ -77,6 +77,7 @@ const {
   METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_THREAD_RESUME,
+  METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
@@ -108,6 +109,7 @@ const {
   METHOD_FILE_SYSTEM_RENAME_FILE,
   METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
   METHOD_PROJECT_GIT_BRANCH_CREATE,
+  METHOD_PROJECT_GIT_DIFF,
   METHOD_PROJECT_GIT_STATUS,
   METHOD_PROJECT_GIT_WORKTREE_CREATE,
   METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
@@ -1597,6 +1599,10 @@ test("builds file system requests with current methods", () => {
   const gitStatus = client.readProjectGitStatus({
     rootPath: "/workspace",
   });
+  const gitDiff = client.readProjectGitDiff({
+    rootPath: "/workspace",
+    contextLines: 5,
+  });
   const gitCheckout = client.checkoutProjectGitBranch({
     rootPath: "/workspace",
     branch: "feature/demo",
@@ -1670,51 +1676,57 @@ test("builds file system requests with current methods", () => {
   assert.deepEqual(gitStatus.params, {
     rootPath: "/workspace",
   });
-  assert.equal(gitCheckout.id, 8);
+  assert.equal(gitDiff.id, 8);
+  assert.equal(gitDiff.method, METHOD_PROJECT_GIT_DIFF);
+  assert.deepEqual(gitDiff.params, {
+    rootPath: "/workspace",
+    contextLines: 5,
+  });
+  assert.equal(gitCheckout.id, 9);
   assert.equal(gitCheckout.method, METHOD_PROJECT_GIT_BRANCH_CHECKOUT);
   assert.deepEqual(gitCheckout.params, {
     rootPath: "/workspace",
     branch: "feature/demo",
   });
-  assert.equal(gitCreateBranch.id, 9);
+  assert.equal(gitCreateBranch.id, 10);
   assert.equal(gitCreateBranch.method, METHOD_PROJECT_GIT_BRANCH_CREATE);
   assert.deepEqual(gitCreateBranch.params, {
     rootPath: "/workspace",
     branch: "feature/new",
   });
-  assert.equal(gitCreateWorktree.id, 10);
+  assert.equal(gitCreateWorktree.id, 11);
   assert.equal(gitCreateWorktree.method, METHOD_PROJECT_GIT_WORKTREE_CREATE);
   assert.deepEqual(gitCreateWorktree.params, {
     rootPath: "/workspace",
     name: "agent-demo",
     baseBranch: "main",
   });
-  assert.equal(shellStart.id, 11);
+  assert.equal(shellStart.id, 12);
   assert.equal(shellStart.method, METHOD_PROJECT_SHELL_SESSION_START);
   assert.deepEqual(shellStart.params, {
     rootPath: "/workspace",
     cols: 120,
     rows: 16,
   });
-  assert.equal(shellWrite.id, 12);
+  assert.equal(shellWrite.id, 13);
   assert.equal(shellWrite.method, METHOD_PROJECT_SHELL_SESSION_WRITE);
   assert.deepEqual(shellWrite.params, {
     sessionId: "project-shell-1",
     data: "pwd\r",
   });
-  assert.equal(shellResize.id, 13);
+  assert.equal(shellResize.id, 14);
   assert.equal(shellResize.method, METHOD_PROJECT_SHELL_SESSION_RESIZE);
   assert.deepEqual(shellResize.params, {
     sessionId: "project-shell-1",
     cols: 100,
     rows: 24,
   });
-  assert.equal(shellKill.id, 14);
+  assert.equal(shellKill.id, 15);
   assert.equal(shellKill.method, METHOD_PROJECT_SHELL_SESSION_KILL);
   assert.deepEqual(shellKill.params, {
     sessionId: "project-shell-1",
   });
-  assert.equal(shellDrain.id, 15);
+  assert.equal(shellDrain.id, 16);
   assert.equal(shellDrain.method, METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS);
   assert.deepEqual(shellDrain.params, {
     sessionId: "project-shell-1",
@@ -1880,6 +1892,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
     { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
     { method: METHOD_PROJECT_GIT_STATUS, kind: "request" },
+    { method: METHOD_PROJECT_GIT_DIFF, kind: "request" },
     { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
     { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
     { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
@@ -2125,6 +2138,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_SESSION_START, kind: "request" },
     { method: METHOD_AGENT_SESSION_READ, kind: "request" },
     { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
+    { method: METHOD_AGENT_SESSION_TOOL_INVENTORY_READ, kind: "request" },
     { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
     { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
     { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
@@ -2148,6 +2162,7 @@ test("exports app-server method catalog with request and notification kinds", ()
   assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_RENAME_FILE), true);
   assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_DELETE_FILE), true);
   assert.equal(isAppServerRequestMethod(METHOD_PROJECT_GIT_STATUS), true);
+  assert.equal(isAppServerRequestMethod(METHOD_PROJECT_GIT_DIFF), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_PROJECT_GIT_BRANCH_CHECKOUT),
     true,
@@ -3007,13 +3022,23 @@ test("connection wraps file system responses", async () => {
         rootPath: "/workspace",
         repositoryRoot: "/workspace",
         hasGitRepository: true,
+        patch: "diff --git a/README.md b/README.md\n+hello",
+        uncommittedFileCount: 1,
+      },
+    },
+    {
+      id: 9,
+      result: {
+        rootPath: "/workspace",
+        repositoryRoot: "/workspace",
+        hasGitRepository: true,
         currentBranch: "feature/demo",
         branches: ["feature/demo", "main"],
         uncommittedFileCount: 0,
       },
     },
     {
-      id: 9,
+      id: 10,
       result: {
         rootPath: "/workspace",
         repositoryRoot: "/workspace",
@@ -3024,7 +3049,7 @@ test("connection wraps file system responses", async () => {
       },
     },
     {
-      id: 10,
+      id: 11,
       result: {
         worktreePath: "/workspace-worktree",
         branch: "main",
@@ -3076,6 +3101,10 @@ test("connection wraps file system responses", async () => {
   const gitStatusResult = await connection.readProjectGitStatus({
     rootPath: "/workspace",
   });
+  const gitDiffResult = await connection.readProjectGitDiff({
+    rootPath: "/workspace",
+    contextLines: 5,
+  });
   const gitCheckoutResult = await connection.checkoutProjectGitBranch({
     rootPath: "/workspace",
     branch: "feature/demo",
@@ -3121,18 +3150,23 @@ test("connection wraps file system responses", async () => {
   assert.deepEqual(sent[6].params, {
     rootPath: "/workspace",
   });
-  assert.equal(sent[7].method, METHOD_PROJECT_GIT_BRANCH_CHECKOUT);
+  assert.equal(sent[7].method, METHOD_PROJECT_GIT_DIFF);
   assert.deepEqual(sent[7].params, {
+    rootPath: "/workspace",
+    contextLines: 5,
+  });
+  assert.equal(sent[8].method, METHOD_PROJECT_GIT_BRANCH_CHECKOUT);
+  assert.deepEqual(sent[8].params, {
     rootPath: "/workspace",
     branch: "feature/demo",
   });
-  assert.equal(sent[8].method, METHOD_PROJECT_GIT_BRANCH_CREATE);
-  assert.deepEqual(sent[8].params, {
+  assert.equal(sent[9].method, METHOD_PROJECT_GIT_BRANCH_CREATE);
+  assert.deepEqual(sent[9].params, {
     rootPath: "/workspace",
     branch: "feature/new",
   });
-  assert.equal(sent[9].method, METHOD_PROJECT_GIT_WORKTREE_CREATE);
-  assert.deepEqual(sent[9].params, {
+  assert.equal(sent[10].method, METHOD_PROJECT_GIT_WORKTREE_CREATE);
+  assert.deepEqual(sent[10].params, {
     rootPath: "/workspace",
     name: "agent-demo",
     baseBranch: "main",
@@ -3144,6 +3178,7 @@ test("connection wraps file system responses", async () => {
   assert.deepEqual(renameFileResult.result, {});
   assert.deepEqual(deleteFileResult.result, {});
   assert.equal(gitStatusResult.result.currentBranch, "main");
+  assert.equal(gitDiffResult.result.patch.includes("diff --git"), true);
   assert.equal(gitCheckoutResult.result.currentBranch, "feature/demo");
   assert.equal(gitCreateBranchResult.result.currentBranch, "feature/new");
   assert.equal(

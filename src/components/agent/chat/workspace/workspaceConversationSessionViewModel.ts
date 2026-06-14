@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
+import type { CodingWorkbenchView } from "@limecloud/agent-runtime-projection";
 import type {
   CanvasWorkbenchSessionView,
   CanvasWorkbenchSummaryStat,
@@ -300,6 +301,60 @@ export function buildSessionRuntimeCounters({
       inProgressItemCount > 0 ||
       pendingActions.length > 0 ||
       queuedTurns.length > 0,
+  };
+}
+
+export function buildSessionRuntimeCountersFromCodingProjection({
+  codingView,
+  fileCheckpointSummary,
+  queuedTurns,
+}: {
+  codingView: CodingWorkbenchView;
+  fileCheckpointSummary?: AgentRuntimeFileCheckpointThreadSummary | null;
+  queuedTurns: readonly unknown[];
+}): SessionRuntimeCounters {
+  const outputItemCount =
+    codingView.commands.length +
+    codingView.tests.length +
+    codingView.actions.length +
+    codingView.diagnostics.length;
+  const failedOutputItemCount =
+    codingView.commands.filter((command) => command.status === "failed")
+      .length +
+    codingView.tests.filter((test) => test.status === "failed").length +
+    codingView.diagnostics.length;
+  const inProgressItemCount =
+    codingView.commands.filter((command) => command.status === "running")
+      .length +
+    codingView.tests.filter((test) => test.status === "running").length +
+    codingView.changes.filter(
+      (change) => change.status === "running" || change.status === "pending",
+    ).length;
+  const generatedFileCount = codingView.changes.length || codingView.files.length;
+  const hasRuntimeFileChanges =
+    (fileCheckpointSummary?.count ?? 0) > 0 || codingView.changes.length > 0;
+  const hasRuntimeOutputs = outputItemCount > 0;
+  const shouldUseRuntimeWorkbench =
+    hasRuntimeFileChanges ||
+    hasRuntimeOutputs ||
+    inProgressItemCount > 0 ||
+    codingView.mainObject.status === "running" ||
+    codingView.mainObject.status === "blocked";
+
+  return {
+    outputItemCount,
+    failedOutputItemCount,
+    inProgressItemCount,
+    generatedFileCount,
+    hasRuntimeFileChanges,
+    hasRuntimeOutputs,
+    shouldUseRuntimeWorkbench,
+    shouldExposeSessionProgress:
+      inProgressItemCount > 0 ||
+      codingView.actions.length > 0 ||
+      queuedTurns.length > 0 ||
+      codingView.mainObject.status === "running" ||
+      codingView.mainObject.status === "blocked",
   };
 }
 

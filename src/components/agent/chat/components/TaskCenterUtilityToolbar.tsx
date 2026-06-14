@@ -10,6 +10,7 @@ import {
   HardDrive,
   Laptop,
   Monitor,
+  PanelRightClose,
   PanelRightOpen,
   SlidersHorizontal,
   SquareTerminal,
@@ -35,6 +36,7 @@ import { agentText } from "./harnessPanelText";
 
 interface TaskCenterUtilityToolbarProps {
   projectRootPath?: string | null;
+  placement?: "task-strip" | "workbench-header";
   showCanvasToggle: boolean;
   isCanvasOpen: boolean;
   onToggleCanvas?: () => void;
@@ -53,6 +55,9 @@ const taskCenterToolButtonClassName =
 
 const taskCenterIconOnlyButtonClassName =
   "h-7 w-7 rounded-[12px] border border-transparent bg-transparent text-[color:var(--lime-chrome-muted)] shadow-none transition-[background-color,color] hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)] disabled:cursor-not-allowed disabled:opacity-50";
+
+const taskCenterToolGroupClassName =
+  "inline-flex shrink-0 items-center gap-1";
 
 function VisualStudioCodeIcon({ className }: { className?: string }) {
   return (
@@ -115,6 +120,7 @@ function useProjectGitStatus(rootPath?: string | null) {
 
 export function TaskCenterUtilityToolbar({
   projectRootPath,
+  placement = "task-strip",
   showCanvasToggle,
   isCanvasOpen,
   onToggleCanvas,
@@ -135,6 +141,8 @@ export function TaskCenterUtilityToolbar({
   );
   const shouldRenderHarnessToggle =
     showHarnessToggle || Boolean(onToggleHarnessPanel);
+  const isWorkbenchHeaderPlacement = placement === "workbench-header";
+  const shouldRenderPanelToolGroup = shouldRenderHarnessToggle || showCanvasToggle;
 
   const handleOpenTool = React.useCallback(
     async (tool: ProjectPathOpenTool) => {
@@ -187,197 +195,219 @@ export function TaskCenterUtilityToolbar({
           : agentText("agentChat.navbar.environment.noGit", "非 Git 项目");
 
   return (
-    <div className="ml-auto flex h-9 shrink-0 items-center gap-1 pb-1">
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={cn(taskCenterToolButtonClassName, "gap-1.5")}
-            aria-label={agentText(
-              "agentChat.navbar.appSwitcher.open",
-              "打开应用切换",
-            )}
-            title={agentText(
-              "agentChat.navbar.appSwitcher.open",
-              "打开应用切换",
-            )}
-            data-testid="task-center-app-switcher-trigger"
-          >
-            <VisualStudioCodeIcon />
-            <ChevronDown className="h-3 w-3" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          sideOffset={8}
-          className="w-44 rounded-2xl border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-2 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10"
-          data-testid="task-center-app-switcher-popover"
-        >
-          <AppSwitcherAction
-            icon={<VisualStudioCodeIcon className="h-3.5 w-3.5" />}
-            label={agentText("agentChat.navbar.appSwitcher.vscode", "VS Code")}
-            disabled={!normalizedProjectRootPath}
-            onClick={() => void handleOpenTool("vscode")}
-          />
-          <AppSwitcherAction
-            icon={<SquareTerminal className="h-3.5 w-3.5 text-slate-500" />}
-            label={agentText("agentChat.navbar.appSwitcher.cursor", "Cursor")}
-            disabled={!normalizedProjectRootPath}
-            onClick={() => void handleOpenTool("cursor")}
-          />
-          <AppSwitcherAction
-            icon={<FolderOpen className="h-3.5 w-3.5 text-sky-500" />}
-            label={agentText("agentChat.navbar.appSwitcher.finder", "Finder")}
-            disabled={!normalizedProjectRootPath}
-            onClick={() => void handleOpenTool("finder")}
-          />
-          <AppSwitcherAction
-            icon={<SquareTerminal className="h-3.5 w-3.5 text-slate-500" />}
-            label={agentText(
-              "agentChat.navbar.appSwitcher.terminal",
-              "Terminal",
-            )}
-            disabled={!normalizedProjectRootPath}
-            onClick={() => void handleOpenTool("terminal")}
-          />
-        </PopoverContent>
-      </Popover>
-
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={taskCenterIconOnlyButtonClassName}
-            aria-label={agentText(
-              "agentChat.navbar.environment.open",
-              "打开环境信息",
-            )}
-            title={agentText(
-              "agentChat.navbar.environment.open",
-              "打开环境信息",
-            )}
-            data-testid="task-center-environment-trigger"
-            onClick={() => {
-              setEnvironmentVisited(true);
-            }}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          sideOffset={8}
-          className="w-[284px] rounded-3xl border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-4 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10"
-          data-testid="task-center-environment-popover"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-[color:var(--lime-text-muted)]">
-              {agentText("agentChat.navbar.environment.title", "环境信息")}
-            </span>
-            <span className="max-w-[180px] truncate text-[11px] text-[color:var(--lime-text-muted)]">
-              {environmentStatusLabel}
-            </span>
-          </div>
-          <div className="mt-3 space-y-2 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="flex items-center gap-2">
-                <GitCommitHorizontal className="h-4 w-4" />
-                {agentText("agentChat.navbar.environment.changes", "变更")}
-              </span>
-              <span className="text-xs text-[color:var(--lime-text-muted)]">
-                {status?.hasGitRepository
-                  ? agentText(
-                      "agentChat.navbar.environment.uncommittedFiles",
-                      "{{count}} 个文件",
-                      { count: changeCount },
-                    )
-                  : environmentStatusLabel}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Monitor className="h-4 w-4" />
-              <span>
-                {agentText("agentChat.navbar.environment.local", "本地")}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <GitBranch className="h-4 w-4" />
-              <span className="min-w-0 truncate">{branchLabel}</span>
-            </div>
-            <button
+    <div
+      className={cn(
+        "ml-auto flex shrink-0 items-center gap-2",
+        isWorkbenchHeaderPlacement ? "h-8" : "h-9 pb-1",
+      )}
+      data-testid="task-center-utility-toolbar"
+      data-placement={placement}
+    >
+      <div
+        className={taskCenterToolGroupClassName}
+        data-testid="task-center-tool-group-app"
+      >
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
               type="button"
-              className="flex w-full cursor-not-allowed items-center gap-2 rounded-xl py-1 text-left text-[color:var(--lime-text-muted)] opacity-70"
-              disabled
-              title={agentText(
-                "agentChat.navbar.environment.submitUnavailable",
-                "提交和推送需要后续接入 Git 写操作",
+              variant="ghost"
+              size="sm"
+              className={cn(taskCenterToolButtonClassName, "gap-1.5")}
+              aria-label={agentText(
+                "agentChat.navbar.appSwitcher.open",
+                "打开应用切换",
               )}
+              title={agentText(
+                "agentChat.navbar.appSwitcher.open",
+                "打开应用切换",
+              )}
+              data-testid="task-center-app-switcher-trigger"
             >
-              <CircleDot className="h-4 w-4" />
-              <span>
-                {agentText(
-                  "agentChat.navbar.environment.submit",
-                  "提交或推送",
-                )}
+              <VisualStudioCodeIcon />
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            sideOffset={8}
+            className="w-44 rounded-2xl border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-2 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10"
+            data-testid="task-center-app-switcher-popover"
+          >
+            <AppSwitcherAction
+              icon={<VisualStudioCodeIcon className="h-3.5 w-3.5" />}
+              label={agentText("agentChat.navbar.appSwitcher.vscode", "VS Code")}
+              disabled={!normalizedProjectRootPath}
+              onClick={() => void handleOpenTool("vscode")}
+            />
+            <AppSwitcherAction
+              icon={<SquareTerminal className="h-3.5 w-3.5 text-slate-500" />}
+              label={agentText("agentChat.navbar.appSwitcher.cursor", "Cursor")}
+              disabled={!normalizedProjectRootPath}
+              onClick={() => void handleOpenTool("cursor")}
+            />
+            <AppSwitcherAction
+              icon={<FolderOpen className="h-3.5 w-3.5 text-sky-500" />}
+              label={agentText("agentChat.navbar.appSwitcher.finder", "Finder")}
+              disabled={!normalizedProjectRootPath}
+              onClick={() => void handleOpenTool("finder")}
+            />
+            <AppSwitcherAction
+              icon={<SquareTerminal className="h-3.5 w-3.5 text-slate-500" />}
+              label={agentText(
+                "agentChat.navbar.appSwitcher.terminal",
+                "Terminal",
+              )}
+              disabled={!normalizedProjectRootPath}
+              onClick={() => void handleOpenTool("terminal")}
+            />
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      <div
+        className={taskCenterToolGroupClassName}
+        data-testid="task-center-tool-group-environment"
+      >
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={taskCenterIconOnlyButtonClassName}
+              aria-label={agentText(
+                "agentChat.navbar.environment.open",
+                "打开环境信息",
+              )}
+              title={agentText(
+                "agentChat.navbar.environment.open",
+                "打开环境信息",
+              )}
+              data-testid="task-center-environment-trigger"
+              onClick={() => {
+                setEnvironmentVisited(true);
+              }}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            sideOffset={8}
+            className="w-[284px] rounded-3xl border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-4 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10"
+            data-testid="task-center-environment-popover"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-[color:var(--lime-text-muted)]">
+                {agentText("agentChat.navbar.environment.title", "环境信息")}
               </span>
-            </button>
-          </div>
-          <div className="mt-4 border-t border-[color:var(--lime-surface-border)] pt-3">
-            <div className="text-xs font-medium text-[color:var(--lime-text-muted)]">
-              {agentText("agentChat.navbar.environment.source", "来源")}
+              <span className="max-w-[180px] truncate text-[11px] text-[color:var(--lime-text-muted)]">
+                {environmentStatusLabel}
+              </span>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-[color:var(--lime-text-muted)]">
-              <GitPullRequest className="h-4 w-4" />
-              <HardDrive className="h-4 w-4" />
-              <Laptop className="h-4 w-4" />
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2">
+                  <GitCommitHorizontal className="h-4 w-4" />
+                  {agentText("agentChat.navbar.environment.changes", "变更")}
+                </span>
+                <span className="text-xs text-[color:var(--lime-text-muted)]">
+                  {status?.hasGitRepository
+                    ? agentText(
+                        "agentChat.navbar.environment.uncommittedFiles",
+                        "{{count}} 个文件",
+                        { count: changeCount },
+                      )
+                    : environmentStatusLabel}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Monitor className="h-4 w-4" />
+                <span>
+                  {agentText("agentChat.navbar.environment.local", "本地")}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <GitBranch className="h-4 w-4" />
+                <span className="min-w-0 truncate">{branchLabel}</span>
+              </div>
+              <button
+                type="button"
+                className="flex w-full cursor-not-allowed items-center gap-2 rounded-xl py-1 text-left text-[color:var(--lime-text-muted)] opacity-70"
+                disabled
+                title={agentText(
+                  "agentChat.navbar.environment.submitUnavailable",
+                  "提交和推送需要后续接入 Git 写操作",
+                )}
+              >
+                <CircleDot className="h-4 w-4" />
+                <span>
+                  {agentText(
+                    "agentChat.navbar.environment.submit",
+                    "提交或推送",
+                  )}
+                </span>
+              </button>
             </div>
-          </div>
-        </PopoverContent>
-      </Popover>
+            <div className="mt-4 border-t border-[color:var(--lime-surface-border)] pt-3">
+              <div className="text-xs font-medium text-[color:var(--lime-text-muted)]">
+                {agentText("agentChat.navbar.environment.source", "来源")}
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-[color:var(--lime-text-muted)]">
+                <GitPullRequest className="h-4 w-4" />
+                <HardDrive className="h-4 w-4" />
+                <Laptop className="h-4 w-4" />
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
 
-      {shouldRenderHarnessToggle ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={cn(
-            taskCenterIconOnlyButtonClassName,
-            "relative",
-            harnessPanelVisible &&
-              "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
-            harnessAttentionLevel === "warning" &&
-              !harnessPanelVisible &&
-              "bg-[color:var(--lime-warning-soft)] text-[color:var(--lime-warning)] hover:bg-[color:var(--lime-warning-soft)] hover:text-[color:var(--lime-warning)]",
-          )}
-          onClick={onToggleHarnessPanel}
-          aria-label={
-            harnessPanelVisible
-              ? agentText("agentChat.navbar.closeHarness", "关闭{{label}}", {
-                  label: harnessToggleLabel,
-                })
-              : agentText("agentChat.navbar.openHarness", "打开{{label}}", {
-                  label: harnessToggleLabel,
-                })
-          }
-          aria-expanded={harnessPanelVisible}
-          title={harnessToggleLabel}
-          data-testid="task-center-harness-toggle"
+      {shouldRenderPanelToolGroup ? (
+        <div
+          className={taskCenterToolGroupClassName}
+          data-testid="task-center-tool-group-panels"
         >
-          <Code2 className="h-4 w-4" />
-          {harnessPendingCount > 0 ? (
-            <span className="absolute -right-1 -top-1 rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] px-1 text-[9px] font-medium leading-4 text-[color:var(--lime-brand-strong)]">
-              {harnessPendingCount > 99 ? "99+" : harnessPendingCount}
-            </span>
+          {shouldRenderHarnessToggle ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                taskCenterIconOnlyButtonClassName,
+                "relative",
+                harnessPanelVisible &&
+                  "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
+                harnessAttentionLevel === "warning" &&
+                  !harnessPanelVisible &&
+                  "bg-[color:var(--lime-warning-soft)] text-[color:var(--lime-warning)] hover:bg-[color:var(--lime-warning-soft)] hover:text-[color:var(--lime-warning)]",
+              )}
+              onClick={onToggleHarnessPanel}
+              aria-label={
+                harnessPanelVisible
+                  ? agentText("agentChat.navbar.closeHarness", "关闭{{label}}", {
+                      label: harnessToggleLabel,
+                    })
+                  : agentText("agentChat.navbar.openHarness", "打开{{label}}", {
+                      label: harnessToggleLabel,
+                    })
+              }
+              aria-expanded={harnessPanelVisible}
+              title={harnessToggleLabel}
+              data-testid="task-center-harness-toggle"
+            >
+              <Code2 className="h-4 w-4" />
+              {harnessPendingCount > 0 ? (
+                <span className="absolute -right-1 -top-1 rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] px-1 text-[9px] font-medium leading-4 text-[color:var(--lime-brand-strong)]">
+                  {harnessPendingCount > 99 ? "99+" : harnessPendingCount}
+                </span>
+              ) : null}
+            </Button>
           ) : null}
-        </Button>
-      ) : null}
 
-      {showCanvasToggle ? (
-        <>
+          {showCanvasToggle ? (
+            <>
           <Button
             type="button"
             variant="ghost"
@@ -405,18 +435,30 @@ export function TaskCenterUtilityToolbar({
               isCanvasOpen &&
                 "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
             )}
-            onClick={!isCanvasOpen ? onToggleCanvas : undefined}
-            disabled={isCanvasOpen}
+            onClick={onToggleCanvas}
             aria-label={agentText(
-              "agentChat.navbar.openWorkbench",
-              "打开工作台",
+              isCanvasOpen
+                ? "agentChat.navbar.closeWorkbench"
+                : "agentChat.navbar.openWorkbench",
+              isCanvasOpen ? "关闭工作台" : "打开工作台",
             )}
-            title={agentText("agentChat.navbar.openWorkbench", "打开工作台")}
+            title={agentText(
+              isCanvasOpen
+                ? "agentChat.navbar.closeWorkbench"
+                : "agentChat.navbar.openWorkbench",
+              isCanvasOpen ? "关闭工作台" : "打开工作台",
+            )}
             data-testid="task-center-workbench-toggle"
           >
-            <PanelRightOpen className="h-4 w-4" />
+            {isCanvasOpen ? (
+              <PanelRightClose className="h-4 w-4" />
+            ) : (
+              <PanelRightOpen className="h-4 w-4" />
+            )}
           </Button>
-        </>
+            </>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

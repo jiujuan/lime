@@ -264,9 +264,11 @@ describe("useWorkspaceBrowserAssistRuntime", () => {
     });
 
     const upsertGeneralArtifact = vi.fn();
+    const onBrowserWorkbenchOpenRequest = vi.fn();
     const { render, getValue } = renderHook({
       input: "https://github.com/",
       upsertGeneralArtifact,
+      onBrowserWorkbenchOpenRequest,
     });
 
     await render();
@@ -280,6 +282,9 @@ describe("useWorkspaceBrowserAssistRuntime", () => {
     });
 
     expect(mockLaunchBrowserSession).not.toHaveBeenCalled();
+    expect(onBrowserWorkbenchOpenRequest).toHaveBeenCalledWith(
+      "https://github.com/",
+    );
     expect(mockBrowserExecuteAction).toHaveBeenCalledWith({
       profile_key: "general-browser",
       backend: "lime_extension_bridge",

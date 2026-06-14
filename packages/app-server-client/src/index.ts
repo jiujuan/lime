@@ -52,6 +52,7 @@ import {
   METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
   METHOD_AGENT_SESSION_START,
   METHOD_AGENT_SESSION_THREAD_RESUME,
+  METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
@@ -83,6 +84,7 @@ import {
   METHOD_FILE_SYSTEM_RENAME_FILE,
   METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
   METHOD_PROJECT_GIT_BRANCH_CREATE,
+  METHOD_PROJECT_GIT_DIFF,
   METHOD_PROJECT_GIT_STATUS,
   METHOD_PROJECT_GIT_WORKTREE_CREATE,
   METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
@@ -325,6 +327,8 @@ import {
   type AgentSessionStartResponse,
   type AgentSessionThreadResumeParams,
   type AgentSessionThreadResumeResponse,
+  type AgentSessionToolInventoryReadParams,
+  type AgentSessionToolInventoryReadResponse,
   type AgentSessionTurnCancelParams,
   type AgentSessionTurnCancelResponse,
   type AgentSessionTurnStartParams,
@@ -397,6 +401,8 @@ import {
   type ProjectGitBranchCheckoutResponse,
   type ProjectGitBranchCreateParams,
   type ProjectGitBranchCreateResponse,
+  type ProjectGitDiffParams,
+  type ProjectGitDiffResponse,
   type ProjectGitStatusParams,
   type ProjectGitStatusResponse,
   type ProjectGitWorktreeCreateParams,
@@ -804,6 +810,10 @@ export interface AgentRuntimeClient {
     params: AgentSessionReadParams,
     options?: AppServerRequestOptions,
   ): Promise<AppServerRequestResult<AgentSessionReadResponse>>;
+  readToolInventory(
+    params?: AgentSessionToolInventoryReadParams,
+    options?: AppServerRequestOptions,
+  ): Promise<AppServerRequestResult<AgentSessionToolInventoryReadResponse>>;
   exportEvidence(
     params: EvidenceExportParams,
     options?: AppServerRequestOptions,
@@ -1787,6 +1797,10 @@ export class AppServerClient {
     return this.request(METHOD_PROJECT_GIT_STATUS, params);
   }
 
+  readProjectGitDiff(params: ProjectGitDiffParams): JsonRpcRequest {
+    return this.request(METHOD_PROJECT_GIT_DIFF, params);
+  }
+
   checkoutProjectGitBranch(
     params: ProjectGitBranchCheckoutParams,
   ): JsonRpcRequest {
@@ -1821,7 +1835,9 @@ export class AppServerClient {
     return this.request(METHOD_PROJECT_SHELL_SESSION_RESIZE, params);
   }
 
-  killProjectShellSession(params: ProjectShellSessionKillParams): JsonRpcRequest {
+  killProjectShellSession(
+    params: ProjectShellSessionKillParams,
+  ): JsonRpcRequest {
     return this.request(METHOD_PROJECT_SHELL_SESSION_KILL, params);
   }
 
@@ -1872,6 +1888,12 @@ export class AppServerClient {
 
   readSession(params: AgentSessionReadParams): JsonRpcRequest {
     return this.request(METHOD_AGENT_SESSION_READ, params);
+  }
+
+  readAgentSessionToolInventory(
+    params: AgentSessionToolInventoryReadParams = {},
+  ): JsonRpcRequest {
+    return this.request(METHOD_AGENT_SESSION_TOOL_INVENTORY_READ, params);
   }
 
   listModels(params: ModelListParams = {}): JsonRpcRequest {
@@ -4189,6 +4211,17 @@ export class AppServerConnection {
     );
   }
 
+  async readProjectGitDiff(
+    params: ProjectGitDiffParams,
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<ProjectGitDiffResponse>> {
+    return await this.request<ProjectGitDiffResponse>(
+      this.client.readProjectGitDiff(params),
+      METHOD_PROJECT_GIT_DIFF,
+      options,
+    );
+  }
+
   async checkoutProjectGitBranch(
     params: ProjectGitBranchCheckoutParams,
     options: AppServerRequestOptions = {},
@@ -4356,6 +4389,17 @@ export class AppServerConnection {
     return await this.request<AgentSessionReadResponse>(
       this.client.readSession(params),
       METHOD_AGENT_SESSION_READ,
+      options,
+    );
+  }
+
+  async readAgentSessionToolInventory(
+    params: AgentSessionToolInventoryReadParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionToolInventoryReadResponse>> {
+    return await this.request<AgentSessionToolInventoryReadResponse>(
+      this.client.readAgentSessionToolInventory(params),
+      METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
       options,
     );
   }
@@ -4794,6 +4838,16 @@ export class AppServerAgentRuntimeClient implements AgentRuntimeClient {
     options: AppServerRequestOptions = {},
   ): Promise<AppServerRequestResult<AgentSessionReadResponse>> {
     return await this.connection.readSession(
+      params,
+      mergeRequestOptions(this.defaultRequestOptions, options),
+    );
+  }
+
+  async readToolInventory(
+    params: AgentSessionToolInventoryReadParams = {},
+    options: AppServerRequestOptions = {},
+  ): Promise<AppServerRequestResult<AgentSessionToolInventoryReadResponse>> {
+    return await this.connection.readAgentSessionToolInventory(
       params,
       mergeRequestOptions(this.defaultRequestOptions, options),
     );

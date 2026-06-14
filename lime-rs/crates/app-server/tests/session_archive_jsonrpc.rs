@@ -14,12 +14,28 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
-use app_server::AppDataSource;
+use app_server::AgentAppDataSource;
 use app_server::AppServer;
+use app_server::AutomationManagementAppDataSource;
+use app_server::AutomationOverviewAppDataSource;
+use app_server::ConnectAppDataSource;
+use app_server::DiagnosticsAppDataSource;
+use app_server::GatewayAppDataSource;
+use app_server::KnowledgeAppDataSource;
+use app_server::McpAppDataSource;
+use app_server::MediaAppDataSource;
+use app_server::MemoryAppDataSource;
 use app_server::MockBackend;
+use app_server::ModelProviderAppDataSource;
 use app_server::NoopAppDataSource;
 use app_server::RuntimeCore;
 use app_server::RuntimeCoreError;
+use app_server::SessionAppDataSource;
+use app_server::SkillAppDataSource;
+use app_server::UsageStatsAppDataSource;
+use app_server::VoiceAppDataSource;
+use app_server::WorkspaceAppDataSource;
+use app_server::WorkspaceSkillBindingAppDataSource;
 use app_server_protocol::*;
 use async_trait::async_trait;
 use lime_core::database::dao::agent_timeline::AgentThreadItem;
@@ -97,7 +113,7 @@ fn persisted_session_overview(
 }
 
 #[async_trait]
-impl AppDataSource for PersistedSessionArchiveDataSource {
+impl SessionAppDataSource for PersistedSessionArchiveDataSource {
     async fn list_current_timeline_sessions(
         &self,
         params: AgentSessionListParams,
@@ -209,7 +225,10 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
             session: session.clone(),
         })
     }
+}
 
+#[async_trait]
+impl WorkspaceAppDataSource for PersistedSessionArchiveDataSource {
     async fn list_workspaces(&self) -> Result<WorkspaceListResponse, RuntimeCoreError> {
         NoopAppDataSource.list_workspaces().await
     }
@@ -257,7 +276,10 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
             .resolve_workspace_project_path(params)
             .await
     }
+}
 
+#[async_trait]
+impl SkillAppDataSource for PersistedSessionArchiveDataSource {
     async fn list_skills(&self) -> Result<SkillListResponse, RuntimeCoreError> {
         NoopAppDataSource.list_skills().await
     }
@@ -310,7 +332,10 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
     ) -> Result<SkillPackageExportResponse, RuntimeCoreError> {
         NoopAppDataSource.export_local_skill_package(params).await
     }
+}
 
+#[async_trait]
+impl WorkspaceSkillBindingAppDataSource for PersistedSessionArchiveDataSource {
     async fn list_workspace_skill_bindings(
         &self,
         params: WorkspaceSkillBindingsListParams,
@@ -328,7 +353,10 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
             .list_workspace_registered_skills(params)
             .await
     }
+}
 
+#[async_trait]
+impl AgentAppDataSource for PersistedSessionArchiveDataSource {
     async fn list_agent_app_installed(
         &self,
     ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
@@ -382,7 +410,10 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
     ) -> Result<AgentAppUninstallResponse, RuntimeCoreError> {
         NoopAppDataSource.uninstall_agent_app(params).await
     }
+}
 
+#[async_trait]
+impl KnowledgeAppDataSource for PersistedSessionArchiveDataSource {
     async fn list_knowledge_packs(
         &self,
         params: KnowledgeListPacksParams,
@@ -440,18 +471,27 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
             .validate_knowledge_context_run(params)
             .await
     }
+}
 
+#[async_trait]
+impl AutomationOverviewAppDataSource for PersistedSessionArchiveDataSource {
     async fn list_automation_jobs(&self) -> Result<AutomationJobListResponse, RuntimeCoreError> {
         NoopAppDataSource.list_automation_jobs().await
     }
+}
 
+#[async_trait]
+impl MemoryAppDataSource for PersistedSessionArchiveDataSource {
     async fn read_project_memory(
         &self,
         params: ProjectMemoryReadParams,
     ) -> Result<ProjectMemoryReadResponse, RuntimeCoreError> {
         NoopAppDataSource.read_project_memory(params).await
     }
+}
 
+#[async_trait]
+impl UsageStatsAppDataSource for PersistedSessionArchiveDataSource {
     async fn read_usage_stats(
         &self,
         params: UsageStatsRangeParams,
@@ -476,7 +516,10 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
             .list_usage_stats_daily_trends(params)
             .await
     }
+}
 
+#[async_trait]
+impl ModelProviderAppDataSource for PersistedSessionArchiveDataSource {
     async fn list_models(
         &self,
         params: ModelListParams,
@@ -517,6 +560,14 @@ impl AppDataSource for PersistedSessionArchiveDataSource {
         NoopAppDataSource.list_model_provider_aliases().await
     }
 }
+
+impl GatewayAppDataSource for PersistedSessionArchiveDataSource {}
+impl MediaAppDataSource for PersistedSessionArchiveDataSource {}
+impl VoiceAppDataSource for PersistedSessionArchiveDataSource {}
+impl McpAppDataSource for PersistedSessionArchiveDataSource {}
+impl AutomationManagementAppDataSource for PersistedSessionArchiveDataSource {}
+impl DiagnosticsAppDataSource for PersistedSessionArchiveDataSource {}
+impl ConnectAppDataSource for PersistedSessionArchiveDataSource {}
 
 #[tokio::test]
 async fn persisted_session_archive_and_unarchive_use_current_jsonrpc() {

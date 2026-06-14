@@ -319,6 +319,9 @@ test("AgentUiProjectionView renders subagent handoff fixture graph", () => {
   assert.match(markup, /data-subagent-id="subagent_fixture_researcher"/);
   assert.match(markup, /data-delegation-action="handoff"/);
   assert.match(markup, /Research subagent started/);
+  assert.match(markup, /Research notes and review evidence are ready/);
+  assert.match(markup, /Research update posted/);
+  assert.match(markup, /Research notes attached/);
   assert.match(markup, /data-source-event-id="evt_handoff_requested"/);
 });
 
@@ -372,11 +375,31 @@ test("ArtifactRefList and EvidenceRefList expose stable DOM contracts", () => {
   assert.match(markup, /Evidence evidence-1/);
 });
 
+test("ArtifactRefList and EvidenceRefList make selectable ref cards interactive", () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(ArtifactRefList, {
+        refs: [{ id: "artifact-1", sourceEventId: "evt-artifact" }],
+        onSelectRef: () => {},
+      }),
+      React.createElement(EvidenceRefList, {
+        refs: [{ id: "evidence-1", sourceEventId: "evt-evidence" }],
+        onSelectRef: () => {},
+      }),
+    ),
+  );
+
+  assert.match(markup, /<button type="button" class="agent-ref-card"/);
+  assert.match(markup, /class="agent-ref-action"/);
+});
+
 test("SubagentsView renders threads, delegations, and activities from projection state", () => {
   const replay = replayAgentUiFixture(getAgentUiFixture("subagent-handoff"));
   const markup = renderToStaticMarkup(
     React.createElement(SubagentsView, {
-      state: replay.state,
+      model: replay.state.subagents,
       labels: {
         subagentsAriaLabel: "子代理",
         subagentThreadsAriaLabel: "子代理线程",
@@ -392,9 +415,11 @@ test("SubagentsView renders threads, delegations, and activities from projection
   assert.match(markup, /活动记录/);
   assert.match(markup, /data-subagent-count="1"/);
   assert.match(markup, /data-delegation-count="2"/);
-  assert.match(markup, /data-activity-count="5"/);
+  assert.match(markup, /data-activity-count="10"/);
   assert.match(markup, /data-thread-id="subagent_fixture_researcher"/);
   assert.match(markup, /data-delegation-action="spawn"/);
   assert.match(markup, /data-delegation-action="handoff"/);
+  assert.match(markup, /data-activity-kind="review"/);
   assert.match(markup, /data-activity-kind="handoff"/);
+  assert.match(markup, /Research notes and review evidence are ready/);
 });

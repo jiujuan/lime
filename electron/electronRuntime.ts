@@ -17,11 +17,14 @@ export const {
   session,
   shell,
   Tray,
+  WebContentsView,
 } = electron;
 
 export type BrowserWindow = Electron.BrowserWindow;
 export type Menu = Electron.Menu;
+export type Rectangle = Electron.Rectangle;
 export type Tray = Electron.Tray;
+export type WebContentsView = Electron.WebContentsView;
 
 export type {
   IpcMainInvokeEvent,

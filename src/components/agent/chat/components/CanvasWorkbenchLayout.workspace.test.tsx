@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   clickByAriaLabel,
+  clickNewWorkbenchTool,
   createArtifact,
   createTaskFile,
   flushEffects,
@@ -9,7 +10,7 @@ import {
 } from "./CanvasWorkbenchLayout.testFixtures";
 
 describe("CanvasWorkbenchLayout workspace tabs", () => {
-  it("命中导出结果文件时应将文件树聚焦到当前结果目录", async () => {
+  it("新增文件标签应展示整个项目目录树", async () => {
     const container = mount({
       artifacts: [],
       canvasState: null,
@@ -34,45 +35,32 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
       })),
       onOpenPath: vi.fn(async () => undefined),
       onRevealPath: vi.fn(async () => undefined),
-      renderPreview: (target) => (
-        <div data-testid="preview-panel">
-          {target.kind}:{target.title}
-        </div>
-      ),
     });
 
     await flushEffects();
-    clickByAriaLabel(container, "切换画布标签-文件");
+    clickNewWorkbenchTool(container, "文件");
     await flushEffects();
 
-    expect(mockListDirectory).toHaveBeenCalledWith(
-      "/workspace/exports/x-article-export/latest",
-    );
-    expect(container.textContent).toContain("结果目录");
-    expect(container.textContent).toContain("exports/x-article-export/latest");
+    expect(mockListDirectory).toHaveBeenCalledWith("/workspace");
+    expect(container.textContent).toContain("项目文件");
+    expect(container.textContent).toContain("/workspace");
 
     const workspaceButtons = Array.from(
       container.querySelectorAll(
-        '[data-testid="canvas-workbench-panel-workspace"] button[aria-label]',
+        '[data-testid="canvas-workbench-panel-project-files"] button[aria-label]',
       ),
     ).map((element) => element.getAttribute("aria-label"));
 
-    expect(workspaceButtons).toContain("选择工作区文件-index.md");
-    expect(workspaceButtons).toContain("选择工作区文件-Agents.md");
-    expect(workspaceButtons).toContain("展开目录-skills");
-    expect(workspaceButtons).toContain("展开目录-images");
+    expect(workspaceButtons).toContain("选择工作区文件-README.md");
+    expect(workspaceButtons).toContain("展开目录-src");
+    expect(workspaceButtons).toContain("展开目录-exports");
 
-    const indexButtonPosition =
-      workspaceButtons.indexOf("选择工作区文件-index.md");
-    const agentsButtonPosition =
-      workspaceButtons.indexOf("选择工作区文件-Agents.md");
-    const manifestButtonPosition = workspaceButtons.indexOf(
-      "选择工作区文件-manifest.json",
-    );
+    const exportsButtonPosition = workspaceButtons.indexOf("展开目录-exports");
+    const readmeButtonPosition =
+      workspaceButtons.indexOf("选择工作区文件-README.md");
 
-    expect(indexButtonPosition).toBeGreaterThanOrEqual(0);
-    expect(agentsButtonPosition).toBeGreaterThan(indexButtonPosition);
-    expect(manifestButtonPosition).toBeGreaterThan(agentsButtonPosition);
+    expect(exportsButtonPosition).toBeGreaterThanOrEqual(0);
+    expect(readmeButtonPosition).toBeGreaterThan(exportsButtonPosition);
   });
 
   it("workspaceView 存在时，应优先使用运行时注入的头部语义", async () => {
@@ -92,11 +80,6 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
       })),
       onOpenPath: vi.fn(async () => undefined),
       onRevealPath: vi.fn(async () => undefined),
-      renderPreview: (target) => (
-        <div data-testid="preview-panel">
-          {target.kind}:{target.title}
-        </div>
-      ),
       workspaceView: {
         eyebrow: "Runtime Workspace",
         tabLabel: "项目文件",
@@ -132,14 +115,63 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
 
     await flushEffects();
 
-    expect(
-      container.querySelector('button[aria-label="切换画布标签-项目文件"]'),
-    ).not.toBeNull();
-
-    clickByAriaLabel(container, "切换画布标签-项目文件");
+    clickNewWorkbenchTool(container, "文件");
     await flushEffects();
 
     expect(container.textContent).toContain("运行时目录");
+  });
+
+  it("新增文件标签应打开整个项目目录，而不是只复用结果目录", async () => {
+    const loadFilePreview = vi.fn(async (path: string) => ({
+      path,
+      content: "# README",
+      isBinary: false,
+      size: 128,
+      error: null,
+    }));
+    const container = mount({
+      artifacts: [],
+      canvasState: null,
+      taskFiles: [],
+      workspaceRoot: "/workspace",
+      workspaceUnavailable: false,
+      defaultPreview: {
+        selectionKey:
+          "default-preview:exports/x-article-export/latest/index.md",
+        title: "index.md",
+        content: "# 导出结果\n\n这是正文。",
+        filePath: "exports/x-article-export/latest/index.md",
+        absolutePath: "/workspace/exports/x-article-export/latest/index.md",
+        previousContent: null,
+      },
+      loadFilePreview,
+      onOpenPath: vi.fn(async () => undefined),
+      onRevealPath: vi.fn(async () => undefined),
+    });
+
+    await flushEffects();
+    clickNewWorkbenchTool(container, "文件");
+    await flushEffects();
+
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-panel-project-files"]',
+      ),
+    ).not.toBeNull();
+    expect(mockListDirectory).toHaveBeenCalledWith("/workspace");
+    expect(container.textContent).toContain("打开文件");
+    expect(container.textContent).toContain("项目文件");
+    expect(container.textContent).toContain("README.md");
+
+    clickByAriaLabel(container, "选择工作区文件-README.md");
+    await flushEffects();
+
+    expect(loadFilePreview).toHaveBeenCalledWith("/workspace/README.md");
+    expect(
+      container.querySelector(
+        '[data-testid="canvas-workbench-panel-project-files"] [data-testid="canvas-workbench-markdown-preview"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("workspaceView 的 panelCopy 应覆盖空态与不可用提示", async () => {
@@ -159,7 +191,6 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
       })),
       onOpenPath: vi.fn(async () => undefined),
       onRevealPath: vi.fn(async () => undefined),
-      renderPreview: (target) => <div>{target.title}</div>,
       workspaceView: {
         panelCopy: {
           unavailableText: "工作区不可用提示来自运行时。",
@@ -169,7 +200,7 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
 
     await flushEffects();
 
-    clickByAriaLabel(unavailableContainer, "切换画布标签-文件");
+    clickNewWorkbenchTool(unavailableContainer, "文件");
     await flushEffects();
     expect(unavailableContainer.textContent).toContain(
       "工作区不可用提示来自运行时。",
@@ -191,7 +222,6 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
       })),
       onOpenPath: vi.fn(async () => undefined),
       onRevealPath: vi.fn(async () => undefined),
-      renderPreview: (target) => <div>{target.title}</div>,
       workspaceView: {
         panelCopy: {
           emptyText: "工作区空态来自运行时。",
@@ -201,7 +231,7 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
 
     await flushEffects();
 
-    clickByAriaLabel(emptyWorkspaceContainer, "切换画布标签-文件");
+    clickNewWorkbenchTool(emptyWorkspaceContainer, "文件");
     await flushEffects();
     expect(emptyWorkspaceContainer.textContent).toContain(
       "工作区空态来自运行时。",
@@ -225,16 +255,11 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
       })),
       onOpenPath: vi.fn(async () => undefined),
       onRevealPath: vi.fn(async () => undefined),
-      renderPreview: (target) => (
-        <div data-testid="preview-panel">
-          {target.kind}:{target.title}
-        </div>
-      ),
     });
 
     await flushEffects();
 
-    clickByAriaLabel(container, "切换画布标签-文件");
+    clickNewWorkbenchTool(container, "文件");
     await flushEffects();
     clickByAriaLabel(container, "展开目录-src");
     await flushEffects();
@@ -242,29 +267,31 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
     await flushEffects();
 
     expect(
-      container.querySelector('[data-testid="preview-panel"]')?.textContent,
-    ).toContain("unsupported:binary.dat");
+      container.querySelector(
+        '[data-testid="canvas-workbench-preview-unsupported"]',
+      )?.textContent,
+    ).toContain("该文件为二进制内容");
   });
 
   it("重新展开结果目录下的 images 时应刷新目录子项，避免沿用空缓存", async () => {
     let imageListingRequestCount = 0;
     mockListDirectory.mockImplementation(async (path: string) => {
-      if (path === "/workspace/exports/x-article-export/latest") {
+      if (path === "/workspace") {
         return {
           path,
-          parentPath: "/workspace/exports/x-article-export",
+          parentPath: null,
           error: null,
           entries: [
             {
               name: "images",
-              path: "/workspace/exports/x-article-export/latest/images",
+              path: "/workspace/images",
               isDir: true,
               size: 0,
               modifiedAt: 100,
             },
             {
               name: "index.md",
-              path: "/workspace/exports/x-article-export/latest/index.md",
+              path: "/workspace/index.md",
               isDir: false,
               size: 2048,
               modifiedAt: 100,
@@ -273,11 +300,11 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
         };
       }
 
-      if (path === "/workspace/exports/x-article-export/latest/images") {
+      if (path === "/workspace/images") {
         imageListingRequestCount += 1;
         return {
           path,
-          parentPath: "/workspace/exports/x-article-export/latest",
+          parentPath: "/workspace",
           error: null,
           entries:
             imageListingRequestCount === 1
@@ -333,15 +360,10 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
       })),
       onOpenPath: vi.fn(async () => undefined),
       onRevealPath: vi.fn(async () => undefined),
-      renderPreview: (target) => (
-        <div data-testid="preview-panel">
-          {target.kind}:{target.title}
-        </div>
-      ),
     });
 
     await flushEffects();
-    clickByAriaLabel(container, "切换画布标签-文件");
+    clickNewWorkbenchTool(container, "文件");
     await flushEffects();
 
     clickByAriaLabel(container, "展开目录-images");
@@ -353,9 +375,7 @@ describe("CanvasWorkbenchLayout workspace tabs", () => {
     clickByAriaLabel(container, "展开目录-images");
     await flushEffects();
 
-    expect(mockListDirectory).toHaveBeenCalledWith(
-      "/workspace/exports/x-article-export/latest/images",
-    );
+    expect(mockListDirectory).toHaveBeenCalledWith("/workspace/images");
     expect(imageListingRequestCount).toBe(2);
     expect(container.textContent).toContain("image-1.jpg");
     expect(container.textContent).toContain("image-2.jpg");

@@ -2,20 +2,24 @@ import {
   AppServerClient,
   APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CHECKOUT,
   APP_SERVER_METHOD_PROJECT_GIT_BRANCH_CREATE,
+  APP_SERVER_METHOD_PROJECT_GIT_DIFF,
   APP_SERVER_METHOD_PROJECT_GIT_STATUS,
   APP_SERVER_METHOD_PROJECT_GIT_WORKTREE_CREATE,
   type AppServerProjectGitBranchCheckoutResponse,
   type AppServerProjectGitBranchCreateResponse,
+  type AppServerProjectGitDiffResponse,
   type AppServerProjectGitStatusResponse,
   type AppServerProjectGitWorktreeCreateResponse,
 } from "@/lib/api/appServer";
 
 export type ProjectGitStatus = AppServerProjectGitStatusResponse;
+export type ProjectGitDiff = AppServerProjectGitDiffResponse;
 export type ProjectGitWorktree = AppServerProjectGitWorktreeCreateResponse;
 
 export type ProjectGitAppServerClient = Pick<
   AppServerClient,
   | "readProjectGitStatus"
+  | "readProjectGitDiff"
   | "checkoutProjectGitBranch"
   | "createProjectGitBranch"
   | "createProjectGitWorktree"
@@ -45,6 +49,21 @@ function assertProjectGitStatus(
   }
 }
 
+function assertProjectGitDiff(
+  method: string,
+  value: unknown,
+): asserts value is ProjectGitDiff {
+  if (
+    !isRecord(value) ||
+    typeof value.rootPath !== "string" ||
+    typeof value.hasGitRepository !== "boolean" ||
+    typeof value.patch !== "string" ||
+    typeof value.uncommittedFileCount !== "number"
+  ) {
+    throw new Error(`${method} did not return project Git diff`);
+  }
+}
+
 function assertProjectGitWorktree(
   method: string,
   value: unknown,
@@ -65,6 +84,19 @@ export async function readProjectGitStatus(
 ): Promise<ProjectGitStatus> {
   const response = await client.readProjectGitStatus({ rootPath });
   assertProjectGitStatus(APP_SERVER_METHOD_PROJECT_GIT_STATUS, response.result);
+  return response.result;
+}
+
+export async function readProjectGitDiff(
+  rootPath: string,
+  contextLines = 3,
+  client: ProjectGitAppServerClient = createProjectGitAppServerClient(),
+): Promise<ProjectGitDiff> {
+  const response = await client.readProjectGitDiff({
+    rootPath,
+    contextLines,
+  });
+  assertProjectGitDiff(APP_SERVER_METHOD_PROJECT_GIT_DIFF, response.result);
   return response.result;
 }
 

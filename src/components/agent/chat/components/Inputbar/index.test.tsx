@@ -101,6 +101,7 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
 
   return (
     <div data-testid="inputbar-core">
+      <div data-testid="top-extra">{props.topExtra}</div>
       {props.showMetaTools ? (
         <>
           <button
@@ -191,7 +192,6 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
       </button>
       <div data-testid="left-extra">{props.leftExtra}</div>
       <div data-testid="trailing-meta">{props.trailingMeta}</div>
-      <div data-testid="top-extra">{props.topExtra}</div>
     </div>
   );
 }
@@ -3296,6 +3296,59 @@ describe("Inputbar", () => {
     expect(knowledgePanel.textContent).toContain("品牌产品资料");
     expect(knowledgePanel.textContent).toContain("已确认，可直接用于本轮生成");
     expect(container.textContent).not.toContain("知识包");
+  });
+
+  it("启用资料应在输入区直接显示当前资料和协同数量", async () => {
+    const { container } = renderInputbar({
+      knowledgePackSelection: {
+        enabled: true,
+        packName: "content-calendar",
+        workingDir: "/tmp/lime-project",
+        label: "内容运营资料",
+        status: "ready",
+        companionPacks: [
+          {
+            name: "founder-persona",
+            activation: "explicit",
+          },
+          {
+            name: "campaign-plan",
+            activation: "explicit",
+          },
+        ],
+      },
+      knowledgePackOptions: [
+        {
+          packName: "content-calendar",
+          label: "内容运营资料",
+          status: "ready",
+          runtimeMode: "data",
+        },
+        {
+          packName: "founder-persona",
+          label: "写作口吻资料",
+          status: "ready",
+          runtimeMode: "persona",
+        },
+        {
+          packName: "campaign-plan",
+          label: "活动资料",
+          status: "ready",
+          runtimeMode: "data",
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const visibleToggle = container.querySelector(
+      '[data-testid="top-extra"] [data-testid="inputbar-knowledge-pack-toggle"]',
+    ) as HTMLButtonElement | null;
+    expect(visibleToggle).toBeTruthy();
+    expect(visibleToggle?.textContent).toContain("资料：内容运营资料 +2");
+    expect(visibleToggle?.getAttribute("title")).toContain("内容运营资料");
   });
 
   it("项目资料控件应在英文界面读取 agent namespace 文案", async () => {

@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 echo "🔍 运行 AI 代码验证..."
 
 # 仅对暂存的文件运行验证

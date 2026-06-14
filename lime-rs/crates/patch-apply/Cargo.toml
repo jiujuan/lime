@@ -1,0 +1,17 @@
+[package]
+name = "patch-apply"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "patch_apply"
+path = "src/lib.rs"
+doctest = false
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,4 +1,7 @@
 use super::*;
+use app_server_protocol::ArtifactContentStatus;
+use app_server_protocol::ArtifactReadParams;
+use std::fs;
 
 #[tokio::test]
 async fn read_artifacts_indexes_latest_artifact_events_for_session() {

@@ -53,13 +53,13 @@ describe("agentRuntime transport", () => {
     const bridgeInvoke = vi.fn().mockResolvedValueOnce({ ok: true });
     const invokeCommand = createAgentRuntimeCommandInvoke({ bridgeInvoke });
 
-    await expect(invokeCommand("agent_runtime_list_sessions")).resolves.toEqual(
+    await expect(invokeCommand("app_server_drain_events")).resolves.toEqual(
       {
         ok: true,
       },
     );
 
-    expect(bridgeInvoke).toHaveBeenCalledWith("agent_runtime_list_sessions");
+    expect(bridgeInvoke).toHaveBeenCalledWith("app_server_drain_events");
   });
 
   it("command invoker 遇到自定义 bridge diagnostic facade 时应 fail closed", async () => {
@@ -72,11 +72,11 @@ describe("agentRuntime transport", () => {
     const invokeCommand = createAgentRuntimeCommandInvoke({ bridgeInvoke });
 
     await expect(
-      invokeCommand("agent_runtime_list_sessions", {
+      invokeCommand("retired_agent_runtime_command", {
         request: { workspaceId: "workspace-1" },
       }),
     ).rejects.toThrow(
-      "agent_runtime_list_sessions 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
+      "retired_agent_runtime_command 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
 
@@ -102,8 +102,8 @@ describe("agentRuntime transport", () => {
     const invoke = vi.fn().mockResolvedValueOnce(withArrayDiagnostic([]));
     const bridgeInvoke = createAgentRuntimeBridgeInvoke({ invoke });
 
-    await expect(bridgeInvoke("agent_runtime_list_sessions")).rejects.toThrow(
-      "agent_runtime_list_sessions 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
+    await expect(bridgeInvoke("retired_agent_runtime_command")).rejects.toThrow(
+      "retired_agent_runtime_command 尚未接入真实 Agent Runtime current 通道，收到 electron-host-diagnostic 诊断返回。",
     );
   });
 
@@ -130,9 +130,9 @@ describe("agentRuntime transport", () => {
     const invokeCommand = createAgentRuntimeCommandInvoke({ bridgeInvoke });
 
     await expect(
-      invokeCommand("agent_runtime_list_sessions", {
+      invokeCommand("retired_agent_runtime_command", {
         request: { workspaceId: "workspace-1" },
       }),
-    ).rejects.toThrow("agent_runtime_list_sessions returned an error envelope");
+    ).rejects.toThrow("retired_agent_runtime_command returned an error envelope");
   });
 });

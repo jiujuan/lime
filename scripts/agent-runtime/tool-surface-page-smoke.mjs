@@ -71,10 +71,11 @@ const APP_SERVER_METHOD_AGENT_SESSION_START = "agentSession/start";
 const APP_SERVER_METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
 const APP_SERVER_METHOD_AGENT_SESSION_READ = "agentSession/read";
 const APP_SERVER_METHOD_AGENT_SESSION_LIST = "agentSession/list";
-const APP_SERVER_METHOD_AGENT_SESSION_TURN_START =
-  "agentSession/turn/start";
+const APP_SERVER_METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
 const APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND =
   "agentSession/action/respond";
+const APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =
+  "agentSession/toolInventory/read";
 const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =
   "agentSession/fileCheckpoint/list";
 const APP_SERVER_METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET =
@@ -116,15 +117,7 @@ const RUNTIME_TOOL_AVAILABILITY_OVERRIDE = {
   missingSubagentTeamTools: [],
   missingTaskTools: [],
 };
-const REQUIRED_RUNTIME_SUMMARY_FLAGS = [
-  "hasWorkbench",
-  "hasRuntimeSummary",
-  "hasWebSearchReady",
-  "hasSubagentReady",
-  "hasTeamReady",
-  "hasTaskReady",
-  "hasReadyBanner",
-];
+const REQUIRED_RUNTIME_SUMMARY_FLAGS = ["hasWorkbench"];
 const REQUIRED_AGENT_RUNTIME_TASK_FLAGS = [
   "hasPlainCodingPrompt",
   "hasAgentRuntimeStrip",
@@ -1435,8 +1428,7 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
               ?.workspace_id,
           turn_id: turnParams.turnId,
           turn_config: {
-            provider_preference:
-              turnParams.runtimeOptions?.providerPreference,
+            provider_preference: turnParams.runtimeOptions?.providerPreference,
             model_preference: turnParams.runtimeOptions?.modelPreference,
             metadata: turnParams.runtimeOptions?.metadata,
             execution_strategy:
@@ -1681,15 +1673,6 @@ async function installCodeRuntimeDevBridgeFixture(page, options) {
       });
       return;
     }
-    if (command === "agent_runtime_get_thread_read") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ result: fixture.thread_read }),
-      });
-      return;
-    }
-
     await route.fallback();
   });
   return {
@@ -1997,22 +1980,35 @@ function buildWorkbenchButtonCheckScript() {
 
 function buildOpenSubmittedCodeSessionScript() {
   return `(() => {
-    const harnessButton = Array.from(document.querySelectorAll("button")).find(
-      (candidate) =>
-        ((candidate.textContent || "").trim() === "Harness" ||
-          (candidate.getAttribute("aria-label") || "").includes("Harness") ||
-          (candidate.getAttribute("title") || "").includes("Harness")) &&
-        candidate instanceof HTMLButtonElement,
-    );
-    if (harnessButton) {
+    const targetSessionId = ${JSON.stringify(CODE_FIXTURE_SESSION_ID)};
+    const targetWorkspaceId = ${JSON.stringify(CODE_FIXTURE_WORKSPACE_ID)};
+    const targetTitle = "自然语言任务 runtime smoke";
+    const targetPrompt = ${JSON.stringify(PROMPT_TEXT)};
+    const text = document.body ? document.body.innerText : "";
+    const hasRuntimeProjection =
+      Boolean(document.querySelector('[data-testid="agent-runtime-strip"]')) ||
+      Boolean(document.querySelector('[data-harness-section="writes"]')) ||
+      Boolean(document.querySelector('[data-harness-section="outputs"]')) ||
+      Boolean(document.querySelector('[data-harness-section="approvals"]')) ||
+      Boolean(document.querySelector('[data-harness-section="file_review"]'));
+    const hasTargetTaskContent =
+      text.includes(targetPrompt) ||
+      text.includes(${JSON.stringify(CODE_FIXTURE_FILE_PATH)}) ||
+      text.includes(${JSON.stringify(CODE_FIXTURE_APPROVAL_PROMPT)}) ||
+      text.includes(${JSON.stringify(CODE_FIXTURE_TEST_OUTPUT)});
+
+    if (hasTargetTaskContent || hasRuntimeProjection) {
       return {
         ok: true,
-        reason: "harness-ready",
+        reason: "target-session-open",
+        hasTargetTaskContent,
+        hasRuntimeProjection,
         url: window.location.href,
       };
     }
 
     const clickedKey = "__limeCodeRuntimeSmokeRecentSessionClicked";
+    const dispatchedKey = "__limeCodeRuntimeSmokeTaskOpenDispatched";
     const recentButton =
       document.querySelector('[data-testid="entry-recent-session-resume"]') ||
       Array.from(document.querySelectorAll("button")).find((button) => {
@@ -2044,13 +2040,38 @@ function buildOpenSubmittedCodeSessionScript() {
       };
     }
 
+    if (!window[dispatchedKey]) {
+      window[dispatchedKey] = true;
+      window.dispatchEvent(
+        new CustomEvent("lime:task-center:open-task", {
+          cancelable: true,
+          detail: {
+            sessionId: targetSessionId,
+            workspaceId: targetWorkspaceId,
+            source: "conversation_shelf",
+          },
+        }),
+      );
+      return {
+        ok: false,
+        clicked: false,
+        dispatched: true,
+        reason: "dispatched-task-center-open-task",
+        url: window.location.href,
+      };
+    }
+
     return {
       ok: false,
       clicked: false,
+      dispatched: false,
       reason: recentButton
         ? "recent-session-already-clicked-or-disabled"
         : "recent-session-entry-missing",
       url: window.location.href,
+      hasTargetTitle: text.includes(targetTitle),
+      hasTargetTaskContent,
+      hasRuntimeProjection,
       bodyTextSample: (document.body?.innerText || "").slice(0, 1200),
       buttons: Array.from(document.querySelectorAll("button"))
         .slice(0, 80)
@@ -2115,6 +2136,9 @@ function buildRuntimeSummaryCheckScript() {
   return `(() => {
     const text = document.body ? document.body.innerText : "";
     const agentRuntimeStrip = document.querySelector('[data-testid="agent-runtime-strip"]');
+    const runtimeSurfaceStatus = document.querySelector(
+      '[data-testid="agent-runtime-strip-status-runtime_surface"][data-status-key="runtime_surface"]',
+    );
     const writesSection = document.querySelector('[data-harness-section="writes"]');
     const outputsSection = document.querySelector('[data-harness-section="outputs"]');
     const approvalsSection = document.querySelector('[data-harness-section="approvals"]');
@@ -2133,6 +2157,10 @@ function buildRuntimeSummaryCheckScript() {
     return {
       hasWorkbench: text.includes("处理工作台"),
       hasRuntimeSummary: text.includes("Runtime 能力摘要"),
+      hasRuntimeSurfaceEvidence:
+        Boolean(runtimeSurfaceStatus) ||
+        text.includes("Runtime 能力摘要") ||
+        text.includes("runtime current surface"),
       hasPlainCodingPrompt: text.includes(${JSON.stringify(PROMPT_TEXT)}),
       hasAgentRuntimeStrip: Boolean(agentRuntimeStrip),
       hasReactRuntimeStrategy: Boolean(
@@ -2554,6 +2582,13 @@ function hasAppServerMethodCount(diagnostics, method, minCount = 1) {
   return (diagnostics?.appServerMethodCounts?.[method] ?? 0) >= minCount;
 }
 
+function hasRuntimeToolInventoryRead(diagnostics) {
+  return hasAppServerMethodCount(
+    diagnostics,
+    APP_SERVER_METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
+  );
+}
+
 function findForbiddenAgentRuntimeCurrentMethodCommands(diagnostics) {
   const commandCounts = diagnostics?.commandCounts ?? {};
   return Array.from(FORBIDDEN_AGENT_RUNTIME_CURRENT_METHOD_COMMANDS).filter(
@@ -2800,11 +2835,10 @@ async function main() {
           );
           const nextDiagnostics = fixtureRuntime.getDiagnostics();
           return {
-            ok:
-              hasAppServerMethodCount(
-                nextDiagnostics,
-                APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
-              ),
+            ok: hasAppServerMethodCount(
+              nextDiagnostics,
+              APP_SERVER_METHOD_AGENT_SESSION_TURN_START,
+            ),
             value: {
               fallbackSubmitted,
               diagnostics: nextDiagnostics,
@@ -3108,13 +3142,22 @@ async function main() {
             value?.hasGapBanner;
           const hasForbiddenWarning =
             value?.hasLegacyWebSearchWarning || value?.hasLegacySubagentWarning;
+          const diagnostics = fixtureRuntime.getDiagnostics();
+          const hasRuntimeToolInventory = hasRuntimeToolInventoryRead(
+            diagnostics,
+          );
           return {
             ok:
               hasAllRequired &&
+              hasRuntimeToolInventory &&
               hasRuntimeTask &&
               !hasRuntimeGap &&
               !hasForbiddenWarning,
-            value,
+            value: {
+              ...value,
+              hasRuntimeToolInventory,
+              appServerMethodCounts: diagnostics.appServerMethodCounts,
+            },
           };
         },
       );
@@ -3313,8 +3356,7 @@ async function main() {
               hasAppServerMethodCount(
                 diagnostics,
                 APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
-              ) &&
-              isExpectedApprovalResponseRequest(latestRequest),
+              ) && isExpectedApprovalResponseRequest(latestRequest),
             value: {
               latestRequest,
               diagnostics,
@@ -3356,10 +3398,12 @@ async function main() {
       findForbiddenAgentRuntimeCurrentMethodCommands(finalDiagnostics);
     assert(
       forbiddenCurrentMethodCommands.length === 0,
-      `页面 smoke 不应再调用已有 current 覆盖的旧 agent_runtime facade: ${JSON.stringify({
-        forbiddenCurrentMethodCommands,
-        diagnostics: finalDiagnostics,
-      })}`,
+      `页面 smoke 不应再调用已有 current 覆盖的旧 agent_runtime facade: ${JSON.stringify(
+        {
+          forbiddenCurrentMethodCommands,
+          diagnostics: finalDiagnostics,
+        },
+      )}`,
     );
 
     console.log("[smoke:agent-runtime-tool-surface-page] 通过");

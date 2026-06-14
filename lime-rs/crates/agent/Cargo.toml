@@ -11,6 +11,7 @@ lime-mcp.workspace = true
 lime-services.workspace = true
 lime-providers.workspace = true
 lime-skills.workspace = true
+patch-apply.workspace = true
 aster.workspace = true
 rmcp.workspace = true
 serde.workspace = true

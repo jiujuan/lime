@@ -3,7 +3,6 @@
 //! 定义 JSON-RPC 风格的请求/响应结构，支持 Agent 和 Scheduler 操作
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Gateway RPC 请求
 ///
@@ -131,7 +130,17 @@ impl RpcError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentRunParams {
     /// 会话 ID（可选，用于连续对话）
+    #[serde(default, alias = "sessionId")]
     pub session_id: Option<String>,
+    /// 逻辑线程 ID（可选）
+    #[serde(default, alias = "threadId", skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+    /// 逻辑回合 ID（可选）
+    #[serde(default, alias = "turnId", skip_serializing_if = "Option::is_none")]
+    pub turn_id: Option<String>,
+    /// 触发调度 ID（可选）
+    #[serde(default, alias = "scheduleId", skip_serializing_if = "Option::is_none")]
+    pub schedule_id: Option<String>,
     /// 用户消息
     #[serde(default)]
     pub message: String,
@@ -141,13 +150,67 @@ pub struct AgentRunParams {
     /// 模型名称（可选）
     pub model: Option<String>,
     /// 系统提示词（可选）
+    #[serde(default, alias = "systemPrompt")]
     pub system_prompt: Option<String>,
+    /// 是否以本次系统提示词覆盖默认分层提示词
+    #[serde(
+        default,
+        alias = "systemPromptOverride",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub system_prompt_override: Option<bool>,
     /// 温度参数（可选）
     pub temperature: Option<f32>,
     /// 最大 token 数（可选）
+    #[serde(default, alias = "maxTokens")]
     pub max_tokens: Option<u32>,
+    /// 最大自动回合数（可选）
+    #[serde(default, alias = "maxTurns", skip_serializing_if = "Option::is_none")]
+    pub max_turns: Option<u32>,
     /// 是否开启联网搜索策略（可选）
+    #[serde(default, alias = "webSearch")]
     pub web_search: Option<bool>,
+    /// 联网搜索模式（disabled/allowed/required）
+    #[serde(default, alias = "searchMode", skip_serializing_if = "Option::is_none")]
+    pub search_mode: Option<String>,
+    /// 工作目录（可选，必须由执行器校验为绝对路径后使用）
+    #[serde(default, alias = "workingDir", skip_serializing_if = "Option::is_none")]
+    pub working_dir: Option<String>,
+    /// 推理强度（可选）
+    #[serde(
+        default,
+        alias = "reasoningEffort",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub reasoning_effort: Option<String>,
+    /// 工具审批策略（可选）
+    #[serde(
+        default,
+        alias = "approvalPolicy",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub approval_policy: Option<String>,
+    /// 沙箱策略（可选）
+    #[serde(
+        default,
+        alias = "sandboxPolicy",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub sandbox_policy: Option<String>,
+    /// 协作模式（可选）
+    #[serde(
+        default,
+        alias = "collaborationMode",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub collaboration_mode: Option<String>,
+    /// 结构化输出 schema（可选）
+    #[serde(
+        default,
+        alias = "outputSchema",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub output_schema: Option<serde_json::Value>,
     /// 是否流式响应
     #[serde(default)]
     pub stream: bool,
@@ -224,8 +287,6 @@ pub struct SessionGetParams {
 pub struct CronRunParams {
     /// 任务 ID
     pub task_id: String,
-    /// 任务参数（可选）
-    pub params: Option<HashMap<String, serde_json::Value>>,
 }
 
 /// Cron 健康查询参数
@@ -330,129 +391,6 @@ pub struct SessionInfo {
     pub updated_at: String,
 }
 
-/// Cron 任务列表结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CronListResult {
-    /// 任务列表
-    pub tasks: Vec<CronTaskInfo>,
-}
-
-/// Cron 任务信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CronTaskInfo {
-    /// 任务 ID
-    pub task_id: String,
-    /// 任务名称
-    pub name: String,
-    /// Cron 表达式
-    pub schedule: String,
-    /// 是否启用
-    pub enabled: bool,
-    /// 最后运行时间
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_run: Option<String>,
-    /// 下次运行时间
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_run: Option<String>,
-}
-
-/// Cron 运行结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CronRunResult {
-    /// 任务 ID
-    pub task_id: String,
-    /// 执行 ID
-    pub execution_id: String,
-    /// 是否成功启动
-    pub started: bool,
-}
-
-/// Cron 健康结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CronHealthResult {
-    /// 总任务数
-    pub total_tasks: usize,
-    /// 待执行任务数
-    pub pending_tasks: usize,
-    /// 运行中任务数
-    pub running_tasks: usize,
-    /// 成功任务数
-    pub completed_tasks: usize,
-    /// 失败任务数
-    pub failed_tasks: usize,
-    /// 取消任务数
-    pub cancelled_tasks: usize,
-    /// 冷却中的任务数
-    pub cooldown_tasks: usize,
-    /// 悬挂运行任务数
-    pub stale_running_tasks: usize,
-    /// 最近 24h 失败任务数
-    pub failed_last_24h: usize,
-    /// 最近 24h 失败趋势（按小时）
-    pub failure_trend_24h: Vec<CronFailureTrendPoint>,
-    /// 告警列表
-    pub alerts: Vec<CronHealthAlert>,
-    /// 高风险任务
-    pub top_risky_tasks: Vec<CronRiskTaskInfo>,
-    /// 生成时间
-    pub generated_at: String,
-}
-
-/// Cron 高风险任务信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CronRiskTaskInfo {
-    /// 任务 ID
-    pub task_id: String,
-    /// 任务名称
-    pub name: String,
-    /// 当前状态
-    pub status: String,
-    /// 连续失败次数
-    pub consecutive_failures: u32,
-    /// 重试次数
-    pub retry_count: u32,
-    /// 冷却截止时间
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub auto_disabled_until: Option<String>,
-    /// 更新时间
-    pub updated_at: String,
-}
-
-/// Cron 失败趋势点
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CronFailureTrendPoint {
-    /// 小时开始时间（RFC3339）
-    pub bucket_start: String,
-    /// 标签（HH:mm）
-    pub label: String,
-    /// 错误数（error）
-    pub error_count: usize,
-    /// 超时数（timeout）
-    pub timeout_count: usize,
-}
-
-/// Cron 健康告警
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CronHealthAlert {
-    /// 告警编码
-    pub code: String,
-    /// 严重级别（info / warning / critical）
-    pub severity: String,
-    /// 告警消息
-    pub message: String,
-    /// 当前值
-    pub current_value: usize,
-    /// 阈值
-    pub threshold: usize,
-}
-
 /// Token 使用量
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -514,6 +452,64 @@ mod tests {
         let request: GatewayRpcRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.method, RpcMethod::AgentRun);
         assert!(request.params.is_some());
+    }
+
+    #[test]
+    fn test_deserialize_agent_run_runtime_context_aliases() {
+        let json = r#"{
+            "sessionId": "session-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "scheduleId": "schedule-1",
+            "message": "Hello",
+            "systemPrompt": "保持简洁",
+            "systemPromptOverride": true,
+            "maxTokens": 1024,
+            "maxTurns": 3,
+            "webSearch": true,
+            "searchMode": "required",
+            "workingDir": "/tmp/workspace",
+            "reasoningEffort": "high",
+            "approvalPolicy": "on-request",
+            "sandboxPolicy": "workspace-write",
+            "collaborationMode": "solo",
+            "outputSchema": {"type": "object"},
+            "sourceMetadata": {"origin": "test"}
+        }"#;
+
+        let params: AgentRunParams = serde_json::from_str(json).unwrap();
+
+        assert_eq!(params.session_id.as_deref(), Some("session-1"));
+        assert_eq!(params.thread_id.as_deref(), Some("thread-1"));
+        assert_eq!(params.turn_id.as_deref(), Some("turn-1"));
+        assert_eq!(params.schedule_id.as_deref(), Some("schedule-1"));
+        assert_eq!(params.system_prompt.as_deref(), Some("保持简洁"));
+        assert_eq!(params.system_prompt_override, Some(true));
+        assert_eq!(params.max_tokens, Some(1024));
+        assert_eq!(params.max_turns, Some(3));
+        assert_eq!(params.web_search, Some(true));
+        assert_eq!(params.search_mode.as_deref(), Some("required"));
+        assert_eq!(params.working_dir.as_deref(), Some("/tmp/workspace"));
+        assert_eq!(params.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(params.approval_policy.as_deref(), Some("on-request"));
+        assert_eq!(params.sandbox_policy.as_deref(), Some("workspace-write"));
+        assert_eq!(params.collaboration_mode.as_deref(), Some("solo"));
+        assert_eq!(
+            params
+                .output_schema
+                .as_ref()
+                .and_then(|value| value.get("type"))
+                .and_then(serde_json::Value::as_str),
+            Some("object")
+        );
+        assert_eq!(
+            params
+                .source_metadata
+                .as_ref()
+                .and_then(|value| value.get("origin"))
+                .and_then(serde_json::Value::as_str),
+            Some("test")
+        );
     }
 
     #[test]

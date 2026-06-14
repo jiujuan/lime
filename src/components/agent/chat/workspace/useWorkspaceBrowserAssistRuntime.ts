@@ -202,6 +202,7 @@ interface UseWorkspaceBrowserAssistRuntimeParams {
   setLayoutMode: Dispatch<SetStateAction<LayoutMode>>;
   upsertGeneralArtifact: (artifact: Artifact) => void;
   generalBrowserAssistProfileKey: string;
+  onBrowserWorkbenchOpenRequest?: (url: string | null) => void;
 }
 
 interface WorkspaceBrowserAssistRuntimeResult {
@@ -231,6 +232,7 @@ export function useWorkspaceBrowserAssistRuntime({
   messages,
   upsertGeneralArtifact,
   generalBrowserAssistProfileKey,
+  onBrowserWorkbenchOpenRequest,
 }: UseWorkspaceBrowserAssistRuntimeParams): WorkspaceBrowserAssistRuntimeResult {
   const [browserAssistLaunching, setBrowserAssistLaunching] = useState(false);
   const [siteSkillExecutionState, setSiteSkillExecutionState] =
@@ -875,6 +877,7 @@ export function useWorkspaceBrowserAssistRuntime({
             : navigationMode === "best-effort"
               ? resolveBrowserAssistLaunchUrl(sourceText)
               : null;
+        onBrowserWorkbenchOpenRequest?.(targetUrl);
         const artifactMeta = asRecord(browserAssistArtifact?.meta);
         const artifactSessionId = readFirstString(
           artifactMeta ? [artifactMeta] : [],
@@ -978,6 +981,7 @@ export function useWorkspaceBrowserAssistRuntime({
         generalBrowserAssistProfileKey,
         attachExistingSessionBrowserAssist,
         navigateBrowserAssistCanvasToUrl,
+        onBrowserWorkbenchOpenRequest,
         openBrowserAssistCanvas,
         projectId,
         sessionId,

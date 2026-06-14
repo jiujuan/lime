@@ -550,7 +550,7 @@ function buildRuntimeArtifactReplayEvents(
           artifactRef,
           workspacePatch,
           contentFactoryWorkspacePatch: workspacePatch,
-          source: "agent_runtime_artifact_replay",
+          source: "app_server_artifact_replay",
         },
       },
     ];
@@ -641,7 +641,7 @@ function buildRuntimeToolCallReplayEvents(
           : `工具 ${toolName} 状态已回写`,
         refs: [`tool:${id}`],
         payload: {
-          source: "agent_runtime_tool_call_replay",
+          source: "app_server_tool_call_replay",
           toolCall,
           toolName,
           outputPreview,

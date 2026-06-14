@@ -15,6 +15,7 @@ const DEFAULTS = {
 };
 
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const METHOD_WORKSPACE_ENSURE = "workspace/ensure";
 
 const ONBOARDING_VERSION = "1.1.0";
 const USER_FACING_FORBIDDEN_TEXT = [
@@ -307,6 +308,104 @@ async function waitText(page, options, label, needles) {
   }
 }
 
+async function waitAgentKnowledgeSelection(
+  page,
+  options,
+  { title, companionCount },
+) {
+  const toggle = page
+    .locator('[data-testid="inputbar-knowledge-pack-toggle"]')
+    .first();
+  try {
+    await toggle.waitFor({ state: "attached", timeout: options.timeoutMs });
+  } catch {
+    const diagnostics = await collectAgentPageDiagnostics(page);
+    throw new Error(
+      `Agent 创作页未挂载项目资料按钮；诊断：${JSON.stringify(diagnostics, null, 2)}`,
+    );
+  }
+
+  try {
+    await page.waitForFunction(
+      ({ expectedTitle, expectedCompanionCount }) => {
+        const element = document.querySelector(
+          '[data-testid="inputbar-knowledge-pack-toggle"]',
+        );
+        if (!element) {
+          return false;
+        }
+
+        const text = [
+          element.textContent || "",
+          element.getAttribute("title") || "",
+          element.getAttribute("aria-label") || "",
+        ].join("\n");
+
+        return (
+          text.includes(expectedTitle) &&
+          text.includes(`+${expectedCompanionCount}`)
+        );
+      },
+      { expectedTitle: title, expectedCompanionCount: companionCount },
+      { timeout: options.timeoutMs },
+    );
+  } catch {
+    const html = await toggle
+      .evaluate((element) => element.outerHTML)
+      .catch(() => "");
+    const diagnostics = await collectAgentPageDiagnostics(page);
+    throw new Error(
+      `Agent 创作页未显示当前资料选择 ${JSON.stringify({ title, companionCount })}；资料按钮：${html.slice(0, 1200)}；诊断：${JSON.stringify(diagnostics, null, 2)}`,
+    );
+  }
+}
+
+async function collectAgentPageDiagnostics(page) {
+  return page
+    .evaluate(() => {
+      const testIds = [
+        "inputbar-knowledge-pack-toggle",
+        "inputbar-knowledge-organize",
+        "workspace-inline-input-slot",
+        "general-workbench-input-overlay",
+      ];
+      const storageKeys = [
+        "agent_last_project_id",
+        "lime-resource-project-id",
+        "lime.knowledge.working-dir",
+      ];
+      const storage = Object.fromEntries(
+        storageKeys.map((key) => [key, window.localStorage.getItem(key)]),
+      );
+      const matchingSessionKeys = Object.fromEntries(
+        Object.keys(window.sessionStorage)
+          .filter(
+            (key) =>
+              key.startsWith("aster_messages_") ||
+              key.startsWith("aster_curr_sessionId_") ||
+              key.startsWith("aster_last_sessionId_"),
+          )
+          .map((key) => [key, window.sessionStorage.getItem(key)]),
+      );
+      return {
+        url: window.location.href,
+        title: document.title,
+        testIds: Object.fromEntries(
+          testIds.map((id) => [
+            id,
+            document.querySelectorAll(`[data-testid="${id}"]`).length,
+          ]),
+        ),
+        storage,
+        matchingSessionKeys,
+        textPreview: (document.body?.innerText || "").slice(0, 2400),
+      };
+    })
+    .catch((error) => ({
+      error: error instanceof Error ? error.message : String(error),
+    }));
+}
+
 async function assertNoLeak(page, label) {
   const mainText =
     (await page
@@ -397,16 +496,15 @@ async function prepareProject(options) {
   const workingDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "lime-knowledge-product-e2e-"),
   );
-  const project = await invoke(options, "workspace_create", {
-    request: {
-      name: `Knowledge Product E2E ${Date.now()}`,
-      rootPath: workingDir,
-      workspaceType: "temporary",
-    },
+  const ensureResult = await invokeAppServerMethod(options, METHOD_WORKSPACE_ENSURE, {
+    name: `Knowledge Product E2E ${Date.now()}`,
+    rootPath: workingDir,
+    workspaceType: "temporary",
   });
+  const project = ensureResult?.workspace;
   const projectId = String(project?.id || "").trim();
   if (!projectId) {
-    throw new Error("workspace_create 未返回项目 ID");
+    throw new Error(`${METHOD_WORKSPACE_ENSURE} 未返回项目 ID`);
   }
   const projectRoot =
     String(project?.rootPath || project?.root_path || workingDir).trim() ||
@@ -444,6 +542,30 @@ async function run() {
     context = await browser.newContext({
       viewport: { width: 1440, height: 960 },
     });
+    await context.addInitScript(
+      ({ nextProjectId, nextProjectRoot, onboardingVersion }) => {
+        window.localStorage.setItem("lime_onboarding_complete", "true");
+        window.localStorage.setItem(
+          "lime_onboarding_version",
+          onboardingVersion,
+        );
+        window.localStorage.setItem("lime_user_profile", "developer");
+        window.localStorage.setItem(
+          "lime.knowledge.working-dir",
+          nextProjectRoot,
+        );
+        window.localStorage.setItem(
+          "agent_last_project_id",
+          JSON.stringify(nextProjectId),
+        );
+        window.localStorage.setItem("lime-resource-project-id", nextProjectId);
+      },
+      {
+        nextProjectId: projectId,
+        nextProjectRoot: projectRoot,
+        onboardingVersion: ONBOARDING_VERSION,
+      },
+    );
     const page = await context.newPage();
     const consoleErrors = [];
     const mockMessages = [];
@@ -465,15 +587,22 @@ async function run() {
     await page.goto(options.appUrl, { waitUntil: "domcontentloaded" });
     await page.evaluate(
       ({ nextProjectId, nextProjectRoot, onboardingVersion }) => {
-        localStorage.setItem("lime_onboarding_complete", "true");
-        localStorage.setItem("lime_onboarding_version", onboardingVersion);
-        localStorage.setItem("lime_user_profile", "developer");
-        localStorage.setItem("lime.knowledge.working-dir", nextProjectRoot);
-        localStorage.setItem(
+        window.localStorage.setItem("lime_onboarding_complete", "true");
+        window.localStorage.setItem(
+          "lime_onboarding_version",
+          onboardingVersion,
+        );
+        window.localStorage.setItem("lime_user_profile", "developer");
+        window.localStorage.setItem(
+          "lime.knowledge.working-dir",
+          nextProjectRoot,
+        );
+        window.localStorage.setItem(
           "agent_last_project_id",
           JSON.stringify(nextProjectId),
         );
-        localStorage.setItem("lime-resource-project-id", nextProjectId);
+        window.localStorage.setItem("lime-resource-project-id", nextProjectId);
+        window.sessionStorage.clear();
       },
       {
         nextProjectId: projectId,
@@ -597,9 +726,11 @@ async function run() {
     await page
       .getByRole("button", { name: "确认使用", exact: true })
       .click({ timeout: options.timeoutMs });
+    await waitAgentKnowledgeSelection(page, options, {
+      title: PACKS.ready.title,
+      companionCount: 2,
+    });
     await waitText(page, options, "Agent 创作页", [
-      `资料：${PACKS.ready.title}`,
-      "+2",
       "保存到项目资料",
       "事实：该结果来自当前 Agent 对话",
     ]);

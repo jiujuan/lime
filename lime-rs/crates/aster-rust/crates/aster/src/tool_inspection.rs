@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::config::AsterMode;
 use crate::conversation::message::{Message, ToolRequest};
@@ -246,6 +246,8 @@ pub fn apply_inspection_results_to_permissions(
         all_requests.insert(req.id.clone(), req.clone());
     }
 
+    let mut blocked_by_non_permission: HashSet<String> = HashSet::new();
+
     // Process inspection results
     for result in inspection_results {
         let request_id = &result.tool_request_id;
@@ -262,6 +264,7 @@ pub fn apply_inspection_results_to_permissions(
 
         match result.action {
             InspectionAction::Deny => {
+                blocked_by_non_permission.insert(request_id.clone());
                 // Remove from approved and needs_approval, add to denied
                 permission_result
                     .approved
@@ -281,6 +284,7 @@ pub fn apply_inspection_results_to_permissions(
                 }
             }
             InspectionAction::RequireApproval(_) => {
+                blocked_by_non_permission.insert(request_id.clone());
                 // Remove from approved, add to needs_approval if not already there
                 permission_result
                     .approved
@@ -297,8 +301,24 @@ pub fn apply_inspection_results_to_permissions(
                 }
             }
             InspectionAction::Allow => {
-                // This inspector allows it, but don't override other inspectors' decisions
-                // If it's already denied or needs approval, leave it that way
+                // Allow may clear the baseline permission inspector decision, but it must not
+                // override a previous non-permission inspector that required approval or denied.
+                if blocked_by_non_permission.contains(request_id) {
+                    continue;
+                }
+                if let Some(request) = all_requests.get(request_id) {
+                    permission_result.denied.retain(|req| req.id != *request_id);
+                    permission_result
+                        .needs_approval
+                        .retain(|req| req.id != *request_id);
+                    if !permission_result
+                        .approved
+                        .iter()
+                        .any(|req| req.id == *request_id)
+                    {
+                        permission_result.approved.push(request.clone());
+                    }
+                }
             }
         }
     }
@@ -358,5 +378,85 @@ mod tests {
         assert_eq!(updated_result.approved.len(), 0);
         assert_eq!(updated_result.denied.len(), 1);
         assert_eq!(updated_result.denied[0].id, "req_1");
+    }
+
+    #[test]
+    fn allow_result_can_clear_permission_baseline_approval() {
+        let tool_request = ToolRequest {
+            id: "req_1".to_string(),
+            tool_call: Ok(CallToolRequestParam {
+                name: "test_tool".into(),
+                arguments: Some(object!({})),
+            }),
+            metadata: None,
+            tool_meta: None,
+        };
+
+        let permission_result = PermissionCheckResult {
+            approved: vec![],
+            needs_approval: vec![tool_request.clone()],
+            denied: vec![],
+        };
+
+        let inspection_results = vec![InspectionResult {
+            tool_request_id: "req_1".to_string(),
+            action: InspectionAction::Allow,
+            reason: "Workspace policy allows this tool".to_string(),
+            confidence: 1.0,
+            inspector_name: "workspace_tool_policy".to_string(),
+            finding_id: Some("workspace_tool_policy:allowed".to_string()),
+        }];
+
+        let updated_result =
+            apply_inspection_results_to_permissions(permission_result, &inspection_results);
+
+        assert_eq!(updated_result.approved.len(), 1);
+        assert!(updated_result.needs_approval.is_empty());
+        assert!(updated_result.denied.is_empty());
+    }
+
+    #[test]
+    fn allow_result_does_not_clear_previous_non_permission_block() {
+        let tool_request = ToolRequest {
+            id: "req_1".to_string(),
+            tool_call: Ok(CallToolRequestParam {
+                name: "test_tool".into(),
+                arguments: Some(object!({})),
+            }),
+            metadata: None,
+            tool_meta: None,
+        };
+
+        let permission_result = PermissionCheckResult {
+            approved: vec![],
+            needs_approval: vec![tool_request.clone()],
+            denied: vec![],
+        };
+
+        let inspection_results = vec![
+            InspectionResult {
+                tool_request_id: "req_1".to_string(),
+                action: InspectionAction::RequireApproval(Some("security check".to_string())),
+                reason: "Security inspector requires approval".to_string(),
+                confidence: 0.9,
+                inspector_name: "security".to_string(),
+                finding_id: Some("SEC-001".to_string()),
+            },
+            InspectionResult {
+                tool_request_id: "req_1".to_string(),
+                action: InspectionAction::Allow,
+                reason: "Workspace policy allows this tool".to_string(),
+                confidence: 1.0,
+                inspector_name: "workspace_tool_policy".to_string(),
+                finding_id: Some("workspace_tool_policy:allowed".to_string()),
+            },
+        ];
+
+        let updated_result =
+            apply_inspection_results_to_permissions(permission_result, &inspection_results);
+
+        assert!(updated_result.approved.is_empty());
+        assert_eq!(updated_result.needs_approval.len(), 1);
+        assert!(updated_result.denied.is_empty());
     }
 }

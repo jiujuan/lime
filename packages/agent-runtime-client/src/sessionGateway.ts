@@ -7,6 +7,8 @@ import type {
   AgentSessionEventNotification,
   AgentSessionReadParams,
   AgentSessionReadResponse,
+  AgentSessionToolInventoryReadParams,
+  AgentSessionToolInventoryReadResponse,
   AgentSessionTurnCancelParams,
   AgentSessionTurnCancelResponse,
   AgentSessionTurnStartParams,
@@ -70,6 +72,10 @@ export type AgentRuntimeSessionGateway = {
     AgentSessionReadParams,
     AgentSessionReadResponse
   >;
+  readToolInventory?: AgentRuntimeGatewayMethod<
+    AgentSessionToolInventoryReadParams,
+    AgentSessionToolInventoryReadResponse
+  >;
   cancelTurn: AgentRuntimeGatewayMethod<
     AgentSessionTurnCancelParams,
     AgentSessionTurnCancelResponse
@@ -103,6 +109,13 @@ export function createAgentRuntimeClientFromSessionGateway(
       callAgentRuntimeSessionGateway(gateway.startTurn, params, options),
     readThread: (params, options) =>
       callAgentRuntimeSessionGateway(gateway.readSession, params, options),
+    readToolInventory: (params = {}, options) =>
+      callOptionalAgentRuntimeSessionGateway(
+        gateway.readToolInventory,
+        "readToolInventory",
+        params,
+        options,
+      ),
     cancelTurn: (params, options) =>
       callAgentRuntimeSessionGateway(gateway.cancelTurn, params, options),
     respondAction: (params, options) =>

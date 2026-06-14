@@ -42,9 +42,10 @@ impl RequestProcessor {
     ) -> Result<RpcDispatch, JsonRpcError> {
         self.ensure_initialized()?;
         let params: WechatLoginWaitParams = parse_params(params)?;
+        let runtime = self.runtime_arc();
         let response = self
             .runtime
-            .wait_wechat_channel_login(params)
+            .wait_wechat_channel_login(params, runtime)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

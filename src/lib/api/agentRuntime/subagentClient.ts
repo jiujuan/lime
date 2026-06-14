@@ -16,9 +16,9 @@ export interface AgentRuntimeSubagentClientDeps {
   invokeCommand?: AgentRuntimeCommandInvoke;
 }
 
-function assertSubagentControlMovedToAppServer(command: string): never {
+function assertSubagentControlMovedToAppServer(): never {
   throw new Error(
-    `${command} is retired from the production Agent Runtime gateway; public subagent control must use App Server current methods before it can be re-enabled.`,
+    "Public subagent control is retired from the production Agent Runtime gateway; public subagent control must use App Server current methods before it can be re-enabled.",
   );
 }
 
@@ -28,41 +28,31 @@ export function createSubagentClient({
   async function spawnAgentRuntimeSubagent(
     _request: AgentRuntimeSpawnSubagentRequest,
   ): Promise<AgentRuntimeSpawnSubagentResponse> {
-    return assertSubagentControlMovedToAppServer(
-      "agent_runtime_spawn_subagent",
-    );
+    return assertSubagentControlMovedToAppServer();
   }
 
   async function sendAgentRuntimeSubagentInput(
     _request: AgentRuntimeSendSubagentInputRequest,
   ): Promise<AgentRuntimeSendSubagentInputResponse> {
-    return assertSubagentControlMovedToAppServer(
-      "agent_runtime_send_subagent_input",
-    );
+    return assertSubagentControlMovedToAppServer();
   }
 
   async function waitAgentRuntimeSubagents(
     _request: AgentRuntimeWaitSubagentsRequest,
   ): Promise<AgentRuntimeWaitSubagentsResponse> {
-    return assertSubagentControlMovedToAppServer(
-      "agent_runtime_wait_subagents",
-    );
+    return assertSubagentControlMovedToAppServer();
   }
 
   async function resumeAgentRuntimeSubagent(
     _request: AgentRuntimeResumeSubagentRequest,
   ): Promise<AgentRuntimeResumeSubagentResponse> {
-    return assertSubagentControlMovedToAppServer(
-      "agent_runtime_resume_subagent",
-    );
+    return assertSubagentControlMovedToAppServer();
   }
 
   async function closeAgentRuntimeSubagent(
     _request: AgentRuntimeCloseSubagentRequest,
   ): Promise<AgentRuntimeCloseSubagentResponse> {
-    return assertSubagentControlMovedToAppServer(
-      "agent_runtime_close_subagent",
-    );
+    return assertSubagentControlMovedToAppServer();
   }
 
   return {

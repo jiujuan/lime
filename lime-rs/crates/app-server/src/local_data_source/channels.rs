@@ -26,11 +26,10 @@ use app_server_protocol::WechatLoginWaitParams;
 use app_server_protocol::WechatLoginWaitResponse;
 use app_server_protocol::WechatRuntimeModelSetParams;
 use app_server_protocol::WechatRuntimeModelSetResponse;
-use lime_agent::AsterAgentState;
 use lime_core::config::load_config;
 use lime_core::config::save_config;
-use lime_core::database::DbConnection;
 use lime_core::logger::LogStore;
+use lime_gateway::agent_runner::GatewayAgentRunnerHandle;
 use lime_gateway::discord;
 use lime_gateway::discord::DiscordGatewayState;
 use lime_gateway::feishu;
@@ -46,9 +45,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub(crate) struct GatewayChannelStates<'a> {
-    pub(crate) db: &'a DbConnection,
     pub(crate) logs: &'a Arc<RwLock<LogStore>>,
-    pub(crate) aster_agent_state: &'a AsterAgentState,
     pub(crate) telegram_gateway_state: &'a TelegramGatewayState,
     pub(crate) feishu_gateway_state: &'a FeishuGatewayState,
     pub(crate) discord_gateway_state: &'a DiscordGatewayState,
@@ -56,9 +53,8 @@ pub(crate) struct GatewayChannelStates<'a> {
 }
 
 pub(crate) struct WechatLoginRuntime<'a> {
-    pub(crate) db: &'a DbConnection,
     pub(crate) logs: &'a Arc<RwLock<LogStore>>,
-    pub(crate) aster_agent_state: &'a AsterAgentState,
+    pub(crate) agent_runner: GatewayAgentRunnerHandle,
     pub(crate) wechat_gateway_state: &'a WechatGatewayState,
     pub(crate) wechat_login_state: &'a WechatLoginState,
 }
@@ -66,6 +62,7 @@ pub(crate) struct WechatLoginRuntime<'a> {
 pub(crate) async fn start_gateway_channel(
     states: GatewayChannelStates<'_>,
     params: GatewayChannelStartParams,
+    agent_runner: GatewayAgentRunnerHandle,
 ) -> Result<GatewayChannelStatusResponse, RuntimeCoreError> {
     let channel = normalize_gateway_channel(&params.channel)?;
     let account_id = optional_trimmed(params.account_id);
@@ -81,8 +78,8 @@ pub(crate) async fn start_gateway_channel(
     let status = match channel.as_str() {
         "telegram" => telegram::start_gateway(
             states.telegram_gateway_state,
-            states.db.clone(),
             states.logs.clone(),
+            agent_runner.clone(),
             config,
             account_id,
             params.poll_timeout_secs,
@@ -92,8 +89,8 @@ pub(crate) async fn start_gateway_channel(
         .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
         "feishu" => feishu::start_gateway(
             states.feishu_gateway_state,
-            states.db.clone(),
             states.logs.clone(),
+            agent_runner.clone(),
             config,
             account_id,
             params.poll_timeout_secs,
@@ -103,8 +100,8 @@ pub(crate) async fn start_gateway_channel(
         .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
         "discord" => discord::start_gateway(
             states.discord_gateway_state,
-            states.db.clone(),
             states.logs.clone(),
+            agent_runner.clone(),
             config,
             account_id,
             params.poll_timeout_secs,
@@ -112,25 +109,17 @@ pub(crate) async fn start_gateway_channel(
         .await
         .map_err(data_error)
         .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
-        "wechat" => {
-            states
-                .aster_agent_state
-                .init_agent_with_db(states.db)
-                .await
-                .map_err(data_error)?;
-            wechat::start_gateway(
-                states.wechat_gateway_state,
-                states.db.clone(),
-                states.aster_agent_state.clone(),
-                states.logs.clone(),
-                config,
-                account_id,
-                params.poll_timeout_secs,
-            )
-            .await
-            .map_err(data_error)
-            .and_then(|status| serde_json::to_value(status).map_err(data_error))?
-        }
+        "wechat" => wechat::start_gateway(
+            states.wechat_gateway_state,
+            states.logs.clone(),
+            agent_runner.clone(),
+            config,
+            account_id,
+            params.poll_timeout_secs,
+        )
+        .await
+        .map_err(data_error)
+        .and_then(|status| serde_json::to_value(status).map_err(data_error))?,
         _ => unreachable!("normalize_gateway_channel restricts channel values"),
     };
     Ok(GatewayChannelStatusResponse { channel, status })
@@ -402,16 +391,10 @@ pub(crate) async fn wait_wechat_channel_login(
         }
         config.channels.wechat.enabled = true;
         save_config(&config).map_err(data_error)?;
-        runtime
-            .aster_agent_state
-            .init_agent_with_db(runtime.db)
-            .await
-            .map_err(data_error)?;
         wechat::start_gateway(
             runtime.wechat_gateway_state,
-            runtime.db.clone(),
-            runtime.aster_agent_state.clone(),
             runtime.logs.clone(),
+            runtime.agent_runner.clone(),
             config,
             Some(account_id),
             None,

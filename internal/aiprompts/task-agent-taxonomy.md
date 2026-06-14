@@ -15,7 +15,7 @@
 
 遇到以下任一情况时，先读本文件：
 
-- 调整 `agent_runtime_spawn_subagent`、`send_input`、`wait_agent`、`resume_agent`、`close_agent`
+- 调整 App Server / RuntimeCore / `lime-rs/crates/agent` 子代理 spawn、send input、wait、resume、close 能力
 - 调整自动化任务的创建、调度、执行、投递或运行历史
 - 调整 `ExecutionTracker`、`agent_runs`、执行状态聚合或 run 级读模型
 - 调整 `SchedulerService`、`scheduled_tasks`、`cron.run` 或任何“后台轮询 / 心跳执行”逻辑
@@ -32,7 +32,7 @@
 当前 Lime 只承认下面三类一等执行实体：
 
 1. `agent turn`
-   前台会话回合。统一走 `agent_runtime_submit_turn -> runtime_turn -> Query Loop` 主链。
+   前台会话回合。统一走 `agentSession/turn/start -> RuntimeCore -> Query Loop` 主链。
 
 2. `subagent turn`
    父会话派生出的 child session / teammate 回合。它是 `agent turn` 的协作变体，不是另一套执行引擎。
@@ -52,7 +52,7 @@
 
 **后续新增长时执行能力时，只允许落成 `agent turn`、`subagent turn` 或 `automation job` 三类之一；不允许再造第四类 runtime taxonomy。**
 
-补充迁移边界：`agent_runtime_*`、`automation_*`、`execution_run_*` 这类命令名可以作为迁移期 surface，但 `lime-rs/src/commands/**` 不是新的 taxonomy、coordinator 或 runtime 实现目录。本文列出的 `aster_agent_cmd/**`、`automation_cmd.rs`、`execution_run_cmd.rs` 只作为现有行为锚点和清理参考；新增长时执行、子代理、自动化或执行摘要能力应进入 RuntimeCore / services / App Server protocol，旧 wrapper 迁出后撤注册并删除。
+补充迁移边界：旧 `agent_runtime_*`、`automation_*`、`execution_run_*` 这类命令名只允许作为 retired guard、历史 evidence、测试 fixture 或受控迁移面；`lime-rs/src/commands/**` 已删除，不是新的 taxonomy、coordinator 或 runtime 实现目录。本文列出的 `aster_agent_cmd/**`、`automation_cmd.rs`、`execution_run_cmd.rs` 只作为历史锚点和清理参考；新增长时执行、子代理、自动化或执行摘要能力应进入 RuntimeCore / services / App Server protocol，不得恢复旧 wrapper。
 
 补充边界：
 
@@ -84,8 +84,9 @@
 ### 1. `agent turn`
 
 - `internal/aiprompts/query-loop.md`
-- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
+- App Server `agentSession/turn/start`
+- App Server RuntimeCore / AsterBackend
+- `lime-rs/crates/agent`
 
 固定规则：
 
@@ -95,9 +96,8 @@
 
 ### 2. `subagent turn`
 
-- `lime-rs/src/commands/aster_agent_cmd/subagent_runtime.rs`
-- `lime-rs/src/commands/aster_agent_cmd/command_api/subagent_api.rs`
-- `lime-rs/src/commands/aster_agent_cmd/tool_runtime/subagent_tools.rs`
+- App Server / RuntimeCore 子代理 session projection
+- `lime-rs/crates/agent` Team / subagent runtime support
 
 当前这里负责：
 

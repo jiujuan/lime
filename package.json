@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.67.0",
+  "version": "1.68.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -39,8 +39,6 @@
     "url": "https://github.com/limecloud/lime/issues"
   },
   "scripts": {
-    "generate:agent-runtime-clients": "node scripts/generate-agent-runtime-clients.mjs",
-    "check:agent-runtime-clients": "node scripts/generate-agent-runtime-clients.mjs --check",
     "generate:extension-site-adapters": "node scripts/generate-extension-site-adapter-runners.mjs",
     "check:extension-site-adapters": "node scripts/generate-extension-site-adapter-runners.mjs --check",
     "heatmap:project": "node scripts/project-heatmap.mjs",
@@ -52,7 +50,7 @@
     "generate:protocol-types": "node scripts/generate-protocol-types.mjs",
     "check:protocol-types": "node scripts/generate-protocol-types.mjs --check",
     "governance:import-boundaries": "node scripts/check-import-boundaries.mjs",
-    "predev": "npm run generate:agent-runtime-clients && npm run generate:extension-site-adapters && npm run verify:app-version && node scripts/ensure-dev-port.mjs",
+    "predev": "npm run generate:extension-site-adapters && npm run verify:app-version && node scripts/ensure-dev-port.mjs",
     "dev": "npm run electron:dev",
     "dev:renderer": "vite",
     "build": "npm run electron:build",
@@ -65,8 +63,8 @@
     "electron:build:app-server-assets": "node scripts/electron/prepare-app-server-assets.mjs",
     "electron:build:host:dev": "node scripts/electron/build-host.mjs --dev && npm run electron:build:assets",
     "electron:build:host": "npm --prefix \"packages/app-server-client\" run build && npm run typecheck:electron && node scripts/electron/build-host.mjs && npm run electron:build:assets && npm run electron:build:app-server-assets",
-    "electron:build": "npm run generate:agent-runtime-clients && npm run generate:extension-site-adapters && npm run verify:app-version && npm run build:renderer:electron && npm run electron:build:host",
-    "electron:build:smoke": "npm run generate:agent-runtime-clients && npm run generate:extension-site-adapters && npm run verify:app-version && npm run build:renderer:electron:smoke && npm run electron:build:host",
+    "electron:build": "npm run generate:extension-site-adapters && npm run verify:app-version && npm run build:renderer:electron && npm run electron:build:host",
+    "electron:build:smoke": "npm run generate:extension-site-adapters && npm run verify:app-version && npm run build:renderer:electron:smoke && npm run electron:build:host",
     "electron:package:dir": "npm run electron:build && node scripts/electron/run-package-dir.mjs",
     "electron:dist": "npm run electron:build && electron-forge make",
     "electron:make:zip-local-feed": "node scripts/electron/make-zip-local-feed.mjs",
@@ -90,7 +88,7 @@
     "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "test:frontend": "npm run lint && npm run typecheck && npm test",
     "test:bridge": "npm test -- src/lib/dev-bridge/safeInvoke.test.ts src/lib/desktop-host/core.test.ts",
-    "test:contracts": "npm run check:agent-runtime-clients && node scripts/check-app-server-client-contract.mjs && node scripts/check-command-contracts.mjs && node scripts/check-harness-contracts.mjs && npm run governance:modality-contracts && npm run governance:scripts && npm run governance:electron-release-workflow && npm run harness:cleanup-report:check && npm run docs:boundary",
+    "test:contracts": "node scripts/check-app-server-client-contract.mjs && node scripts/check-command-contracts.mjs && node scripts/check-harness-contracts.mjs && npm run governance:modality-contracts && npm run governance:scripts && npm run governance:electron-release-workflow && npm run harness:cleanup-report:check && npm run docs:boundary",
     "test:rust": "cargo test --manifest-path \"lime-rs/Cargo.toml\"",
     "test:rust:unit": "node scripts/run-rust-layer.mjs unit",
     "test:rust:integration": "node scripts/run-rust-layer.mjs integration",
@@ -229,8 +227,8 @@
     "@babel/standalone": "^7.29.0",
     "@floating-ui/react": "^0.27.16",
     "@limecloud/agent-runtime-client": "0.1.1",
-    "@limecloud/agent-runtime-projection": "0.1.0",
-    "@limecloud/agent-runtime-ui": "0.1.0",
+    "@limecloud/agent-runtime-projection": "0.1.1",
+    "@limecloud/agent-runtime-ui": "0.1.1",
     "@limecloud/agent-ui-contracts": "0.1.0",
     "@observablehq/plot": "^0.6.17",
     "@radix-ui/react-collapsible": "^1.1.12",

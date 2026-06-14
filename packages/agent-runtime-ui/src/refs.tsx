@@ -40,29 +40,52 @@ export function AgentUiRefList<TRef extends AgentUiRefView = AgentUiRefView>({
 
   return (
     <div className={className} aria-label={ariaLabel} data-ref-kind={refKind}>
-      {refs.map((ref) => (
-        <article
-          key={ref.id}
-          className="agent-ref-card"
-          data-ref-kind={refKind}
-          data-ref-id={ref.id}
-          data-source-event-id={ref.sourceEventId}
-          data-ref-status={ref.status}
-          data-content-ref={ref.contentRef}
-        >
-          <div>
-            <small>{refKind}</small>
-            <strong>{refTitle(ref)}</strong>
-            <em>{refMeta(ref)}</em>
-          </div>
-          {refPreview ? <p>{refPreview(ref)}</p> : null}
-          {onSelectRef ? (
-            <button type="button" className="agent-ref-action" onClick={() => onSelectRef(ref)}>
-              {refActionLabel ? refActionLabel(ref) : "Open"}
+      {refs.map((ref) => {
+        const handleSelect = () => onSelectRef?.(ref);
+        const content = (
+          <>
+            <span className="agent-ref-card-body">
+              <small>{refKind}</small>
+              <strong>{refTitle(ref)}</strong>
+              <em>{refMeta(ref)}</em>
+            </span>
+            {refPreview ? <span className="agent-ref-preview">{refPreview(ref)}</span> : null}
+            {onSelectRef ? <span className="agent-ref-action">{refActionLabel ? refActionLabel(ref) : "Open"}</span> : null}
+          </>
+        );
+
+        if (onSelectRef) {
+          return (
+            <button
+              key={ref.id}
+              type="button"
+              className="agent-ref-card"
+              data-ref-kind={refKind}
+              data-ref-id={ref.id}
+              data-source-event-id={ref.sourceEventId}
+              data-ref-status={ref.status}
+              data-content-ref={ref.contentRef}
+              onClick={handleSelect}
+            >
+              {content}
             </button>
-          ) : null}
-        </article>
-      ))}
+          );
+        }
+
+        return (
+          <article
+            key={ref.id}
+            className="agent-ref-card"
+            data-ref-kind={refKind}
+            data-ref-id={ref.id}
+            data-source-event-id={ref.sourceEventId}
+            data-ref-status={ref.status}
+            data-content-ref={ref.contentRef}
+          >
+            {content}
+          </article>
+        );
+      })}
     </div>
   );
 }

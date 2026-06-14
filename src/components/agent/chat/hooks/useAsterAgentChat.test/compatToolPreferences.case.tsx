@@ -132,7 +132,7 @@ describe("useAsterAgentChat 兼容接口 - tool preferences", () => {
     }
   });
 
-  it("thinking 旧开关已变更但 session 仍是旧值时也不随 turn 提交 thinking_enabled", async () => {
+  it("旧 thinking positional 开关已变更但 session 仍是旧值时也不随 turn 提交 thinking_enabled", async () => {
     const workspaceId = "ws-runtime-thinking-pending-sync";
     const topicId = "topic-runtime-thinking-pending-sync";
     mockGetAgentRuntimeSession.mockResolvedValue({
@@ -259,7 +259,7 @@ describe("useAsterAgentChat 兼容接口 - tool preferences", () => {
     }
   });
 
-  it("thinking 已变更且 metadata 显式携带时也应裁掉旧 thinking 偏好", async () => {
+  it("thinking 已变更且 metadata 显式携带时应迁移到 turn_config 并裁掉旧 metadata 偏好", async () => {
     const workspaceId = "ws-runtime-thinking-metadata-pending-sync";
     const topicId = "topic-runtime-thinking-metadata-pending-sync";
     mockGetAgentRuntimeSession.mockResolvedValue({
@@ -317,6 +317,10 @@ describe("useAsterAgentChat 兼容接口 - tool preferences", () => {
       });
 
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+          ?.thinking_enabled,
+      ).toBe(true);
       expect(
         (
           mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
@@ -458,7 +462,7 @@ describe("useAsterAgentChat 兼容接口 - tool preferences", () => {
     }
   });
 
-  it("webSearch 旧开关已变更但 session 仍是旧值时也不随 turn 提交 web_search", async () => {
+  it("旧 webSearch positional 开关已变更但 session 仍是旧值时也不随 turn 提交 web_search", async () => {
     const workspaceId = "ws-runtime-websearch-pending-sync";
     const topicId = "topic-runtime-websearch-pending-sync";
     mockGetAgentRuntimeSession.mockResolvedValue({
@@ -507,6 +511,80 @@ describe("useAsterAgentChat 兼容接口 - tool preferences", () => {
       expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
       expect(
         mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config?.web_search,
+      ).toBeUndefined();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("webSearch 已变更且 metadata 显式携带时应迁移到 turn_config 并裁掉旧 metadata 偏好", async () => {
+    const workspaceId = "ws-runtime-websearch-metadata-pending-sync";
+    const topicId = "topic-runtime-websearch-metadata-pending-sync";
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: topicId,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      execution_strategy: "react",
+      execution_runtime: {
+        session_id: topicId,
+        execution_strategy: "react",
+        recent_preferences: {
+          webSearch: false,
+          thinking: false,
+          task: false,
+          subagent: false,
+        },
+        source: "session",
+      },
+      messages: [],
+      turns: [],
+      items: [],
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await act(async () => {
+        await harness.getValue().switchTopic(topicId);
+      });
+      mockSubmitAgentRuntimeTurn.mockClear();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage(
+            "切换 webSearch metadata 后立即发送",
+            [],
+            false,
+            false,
+            false,
+            "react",
+            undefined,
+            undefined,
+            {
+              requestMetadata: {
+                harness: {
+                  preferences: {
+                    web_search: true,
+                  },
+                },
+              },
+            },
+          );
+      });
+
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      expect(
+        mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config?.web_search,
+      ).toBe(true);
+      expect(
+        (
+          mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0]?.turn_config
+            ?.metadata as {
+            harness?: { preferences?: { web_search?: boolean } };
+          } | null
+        )?.harness?.preferences?.web_search,
       ).toBeUndefined();
     } finally {
       harness.unmount();

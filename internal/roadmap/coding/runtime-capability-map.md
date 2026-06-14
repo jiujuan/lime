@@ -1,7 +1,7 @@
 # Coding Runtime 能力映射
 
-> 状态：draft
-> 更新时间：2026-06-12
+> 状态：active
+> 更新时间：2026-06-14
 
 ## 分类规则
 
@@ -26,26 +26,64 @@
 | Context compaction | RuntimeCore history / memory compaction | rewrite | 对齐 Lime memory / evidence / read model。 |
 | Review mode | coding review profile / task kind | rewrite | 作为模型槽位和 task mode，不新增 runtime。 |
 
+## Runtime 模块边界
+
+| 能力 | Lime current 落点 | 分类 | 当前状态 |
+| --- | --- | --- | --- |
+| Runtime facade | `lime-rs/crates/app-server/src/runtime.rs` | current | 已收缩到约 527 行，只保留核心类型、构造、共享 helper 和模块出口。不得继续承接领域业务逻辑。 |
+| Runtime domain logic | `lime-rs/crates/app-server/src/runtime/*.rs` | current | session、turn、gateway、exports、artifact、tool lifecycle、file system、project git 等分域模块已拆出。新增能力优先进入对应领域文件。 |
+| App data traits | `runtime/app_data.rs` + `runtime/app_data/*.rs` | current | `AppDataSource` 是组合 facade；分域 trait 是真实 owner，禁止把新接口直接堆到巨型 trait 区块。 |
+| Local data source impl | `local_data_source.rs` + `local_data_source/impls/*.rs` | current | 根文件保留结构体、初始化和共享 helper；分域 impl 已下沉，后续新增数据源实现必须进入 `impls/<domain>.rs` 或对应子模块。 |
+| Gateway inbound agent runner | `runtime/gateway_runner.rs` + `runtime/gateway.rs` | current | Telegram / Feishu / Discord / WeChat 通过 `GatewayAgentRunner` 调用 App Server current `RuntimeCore::start_turn`，不恢复旧 DB 参数 runner 或 legacy runtime。 |
+| 旧 Rust root | `lime-rs/src/**` | dead | 已删除，禁止恢复 wrapper、stub、compat facade 或旧命令注册。 |
+
+## 本地参考模块迁移清单
+
+本表只记录“可迁移能力”，不把任何参考仓库、参考 CLI 或参考产品名写成 Lime current owner。实际迁入时，执行计划必须单独记录来源路径、许可证、迁入文件和测试证据；本路线图只保留中性模块名和 Lime 落点。
+
+| 参考目录 | 可迁移内容 | Lime current owner | 分类 | 当前状态 |
+| --- | --- | --- | --- | --- |
+| `apply-patch` 模块 | patch grammar、streaming parser、patch apply replacement engine、场景 fixture | `patch-apply` crate + agent `apply_patch` tool + RuntimeBackend mirror + file checkpoint / evidence owner | copy | 已迁入中性 `patch-apply` crate（parser / streaming parser / seek sequence / apply service），并接入 agent current tool registry 与 App Server `runtime_backend/coding_events/patch.rs`：`patch.started.paths` 优先来自结构化 parser，非法 patch 优先分类为 `invalid_patch`；agent `apply_patch` tool 已委托 `patch-apply` 在 workdir 内真实 add/update/delete/move 文件，支持缺父目录创建、Unicode 标点模糊匹配和 path escape 拒绝，并输出多文件 `file.changed` metadata。每个文件变更已带 `checkpointRef/contentRef/diffRef`、工作区相对路径、内容预览、旧内容字段和结构化 diff 预览，RuntimeBackend mirror 会透传到 `file.changed`，由 RuntimeCore file checkpoint / evidence owner 消费。后续仍需补 GUI evidence。 |
+| `execpolicy` 模块 | prefix rule、network rule、policy decision | Policy service + RuntimeBackend policy facts | copy/rewrite | 基础 `permission.denied` / `sandbox.blocked` facts 已从 tool result 分类进入 RuntimeEvent，并透传 policy/profile/decision/platform/command diagnostics；agent tool orchestrator 已能把真实 `ToolRegistry::execute` 权限拒绝 / 安全拒绝 / 沙箱类失败合成结构化 policy metadata；执行前置 `ToolExecutionDecision` 已覆盖 shell approval 与 `read-only` sandbox 非只读 shell 阻断，主工具 inspector 复用同一 decision；`NativeAgentConfig.agent.tool_execution` 已由 App Server turn start 注入 turn metadata，并被 execution / orchestrator / inspector / inventory 消费，runtime `harness.executionPolicy` 仍高于持久化配置；App Server tool inventory 已有直接测试证明 persisted config 与 runtime override 的来源优先级；`execution/sandbox.rs` 已成为基础 sandbox 判定 owner；`execution/rules.rs` 已承接默认 policy rule catalog，并用 guard 测试确保规则只指向 current 已注册 canonical 工具，shell command classifier 已给危险命令输出结构化 rule/risk metadata；`execution/service.rs` 已支持持久化 `agent.tool_execution.shellCommandRules`、`organizationExecutionPolicy`、`userExecutionPolicy`、`executionPolicy`、`requestExecutionPolicy` 多来源合并，同风险下更靠近请求的规则覆盖上游 metadata；`ToolExecutionCommandRuleConfig.matchType` 已支持 `regex/prefix/exact`。仍需网络 rule catalog 管理和分平台 sandbox backend。 |
+| `file-search` 模块 | 异步文件搜索、增量 snapshot | search/context tool | copy | 待输出 `tool.result` + source refs。 |
+| `sandboxing` 模块 | sandbox policy transforms | sandbox manager + RuntimeEvent diagnostics | rewrite | 基础 `sandbox.blocked` event 已接入；`read-only` sandbox 下非只读 shell 命令已在执行前阻断并输出结构化 blocked metadata；`execution/sandbox.rs` 已集中 canonical sandbox label、shell command 文本抽取和只读命令分类，并由 agent execution 定向测试覆盖。仍需按 macOS / Windows / Linux 接真实 sandbox backend。 |
+| `exec` 模块 | JSONL / human event processor 思路 | RuntimeEvent adapter / smoke harness | reference | 只借事件输出思想，不复制协议 shape。 |
+| `code-mode-protocol` 模块 | session framing / response model | external harness adapter | reference | 只能 compat，不替代 App Server。 |
+| `code-mode-host` 模块 | host lifecycle idea | Desktop Host sidecar 管理 | reference | 只用于外部 harness 生命周期。 |
+
+## 终端型多 harness 参考能力
+
+另一个本地参考仓库的价值主要在“多模型 / 多 harness / 工作区任务治理”的产品和架构经验，而不是代码复制。它已经有 Provider、agent harness、MCP、workspace、terminal、remote apply/read 等较完整边界；Lime 只吸收可映射到 current 主链的部分。
+
+| 参考能力 | Lime current 落点 | 分类 | 说明 |
+| --- | --- | --- | --- |
+| 多 harness 选择 | `external_harness` diagnostics + RuntimeCore profile decision | reference | 只能作为兼容执行器选择诊断；Lime 主 turn owner 仍是 App Server / RuntimeCore。 |
+| 组织 / 用户命令规则合并 | Policy service command rules | rewrite | 持久化、组织、用户、runtime、请求级 `shellCommandRules` 与 tool override 已接入；`ToolExecutionPolicySource` / `commandRuleSource` 可输出 `organization/user/runtime/request` 来源，command rule 支持 `regex/prefix/exact`。后续补冲突解释和 network catalog。Lime 输出 `action.required`、`permission.denied` 或 `sandbox.blocked`。 |
+| MCP server 配置解析 | Tool inventory / MCP owner | rewrite | 只进入 Lime MCP owner，不让外部 harness 配置成为事实源。 |
+| 远程读文件 / 应用 diff | ExecutionBackend file / patch tool | reference | 可作为 remote backend 语义参考；输出仍是 `file.changed` / `patch.*` / artifact refs。 |
+| 工作区配置和 session 切换 | Workspace + RuntimeCore session owner | reference | 保持 Lime Workspace 边界，不复制终端 workspace 状态模型。 |
+| UI 视觉 / 终端面板 | Coding Workbench diagnostics / optional terminal surface | forbidden/reference | 不能把 Lime GUI 退回终端壳；只允许借鉴“运行明细可展开”的信息层级。 |
+
 ## 文件、补丁、命令
 
 | 参考能力 | Lime current 落点 | 分类 | 说明 |
 | --- | --- | --- | --- |
-| File read/write abstraction | ExecutionBackend file tool + artifact owner | copy | 所有写入产生 `file.changed` 和 checkpoint。 |
-| Patch apply engine | Patch service / file artifact / diff owner | copy | 失败必须结构化，不只写日志。 |
+| File read/write abstraction | RuntimeBackend mirror + ExecutionBackend file tool + artifact/checkpoint projection owner | copy | 第一刀已从 `Read/Write/Edit` 派生 `file.read/file.changed`；`file.changed` 已进入 RuntimeCore artifact/evidence 聚合与 file checkpoint API read/list/get/diff/restore 基础链路；previous content 已落到文件系统 checkpoint snapshot owner，restore 从 snapshot ref 回读后写回 live 文件；current timeline hydrate 已可从 persisted items 恢复 checkpoint snapshot refs，Basic Evidence Pack 已输出 file checkpoint snapshot artifact。后续补 GUI evidence。 |
+| Patch apply engine | `patch-apply` crate + agent `apply_patch` tool + RuntimeBackend mirror + file artifact / checkpoint / evidence owner | copy | 已复制 patch grammar、lenient heredoc parser、streaming parser、fuzzy seek sequence 和真实 apply service 到中性 crate；agent `apply_patch` tool 已接到该 current owner，RuntimeBackend mirror 已用 parser 提取 patch paths 和 `invalid_patch` 分类，并从 tool metadata 投影多文件 `file.changed`。per-file `checkpointRef/contentRef/diffRef` 与结构化 diff 预览已进入 RuntimeCore artifact / file checkpoint / evidence 主链；后续补 GUI evidence，失败必须结构化，不只写日志。 |
 | Diff summary | AgentUI projection `PatchView / FileChangeView` | rewrite | UI 从 patch/file facts 派生。 |
-| Shell command execution | Project Shell / ExecutionBackend command tool | copy | 必须接 policy、approval、output spill。 |
+| Shell command execution | RuntimeBackend tool mirror + Project Shell / ExecutionBackend command tool | copy | 已完成 Aster `Bash/PowerShell` tool lifecycle 到 `command.*` / `test.*` facts 的第一刀；大输出已可进入文件系统 output snapshot owner，hydrate 可恢复 output snapshot refs，Basic Evidence Pack 已输出 tool output snapshot artifact；`thread_read.commands/tests/pending_requests` 已进入 `CodingWorkbenchView` selector 与 Workspace adapter；policy/sandbox blocked 事件已有基础 diagnostics，真实工具拒绝 outcome 已携带 `eventClass/failureCategory/reasonCode/reason/command/cwd/platform` 等 metadata；`agent_tools::tool_orchestrator` 已在真实工具执行前接入 `ToolExecutionDecision`，shell 风险在 `on_request / unless_trusted / granular` 下会先输出 `action.required`，`read-only` sandbox 下非只读 shell 命令会先输出 `sandbox.blocked`，`never` 保持非人工确认路径；Aster 主工具 inspector 已复用该 decision；App Server current 配置中的 `agent.tool_execution` 已能影响 execution / inventory 的 effective policy；基础 sandbox 判定已收敛到 `execution/sandbox.rs`，policy resolver 已收敛到 `execution/service.rs`。仍需接完整多来源 Policy service、分平台 sandbox backend 与 P4 输出/日志/审批面板 evidence。 |
 | PTY resize/write/terminate | Project Shell APIs | reference | 仅用于用户显式 shell 或工具执行面。 |
 | Test output parsing | ExecutionBackend test tool | rewrite | 不从自由文本猜测，需要 status/exit/output refs。 |
-| Large output truncation | output ref / evidence ref | copy | 大输出进 ref，不重复刷 event。 |
+| Large output truncation | output ref / evidence ref | copy | 大输出进 ref，不重复刷 event；App Server runtime 已能把 tool terminal 大输出落到会话文件系统 snapshot，并在 `artifact/read(include_content=true)` 时回读完整内容；历史 hydrate 可从 `detail.outputs` 恢复 snapshot ref，Basic Evidence Pack 会把 `outputSnapshotFile` 作为文件化 evidence artifact。 |
 
 ## 权限与安全
 
 | 参考能力 | Lime current 落点 | 分类 | 说明 |
 | --- | --- | --- | --- |
 | Permission profile | App Server policy + Desktop Host snapshot | copy | 显式表达 read/write/network/shell。 |
-| Command approval policy | Policy service + `action.required` | copy | 用户选择必须回写 action owner。 |
-| Sandbox blocked event | `sandbox.blocked` RuntimeEvent | copy | UI 显示 blocked，不当作 assistant 文本。 |
-| Dangerous command rules | policy catalog / command classifier | rewrite | 使用 Lime policy owner，不让模型自行判定。 |
+| Command approval policy | Policy service + RuntimeCore action owner | copy | `action.required/resolved` 已进入 RuntimeCore guard，RuntimeBackend action response 会回写 Aster tool confirmation / elicitation owner；`thread_read.pending_requests / active_action_id` 已支持 hydrate；agent tool orchestrator 已接入执行前置 `ToolExecutionDecision`，并有 decision 层、orchestrator 层和 Aster inspector 层定向测试覆盖 shell approval policy；App Server turn context 会注入当前配置的 `agent.tool_execution`，避免默认产品路径只依赖请求 metadata；Aster 库内 `handle_approval_tool_requests_should_resume_after_manual_confirmation` 已证明人工确认后工具会继续入队执行；仍需补完整 Policy service、分平台 sandbox backend 和 UI 侧审批后续跑 evidence。 |
+| Sandbox blocked event | `sandbox.blocked` RuntimeEvent | copy | tool policy/sandbox 类失败会在 `tool.failed` 前派生 blocked fact，并携带 `sandboxPolicy/platform/command/diagnostics` 基础字段；`read-only` sandbox 下非只读 shell 命令已在真实执行前输出 blocked metadata；UI 显示 blocked，不当作 assistant 文本。 |
+| Dangerous command rules | policy catalog / command classifier | rewrite | `execution/rules.rs` 已提供基础 shell command classifier，能输出 git state mutation、递归/强制删除、提权、网络下载、权限变更和包管理器变更等风险 metadata；`shellCommandRules` 可用 `regex/prefix/exact` 补充持久化 / 组织 / 用户 / runtime / 请求级规则，并按来源优先级输出 metadata；后续需接更细粒度 network policy。 |
 | Network policy | Provider / tool policy | rewrite | 联网能力由 runtime tool policy 决定。 |
 | Secret redaction | evidence / projection sanitation | copy | raw payload 不得进入 UI projection。 |
 
@@ -80,7 +118,7 @@
 
 ## 迁移优先级
 
-### P0：先 copy / rewrite runtime spine
+### P0：先补 current event spine
 
 - Thread / Turn / Item 生命周期。
 - Tool lifecycle pairing。
@@ -88,7 +126,26 @@
 - Command execution policy。
 - Permission / sandbox facts。
 
-### P1：再补 coding profile 投影
+退出条件：
+
+- App Server current fixture 能产生同构 coding events。
+- `@limecloud/agent-ui-contracts` schema / sequence gate 能拒绝孤立或终态后的执行事件。
+- Rust owner 不依赖 legacy desktop facade 或生产 mock fallback。
+
+### P1：迁入 patch / command / policy owner
+
+- Patch parser / streaming parser / apply service：已迁入 `patch-apply` crate，并通过 agent `apply_patch` tool 与 App Server patch mirror 消费 parser/apply facts；真实 apply service 已支持 workdir 内 add/update/delete/move、缺父目录创建、Unicode 标点模糊匹配和 path escape 拒绝。
+- File / command / patch execution adapter：已完成 runtime tool event mirror、agent `apply_patch` tool 入口接线、per-file patch `checkpointRef/contentRef/diffRef` metadata 和结构化 diff 预览、真实 tool permission denial outcome metadata、基础 policy/action/sandbox diagnostics facts，以及 backend metadata 中 `outputRef/refIds/artifactRefs/checkpointRef/contentRef/diffRef` 的透传、artifact/evidence 聚合、file checkpoint API read/list/get/diff/restore 基础投影、output snapshot owner、file checkpoint snapshot owner、current timeline snapshot refs hydrate 和 Basic Evidence Pack 文件化 snapshot artifacts；下一步补真实 Policy service / 分平台 sandbox backend 与 UI evidence。
+- Approval / sandbox policy：基础 RuntimeEvent/action owner、`execution/sandbox.rs` 基础 owner、`execution/rules.rs` 默认规则 catalog、`execution/service.rs` resolver owner、持久化 / 组织 / 用户 / runtime / 请求级 `shellCommandRules` 合并、`regex/prefix/exact` 命令规则与人工确认后工具续跑库内测试已接入，仍需分平台 sandbox backend 与 UI evidence。
+- Output spill refs：事件级大输出规整、文件系统 snapshot owner、跨 timeline hydrate 和 evidence pack 文件化均已接入；剩余是 GUI 读取证据。
+
+退出条件：
+
+- patch 成功/失败、patch parser paths / `invalid_patch` 分类、`patch-apply` 真实落盘 service、agent `apply_patch` tool 入口接线、多文件 patch `file.changed` 投影、per-file patch `checkpointRef/contentRef/diffRef` 透传、文件读写、命令 lifecycle、测试命令 lifecycle、action resolved tool 回填、真实工具权限拒绝 metadata、命令被拒绝、沙箱阻断、基础 policy/sandbox diagnostics、sandbox 基础 owner、默认 policy rule catalog、PolicyService resolver owner、shell command rule classifier、持久化 / 组织 / 用户 / runtime / 请求级 `shellCommandRules` 合并、审批后工具续跑、output/artifact refs 透传、artifact/evidence 聚合、file checkpoint API read/list/get/diff/restore、tool terminal 大输出 payload 规整、文件系统 output snapshot owner、文件系统 checkpoint snapshot owner、跨 timeline hydrate、active command/test/action read model hydrate 和 evidence pack 文件化已有 Rust 定向测试；分平台 sandbox backend 与 UI evidence 仍需补 owner 与定向测试。
+- 所有副作用都有 `toolCallId`、`artifactId`、`checkpointId`、`actionId` 或等价 owner id。
+- 失败分类不靠 stdout/stderr 文本解析。
+
+### P2：再补 coding profile 投影
 
 - FileChangeView。
 - PatchView。
@@ -97,11 +154,35 @@
 - ApprovalView。
 - CodingDiagnosticsView。
 
-### P2：最后接外部 harness
+退出条件：
+
+- `CodingWorkbenchView` 可从 conformance fixtures 与 App Server read model 双路径重建。
+- active command/test/action 刷新后可 hydrate，并已通过 projection / Workspace adapter 定向测试进入 view model。
+- `degraded/stale/blocked` 不被伪造成成功或普通 assistant 回复。
+
+### P3：接 Workspace UI 和 GUI smoke
+
+- 旧 thread item adapter 只作为 migration 输入。
+- Coding Workbench 消费 `CodingWorkbenchView`。
+- GUI smoke 覆盖真实 current fixture。
+
+退出条件：
+
+- `changeView / outputView / logView / actionView / diagnosticsView` 全部由 `CodingWorkbenchView` 派生。
+- 右侧审批卡和失败继续修复入口只调用 runtime client command callbacks。
+- 用户可见文案覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
+
+### P4：最后接外部 harness
 
 - 外部 CLI agent 只作为 `external_harness`。
 - 事件必须转成 Lime RuntimeEvent。
 - 不允许外部 harness 直接写 artifact/evidence truth。
+
+退出条件：
+
+- 外部 harness 缺事件时 UI 显示 `degraded`，不从日志文本猜测。
+- 外部 harness 自选模型只进入 diagnostics，不成为 Lime routing truth。
+- 生产默认不要求安装外部 CLI 才能完成 coding turn。
 
 ## 禁止清单
 

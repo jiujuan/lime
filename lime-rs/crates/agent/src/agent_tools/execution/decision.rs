@@ -1,0 +1,190 @@
+use super::policy::{
+    ToolExecutionPolicyResolution, ToolExecutionResolverInput, ToolExecutionSandboxProfile,
+    ToolExecutionWarningPolicy,
+};
+use super::sandbox::{command_text, evaluate_sandbox, SandboxEvaluation, SandboxEvaluationInput};
+use super::service::ToolExecutionPolicyService;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value as JsonValue};
+use std::collections::HashMap;
+use std::path::Path;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolExecutionDecisionKind {
+    Allow,
+    RequiresApproval,
+    Deny,
+    SandboxBlocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolExecutionDecision {
+    pub kind: ToolExecutionDecisionKind,
+    pub reason_code: String,
+    pub reason: String,
+    pub policy_resolution: ToolExecutionPolicyResolution,
+    pub metadata: HashMap<String, JsonValue>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ToolExecutionDecisionInput<'a> {
+    pub tool_name: &'a str,
+    pub params: &'a JsonValue,
+    pub working_directory: &'a Path,
+    pub surface: &'a str,
+    pub auto_mode: bool,
+    pub bypass_restrictions: bool,
+    pub approval_policy: Option<&'a str>,
+    pub requested_sandbox_policy: Option<&'a str>,
+    pub resolver_input: ToolExecutionResolverInput<'a>,
+}
+
+impl ToolExecutionDecision {
+    pub fn allowed(&self) -> bool {
+        self.kind == ToolExecutionDecisionKind::Allow
+    }
+
+    pub fn requires_approval(&self) -> bool {
+        self.kind == ToolExecutionDecisionKind::RequiresApproval
+    }
+}
+
+pub fn decide_tool_execution(input: ToolExecutionDecisionInput<'_>) -> ToolExecutionDecision {
+    let policy_service = ToolExecutionPolicyService::new(input.resolver_input);
+    let resolution = policy_service.resolve(input.tool_name);
+    let mut metadata =
+        policy_service.metadata_for_resolution(input.tool_name, input.surface, resolution);
+    metadata.insert(
+        "decisionOwner".to_string(),
+        json!("workspace_tool_execution"),
+    );
+    metadata.insert("decisionKind".to_string(), json!("allow"));
+    metadata.insert("reasonCode".to_string(), json!("allowed"));
+    metadata.insert("reason".to_string(), json!("tool execution allowed"));
+    metadata.insert("platform".to_string(), json!(std::env::consts::OS));
+    metadata.insert("arch".to_string(), json!(std::env::consts::ARCH));
+    metadata.insert(
+        "cwd".to_string(),
+        json!(input.working_directory.to_string_lossy().to_string()),
+    );
+
+    if let Some(command) = command_text(input.params) {
+        if let Some(command_rule) = policy_service.classify_shell_command(&command) {
+            metadata.insert("commandRuleId".to_string(), json!(command_rule.rule_id));
+            metadata.insert(
+                "commandRuleSource".to_string(),
+                json!(command_rule.source.label()),
+            );
+            metadata.insert(
+                "commandRiskLevel".to_string(),
+                json!(command_rule.risk_level.label()),
+            );
+            metadata.insert(
+                "commandRiskReasonCode".to_string(),
+                json!(command_rule.reason_code),
+            );
+            metadata.insert("commandRiskReason".to_string(), json!(command_rule.reason));
+        }
+        metadata.insert("command".to_string(), json!(command));
+    }
+    if let Some(approval_policy) = input.approval_policy {
+        metadata.insert("approvalPolicy".to_string(), json!(approval_policy));
+    }
+    if let Some(sandbox_policy) = input.requested_sandbox_policy {
+        metadata.insert("requestedSandboxPolicy".to_string(), json!(sandbox_policy));
+    }
+
+    if input.bypass_restrictions {
+        return build_decision(
+            ToolExecutionDecisionKind::Allow,
+            "full_access_allowed",
+            "full-access 允许工具执行",
+            resolution,
+            metadata,
+        );
+    }
+
+    if let SandboxEvaluation::Block(block) = evaluate_sandbox(SandboxEvaluationInput {
+        sandbox_profile: resolution.policy.sandbox_profile,
+        requested_policy: input.requested_sandbox_policy,
+        params: input.params,
+    }) {
+        metadata.insert("sandboxPolicy".to_string(), json!(block.policy.label()));
+        metadata.insert("sandboxReason".to_string(), json!(block.diagnostic));
+        return build_decision(
+            ToolExecutionDecisionKind::SandboxBlocked,
+            block.reason_code,
+            block.reason,
+            resolution,
+            metadata,
+        );
+    }
+
+    if input.auto_mode {
+        return build_decision(
+            ToolExecutionDecisionKind::Allow,
+            "auto_mode_allowed",
+            "Auto 模式允许工具执行",
+            resolution,
+            metadata,
+        );
+    }
+
+    if should_require_approval(&resolution, input.approval_policy) {
+        return build_decision(
+            ToolExecutionDecisionKind::RequiresApproval,
+            "shell_command_requires_approval",
+            "Shell 命令需要人工确认后执行",
+            resolution,
+            metadata,
+        );
+    }
+
+    build_decision(
+        ToolExecutionDecisionKind::Allow,
+        "allowed",
+        "工具执行策略允许继续",
+        resolution,
+        metadata,
+    )
+}
+
+fn build_decision(
+    kind: ToolExecutionDecisionKind,
+    reason_code: &str,
+    reason: &str,
+    policy_resolution: ToolExecutionPolicyResolution,
+    mut metadata: HashMap<String, JsonValue>,
+) -> ToolExecutionDecision {
+    metadata.insert("decisionKind".to_string(), json!(kind));
+    metadata.insert("reasonCode".to_string(), json!(reason_code));
+    metadata.insert("reason".to_string(), json!(reason));
+
+    ToolExecutionDecision {
+        kind,
+        reason_code: reason_code.to_string(),
+        reason: reason.to_string(),
+        policy_resolution,
+        metadata,
+    }
+}
+
+fn should_require_approval(
+    resolution: &ToolExecutionPolicyResolution,
+    approval_policy: Option<&str>,
+) -> bool {
+    resolution.policy.warning_policy == ToolExecutionWarningPolicy::ShellCommandRisk
+        && resolution.policy.sandbox_profile == ToolExecutionSandboxProfile::WorkspaceCommand
+        && matches!(
+            normalize_policy_label(approval_policy).as_deref(),
+            Some("on_request" | "on-request" | "unless_trusted" | "unless-trusted" | "granular")
+        )
+}
+
+fn normalize_policy_label(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
+}

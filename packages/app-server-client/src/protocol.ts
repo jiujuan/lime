@@ -18,6 +18,7 @@ export const METHOD_FILE_SYSTEM_CREATE_DIRECTORY = "fileSystem/createDirectory";
 export const METHOD_FILE_SYSTEM_RENAME_FILE = "fileSystem/renameFile";
 export const METHOD_FILE_SYSTEM_DELETE_FILE = "fileSystem/deleteFile";
 export const METHOD_PROJECT_GIT_STATUS = "projectGit/status";
+export const METHOD_PROJECT_GIT_DIFF = "projectGit/diff";
 export const METHOD_PROJECT_GIT_BRANCH_CHECKOUT = "projectGit/branch/checkout";
 export const METHOD_PROJECT_GIT_BRANCH_CREATE = "projectGit/branch/create";
 export const METHOD_PROJECT_GIT_WORKTREE_CREATE = "projectGit/worktree/create";
@@ -281,6 +282,8 @@ export const METHOD_USAGE_STATS_DAILY_TRENDS_LIST =
   "usageStats/dailyTrends/list";
 export const METHOD_AGENT_SESSION_START = "agentSession/start";
 export const METHOD_AGENT_SESSION_READ = "agentSession/read";
+export const METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =
+  "agentSession/toolInventory/read";
 export const METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
 export const METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
 export const METHOD_AGENT_SESSION_ACTION_REPLAY = "agentSession/action/replay";
@@ -342,6 +345,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
   { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
   { method: METHOD_PROJECT_GIT_STATUS, kind: "request" },
+  { method: METHOD_PROJECT_GIT_DIFF, kind: "request" },
   { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
   { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
   { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
@@ -584,6 +588,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_SESSION_START, kind: "request" },
   { method: METHOD_AGENT_SESSION_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
+  { method: METHOD_AGENT_SESSION_TOOL_INVENTORY_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
   { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
   { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
@@ -825,6 +830,18 @@ export type ProjectGitStatusParams = {
   rootPath: string;
 };
 
+export type ProjectGitDiffParams = {
+  rootPath: string;
+  contextLines?: number;
+  base?: ProjectGitDiffBase;
+};
+
+export type ProjectGitDiffBase =
+  | "unstaged"
+  | "staged"
+  | "branch"
+  | "previousConversation";
+
 export type ProjectGitBranchCheckoutParams = {
   rootPath: string;
   branch: string;
@@ -852,6 +869,14 @@ export type ProjectGitStatusResponse = {
 
 export type ProjectGitBranchCheckoutResponse = ProjectGitStatusResponse;
 export type ProjectGitBranchCreateResponse = ProjectGitStatusResponse;
+
+export type ProjectGitDiffResponse = {
+  rootPath: string;
+  repositoryRoot?: string;
+  hasGitRepository: boolean;
+  patch: string;
+  uncommittedFileCount: number;
+};
 
 export type ProjectGitWorktreeCreateResponse = {
   worktreePath: string;

@@ -10,9 +10,9 @@
 
 当前文件持久化主链固定为：
 
-`runtime_turn ArtifactSnapshot -> AgentTimeline FileArtifact -> artifact_document_service sidecar versions -> SessionDetail / AgentRuntimeThreadReadModel / agent_runtime_* -> evidence / replay`
+`agentSession/turn/start ArtifactSnapshot -> AgentTimeline FileArtifact -> artifact_document_service sidecar versions -> SessionDetail / AgentRuntimeThreadReadModel / App Server file checkpoint methods -> evidence / replay`
 
-路径边界：`agent_runtime_*` 文件快照命令名可以作为迁移期读取 surface，但 `lime-rs/src/commands/**` 不是新增持久化实现目录。本文提到的 `aster_agent_cmd/dto.rs` 只作为现有读模型锚点；新增 file checkpoint、artifact sidecar、export / replay 持久化逻辑应进入 services、App Server / RuntimeCore 或 `lime-rs/crates/agent`，旧 command wrapper 迁出后撤注册并删除。
+路径边界：旧 `agent_runtime_*file_checkpoint*` 文件快照命令名只允许作为迁移期读取 surface、retired guard 或历史 evidence；`lime-rs/src/commands/**` 已删除，不是新增持久化实现目录。本文提到的 `aster_agent_cmd/dto.rs` 只作为历史读模型锚点；新增 file checkpoint、artifact sidecar、export / replay 持久化逻辑应进入 services、App Server / RuntimeCore 或 `lime-rs/crates/agent`，不得恢复旧 command wrapper。
 
 含义如下：
 
@@ -21,9 +21,9 @@
 3. `artifact_document_service` 负责把当前文档与 `versions/vNNNN.artifact.json` 历史快照落到工作区 sidecar
 4. `AgentRuntimeThreadReadModel.file_checkpoint_summary` 只做轻量摘要，不复制第二套 transcript
 5. 深一点的读取统一走：
-   - `agent_runtime_list_file_checkpoints`
-   - `agent_runtime_get_file_checkpoint`
-   - `agent_runtime_diff_file_checkpoint`
+   - App Server `agentSession/fileCheckpoint/list`
+   - App Server `agentSession/fileCheckpoint/get`
+   - App Server `agentSession/fileCheckpoint/diff`
 6. `runtime_evidence_pack_service` 与 `runtime_replay_case_service` 统一消费同一份 file checkpoint 读模型，不再各自重新解析 artifact 状态
 
 ## 事实源分层
@@ -107,6 +107,6 @@
 
 - `runtime_file_checkpoint_service`
 - `AgentRuntimeThreadReadModel.file_checkpoint_summary`
-- App Server / `agent_runtime_*file_checkpoint*` 命令边界
+- App Server `agentSession/fileCheckpoint/*` 命令边界；旧 `agent_runtime_*file_checkpoint*` 只作 retired guard
 
 而不是再开平级旁路。

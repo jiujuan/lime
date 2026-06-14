@@ -1,6 +1,6 @@
 # Lime 工具治理总览
 
-更新时间：2026-03-20
+更新时间：2026-06-13
 
 ## 1. 背景
 
@@ -61,25 +61,27 @@ Lime 实际已经具备这些能力：
 本轮治理后，建议把事实源固定为：
 
 - **工具元数据事实源**：`lime-rs/crates/core/src/tool_calling.rs`
-- **native 工具目录事实源**：`lime-rs/src/agent_tools/catalog.rs`
-- **执行权限事实源**：`lime-rs/src/agent_tools/execution.rs`
+- **native 工具目录事实源**：`lime-rs/crates/agent/src/agent_tools/catalog.rs`
+- **执行权限事实源**：`lime-rs/crates/agent/src/agent_tools/execution.rs`
 - **MCP runtime 工具事实源**：`lime-rs/crates/mcp/src/manager.rs`
-- **Aster 注入工具面事实源**：`lime-rs/src/commands/aster_agent_cmd.rs`
-- **工具库存 / 审计快照事实源**：`lime-rs/src/agent_tools/inventory.rs`
+- **Aster 注入工具面事实源**：`lime-rs/crates/agent` + App Server `RuntimeBackend`
+- **工具库存 / 审计快照事实源**：`lime-rs/crates/agent/src/agent_tools/inventory.rs`
+- **工具库存读取入口**：App Server JSON-RPC `agentSession/toolInventory/read`
 
 ### 2.3 当前 / 兼容 / 待清理分类
 
-| 分类           | 路径 / 对象                                      | 说明                                                                                                                     |
-| -------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| current        | `lime_core::tool_calling`                        | 统一 metadata 读取与打分                                                                                                 |
-| current        | `lime-rs/src/agent_tools/catalog.rs`           | 完整 native tool 目录与默认授权子集                                                                                      |
-| current        | `lime-rs/src/agent_tools/execution.rs`         | 统一 execution 层的 warning / sandbox / 参数限制事实源                                                                   |
-| current        | `lime-rs/crates/mcp/src/manager.rs`            | MCP tools runtime registry                                                                                               |
-| current        | `lime-rs/src/commands/aster_agent_cmd.rs`      | Aster runtime 注入、`ToolSearch`、inventory 命令                                                                         |
-| current        | `lime-rs/src/agent_tools/inventory.rs`         | runtime 工具库存快照                                                                                                     |
-| compat         | `workspace_allowed_tool_names(...)`              | 当前保留为旧调用入口别名，实际委托默认授权目录                                                                           |
-| dead-candidate | `lime-rs/crates/agent/src/tool_permissions.rs` | 已退出 `lime-agent` 的 `lib.rs` 编译图，仅通过 `lime-rs/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载 |
-| dead-candidate | `lime-rs/crates/agent/src/shell_security.rs`   | 已退出 `lime-agent` 的 `lib.rs` 编译图，仅通过 `lime-rs/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载 |
+| 分类           | 路径 / 对象                                                       | 说明                                                                                                                   |
+| -------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| current        | `lime_core::tool_calling`                                         | 统一 metadata 读取与打分                                                                                               |
+| current        | `lime-rs/crates/agent/src/agent_tools/catalog.rs`                 | 完整 native tool 目录与默认授权子集                                                                                    |
+| current        | `lime-rs/crates/agent/src/agent_tools/execution.rs`               | 统一 execution 层的 warning / sandbox / 参数限制事实源                                                                 |
+| current        | `lime-rs/crates/mcp/src/manager.rs`                               | MCP tools runtime registry                                                                                             |
+| current        | `lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs` | App Server `agentSession/toolInventory/read` 到 runtime inventory builder 的桥接                                       |
+| current        | `lime-rs/crates/agent/src/agent_tools/inventory.rs`               | runtime 工具库存快照                                                                                                   |
+| compat         | `workspace_allowed_tool_names(...)`                               | 当前保留为旧调用入口别名，实际委托默认授权目录                                                                         |
+| dead           | `agent_runtime_get_tool_inventory`                                | 旧 Desktop / Tauri facade 已退出现役入口；不得回到 Electron Host、DevBridge truth、desktop-host mock 或前端 gateway    |
+| dead-candidate | `lime-rs/crates/agent/src/tool_permissions.rs`                    | 已退出 `lime-agent` 的 `lib.rs` 编译图，仅通过 `lime-rs/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载 |
+| dead-candidate | `lime-rs/crates/agent/src/shell_security.rs`                      | 已退出 `lime-agent` 的 `lib.rs` 编译图，仅通过 `lime-rs/crates/agent/tests/legacy_permission_surfaces.rs` 测试夹具加载 |
 
 > 注意：`dead-candidate` 本轮只做标记，不直接删除。删除属于高风险操作，需要单独确认。
 
@@ -100,13 +102,13 @@ Lime 实际已经具备这些能力：
 以下模块都已切换到共享逻辑：
 
 - `lime-rs/crates/mcp/src/manager.rs`
-- `lime-rs/src/commands/aster_agent_cmd.rs`
+- `lime-rs/crates/agent/src/agent_tools/inventory.rs`
 - `lime-rs/crates/providers/src/providers/openai_custom.rs`
 - `lime-rs/crates/providers/src/providers/claude_custom.rs`
 
 ### 3.2 native 工具目录补全
 
-`lime-rs/src/agent_tools/catalog.rs` 已升级为完整目录，覆盖：
+`lime-rs/crates/agent/src/agent_tools/catalog.rs` 已升级为完整目录，覆盖：
 
 - Aster built-ins
 - Lime 注入工具
@@ -124,9 +126,9 @@ Lime 实际已经具备这些能力：
 
 新增：
 
-- `lime-rs/src/agent_tools/inventory.rs`
-- `agent_runtime_get_tool_inventory` Tauri 命令
-- `src/lib/api/agentRuntime.ts` 对应 helper
+- `lime-rs/crates/agent/src/agent_tools/inventory.rs`
+- App Server JSON-RPC `agentSession/toolInventory/read`
+- `src/lib/api/agentRuntime/inventoryClient.ts` 对应 helper
 
 这条命令可以一次返回：
 
@@ -142,7 +144,7 @@ Lime 实际已经具备这些能力：
 
 新增：
 
-- `lime-rs/src/agent_tools/execution.rs`
+- `lime-rs/crates/agent/src/agent_tools/execution.rs`
 
 负责：
 
@@ -157,14 +159,14 @@ Lime 实际已经具备这些能力：
 
 - **持久化覆盖**：`lime-rs/crates/core/src/config/types.rs` -> `NativeAgentConfig.tool_execution`
 - **运行时覆盖**：`request.metadata.harness.executionPolicy` / `execution_policy`
-- **有效策略解析**：`lime-rs/src/agent_tools/execution.rs::resolve_tool_execution_policy`
+- **有效策略解析**：`lime-rs/crates/agent/src/agent_tools/execution.rs::resolve_tool_execution_policy`
 
 结果：
 
 - `aster_agent_cmd.rs` 不再手工拼整段 `ToolPermission` 模板
 - execution 层事实源从命令层 if/else 收回 `agent_tools` 边界
 - inventory 现在可直接审计 `execution_warning_policy` / `execution_restriction_profile` / `execution_sandbox_profile`
-- `agent_runtime_get_tool_inventory` 可通过 `metadata` 观察 runtime override 后的 effective profile
+- `agentSession/toolInventory/read` 可通过 `metadata` 观察 runtime override 后的 effective profile
 - inventory 同时暴露每个 execution 字段的来源：
   - `execution_warning_policy_source`
   - `execution_restriction_profile_source`
@@ -187,11 +189,11 @@ Lime 实际已经具备这些能力：
 - `lime-rs/crates/agent/src/lib.rs`
 - `lime-rs/crates/agent/src/agent_tools/mod.rs`
 
-这条通道直接复用 app crate 的：
+这条通道直接复用 `lime-agent` crate 的：
 
-- `lime-rs/src/agent_tools/catalog.rs`
-- `lime-rs/src/agent_tools/execution.rs`
-- `lime-rs/src/agent_tools/inventory.rs`
+- `lime-rs/crates/agent/src/agent_tools/catalog.rs`
+- `lime-rs/crates/agent/src/agent_tools/execution.rs`
+- `lime-rs/crates/agent/src/agent_tools/inventory.rs`
 
 用于承接纯逻辑单测，而不是复制第二份实现。
 
@@ -240,7 +242,7 @@ Lime 实际已经具备这些能力：
   当前不再保留 `SubAgentTask`；team runtime 已收敛到 `Agent / SendMessage / TeamCreate / TeamDelete / ListPeers`
 
 - **说明**  
-  Core surface 现已按 current surface 收敛；精确数量与分类以 `lime-rs/src/agent_tools/catalog.rs` 为准。
+  Core surface 现已按 current surface 收敛；精确数量与分类以 `lime-rs/crates/agent/src/agent_tools/catalog.rs` 为准。
 
 ### 4.2 Workbench surface
 

@@ -94,6 +94,29 @@ describe("appServerReadModelProjection", () => {
                 status: "pending",
               },
             ],
+            active_command_id: "command-active",
+            active_test_run_id: "test-active",
+            active_action_id: "request-1",
+            commands: [
+              {
+                command_id: "command-active",
+                status: "running",
+                command: "npm test",
+                cwd: "app",
+                output_refs: ["output://command-active"],
+                output_preview: "running tests",
+              },
+            ],
+            tests: [
+              {
+                test_run_id: "test-active",
+                status: "running",
+                command_id: "command-active",
+                suite: "unit",
+                passed: 3,
+                failed: 0,
+              },
+            ],
             queued_turns: [
               {
                 queuedTurnId: "queued-1",
@@ -125,6 +148,29 @@ describe("appServerReadModelProjection", () => {
           id: "request-1",
           request_type: "ask_user",
           status: "pending",
+        },
+      ],
+      active_command_id: "command-active",
+      active_test_run_id: "test-active",
+      active_action_id: "request-1",
+      commands: [
+        {
+          command_id: "command-active",
+          status: "running",
+          command: "npm test",
+          cwd: "app",
+          output_refs: ["output://command-active"],
+          output_preview: "running tests",
+        },
+      ],
+      tests: [
+        {
+          test_run_id: "test-active",
+          status: "running",
+          command_id: "command-active",
+          suite: "unit",
+          passed: 3,
+          failed: 0,
         },
       ],
       queued_turns: [

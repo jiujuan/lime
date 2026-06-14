@@ -735,7 +735,8 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::agents::agent::ToolStreamItem;
-    use crate::conversation::message::{MessageContent, ToolResponse};
+    use crate::conversation::message::{ActionRequiredData, MessageContent, ToolResponse};
+    use crate::permission::{PermissionConfirmation, PrincipalType};
     use crate::session::{SessionManager, SessionType};
     use crate::tools::{Tool, ToolError};
 
@@ -947,6 +948,99 @@ mod tests {
             recorded_input.get("path"),
             Some(&serde_json::Value::String("HOOKED.md".to_string()))
         );
+    }
+
+    #[tokio::test]
+    async fn handle_approval_tool_requests_should_resume_after_manual_confirmation() {
+        let agent = Agent::new();
+        {
+            let mut registry = agent.tool_registry.write().await;
+            let _ = registry.unregister("Dangerous");
+            registry.register(Box::new(StaticTool {
+                name: "Dangerous".to_string(),
+                response: "manual-confirmed".to_string(),
+                recorded_params: None,
+            }));
+        }
+
+        let temp_dir = tempdir().expect("create temp dir");
+        let session = SessionManager::create_session(
+            temp_dir.path().to_path_buf(),
+            "manual-confirmation-resume".to_string(),
+            SessionType::User,
+        )
+        .await
+        .expect("create session");
+
+        let tool_futures = Arc::new(Mutex::new(Vec::new()));
+        let requests = [build_request(
+            "req-manual-confirm",
+            "Dangerous",
+            json!({"command": "cargo test"}),
+        )];
+        let request_map = HashMap::new();
+        let stream = agent.handle_approval_tool_requests(
+            &requests,
+            tool_futures.clone(),
+            &request_map,
+            None,
+            &session,
+            &[],
+            None,
+        );
+
+        let collect_messages = async {
+            stream
+                .try_collect::<Vec<_>>()
+                .await
+                .expect("stream should complete after confirmation")
+        };
+        let submit_confirmation = async {
+            tokio::task::yield_now().await;
+            agent
+                .handle_confirmation(
+                    "req-manual-confirm".to_string(),
+                    PermissionConfirmation {
+                        principal_type: PrincipalType::Tool,
+                        permission: Permission::AllowOnce,
+                    },
+                )
+                .await;
+        };
+        let (messages, _) = tokio::join!(collect_messages, submit_confirmation);
+
+        let action = messages
+            .iter()
+            .flat_map(|message| message.content.iter())
+            .find_map(|content| match content {
+                MessageContent::ActionRequired(action) => Some(action),
+                _ => None,
+            })
+            .expect("manual confirmation should emit action required");
+        assert!(matches!(
+            &action.data,
+            ActionRequiredData::ToolConfirmation { id, tool_name, .. }
+                if id == "req-manual-confirm" && tool_name == "Dangerous"
+        ));
+
+        let mut futures = tool_futures.lock().await;
+        assert_eq!(futures.len(), 1);
+        let (_req_id, tool_stream) = futures.pop().expect("should enqueue confirmed tool future");
+        drop(futures);
+
+        let items = tool_stream.collect::<Vec<_>>().await;
+        assert_eq!(items.len(), 1);
+        let ToolStreamItem::Result(result) = &items[0] else {
+            panic!("expected tool result");
+        };
+        let call_result = result.as_ref().expect("tool should run after approval");
+        let text = call_result
+            .content
+            .first()
+            .and_then(|content| content.as_text())
+            .map(|text| text.text.clone())
+            .expect("tool result should contain text");
+        assert_eq!(text, "manual-confirmed");
     }
 
     #[tokio::test]

@@ -322,6 +322,11 @@ export interface AgentRuntimeThreadReadModel {
   incidents?: AgentRuntimeIncidentView[];
   queued_turns?: QueuedTurnSnapshot[];
   tool_calls?: AgentRuntimeThreadToolCallView[];
+  commands?: AgentRuntimeThreadCommandView[];
+  tests?: AgentRuntimeThreadTestRunView[];
+  active_command_id?: string | null;
+  active_test_run_id?: string | null;
+  active_action_id?: string | null;
   artifacts?: Record<string, unknown>[];
   model_routing?: Record<string, unknown> | null;
   evidence_summary?: AgentRuntimeThreadEvidenceSummary | null;
@@ -452,6 +457,38 @@ export interface AgentRuntimeThreadToolCallView {
   success?: boolean | null;
   error?: string | null;
   evidence_refs?: string[];
+}
+
+export interface AgentRuntimeThreadCommandView {
+  command_id: string;
+  turn_id?: string;
+  status: "running" | "completed" | "failed" | "canceled" | string;
+  command?: string;
+  cwd?: string;
+  exit_code?: number;
+  output_refs?: string[];
+  output_preview?: string | null;
+  started_at?: string | number | null;
+  completed_at?: string | number | null;
+  updated_at?: string | number | null;
+  source_event_ids?: string[];
+}
+
+export interface AgentRuntimeThreadTestRunView {
+  test_run_id: string;
+  turn_id?: string;
+  status: "running" | "completed" | "failed" | "canceled" | string;
+  command_id?: string;
+  suite?: string;
+  result?: string;
+  passed?: number;
+  failed?: number;
+  output_refs?: string[];
+  failure_category?: string;
+  started_at?: string | number | null;
+  completed_at?: string | number | null;
+  updated_at?: string | number | null;
+  source_event_ids?: string[];
 }
 
 export interface AgentRuntimeThreadEvidenceSummary {

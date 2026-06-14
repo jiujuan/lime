@@ -468,6 +468,12 @@ test("agent ui conformance fixtures cover the standard runtime slices", () => {
       "artifact-evidence",
       "stream-repair",
       "subagent-handoff",
+      "coding-file-change",
+      "coding-command-approval",
+      "coding-sandbox-blocked",
+      "coding-patch-failure",
+      "coding-test-failure-fix",
+      "coding-hydration-repair",
     ],
   );
 
@@ -481,11 +487,17 @@ test("agent ui conformance fixtures cover the standard runtime slices", () => {
     hasSubagents: true,
     threadCount: 1,
     delegationCallCount: 2,
-    activityCount: 5,
+    activityCount: 10,
     activeThreadCount: 0,
     completedThreadCount: 1,
     failedThreadCount: 0,
   });
+  assert.ok(
+    handoff.events.some((event) => event.eventClass === "channel.opened"),
+  );
+  assert.ok(
+    handoff.events.some((event) => event.eventClass === "artifact.changed"),
+  );
   assert.ok(
     handoff.events.some((event) => event.eventClass === "subagent.started"),
   );
@@ -494,6 +506,15 @@ test("agent ui conformance fixtures cover the standard runtime slices", () => {
   );
   assert.ok(
     handoff.events.some((event) => event.eventClass === "review.verdict"),
+  );
+  assert.ok(
+    handoff.events.some((event) => event.eventClass === "task.completed"),
+  );
+  assert.ok(
+    handoff.events.some((event) => event.eventClass === "state.delta"),
+  );
+  assert.ok(
+    handoff.events.some((event) => event.eventClass === "snapshot.updated"),
   );
 });
 
@@ -647,6 +668,117 @@ test("sequence verifier flags tool.result without a matching tool.started", () =
   assert.deepEqual(
     verifyRuntimeEventSequence(events).map((v) => v.code),
     ["tool_result_without_start"],
+  );
+});
+
+test("runtime event validation enforces coding event fact scopes", () => {
+  const base = {
+    ...RUNTIME_EVENT_BASE,
+    id: "evt_coding",
+    kind: "tool",
+    status: "completed",
+    sequence: 1,
+    title: "Coding fact",
+  };
+
+  assert.deepEqual(
+    collectRuntimeEventValidationIssues({
+      ...base,
+      eventClass: "file.changed",
+      payload: { path: "src/App.tsx" },
+      artifactRefs: ["artifact-app"],
+    }).map((issue) => issue.code),
+    [],
+  );
+
+  assert.deepEqual(
+    collectRuntimeEventValidationIssues({
+      ...base,
+      eventClass: "file.changed",
+      payload: {},
+    }).map((issue) => issue.path),
+    ["$.artifactId", "$.payload.path"],
+  );
+
+  assert.deepEqual(
+    collectRuntimeEventValidationIssues({
+      ...base,
+      eventClass: "patch.failed",
+      toolCallId: "patch-1",
+      payload: { patchId: "patch-1" },
+    }).map((issue) => issue.path),
+    ["$.payload.failureCategory"],
+  );
+
+  assert.deepEqual(
+    collectRuntimeEventValidationIssues({
+      ...base,
+      eventClass: "command.output",
+      toolCallId: "command-1",
+      payload: { commandId: "command-1" },
+    }).map((issue) => issue.path),
+    ["$.refIds"],
+  );
+
+  assert.deepEqual(
+    collectRuntimeEventValidationIssues({
+      ...base,
+      eventClass: "sandbox.blocked",
+      kind: "sandbox",
+      status: "blocked",
+      payload: {},
+    }).map((issue) => issue.path),
+    ["$.payload.reasonCode"],
+  );
+});
+
+test("sequence verifier flags malformed coding event lifecycles", () => {
+  assert.deepEqual(
+    verifyRuntimeEventSequence([
+      seqEvent({
+        id: "evt_patch_orphan",
+        eventClass: "patch.applied",
+        kind: "tool",
+        status: "completed",
+        sequence: 1,
+        toolCallId: "patch-orphan",
+        title: "Patch applied",
+        payload: { patchId: "patch-orphan" },
+      }),
+    ]).map((v) => v.code),
+    ["patch_terminal_without_start"],
+  );
+
+  assert.deepEqual(
+    verifyRuntimeEventSequence([
+      seqEvent({
+        id: "evt_command_orphan",
+        eventClass: "command.exited",
+        kind: "tool",
+        status: "completed",
+        sequence: 1,
+        toolCallId: "command-orphan",
+        title: "Command exited",
+        payload: { commandId: "command-orphan", exitCode: 0 },
+      }),
+    ]).map((v) => v.code),
+    ["command_exited_without_start"],
+  );
+
+  assert.deepEqual(
+    verifyRuntimeEventSequence([
+      seqEvent({
+        id: "evt_test_orphan",
+        eventClass: "test.completed",
+        kind: "tool",
+        status: "completed",
+        sequence: 1,
+        toolCallId: "test-orphan",
+        title: "Test completed",
+        payload: { testRunId: "test-orphan", result: "passed" },
+      }),
+    ]).map((v) => v.code),
+    ["test_completed_without_start"],
   );
 });
 

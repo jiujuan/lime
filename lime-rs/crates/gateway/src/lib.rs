@@ -4,6 +4,7 @@
 
 #![allow(clippy::all)]
 
+pub mod agent_runner;
 pub mod discord;
 pub mod feishu;
 pub mod telegram;

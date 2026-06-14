@@ -5,7 +5,7 @@
 本文件定义 Lime 当前 `Memory / Compaction` 的唯一主链，主要回答：
 
 - 哪些路径负责当前回合的记忆来源解析、会话记忆预取、持久记忆召回与压缩续接
-- `memory_runtime_*`、`unified_memory_*`、`agent_runtime_compact_session`、`project_memory_get` 分别属于哪一层
+- `memory_runtime_*`、`unified_memory_*`、App Server `agentSession/compact`、`project_memory_get` 分别属于哪一层
 - 哪些页面和稳定读模型只是在消费这条主链，而不是继续定义另一套“真实记忆”
 - 哪些旧侧链只能作为附属层或退场面，不能再反向定义当前记忆与压缩事实源
 
@@ -16,7 +16,7 @@
 遇到以下任一情况时，先读本文件：
 
 - 调整 `memory_runtime_*`、`memory_get_*`、`memory_toggle_auto`、`memory_update_auto_note`
-- 调整 `agent_runtime_compact_session`、自动压缩、summary cache 或 overflow compaction
+- 调整 App Server `agentSession/compact`、自动压缩、summary cache 或 overflow compaction
 - 调整 `memory_source_resolver_service.rs`、`auto_memory_service.rs`、runtime agents template scaffold
 - 调整 `unified_memory_*`、持久记忆召回、记忆抽取或 unified memory 分析
 - 调整 `MemoryPage.tsx`、记忆设置页、线程可靠性面板里的记忆预演与压缩展示
@@ -33,16 +33,16 @@
 这条主链的固定判断是：
 
 1. `memory_runtime_*` 是当前 runtime / 上下文记忆的唯一读模型入口。
-2. `agent_runtime_compact_session` 是当前手动压缩入口；它属于 Query Loop 下游治理动作，不是另一套聊天系统。
+2. App Server `agentSession/compact` 是当前手动压缩入口；旧 `agent_runtime_compact_session` 只允许作为 retired guard / migration-only surface。压缩属于 Query Loop 下游治理动作，不是另一套聊天系统。
 3. `unified_memory_*` 是当前跨会话结构化持久记忆的唯一主表面。
 4. `memory_get_effective_sources`、`memory_get_auto_index`、`memory_toggle_auto`、`memory_update_auto_note` 是来源链与自动记忆 control plane，不是第二条 recall pipeline。
 5. `project_memory_get` 只保留“项目资料附属层”职责，不能继续抢占 runtime memory / compaction 的主链解释权。
 
 固定规则只有一句：
 
-**后续新增记忆或压缩能力时，只允许接到 `memory_runtime_*`、`unified_memory_*` 和 `agent_runtime_compact_session` 这组 current 边界；不允许再造并列记忆真相。**
+**后续新增记忆或压缩能力时，只允许接到 `memory_runtime_*`、`unified_memory_*` 和 App Server `agentSession/compact` 这组 current 边界；不允许再造并列记忆真相。**
 
-补充迁移边界：`memory_runtime_*`、`unified_memory_*`、`agent_runtime_compact_session` 是 current 命令语义，但 `lime-rs/src/commands/**` 不是新记忆实现目录。本文列出的 `memory_management_cmd.rs`、`unified_memory_cmd.rs`、`memory_search_cmd.rs` 和 `aster_agent_cmd/**` 是现有迁移锚点；新增记忆来源、durable recall、compaction、Team Memory 或 prompt prefetch 能力应进入 App Server / RuntimeCore / services / `lime-rs/crates/agent`，旧 wrapper 迁出后撤注册并删除。
+补充迁移边界：`memory_runtime_*`、`unified_memory_*` 与 App Server `agentSession/compact` 是 current 命令语义；旧 `agent_runtime_compact_session` 只允许作为 retired guard / migration-only surface。`lime-rs/src/commands/**` 已删除，不是新记忆实现目录。本文列出的 `memory_management_cmd.rs`、`unified_memory_cmd.rs`、`memory_search_cmd.rs` 和 `aster_agent_cmd/**` 是历史迁移锚点；新增记忆来源、durable recall、compaction、Team Memory 或 prompt prefetch 能力应进入 App Server / RuntimeCore / services / `lime-rs/crates/agent`，不得恢复旧 wrapper。
 
 ## 代码入口地图
 
@@ -100,8 +100,9 @@
 
 ### 3. Query Loop 集成与压缩执行
 
-- `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
-- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs`
+- App Server `agentSession/turn/start`
+- App Server `agentSession/compact`
+- RuntimeCore / AsterBackend
 - `lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs`
 
 当前这里负责：
@@ -110,13 +111,13 @@
 2. 回合完成后，`spawn_runtime_memory_capture_task(...)` 会并行沉淀：
    - working memory：`analyze_memory_candidates(...)`
    - durable memory：`analyze_unified_memory_candidates(...)`
-3. `agent_runtime_compact_session` 统一走 `compact_runtime_session_internal(...) -> compact_runtime_session_with_trigger(...) -> Agent::perform_context_compaction(...)` 这条 shared compaction core。
+3. App Server `agentSession/compact` 统一走 RuntimeCore / Aster shared compaction core；旧 `agent_runtime_compact_session` 只能作为迁移残留或 retired guard。
 4. `compact_runtime_session_with_trigger(...)` 只创建一个最小 control turn 来写时间线与 usage metrics 锚点；真正替换 conversation、更新 summary cache 的核心逻辑仍复用 Aster 的共享 compaction 实现。
 
 固定规则：
 
 - 自动沉淀与手动压缩都属于同一条 Query Loop 下游主链。
-- `agent_runtime_compact_session` 只能视为上下文治理动作，不能被包装成第二套独立记忆系统。
+- App Server `agentSession/compact` 只能视为上下文治理动作，不能被包装成第二套独立记忆系统。
 - compaction control turn 允许只保留 `thread_id / turn_id` 这组最小 `SessionConfig`；它不参与常规 turn prompt / tool / turn_context snapshot 组包，因此不构成第二事实源。
 - 如果一个功能要影响“这轮 prompt 最终用了哪些记忆”，先改 RuntimeCore / services 与现有 current 命令 surface；若相关逻辑仍在 `runtime_turn.rs` 或 `memory_management_cmd.rs`，优先迁出核心逻辑，不要在 UI 层旁路拼装，也不要继续扩写 `commands/**`。
 
@@ -173,7 +174,7 @@
 - `lime-rs/src/services/memory_source_resolver_service.rs`
 - `lime-rs/src/services/auto_memory_service.rs`
 - `lime-rs/src/services/runtime_agents_template_service.rs`
-- `lime-rs/src/commands/aster_agent_cmd/command_api/runtime_api.rs` 的 `agent_runtime_compact_session`
+- App Server `agentSession/compact`
 - `lime-rs/src/commands/aster_agent_cmd/runtime_turn.rs`
 - `lime-rs/crates/aster-rust/crates/aster/src/agents/agent.rs` 的 `compact_session`
 - `src/lib/api/unifiedMemory.ts`
@@ -193,7 +194,7 @@
 - 来源链与自动记忆配置看 `memory_management_cmd.rs`
 - 单回合命中与工作记忆 / 压缩状态看 `memory_runtime_*`
 - 持久沉淀看 `unified_memory_*`
-- 手动压缩看 `agent_runtime_compact_session`
+- 手动压缩看 App Server `agentSession/compact`
 - GUI 与线程面板只消费同一套稳定读模型
 
 ### `compat`
@@ -254,7 +255,7 @@
 - 解释来源链、自动记忆与入口模板时，回到 `memory_management_cmd.rs`
 - 解释当前回合命中哪些记忆时，回到 `memory_runtime_prefetch_for_turn`
 - 解释跨会话结构化沉淀时，回到 `unified_memory_*`
-- 解释会话压缩与续接边界时，回到 `agent_runtime_compact_session`
+- 解释会话压缩与续接边界时，回到 App Server `agentSession/compact`
 - 解释角色 / 世界观 / 大纲资料时，视为 `project memory` compat 附属层
 
 这样后续 `M5 State / History / Telemetry` 才不会继续被“工作记忆、持久记忆、项目资料、压缩摘要”几套语言来回打断。

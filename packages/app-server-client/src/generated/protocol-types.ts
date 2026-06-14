@@ -676,6 +676,17 @@ export interface AgentSessionThreadResumeResponse {
   turns?: (AgentTurn)[];
 }
 
+export interface AgentSessionToolInventoryReadParams {
+  browserAssist?: boolean;
+  caller?: null | string;
+  metadata?: unknown;
+  workbench?: boolean;
+}
+
+export interface AgentSessionToolInventoryReadResponse {
+  inventory: unknown;
+}
+
 export interface AgentSessionTurnCancelParams {
   sessionId: string;
   turnId: string;
@@ -1975,6 +1986,19 @@ export interface ProjectGitBranchCheckoutParams {
 export interface ProjectGitBranchCreateParams {
   branch: string;
   rootPath: string;
+}
+
+export interface ProjectGitDiffParams {
+  contextLines?: number | null;
+  rootPath: string;
+}
+
+export interface ProjectGitDiffResponse {
+  hasGitRepository: boolean;
+  patch: string;
+  repositoryRoot?: null | string;
+  rootPath: string;
+  uncommittedFileCount?: number;
 }
 
 export interface ProjectGitStatusParams {

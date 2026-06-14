@@ -11,16 +11,6 @@ pub struct BaseInfo {
     pub channel_version: Option<String>,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[repr(i32)]
-pub enum UploadMediaType {
-    Image = 1,
-    Video = 2,
-    File = 3,
-    Voice = 4,
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[repr(i32)]
 pub enum MessageType {
@@ -42,13 +32,6 @@ pub enum MessageItemType {
 #[repr(i32)]
 pub enum MessageState {
     Finish = 2,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[repr(i32)]
-pub enum TypingStatus {
-    Typing = 1,
-    Cancel = 2,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -175,53 +158,6 @@ pub struct GetUpdatesResp {
     pub get_updates_buf: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub longpolling_timeout_ms: Option<u64>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetUploadUrlReq {
-    pub filekey: String,
-    pub media_type: i32,
-    pub to_user_id: String,
-    pub rawsize: u64,
-    pub rawfilemd5: String,
-    pub filesize: u64,
-    pub no_need_thumb: bool,
-    pub aeskey: String,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct GetUploadUrlResp {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub upload_param: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thumb_upload_param: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct SendTypingResp {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ret: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub errmsg: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct GetConfigResp {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ret: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub errmsg: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub typing_ticket: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SendTypingReq {
-    pub ilink_user_id: String,
-    pub typing_ticket: String,
-    pub status: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

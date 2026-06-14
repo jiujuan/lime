@@ -388,7 +388,7 @@ export function useAgentAppRuntimePageTestLifecycle() {
         detail: {
           thread_read: {
             session_id: request.sessionId,
-            source: "app_server_agent_runtime_client",
+            source: "app_server_runtime_client",
           },
         },
       },

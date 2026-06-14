@@ -22,6 +22,26 @@ pub struct ProjectGitWorktree {
     pub status: ProjectGitStatus,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGitDiff {
+    pub root_path: String,
+    pub repository_root: Option<String>,
+    pub has_git_repository: bool,
+    pub patch: String,
+    pub uncommitted_file_count: u32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProjectGitDiffBase {
+    #[default]
+    Unstaged,
+    Staged,
+    Branch,
+    PreviousConversation,
+}
+
 pub fn read_status(root_path: &str) -> Result<ProjectGitStatus, String> {
     let root = required_root_path(root_path)?;
     let repository_root = match git_output(&root, &["rev-parse", "--show-toplevel"]) {
@@ -52,6 +72,167 @@ pub fn read_status(root_path: &str) -> Result<ProjectGitStatus, String> {
         branches,
         uncommitted_file_count,
     })
+}
+
+pub fn read_diff(
+    root_path: &str,
+    context_lines: Option<u32>,
+    base: Option<ProjectGitDiffBase>,
+) -> Result<ProjectGitDiff, String> {
+    let status = read_status(root_path)?;
+    if !status.has_git_repository {
+        return Ok(ProjectGitDiff {
+            root_path: status.root_path,
+            repository_root: status.repository_root,
+            has_git_repository: false,
+            patch: String::new(),
+            uncommitted_file_count: 0,
+        });
+    }
+
+    let root = required_root_path(root_path)?;
+    let unified_arg = format!("--unified={}", context_lines.unwrap_or(3).min(100));
+    let base = base.unwrap_or_default();
+    let patch = match base {
+        ProjectGitDiffBase::Unstaged => read_unstaged_patch(&root, unified_arg.as_str())?,
+        ProjectGitDiffBase::Staged => git_diff_output(
+            &root,
+            &[
+                "diff",
+                "--cached",
+                "--no-textconv",
+                "--no-ext-diff",
+                "--submodule=short",
+                "--ignore-submodules=dirty",
+                "--no-color",
+                unified_arg.as_str(),
+            ],
+        )?,
+        ProjectGitDiffBase::Branch => read_branch_patch(&root, &status, unified_arg.as_str())?,
+        ProjectGitDiffBase::PreviousConversation => {
+            return Err("上轮对话基准不由 Git 后端读取".to_string());
+        }
+    };
+
+    Ok(ProjectGitDiff {
+        root_path: status.root_path,
+        repository_root: status.repository_root,
+        has_git_repository: true,
+        patch,
+        uncommitted_file_count: status.uncommitted_file_count,
+    })
+}
+
+fn read_unstaged_patch(root: &Path, unified_arg: &str) -> Result<String, String> {
+    let tracked_patch = git_diff_output(
+        root,
+        &[
+            "diff",
+            "--no-textconv",
+            "--no-ext-diff",
+            "--submodule=short",
+            "--ignore-submodules=dirty",
+            "--no-color",
+            unified_arg,
+        ],
+    )?;
+    let untracked_patch = read_untracked_patch(root, unified_arg)?;
+    Ok(format!("{tracked_patch}{untracked_patch}"))
+}
+
+fn read_untracked_patch(root: &Path, unified_arg: &str) -> Result<String, String> {
+    let output = git_output(root, &["ls-files", "--others", "--exclude-standard"])?;
+    let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
+    let mut patch = String::new();
+
+    for file in output.lines().map(str::trim).filter(|file| !file.is_empty()) {
+        let diff = git_diff_output(
+            root,
+            &[
+                "diff",
+                "--no-textconv",
+                "--no-ext-diff",
+                "--submodule=short",
+                "--ignore-submodules=dirty",
+                "--no-color",
+                unified_arg,
+                "--no-index",
+                "--",
+                null_path,
+                file,
+            ],
+        )?;
+        patch.push_str(&diff);
+    }
+
+    Ok(patch)
+}
+
+fn read_branch_patch(
+    root: &Path,
+    status: &ProjectGitStatus,
+    unified_arg: &str,
+) -> Result<String, String> {
+    let Some(base_branch) = resolve_default_base_branch(status) else {
+        return Ok(String::new());
+    };
+    let preferred_ref = resolve_upstream_if_remote_ahead(root, &base_branch)?
+        .unwrap_or_else(|| base_branch.to_string());
+    let Some(merge_base) = git_output_optional(root, &["merge-base", "HEAD", &preferred_ref])?
+    else {
+        return Ok(String::new());
+    };
+
+    git_diff_output(
+        root,
+        &[
+            "diff",
+            "--no-textconv",
+            "--no-ext-diff",
+            "--submodule=short",
+            "--ignore-submodules=dirty",
+            "--no-color",
+            unified_arg,
+            &merge_base,
+        ],
+    )
+}
+
+fn resolve_default_base_branch(status: &ProjectGitStatus) -> Option<&str> {
+    let current = status.current_branch.as_deref();
+    ["main", "master", "trunk", "develop"]
+        .into_iter()
+        .find(|branch| current != Some(*branch) && status.branches.iter().any(|item| item == branch))
+        .or_else(|| {
+            status
+                .branches
+                .iter()
+                .map(String::as_str)
+                .find(|branch| current != Some(*branch))
+        })
+}
+
+fn resolve_upstream_if_remote_ahead(root: &Path, branch: &str) -> Result<Option<String>, String> {
+    let Some(upstream) = git_output_optional(
+        root,
+        &[
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            &format!("{branch}@{{upstream}}"),
+        ],
+    )?
+    else {
+        return Ok(None);
+    };
+    let Some(counts) = git_output_optional(root, &["rev-list", "--left-right", "--count", &format!("{branch}...{upstream}")])? else {
+        return Ok(None);
+    };
+    let mut parts = counts.split_whitespace();
+    let _left: i64 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    let right: i64 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+
+    Ok((right > 0).then_some(upstream))
 }
 
 pub fn checkout_branch(root_path: &str, branch: &str) -> Result<ProjectGitStatus, String> {
@@ -172,6 +353,34 @@ fn git_output(root: &Path, args: &[&str]) -> Result<String, String> {
         .args(args)
         .output()
         .map_err(|error| format!("无法执行 git: {error}"))?;
+    output_to_string(output)
+}
+
+fn git_output_optional(root: &Path, args: &[&str]) -> Result<Option<String>, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .map_err(|error| format!("无法执行 git: {error}"))?;
+    if output.status.success() {
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok((!value.is_empty()).then_some(value));
+    }
+    Ok(None)
+}
+
+fn git_diff_output(root: &Path, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .map_err(|error| format!("无法执行 git: {error}"))?;
+    let code = output.status.code();
+    if output.status.success() || code == Some(1) {
+        return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+    }
     output_to_string(output)
 }
 
@@ -324,6 +533,71 @@ mod tests {
         assert_eq!(status.current_branch.as_deref(), Some("main"));
         assert!(status.branches.iter().any(|branch| branch == "main"));
         assert_eq!(status.uncommitted_file_count, 1);
+    }
+
+    #[test]
+    fn diff_reads_unstaged_patch() {
+        let Some((_temp, repo)) = init_repo() else {
+            return;
+        };
+        fs::write(repo.join("README.md"), "hello\nworld\n").expect("write readme");
+
+        let diff = read_diff(&repo.to_string_lossy(), Some(1), None).expect("diff");
+
+        assert!(diff.has_git_repository);
+        assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
+        assert!(diff.patch.contains("+world"));
+        assert_eq!(diff.uncommitted_file_count, 1);
+    }
+
+    #[test]
+    fn diff_reads_staged_patch() {
+        let Some((_temp, repo)) = init_repo() else {
+            return;
+        };
+        fs::write(repo.join("README.md"), "hello\nstaged\n").expect("write readme");
+        run_git(&repo, &["add", "README.md"]);
+
+        let diff = read_diff(
+            &repo.to_string_lossy(),
+            Some(1),
+            Some(ProjectGitDiffBase::Staged),
+        )
+        .expect("diff");
+
+        assert!(diff.has_git_repository);
+        assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
+        assert!(diff.patch.contains("+staged"));
+    }
+
+    #[test]
+    fn diff_reads_branch_merge_base_patch() {
+        let Some((_temp, repo)) = init_repo() else {
+            return;
+        };
+        run_git(&repo, &["switch", "-c", "feature/review"]);
+        fs::write(repo.join("README.md"), "hello\nbranch\n").expect("write readme");
+        run_git(&repo, &["add", "README.md"]);
+        run_git(&repo, &["commit", "-m", "feature change"]);
+
+        let diff = read_diff(
+            &repo.to_string_lossy(),
+            Some(3),
+            Some(ProjectGitDiffBase::Branch),
+        )
+        .expect("diff");
+
+        assert!(diff.has_git_repository);
+        assert!(diff.patch.contains("diff --git a/README.md b/README.md"));
+        assert!(diff.patch.contains("+branch"));
+    }
+
+    #[test]
+    fn diff_returns_empty_patch_for_plain_directory() {
+        let temp = TempDir::new().expect("temp dir");
+        let diff = read_diff(&temp.path().to_string_lossy(), Some(3), None).expect("diff");
+        assert!(!diff.has_git_repository);
+        assert!(diff.patch.is_empty());
     }
 
     #[test]

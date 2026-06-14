@@ -7,6 +7,7 @@ import type {
   AgentUiRefView,
   AgentUiSubagentActivityView,
   AgentUiSubagentDelegationView,
+  AgentUiSubagentsModel,
   AgentUiSubagentThreadView,
   AgentRuntimeActionProjection,
   AgentRuntimeEventProjection,
@@ -218,7 +219,8 @@ export interface SubagentActivityListProps {
 }
 
 export interface SubagentsViewProps<TEvent extends AgentRuntimeExecutionEvent = AgentRuntimeExecutionEvent> {
-  state: AgentUiProjectionState<TEvent>;
+  state?: AgentUiProjectionState<TEvent>;
+  model?: AgentUiSubagentsModel;
   emptyThreads?: ReactNode;
   emptyDelegations?: ReactNode;
   emptyActivities?: ReactNode;

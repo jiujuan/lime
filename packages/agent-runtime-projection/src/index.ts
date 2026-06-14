@@ -2,6 +2,7 @@ export type * from "./contracts.js";
 export * from "./actions.js";
 export * from "./appServerFacts.js";
 export * from "./artifactEvents.js";
+export * from "./coding.js";
 export * from "./contextEvents.js";
 export * from "./conversationEvents.js";
 export * from "./diagnosticEvents.js";

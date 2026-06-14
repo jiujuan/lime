@@ -570,6 +570,51 @@ pub enum ToolExecutionSandboxProfileConfig {
     WorkspaceCommand,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolExecutionCommandRiskLevelConfig {
+    Low,
+    #[default]
+    Medium,
+    High,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolExecutionCommandRuleMatchTypeConfig {
+    #[default]
+    Regex,
+    Prefix,
+    Exact,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ToolExecutionCommandRuleConfig {
+    #[serde(default, alias = "ruleId", alias = "id")]
+    pub rule_id: String,
+    #[serde(default, alias = "matchType")]
+    pub match_type: ToolExecutionCommandRuleMatchTypeConfig,
+    #[serde(default)]
+    pub pattern: String,
+    #[serde(default, alias = "riskLevel")]
+    pub risk_level: ToolExecutionCommandRiskLevelConfig,
+    #[serde(default, alias = "reasonCode")]
+    pub reason_code: String,
+    #[serde(default)]
+    pub reason: String,
+}
+
+impl ToolExecutionCommandRuleConfig {
+    pub fn is_default(value: &Self) -> bool {
+        value.rule_id.is_empty()
+            && value.pattern.is_empty()
+            && value.match_type == ToolExecutionCommandRuleMatchTypeConfig::Regex
+            && value.risk_level == ToolExecutionCommandRiskLevelConfig::Medium
+            && value.reason_code.is_empty()
+            && value.reason.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct ToolExecutionOverrideConfig {
     #[serde(
@@ -608,11 +653,17 @@ pub struct ToolExecutionPolicyConfig {
         skip_serializing_if = "HashMap::is_empty"
     )]
     pub tool_overrides: HashMap<String, ToolExecutionOverrideConfig>,
+    #[serde(
+        default,
+        alias = "shellCommandRules",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub shell_command_rules: Vec<ToolExecutionCommandRuleConfig>,
 }
 
 impl ToolExecutionPolicyConfig {
     pub fn is_default(value: &Self) -> bool {
-        value.tool_overrides.is_empty()
+        value.tool_overrides.is_empty() && value.shell_command_rules.is_empty()
     }
 }
 
@@ -2873,7 +2924,17 @@ mod unit_tests {
                 "Task": {
                     "warning_policy": "shell_command_risk"
                 }
-            }
+            },
+            "shellCommandRules": [
+                {
+                    "ruleId": "block_release_publish",
+                    "matchType": "prefix",
+                    "pattern": "cargo publish",
+                    "riskLevel": "high",
+                    "reasonCode": "release_publish_command",
+                    "reason": "命令会发布 crate"
+                }
+            ]
         });
 
         let parsed: ToolExecutionPolicyConfig =
@@ -2900,10 +2961,23 @@ mod unit_tests {
                 .and_then(|item| item.warning_policy),
             Some(ToolExecutionWarningPolicyConfig::ShellCommandRisk)
         );
+        assert_eq!(parsed.shell_command_rules.len(), 1);
+        assert_eq!(
+            parsed.shell_command_rules[0].rule_id,
+            "block_release_publish"
+        );
+        assert_eq!(
+            parsed.shell_command_rules[0].match_type,
+            ToolExecutionCommandRuleMatchTypeConfig::Prefix
+        );
+        assert_eq!(
+            parsed.shell_command_rules[0].risk_level,
+            ToolExecutionCommandRiskLevelConfig::High
+        );
     }
 
     #[test]
-    fn test_tool_execution_policy_config_roundtrip_preserves_non_default_overrides() {
+    fn test_tool_execution_policy_config_roundtrip_preserves_non_default_policy() {
         let config = ToolExecutionPolicyConfig {
             tool_overrides: HashMap::from([(
                 "bash".to_string(),
@@ -2915,6 +2989,14 @@ mod unit_tests {
                     sandbox_profile: Some(ToolExecutionSandboxProfileConfig::None),
                 },
             )]),
+            shell_command_rules: vec![ToolExecutionCommandRuleConfig {
+                rule_id: "block_release_publish".to_string(),
+                match_type: ToolExecutionCommandRuleMatchTypeConfig::Prefix,
+                pattern: "cargo publish".to_string(),
+                risk_level: ToolExecutionCommandRiskLevelConfig::High,
+                reason_code: "release_publish_command".to_string(),
+                reason: "命令会发布 crate".to_string(),
+            }],
         };
 
         let value = serde_json::to_value(&config).expect("tool execution config should serialize");

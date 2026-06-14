@@ -1005,7 +1005,7 @@ describe("AgentRuntimeCapabilityHost", () => {
           type: "evidence:recorded",
           refs: ["evidence:.lime/artifacts/content-batch.json"],
           payload: expect.objectContaining({
-            source: "agent_runtime_artifact_replay",
+            source: "app_server_artifact_replay",
             contentFactoryWorkspacePatch: expect.objectContaining({
               contentBatch: expect.objectContaining({
                 items: expect.arrayContaining([
@@ -1107,7 +1107,7 @@ describe("AgentRuntimeCapabilityHost", () => {
           type: "task:toolCall",
           refs: ["tool:web-fetch-call-1"],
           payload: expect.objectContaining({
-            source: "agent_runtime_tool_call_replay",
+            source: "app_server_tool_call_replay",
             toolName: "WebFetch",
             outputPreview: "fetched https://example.com",
             success: true,

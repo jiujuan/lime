@@ -103,8 +103,11 @@ function isSubagentEvent(event: AgentRuntimeExecutionEvent): boolean {
     subagentThreadId(event) ||
     eventClass.startsWith("subagent.") ||
     eventClass.startsWith("handoff.") ||
+    eventClass.startsWith("channel.") ||
+    eventClass.startsWith("review.") ||
     eventClass === "agent.spawned" ||
-    eventClass === "agent.completed",
+    eventClass === "agent.completed" ||
+    eventClass === "agent.changed",
   );
 }
 
@@ -141,10 +144,44 @@ function isFailedTerminalStatus(status: string): boolean {
   );
 }
 
+function statusForThread(
+  current: AgentUiSubagentThreadView | undefined,
+  event: AgentRuntimeExecutionEvent,
+): AgentRuntimeExecutionEvent["status"] {
+  const eventClass = event.eventClass ?? "";
+  if (!current) return event.status;
+  if (
+    eventClass.startsWith("subagent.") ||
+    eventClass.startsWith("task.") ||
+    eventClass === "agent.spawned" ||
+    eventClass === "agent.completed" ||
+    eventClass === "agent.changed" ||
+    eventClass === "agent.handoff"
+  ) {
+    return event.status;
+  }
+  if (eventClass === "handoff.requested" && event.status === "blocked") {
+    return event.status;
+  }
+  return current.status;
+}
+
 function activityKind(event: AgentRuntimeExecutionEvent): string {
   const eventClass = event.eventClass ?? "";
   if (eventClass.includes("started") || eventClass === "agent.spawned") {
     return "started";
+  }
+  if (
+    eventClass.includes("cancel") ||
+    eventClass.includes("abort") ||
+    eventClass.includes("interrupt") ||
+    eventClass.includes("closed") ||
+    event.status === "canceled" ||
+    event.status === "cancelled" ||
+    event.status === "aborted" ||
+    event.status === "closed"
+  ) {
+    return "interrupted";
   }
   if (eventClass.includes("completed") || eventClass === "agent.completed") {
     return "completed";
@@ -152,6 +189,14 @@ function activityKind(event: AgentRuntimeExecutionEvent): string {
   if (eventClass.includes("failed")) return "failed";
   if (eventClass.startsWith("handoff.")) return "handoff";
   if (eventClass.startsWith("review.")) return "review";
+  if (
+    eventClass.startsWith("channel.") ||
+    eventClass.startsWith("tool.") ||
+    eventClass.startsWith("model.") ||
+    eventClass.startsWith("artifact.")
+  ) {
+    return "interacted";
+  }
   if (eventClass.startsWith("tool.") || eventClass.startsWith("model.")) {
     return "interacted";
   }
@@ -239,7 +284,7 @@ function mergeThread(
     nickname:
       current?.nickname ??
       payloadString(event, "nickname", "agentNickname", "agent_nickname"),
-    status: event.status,
+    status: statusForThread(current, event),
     title: current?.title ?? event.title,
     summary:
       payloadString(event, "summary", "resultSummary", "outputSummary") ??

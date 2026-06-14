@@ -59,6 +59,7 @@ use crate::session::{
     TurnStatus,
 };
 use crate::tool_inspection::ToolInspectionManager;
+use crate::tool_inspection::ToolInspector;
 use crate::tool_monitor::RepetitionInspector;
 use crate::tools::{
     current_surface_tool_gates, is_bash_command_concurrency_safe,
@@ -1929,6 +1930,11 @@ impl Agent {
     /// This is useful for tools that need to track file reads.
     pub fn file_read_history(&self) -> &SharedFileReadHistory {
         &self.file_read_history
+    }
+
+    /// Register an additional tool inspector for runtime-specific policy.
+    pub fn add_tool_inspector(&mut self, inspector: Box<dyn ToolInspector>) {
+        self.tool_inspection_manager.add_inspector(inspector);
     }
 
     /// Register an MCP tool with the registry

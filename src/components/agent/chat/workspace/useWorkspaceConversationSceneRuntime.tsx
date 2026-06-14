@@ -14,6 +14,7 @@ import { useWorkspaceCanvasSceneRuntime } from "./useWorkspaceCanvasSceneRuntime
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { CanvasSessionOverviewPanel } from "../components/CanvasSessionOverviewPanel";
 import { MessageList } from "../components/MessageList";
+import { CodingWorkbenchOutputPanel } from "./CodingWorkbenchOutputPanel";
 import type {
   CanvasWorkbenchSessionView,
   CanvasWorkbenchUtilityView,
@@ -36,15 +37,15 @@ import type { CreationReplaySurfaceModel } from "../utils/creationReplaySurface"
 import { buildStepProgressProps } from "./chatSurfaceProps";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 import {
-  buildCanvasWorkbenchChangeView,
+  buildCanvasWorkbenchChangeViewFromCodingProjection,
+  buildCodingWorkbenchProjectionFromThreadItems,
   buildOutputHeaderViewModel,
   buildQuotedReplyText,
   buildSessionHeaderViewModel,
-  buildSessionRuntimeCounters,
+  buildSessionRuntimeCountersFromCodingProjection,
   buildSessionRuntimeProjectionIdentity,
   buildSessionRuntimeProjectionState,
   buildWorkspaceHeaderView,
-  isCodeOutputThreadItem,
   resolveNextSessionRuntimeProjectionState,
   resolveSessionRuntimeProjectionStatus,
   resolveSessionStatusBadge,
@@ -73,7 +74,6 @@ type CanvasScene = Pick<
   | "handleOpenCanvasWorkbenchPath"
   | "handleRevealCanvasWorkbenchPath"
   | "handleCloseCanvasWorkbench"
-  | "renderCanvasWorkbenchPreview"
 >;
 type WorkspaceConversationSceneProps = ComponentProps<
   typeof WorkspaceConversationScene
@@ -298,6 +298,8 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   >;
   handleToggleCanvas: ConversationScenePresentationParams["scene"]["onToggleCanvas"];
   currentImageWorkbenchActive: ConversationScenePresentationParams["scene"]["currentImageWorkbenchActive"];
+  browserWorkbenchOpenRequest?: ConversationScenePresentationParams["canvasWorkbenchLayout"]["browserOpenRequest"];
+  onBrowserWorkbenchOpenRequestHandled?: ConversationScenePresentationParams["canvasWorkbenchLayout"]["onBrowserOpenRequestHandled"];
   hideInlineStepProgress: ConversationScenePresentationParams["stepProgress"]["hidden"];
   isSpecializedThemeMode: ConversationScenePresentationParams["stepProgress"]["isSpecializedThemeMode"];
   hasMessages: ConversationScenePresentationParams["stepProgress"]["hasMessages"];
@@ -349,6 +351,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   taskFiles: TaskFile[];
   selectedFileId: string | undefined;
   projectRootPath: string | null;
+  canvasWorkbenchRootPath?: string | null;
   handleHarnessLoadFilePreview: ConversationScenePresentationParams["canvasWorkbenchLayout"]["loadFilePreview"];
   setCanvasWorkbenchLayoutMode: ConversationScenePresentationParams["canvasWorkbenchLayout"]["onLayoutModeChange"];
   workspacePathMissing: WorkspacePathMissingState | boolean | null;
@@ -451,6 +454,8 @@ export function useWorkspaceConversationSceneRuntime({
   handlePendingA2UISubmit,
   handleToggleCanvas,
   currentImageWorkbenchActive,
+  browserWorkbenchOpenRequest,
+  onBrowserWorkbenchOpenRequestHandled,
   hideInlineStepProgress,
   isSpecializedThemeMode,
   hasMessages,
@@ -498,6 +503,7 @@ export function useWorkspaceConversationSceneRuntime({
   taskFiles,
   selectedFileId,
   projectRootPath,
+  canvasWorkbenchRootPath,
   handleHarnessLoadFilePreview,
   setCanvasWorkbenchLayoutMode,
   workspacePathMissing,
@@ -679,12 +685,24 @@ export function useWorkspaceConversationSceneRuntime({
   );
   const fileCheckpointSummary =
     projectedThreadRead?.file_checkpoint_summary || null;
-  const sessionRuntimeCounters = buildSessionRuntimeCounters({
-    threadItems: projectedThreadItems,
-    fileCheckpointSummary,
-    pendingActions: projectedPendingActions,
-    queuedTurns: projectedQueuedTurns,
-  });
+  const codingWorkbenchView = useMemo(
+    () =>
+      buildCodingWorkbenchProjectionFromThreadItems({
+        threadItems: projectedThreadItems,
+        fileCheckpointSummary,
+        threadRead: projectedThreadRead,
+      }),
+    [fileCheckpointSummary, projectedThreadItems, projectedThreadRead],
+  );
+  const sessionRuntimeCounters =
+    buildSessionRuntimeCountersFromCodingProjection({
+      codingView: codingWorkbenchView,
+      fileCheckpointSummary,
+      queuedTurns: projectedQueuedTurns,
+    });
+  const shouldUseCodingWorkbenchChrome =
+    sessionRuntimeCounters.shouldUseRuntimeWorkbench ||
+    navbarContextVariant === "task-center";
   const sessionRuntimeCountLabels = {
     inProgressItemCountLabel: formatNumber(
       sessionRuntimeCounters.inProgressItemCount,
@@ -694,7 +712,7 @@ export function useWorkspaceConversationSceneRuntime({
       sessionRuntimeCounters.generatedFileCount,
       { locale },
     ),
-    pendingActionCountLabel: formatNumber(projectedPendingActions.length, {
+    pendingActionCountLabel: formatNumber(codingWorkbenchView.actions.length, {
       locale,
     }),
     queuedTurnCountLabel: formatNumber(projectedQueuedTurns.length, {
@@ -702,18 +720,15 @@ export function useWorkspaceConversationSceneRuntime({
     }),
   };
   const changeView = useMemo(() => {
-    return buildCanvasWorkbenchChangeView({
-      threadItems: sessionRuntimeCounters.hasRuntimeFileChanges
-        ? projectedThreadItems
-        : [],
+    return buildCanvasWorkbenchChangeViewFromCodingProjection({
+      codingView: codingWorkbenchView,
       fileCheckpointSummary,
       onOpenFile: canvasScene.handleOpenCanvasWorkbenchPath,
     });
   }, [
     canvasScene.handleOpenCanvasWorkbenchPath,
+    codingWorkbenchView,
     fileCheckpointSummary,
-    projectedThreadItems,
-    sessionRuntimeCounters.hasRuntimeFileChanges,
   ]);
   const sessionHeaderView = buildSessionHeaderViewModel({
     t,
@@ -721,7 +736,7 @@ export function useWorkspaceConversationSceneRuntime({
     currentSessionStatus,
     counters: sessionRuntimeCounters,
     labels: sessionRuntimeCountLabels,
-    pendingActionCount: projectedPendingActions.length,
+    pendingActionCount: codingWorkbenchView.actions.length,
     queuedTurnCount: projectedQueuedTurns.length,
   });
   const sessionView: CanvasWorkbenchSessionView | null = sessionHeaderView
@@ -747,19 +762,13 @@ export function useWorkspaceConversationSceneRuntime({
   const outputView: CanvasWorkbenchUtilityView = {
     ...outputHeaderView,
     renderPanel: () => (
-      <CanvasSessionOverviewPanel
-        turns={projectedTurns}
-        threadItems={projectedThreadItems.filter(isCodeOutputThreadItem)}
-        currentTurnId={projectedCurrentTurnId}
-        pendingActions={[]}
-        queuedTurns={[]}
-        isSending={isSending}
-        focusedItemId={focusedTimelineItemId}
-      />
+      <CodingWorkbenchOutputPanel codingView={codingWorkbenchView} />
     ),
   };
+  const effectiveCanvasWorkbenchRootPath =
+    canvasWorkbenchRootPath?.trim() || projectRootPath;
   const workspaceView = buildWorkspaceHeaderView({
-    projectRootPath,
+    projectRootPath: effectiveCanvasWorkbenchRootPath,
     workspacePathMissing: Boolean(workspacePathMissing),
     workspaceHealthError,
   });
@@ -1006,16 +1015,13 @@ export function useWorkspaceConversationSceneRuntime({
       canvasState: resolvedCanvasState,
       taskFiles,
       selectedFileId,
-      workspaceRoot: projectRootPath,
+      workspaceRoot: effectiveCanvasWorkbenchRootPath,
       defaultPreview: canvasScene.canvasWorkbenchDefaultPreview,
       loadFilePreview: handleHarnessLoadFilePreview,
       onOpenPath: canvasScene.handleOpenCanvasWorkbenchPath,
       onRevealPath: canvasScene.handleRevealCanvasWorkbenchPath,
       onClose: canvasScene.handleCloseCanvasWorkbench,
-      renderPreview: canvasScene.renderCanvasWorkbenchPreview,
-      workbenchMode: sessionRuntimeCounters.shouldUseRuntimeWorkbench
-        ? "coding"
-        : "default",
+      workbenchMode: shouldUseCodingWorkbenchChrome ? "coding" : "default",
       workspaceView,
       sessionView,
       outputView: sessionRuntimeCounters.shouldUseRuntimeWorkbench
@@ -1030,6 +1036,8 @@ export function useWorkspaceConversationSceneRuntime({
       onLayoutModeChange: shouldSyncCanvasWorkbenchLayoutMode
         ? setCanvasWorkbenchLayoutMode
         : undefined,
+      browserOpenRequest: browserWorkbenchOpenRequest,
+      onBrowserOpenRequestHandled: onBrowserWorkbenchOpenRequestHandled,
     },
   });
 }

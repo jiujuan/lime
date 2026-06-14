@@ -60,11 +60,9 @@ export function createAgentRuntimeClient({
     ...createAgentClient({ bridgeInvoke: resolvedBridgeInvoke }),
     ...createExportClient({
       appServerClient,
-      invokeCommand: resolvedInvokeCommand,
     }),
     ...createInventoryClient({
       appServerClient,
-      invokeCommand: resolvedInvokeCommand,
     }),
     ...createObjectiveClient({
       appServerClient,

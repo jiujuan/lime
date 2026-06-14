@@ -24,6 +24,7 @@ pub const LIME_SITE_INFO_TOOL_NAME: &str = "lime_site_info";
 pub const LIME_SITE_RUN_TOOL_NAME: &str = "lime_site_run";
 pub const BROWSER_RUNTIME_TOOL_PREFIX: &str = "mcp__lime-browser__";
 pub const VIEW_IMAGE_TOOL_NAME: &str = "view_image";
+pub const APPLY_PATCH_TOOL_NAME: &str = "apply_patch";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -169,6 +170,15 @@ static NATIVE_TOOL_CATALOG: &[ToolCatalogEntry] = &[
         capabilities: WORKSPACE_IO_CAP,
         lifecycle: ToolLifecycle::Current,
         source: ToolSourceKind::AsterBuiltin,
+        permission_plane: ToolPermissionPlane::ParameterRestricted,
+        workspace_default_allow: false,
+    },
+    ToolCatalogEntry {
+        name: APPLY_PATCH_TOOL_NAME,
+        profiles: CORE_PROFILES,
+        capabilities: WORKSPACE_IO_CAP,
+        lifecycle: ToolLifecycle::Current,
+        source: ToolSourceKind::LimeInjected,
         permission_plane: ToolPermissionPlane::ParameterRestricted,
         workspace_default_allow: false,
     },
@@ -701,6 +711,7 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "filewritetool" | "writefiletool" | "createfiletool" | "writefile" | "createfile"
         | "mcpsystemwritefile" => "Write",
         "fileedittool" | "editfile" | "developertexteditor" | "mcpsystemeditfile" => "Edit",
+        "applypatch" | "applypatchtool" => APPLY_PATCH_TOOL_NAME,
         "globtool" | "mcpsystemglob" => "Glob",
         "greptool" | "mcpsystemgrep" => "Grep",
         "lsptool" => "LSP",
@@ -1012,6 +1023,8 @@ mod tests {
             ("ExitPlanModeTool", "ExitPlanMode"),
             ("ExitWorktreeTool", "ExitWorktree"),
             ("FileEditTool", "Edit"),
+            ("ApplyPatchTool", APPLY_PATCH_TOOL_NAME),
+            ("apply_patch", APPLY_PATCH_TOOL_NAME),
             ("FileReadTool", "Read"),
             ("FileWriteTool", "Write"),
             ("read_file", "Read"),
@@ -1102,14 +1115,24 @@ mod tests {
             .iter()
             .filter(|entry| entry.profiles.contains(&ToolSurfaceProfile::BrowserAssist))
             .count();
-        assert_eq!(core.len(), 41);
+        assert_eq!(core.len(), 42);
         assert_eq!(
             core.iter()
                 .filter(|entry| entry.lifecycle == ToolLifecycle::Current)
                 .count(),
-            41
+            42
         );
         assert!(core.iter().any(|entry| entry.name == VIEW_IMAGE_TOOL_NAME));
+        let apply_patch = core
+            .iter()
+            .find(|entry| entry.name == APPLY_PATCH_TOOL_NAME)
+            .expect("apply_patch should stay in current catalog");
+        assert_eq!(apply_patch.lifecycle, ToolLifecycle::Current);
+        assert_eq!(
+            apply_patch.permission_plane,
+            ToolPermissionPlane::ParameterRestricted
+        );
+        assert!(!apply_patch.workspace_default_allow);
         assert_eq!(
             core.iter()
                 .filter(|entry| entry.lifecycle == ToolLifecycle::Compat)
