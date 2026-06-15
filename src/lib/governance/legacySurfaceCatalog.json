@@ -5040,7 +5040,8 @@
       "includePathPrefixes": ["lime-rs/crates"],
       "allowedPaths": [
         "lime-rs/crates/core/src/database/schema.rs",
-        "lime-rs/crates/core/src/database/dao/agent_timeline.rs"
+        "lime-rs/crates/core/src/database/dao/agent_timeline.rs",
+        "lime-rs/crates/core/src/database/dao/agent_timeline_payload.rs"
       ]
     },
     {

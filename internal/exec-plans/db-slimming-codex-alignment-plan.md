@@ -73,7 +73,7 @@
 | P3      | 已完成骨架，兼容收尾            | Read/export 共享 load context             | 新会话用户输入可从 `message.created` JSONL event 恢复；read/export 不依赖 `agent_messages`                                                                                                                                                                                              |
 | P4      | 已完成最小骨架，P4-b 后续证据项 | Telemetry DB 最小 owner                   | `TelemetryStore` 独立接管 `telemetry_1.sqlite`，App Server 初始化并注入 Telemetry DB，`evidence/export` 优先读取 Telemetry DB；生产 HTTP/shared logger 写入接线只在确认真实 request source 后补齐，不作为 P5 前置阻塞                                                                   |
 | P5      | 已完成骨架，后续只做守卫验证    | Sidecar contract 补齐                     | `SidecarStore`、`StorageRoots.sidecar_root`、tool large output、file checkpoint previous content、`artifact.snapshot` 和含正文 artifact payload 已通过 ref + sha256 写入 sidecar；剩余 generated artifact / current checkpoint 只在 S2 扫描发现真实 inline 大正文写入点时按守卫缺口处理 |
-| P6 / S2 | 当前唯一主刀                    | 骨架守卫                                  | 在继续细节治理前，先封住 `agent_messages`、`agent_thread_items.payload_json`、裸 `outputSnapshotFile` / `checkpointSnapshotFile`、无 `sidecarRef.sha256` runtime event 和硬编码平台路径回流                                                                                             |
+| P6 / S2 | 当前唯一主刀                    | 骨架守卫                                  | 在继续细节治理前，先封住 `agent_messages`、`agent_thread_items.payload_json` 大正文、裸 `outputSnapshotFile` / `checkpointSnapshotFile`、无 `sidecarRef.sha256` runtime event 和硬编码平台路径回流；`payload_json` 新写入已改为 bounded projection                                                                                             |
 | P7 / S3 | 进行中                          | 旧消息路径退场                            | `agent_messages` 旧表读写路径删除；用户历史已迁入 event log 或导出为用户文件；迁移成功后默认清 legacy rows / message-only session shells，支持配置保留或仅空表时 drop；旧生产 reader/writer 退场仍留到 S4                                                                               |
 
 ## 5. 骨架优先顺序
@@ -90,7 +90,7 @@
 | ---- | ----------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | S0   | data root / JSONL event log / Projection DB / shared load context | 已完成          | 新会话用户输入和 read/export 已能绕开 `agent_messages` 主链                                                                                                                                                                                  |
 | S1   | Sidecar contract completion                                       | 已完成骨架      | `artifact.snapshot` 和含正文 artifact payload 已统一写入 `<data-root>/runtime/sidecar`，event payload 只保留 `sidecarRef + contentStatus + contentBytes + contentSha256`；generated artifact / current checkpoint 后续只作为 S2 扫描缺口处理 |
-| S2   | Guard before fine detail                                          | 当前唯一主刀    | 先扫描并封住 `agent_messages` 新写入、`payload_json` 大正文、裸 snapshot file 字段、无 checksum sidecar ref、硬编码平台路径                                                                                                                  |
+| S2   | Guard before fine detail                                          | 当前唯一主刀    | 先扫描并封住 `agent_messages` 新写入、`payload_json` 大正文、裸 snapshot file 字段、无 checksum sidecar ref、硬编码平台路径；`payload_json` 新写入已不再保存完整大 artifact / tool output                                                                                                                  |
 | S3   | Legacy message exit                                               | 进行中          | 一次性 backfill/export 旧历史，默认清 legacy rows / message-only session shells；启动配置可选 `retain` / `clear-rows` / `drop-empty-tables`，产品读路径不保留 fallback                                                                       |
 | S4   | Fine-grained cleanup                                              | S3 后按收益排序 | P4-b 真实 request telemetry 接线、`current_timeline` bridge 收尾、旧 DAO/store/schema 引用清零、历史表 drop migration（包含 legacy message 表结构）；usage/model 已退出 `agent_messages` fallback                                            |
 
@@ -130,7 +130,7 @@
 - `lime-rs/crates/core/src/database/mod.rs`：`DbConnection = Arc<Mutex<Connection>>`，`init_database_with_data_dir(data_dir)` 只创建 `<data_dir>/lime.db`。
 - `lime-rs/crates/core/src/database/schema.rs`：`agent_sessions`、`agent_messages`、`agent_thread_turns`、`agent_thread_items`、`agent_turn_outcomes`、`agent_thread_incidents` 都仍在 Product DB schema 中。
 - `lime-rs/crates/services/src/aster_session_store.rs`：已收口为 current runtime conversation 优先读取；旧 `agent_messages` 只作为 migration 导入源，不再作为产品 fallback。
-- `lime-rs/crates/core/src/database/dao/agent_timeline.rs`：仍向 `agent_thread_turns` / `agent_thread_items.payload_json` 写 timeline projection。
+- `lime-rs/crates/core/src/database/dao/agent_timeline.rs`：仍向 `agent_thread_turns` / `agent_thread_items.payload_json` 写迁移期 timeline projection；新写入已通过 `agent_timeline_payload` 限制为 bounded payload，不再把完整大 artifact / tool output 写回 Product DB。
 - `lime-rs/crates/app-server/src/local_data_source/current_timeline.rs`：App Server 仍从旧 timeline 表读 current timeline。
 - `lime-rs/crates/infra/src/telemetry/logger.rs`：request log 仍写 `app_paths::resolve_request_logs_dir()` 文件目录。
 - `lime-rs/crates/app-server/src/main.rs`：App Server 支持 `--data-dir` 和 `APP_SERVER_DATA_DIR`，Electron 托管时由 Host 显式传入 `app.getPath("userData")/app-server`。
@@ -146,7 +146,7 @@
 - `lime-rs/crates/core/src/database/schema.rs` 已超过 1000 行；后续实现不应继续往中心 schema 文件追加 runtime 表，应拆 product/projection schema 边界。
 - `lime-rs/crates/core/src/app_paths.rs` 已超过 1000 行；本轮只允许保留路径解析 / 迁移来源发现的薄入口，迁移后清理逻辑必须继续放在 `product_db_migration_cleanup.rs` 等独立模块。
 - `current_timeline` 仍是 compat bridge；它只允许保障旧 GUI projection 过渡，不应继续决定骨架优先级。
-- `agent_thread_items.payload_json` 是当前最直接的瘦身关键面；如果先继续追旧 timeline 或未定位的 telemetry shared logger 细节，Sidecar owner 会继续缺位。
+- `agent_thread_items.payload_json` 已完成写入侧 bounded projection 收口；剩余风险是旧行兼容读取、`current_timeline` bridge 和 S4 历史表结构退场。
 - `request_logs/` 文件目录已经降为 `compat / migration-source`；P4-b 只补真实 request telemetry 的生产写入证据，不允许把 runtime event summary 伪造成 provider request log。
 
 ## 9. 本轮进度日志
@@ -230,6 +230,7 @@
 - 本轮 DB 守卫验证：`npx vitest run "src/lib/governance/legacySurfaceCatalog.test.ts" -t "agent_messages|AgentDao|测试编译图" --silent=passed-only --disableConsoleIntercept` 通过（5 tests）；`npm run governance:legacy-report` 通过，`边界违规=0`，分类漂移候选从 3 个降为 2 个，仅剩 `rust-memory-profile-prompt-helper-leak` / `rust-memory-sources-prompt-helper-leak`，均非 DB 主线。全量 `legacySurfaceCatalog.test.ts` 当前仍被既有 Coding roadmap 断言阻塞，失败项为 `Coding roadmap 不应把已完成的 P5/P7/P8 baseline 重新写成主线 blocker`，不作为本轮 DB 瘦身 blocker。
 - S2 ChatDao 旧写 API 收口：`session_context_service` 的旧消息忽略回归不再通过 `ChatDao::add_message` 写 `agent_messages`，改为测试内显式 `insert_legacy_agent_messages` seed，语义从“调用旧产品 DAO”降级为“构造 legacy fixture”。同步将 `rust-chat-dao-agent-messages-product-api-leak` 扩展到 `ChatDao::add_message/delete_messages`，服务层 / app-server / websocket 不得重新通过 ChatDao 读写 `agent_messages`。
 - 本轮 ChatDao 收口验证：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-services session_context_service -- --nocapture` 通过（7 tests）；`npx vitest run "src/lib/governance/legacySurfaceCatalog.test.ts" -t "ChatDao|agent_messages|AgentDao|测试编译图" --silent=passed-only --disableConsoleIntercept` 通过（5 tests）；`npm run governance:legacy-report` 通过，`边界违规=0`，分类漂移候选仍为 2 个非 DB 项；`cargo fmt --manifest-path "lime-rs/Cargo.toml" -p lime-services --check` 与 `npx prettier --check "src/lib/governance/legacySurfaceCatalog.json" "src/lib/governance/legacySurfaceCatalog.test.ts" "internal/exec-plans/db-slimming-codex-alignment-plan.md"` 通过。
+- S2 `agent_thread_items.payload_json` 大正文收口：新增 `core/src/database/dao/agent_timeline_payload.rs` 承接 legacy timeline payload 裁剪规则，`AgentTimelineDao::upsert_item` 写入前即把大 file artifact 正文移除、把大 tool / command / web search output 截成 bounded summary；旧 DAO 仍只作为迁移期 GUI projection，JSONL Event Log + Sidecar 才是 runtime truth。同步把 `agent_timeline.rs` 从 1000 行降到 979 行，避免继续向中心 DAO 堆逻辑。
 
 ## 10. 下一刀
 
@@ -237,7 +238,7 @@
 
 1. 产品阻塞优先：真实用户环境无法对话时，先诊断 `userData/app-server/lime.db`、Provider / model 当前配置、`agentSession/start/read/list`、`agentSession/turn/start` 和 renderer console；只读检查真实库，不手工 drop/delete。
 2. 回到 S2：继续压缩 `agent_messages` 旧 DAO / migration 白名单；`AgentDao` 上层 direct 回读和 `ChatDao` 服务层读写回流已封成 `dead-candidate`，下一步只处理旧 DAO 物理退场和历史表 drop migration，不再恢复产品 fallback。
-3. 扫描 `agent_thread_items.payload_json` 是否仍承载大正文；projection 只允许 bounded summary、refs、status，不允许成为 event truth。
+3. `agent_thread_items.payload_json` 新写入已 bounded；后续只保留旧行兼容读取和 S4 表退场，不再把它列为新增大正文 owner。
 4. 扫描裸 `outputSnapshotFile` / `checkpointSnapshotFile`、缺少 `sidecarRef.sha256` 的 runtime event，以及 generated artifact / file checkpoint current snapshot 是否还有 inline content。
 5. 扫描业务层硬编码平台路径、`~/.lime`、repo root、temp/cache durable fact 写入；允许白名单仅限 `app_paths`、启动配置、迁移和测试 fixture。
 6. P4-b 只在 S2 后作为真实 request telemetry 证据项处理；找不到真实 source 时只更新 blocker，不伪造数据。

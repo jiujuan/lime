@@ -3340,6 +3340,7 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.allowedPaths).toEqual([
       "lime-rs/crates/core/src/database/schema.rs",
       "lime-rs/crates/core/src/database/dao/agent_timeline.rs",
+      "lime-rs/crates/core/src/database/dao/agent_timeline_payload.rs",
     ]);
     expect(monitor?.regexPatterns).toEqual([
       "agent_thread_items[\\s\\S]{0,1600}payload_json",
